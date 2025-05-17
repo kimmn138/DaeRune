@@ -27,6 +27,7 @@ void ADREffectActor::OnOverlap(UPrimitiveComponent* OverlappedComponent, AActor*
 
 		UDRAttributeSet* MutableDRAttributeSet = const_cast<UDRAttributeSet*>(DRAttributeSet);
 		MutableDRAttributeSet->SetHealth(DRAttributeSet->GetHealth() + 25.f);
+		MutableDRAttributeSet->SetMana(DRAttributeSet->GetMana() - 25.f);
 		Destroy();
 	}
 }
