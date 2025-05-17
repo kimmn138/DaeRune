@@ -3,17 +3,15 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Character/DRCharacterBase.h"
-#include "DRCharacter.generated.h"
+#include "GameFramework/GameModeBase.h"
+#include "DRGameModeBase.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class DAERUNE_API ADRCharacter : public ADRCharacterBase
+class DAERUNE_API ADRGameModeBase : public AGameModeBase
 {
 	GENERATED_BODY()
 	
-public:
-	ADRCharacter();
 };
