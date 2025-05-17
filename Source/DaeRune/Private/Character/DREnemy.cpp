@@ -2,8 +2,15 @@
 
 
 #include "Character/DREnemy.h"
+#include "AbilitySystem/DRAbilitySystemComponent.h"
+#include "AbilitySystem/DRAttributeSet.h"
 
 ADREnemy::ADREnemy()
 {
 	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
+	AbilitySystemComponent = CreateDefaultSubobject<UDRAbilitySystemComponent>("AbilitySystemComponent");
+	AbilitySystemComponent->SetIsReplicated(true);
+
+	AttributeSet = CreateDefaultSubobject<UDRAttributeSet>("AttributeSet");
 }

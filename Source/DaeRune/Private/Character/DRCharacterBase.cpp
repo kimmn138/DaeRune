@@ -12,6 +12,11 @@ ADRCharacterBase::ADRCharacterBase()
 	Weapon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
+UAbilitySystemComponent* ADRCharacterBase::GetAbilitySystemComponent() const
+{
+	return AbilitySystemComponent;
+}
+
 void ADRCharacterBase::BeginPlay()
 {
 	Super::BeginPlay();
