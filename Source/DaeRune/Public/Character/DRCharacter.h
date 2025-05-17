@@ -16,4 +16,9 @@ class DAERUNE_API ADRCharacter : public ADRCharacterBase
 	
 public:
 	ADRCharacter();
+	virtual void PossessedBy(AController* NewController) override;
+	virtual void OnRep_PlayerState() override;
+
+private:
+	void InitAbilityActorInfo();
 };

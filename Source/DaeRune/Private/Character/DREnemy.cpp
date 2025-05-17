@@ -15,3 +15,10 @@ ADREnemy::ADREnemy()
 
 	AttributeSet = CreateDefaultSubobject<UDRAttributeSet>("AttributeSet");
 }
+
+void ADREnemy::BeginPlay()
+{
+	Super::BeginPlay();
+
+	AbilitySystemComponent->InitAbilityActorInfo(this, this);
+}

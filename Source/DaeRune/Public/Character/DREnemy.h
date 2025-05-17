@@ -16,4 +16,7 @@ class DAERUNE_API ADREnemy : public ADRCharacterBase
 	
 public:
 	ADREnemy();
+
+protected:
+	virtual void BeginPlay() override;
 };
