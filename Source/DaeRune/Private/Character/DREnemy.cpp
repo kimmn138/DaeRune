@@ -3,3 +3,7 @@
 
 #include "Character/DREnemy.h"
 
+ADREnemy::ADREnemy()
+{
+	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+}

@@ -14,4 +14,6 @@ class DAERUNE_API ADREnemy : public ADRCharacterBase
 {
 	GENERATED_BODY()
 	
+public:
+	ADREnemy();
 };
