@@ -16,8 +16,10 @@ void ADRPlayerController::BeginPlay()
 	check(DRContext);
 
 	UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer());
-	check(Subsystem);
-	Subsystem->AddMappingContext(DRContext, 0);
+	if (Subsystem)
+	{
+		Subsystem->AddMappingContext(DRContext, 0);
+	}
 
 	bShowMouseCursor = true;
 	DefaultMouseCursor = EMouseCursor::Default;

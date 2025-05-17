@@ -4,7 +4,9 @@
 #include "Character/DRCharacter.h"
 #include "AbilitySystemComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
+#include "UI/HUD/DRHUD.h"
 
 ADRCharacter::ADRCharacter()
 {
@@ -41,4 +43,12 @@ void ADRCharacter::InitAbilityActorInfo()
 	DRPlayerState->GetAbilitySystemComponent()->InitAbilityActorInfo(DRPlayerState, this);
 	AbilitySystemComponent = DRPlayerState->GetAbilitySystemComponent();
 	AttributeSet = DRPlayerState->GetAttributeSet();
+
+	if (ADRPlayerController* DRPlayerController = Cast<ADRPlayerController>(GetController()))
+	{
+		if (ADRHUD* DRHUD = Cast<ADRHUD>(DRPlayerController->GetHUD()))
+		{
+			DRHUD->InitOverlay(DRPlayerController, DRPlayerState, AbilitySystemComponent, AttributeSet);
+		}
+	}
 }
