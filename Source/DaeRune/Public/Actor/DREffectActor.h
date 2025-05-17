@@ -6,7 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "DREffectActor.generated.h"
 
-class USphereComponent;
+class UGameplayEffect;
 
 UCLASS()
 class DAERUNE_API ADREffectActor : public AActor
@@ -16,19 +16,12 @@ class DAERUNE_API ADREffectActor : public AActor
 public:
 	ADREffectActor();
 
-	UFUNCTION()
-	virtual void OnOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
-
-	UFUNCTION()
-	virtual void EndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
-
 protected:
 	virtual void BeginPlay() override;
 
-private:
-	UPROPERTY(VisibleAnywhere)
-	TObjectPtr<USphereComponent> Sphere;
+	UFUNCTION(BlueprintCallable)
+	void ApplyEffectToTarget(AActor* Target, TSubclassOf<UGameplayEffect> GameplayEffectClass);
 
-	UPROPERTY(VisibleAnywhere)
-	TObjectPtr<UStaticMeshComponent> Mesh;
+	UPROPERTY(EditAnywhere, Category = "Applied Effects")
+	TSubclassOf<UGameplayEffect> InstantGameplayEffectClass;
 };
