@@ -22,5 +22,9 @@ void ADRCharacterBase::BeginPlay()
 	Super::BeginPlay();
 }
 
+void ADRCharacterBase::InitAbilityActorInfo()
+{
+}
+
 
 

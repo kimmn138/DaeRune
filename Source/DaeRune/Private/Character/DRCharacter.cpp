@@ -3,6 +3,7 @@
 
 #include "Character/DRCharacter.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
@@ -41,6 +42,7 @@ void ADRCharacter::InitAbilityActorInfo()
 	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
 	check(DRPlayerState);
 	DRPlayerState->GetAbilitySystemComponent()->InitAbilityActorInfo(DRPlayerState, this);
+	Cast<UDRAbilitySystemComponent>(DRPlayerState->GetAbilitySystemComponent())->AbilityActorInfoSet();
 	AbilitySystemComponent = DRPlayerState->GetAbilitySystemComponent();
 	AttributeSet = DRPlayerState->GetAttributeSet();
 
