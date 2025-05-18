@@ -53,4 +53,5 @@ void ADRCharacter::InitAbilityActorInfo()
 			DRHUD->InitOverlay(DRPlayerController, DRPlayerState, AbilitySystemComponent, AttributeSet);
 		}
 	}
+	InitializePrimaryAttributes();
 }

@@ -9,8 +9,9 @@
 
 class UAbilitySystemComponent;
 class UAttributeSet;
+class UGameplayEffect;
 
-UCLASS()
+UCLASS(Abstract)
 class DAERUNE_API ADRCharacterBase : public ACharacter, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
@@ -33,4 +34,9 @@ protected:
 	TObjectPtr<UAttributeSet> AttributeSet;
 
 	virtual void InitAbilityActorInfo();
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Attributes")
+	TSubclassOf<UGameplayEffect> DefaultPrimaryAttributes;
+
+	void InitializePrimaryAttributes() const;
 };

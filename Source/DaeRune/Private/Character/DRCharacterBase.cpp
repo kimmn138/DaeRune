@@ -2,6 +2,7 @@
 
 
 #include "Character/DRCharacterBase.h"
+#include "AbilitySystemComponent.h"
 
 ADRCharacterBase::ADRCharacterBase()
 {
@@ -24,6 +25,15 @@ void ADRCharacterBase::BeginPlay()
 
 void ADRCharacterBase::InitAbilityActorInfo()
 {
+}
+
+void ADRCharacterBase::InitializePrimaryAttributes() const
+{
+	check(IsValid(GetAbilitySystemComponent()));
+	check(DefaultPrimaryAttributes);
+	const FGameplayEffectContextHandle ContextHandle = GetAbilitySystemComponent()->MakeEffectContext();
+	const FGameplayEffectSpecHandle SpecHandle = GetAbilitySystemComponent()->MakeOutgoingSpec(DefaultPrimaryAttributes, 1.f, ContextHandle);
+	GetAbilitySystemComponent()->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), GetAbilitySystemComponent());
 }
 
 
