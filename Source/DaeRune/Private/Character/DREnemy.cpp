@@ -16,6 +16,11 @@ ADREnemy::ADREnemy()
 	AttributeSet = CreateDefaultSubobject<UDRAttributeSet>("AttributeSet");
 }
 
+int32 ADREnemy::GetPlayerLevel()
+{
+	return Level;
+}
+
 void ADREnemy::BeginPlay()
 {
 	Super::BeginPlay();
