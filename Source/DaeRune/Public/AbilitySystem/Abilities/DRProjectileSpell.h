@@ -6,6 +6,8 @@
 #include "AbilitySystem/Abilities/DRGameplayAbility.h"
 #include "DRProjectileSpell.generated.h"
 
+class ADRProjectile;
+
 /**
  * 
  */
@@ -16,4 +18,7 @@ class DAERUNE_API UDRProjectileSpell : public UDRGameplayAbility
 	
 protected:
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TSubclassOf<ADRProjectile> ProjectileClass;
 };
