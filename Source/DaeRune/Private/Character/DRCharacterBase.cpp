@@ -3,6 +3,7 @@
 
 #include "Character/DRCharacterBase.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/DRAbilitySystemComponent.h"
 
 ADRCharacterBase::ADRCharacterBase()
 {
@@ -42,6 +43,14 @@ void ADRCharacterBase::InitializeDefaultAttributes() const
 	ApplyEffectToSelf(DefaultPrimaryAttributes, 1.f);
 	ApplyEffectToSelf(DefaultSecondaryAttributes, 1.f);
 	ApplyEffectToSelf(DefaultVitalAttributes, 1.f);
+}
+
+void ADRCharacterBase::AddCharacterAbilities()
+{
+	UDRAbilitySystemComponent* DRASC = CastChecked<UDRAbilitySystemComponent>(AbilitySystemComponent);
+	if (!HasAuthority()) return;
+
+	DRASC->AddCharacterAbilities(StartupAbilities);
 }
 
 
