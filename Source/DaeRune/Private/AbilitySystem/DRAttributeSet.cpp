@@ -8,8 +8,6 @@
 
 UDRAttributeSet::UDRAttributeSet()
 {
-	InitHealth(10.f);
-	InitMana(10.f);
 }
 
 void UDRAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
