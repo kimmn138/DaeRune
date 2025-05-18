@@ -11,6 +11,7 @@ class UInputMappingContext;
 class UInputAction;
 struct FInputActionValue;
 class UDRInputConfig;
+class UDRAbilitySystemComponent;
 
 /**
  * 
@@ -43,4 +44,9 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UDRInputConfig> InputConfig;
+
+	UPROPERTY()
+	TObjectPtr<UDRAbilitySystemComponent> DRAbilitySystemComponent;
+
+	UDRAbilitySystemComponent* GetASC();
 };
