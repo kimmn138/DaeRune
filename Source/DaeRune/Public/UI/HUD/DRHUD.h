@@ -21,9 +21,6 @@ class DAERUNE_API ADRHUD : public AHUD
 	GENERATED_BODY()
 	
 public:
-	UPROPERTY()
-	TObjectPtr<UDRUserWidget>  OverlayWidget;
-
 	UOverlayWidgetController* GetOverlayWidgetController(const FWidgetControllerParams& WCParams);
 
 	void InitOverlay(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS);
@@ -31,6 +28,9 @@ public:
 protected:
 
 private:
+	UPROPERTY()
+	TObjectPtr<UDRUserWidget>  OverlayWidget;
+
 	UPROPERTY(EditAnywhere)
 	TSubclassOf<UDRUserWidget> OverlayWidgetClass;
 
