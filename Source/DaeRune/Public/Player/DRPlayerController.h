@@ -4,11 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "GameplayTagContainer.h"
 #include "DRPlayerController.generated.h"
 
 class UInputMappingContext;
 class UInputAction;
 struct FInputActionValue;
+class UDRInputConfig;
 
 /**
  * 
@@ -34,4 +36,11 @@ private:
 	TObjectPtr<UInputAction> MoveAction;
 
 	void Move(const FInputActionValue& InputActionValue);
+
+	void AbilityInputTagPressed(FGameplayTag InputTag);
+	void AbilityInputTagReleased(FGameplayTag InputTag);
+	void AbilityInputTagHeld(FGameplayTag InputTag);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	TObjectPtr<UDRInputConfig> InputConfig;
 };
