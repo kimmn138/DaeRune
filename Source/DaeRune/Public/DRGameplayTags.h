@@ -16,6 +16,9 @@ struct FDRGameplayTags
 public:
 	static const FDRGameplayTags& Get() { return GameplayTags; }
 	static void InitializeNativeGameplayTags();
+
+	FGameplayTag Attributes_Secondary_Armor;
+
 protected:
 
 private:
