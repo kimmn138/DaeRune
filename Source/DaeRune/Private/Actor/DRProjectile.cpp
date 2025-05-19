@@ -27,7 +27,7 @@ ADRProjectile::ADRProjectile()
 void ADRProjectile::BeginPlay()
 {
 	Super::BeginPlay();
-
+	
 	Sphere->OnComponentBeginOverlap.AddDynamic(this, &ADRProjectile::OnSphereOverlap);
 }
 

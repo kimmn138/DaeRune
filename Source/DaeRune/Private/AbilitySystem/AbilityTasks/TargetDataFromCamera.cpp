@@ -2,7 +2,6 @@
 
 
 #include "AbilitySystem/AbilityTasks/TargetDataFromCamera.h"
-#include "GameFramework/PlayerController.h"
 #include "AbilitySystemComponent.h"
 
 UTargetDataFromCamera* UTargetDataFromCamera::CreateTargetDataFromCamera(UGameplayAbility* OwningAbility, float TraceDistance)
