@@ -2,6 +2,8 @@
 
 
 #include "AbilitySystem/Abilities/DRProjectileSpell.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystemComponent.h"
 #include "Actor/DRProjectile.h"
 #include "Interaction/CombatInterface.h"
 
@@ -33,7 +35,9 @@ void UDRProjectileSpell::SpawnProjectile(const FVector& ProjectileTargetLocation
 			Cast<APawn>(GetOwningActorFromActorInfo()),
 			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 
-		//TODO: Give the Projectile a Gameplay Effect Spec for causing Damage.
+		const UAbilitySystemComponent* SourceASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetAvatarActorFromActorInfo());
+		const FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageEffectClass, GetAbilityLevel(), SourceASC->MakeEffectContext());
+		Projectile->DamageEffectSpecHandle = SpecHandle;
 
 		Projectile->FinishSpawning(SpawnTransform);
 	}

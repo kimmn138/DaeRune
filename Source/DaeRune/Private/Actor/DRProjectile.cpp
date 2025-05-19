@@ -2,6 +2,8 @@
 
 
 #include "Actor/DRProjectile.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystemComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "DaeRune/DaeRune.h"
 #include "Components/AudioComponent.h"
@@ -58,6 +60,11 @@ void ADRProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AA
 
 	if (HasAuthority())
 	{
+		if (UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(OtherActor))
+		{
+			TargetASC->ApplyGameplayEffectSpecToSelf(*DamageEffectSpecHandle.Data.Get());
+		}
+
 		Destroy();
 	}
 	else
