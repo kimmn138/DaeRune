@@ -4,6 +4,8 @@
 #include "Character/DREnemy.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "AbilitySystem/DRAttributeSet.h"
+#include "Components/WidgetComponent.h"
+#include "UI/Widget/DRUserWidget.h"
 
 ADREnemy::ADREnemy()
 {
@@ -14,6 +16,9 @@ ADREnemy::ADREnemy()
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
 
 	AttributeSet = CreateDefaultSubobject<UDRAttributeSet>("AttributeSet");
+
+	HealthBar = CreateDefaultSubobject<UWidgetComponent>("HealthBar");
+	HealthBar->SetupAttachment(GetRootComponent());
 }
 
 int32 ADREnemy::GetPlayerLevel()
@@ -26,6 +31,30 @@ void ADREnemy::BeginPlay()
 	Super::BeginPlay();
 
 	InitAbilityActorInfo();
+
+	if (UDRUserWidget* DRUserWidget = Cast<UDRUserWidget>(HealthBar->GetUserWidgetObject()))
+	{
+		DRUserWidget->SetWidgetController(this);
+	}
+
+	if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
+	{
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetHealthAttribute()).AddLambda(
+			[this](const FOnAttributeChangeData& Data)
+			{
+				OnHealthChanged.Broadcast(Data.NewValue);
+			}
+		);
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMaxHealthAttribute()).AddLambda(
+			[this](const FOnAttributeChangeData& Data)
+			{
+				OnMaxHealthChanged.Broadcast(Data.NewValue);
+			}
+		);
+
+		OnHealthChanged.Broadcast(DRAS->GetHealth());
+		OnMaxHealthChanged.Broadcast(DRAS->GetMaxHealth());
+	}
 }
 
 void ADREnemy::InitAbilityActorInfo()
