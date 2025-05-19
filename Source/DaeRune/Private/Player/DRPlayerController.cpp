@@ -23,13 +23,8 @@ void ADRPlayerController::BeginPlay()
 		Subsystem->AddMappingContext(DRContext, 0);
 	}
 
-	bShowMouseCursor = true;
-	DefaultMouseCursor = EMouseCursor::Default;
-
-	FInputModeGameAndUI InputModeData;
-	InputModeData.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-	InputModeData.SetHideCursorDuringCapture(false);
-	SetInputMode(InputModeData);
+	bShowMouseCursor = false;
+	SetInputMode(FInputModeGameOnly());
 }
 
 void ADRPlayerController::SetupInputComponent()
@@ -38,6 +33,7 @@ void ADRPlayerController::SetupInputComponent()
 
 	UDRInputComponent* DRInputComponent = CastChecked<UDRInputComponent>(InputComponent);
 	DRInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Move);
+	DRInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Look);
 	DRInputComponent->BindAbilityActions(InputConfig, this, &ThisClass::AbilityInputTagPressed, &ThisClass::AbilityInputTagReleased, &ThisClass::AbilityInputTagHeld);
 }
 
@@ -55,6 +51,13 @@ void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 		ControlledPawn->AddMovementInput(ForwardDirection, InputAxisVector.Y);
 		ControlledPawn->AddMovementInput(RightDirection, InputAxisVector.X);
 	}
+}
+
+void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
+{
+	const FVector2D Axis = InputActionValue.Get<FVector2D>();
+	AddYawInput(Axis.X);
+	AddPitchInput(Axis.Y);
 }
 
 void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
