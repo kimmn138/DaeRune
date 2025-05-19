@@ -2,6 +2,7 @@
 
 
 #include "DRAssetManager.h"
+#include "AbilitySystemGlobals.h"
 #include "DRGameplayTags.h"
 
 UDRAssetManager& UDRAssetManager::Get()
@@ -17,4 +18,6 @@ void UDRAssetManager::StartInitialLoading()
 	Super::StartInitialLoading();
 
 	FDRGameplayTags::InitializeNativeGameplayTags();
+
+	UAbilitySystemGlobals::Get().InitGlobalData();
 }
