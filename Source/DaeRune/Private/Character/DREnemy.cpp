@@ -3,6 +3,7 @@
 
 #include "Character/DREnemy.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystem/DRAttributeSet.h"
 #include "Components/WidgetComponent.h"
 #include "UI/Widget/DRUserWidget.h"
@@ -63,4 +64,9 @@ void ADREnemy::InitAbilityActorInfo()
 	Cast<UDRAbilitySystemComponent>(AbilitySystemComponent)->AbilityActorInfoSet();
 
 	InitializeDefaultAttributes();
+}
+
+void ADREnemy::InitializeDefaultAttributes() const
+{
+	UDRAbilitySystemLibrary::InitializeDefaultAttributes(this, CharacterClass, Level, AbilitySystemComponent);
 }
