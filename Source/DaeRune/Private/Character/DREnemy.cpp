@@ -41,6 +41,7 @@ void ADREnemy::BeginPlay()
 
 	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
 	InitAbilityActorInfo();
+	UDRAbilitySystemLibrary::GiveStartupAbilities(this, AbilitySystemComponent);
 
 	if (UDRUserWidget* DRUserWidget = Cast<UDRUserWidget>(HealthBar->GetUserWidgetObject()))
 	{
