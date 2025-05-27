@@ -30,6 +30,8 @@ public:
 
 	FGameplayTag Damage;
 
+	FGameplayTag Effects_HitReact;
+
 private:
 	static FDRGameplayTags GameplayTags;
 };

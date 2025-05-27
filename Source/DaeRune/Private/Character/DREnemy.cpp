@@ -7,6 +7,8 @@
 #include "AbilitySystem/DRAttributeSet.h"
 #include "Components/WidgetComponent.h"
 #include "UI/Widget/DRUserWidget.h"
+#include "DRGameplayTags.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 ADREnemy::ADREnemy()
 {
@@ -27,10 +29,17 @@ int32 ADREnemy::GetPlayerLevel()
 	return Level;
 }
 
+void ADREnemy::HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
+{
+	bHitReacting = NewCount > 0;
+	GetCharacterMovement()->MaxWalkSpeed = bHitReacting ? 0.f : BaseWalkSpeed;
+}
+
 void ADREnemy::BeginPlay()
 {
 	Super::BeginPlay();
 
+	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
 	InitAbilityActorInfo();
 
 	if (UDRUserWidget* DRUserWidget = Cast<UDRUserWidget>(HealthBar->GetUserWidgetObject()))
@@ -51,6 +60,11 @@ void ADREnemy::BeginPlay()
 			{
 				OnMaxHealthChanged.Broadcast(Data.NewValue);
 			}
+		);
+
+		AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Effects_HitReact, EGameplayTagEventType::NewOrRemoved).AddUObject(
+			this,
+			&ADREnemy::HitReactTagChanged
 		);
 
 		OnHealthChanged.Broadcast(DRAS->GetHealth());

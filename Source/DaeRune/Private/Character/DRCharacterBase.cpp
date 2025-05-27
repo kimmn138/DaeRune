@@ -27,6 +27,11 @@ UAbilitySystemComponent* ADRCharacterBase::GetAbilitySystemComponent() const
 	return AbilitySystemComponent;
 }
 
+UAnimMontage* ADRCharacterBase::GetHitReactMontage_Implementation()
+{
+	return HitReactMontage;
+}
+
 void ADRCharacterBase::BeginPlay()
 {
 	Super::BeginPlay();
