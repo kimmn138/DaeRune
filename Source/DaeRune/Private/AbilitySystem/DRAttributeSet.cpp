@@ -142,7 +142,7 @@ void UDRAttributeSet::ShowFloatingText(const FEffectProperties& Props, float Dam
 {
 	if (Props.SourceCharacter != Props.TargetCharacter)
 	{
-		if (ADRPlayerController* PC = Cast<ADRPlayerController>(UGameplayStatics::GetPlayerController(Props.SourceCharacter, 0)))
+		if (ADRPlayerController* PC = Cast<ADRPlayerController>(Props.SourceCharacter->Controller))
 		{
 			PC->ShowDamageNumber(Damage, Props.TargetCharacter);
 		}
