@@ -29,6 +29,13 @@ int32 ADREnemy::GetPlayerLevel()
 	return Level;
 }
 
+void ADREnemy::Die()
+{
+	SetLifeSpan(LifeSpan);
+
+	Super::Die();
+}
+
 void ADREnemy::HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 {
 	bHitReacting = NewCount > 0;
