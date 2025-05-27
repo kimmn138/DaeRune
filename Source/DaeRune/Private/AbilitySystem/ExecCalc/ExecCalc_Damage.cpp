@@ -3,6 +3,7 @@
 
 #include "AbilitySystem/ExecCalc/ExecCalc_Damage.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/DRAttributeSet.h"
 
 UExecCalc_Damage::UExecCalc_Damage()
 {
