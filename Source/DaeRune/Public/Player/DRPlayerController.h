@@ -7,6 +7,7 @@
 #include "GameplayTagContainer.h"
 #include "DRPlayerController.generated.h"
 
+class UDamageTextComponent;
 class UInputMappingContext;
 class UInputAction;
 struct FInputActionValue;
@@ -23,6 +24,9 @@ class DAERUNE_API ADRPlayerController : public APlayerController
 
 public:
 	ADRPlayerController();
+
+	UFUNCTION(Client, Reliable)
+	void ShowDamageNumber(float DamageAmount, ACharacter* TargetCharacter);
 
 protected:
 	virtual void BeginPlay() override;
@@ -54,4 +58,7 @@ private:
 	TObjectPtr<UDRAbilitySystemComponent> DRAbilitySystemComponent;
 
 	UDRAbilitySystemComponent* GetASC();
+
+	UPROPERTY(EditDefaultsOnly)
+	TSubclassOf<UDamageTextComponent> DamageTextComponentClass;
 };
