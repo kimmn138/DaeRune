@@ -11,8 +11,6 @@ void UOverlayWidgetController::BroadcastInitialValues()
 
 	OnHealthChanged.Broadcast(DRAttributeSet->GetHealth());
 	OnMaxHealthChanged.Broadcast(DRAttributeSet->GetMaxHealth());
-	OnManaChanged.Broadcast(DRAttributeSet->GetMana());
-	OnMaxManaChanged.Broadcast(DRAttributeSet->GetMaxMana());
 }
 
 void UOverlayWidgetController::BindCallbacksToDependencies()
@@ -30,20 +28,6 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 		[this](const FOnAttributeChangeData& Data)
 		{
 			OnMaxHealthChanged.Broadcast(Data.NewValue);
-		}
-	);
-
-	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAttributeSet->GetManaAttribute()).AddLambda(
-		[this](const FOnAttributeChangeData& Data)
-		{
-			OnManaChanged.Broadcast(Data.NewValue);
-		}
-	);
-
-	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAttributeSet->GetMaxManaAttribute()).AddLambda(
-		[this](const FOnAttributeChangeData& Data)
-		{
-			OnMaxManaChanged.Broadcast(Data.NewValue);
 		}
 	);
 
