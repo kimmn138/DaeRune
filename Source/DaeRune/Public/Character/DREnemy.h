@@ -9,6 +9,8 @@
 #include "DREnemy.generated.h"
 
 class UWidgetComponent;
+class UBehaviorTree;
+class ADRAIController;
 
 /**
  * 
@@ -20,6 +22,7 @@ class DAERUNE_API ADREnemy : public ADRCharacterBase
 	
 public:
 	ADREnemy();
+	virtual void PossessedBy(AController* NewController) override;
 
 	/** Combat Interface */
 	virtual int32 GetPlayerLevel() override;
@@ -56,4 +59,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TObjectPtr<UWidgetComponent> HealthBar;
+
+	UPROPERTY(EditAnywhere, Category = "AI")
+	TObjectPtr<UBehaviorTree> BehaviorTree;
+
+	UPROPERTY()
+	TObjectPtr<ADRAIController> DRAIController;
 };

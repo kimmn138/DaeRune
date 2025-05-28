@@ -8,6 +8,9 @@
 #include "Components/WidgetComponent.h"
 #include "UI/Widget/DRUserWidget.h"
 #include "DRGameplayTags.h"
+#include "AI/DRAIController.h"
+#include "BehaviorTree/BehaviorTree.h"
+#include "BehaviorTree/BlackboardComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
 ADREnemy::ADREnemy()
@@ -22,6 +25,16 @@ ADREnemy::ADREnemy()
 
 	HealthBar = CreateDefaultSubobject<UWidgetComponent>("HealthBar");
 	HealthBar->SetupAttachment(GetRootComponent());
+}
+
+void ADREnemy::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	if (!HasAuthority()) return;
+	DRAIController = Cast<ADRAIController>(NewController);
+	DRAIController->GetBlackboardComponent()->InitializeBlackboard(*BehaviorTree->BlackboardAsset);
+	DRAIController->RunBehaviorTree(BehaviorTree);
 }
 
 int32 ADREnemy::GetPlayerLevel()
