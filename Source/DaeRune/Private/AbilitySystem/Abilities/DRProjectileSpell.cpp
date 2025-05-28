@@ -18,42 +18,38 @@ void UDRProjectileSpell::SpawnProjectile(const FVector& ProjectileTargetLocation
 	const bool bIsServer = GetAvatarActorFromActorInfo()->HasAuthority();
 	if (!bIsServer) return;
 
-	ICombatInterface* CombatInterface = Cast<ICombatInterface>(GetAvatarActorFromActorInfo());
-	if (CombatInterface)
-	{
-		const FVector SocketLocation = CombatInterface->GetCombatSocketLocation();
-		FRotator Rotation = (ProjectileTargetLocation - SocketLocation).Rotation();
+	const FVector SocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(GetAvatarActorFromActorInfo());
+	FRotator Rotation = (ProjectileTargetLocation - SocketLocation).Rotation();
 
-		FTransform SpawnTransform;
-		SpawnTransform.SetLocation(SocketLocation);
-		SpawnTransform.SetRotation(Rotation.Quaternion());
+	FTransform SpawnTransform;
+	SpawnTransform.SetLocation(SocketLocation);
+	SpawnTransform.SetRotation(Rotation.Quaternion());
 
-		ADRProjectile* Projectile = GetWorld()->SpawnActorDeferred<ADRProjectile>(
-			ProjectileClass,
-			SpawnTransform,
-			GetOwningActorFromActorInfo(),
-			Cast<APawn>(GetOwningActorFromActorInfo()),
-			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	ADRProjectile* Projectile = GetWorld()->SpawnActorDeferred<ADRProjectile>(
+		ProjectileClass,
+		SpawnTransform,
+		GetOwningActorFromActorInfo(),
+		Cast<APawn>(GetOwningActorFromActorInfo()),
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 
-		const UAbilitySystemComponent* SourceASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetAvatarActorFromActorInfo());
-		FGameplayEffectContextHandle EffectContextHandle = SourceASC->MakeEffectContext();
-		EffectContextHandle.SetAbility(this);
-		EffectContextHandle.AddSourceObject(Projectile);
-		TArray<TWeakObjectPtr<AActor>> Actors;
-		Actors.Add(Projectile);
-		EffectContextHandle.AddActors(Actors);
-		FHitResult HitResult;
-		HitResult.Location = ProjectileTargetLocation;
-		EffectContextHandle.AddHitResult(HitResult);
+	const UAbilitySystemComponent* SourceASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetAvatarActorFromActorInfo());
+	FGameplayEffectContextHandle EffectContextHandle = SourceASC->MakeEffectContext();
+	EffectContextHandle.SetAbility(this);
+	EffectContextHandle.AddSourceObject(Projectile);
+	TArray<TWeakObjectPtr<AActor>> Actors;
+	Actors.Add(Projectile);
+	EffectContextHandle.AddActors(Actors);
+	FHitResult HitResult;
+	HitResult.Location = ProjectileTargetLocation;
+	EffectContextHandle.AddHitResult(HitResult);
 
-		const FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageEffectClass, GetAbilityLevel(), EffectContextHandle);
+	const FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageEffectClass, GetAbilityLevel(), EffectContextHandle);
 
-		const FDRGameplayTags GameplayTags = FDRGameplayTags::Get();
-		const float ScaledDamage = Damage.GetValueAtLevel(GetAbilityLevel());
+	const FDRGameplayTags GameplayTags = FDRGameplayTags::Get();
+	const float ScaledDamage = Damage.GetValueAtLevel(GetAbilityLevel());
 
-		UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(SpecHandle, GameplayTags.Damage, ScaledDamage);
-		Projectile->DamageEffectSpecHandle = SpecHandle;
+	UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(SpecHandle, GameplayTags.Damage, ScaledDamage);
+	Projectile->DamageEffectSpecHandle = SpecHandle;
 
-		Projectile->FinishSpawning(SpawnTransform);
-	}
+	Projectile->FinishSpawning(SpawnTransform);
 }

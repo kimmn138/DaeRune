@@ -58,7 +58,7 @@ void ADRCharacterBase::BeginPlay()
 	Super::BeginPlay();
 }
 
-FVector ADRCharacterBase::GetCombatSocketLocation()
+FVector ADRCharacterBase::GetCombatSocketLocation_Implementation()
 {
 	check(Weapon);
 	return Weapon->GetSocketLocation(WeaponTipSocketName);
