@@ -30,6 +30,8 @@ public:
 
 	FGameplayTag Damage;
 
+	FGameplayTag Abilities_Attack;
+
 	FGameplayTag Effects_HitReact;
 
 private:
