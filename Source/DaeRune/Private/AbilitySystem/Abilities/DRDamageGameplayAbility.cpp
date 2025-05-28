@@ -15,3 +15,14 @@ void UDRDamageGameplayAbility::CauseDamage(AActor* TargetActor)
 	UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(DamageSpecHandle, GameplayTags.Damage, ScaledDamage);
 	GetAbilitySystemComponentFromActorInfo()->ApplyGameplayEffectSpecToTarget(*DamageSpecHandle.Data.Get(), UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor));
 }
+
+FTaggedMontage UDRDamageGameplayAbility::GetRandomTaggedMontageFromArray(const TArray<FTaggedMontage>& TaggedMontages) const
+{
+	if (TaggedMontages.Num() > 0)
+	{
+		const int32 Selection = FMath::RandRange(0, TaggedMontages.Num() - 1);
+		return TaggedMontages[Selection];
+	}
+
+	return FTaggedMontage();
+}

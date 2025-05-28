@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "AbilitySystem/Abilities/DRGameplayAbility.h"
+#include "Interaction/CombatInterface.h"
 #include "DRDamageGameplayAbility.generated.h"
 
 /**
@@ -24,4 +25,7 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Damage")
 	FScalableFloat Damage;
+
+	UFUNCTION(BlueprintPure)
+	FTaggedMontage GetRandomTaggedMontageFromArray(const TArray<FTaggedMontage>& TaggedMontages) const;
 };
