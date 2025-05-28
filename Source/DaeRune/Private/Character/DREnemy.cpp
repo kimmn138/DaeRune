@@ -40,6 +40,8 @@ void ADREnemy::PossessedBy(AController* NewController)
 	DRAIController = Cast<ADRAIController>(NewController);
 	DRAIController->GetBlackboardComponent()->InitializeBlackboard(*BehaviorTree->BlackboardAsset);
 	DRAIController->RunBehaviorTree(BehaviorTree);
+	DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("HitReacting"), false);
+	DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("RangedAttacker"), CharacterClass != ECharacterClass::Warrior);
 }
 
 int32 ADREnemy::GetPlayerLevel()
@@ -58,6 +60,7 @@ void ADREnemy::HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount
 {
 	bHitReacting = NewCount > 0;
 	GetCharacterMovement()->MaxWalkSpeed = bHitReacting ? 0.f : BaseWalkSpeed;
+	DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("HitReacting"), bHitReacting);
 }
 
 void ADREnemy::BeginPlay()
