@@ -51,6 +51,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation()
 
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Dissolve();
+	bDead = true;
 }
 
 void ADRCharacterBase::BeginPlay()
@@ -62,6 +63,16 @@ FVector ADRCharacterBase::GetCombatSocketLocation_Implementation()
 {
 	check(Weapon);
 	return Weapon->GetSocketLocation(WeaponTipSocketName);
+}
+
+bool ADRCharacterBase::IsDead_Implementation() const
+{
+	return bDead;
+}
+
+AActor* ADRCharacterBase::GetAvatar_Implementation()
+{
+	return this;
 }
 
 void ADRCharacterBase::InitAbilityActorInfo()
