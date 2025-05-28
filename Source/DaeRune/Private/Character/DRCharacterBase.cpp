@@ -3,6 +3,7 @@
 
 #include "Character/DRCharacterBase.h"
 #include "AbilitySystemComponent.h"
+#include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "DaeRune/DaeRune.h"
 #include "Components/CapsuleComponent.h"
@@ -59,10 +60,22 @@ void ADRCharacterBase::BeginPlay()
 	Super::BeginPlay();
 }
 
-FVector ADRCharacterBase::GetCombatSocketLocation_Implementation()
+FVector ADRCharacterBase::GetCombatSocketLocation_Implementation(const FGameplayTag& MontageTag)
 {
-	check(Weapon);
-	return Weapon->GetSocketLocation(WeaponTipSocketName);
+	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+	if (MontageTag.MatchesTagExact(GameplayTags.Montage_Attack_Weapon) && IsValid(Weapon))
+	{
+		return Weapon->GetSocketLocation(WeaponTipSocketName);
+	}
+	if (MontageTag.MatchesTagExact(GameplayTags.Montage_Attack_LeftHand))
+	{
+		return GetMesh()->GetSocketLocation(LeftHandSocketName);
+	}
+	if (MontageTag.MatchesTagExact(GameplayTags.Montage_Attack_RightHand))
+	{
+		return GetMesh()->GetSocketLocation(RightHandSocketName);
+	}
+	return FVector();
 }
 
 bool ADRCharacterBase::IsDead_Implementation() const
@@ -73,6 +86,11 @@ bool ADRCharacterBase::IsDead_Implementation() const
 AActor* ADRCharacterBase::GetAvatar_Implementation()
 {
 	return this;
+}
+
+TArray<FTaggedMontage> ADRCharacterBase::GetAttackMontages_Implementation()
+{
+	return AttackMontages;
 }
 
 void ADRCharacterBase::InitAbilityActorInfo()
