@@ -145,6 +145,11 @@ void UDRAttributeSet::ShowFloatingText(const FEffectProperties& Props, float Dam
 		if (ADRPlayerController* PC = Cast<ADRPlayerController>(Props.SourceCharacter->Controller))
 		{
 			PC->ShowDamageNumber(Damage, Props.TargetCharacter);
+			return;
+		}
+		if (ADRPlayerController* PC = Cast<ADRPlayerController>(Props.TargetCharacter->Controller))
+		{
+			PC->ShowDamageNumber(Damage, Props.TargetCharacter);
 		}
 	}
 }
