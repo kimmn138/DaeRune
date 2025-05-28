@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Character/DRCharacterBase.h"
+#include "Interaction/EnemyInterface.h"
 #include "UI/WidgetController/OverlayWidgetController.h"
 #include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "DREnemy.generated.h"
@@ -16,7 +17,7 @@ class ADRAIController;
  * 
  */
 UCLASS()
-class DAERUNE_API ADREnemy : public ADRCharacterBase
+class DAERUNE_API ADREnemy : public ADRCharacterBase, public IEnemyInterface
 {
 	GENERATED_BODY()
 	
@@ -27,7 +28,12 @@ public:
 	/** Combat Interface */
 	virtual int32 GetPlayerLevel() override;
 	virtual void Die() override;
+	virtual void SetCombatTarget_Implementation(AActor* InCombatTarget) override;
+	virtual AActor* GetCombatTarget_Implementation() const override;
 	/** end Combat Interface */
+
+	UPROPERTY(BlueprintReadWrite, Category = "Combat")
+	TObjectPtr<AActor> CombatTarget;
 
 	UPROPERTY(BlueprintAssignable)
 	FOnAttributeChangedSignature OnHealthChanged;

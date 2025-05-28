@@ -56,6 +56,16 @@ void ADREnemy::Die()
 	Super::Die();
 }
 
+void ADREnemy::SetCombatTarget_Implementation(AActor* InCombatTarget)
+{
+	CombatTarget = InCombatTarget;
+}
+
+AActor* ADREnemy::GetCombatTarget_Implementation() const
+{
+	return CombatTarget;
+}
+
 void ADREnemy::HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 {
 	bHitReacting = NewCount > 0;
