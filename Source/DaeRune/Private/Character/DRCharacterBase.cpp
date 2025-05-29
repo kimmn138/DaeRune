@@ -93,6 +93,11 @@ TArray<FTaggedMontage> ADRCharacterBase::GetAttackMontages_Implementation()
 	return AttackMontages;
 }
 
+UNiagaraSystem* ADRCharacterBase::GetBloodEffect_Implementation()
+{
+	return BloodEffect;
+}
+
 void ADRCharacterBase::InitAbilityActorInfo()
 {
 }
