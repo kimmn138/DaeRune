@@ -7,6 +7,7 @@
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "DaeRune/DaeRune.h"
 #include "Components/CapsuleComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 ADRCharacterBase::ADRCharacterBase()
 {
@@ -41,6 +42,8 @@ void ADRCharacterBase::Die()
 
 void ADRCharacterBase::MulticastHandleDeath_Implementation()
 {
+	UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation(), GetActorRotation());
+
 	Weapon->SetSimulatePhysics(true);
 	Weapon->SetEnableGravity(true);
 	Weapon->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
