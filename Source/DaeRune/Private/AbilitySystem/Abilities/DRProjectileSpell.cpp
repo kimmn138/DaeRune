@@ -20,7 +20,7 @@ void UDRProjectileSpell::SpawnProjectile(const FVector& ProjectileTargetLocation
 
 	const FVector SocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(
 		GetAvatarActorFromActorInfo(),
-		FDRGameplayTags::Get().Montage_Attack_Weapon);
+		FDRGameplayTags::Get().CombatSocket_Weapon);
 	FRotator Rotation = (ProjectileTargetLocation - SocketLocation).Rotation();
 
 	FTransform SpawnTransform;
