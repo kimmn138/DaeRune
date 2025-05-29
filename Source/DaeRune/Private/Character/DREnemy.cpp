@@ -52,6 +52,7 @@ int32 ADREnemy::GetPlayerLevel()
 void ADREnemy::Die()
 {
 	SetLifeSpan(LifeSpan);
+	if (DRAIController) DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("Dead"), true);
 
 	Super::Die();
 }
