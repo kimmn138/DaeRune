@@ -21,7 +21,7 @@ void UExecCalc_Damage::Execute_Implementation(const FGameplayEffectCustomExecuti
 	const FGameplayEffectSpec& Spec = ExecutionParams.GetOwningSpec();
 
 	// Get Damage Set by Caller Magnitude
-	float Damage = Spec.GetSetByCallerMagnitude(FDRGameplayTags::Get().Damage);
+	float Damage = Spec.GetSetByCallerMagnitude(FDRGameplayTags::Get().Damage, false);
 
 	const FGameplayModifierEvaluatedData EvaluatedData(UDRAttributeSet::GetIncomingDamageAttribute(), EGameplayModOp::Additive, Damage);
 	OutExecutionOutput.AddOutputModifier(EvaluatedData);
