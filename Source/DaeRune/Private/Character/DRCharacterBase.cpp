@@ -122,6 +122,11 @@ int32 ADRCharacterBase::GetMinionCount_Implementation()
 	return MinionCount;
 }
 
+void ADRCharacterBase::IncremenetMinionCount_Implementation(int32 Amount)
+{
+	MinionCount += Amount;
+}
+
 void ADRCharacterBase::InitAbilityActorInfo()
 {
 }
