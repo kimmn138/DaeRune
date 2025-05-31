@@ -117,6 +117,11 @@ FTaggedMontage ADRCharacterBase::GetTaggedMontageByTag_Implementation(const FGam
 	return FTaggedMontage();
 }
 
+int32 ADRCharacterBase::GetMinionCount_Implementation()
+{
+	return MinionCount;
+}
+
 void ADRCharacterBase::InitAbilityActorInfo()
 {
 }
