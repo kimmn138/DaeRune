@@ -44,7 +44,7 @@ void ADREnemy::PossessedBy(AController* NewController)
 	DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("RangedAttacker"), CharacterClass != ECharacterClass::Warrior);
 }
 
-int32 ADREnemy::GetPlayerLevel()
+int32 ADREnemy::GetPlayerLevel_Implementation()
 {
 	return Level;
 }

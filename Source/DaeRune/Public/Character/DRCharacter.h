@@ -20,7 +20,7 @@ public:
 	virtual void OnRep_PlayerState() override;
 
 	/** Combat Interface */
-	virtual int32 GetPlayerLevel() override;
+	virtual int32 GetPlayerLevel_Implementation() override;
 	/** end Combat Interface */
 
 private:

@@ -54,7 +54,7 @@ void ADRCharacter::OnRep_PlayerState()
 	InitAbilityActorInfo();
 }
 
-int32 ADRCharacter::GetPlayerLevel()
+int32 ADRCharacter::GetPlayerLevel_Implementation()
 {
 	const ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
 	check(DRPlayerState);
