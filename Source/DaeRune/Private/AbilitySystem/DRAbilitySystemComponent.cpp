@@ -21,6 +21,8 @@ void UDRAbilitySystemComponent::AddCharacterAbilities(const TArray<TSubclassOf<U
 			GiveAbility(AbilitySpec);
 		}
 	}
+	bStartupAbilitiesGiven = true;
+	AbilitiesGivenDelegate.Broadcast(this);
 }
 
 void UDRAbilitySystemComponent::AbilityInputTagHeld(const FGameplayTag& InputTag)
