@@ -75,6 +75,6 @@ void UOverlayWidgetController::OnInitializeStartupAbilities(UDRAbilitySystemComp
 				Info.InputTag = DRAbilitySystemComponent->GetInputTagFromSpec(AbilitySpec);
 				AbilityInfoDelegate.Broadcast(Info);
 			});
-	AuraAbilitySystemComponent->ForEachAbility(BroadcastDelegate);
+	DRAbilitySystemComponent->ForEachAbility(BroadcastDelegate);
 }
 
