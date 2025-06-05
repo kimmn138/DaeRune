@@ -4,6 +4,7 @@
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "DRGameplayTags.h"
 #include "AbilitySystem/Abilities/DRGameplayAbility.h"
+#include "DaeRune/DRLogChannels.h"
 
 void UDRAbilitySystemComponent::AbilityActorInfoSet()
 {
@@ -53,6 +54,45 @@ void UDRAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& Inpu
 			AbilitySpecInputReleased(AbilitySpec);
 		}
 	}
+}
+
+void UDRAbilitySystemComponent::ForEachAbility(const FForEachAbility& Delegate)
+{
+	FScopedAbilityListLock ActiveScopeLock(*this); 
+		for (const FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
+		{
+			if (!Delegate.ExecuteIfBound(AbilitySpec))
+			{
+				UE_LOG(LogDR, Error, TEXT("Failed to execute delegate in %hs"), __FUNCTION__);
+			}
+		}
+}
+
+FGameplayTag UDRAbilitySystemComponent::GetAbilityTagFromSpec(const FGameplayAbilitySpec& AbilitySpec)
+{
+	if (AbilitySpec.Ability)
+	{
+		for (FGameplayTag Tag : AbilitySpec.Ability.Get()->AbilityTags)
+		{
+			if (Tag.MatchesTag(FGameplayTag::RequestGameplayTag(FName("Abilities"))))
+			{
+				return Tag;
+			}
+		}
+	}
+	return FGameplayTag();
+}
+
+FGameplayTag UDRAbilitySystemComponent::GetInputTagFromSpec(const FGameplayAbilitySpec& AbilitySpec)
+{
+	for (FGameplayTag Tag : AbilitySpec.DynamicAbilityTags)
+	{
+		if (Tag.MatchesTag(FGameplayTag::RequestGameplayTag(FName("InputTag"))))
+		{
+			return Tag; 
+		}
+	}
+	return FGameplayTag();
 }
 
 void UDRAbilitySystemComponent::ClientEffectApplied_Implementation(UAbilitySystemComponent* AbilitySystemComponent, const FGameplayEffectSpec& EffectSpec, FActiveGameplayEffectHandle ActiveEffectHandle)
