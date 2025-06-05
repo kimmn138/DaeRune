@@ -159,6 +159,7 @@ void ADRCharacterBase::AddCharacterAbilities()
 	if (!HasAuthority()) return;
 
 	DRASC->AddCharacterAbilities(StartupAbilities);
+	DRASC->AddCharacterPassiveAbilities(StartupPassiveAbilities);
 }
 
 void ADRCharacterBase::Dissolve()
