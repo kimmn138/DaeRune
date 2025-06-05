@@ -33,6 +33,8 @@ ADRCharacter::ADRCharacter()
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationRoll = false;
 	bUseControllerRotationYaw = true;
+
+	CharacterClass = ECharacterClass::Elementalist;
 }
 
 void ADRCharacter::PossessedBy(AController* NewController)
