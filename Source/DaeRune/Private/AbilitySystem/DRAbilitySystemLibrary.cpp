@@ -101,6 +101,54 @@ UAbilityInfo* UDRAbilitySystemLibrary::GetAbilityInfo(const UObject* WorldContex
 	return DRGameMode->AbilityInfo;
 }
 
+bool UDRAbilitySystemLibrary::IsSuccessfulDebuff(const FGameplayEffectContextHandle& EffectContextHandle)
+{
+	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	{
+		return DREffectContext->IsSuccessfulDebuff();
+	}
+	return false;
+}
+
+float UDRAbilitySystemLibrary::GetDebuffDamage(const FGameplayEffectContextHandle& EffectContextHandle)
+{
+	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	{
+		return DREffectContext->GetDebuffDamage();
+	}
+	return 0.f;
+}
+
+float UDRAbilitySystemLibrary::GetDebuffDuration(const FGameplayEffectContextHandle& EffectContextHandle)
+{
+	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	{
+		return DREffectContext->GetDebuffDuration();
+	}
+	return 0.f;
+}
+
+float UDRAbilitySystemLibrary::GetDebuffFrequency(const FGameplayEffectContextHandle& EffectContextHandle)
+{
+	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	{
+		return DREffectContext->GetDebuffFrequency();
+	}
+	return 0.f;
+}
+
+FGameplayTag UDRAbilitySystemLibrary::GetDamageType(const FGameplayEffectContextHandle& EffectContextHandle)
+{
+	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	{
+		if (DREffectContext->GetDamageType().IsValid())
+		{
+			return *DREffectContext->GetDamageType();
+		}
+	}
+	return FGameplayTag();
+}
+
 void UDRAbilitySystemLibrary::GetLivePlayersWithinRadius(const UObject* WorldContextObject, TArray<AActor*>& OutOverlappingActors, const TArray<AActor*>& ActorsToIgnore, float Radius, const FVector& SphereOrigin)
 {
 	FCollisionQueryParams SphereParams;
