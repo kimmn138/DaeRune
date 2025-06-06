@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DRAbilityTypes.h"
 #include "AbilitySystem/Abilities/DRGameplayAbility.h"
 #include "Interaction/CombatInterface.h"
 #include "DRDamageGameplayAbility.generated.h"
@@ -18,6 +19,8 @@ class DAERUNE_API UDRDamageGameplayAbility : public UDRGameplayAbility
 public:
 	UFUNCTION(BlueprintCallable)
 	void CauseDamage(AActor* TargetActor);
+
+	FDamageEffectParams MakeDamageEffectParamsFromClassDefaults(AActor* TargetActor = nullptr) const;
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
