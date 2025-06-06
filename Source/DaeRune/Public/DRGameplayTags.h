@@ -31,6 +31,15 @@ public:
 	FGameplayTag InputTag_Passive_2;
 
 	FGameplayTag Damage;
+	FGameplayTag Damage_Fire;
+	FGameplayTag Damage_Lightning;
+	FGameplayTag Damage_Arcane; 
+	FGameplayTag Damage_Physical;
+
+	FGameplayTag Debuff_Burn; 
+	FGameplayTag Debuff_Stun;
+	FGameplayTag Debuff_Arcane;
+	FGameplayTag Debuff_Physical;
 
 	FGameplayTag Abilities_Attack;
 	FGameplayTag Abilities_Summon;
@@ -55,6 +64,9 @@ public:
 	FGameplayTag Montage_Attack_2;
 	FGameplayTag Montage_Attack_3;
 	FGameplayTag Montage_Attack_4;
+
+	TArray<FGameplayTag> DamageTypeTags;
+	TMap<FGameplayTag, FGameplayTag> DamageTypesToDebuffs;
 
 	FGameplayTag Effects_HitReact;
 
