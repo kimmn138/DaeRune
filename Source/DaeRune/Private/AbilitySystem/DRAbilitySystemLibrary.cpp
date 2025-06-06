@@ -5,23 +5,39 @@
 #include "Game/DRGameModeBase.h"
 #include "Interaction/CombatInterface.h"
 #include "Kismet/GameplayStatics.h"
-#include "UI/WidgetController/DRWidgetController.h"
 #include "Player/DRPlayerState.h"
 #include "UI/HUD/DRHUD.h"
+#include "UI/WidgetController/DRWidgetController.h"
 #include "Engine/OverlapResult.h"
 
-UOverlayWidgetController* UDRAbilitySystemLibrary::GetOverlayWidgetController(const UObject* WorldContextObject)
+bool UDRAbilitySystemLibrary::MakeWidgetControllerParams(const UObject* WorldContextObject, FWidgetControllerParams& OutWCParams, ADRHUD*& OutDRHUD)
 {
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(WorldContextObject, 0))
 	{
-		if (ADRHUD* DRHUD = Cast<ADRHUD>(PC->GetHUD()))
+		OutDRHUD = Cast<ADRHUD>(PC->GetHUD()); 
+		if (OutDRHUD)
 		{
 			ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>();
 			UAbilitySystemComponent* ASC = PS->GetAbilitySystemComponent();
 			UAttributeSet* AS = PS->GetAttributeSet();
-			const FWidgetControllerParams WidgetControllerParams(PC, PS, ASC, AS);
-			return DRHUD->GetOverlayWidgetController(WidgetControllerParams);
+			
+			OutWCParams.AttributeSet = AS;
+			OutWCParams.AbilitySystemComponent = ASC;
+			OutWCParams.PlayerState = PS;
+			OutWCParams.PlayerController = PC;
+			return true;
 		}
+	}
+	return false;
+}
+
+UOverlayWidgetController* UDRAbilitySystemLibrary::GetOverlayWidgetController(const UObject* WorldContextObject)
+{
+	FWidgetControllerParams WCParams;
+	ADRHUD* DRHUD = nullptr;
+	if (MakeWidgetControllerParams(WorldContextObject, WCParams, DRHUD))
+	{
+		return DRHUD->GetOverlayWidgetController(WCParams);
 	}
 	return nullptr;
 }
