@@ -8,47 +8,43 @@
 
 void UOverlayWidgetController::BroadcastInitialValues()
 {
-	const UDRAttributeSet* DRAttributeSet = CastChecked<UDRAttributeSet>(AttributeSet);
-
-	OnHealthChanged.Broadcast(DRAttributeSet->GetHealth());
-	OnMaxHealthChanged.Broadcast(DRAttributeSet->GetMaxHealth());
+	OnHealthChanged.Broadcast(GetDRAS()->GetHealth());
+	OnMaxHealthChanged.Broadcast(GetDRAS()->GetMaxHealth());
 }
 
 void UOverlayWidgetController::BindCallbacksToDependencies()
 {
-	const UDRAttributeSet* DRAttributeSet = CastChecked<UDRAttributeSet>(AttributeSet);
-
-	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAttributeSet->GetHealthAttribute()).AddLambda(
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetHealthAttribute()).AddLambda(
 		[this](const FOnAttributeChangeData& Data)
 		{
 			OnHealthChanged.Broadcast(Data.NewValue);
 		}
 	);
 
-	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAttributeSet->GetMaxHealthAttribute()).AddLambda(
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetMaxHealthAttribute()).AddLambda(
 		[this](const FOnAttributeChangeData& Data)
 		{
 			OnMaxHealthChanged.Broadcast(Data.NewValue);
 		}
 	);
 
-	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(AbilitySystemComponent))
+	if (GetDRASC())
 	{
-		if (DRASC->bStartupAbilitiesGiven)
+		if (GetDRASC()->bStartupAbilitiesGiven)
 		{
-			OnInitializeStartupAbilities(DRASC);
+			BroadcastAbilityInfo();
 		}
 		else
 		{
-			DRASC->AbilitiesGivenDelegate.AddUObject(this, &UOverlayWidgetController::OnInitializeStartupAbilities);
+			GetDRASC()->AbilitiesGivenDelegate.AddUObject(this, &UOverlayWidgetController::BroadcastAbilityInfo);
 		}
 
-		DRASC->EffectAssetTags.AddLambda(
+		GetDRASC()->EffectAssetTags.AddLambda(
 			[this](const FGameplayTagContainer& AssetTags)
 			{
 				for (const FGameplayTag& Tag : AssetTags)
 				{
-					// For example, say that Tag = Message.HealthPotionMore actions
+					// For example, say that Tag = Message.HealthPotion
 					// "Message.HealthPotion".MatchesTag("Message") will return True, "Message".MatchesTag("Message.HealthPotion") will return False
 					FGameplayTag MessageTag = FGameplayTag::RequestGameplayTag(FName("Message"));
 					if (Tag.MatchesTag(MessageTag))
@@ -60,21 +56,5 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 			}
 		);
 	}
-}
-
-void UOverlayWidgetController::OnInitializeStartupAbilities(UDRAbilitySystemComponent* DRAbilitySystemComponent)
-{
-	//TODO Get information about all given abilities, look up their Ability Info, and broadcast it to widgets.More actions
-	if (!DRAbilitySystemComponent->bStartupAbilitiesGiven) return;
-
-	FForEachAbility BroadcastDelegate;
-		BroadcastDelegate.BindLambda([this, DRAbilitySystemComponent](const FGameplayAbilitySpec& AbilitySpec)
-			{
-				//TODO need a way to figure out the ability tag for a given ability spec.
-				FDRAbilityInfo Info = AbilityInfo->FindAbilityInfoForTag(DRAbilitySystemComponent->GetAbilityTagFromSpec(AbilitySpec));
-				Info.InputTag = DRAbilitySystemComponent->GetInputTagFromSpec(AbilitySpec);
-				AbilityInfoDelegate.Broadcast(Info);
-			});
-	DRAbilitySystemComponent->ForEachAbility(BroadcastDelegate);
 }
 

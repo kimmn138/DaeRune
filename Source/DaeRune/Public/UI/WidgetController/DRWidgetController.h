@@ -7,8 +7,15 @@
 #include "UObject/NoExportTypes.h"
 #include "DRWidgetController.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAbilityInfoSignature, const FDRAbilityInfo&, Info);
+
 class UAttributeSet;
 class UAbilitySystemComponent;
+class ADRPlayerController;
+class ADRPlayerState; 
+class UDRAbilitySystemComponent;
+class UDRAttributeSet;
+class UAbilityInfo;
 
 USTRUCT(BlueprintType)
 struct FWidgetControllerParams
@@ -47,8 +54,16 @@ public:
 	UFUNCTION(BlueprintCallable)
 	virtual void BroadcastInitialValues();
 	virtual void BindCallbacksToDependencies();
+
+	UPROPERTY(BlueprintAssignable, Category = "GAS|Messages")
+	FAbilityInfoSignature AbilityInfoDelegate;
+
+	void BroadcastAbilityInfo();
 	
 protected:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Widget Data")
+	TObjectPtr<UAbilityInfo> AbilityInfo;
+
 	UPROPERTY(BlueprintReadOnly, Category = "WidgetController")
 	TObjectPtr<APlayerController> PlayerController;
 
@@ -60,4 +75,21 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category = "WidgetController")
 	TObjectPtr<UAttributeSet> AttributeSet;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WidgetController")
+	TObjectPtr<ADRPlayerController> DRPlayerController;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WidgetController")
+	TObjectPtr<ADRPlayerState> DRPlayerState;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WidgetController")
+	TObjectPtr<UDRAbilitySystemComponent> DRAbilitySystemComponent;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WidgetController")
+	TObjectPtr<UDRAttributeSet> DRAttributeSet;
+
+	ADRPlayerController* GetDRPC();
+	ADRPlayerState* GetDRPS();
+	UDRAbilitySystemComponent* GetDRASC();
+	UDRAttributeSet* GetDRAS();
 };
