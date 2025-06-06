@@ -86,9 +86,16 @@ void UDRAbilitySystemLibrary::GiveStartupAbilities(const UObject* WorldContextOb
 
 UCharacterClassInfo* UDRAbilitySystemLibrary::GetCharacterClassInfo(const UObject* WorldContextObject)
 {
-	ADRGameModeBase* DRGameMode = Cast<ADRGameModeBase>(UGameplayStatics::GetGameMode(WorldContextObject));
+	const ADRGameModeBase* DRGameMode = Cast<ADRGameModeBase>(UGameplayStatics::GetGameMode(WorldContextObject));
 	if (DRGameMode == nullptr) return nullptr;
 	return DRGameMode->CharacterClassInfo;
+}
+
+UAbilityInfo* UDRAbilitySystemLibrary::GetAbilityInfo(const UObject* WorldContextObject)
+{
+	const ADRGameModeBase* DRGameMode = Cast<ADRGameModeBase>(UGameplayStatics::GetGameMode(WorldContextObject));
+	if (DRGameMode == nullptr) return nullptr;
+	return DRGameMode->AbilityInfo;
 }
 
 void UDRAbilitySystemLibrary::GetLivePlayersWithinRadius(const UObject* WorldContextObject, TArray<AActor*>& OutOverlappingActors, const TArray<AActor*>& ActorsToIgnore, float Radius, const FVector& SphereOrigin)
