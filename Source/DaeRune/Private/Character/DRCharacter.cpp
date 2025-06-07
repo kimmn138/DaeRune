@@ -69,6 +69,7 @@ void ADRCharacter::InitAbilityActorInfo()
 	Cast<UDRAbilitySystemComponent>(DRPlayerState->GetAbilitySystemComponent())->AbilityActorInfoSet();
 	AbilitySystemComponent = DRPlayerState->GetAbilitySystemComponent();
 	AttributeSet = DRPlayerState->GetAttributeSet();
+	OnAscRegistered.Broadcast(AbilitySystemComponent);
 
 	if (ADRPlayerController* DRPlayerController = Cast<ADRPlayerController>(GetController()))
 	{

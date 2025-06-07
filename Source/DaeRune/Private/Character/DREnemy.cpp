@@ -127,6 +127,7 @@ void ADREnemy::InitAbilityActorInfo()
 	{
 		InitializeDefaultAttributes();
 	}
+	OnAscRegistered.Broadcast(AbilitySystemComponent);
 }
 
 void ADREnemy::InitializeDefaultAttributes() const

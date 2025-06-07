@@ -5,6 +5,7 @@
 #include "AbilitySystemComponent.h"
 #include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
+#include "AbilitySystem/Debuff/DebuffNiagaraComponent.h"
 #include "DaeRune/DaeRune.h"
 #include "Components/CapsuleComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -12,6 +13,11 @@
 ADRCharacterBase::ADRCharacterBase()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get(); 
+
+	BurnDebuffComponent = CreateDefaultSubobject<UDebuffNiagaraComponent>("BurnDebuffComponent");
+	BurnDebuffComponent->SetupAttachment(GetRootComponent());
+	BurnDebuffComponent->DebuffTag = GameplayTags.Debuff_Burn;
 
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	GetCapsuleComponent()->SetGenerateOverlapEvents(false);
@@ -56,6 +62,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation()
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Dissolve();
 	bDead = true;
+	BurnDebuffComponent->Deactivate();
 }
 
 void ADRCharacterBase::BeginPlay()
@@ -130,6 +137,11 @@ void ADRCharacterBase::IncremenetMinionCount_Implementation(int32 Amount)
 ECharacterClass ADRCharacterBase::GetCharacterClass_Implementation()
 {
 	return CharacterClass;
+}
+
+FOnASCRegistered ADRCharacterBase::GetOnASCRegisteredDelegate()
+{
+	return OnAscRegistered;
 }
 
 void ADRCharacterBase::InitAbilityActorInfo()
