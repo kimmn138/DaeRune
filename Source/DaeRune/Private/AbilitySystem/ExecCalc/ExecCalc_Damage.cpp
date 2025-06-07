@@ -25,8 +25,7 @@ void UExecCalc_Damage::DetermineDebuff(const FGameplayEffectCustomExecutionParam
 			// Determine if there was a successful debuff
 			const float SourceDebuffChance = Spec.GetSetByCallerMagnitude(GameplayTags.Debuff_Chance, false, -1.f);
 
-			const float EffectiveDebuffChance = SourceDebuffChance / 100.f;
-			const bool bDebuff = FMath::RandRange(1, 100) < EffectiveDebuffChance;
+			const bool bDebuff = FMath::RandRange(1, 100) <= SourceDebuffChance;
 			if (bDebuff)
 			{
 				FGameplayEffectContextHandle ContextHandle = Spec.GetContext(); 
