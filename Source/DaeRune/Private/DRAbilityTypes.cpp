@@ -54,9 +54,13 @@ bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool
 		{
 			RepBits |= 1 << 11;
 		}
+		if (!DeathImpulse.IsZero())
+		{
+			RepBits |= 1 << 12;
+		}
 	}
 
-	Ar.SerializeBits(&RepBits, 12);
+	Ar.SerializeBits(&RepBits, 13);
 
 	if (RepBits & (1 << 0))
 	{
@@ -124,6 +128,10 @@ bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool
 			}
 		}
 		DamageType->NetSerialize(Ar, Map, bOutSuccess);
+	}
+	if (RepBits & (1 << 12))
+	{
+		DeathImpulse.NetSerialize(Ar, Map, bOutSuccess);
 	}
 
 	if (Ar.IsLoading())
