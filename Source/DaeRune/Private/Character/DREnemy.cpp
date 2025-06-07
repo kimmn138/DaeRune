@@ -49,12 +49,12 @@ int32 ADREnemy::GetPlayerLevel_Implementation()
 	return Level;
 }
 
-void ADREnemy::Die()
+void ADREnemy::Die(const FVector& DeathImpulse)
 {
 	SetLifeSpan(LifeSpan);
 	if (DRAIController) DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("Dead"), true);
 
-	Super::Die();
+	Super::Die(DeathImpulse);
 }
 
 void ADREnemy::SetCombatTarget_Implementation(AActor* InCombatTarget)
