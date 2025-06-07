@@ -4,6 +4,7 @@
 #include "AbilitySystem/ExecCalc/ExecCalc_Damage.h"
 #include "AbilitySystemComponent.h"
 #include "DRGameplayTags.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystem/DRAttributeSet.h"
 
 UExecCalc_Damage::UExecCalc_Damage()
@@ -28,7 +29,18 @@ void UExecCalc_Damage::DetermineDebuff(const FGameplayEffectCustomExecutionParam
 			const bool bDebuff = FMath::RandRange(1, 100) < EffectiveDebuffChance;
 			if (bDebuff)
 			{
-				//TODO: What do we do?
+				FGameplayEffectContextHandle ContextHandle = Spec.GetContext(); 
+
+				UDRAbilitySystemLibrary::SetIsSuccessfulDebuff(ContextHandle, true);
+				UDRAbilitySystemLibrary::SetDamageType(ContextHandle, DamageType);
+
+				const float DebuffDamage = Spec.GetSetByCallerMagnitude(GameplayTags.Debuff_Damage, false, -1.f);
+				const float DebuffDuration = Spec.GetSetByCallerMagnitude(GameplayTags.Debuff_Duration, false, -1.f);
+				const float DebuffFrequency = Spec.GetSetByCallerMagnitude(GameplayTags.Debuff_Frequency, false, -1.f);
+
+				UDRAbilitySystemLibrary::SetDebuffDamage(ContextHandle, DebuffDamage);
+				UDRAbilitySystemLibrary::SetDebuffDuration(ContextHandle, DebuffDuration);
+				UDRAbilitySystemLibrary::SetDebuffFrequency(ContextHandle, DebuffFrequency);
 			}
 		}
 	}
