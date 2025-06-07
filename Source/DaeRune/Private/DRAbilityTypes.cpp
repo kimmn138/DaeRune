@@ -58,9 +58,13 @@ bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool
 		{
 			RepBits |= 1 << 12;
 		}
+		if (!KnockbackForce.IsZero())
+		{
+			RepBits |= 1 << 13;
+		}
 	}
 
-	Ar.SerializeBits(&RepBits, 13);
+	Ar.SerializeBits(&RepBits, 14);
 
 	if (RepBits & (1 << 0))
 	{
@@ -132,6 +136,10 @@ bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool
 	if (RepBits & (1 << 12))
 	{
 		DeathImpulse.NetSerialize(Ar, Map, bOutSuccess);
+	}
+	if (RepBits & (1 << 13))
+	{
+		KnockbackForce.NetSerialize(Ar, Map, bOutSuccess);
 	}
 
 	if (Ar.IsLoading())
