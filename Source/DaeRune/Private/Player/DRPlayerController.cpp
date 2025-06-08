@@ -3,6 +3,7 @@
 
 #include "Player/DRPlayerController.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "DRGameplayTags.h"
 #include "EnhancedInputSubsystems.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "Input/DRInputComponent.h"
@@ -53,6 +54,10 @@ void ADRPlayerController::SetupInputComponent()
 
 void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 {
+	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed))
+	{
+		return; 
+	}
 	const FVector2D InputAxisVector = InputActionValue.Get<FVector2D>();
 	const FRotator Rotation = GetControlRotation();
 	const FRotator YawRotation(0.f, Rotation.Yaw, 0.f);
@@ -76,17 +81,29 @@ void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 {
+	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed))
+	{
+		return;
+	}
 	if (GetASC()) GetASC()->AbilityInputTagPressed(InputTag);
 }
 
 void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 {
+	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputReleased))
+	{
+		return;
+	}
 	if (GetASC() == nullptr) return;
 	GetASC()->AbilityInputTagReleased(InputTag);
 }
 
 void ADRPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
 {
+	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputHeld))
+	{
+		return;
+	}
 	if (GetASC() == nullptr) return;
 	GetASC()->AbilityInputTagHeld(InputTag);
 }
