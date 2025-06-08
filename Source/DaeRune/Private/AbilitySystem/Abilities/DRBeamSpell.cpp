@@ -2,6 +2,7 @@
 
 
 #include "AbilitySystem/Abilities/DRBeamSpell.h"
+#include "GameFramework/Character.h"
 
 void UDRBeamSpell::StoreCameraDataInfo(const FHitResult& HitResult)
 {
@@ -13,5 +14,13 @@ void UDRBeamSpell::StoreCameraDataInfo(const FHitResult& HitResult)
 	else
 	{
 		CancelAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true);
+	}
+}
+
+void UDRBeamSpell::StoreOwnerVariables()
+{
+	if (CurrentActorInfo)
+	{
+		OwnerCharacter = Cast<ACharacter>(CurrentActorInfo->AvatarActor);
 	}
 }

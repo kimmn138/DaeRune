@@ -18,10 +18,16 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void StoreCameraDataInfo(const FHitResult& HitResult);
 
+	UFUNCTION(BlueprintCallable)
+	void StoreOwnerVariables();
+
 protected:
 	UPROPERTY(BlueprintReadWrite, Category = "Beam")
 	FVector CameraHitLocation;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Beam")
 	TObjectPtr<AActor> CameraHitActor;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Beam")
+	TObjectPtr<ACharacter> OwnerCharacter;
 };
