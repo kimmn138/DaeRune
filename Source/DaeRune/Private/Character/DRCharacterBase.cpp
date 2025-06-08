@@ -146,6 +146,11 @@ FOnASCRegistered ADRCharacterBase::GetOnASCRegisteredDelegate()
 	return OnAscRegistered;
 }
 
+USkeletalMeshComponent* ADRCharacterBase::GetWeapon_Implementation()
+{
+	return Weapon;
+}
+
 void ADRCharacterBase::InitAbilityActorInfo()
 {
 }
