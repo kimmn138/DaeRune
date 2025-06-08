@@ -76,7 +76,7 @@ void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 {
-	//GEngine->AddOnScreenDebugMessage(1, 3.f, FColor::Red, *InputTag.ToString());
+	if (GetASC()) GetASC()->AbilityInputTagPressed(InputTag);
 }
 
 void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
