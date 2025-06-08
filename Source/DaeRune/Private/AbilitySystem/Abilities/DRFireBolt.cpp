@@ -4,7 +4,7 @@
 #include "AbilitySystem/Abilities/DRFireBolt.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Actor/DRProjectile.h"
-#include "Kismet/KismetSystemLibrary.h"
+#include "GameFramework/ProjectileMovementComponent.h"
 
 void UDRFireBolt::SpawnProjectiles(const FVector& ProjectileTargetLocation, const FGameplayTag& SocketTag, bool bOverridePitch, float PitchOverride, AActor* HomingTarget)
 {
@@ -18,7 +18,7 @@ void UDRFireBolt::SpawnProjectiles(const FVector& ProjectileTargetLocation, cons
 	if (bOverridePitch) Rotation.Pitch = PitchOverride;
 
 	const FVector Forward = Rotation.Vector();
-
+	
 	TArray<FRotator> Rotations = UDRAbilitySystemLibrary::EvenlySpacedRotators(Forward, FVector::UpVector, ProjectileSpread, NumProjectiles);
 
 	for (const FRotator& Rot : Rotations)
@@ -35,6 +35,19 @@ void UDRFireBolt::SpawnProjectiles(const FVector& ProjectileTargetLocation, cons
 			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 
 		Projectile->DamageEffectParams = MakeDamageEffectParamsFromClassDefaults();
+
+		if (HomingTarget && HomingTarget->Implements<UCombatInterface>())
+		{
+			Projectile->ProjectileMovement->HomingTargetComponent = HomingTarget->GetRootComponent();
+		}
+		else
+		{
+			Projectile->HomingTargetSceneComponent = NewObject<USceneComponent>(USceneComponent::StaticClass());
+			Projectile->HomingTargetSceneComponent->SetWorldLocation(ProjectileTargetLocation);
+			Projectile->ProjectileMovement->HomingTargetComponent = Projectile->HomingTargetSceneComponent;
+		}
+		Projectile->ProjectileMovement->HomingAccelerationMagnitude = FMath::FRandRange(HomingAccelerationMin, HomingAccelerationMax);
+		Projectile->ProjectileMovement->bIsHomingProjectile = bLaunchHomingProjectiles;
 
 		Projectile->FinishSpawning(SpawnTransform);
 	}

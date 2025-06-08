@@ -6,7 +6,6 @@
 #include "AbilitySystemComponent.h"
 #include "Actor/DRProjectile.h"
 #include "Interaction/CombatInterface.h"
-#include "DaeRune/Public/DRGameplayTags.h"
 
 void UDRProjectileSpell::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
