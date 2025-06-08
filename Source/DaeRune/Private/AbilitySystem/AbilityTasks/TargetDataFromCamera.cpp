@@ -3,6 +3,7 @@
 
 #include "AbilitySystem/AbilityTasks/TargetDataFromCamera.h"
 #include "AbilitySystemComponent.h"
+#include "DaeRune/DaeRune.h"
 
 UTargetDataFromCamera* UTargetDataFromCamera::CreateTargetDataFromCamera(UGameplayAbility* OwningAbility, float TraceDistance)
 {
@@ -47,7 +48,7 @@ void UTargetDataFromCamera::SendCameraTargetData()
     FCollisionQueryParams Params;
     Params.AddIgnoredActor(Ability->GetCurrentActorInfo()->AvatarActor.Get());
 
-    bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params);
+    bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Target, Params);
 
     FGameplayAbilityTargetDataHandle DataHandle;
     FGameplayAbilityTargetData_SingleTargetHit* Data = new FGameplayAbilityTargetData_SingleTargetHit();
