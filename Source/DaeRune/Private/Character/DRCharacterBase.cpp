@@ -46,6 +46,11 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 	MulticastHandleDeath(DeathImpulse);
 }
 
+FOnDeathSignature& ADRCharacterBase::GetOnDeathDelegate()
+{
+	return OnDeathDelegate;
+}
+
 void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathImpulse)
 {
 	UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation(), GetActorRotation());
@@ -65,6 +70,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 	Dissolve();
 	bDead = true;
 	BurnDebuffComponent->Deactivate();
+	OnDeathDelegate.Broadcast(this);
 }
 
 void ADRCharacterBase::BeginPlay()
