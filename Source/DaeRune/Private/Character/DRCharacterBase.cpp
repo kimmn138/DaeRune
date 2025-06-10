@@ -42,6 +42,7 @@ void ADRCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 
 	DOREPLIFETIME(ADRCharacterBase, bIsStunned);
 	DOREPLIFETIME(ADRCharacterBase, bIsBurned);
+	DOREPLIFETIME(ADRCharacterBase, bIsBeingShocked);
 }
 
 UAbilitySystemComponent* ADRCharacterBase::GetAbilitySystemComponent() const
@@ -184,6 +185,16 @@ FOnASCRegistered& ADRCharacterBase::GetOnASCRegisteredDelegate()
 USkeletalMeshComponent* ADRCharacterBase::GetWeapon_Implementation()
 {
 	return Weapon;
+}
+
+void ADRCharacterBase::SetIsBeingShocked_Implementation(bool bInShock)
+{
+	bIsBeingShocked = bInShock;
+}
+
+bool ADRCharacterBase::IsBeingShocked_Implementation() const
+{
+	return bIsBeingShocked;
 }
 
 void ADRCharacterBase::InitAbilityActorInfo()
