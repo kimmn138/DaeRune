@@ -3,14 +3,16 @@
 
 #include "Character/DRCharacter.h"
 #include "Components/CapsuleComponent.h"
-#include "GameFramework/SpringArmComponent.h"
-#include "Camera/CameraComponent.h"
 #include "AbilitySystemComponent.h"
 #include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
+#include "NiagaraComponent.h"
+#include "AbilitySystem/Debuff/DebuffNiagaraComponent.h"
+#include "Camera/CameraComponent.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "UI/HUD/DRHUD.h"
 
 ADRCharacter::ADRCharacter()
@@ -74,11 +76,25 @@ void ADRCharacter::OnRep_Stunned()
 		if (bIsStunned)
 		{
 			DRASC->AddLooseGameplayTags(BlockedTags);
+			StunDebuffComponent->Activate();
 		}
 		else
 		{
 			DRASC->RemoveLooseGameplayTags(BlockedTags);
+			StunDebuffComponent->Deactivate();
 		}
+	}
+}
+
+void ADRCharacter::OnRep_Burned()
+{
+	if (bIsBurned)
+	{
+		BurnDebuffComponent->Activate();
+	}
+	else
+	{
+		BurnDebuffComponent->Deactivate();
 	}
 }
 

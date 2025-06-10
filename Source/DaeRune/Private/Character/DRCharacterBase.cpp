@@ -21,6 +21,10 @@ ADRCharacterBase::ADRCharacterBase()
 	BurnDebuffComponent->SetupAttachment(GetRootComponent());
 	BurnDebuffComponent->DebuffTag = GameplayTags.Debuff_Burn;
 
+	StunDebuffComponent = CreateDefaultSubobject<UDebuffNiagaraComponent>("StunDebuffComponent");
+	StunDebuffComponent->SetupAttachment(GetRootComponent());
+	StunDebuffComponent->DebuffTag = GameplayTags.Debuff_Stun;
+
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	GetCapsuleComponent()->SetGenerateOverlapEvents(false);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
@@ -37,6 +41,7 @@ void ADRCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ADRCharacterBase, bIsStunned);
+	DOREPLIFETIME(ADRCharacterBase, bIsBurned);
 }
 
 UAbilitySystemComponent* ADRCharacterBase::GetAbilitySystemComponent() const
@@ -79,6 +84,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 	Dissolve();
 	bDead = true;
 	BurnDebuffComponent->Deactivate();
+	StunDebuffComponent->Deactivate();
 	OnDeathDelegate.Broadcast(this);
 }
 
@@ -89,6 +95,10 @@ void ADRCharacterBase::StunTagChanged(const FGameplayTag CallbackTag, int32 NewC
 }
 
 void ADRCharacterBase::OnRep_Stunned()
+{
+}
+
+void ADRCharacterBase::OnRep_Burned()
 {
 }
 
@@ -166,7 +176,7 @@ ECharacterClass ADRCharacterBase::GetCharacterClass_Implementation()
 	return CharacterClass;
 }
 
-FOnASCRegistered ADRCharacterBase::GetOnASCRegisteredDelegate()
+FOnASCRegistered& ADRCharacterBase::GetOnASCRegisteredDelegate()
 {
 	return OnAscRegistered;
 }
