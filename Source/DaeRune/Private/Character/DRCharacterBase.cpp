@@ -9,6 +9,8 @@
 #include "DaeRune/DaeRune.h"
 #include "Components/CapsuleComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Net/UnrealNetwork.h"
 
 ADRCharacterBase::ADRCharacterBase()
 {
@@ -28,6 +30,13 @@ ADRCharacterBase::ADRCharacterBase()
 	Weapon = CreateDefaultSubobject<USkeletalMeshComponent>("Weapon");
 	Weapon->SetupAttachment(GetMesh(), FName("WeaponHandSocket"));
 	Weapon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+}
+
+void ADRCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ADRCharacterBase, bIsStunned);
 }
 
 UAbilitySystemComponent* ADRCharacterBase::GetAbilitySystemComponent() const
@@ -71,6 +80,16 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 	bDead = true;
 	BurnDebuffComponent->Deactivate();
 	OnDeathDelegate.Broadcast(this);
+}
+
+void ADRCharacterBase::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
+{
+	bIsStunned = NewCount > 0;
+	GetCharacterMovement()->MaxWalkSpeed = bIsStunned ? 0.f : BaseWalkSpeed;
+}
+
+void ADRCharacterBase::OnRep_Stunned()
+{
 }
 
 void ADRCharacterBase::BeginPlay()

@@ -6,6 +6,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
 #include "AbilitySystemComponent.h"
+#include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Player/DRPlayerController.h"
@@ -61,6 +62,26 @@ int32 ADRCharacter::GetPlayerLevel_Implementation()
 	return DRPlayerState->GetPlayerLevel();
 }
 
+void ADRCharacter::OnRep_Stunned()
+{
+	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(AbilitySystemComponent))
+	{
+		const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+		FGameplayTagContainer BlockedTags;
+		BlockedTags.AddTag(GameplayTags.Player_Block_InputHeld);
+		BlockedTags.AddTag(GameplayTags.Player_Block_InputPressed);
+		BlockedTags.AddTag(GameplayTags.Player_Block_InputReleased);
+		if (bIsStunned)
+		{
+			DRASC->AddLooseGameplayTags(BlockedTags);
+		}
+		else
+		{
+			DRASC->RemoveLooseGameplayTags(BlockedTags);
+		}
+	}
+}
+
 void ADRCharacter::InitAbilityActorInfo()
 {
 	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
@@ -70,6 +91,7 @@ void ADRCharacter::InitAbilityActorInfo()
 	AbilitySystemComponent = DRPlayerState->GetAbilitySystemComponent();
 	AttributeSet = DRPlayerState->GetAttributeSet();
 	OnAscRegistered.Broadcast(AbilitySystemComponent);
+	AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Debuff_Stun, EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ADRCharacter::StunTagChanged);
 
 	if (ADRPlayerController* DRPlayerController = Cast<ADRPlayerController>(GetController()))
 	{

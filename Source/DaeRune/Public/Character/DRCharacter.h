@@ -23,6 +23,8 @@ public:
 	virtual int32 GetPlayerLevel_Implementation() override;
 	/** end Combat Interface */
 
+	virtual void OnRep_Stunned() override;
+
 private:
 	virtual void InitAbilityActorInfo() override;
 
