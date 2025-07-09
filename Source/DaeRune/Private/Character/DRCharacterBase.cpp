@@ -172,11 +172,6 @@ void ADRCharacterBase::IncremenetMinionCount_Implementation(int32 Amount)
 	MinionCount += Amount;
 }
 
-ECharacterClass ADRCharacterBase::GetCharacterClass_Implementation()
-{
-	return CharacterClass;
-}
-
 FOnASCRegistered& ADRCharacterBase::GetOnASCRegisteredDelegate()
 {
 	return OnAscRegistered;
@@ -213,9 +208,6 @@ void ADRCharacterBase::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEf
 
 void ADRCharacterBase::InitializeDefaultAttributes() const
 {
-	ApplyEffectToSelf(DefaultPrimaryAttributes, 1.f);
-	ApplyEffectToSelf(DefaultSecondaryAttributes, 1.f);
-	ApplyEffectToSelf(DefaultVitalAttributes, 1.f);
 }
 
 void ADRCharacterBase::AddCharacterAbilities()

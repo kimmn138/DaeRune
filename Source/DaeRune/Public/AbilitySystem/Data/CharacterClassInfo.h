@@ -10,7 +10,15 @@ class UGameplayEffect;
 class UGameplayAbility;
 
 UENUM(BlueprintType)
-enum class ECharacterClass : uint8
+enum class EPlayerCharacterClass : uint8
+{
+	GardenRobot,
+	CleanRobot,
+	VendRobot
+};
+
+UENUM(BlueprintType)
+enum class EEnemyCharacterClass : uint8
 {
 	Elementalist,
 	Warrior,
@@ -26,6 +34,9 @@ struct FCharacterClassDefaultInfo
 	TSubclassOf<UGameplayEffect> PrimaryAttributes;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Class Defaults")
+	TSubclassOf<UGameplayEffect> VitalAttributes;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Class Defaults")
 	TArray<TSubclassOf<UGameplayAbility>> StartupAbilities;
 };
 
@@ -39,16 +50,15 @@ class DAERUNE_API UCharacterClassInfo : public UDataAsset
 	
 public:
 	UPROPERTY(EditDefaultsOnly, Category = "Character Class Defaults")
-	TMap<ECharacterClass, FCharacterClassDefaultInfo> CharacterClassInformation;
+	TMap<EPlayerCharacterClass, FCharacterClassDefaultInfo> PlayerCharacterClassInformation;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Common Class Defaults")
-	TSubclassOf<UGameplayEffect> SecondaryAttributes;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Common Class Defaults")
-	TSubclassOf<UGameplayEffect> VitalAttributes;
+	UPROPERTY(EditDefaultsOnly, Category = "Character Class Defaults")
+	TMap<EEnemyCharacterClass, FCharacterClassDefaultInfo> EnemyCharacterClassInformation;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Common Class Defaults")
 	TArray<TSubclassOf<UGameplayAbility>> CommonAbilities;
 
-	FCharacterClassDefaultInfo GetClassDefaultInfo(ECharacterClass CharacterClass);
+	const FCharacterClassDefaultInfo& GetPlayerClassDefaultInfo(EPlayerCharacterClass CharacterClass);
+
+	const FCharacterClassDefaultInfo& GetEnemyClassDefaultInfo(EEnemyCharacterClass CharacterClass);
 };

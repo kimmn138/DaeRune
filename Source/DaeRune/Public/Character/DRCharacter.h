@@ -21,10 +21,17 @@ public:
 
 	/** Combat Interface */
 	virtual int32 GetPlayerLevel_Implementation() override;
+	virtual EPlayerCharacterClass GetPlayerCharacterClass_Implementation() override;
 	/** end Combat Interface */
 
 	virtual void OnRep_Stunned() override;
 	virtual void OnRep_Burned() override;
+
+protected:
+	virtual void InitializeDefaultAttributes() const override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Class Defaults")
+	EPlayerCharacterClass CharacterClass = EPlayerCharacterClass::GardenRobot;
 
 private:
 	virtual void InitAbilityActorInfo() override;

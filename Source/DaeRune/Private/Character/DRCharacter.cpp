@@ -6,6 +6,7 @@
 #include "AbilitySystemComponent.h"
 #include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
@@ -36,8 +37,6 @@ ADRCharacter::ADRCharacter()
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationRoll = false;
 	bUseControllerRotationYaw = true;
-
-	CharacterClass = ECharacterClass::Elementalist;
 }
 
 void ADRCharacter::PossessedBy(AController* NewController)
@@ -62,6 +61,11 @@ int32 ADRCharacter::GetPlayerLevel_Implementation()
 	const ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
 	check(DRPlayerState);
 	return DRPlayerState->GetPlayerLevel();
+}
+
+EPlayerCharacterClass ADRCharacter::GetPlayerCharacterClass_Implementation()
+{
+	return CharacterClass;
 }
 
 void ADRCharacter::OnRep_Stunned()
@@ -96,6 +100,11 @@ void ADRCharacter::OnRep_Burned()
 	{
 		BurnDebuffComponent->Deactivate();
 	}
+}
+
+void ADRCharacter::InitializeDefaultAttributes() const
+{
+	UDRAbilitySystemLibrary::InitializePlayerDefaultAttributes(this, CharacterClass, 1.0f, AbilitySystemComponent);
 }
 
 void ADRCharacter::InitAbilityActorInfo()

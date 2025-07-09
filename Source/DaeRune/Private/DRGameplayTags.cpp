@@ -11,17 +11,9 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	/*
 	 * Primary Attributes
 	 */
-	GameplayTags.Attributes_Primary_Strength = UGameplayTagsManager::Get().AddNativeGameplayTag(
-		FName("Attributes.Primary.Strength"),
-		FString("Increases physical damage")
-	);
 
-	/*
-	 * Secondary Attributes
-	 */
-
-	GameplayTags.Attributes_Secondary_MaxHealth = UGameplayTagsManager::Get().AddNativeGameplayTag(
-		FName("Attributes.Secondary.MaxHealth"),
+	GameplayTags.Attributes_Primary_MaxHealth = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Attributes.Primary.MaxHealth"),
 		FString("Maximum amount of Health obtainable")
 	);
 

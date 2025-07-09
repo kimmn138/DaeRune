@@ -43,12 +43,17 @@ void ADREnemy::PossessedBy(AController* NewController)
 	DRAIController->GetBlackboardComponent()->InitializeBlackboard(*BehaviorTree->BlackboardAsset);
 	DRAIController->RunBehaviorTree(BehaviorTree);
 	DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("HitReacting"), false);
-	DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("RangedAttacker"), CharacterClass != ECharacterClass::Warrior);
+	DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("RangedAttacker"), CharacterClass != EEnemyCharacterClass::Warrior);
 }
 
 int32 ADREnemy::GetPlayerLevel_Implementation()
 {
 	return Level;
+}
+
+EEnemyCharacterClass ADREnemy::GetEnemyCharacterClass_Implementation()
+{
+	return CharacterClass;
 }
 
 void ADREnemy::Die(const FVector& DeathImpulse)
@@ -87,7 +92,7 @@ void ADREnemy::BeginPlay()
 	InitAbilityActorInfo();
 	if (HasAuthority())
 	{
-		UDRAbilitySystemLibrary::GiveStartupAbilities(this, AbilitySystemComponent, CharacterClass);
+		UDRAbilitySystemLibrary::GiveEnemyStartupAbilities(this, AbilitySystemComponent, CharacterClass);
 	}
 
 	if (UDRUserWidget* DRUserWidget = Cast<UDRUserWidget>(HealthBar->GetUserWidgetObject()))
@@ -135,7 +140,7 @@ void ADREnemy::InitAbilityActorInfo()
 
 void ADREnemy::InitializeDefaultAttributes() const
 {
-	UDRAbilitySystemLibrary::InitializeDefaultAttributes(this, CharacterClass, Level, AbilitySystemComponent);
+	UDRAbilitySystemLibrary::InitializeEnemyDefaultAttributes(this, CharacterClass, Level, AbilitySystemComponent);
 }
 
 void ADREnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)

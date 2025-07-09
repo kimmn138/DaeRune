@@ -87,7 +87,10 @@ public:
 	void IncremenetMinionCount(int32 Amount);
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
-	ECharacterClass GetCharacterClass();
+	EPlayerCharacterClass GetPlayerCharacterClass();
+
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
+	EEnemyCharacterClass GetEnemyCharacterClass();
 
 	virtual FOnASCRegistered& GetOnASCRegisteredDelegate() = 0;
 
