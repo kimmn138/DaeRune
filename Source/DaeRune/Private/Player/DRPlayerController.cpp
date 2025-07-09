@@ -1,0 +1,118 @@
+// Copyright DaeRune
+
+
+#include "Player/DRPlayerController.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "DRGameplayTags.h"
+#include "EnhancedInputSubsystems.h"
+#include "AbilitySystem/DRAbilitySystemComponent.h"
+#include "Input/DRInputComponent.h"
+#include "GameFramework/Character.h"
+#include "UI/Widget/DamageTextComponent.h"
+
+ADRPlayerController::ADRPlayerController()
+{
+	bReplicates = true;
+}
+
+void ADRPlayerController::ShowDamageNumber_Implementation(float DamageAmount, ACharacter* TargetCharacter)
+{
+	if (IsValid(TargetCharacter) && DamageTextComponentClass && IsLocalController())
+	{
+		UDamageTextComponent* DamageText = NewObject<UDamageTextComponent>(TargetCharacter, DamageTextComponentClass);
+		DamageText->RegisterComponent();
+		DamageText->AttachToComponent(TargetCharacter->GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
+		DamageText->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+		DamageText->SetDamageText(DamageAmount);
+	}
+}
+
+void ADRPlayerController::BeginPlay()
+{
+	Super::BeginPlay();
+	check(DRContext);
+
+	UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer());
+	if (Subsystem)
+	{
+		Subsystem->AddMappingContext(DRContext, 0);
+	}
+
+	bShowMouseCursor = false;
+	SetInputMode(FInputModeGameOnly());
+}
+
+void ADRPlayerController::SetupInputComponent()
+{
+	Super::SetupInputComponent();
+
+	UDRInputComponent* DRInputComponent = CastChecked<UDRInputComponent>(InputComponent);
+	DRInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Move);
+	DRInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Look);
+	DRInputComponent->BindAbilityActions(InputConfig, this, &ThisClass::AbilityInputTagPressed, &ThisClass::AbilityInputTagReleased, &ThisClass::AbilityInputTagHeld);
+}
+
+void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
+{
+	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed))
+	{
+		return; 
+	}
+	const FVector2D InputAxisVector = InputActionValue.Get<FVector2D>();
+	const FRotator Rotation = GetControlRotation();
+	const FRotator YawRotation(0.f, Rotation.Yaw, 0.f);
+
+	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+
+	if (APawn* ControlledPawn = GetPawn<APawn>())
+	{
+		ControlledPawn->AddMovementInput(ForwardDirection, InputAxisVector.Y);
+		ControlledPawn->AddMovementInput(RightDirection, InputAxisVector.X);
+	}
+}
+
+void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
+{
+	const FVector2D Axis = InputActionValue.Get<FVector2D>();
+	AddYawInput(Axis.X);
+	AddPitchInput(Axis.Y);
+}
+
+void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
+{
+	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed))
+	{
+		return;
+	}
+	if (GetASC()) GetASC()->AbilityInputTagPressed(InputTag);
+}
+
+void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
+{
+	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputReleased))
+	{
+		return;
+	}
+	if (GetASC() == nullptr) return;
+	GetASC()->AbilityInputTagReleased(InputTag);
+}
+
+void ADRPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
+{
+	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputHeld))
+	{
+		return;
+	}
+	if (GetASC() == nullptr) return;
+	GetASC()->AbilityInputTagHeld(InputTag);
+}
+
+UDRAbilitySystemComponent* ADRPlayerController::GetASC()
+{
+	if (DRAbilitySystemComponent == nullptr)
+	{
+		DRAbilitySystemComponent = Cast<UDRAbilitySystemComponent>(UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetPawn<APawn>()));
+	}
+	return DRAbilitySystemComponent;
+}

@@ -1,0 +1,35 @@
+// Copyright DaeRune
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Engine/DataAsset.h"
+#include "GameplayTagContainer.h"
+#include "DRInputConfig.generated.h"
+
+USTRUCT(BlueprintType)
+struct FDRInputAction
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly)
+	const class UInputAction* InputAction = nullptr;
+
+	UPROPERTY(EditDefaultsOnly)
+	FGameplayTag InputTag = FGameplayTag();
+};
+
+/**
+ * 
+ */
+UCLASS()
+class DAERUNE_API UDRInputConfig : public UDataAsset
+{
+	GENERATED_BODY()
+	
+public:
+	const UInputAction* FindAbilityInputActionForTag(const FGameplayTag& InputTag, bool bLogNotFound = false) const;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	TArray<FDRInputAction> AbilityInputActions;
+};
