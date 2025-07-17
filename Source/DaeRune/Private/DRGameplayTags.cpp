@@ -4,9 +4,9 @@
 #include "DRGameplayTags.h"
 #include "GameplayTagsManager.h"
 
-FDRGameplayTags FDRGameplayTags::GameplayTags;
+FDRGameplayTags FDRGameplayTags::GameplayTags; // 싱글톤 인스턴스 정의임
 
-void FDRGameplayTags::InitializeNativeGameplayTags()
+void FDRGameplayTags::InitializeNativeGameplayTags() // 네이티브 태그 등록 함수임
 {
 	/*
 	 * Primary Attributes
