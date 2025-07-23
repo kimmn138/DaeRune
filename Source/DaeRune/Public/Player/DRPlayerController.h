@@ -55,11 +55,20 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> LookAction;
 
+	// 점프 입력 액션 참조임
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<UInputAction> JumpAction;
+
 	// 이동 로직 처리 함수임
 	void Move(const FInputActionValue& InputActionValue);
 
 	// 시점 변경 로직 처리 함수임
 	void Look(const FInputActionValue& InputActionValue);
+
+	// 점프 로직 처리 함수임
+	void Jump(const FInputActionValue& InputActionValue);
+	// 점프 중단 로직 처리 함수임
+	void StopJump(const FInputActionValue& InputActionValue);
 
 	// 능력 입력 시작 처리 함수임
 	void AbilityInputTagPressed(FGameplayTag InputTag);

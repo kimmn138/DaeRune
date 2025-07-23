@@ -54,6 +54,8 @@ void ADRPlayerController::SetupInputComponent() // 입력 바인딩 구현부임
 	UDRInputComponent* DRInputComponent = CastChecked<UDRInputComponent>(InputComponent);
 	DRInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Move);
 	DRInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Look);
+	DRInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ADRPlayerController::Jump);
+	DRInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ADRPlayerController::StopJump);
 	DRInputComponent->BindAbilityActions(InputConfig, this, &ThisClass::AbilityInputTagPressed, &ThisClass::AbilityInputTagReleased, &ThisClass::AbilityInputTagHeld);
 }
 
@@ -83,6 +85,22 @@ void ADRPlayerController::Look(const FInputActionValue& InputActionValue) // 시�
 	const FVector2D Axis = InputActionValue.Get<FVector2D>(); // 축 값 획득임
 	AddYawInput(Axis.X); // 좌우 시점 입력임
 	AddPitchInput(Axis.Y); // 상하 시점 입력임
+}
+
+void ADRPlayerController::Jump(const FInputActionValue& InputActionValue) // 점프 입력 처리 구현부임
+{
+	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>())) // 캐릭터 유효성 검사
+	{
+		ControlledCharacter->Jump(); // 점프
+	}
+}
+
+void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue) // 점프 중단 입력 처리 구현부임
+{
+	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>())) // 캐릭터 유효성 검사
+	{
+		ControlledCharacter->StopJumping(); // 점프 중단
+	}
 }
 
 void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag) // 능력 입력 시작 처리 구현부임

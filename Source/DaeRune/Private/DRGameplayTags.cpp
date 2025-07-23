@@ -51,6 +51,16 @@ void FDRGameplayTags::InitializeNativeGameplayTags() // 네이티브 태그 등록 함수�
 		FString("Input Tag for 4 key")
 	);
 
+	GameplayTags.InputTag_Q = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("InputTag.Q"),
+		FString("Input Tag for Q key")
+	);
+
+	GameplayTags.InputTag_E = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("InputTag.E"),
+		FString("Input Tag for E key")
+	);
+
 	GameplayTags.InputTag_Passive_1 = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("InputTag.Passive.1"),
 		FString("Input Tag Passive Ability 1")
