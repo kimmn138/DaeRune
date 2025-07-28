@@ -57,13 +57,6 @@ void ADRCharacter::OnRep_PlayerState()
 	InitAbilityActorInfo();
 }
 
-int32 ADRCharacter::GetPlayerLevel_Implementation()
-{
-	const ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
-	check(DRPlayerState);
-	return DRPlayerState->GetPlayerLevel();
-}
-
 void ADRCharacter::OnRep_Stunned()
 {
 	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(AbilitySystemComponent))

@@ -17,18 +17,7 @@ ADRPlayerState::ADRPlayerState()
 	NetUpdateFrequency = 100.f;
 }
 
-void ADRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	DOREPLIFETIME(ADRPlayerState, Level);
-}
-
 UAbilitySystemComponent* ADRPlayerState::GetAbilitySystemComponent() const
 {
 	return AbilitySystemComponent;
-}
-
-void ADRPlayerState::OnRep_Level(int32 OldLevel)
-{
 }

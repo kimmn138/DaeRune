@@ -64,7 +64,7 @@ public:
 	UDRAttributeSet();
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
+	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;
 	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 	virtual void PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue) override;
 
@@ -72,14 +72,6 @@ public:
 
 	/*
 	 * Primary Attributes
-	 */
-
-	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Strength, Category = "Primary Attributes")
-	FGameplayAttributeData Strength;
-	ATTRIBUTE_ACCESSORS(UDRAttributeSet, Strength);
-
-	/*
-	 * Secondary Attributes
 	 */
 
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxHealth, Category = "Vital Attributes")
@@ -104,9 +96,6 @@ public:
 
 	UFUNCTION()
 	void OnRep_Health(const FGameplayAttributeData& OldHealth) const;
-
-	UFUNCTION()
-	void OnRep_Strength(const FGameplayAttributeData& OldStrength) const;
 
 	UFUNCTION()
 	void OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth) const;

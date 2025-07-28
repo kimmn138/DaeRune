@@ -18,10 +18,7 @@ UDRAttributeSet::UDRAttributeSet()
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 
 	/* Primary Attributes */
-	TagsToAttributes.Add(GameplayTags.Attributes_Primary_Strength, GetStrengthAttribute);
-
-	/* Secondary Attributes */
-	TagsToAttributes.Add(GameplayTags.Attributes_Secondary_MaxHealth, GetMaxHealthAttribute);
+	TagsToAttributes.Add(GameplayTags.Attributes_Primary_MaxHealth, GetMaxHealthAttribute);
 }
 
 void UDRAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -30,10 +27,6 @@ void UDRAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 
 	// Primary Attributes
 
-	DOREPLIFETIME_CONDITION_NOTIFY(UDRAttributeSet, Strength, COND_None, REPNOTIFY_Always);
-
-	// Secondary Attributes
-
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRAttributeSet, MaxHealth, COND_None, REPNOTIFY_Always);
 
 	// Vital Attributes
@@ -41,9 +34,9 @@ void UDRAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRAttributeSet, Health, COND_None, REPNOTIFY_Always);
 }
 
-void UDRAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
+void UDRAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
 {
-	Super::PreAttributeChange(Attribute, NewValue);
+	Super::PreAttributeBaseChange(Attribute, NewValue);
 
 	if (Attribute == GetHealthAttribute())
 	{
@@ -179,11 +172,6 @@ void UDRAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, f
 void UDRAttributeSet::OnRep_Health(const FGameplayAttributeData& OldHealth) const
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRAttributeSet, Health, OldHealth);
-}
-
-void UDRAttributeSet::OnRep_Strength(const FGameplayAttributeData& OldStrength) const
-{
-	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRAttributeSet, Strength, OldStrength);
 }
 
 void UDRAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth) const

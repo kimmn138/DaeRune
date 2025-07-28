@@ -17,18 +17,12 @@ public:
 	static const FDRGameplayTags& Get() { return GameplayTags; }
 	static void InitializeNativeGameplayTags();
 
-	FGameplayTag Attributes_Primary_Strength;
-
-	FGameplayTag Attributes_Secondary_MaxHealth;
+	FGameplayTag Attributes_Primary_MaxHealth;
 
 	FGameplayTag InputTag_LMB;
 	FGameplayTag InputTag_RMB;
-	FGameplayTag InputTag_1;
-	FGameplayTag InputTag_2;
-	FGameplayTag InputTag_3;
-	FGameplayTag InputTag_4;
-	FGameplayTag InputTag_Passive_1;
-	FGameplayTag InputTag_Passive_2;
+	FGameplayTag InputTag_Q;
+	FGameplayTag InputTag_E;
 
 	FGameplayTag Damage;
 	FGameplayTag Damage_Fire;
