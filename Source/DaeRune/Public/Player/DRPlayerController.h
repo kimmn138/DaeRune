@@ -43,9 +43,15 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> LookAction;
 
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<UInputAction> JumpAction;
+
 	void Move(const FInputActionValue& InputActionValue);
 
 	void Look(const FInputActionValue& InputActionValue);
+
+	void StartJump(const FInputActionValue& InputActionValue);
+	void StopJump(const FInputActionValue& InputActionValue);
 
 	void AbilityInputTagPressed(FGameplayTag InputTag);
 	void AbilityInputTagReleased(FGameplayTag InputTag);

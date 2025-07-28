@@ -49,6 +49,8 @@ void ADRPlayerController::SetupInputComponent()
 	UDRInputComponent* DRInputComponent = CastChecked<UDRInputComponent>(InputComponent);
 	DRInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Move);
 	DRInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Look);
+	DRInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ADRPlayerController::StartJump);
+	DRInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ADRPlayerController::StopJump);
 	DRInputComponent->BindAbilityActions(InputConfig, this, &ThisClass::AbilityInputTagPressed, &ThisClass::AbilityInputTagReleased, &ThisClass::AbilityInputTagHeld);
 }
 
@@ -77,6 +79,22 @@ void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 	const FVector2D Axis = InputActionValue.Get<FVector2D>();
 	AddYawInput(Axis.X);
 	AddPitchInput(Axis.Y);
+}
+
+void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
+{
+	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>()))
+	{
+		ControlledCharacter->Jump();
+	}
+}
+
+void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
+{
+	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>()))
+	{
+		ControlledCharacter->StopJumping();
+	}
 }
 
 void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
