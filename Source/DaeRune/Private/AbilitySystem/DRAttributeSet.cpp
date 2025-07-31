@@ -67,42 +67,73 @@ void UDRAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 {
 	const float LocalIncomingDamage = GetIncomingDamage();
 	SetIncomingDamage(0.f);
-	if (LocalIncomingDamage > 0.f)
+
+	constexpr float ContainerHealth = 100.f;
+	constexpr int32 NumContainers = 4;
+	const float ContainerThreshold = 0.1f;
+
+	float NewHealth = GetHealth();
+	float RemainingDamage = LocalIncomingDamage;
+	int32 DecreaseCount = 0;
+
+	while (RemainingDamage > 0.f && NewHealth > 0.f)
 	{
-		const float NewHealth = GetHealth() - LocalIncomingDamage;
-		SetHealth(FMath::Clamp(NewHealth, 0.f, GetMaxHealth()));
-
-		const bool bFatal = NewHealth <= 0.f;
-		if (bFatal)
+		int32 ContainerIndex = FMath::Clamp<int32>(FMath::FloorToInt(NewHealth / ContainerHealth), 0, NumContainers - 1) - DecreaseCount;
+		float HealthInContainer = NewHealth == ContainerIndex * ContainerHealth ? ContainerHealth : NewHealth - ContainerIndex * ContainerHealth;
+		
+		if (RemainingDamage < HealthInContainer)
 		{
-			ICombatInterface* CombatInterface = Cast<ICombatInterface>(Props.TargetAvatarActor);
-			if (CombatInterface)
-			{
-				FVector Impulse = UDRAbilitySystemLibrary::GetDeathImpulse(Props.EffectContextHandle);
-				CombatInterface->Die(UDRAbilitySystemLibrary::GetDeathImpulse(Props.EffectContextHandle));
-			}
-		}
-		else
-		{
-			if (Props.TargetCharacter->Implements<UCombatInterface>() && !ICombatInterface::Execute_IsBeingShocked(Props.TargetCharacter))
-			{
-				FGameplayTagContainer TagContainer;
-				TagContainer.AddTag(FDRGameplayTags::Get().Effects_HitReact);
-				Props.TargetASC->TryActivateAbilitiesByTag(TagContainer);
-			}
-
-			const FVector& KnockbackForce = UDRAbilitySystemLibrary::GetKnockbackForce(Props.EffectContextHandle);
-			if (!KnockbackForce.IsNearlyZero(1.f))
-			{
-				Props.TargetCharacter->LaunchCharacter(KnockbackForce, true, true);
-			}
+			NewHealth -= RemainingDamage;
+			RemainingDamage = 0.f;
+			break;
 		}
 
-		ShowFloatingText(Props, LocalIncomingDamage);
-		if (UDRAbilitySystemLibrary::IsSuccessfulDebuff(Props.EffectContextHandle))
+		float OverflowDamage = RemainingDamage - HealthInContainer;
+
+		if (OverflowDamage >= 0.f && OverflowDamage <= (LocalIncomingDamage * 0.1f))
 		{
-			Debuff(Props);
+			NewHealth = ContainerIndex * ContainerHealth + 1.f;
+			RemainingDamage = 0.f;
+			break;
 		}
+
+		NewHealth = ContainerIndex * ContainerHealth;
+		RemainingDamage = OverflowDamage;
+		DecreaseCount = 1;
+	}
+
+	SetHealth(FMath::Clamp(NewHealth, 0.f, GetMaxHealth()));
+
+	const bool bFatal = NewHealth <= 0.f;
+	if (bFatal)
+	{
+		ICombatInterface* CombatInterface = Cast<ICombatInterface>(Props.TargetAvatarActor);
+		if (CombatInterface)
+		{
+			FVector Impulse = UDRAbilitySystemLibrary::GetDeathImpulse(Props.EffectContextHandle);
+			CombatInterface->Die(UDRAbilitySystemLibrary::GetDeathImpulse(Props.EffectContextHandle));
+		}
+	}
+	else
+	{
+		if (Props.TargetCharacter->Implements<UCombatInterface>() && !ICombatInterface::Execute_IsBeingShocked(Props.TargetCharacter))
+		{
+			FGameplayTagContainer TagContainer;
+			TagContainer.AddTag(FDRGameplayTags::Get().Effects_HitReact);
+			Props.TargetASC->TryActivateAbilitiesByTag(TagContainer);
+		}
+
+		const FVector& KnockbackForce = UDRAbilitySystemLibrary::GetKnockbackForce(Props.EffectContextHandle);
+		if (!KnockbackForce.IsNearlyZero(1.f))
+		{
+			Props.TargetCharacter->LaunchCharacter(KnockbackForce, true, true);
+		}
+	}
+
+	ShowFloatingText(Props, LocalIncomingDamage);
+	if (UDRAbilitySystemLibrary::IsSuccessfulDebuff(Props.EffectContextHandle))
+	{
+		Debuff(Props);
 	}
 }
 
