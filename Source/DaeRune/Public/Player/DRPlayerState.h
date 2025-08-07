@@ -12,7 +12,8 @@ class UAbilitySystemComponent;
 class UAttributeSet;
 class UGameplayEffect;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCombatStateChanged, bool, bIsInCombat);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCombatStateChangedSignature, bool, bIsInCombat);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCorruptedStateChangedSignature, bool, bIsCorrupted);
 
 /**
  * 
@@ -39,9 +40,13 @@ public:
 
 	// 델리게이트
 	UPROPERTY(BlueprintAssignable)
-	FOnCombatStateChanged OnCombatStateChanged;
+	FOnCombatStateChangedSignature OnCombatStateChanged;
 
-	// 부패 상태 체크
+	UPROPERTY(BlueprintAssignable)
+	FOnCorruptedStateChangedSignature OnCorruptedStateChanged;
+
+	// 부패 상태 시스템
+	void SetCorruptedState(bool bNewCorrupted);
 	bool IsPlayerCorrupted() const;
 
 protected:
@@ -56,8 +61,14 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_IsInCombat)
 	bool bIsInCombat = false;
 
+	UPROPERTY(ReplicatedUsing = OnRep_IsCorrupted)
+	bool bIsCorrupted = false;
+
 	UFUNCTION()
 	void OnRep_IsInCombat();
+
+	UFUNCTION()
+	void OnRep_IsCorrupted();
 
 private:
 	FTimerHandle CombatTimerHandle;
@@ -73,6 +84,11 @@ private:
 	void StartHealthRegen();
 	void StopHealthRegen();
 	void CheckCombatExit();
+	void CheckAndStartHealthRegen();
+	void CheckHealthRegenStatus();
+
+	// 체력 변경 감지
+	void OnHealthChanged(const FOnAttributeChangeData& Data);
 
 	// 최적화를 위한 캐싱
 	FGameplayEffectSpecHandle CachedHealthRegenSpec;

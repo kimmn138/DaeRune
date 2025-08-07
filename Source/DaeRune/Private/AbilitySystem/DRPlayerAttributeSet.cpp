@@ -7,6 +7,7 @@
 #include "DRGameplayTags.h"
 #include "GameFramework/Character.h"
 #include "Player/DRPlayerController.h"
+#include "Player/DRPlayerState.h"
 
 void UDRPlayerAttributeSet::EnterCorruptedState(const FEffectProperties& Props)
 {
@@ -14,45 +15,55 @@ void UDRPlayerAttributeSet::EnterCorruptedState(const FEffectProperties& Props)
 
 	bCorrupted = true;
 
-	// 부패 상태 태그 추가
-	if (Props.TargetASC)
-	{
-		Props.TargetASC->AddLooseGameplayTag(FDRGameplayTags::Get().State_Corrupt);
-	}
-
 	// 체력 설정
 	SetMaxHealth(CORRUPT_MAX_HEALTH);
 	SetHealth(CORRUPT_MAX_HEALTH);
 
-	// 플레이어 컨트롤러에 알림
-	if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(Props.TargetController))
+	// PlayerState에 알림 (태그 관리와 회복 중지를 PlayerState에서 처리)
+	if (Props.TargetAvatarActor)
 	{
-		DRPC->OnCorruptedStateChanged(true);
-	}
+		if (APlayerController* PC = Cast<APlayerController>(Props.TargetController))
+		{
+			if (ADRPlayerState* DRPS = PC->GetPlayerState<ADRPlayerState>())
+			{
+				DRPS->SetCorruptedState(true);
+			}
 
-	// 체력 회복은 계속 유지 (PlayerState에서 관리)
+			// 컨트롤러에 알림
+			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
+			{
+				DRPC->OnCorruptedStateChanged(true);
+			}
+		}
+	}
 }
 
 void UDRPlayerAttributeSet::ExitCorruptedState(const FEffectProperties& Props)
 {
-	if (!bCorrupted) return; // 이미 정상 상태
+	if (!bCorrupted) return;
 
 	bCorrupted = false;
 
-	// 부패 상태 태그 제거
-	if (Props.TargetASC)
-	{
-		Props.TargetASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Corrupt);
-	}
-
 	// 체력 복원
 	SetMaxHealth(NORMAL_MAX_HEALTH);
-	SetHealth(CONTAINER_HEALTH); // 1개 컨테이너만 회복
+	SetHealth(CONTAINER_HEALTH);
 
-	// 플레이어 컨트롤러에 알림
-	if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(Props.TargetController))
+	// PlayerState에 알림
+	if (Props.TargetAvatarActor)
 	{
-		DRPC->OnCorruptedStateChanged(false);
+		if (APlayerController* PC = Cast<APlayerController>(Props.TargetController))
+		{
+			if (ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
+			{
+				PS->SetCorruptedState(false);
+			}
+
+			// 컨트롤러에 알림
+			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
+			{
+				DRPC->OnCorruptedStateChanged(false);
+			}
+		}
 	}
 }
 
@@ -188,19 +199,10 @@ void UDRPlayerAttributeSet::HandleIncomingHealing(const FEffectProperties& Props
 	const bool bIsActiveHealing = Props.SourceAvatarActor != nullptr &&
 		Props.SourceAvatarActor != Props.TargetAvatarActor;
 
-	if (bCorrupted)
+	if (bCorrupted && bIsActiveHealing)
 	{
-		if (bIsActiveHealing)
-		{
-			// 아군 스킬로 인한 회복 시 부패 상태 해제
-			ExitCorruptedState(Props);
-		}
-		else
-		{
-			// 자연 회복은 부패 상태에서도 적용 (최대 100까지)
-			const float NewHealth = GetHealth() + LocalIncomingHealing;
-			SetHealth(FMath::Clamp(NewHealth, 0.f, CORRUPT_MAX_HEALTH));
-		}
+		// 아군 스킬로 인한 회복 시 부패 상태 해제
+		ExitCorruptedState(Props);
 	}
 	else
 	{
