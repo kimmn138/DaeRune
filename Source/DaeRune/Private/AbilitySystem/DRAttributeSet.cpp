@@ -12,6 +12,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Player/DRPlayerController.h"
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
+#include "Player/DRPlayerState.h"
 
 UDRAttributeSet::UDRAttributeSet()
 {
@@ -44,6 +45,16 @@ void UDRAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute
 	}
 }
 
+void UDRAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
+{
+	Super::PreAttributeChange(Attribute, NewValue);
+
+	if (Attribute == GetHealthAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
+	}
+}
+
 void UDRAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
 {
 	Super::PostGameplayEffectExecute(Data);
@@ -51,90 +62,29 @@ void UDRAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 	FEffectProperties Props;
 	SetEffectProperties(Data, Props);
 
-	if (Props.TargetCharacter->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Props.TargetCharacter)) return;
+	if (Props.TargetCharacter && Props.TargetCharacter->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Props.TargetCharacter)) return;
 
 	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
 		SetHealth(FMath::Clamp(GetHealth(), 0.f, GetMaxHealth()));
 	}
-	if (Data.EvaluatedData.Attribute == GetIncomingDamageAttribute())
+	else if (Data.EvaluatedData.Attribute == GetIncomingDamageAttribute())
 	{
 		HandleIncomingDamage(Props);
+	}
+	else if (Data.EvaluatedData.Attribute == GetIncomingHealingAttribute())
+	{
+		HandleIncomingHealing(Props);
 	}
 }
 
 void UDRAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 {
-	const float LocalIncomingDamage = GetIncomingDamage();
-	SetIncomingDamage(0.f);
+	
+}
 
-	constexpr float ContainerHealth = 100.f;
-	constexpr int32 NumContainers = 4;
-	const float ContainerThreshold = 0.1f;
-
-	float NewHealth = GetHealth();
-	float RemainingDamage = LocalIncomingDamage;
-	int32 DecreaseCount = 0;
-
-	while (RemainingDamage > 0.f && NewHealth > 0.f)
-	{
-		int32 ContainerIndex = FMath::Clamp<int32>(FMath::FloorToInt(NewHealth / ContainerHealth), 0, NumContainers - 1) - DecreaseCount;
-		float HealthInContainer = NewHealth == ContainerIndex * ContainerHealth ? ContainerHealth : NewHealth - ContainerIndex * ContainerHealth;
-		
-		if (RemainingDamage < HealthInContainer)
-		{
-			NewHealth -= RemainingDamage;
-			RemainingDamage = 0.f;
-			break;
-		}
-
-		float OverflowDamage = RemainingDamage - HealthInContainer;
-
-		if (OverflowDamage >= 0.f && OverflowDamage <= (LocalIncomingDamage * 0.1f))
-		{
-			NewHealth = ContainerIndex * ContainerHealth + 1.f;
-			RemainingDamage = 0.f;
-			break;
-		}
-
-		NewHealth = ContainerIndex * ContainerHealth;
-		RemainingDamage = OverflowDamage;
-		DecreaseCount = 1;
-	}
-
-	SetHealth(FMath::Clamp(NewHealth, 0.f, GetMaxHealth()));
-
-	const bool bFatal = NewHealth <= 0.f;
-	if (bFatal)
-	{
-		ICombatInterface* CombatInterface = Cast<ICombatInterface>(Props.TargetAvatarActor);
-		if (CombatInterface)
-		{
-			FVector Impulse = UDRAbilitySystemLibrary::GetDeathImpulse(Props.EffectContextHandle);
-			CombatInterface->Die(UDRAbilitySystemLibrary::GetDeathImpulse(Props.EffectContextHandle));
-		}
-	}
-	else
-	{
-		if (Props.TargetCharacter->Implements<UCombatInterface>() && !ICombatInterface::Execute_IsBeingShocked(Props.TargetCharacter))
-		{
-			FGameplayTagContainer TagContainer;
-			TagContainer.AddTag(FDRGameplayTags::Get().Effects_HitReact);
-			Props.TargetASC->TryActivateAbilitiesByTag(TagContainer);
-		}
-
-		const FVector& KnockbackForce = UDRAbilitySystemLibrary::GetKnockbackForce(Props.EffectContextHandle);
-		if (!KnockbackForce.IsNearlyZero(1.f))
-		{
-			Props.TargetCharacter->LaunchCharacter(KnockbackForce, true, true);
-		}
-	}
-
-	ShowFloatingText(Props, LocalIncomingDamage);
-	if (UDRAbilitySystemLibrary::IsSuccessfulDebuff(Props.EffectContextHandle))
-	{
-		Debuff(Props);
-	}
+void UDRAttributeSet::HandleIncomingHealing(const FEffectProperties& Props)
+{
 }
 
 void UDRAttributeSet::Debuff(const FEffectProperties& Props)
@@ -186,6 +136,30 @@ void UDRAttributeSet::Debuff(const FEffectProperties& Props)
 		DRContext->SetDamageType(DebuffDamageType);
 
 		Props.TargetASC->ApplyGameplayEffectSpecToSelf(*MutableSpec);
+	}
+}
+
+void UDRAttributeSet::NotifyEnterCombat(const FEffectProperties& Props) const
+{
+	// 서버에서만 처리
+	if (!Props.TargetAvatarActor || !Props.TargetAvatarActor->HasAuthority()) return;
+
+	// 소스가 플레이어인 경우
+	if (Props.SourceController && Props.SourceController->IsPlayerController())
+	{
+		if (ADRPlayerState* PS = Props.SourceController->GetPlayerState<ADRPlayerState>())
+		{
+			PS->EnterCombat();
+		}
+	}
+
+	// 타겟이 플레이어인 경우
+	if (Props.TargetController && Props.TargetController->IsPlayerController())
+	{
+		if (ADRPlayerState* PS = Props.TargetController->GetPlayerState<ADRPlayerState>())
+		{
+			PS->EnterCombat();
+		}
 	}
 }
 

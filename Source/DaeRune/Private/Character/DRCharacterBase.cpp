@@ -57,8 +57,29 @@ UAnimMontage* ADRCharacterBase::GetHitReactMontage_Implementation()
 
 void ADRCharacterBase::Die(const FVector& DeathImpulse)
 {
-	Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
-	MulticastHandleDeath(DeathImpulse);
+	// 플레이어 캐릭터인 경우 특별 처리
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		// 부패 상태인지 확인
+		if (AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Corrupt))
+		{
+			// 부패 상태에서 죽으면 진짜 사망
+			Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
+			MulticastHandleDeath(DeathImpulse);
+
+			// 관전자 모드로 전환
+			if (PC)
+			{
+				PC->StartSpectatingOnly();
+			}
+		}
+	}
+	else
+	{
+		// AI나 다른 캐릭터는 정상적으로 사망 처리
+		Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
+		MulticastHandleDeath(DeathImpulse);
+	}
 }
 
 FOnDeathSignature& ADRCharacterBase::GetOnDeathDelegate()

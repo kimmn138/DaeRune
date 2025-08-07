@@ -4,7 +4,7 @@
 #include "Character/DREnemy.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
-#include "AbilitySystem/DRAttributeSet.h"
+#include "AbilitySystem/DREnemyAttributeSet.h"
 #include "Components/WidgetComponent.h"
 #include "UI/Widget/DRUserWidget.h"
 #include "DRGameplayTags.h"
@@ -26,7 +26,7 @@ ADREnemy::ADREnemy()
 	bUseControllerRotationYaw = false;
 	GetCharacterMovement()->bUseControllerDesiredRotation = true;
 
-	AttributeSet = CreateDefaultSubobject<UDRAttributeSet>("AttributeSet");
+	AttributeSet = CreateDefaultSubobject<UDREnemyAttributeSet>("AttributeSet");
 
 	HealthBar = CreateDefaultSubobject<UWidgetComponent>("HealthBar");
 	HealthBar->SetupAttachment(GetRootComponent());

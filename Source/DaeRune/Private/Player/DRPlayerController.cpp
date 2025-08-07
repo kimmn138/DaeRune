@@ -15,6 +15,28 @@ ADRPlayerController::ADRPlayerController()
 	bReplicates = true;
 }
 
+void ADRPlayerController::OnCorruptedStateChanged(bool bIsStateChanged)
+{
+	bIsCorrupted = bIsStateChanged;
+
+	// 음성 채팅 설정
+	//SetVoiceChatEnabled(!bIsCorrupted);
+
+	// 팀 구분 시각 효과 설정
+	//SetTeamVisualsEnabled(!bIsCorrupted);
+
+	if (bIsCorrupted)
+	{
+		// 부패 상태 진입 시 추가 처리
+		UE_LOG(LogTemp, Warning, TEXT("Player entered corrupted state"));
+	}
+	else
+	{
+		// 부패 상태 해제 시 추가 처리
+		UE_LOG(LogTemp, Warning, TEXT("Player exited corrupted state"));
+	}
+}
+
 void ADRPlayerController::ShowDamageNumber_Implementation(float DamageAmount, ACharacter* TargetCharacter)
 {
 	if (IsValid(TargetCharacter) && DamageTextComponentClass && IsLocalController())
