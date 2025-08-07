@@ -57,8 +57,39 @@ UAnimMontage* ADRCharacterBase::GetHitReactMontage_Implementation()
 
 void ADRCharacterBase::Die(const FVector& DeathImpulse)
 {
-	Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
-	MulticastHandleDeath(DeathImpulse);
+	// 플레이어 캐릭터인 경우 특별 처리
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		// 부패 상태인지 확인
+		if (AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Corrupt))
+		{
+			// 부패 상태에서 죽으면 진짜 사망
+			Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
+			MulticastHandleDeath(DeathImpulse);
+
+			// 관전자 모드로 전환
+			if (PC)
+			{
+				// 약간의 딜레이 후 관전 모드 전환 (안전을 위해)
+				FTimerHandle SpectatorTimerHandle;
+				GetWorld()->GetTimerManager().SetTimer(
+					SpectatorTimerHandle,
+					[PC]()
+					{
+						PC->StartSpectatingOnly();
+					},
+					0.5f,
+					false
+				);
+			}
+		}
+	}
+	else
+	{
+		// AI나 다른 캐릭터는 정상적으로 사망 처리
+		Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
+		MulticastHandleDeath(DeathImpulse);
+	}
 }
 
 FOnDeathSignature& ADRCharacterBase::GetOnDeathDelegate()
@@ -68,24 +99,56 @@ FOnDeathSignature& ADRCharacterBase::GetOnDeathDelegate()
 
 void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathImpulse)
 {
-	UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation(), GetActorRotation());
+	// 이미 죽은 상태면 무시
+	if (bDead) return;
 
-	Weapon->SetSimulatePhysics(true);
-	Weapon->SetEnableGravity(true);
-	Weapon->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
-	Weapon->AddImpulse(DeathImpulse * 0.1f, NAME_None, true);
-
-	GetMesh()->SetSimulatePhysics(true);
-	GetMesh()->SetEnableGravity(true);
-	GetMesh()->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
-	GetMesh()->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
-	GetMesh()->AddImpulse(DeathImpulse, NAME_None, true);
-
-	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Dissolve();
 	bDead = true;
-	BurnDebuffComponent->Deactivate();
-	StunDebuffComponent->Deactivate();
+
+	// 사운드 재생
+	if (DeathSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation(), GetActorRotation());
+	}
+
+	// 무기 물리 적용
+	if (Weapon)
+	{
+		Weapon->SetSimulatePhysics(true);
+		Weapon->SetEnableGravity(true);
+		Weapon->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
+		Weapon->AddImpulse(DeathImpulse * 0.1f, NAME_None, true);
+	}
+
+	// 메시 물리 적용
+	if (GetMesh())
+	{
+		GetMesh()->SetSimulatePhysics(true);
+		GetMesh()->SetEnableGravity(true);
+		GetMesh()->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
+		GetMesh()->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
+		GetMesh()->AddImpulse(DeathImpulse, NAME_None, true);
+	}
+
+	// 캡슐 충돌 비활성화
+	if (GetCapsuleComponent())
+	{
+		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	// Dissolve 효과
+	Dissolve();
+
+	// 디버프 컴포넌트 비활성화
+	if (BurnDebuffComponent)
+	{
+		BurnDebuffComponent->Deactivate();
+	}
+	if (StunDebuffComponent)
+	{
+		StunDebuffComponent->Deactivate();
+	}
+
+	// Death 델리게이트 브로드캐스트
 	OnDeathDelegate.Broadcast(this);
 }
 

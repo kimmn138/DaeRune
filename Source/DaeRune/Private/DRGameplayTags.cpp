@@ -47,6 +47,15 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
+	 * State Tags
+	 */
+
+	GameplayTags.State_Corrupt = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.Corrupt"),
+		FString("State Tag for Player In Corrupt")
+	);
+
+	/*
 	 * Damage Types
 	 */
 

@@ -28,10 +28,29 @@ public:
 	UFUNCTION(Client, Reliable)
 	void ShowDamageNumber(float DamageAmount, ACharacter* TargetCharacter);
 
+	// 부패 상태 변경 처리
+	UFUNCTION(BlueprintCallable, Category = "Corruption")
+	void OnCorruptedStateChanged(bool bIsStateChanged);
+
+	// 음성 채팅 활성화/비활성화
+	UFUNCTION(BlueprintImplementableEvent, Category = "Corruption")
+	void SetVoiceChatEnabled(bool bEnabled);
+
+	// 아군/적 구분 표시 변경
+	UFUNCTION(BlueprintImplementableEvent, Category = "Corruption")
+	void SetTeamVisualsEnabled(bool bEnabled);
+
+	// 부패 상태 확인
+	UFUNCTION(BlueprintCallable, Category = "Corruption")
+	bool IsInCorruptedState() const { return bIsCorrupted; }
+
 protected:
 	virtual void BeginPlay() override;
 
 	virtual void SetupInputComponent() override;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Corruption")
+	bool bIsCorrupted = false;
 
 private:
 	UPROPERTY(EditAnywhere, Category = "Input")

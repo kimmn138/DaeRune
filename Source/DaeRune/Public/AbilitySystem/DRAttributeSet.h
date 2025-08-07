@@ -65,6 +65,7 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;
+	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 	virtual void PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue) override;
 
@@ -94,16 +95,26 @@ public:
 	FGameplayAttributeData IncomingDamage;
 	ATTRIBUTE_ACCESSORS(UDRAttributeSet, IncomingDamage);
 
+	UPROPERTY(BlueprintReadOnly, Category = "Meta Attributes")
+	FGameplayAttributeData IncomingHealing;
+	ATTRIBUTE_ACCESSORS(UDRAttributeSet, IncomingHealing);
+
 	UFUNCTION()
 	void OnRep_Health(const FGameplayAttributeData& OldHealth) const;
 
 	UFUNCTION()
 	void OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth) const;
 
-private:
-	void HandleIncomingDamage(const FEffectProperties& Props);
-	void Debuff(const FEffectProperties& Props);
-	void SetEffectProperties(const FGameplayEffectModCallbackData& Data, FEffectProperties& Props) const;
+protected:
+	virtual void HandleIncomingDamage(const FEffectProperties& Props);
+	virtual void HandleIncomingHealing(const FEffectProperties& Props);
 	void ShowFloatingText(const FEffectProperties& Props, float Damage) const;
+	void Debuff(const FEffectProperties& Props);
+
+	// 전투 상태 진입을 알리는 함수
+	void NotifyEnterCombat(const FEffectProperties& Props) const;
+
+private:
+	void SetEffectProperties(const FGameplayEffectModCallbackData& Data, FEffectProperties& Props) const;
 	bool bTopOffHealth = false;
 };

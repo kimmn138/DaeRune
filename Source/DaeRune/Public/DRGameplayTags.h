@@ -24,6 +24,8 @@ public:
 	FGameplayTag InputTag_Q;
 	FGameplayTag InputTag_E;
 
+	FGameplayTag State_Corrupt;
+
 	FGameplayTag Damage;
 	FGameplayTag Damage_Fire;
 	FGameplayTag Damage_Lightning;
