@@ -64,7 +64,7 @@ void ADRPlayerState::OnHealthChanged(const FOnAttributeChangeData& Data)
 
 void ADRPlayerState::CheckHealthRegenStatus()
 {
-    if (!HasAuthority() || bIsCorrupted) return;
+    if (!HasAuthority() || bIsCorrupted || bIsInCombat) return;
 
     const UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSet);
     if (!PlayerAS) return;
@@ -90,7 +90,6 @@ void ADRPlayerState::CheckHealthRegenStatus()
         if (HealthRegenEffectHandle.IsValid())
         {
             StopHealthRegen();
-            UE_LOG(LogTemp, Log, TEXT("Container Full - Health regen stopped at %.1f"), CurrentHealth);
         }
     }
     else
@@ -99,7 +98,6 @@ void ADRPlayerState::CheckHealthRegenStatus()
         if (!HealthRegenEffectHandle.IsValid())
         {
             StartHealthRegen();
-            UE_LOG(LogTemp, Log, TEXT("Container Not Full - Health regen started at %.1f"), CurrentHealth);
         }
     }
 }
@@ -152,16 +150,19 @@ void ADRPlayerState::ExitCombat()
 {
     if (!HasAuthority() || !bIsInCombat) return;
 
+    // 1. 먼저 전투 상태 플래그 변경
     bIsInCombat = false;
 
+    // 2. 타이머 정리
     GetWorld()->GetTimerManager().ClearTimer(CombatTimerHandle);
 
-    // 비전투 상태가 되면 체력 재생 체크
-    CheckAndStartHealthRegen();
-
+    // 3. 클라이언트에 알림
     OnCombatStateChanged.Broadcast(false);
 
     UE_LOG(LogTemp, Log, TEXT("ExitCombat - Player exited combat state"));
+
+    // 4. 마지막에 체력 재생 체크 (bIsInCombat이 false가 된 후)
+    CheckAndStartHealthRegen();
 }
 
 int32 ADRPlayerState::GetCurrentContainerIndex() const
@@ -242,17 +243,11 @@ void ADRPlayerState::OnRep_IsInCombat()
 {
     // 클라이언트에서 상태 변경 알림
     OnCombatStateChanged.Broadcast(bIsInCombat);
-
-    UE_LOG(LogTemp, Log, TEXT("OnRep_IsInCombat - Combat state changed to: %s"),
-        bIsInCombat ? TEXT("In Combat") : TEXT("Out of Combat"));
 }
 
 void ADRPlayerState::OnRep_IsCorrupted()
 {
     OnCorruptedStateChanged.Broadcast(bIsCorrupted);
-
-    UE_LOG(LogTemp, Log, TEXT("OnRep_IsCorrupted - Corrupted state: %s"),
-        bIsCorrupted ? TEXT("True") : TEXT("False"));
 }
 
 void ADRPlayerState::StartHealthRegen()

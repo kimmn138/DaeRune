@@ -13,6 +13,7 @@
 #include "Player/DRPlayerController.h"
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
 #include "Player/DRPlayerState.h"
+#include "AbilitySystemBlueprintLibrary.h"
 
 UDRAttributeSet::UDRAttributeSet()
 {

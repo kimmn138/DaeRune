@@ -50,29 +50,9 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	 * State Tags
 	 */
 
-	GameplayTags.State_InCombat = UGameplayTagsManager::Get().AddNativeGameplayTag(
-		FName("State.InCombat"),
-		FString("State Tag for Player In Combat")
-	);
-
-	GameplayTags.State_OutOfCombat = UGameplayTagsManager::Get().AddNativeGameplayTag(
-		FName("State.OutOfCombat"),
-		FString("State Tag for Player Out Combat")
-	);
-
 	GameplayTags.State_Corrupt = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("State.Corrupt"),
 		FString("State Tag for Player In Corrupt")
-	);
-
-	GameplayTags.Event_CombatEntered = UGameplayTagsManager::Get().AddNativeGameplayTag(
-		FName("Event.CombatEntered"),
-		FString("Event fired when entering combat")
-	);
-
-	GameplayTags.Event_CombatExited = UGameplayTagsManager::Get().AddNativeGameplayTag(
-		FName("Event.CombatExited"),
-		FString("Event fired when exiting combat")
 	);
 
 	/*

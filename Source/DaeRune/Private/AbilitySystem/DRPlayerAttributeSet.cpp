@@ -195,19 +195,20 @@ void UDRPlayerAttributeSet::HandleIncomingHealing(const FEffectProperties& Props
 
 	if (LocalIncomingHealing <= 0.f) return;
 
-	// 스킬로 인한 회복인지 체크 (SourceAvatarActor가 있으면 스킬/아이템 회복)
-	const bool bIsActiveHealing = Props.SourceAvatarActor != nullptr &&
+	// 스킬 회복 여부 판단
+	const bool bIsActiveHealing = Props.SourceAvatarActor &&
 		Props.SourceAvatarActor != Props.TargetAvatarActor;
 
-	if (bCorrupted && bIsActiveHealing)
+	if (bCorrupted)
 	{
-		// 아군 스킬로 인한 회복 시 부패 상태 해제
-		ExitCorruptedState(Props);
+		if (bIsActiveHealing)
+		{
+			ExitCorruptedState(Props);
+		}
 	}
 	else
 	{
-		// 정상 상태 회복
 		const float NewHealth = GetHealth() + LocalIncomingHealing;
-		SetHealth(FMath::Clamp(NewHealth, 0.f, GetMaxHealth()));
+		SetHealth(FMath::Min(NewHealth, GetMaxHealth()));
 	}
 }

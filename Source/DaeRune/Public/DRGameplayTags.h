@@ -24,12 +24,7 @@ public:
 	FGameplayTag InputTag_Q;
 	FGameplayTag InputTag_E;
 
-	FGameplayTag State_InCombat;
-	FGameplayTag State_OutOfCombat;
 	FGameplayTag State_Corrupt;
-
-	FGameplayTag Event_CombatEntered;
-	FGameplayTag Event_CombatExited;
 
 	FGameplayTag Damage;
 	FGameplayTag Damage_Fire;

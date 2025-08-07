@@ -27,6 +27,7 @@ void ADREffectActor::ApplyEffectToTarget(AActor* TargetActor, TSubclassOf<UGamep
 	check(GameplayEffectClass);
 	FGameplayEffectContextHandle EffectContextHandle = TargetASC->MakeEffectContext();
 	EffectContextHandle.AddSourceObject(this);
+	EffectContextHandle.AddInstigator(this, this);
 	const FGameplayEffectSpecHandle EffectSpecHandle = TargetASC->MakeOutgoingSpec(GameplayEffectClass, ActorLevel, EffectContextHandle);
 	const FActiveGameplayEffectHandle ActiveEffectHandle = TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpecHandle.Data.Get());
 

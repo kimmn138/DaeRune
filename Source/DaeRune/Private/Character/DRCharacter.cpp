@@ -93,15 +93,38 @@ void ADRCharacter::OnRep_Burned()
 
 void ADRCharacter::InitAbilityActorInfo()
 {
+	// PlayerState null 체크 추가
 	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
-	check(DRPlayerState);
-	DRPlayerState->GetAbilitySystemComponent()->InitAbilityActorInfo(DRPlayerState, this);
-	Cast<UDRAbilitySystemComponent>(DRPlayerState->GetAbilitySystemComponent())->AbilityActorInfoSet();
-	AbilitySystemComponent = DRPlayerState->GetAbilitySystemComponent();
-	AttributeSet = DRPlayerState->GetAttributeSet();
-	OnAscRegistered.Broadcast(AbilitySystemComponent);
-	AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Debuff_Stun, EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ADRCharacter::StunTagChanged);
+	if (!DRPlayerState)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("InitAbilityActorInfo - PlayerState is null, skipping initialization"));
+		return;
+	}
 
+	// AbilitySystemComponent null 체크
+	UAbilitySystemComponent* ASC = DRPlayerState->GetAbilitySystemComponent();
+	if (!ASC)
+	{
+		UE_LOG(LogTemp, Error, TEXT("InitAbilityActorInfo - AbilitySystemComponent is null"));
+		return;
+	}
+
+	// 초기화 진행
+	ASC->InitAbilityActorInfo(DRPlayerState, this);
+	Cast<UDRAbilitySystemComponent>(ASC)->AbilityActorInfoSet();
+
+	AbilitySystemComponent = ASC;
+	AttributeSet = DRPlayerState->GetAttributeSet();
+
+	OnAscRegistered.Broadcast(AbilitySystemComponent);
+
+	// Debuff 태그 이벤트 등록
+	AbilitySystemComponent->RegisterGameplayTagEvent(
+		FDRGameplayTags::Get().Debuff_Stun,
+		EGameplayTagEventType::NewOrRemoved
+	).AddUObject(this, &ADRCharacter::StunTagChanged);
+
+	// HUD 초기화 (컨트롤러가 있는 경우만)
 	if (ADRPlayerController* DRPlayerController = Cast<ADRPlayerController>(GetController()))
 	{
 		if (ADRHUD* DRHUD = Cast<ADRHUD>(DRPlayerController->GetHUD()))
@@ -109,5 +132,7 @@ void ADRCharacter::InitAbilityActorInfo()
 			DRHUD->InitOverlay(DRPlayerController, DRPlayerState, AbilitySystemComponent, AttributeSet);
 		}
 	}
+
+	// 기본 속성 초기화
 	InitializeDefaultAttributes();
 }
