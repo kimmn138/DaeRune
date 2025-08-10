@@ -9,31 +9,49 @@
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
 
+void UDRPlayerAttributeSet::SetContainerInfo(int32 InNumContainers, float InContainerHealth)
+{
+	NumContainers = InNumContainers;
+	ContainerHealth = InContainerHealth;
+}
+
+int32 UDRPlayerAttributeSet::GetCurrentContainerIndex() const
+{
+	const float CurrentHealth = GetHealth();
+	if (CurrentHealth <= 0.f) return -1;
+
+	int32 ContainerIndex = FMath::FloorToInt(CurrentHealth / ContainerHealth);
+
+	// 정확히 컨테이너 경계에 있는 경우
+	if (FMath::IsNearlyEqual(CurrentHealth, ContainerIndex * ContainerHealth))
+	{
+		ContainerIndex = FMath::Max(0, ContainerIndex - 1);
+	}
+
+	return FMath::Clamp(ContainerIndex, 0, NumContainers - 1);
+}
+
 void UDRPlayerAttributeSet::EnterCorruptedState(const FEffectProperties& Props)
 {
 	if (bCorrupted) return;
 
 	bCorrupted = true;
 
-	// 체력 설정
-	SetMaxHealth(CORRUPT_MAX_HEALTH);
-	SetHealth(CORRUPT_MAX_HEALTH);
+	// 부패 상태로 체력 설정
+	SetMaxHealth(GetCorruptMaxHealth());
+	SetHealth(GetCorruptMaxHealth());
 
-	// PlayerState에 알림 (태그 관리와 회복 중지를 PlayerState에서 처리)
-	if (Props.TargetAvatarActor)
+	// PlayerState에 알림
+	if (Props.TargetAvatarActor && Props.TargetController)
 	{
-		if (APlayerController* PC = Cast<APlayerController>(Props.TargetController))
+		if (ADRPlayerState* DRPS = Props.TargetController->GetPlayerState<ADRPlayerState>())
 		{
-			if (ADRPlayerState* DRPS = PC->GetPlayerState<ADRPlayerState>())
-			{
-				DRPS->SetCorruptedState(true);
-			}
+			DRPS->SetCorruptedState(true);
+		}
 
-			// 컨트롤러에 알림
-			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
-			{
-				DRPC->OnCorruptedStateChanged(true);
-			}
+		if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(Props.TargetController))
+		{
+			DRPC->OnCorruptedStateChanged(true);
 		}
 	}
 }
@@ -44,25 +62,22 @@ void UDRPlayerAttributeSet::ExitCorruptedState(const FEffectProperties& Props)
 
 	bCorrupted = false;
 
-	// 체력 복원
-	SetMaxHealth(NORMAL_MAX_HEALTH);
-	SetHealth(CONTAINER_HEALTH);
+	// 정상 상태로 복원 (최대 체력을 원래대로)
+	const float NormalMaxHealth = NumContainers * ContainerHealth;
+	SetMaxHealth(NormalMaxHealth);
+	SetHealth(ContainerHealth); // 첫 번째 컨테이너만 회복
 
 	// PlayerState에 알림
-	if (Props.TargetAvatarActor)
+	if (Props.TargetAvatarActor && Props.TargetController)
 	{
-		if (APlayerController* PC = Cast<APlayerController>(Props.TargetController))
+		if (ADRPlayerState* PS = Props.TargetController->GetPlayerState<ADRPlayerState>())
 		{
-			if (ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
-			{
-				PS->SetCorruptedState(false);
-			}
+			PS->SetCorruptedState(false);
+		}
 
-			// 컨트롤러에 알림
-			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
-			{
-				DRPC->OnCorruptedStateChanged(false);
-			}
+		if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(Props.TargetController))
+		{
+			DRPC->OnCorruptedStateChanged(false);
 		}
 	}
 }
@@ -138,14 +153,14 @@ float UDRPlayerAttributeSet::CalculateContainerDamage(float CurrentHealth, float
 
 	while (RemainingDamage > 0.f && NewHealth > 0.f)
 	{
-		int32 ContainerIndex = FMath::FloorToInt(NewHealth / CONTAINER_HEALTH);
-		if (FMath::IsNearlyEqual(NewHealth, ContainerIndex * CONTAINER_HEALTH))
+		int32 ContainerIndex = FMath::FloorToInt(NewHealth / ContainerHealth);
+		if (FMath::IsNearlyEqual(NewHealth, ContainerIndex * ContainerHealth))
 		{
 			ContainerIndex = FMath::Max(0, ContainerIndex - 1);
 		}
-		ContainerIndex = FMath::Clamp(ContainerIndex, 0, NUM_CONTAINERS - 1);
+		ContainerIndex = FMath::Clamp(ContainerIndex, 0, NumContainers - 1);
 
-		float HealthInContainer = NewHealth - (ContainerIndex * CONTAINER_HEALTH);
+		float HealthInContainer = NewHealth - (ContainerIndex * ContainerHealth);
 
 		if (RemainingDamage < HealthInContainer)
 		{
@@ -158,11 +173,11 @@ float UDRPlayerAttributeSet::CalculateContainerDamage(float CurrentHealth, float
 		// 오버플로우 체크
 		if (OverflowDamage <= (Damage * OVERFLOW_THRESHOLD))
 		{
-			NewHealth = ContainerIndex * CONTAINER_HEALTH + 1.f;
+			NewHealth = ContainerIndex * ContainerHealth + 1.f;
 			break;
 		}
 
-		NewHealth = ContainerIndex * CONTAINER_HEALTH;
+		NewHealth = ContainerIndex * ContainerHealth;
 		RemainingDamage = OverflowDamage;
 	}
 
