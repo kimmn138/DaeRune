@@ -70,18 +70,11 @@ void ADRPlayerState::CheckHealthRegenStatus()
     if (!PlayerAS) return;
 
     const float CurrentHealth = PlayerAS->GetHealth();
+    const int32 ContainerIndex = PlayerAS->GetCurrentContainerIndex();
+    const float ContainerHealth = PlayerAS->GetContainerHealth();
+    const float ContainerMax = (ContainerIndex + 1) * ContainerHealth;
 
-    // 현재 컨테이너 계산
-    int32 ContainerIndex = FMath::FloorToInt(CurrentHealth / UDRPlayerAttributeSet::CONTAINER_HEALTH);
-    if (FMath::IsNearlyEqual(CurrentHealth, ContainerIndex * UDRPlayerAttributeSet::CONTAINER_HEALTH))
-    {
-        ContainerIndex = FMath::Max(0, ContainerIndex - 1);
-    }
-    ContainerIndex = FMath::Clamp(ContainerIndex, 0, UDRPlayerAttributeSet::NUM_CONTAINERS - 1);
-
-    const float ContainerMax = (ContainerIndex + 1) * UDRPlayerAttributeSet::CONTAINER_HEALTH;
-
-    // 현재 컨테이너가 가득 찼는지 체크
+    // 현재 컨테이너가 가득 찬지 체크
     const bool bIsContainerFull = FMath::IsNearlyEqual(CurrentHealth, ContainerMax, 0.1f);
 
     if (bIsContainerFull)
@@ -169,21 +162,8 @@ int32 ADRPlayerState::GetCurrentContainerIndex() const
 {
     if (const UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSet))
     {
-        const float Health = PlayerAS->GetHealth();
-        if (Health <= 0.f) return -1;
-
-        constexpr float ContainerHealth = 100.f;
-        constexpr int32 NumContainers = 4;
-
-        int32 ContainerIndex = FMath::FloorToInt(Health / ContainerHealth);
-        if (FMath::IsNearlyEqual(Health, ContainerIndex * ContainerHealth))
-        {
-            ContainerIndex = FMath::Max(0, ContainerIndex - 1);
-        }
-
-        return FMath::Clamp(ContainerIndex, 0, NumContainers - 1);
+        return PlayerAS->GetCurrentContainerIndex();
     }
-
     return 0;
 }
 

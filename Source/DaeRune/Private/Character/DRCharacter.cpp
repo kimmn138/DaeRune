@@ -14,6 +14,7 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "UI/HUD/DRHUD.h"
+#include "AbilitySystem/DRPlayerAttributeSet.h"
 
 ADRCharacter::ADRCharacter()
 {
@@ -115,6 +116,12 @@ void ADRCharacter::InitAbilityActorInfo()
 
 	AbilitySystemComponent = ASC;
 	AttributeSet = DRPlayerState->GetAttributeSet();
+
+	// 플레이어 AttributeSet에 컨테이너 정보 설정
+	if (UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSet))
+	{
+		PlayerAS->SetContainerInfo(NumContainers, ContainerHealth);
+	}
 
 	OnAscRegistered.Broadcast(AbilitySystemComponent);
 

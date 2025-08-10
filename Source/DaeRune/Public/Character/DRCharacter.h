@@ -22,6 +22,13 @@ public:
 	virtual void OnRep_Stunned() override;
 	virtual void OnRep_Burned() override;
 
+	// 컨테이너 시스템 설정
+	UPROPERTY(EditDefaultsOnly, Category = "Container System")
+	int32 NumContainers = 4;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Container System")
+	float ContainerHealth = 100.f;
+
 private:
 	virtual void InitAbilityActorInfo() override;
 
