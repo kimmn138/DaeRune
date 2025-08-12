@@ -9,12 +9,26 @@ FDRGameplayTags FDRGameplayTags::GameplayTags;
 void FDRGameplayTags::InitializeNativeGameplayTags()
 {
 	/*
+	 * Cost Tags
+	 */
+
+	GameplayTags.Cost_Water = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Cost.Water"),
+		FString("Water cost for abilities")
+	);
+
+	/*
 	 * Primary Attributes
 	 */
 
 	GameplayTags.Attributes_Primary_MaxHealth = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Attributes.Primary.MaxHealth"),
 		FString("Maximum amount of Health obtainable")
+	);
+
+	GameplayTags.Attributes_Primary_MaxWater = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Attributes.Primary.MaxWater"),
+		FString("Maximum amount of Water obtainable")
 	);
 
 	/*

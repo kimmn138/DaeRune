@@ -10,6 +10,8 @@ void UOverlayWidgetController::BroadcastInitialValues()
 {
 	OnHealthChanged.Broadcast(GetDRAS()->GetHealth());
 	OnMaxHealthChanged.Broadcast(GetDRAS()->GetMaxHealth());
+	OnWaterChanged.Broadcast(GetDRAS()->GetWater());
+	OnMaxWaterChanged.Broadcast(GetDRAS()->GetMaxWater());
 }
 
 void UOverlayWidgetController::BindCallbacksToDependencies()
@@ -25,6 +27,20 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 		[this](const FOnAttributeChangeData& Data)
 		{
 			OnMaxHealthChanged.Broadcast(Data.NewValue);
+		}
+	);
+
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetWaterAttribute()).AddLambda(
+		[this](const FOnAttributeChangeData& Data)
+		{
+			OnWaterChanged.Broadcast(Data.NewValue);
+		}
+	);
+
+	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetMaxWaterAttribute()).AddLambda(
+		[this](const FOnAttributeChangeData& Data)
+		{
+			OnMaxWaterChanged.Broadcast(Data.NewValue);
 		}
 	);
 

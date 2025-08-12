@@ -17,7 +17,10 @@ public:
 	static const FDRGameplayTags& Get() { return GameplayTags; }
 	static void InitializeNativeGameplayTags();
 
+	FGameplayTag Cost_Water;
+
 	FGameplayTag Attributes_Primary_MaxHealth;
+	FGameplayTag Attributes_Primary_MaxWater;
 
 	FGameplayTag InputTag_LMB;
 	FGameplayTag InputTag_RMB;

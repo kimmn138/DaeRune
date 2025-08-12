@@ -30,10 +30,12 @@ void UDRAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	// Primary Attributes
 
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRAttributeSet, MaxHealth, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRAttributeSet, MaxWater, COND_None, REPNOTIFY_Always);
 
 	// Vital Attributes
 
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRAttributeSet, Health, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRAttributeSet, Water, COND_None, REPNOTIFY_Always);
 }
 
 void UDRAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
@@ -44,6 +46,10 @@ void UDRAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute
 	{
 		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
 	}
+	if (Attribute == GetWaterAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxWater());
+	}
 }
 
 void UDRAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
@@ -53,6 +59,10 @@ void UDRAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, fl
 	if (Attribute == GetHealthAttribute())
 	{
 		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
+	}
+	if (Attribute == GetWaterAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxWater());
 	}
 }
 
@@ -183,6 +193,16 @@ void UDRAttributeSet::OnRep_Health(const FGameplayAttributeData& OldHealth) cons
 void UDRAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth) const
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRAttributeSet, MaxHealth, OldMaxHealth);
+}
+
+void UDRAttributeSet::OnRep_Water(const FGameplayAttributeData& OldWater) const
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRAttributeSet, Water, OldWater);
+}
+
+void UDRAttributeSet::OnRep_MaxWater(const FGameplayAttributeData& OldMaxWater) const
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRAttributeSet, MaxWater, OldMaxWater);
 }
 
 void UDRAttributeSet::SetEffectProperties(const FGameplayEffectModCallbackData& Data, FEffectProperties& Props) const
