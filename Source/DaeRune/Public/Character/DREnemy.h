@@ -40,6 +40,10 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FOnAttributeChangedSignature OnMaxHealthChanged;
 
+	// Water System
+	UFUNCTION(BlueprintCallable, Category = "Water System")
+	void OnAttackExecuted();
+
 	void HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 
 	UPROPERTY(BlueprintReadOnly, Category = "Combat")
@@ -65,4 +69,27 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<ADRAIController> DRAIController;
+
+	// Water System Configuration
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water System", meta = (ClampMin = "0.0"))
+	float WaterReductionPerAttack = -10.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water System", meta = (ClampMin = "100.0"))
+	float WaterExplosionRadius = 500.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water System")
+	bool bIsBoss = false;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Water System")
+	TSubclassOf<UGameplayEffect> WaterReductionEffectClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Water System")
+	TSubclassOf<UGameplayEffect> WaterGrantEffectClass;
+
+private:
+	void ReduceWaterReward();
+	void GrantWaterToPlayers();
+
+	UPROPERTY()
+	int32 AttackCount = 0;
 };

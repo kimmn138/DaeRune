@@ -45,6 +45,9 @@ public:
 	FGameplayTag Debuff_Duration;
 	FGameplayTag Debuff_Frequency;
 
+	FGameplayTag Water_SetByCaller_Reduction;
+	FGameplayTag Water_SetByCaller_Grant;
+
 	FGameplayTag Abilities_Attack;
 	FGameplayTag Abilities_Summon;
 

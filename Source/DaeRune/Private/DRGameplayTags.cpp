@@ -165,6 +165,20 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
+	 * Water
+	 */
+
+	GameplayTags.Water_SetByCaller_Reduction = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Water.SetByCaller.Reduction"),
+		FString("SetByCaller tag for water reduction amount")
+	);
+
+	GameplayTags.Water_SetByCaller_Grant = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Water.SetByCaller.Grant"),
+		FString("SetByCaller tag for water grant amount")
+	);
+
+	/*
 	 * Abilities
 	 */
 

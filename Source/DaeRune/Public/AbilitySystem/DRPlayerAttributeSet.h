@@ -21,7 +21,7 @@ public:
 	// 컨테이너 정보 접근자
 	int32 GetNumContainers() const { return NumContainers; }
 	float GetContainerHealth() const { return ContainerHealth; }
-	float GetCorruptMaxHealth() const { return 100.f; }
+	float GetCorruptMaxHealth() const { return CorruptMaxHealth; }
 
 	// 현재 컨테이너 인덱스 계산
 	int32 GetCurrentContainerIndex() const;
@@ -47,6 +47,9 @@ private:
 
 	UPROPERTY()
 	float ContainerHealth = 100.f;
+
+	UPROPERTY()
+	float CorruptMaxHealth = 100.f;
 
 	bool bCorrupted = false;
 
