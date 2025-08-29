@@ -202,6 +202,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Electrocute Ability Tag")
 	);
 
+	GameplayTags.Abilities_Melee_ClawSwipe = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.Melee.ClawSwipe"),
+		FString("ClawSwipe Ability Tag")
+	);
+
 	GameplayTags.Abilities_HitReact = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Abilities.HitReact"),
 		FString("Hit React Ability")
