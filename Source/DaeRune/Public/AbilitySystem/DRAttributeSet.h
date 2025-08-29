@@ -79,6 +79,10 @@ public:
 	FGameplayAttributeData MaxHealth;
 	ATTRIBUTE_ACCESSORS(UDRAttributeSet, MaxHealth);
 
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxWater, Category = "Resource Attributes")
+	FGameplayAttributeData MaxWater;
+	ATTRIBUTE_ACCESSORS(UDRAttributeSet, MaxWater);
+
 	/*
 	 * Vital Attributes
 	 */
@@ -86,6 +90,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Health, Category = "Vital Attributes")
 	FGameplayAttributeData Health;
 	ATTRIBUTE_ACCESSORS(UDRAttributeSet, Health);
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Water, Category = "Resource Attributes")
+	FGameplayAttributeData Water;
+	ATTRIBUTE_ACCESSORS(UDRAttributeSet, Water);
 
 	/*
 	 * Meta Attributes
@@ -104,6 +112,12 @@ public:
 
 	UFUNCTION()
 	void OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth) const;
+
+	UFUNCTION()
+	void OnRep_Water(const FGameplayAttributeData& OldWater) const;
+
+	UFUNCTION()
+	void OnRep_MaxWater(const FGameplayAttributeData& OldMaxWater) const;
 
 protected:
 	virtual void HandleIncomingDamage(const FEffectProperties& Props);

@@ -17,7 +17,10 @@ public:
 	static const FDRGameplayTags& Get() { return GameplayTags; }
 	static void InitializeNativeGameplayTags();
 
+	FGameplayTag Cost_Water;
+
 	FGameplayTag Attributes_Primary_MaxHealth;
+	FGameplayTag Attributes_Primary_MaxWater;
 
 	FGameplayTag InputTag_LMB;
 	FGameplayTag InputTag_RMB;
@@ -41,6 +44,9 @@ public:
 	FGameplayTag Debuff_Damage;
 	FGameplayTag Debuff_Duration;
 	FGameplayTag Debuff_Frequency;
+
+	FGameplayTag Water_SetByCaller_Reduction;
+	FGameplayTag Water_SetByCaller_Grant;
 
 	FGameplayTag Abilities_Attack;
 	FGameplayTag Abilities_Summon;
