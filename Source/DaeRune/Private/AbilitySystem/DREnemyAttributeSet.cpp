@@ -6,6 +6,7 @@
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "DRGameplayTags.h"
 #include "GameFramework/Character.h"
+#include "Character/DREnemy.h"
 
 void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 {
@@ -42,6 +43,27 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			if (!KnockbackForce.IsNearlyZero(1.f))
 			{
 				Props.TargetCharacter->LaunchCharacter(KnockbackForce, true, true);
+
+				// 넉백 상태 설정 추가
+				if (ADREnemy* Enemy = Cast<ADREnemy>(Props.TargetCharacter))
+				{
+					Enemy->SetKnockbackState(true);
+
+					// 넉백 종료 타이머 (안전장치)
+					FTimerHandle KnockbackEndTimer;
+					Props.TargetCharacter->GetWorld()->GetTimerManager().SetTimer(
+						KnockbackEndTimer,
+						[Enemy]()
+						{
+							if (IsValid(Enemy))
+							{
+								Enemy->SetKnockbackState(false);
+							}
+						},
+						1.5f, // 최대 1.5초 후 자동 해제
+						false
+					);
+				}
 			}
 		}
 

@@ -59,7 +59,8 @@ public:
 
 	FGameplayTag Abilities_Fire_FireBolt;
 	FGameplayTag Abilities_Lightning_Electrocute;
-	FGameplayTag Abilities_Melee_ClawSwipe;
+	FGameplayTag Abilities_GardenRobot_ClawSwipe;
+	FGameplayTag Abilities_GardenRobot_WaterPump;
 
 	FGameplayTag Cooldown_Fire_FireBolt;
 

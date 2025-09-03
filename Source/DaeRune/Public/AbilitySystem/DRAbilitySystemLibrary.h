@@ -98,4 +98,8 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayMechanics")
 	static TArray<FVector> EvenlyRotatedVectors(const FVector& Forward, const FVector& Axis, float Spread, int32 NumVectors);
+
+	// 벽 충돌 체크 유틸리티 함수
+	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|Combat")
+	static bool CheckActorWallCollision(AActor* Target, float CheckDistance = 50.f);
 };

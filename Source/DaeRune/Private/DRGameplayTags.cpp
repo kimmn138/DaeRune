@@ -202,9 +202,14 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Electrocute Ability Tag")
 	);
 
-	GameplayTags.Abilities_Melee_ClawSwipe = UGameplayTagsManager::Get().AddNativeGameplayTag(
-		FName("Abilities.Melee.ClawSwipe"),
+	GameplayTags.Abilities_GardenRobot_ClawSwipe = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.GardenRobot.ClawSwipe"),
 		FString("ClawSwipe Ability Tag")
+	);
+
+	GameplayTags.Abilities_GardenRobot_WaterPump = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.GardenRobot.WaterPump"),
+		FString("WaterPump Ability Tag")
 	);
 
 	GameplayTags.Abilities_HitReact = UGameplayTagsManager::Get().AddNativeGameplayTag(

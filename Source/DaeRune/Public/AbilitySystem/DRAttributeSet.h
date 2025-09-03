@@ -75,13 +75,17 @@ public:
 	 * Primary Attributes
 	 */
 
-	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxHealth, Category = "Vital Attributes")
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxHealth, Category = "Primary Attributes")
 	FGameplayAttributeData MaxHealth;
 	ATTRIBUTE_ACCESSORS(UDRAttributeSet, MaxHealth);
 
-	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxWater, Category = "Resource Attributes")
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxWater, Category = "Primary Attributes")
 	FGameplayAttributeData MaxWater;
 	ATTRIBUTE_ACCESSORS(UDRAttributeSet, MaxWater);
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MoveSpeed, Category = "Primary Attributes")
+	FGameplayAttributeData MoveSpeed;
+	ATTRIBUTE_ACCESSORS(UDRAttributeSet, MoveSpeed);
 
 	/*
 	 * Vital Attributes
@@ -91,7 +95,7 @@ public:
 	FGameplayAttributeData Health;
 	ATTRIBUTE_ACCESSORS(UDRAttributeSet, Health);
 
-	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Water, Category = "Resource Attributes")
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Water, Category = "Vital Attributes")
 	FGameplayAttributeData Water;
 	ATTRIBUTE_ACCESSORS(UDRAttributeSet, Water);
 
@@ -119,11 +123,15 @@ public:
 	UFUNCTION()
 	void OnRep_MaxWater(const FGameplayAttributeData& OldMaxWater) const;
 
+	UFUNCTION()
+	void OnRep_MoveSpeed(const FGameplayAttributeData& OldMoveSpeed) const;
+
+	void Debuff(const FEffectProperties& Props);
+
 protected:
 	virtual void HandleIncomingDamage(const FEffectProperties& Props);
 	virtual void HandleIncomingHealing(const FEffectProperties& Props);
 	void ShowFloatingText(const FEffectProperties& Props, float Damage) const;
-	void Debuff(const FEffectProperties& Props);
 
 	// 전투 상태 진입을 알리는 함수
 	void NotifyEnterCombat(const FEffectProperties& Props) const;
@@ -131,4 +139,5 @@ protected:
 private:
 	void SetEffectProperties(const FGameplayEffectModCallbackData& Data, FEffectProperties& Props) const;
 	bool bTopOffHealth = false;
+	bool bTopOffWater = false;
 };
