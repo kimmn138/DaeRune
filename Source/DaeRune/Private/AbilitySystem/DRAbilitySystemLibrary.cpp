@@ -378,7 +378,6 @@ bool UDRAbilitySystemLibrary::CheckActorWallCollision(AActor* Target, float Chec
 
 	if (bHitWall && WallHitResult.bBlockingHit)
 	{
-		UE_LOG(LogTemp, Log, TEXT("%s hit wall while knockback"), *GetNameSafe(Target));
 		return true;
 	}
 

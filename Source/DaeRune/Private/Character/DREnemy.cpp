@@ -137,24 +137,12 @@ void ADREnemy::ReduceWaterReward()
 		);
 
 		AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-
-		UE_LOG(LogTemp, Log, TEXT("%s - Attack #%d, Water reduced by %f (Current: %f)"),
-			*GetName(), AttackCount, WaterReductionPerAttack, DRAS->GetWater());
 	}
 }
 
 void ADREnemy::SetKnockbackState(bool bInKnockback)
 {
 	bIsBeingKnockedBack = bInKnockback;
-
-	if (bInKnockback)
-	{
-		UE_LOG(LogTemp, Log, TEXT("%s: Knockback started"), *GetName());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Log, TEXT("%s: Knockback ended"), *GetName());
-	}
 }
 
 void ADREnemy::BeginPlay()
@@ -257,12 +245,9 @@ void ADREnemy::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPri
 	FVector Velocity = GetVelocity();
 	float Speed = Velocity.Size();
 
-	UE_LOG(LogTemp, Warning, TEXT("%s hit wall - Speed: %f"), *GetName(), Speed);
-
 	// 속도 임계값 체크
 	if (Speed > MinSpeedForStun)  // MinSpeedForStun = 50.f
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Applying wall stun!"));
 		ApplyWallStun();
 	}
 }
@@ -286,7 +271,6 @@ void ADREnemy::ApplyWallStun()
 
 	if (!BaseAttributeSet)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to cast AttributeSet"));
 		return;
 	}
 
@@ -323,8 +307,6 @@ void ADREnemy::ApplyWallStun()
 	// 기존 Debuff 시스템 호출
 	BaseAttributeSet->Debuff(Props);
 
-	UE_LOG(LogTemp, Warning, TEXT("Wall stun applied using existing Debuff system"));
-
 	// 넉백 상태 해제
 	bIsBeingKnockedBack = false;
 
@@ -345,7 +327,6 @@ void ADREnemy::ApplyWallStun()
 void ADREnemy::EndStunImmunity()
 {
 	bIsStunImmune = false;
-	UE_LOG(LogTemp, Log, TEXT("%s: Stun immunity ended, can be stunned again"), *GetName());
 }
 
 void ADREnemy::GrantWaterToPlayers()
@@ -368,9 +349,6 @@ void ADREnemy::GrantWaterToPlayers()
 			ADRCharacter::StaticClass(),
 			PlayersToGrant
 		);
-
-		UE_LOG(LogTemp, Log, TEXT("Boss %s died - Granting MAX water to all %d players"),
-			*GetName(), PlayersToGrant.Num());
 	}
 	else
 	{
@@ -395,9 +373,6 @@ void ADREnemy::GrantWaterToPlayers()
 				PlayersToGrant.Add(Player);
 			}
 		}
-
-		UE_LOG(LogTemp, Log, TEXT("Enemy %s died - Granting %f water to %d players (Radius: %f)"),
-			*GetName(), CurrentWater, PlayersToGrant.Num(), WaterExplosionRadius);
 	}
 
 	// 물 부여 적용
@@ -441,9 +416,6 @@ void ADREnemy::GrantWaterToPlayers()
 				*SpecHandle.Data.Get(),
 				TargetASC
 			);
-
-			UE_LOG(LogTemp, Verbose, TEXT("Granted %f water to %s"),
-				WaterAmount, *Player->GetName());
 		}
 	}
 }

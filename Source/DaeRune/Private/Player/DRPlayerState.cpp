@@ -127,8 +127,6 @@ void ADRPlayerState::EnterCombat()
     );
 
     OnCombatStateChanged.Broadcast(true);
-
-    UE_LOG(LogTemp, Log, TEXT("EnterCombat - Player entered combat state"));
 }
 
 void ADRPlayerState::CheckCombatExit()
@@ -151,8 +149,6 @@ void ADRPlayerState::ExitCombat()
 
     // 3. 클라이언트에 알림
     OnCombatStateChanged.Broadcast(false);
-
-    UE_LOG(LogTemp, Log, TEXT("ExitCombat - Player exited combat state"));
 
     // 4. 마지막에 체력 재생 체크 (bIsInCombat이 false가 된 후)
     CheckAndStartHealthRegen();
@@ -185,8 +181,6 @@ void ADRPlayerState::SetCorruptedState(bool bNewCorrupted)
         {
             AbilitySystemComponent->AddLooseGameplayTag(FDRGameplayTags::Get().State_Corrupt);
         }
-
-        UE_LOG(LogTemp, Log, TEXT("Entered Corrupted State - Health regen stopped"));
     }
     else
     {
@@ -198,8 +192,6 @@ void ADRPlayerState::SetCorruptedState(bool bNewCorrupted)
         {
             AbilitySystemComponent->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Corrupt);
         }
-
-        UE_LOG(LogTemp, Log, TEXT("Exited Corrupted State - Health regen resumed"));
     }
 
     // 클라이언트에 알림
@@ -227,6 +219,23 @@ void ADRPlayerState::OnRep_IsInCombat()
 
 void ADRPlayerState::OnRep_IsCorrupted()
 {
+    // 클라이언트에서 태그 동기화
+    if (AbilitySystemComponent)
+    {
+        if (bIsCorrupted)
+        {
+            // 부패 상태 태그 추가
+            AbilitySystemComponent->AddLooseGameplayTag(FDRGameplayTags::Get().State_Corrupt);
+            UE_LOG(LogTemp, Log, TEXT("Client: Added Corrupt tag"));
+        }
+        else
+        {
+            // 부패 상태 태그 제거
+            AbilitySystemComponent->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Corrupt);
+            UE_LOG(LogTemp, Log, TEXT("Client: Removed Corrupt tag"));
+        }
+    }
+
     OnCorruptedStateChanged.Broadcast(bIsCorrupted);
 }
 
@@ -247,11 +256,6 @@ void ADRPlayerState::StartHealthRegen()
     }
 
     HealthRegenEffectHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*CachedHealthRegenSpec.Data.Get());
-
-    if (HealthRegenEffectHandle.IsValid())
-    {
-        UE_LOG(LogTemp, Log, TEXT("StartHealthRegen - Health regeneration started"));
-    }
 }
 
 void ADRPlayerState::StopHealthRegen()
@@ -262,8 +266,6 @@ void ADRPlayerState::StopHealthRegen()
     {
         AbilitySystemComponent->RemoveActiveGameplayEffect(HealthRegenEffectHandle);
         HealthRegenEffectHandle.Invalidate();
-
-        UE_LOG(LogTemp, Log, TEXT("StopHealthRegen - Health regeneration stopped"));
     }
 }
 
@@ -274,6 +276,4 @@ void ADRPlayerState::InitializeHealthRegenSpec()
     FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
     EffectContext.AddSourceObject(this);
     CachedHealthRegenSpec = AbilitySystemComponent->MakeOutgoingSpec(HealthRegenEffectClass, 1.f, EffectContext);
-
-    UE_LOG(LogTemp, Log, TEXT("InitializeHealthRegenSpec - Health regen spec initialized"));
 }

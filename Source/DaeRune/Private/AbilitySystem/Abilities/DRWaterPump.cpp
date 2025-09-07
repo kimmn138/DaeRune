@@ -100,8 +100,6 @@ void UDRWaterPump::StartWaterPumpLoop()
             true, // Looping
             0.0f  // 즉시 시작
         );
-
-        UE_LOG(LogTemp, Log, TEXT("WaterPump Loop Started"));
     }
 }
 
@@ -115,8 +113,6 @@ void UDRWaterPump::StopWaterPumpLoop()
         DamageTickCounter = 0;
         CurrentTarget = nullptr;
         PreviousTarget = nullptr;
-
-        UE_LOG(LogTemp, Log, TEXT("WaterPump Loop Stopped"));
     }
 }
 
@@ -147,8 +143,6 @@ void UDRWaterPump::PerformWaterPumpTick()
             CurrentTarget = HitResult.GetActor();
             DamageTickCounter = 0; // 새 타겟이면 카운터 리셋
 
-            UE_LOG(LogTemp, Log, TEXT("New Target: %s"), *GetNameSafe(CurrentTarget.Get()));
-
             // 블루프린트에서 타겟 변경 이벤트 처리 가능
             OnTargetChanged(PreviousTarget.Get(), CurrentTarget.Get());
         }
@@ -163,9 +157,6 @@ void UDRWaterPump::PerformWaterPumpTick()
 
             // 블루프린트에서 효과 적용
             OnDamageTickReached(CurrentTarget.Get());
-
-            UE_LOG(LogTemp, Log, TEXT("Damage Tick Reached for %s"),
-                *GetNameSafe(CurrentTarget.Get()));
         }
     }
     else
@@ -178,8 +169,6 @@ void UDRWaterPump::PerformWaterPumpTick()
             DamageTickCounter = 0;
 
             OnTargetChanged(PreviousTarget.Get(), nullptr);
-
-            UE_LOG(LogTemp, Verbose, TEXT("Lost Target"));
         }
     }
 }

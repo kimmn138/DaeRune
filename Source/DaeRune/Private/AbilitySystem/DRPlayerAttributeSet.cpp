@@ -8,6 +8,7 @@
 #include "GameFramework/Character.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
+#include "Character/DRCharacter.h"
 
 void UDRPlayerAttributeSet::SetContainerInfo(int32 InNumContainers, float InContainerHealth)
 {
@@ -210,20 +211,42 @@ void UDRPlayerAttributeSet::HandleIncomingHealing(const FEffectProperties& Props
 
 	if (LocalIncomingHealing <= 0.f) return;
 
-	// 스킬 회복 여부 판단
-	const bool bIsActiveHealing = Props.SourceAvatarActor &&
-		Props.SourceAvatarActor != Props.TargetAvatarActor;
+	const float CurrentHealth = GetHealth();
+	const float MaxHealthValue = GetMaxHealth();
 
-	if (bCorrupted)
+	// 부패 상태 확인
+	if (IsCorrupted())
 	{
-		if (bIsActiveHealing)
-		{
-			ExitCorruptedState(Props);
-		}
+		// 부패 정화 처리
+		HandleCorruptionPurification(Props, LocalIncomingHealing);
+		return;
 	}
-	else
+
+	// 정상 상태: 그냥 힐량 적용 (컨테이너 무관하게)
+	float NewHealth = FMath::Min(CurrentHealth + LocalIncomingHealing, MaxHealthValue);
+	SetHealth(NewHealth);
+}
+
+void UDRPlayerAttributeSet::HandleCorruptionPurification(const FEffectProperties& Props, float HealAmount)
+{
+	UE_LOG(LogTemp, Log, TEXT("Purifying corruption with healing"));
+
+	bCorrupted = false;
+
+	// 1. 정상 상태로 복원 (최대 체력을 원래대로)
+	const float NormalMaxHealth = NumContainers * ContainerHealth;
+	SetMaxHealth(NormalMaxHealth);
+	SetHealth(ContainerHealth);
+
+	// DRPlayerState의 SetCorruptedState 사용
+	if (ADRCharacter* Owner = Cast<ADRCharacter>(Props.TargetAvatarActor))
 	{
-		const float NewHealth = GetHealth() + LocalIncomingHealing;
-		SetHealth(FMath::Min(NewHealth, GetMaxHealth()));
+		if (ADRPlayerState* PlayerState = Owner->GetPlayerState<ADRPlayerState>())
+		{
+			// false로 설정하여 부패 상태 해제
+			PlayerState->SetCorruptedState(false);
+
+			UE_LOG(LogTemp, Log, TEXT("Corruption purified using SetCorruptedState"));
+		}
 	}
 }

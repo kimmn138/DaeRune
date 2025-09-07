@@ -35,6 +35,8 @@ public:
 	FGameplayTag Damage_Arcane; 
 	FGameplayTag Damage_Physical;
 
+	FGameplayTag Heal;
+
 	FGameplayTag Debuff_Burn; 
 	FGameplayTag Debuff_Stun;
 	FGameplayTag Debuff_Arcane;
@@ -61,6 +63,7 @@ public:
 	FGameplayTag Abilities_Lightning_Electrocute;
 	FGameplayTag Abilities_GardenRobot_ClawSwipe;
 	FGameplayTag Abilities_GardenRobot_WaterPump;
+	FGameplayTag Abilities_GardenRobot_SeedCannon;
 
 	FGameplayTag Cooldown_Fire_FireBolt;
 

@@ -227,9 +227,6 @@ void UDRAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, f
 				if (UCharacterMovementComponent* MovementComp = AvatarCharacter->GetCharacterMovement())
 				{
 					MovementComp->MaxWalkSpeed = NewValue;
-
-					UE_LOG(LogTemp, Log, TEXT("Movement Speed Updated for %s: %f"),
-						*GetNameSafe(AvatarCharacter), NewValue);
 				}
 			}
 		}
