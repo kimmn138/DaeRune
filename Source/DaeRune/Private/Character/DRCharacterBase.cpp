@@ -11,6 +11,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "AbilitySystem/DRAttributeSet.h"
 
 ADRCharacterBase::ADRCharacterBase()
 {
@@ -155,7 +156,24 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 void ADRCharacterBase::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 {
 	bIsStunned = NewCount > 0;
-	GetCharacterMovement()->MaxWalkSpeed = bIsStunned ? 0.f : BaseWalkSpeed;
+	if (bIsStunned)
+	{
+		// 스턴 시작 - 이동 정지
+		GetCharacterMovement()->MaxWalkSpeed = 0.f;
+	}
+	else
+	{
+		// 스턴 종료 - GAS 속성값으로 복구
+		if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
+		{
+			GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
+		}
+		else
+		{
+			// 폴백: AttributeSet이 없으면 BaseWalkSpeed 사용
+			GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
+		}
+	}
 }
 
 void ADRCharacterBase::OnRep_Stunned()

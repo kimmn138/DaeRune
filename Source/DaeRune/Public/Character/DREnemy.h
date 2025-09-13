@@ -52,6 +52,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
 	float LifeSpan = 5.f;
 
+	// 넉백 상태 설정
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	void SetKnockbackState(bool bInKnockback);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void InitAbilityActorInfo() override;
@@ -86,10 +90,46 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Water System")
 	TSubclassOf<UGameplayEffect> WaterGrantEffectClass;
 
+	// ========== 벽 충돌 기절 시스템 추가 ==========
+
+	// Hit 이벤트 핸들러
+	UFUNCTION()
+	void OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
+		UPrimitiveComponent* OtherComponent, FVector NormalImpulse,
+		const FHitResult& Hit);
+
+	// 벽 스턴 적용 함수
+	void ApplyWallStun();
+
+	// 스턴 면역 종료
+	void EndStunImmunity();
+
+	// 넉백 상태
+	UPROPERTY(BlueprintReadOnly, Category = "Combat|Wall Stun")
+	bool bIsBeingKnockedBack = false;
+
+	// 충돌 강도 임계값
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "100.0", ClampMax = "2000.0"))
+	float MinSpeedForStun = 50.f;
+
+	// 스턴 지속 시간
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "0.5", ClampMax = "5.0"))
+	float WallStunDuration = 5.0f;
+
+	// 스턴 면역 시간 (스턴 종료 후)
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "0.0", ClampMax = "10.0"))
+	float StunImmunityDuration = 5.0f;
+
 private:
 	void ReduceWaterReward();
 	void GrantWaterToPlayers();
 
 	UPROPERTY()
 	int32 AttackCount = 0;
+
+	// 스턴 면역 상태
+	bool bIsStunImmune = false;
+
+	// 스턴 면역 타이머
+	FTimerHandle StunImmunityTimerHandle;
 };

@@ -60,7 +60,6 @@ void ADRWaterSource::FillPlayerWater(AActor* TargetActor)
     // 이미 물이 가득 차있으면 무시
     if (FMath::IsNearlyEqual(TargetAS->GetWater(), TargetAS->GetMaxWater()))
     {
-        UE_LOG(LogTemp, Log, TEXT("Water Source: Player already has full water"));
         return;
     }
 
@@ -86,9 +85,6 @@ void ADRWaterSource::FillPlayerWater(AActor* TargetActor)
 
             // 블루프린트 이벤트 호출
             OnWaterSourceUsed(PlayerCharacter);
-
-            UE_LOG(LogTemp, Log, TEXT("Water Source: Filled water for %s"),
-                *PlayerCharacter->GetName());
         }
     }
 }
@@ -125,8 +121,6 @@ void ADRWaterSource::OnSourceRecharged()
 
     // 블루프린트 이벤트 호출
     OnWaterSourceRecharged();
-
-    UE_LOG(LogTemp, Log, TEXT("Water Source: Recharged and ready"));
 }
 
 void ADRWaterSource::OnRep_bIsAvailable()

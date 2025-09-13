@@ -98,7 +98,6 @@ void ADRCharacter::InitAbilityActorInfo()
 	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
 	if (!DRPlayerState)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("InitAbilityActorInfo - PlayerState is null, skipping initialization"));
 		return;
 	}
 
@@ -106,7 +105,6 @@ void ADRCharacter::InitAbilityActorInfo()
 	UAbilitySystemComponent* ASC = DRPlayerState->GetAbilitySystemComponent();
 	if (!ASC)
 	{
-		UE_LOG(LogTemp, Error, TEXT("InitAbilityActorInfo - AbilitySystemComponent is null"));
 		return;
 	}
 

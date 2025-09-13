@@ -60,6 +60,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Damage")
 	);
 
+	GameplayTags.Heal = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Heal"),
+		FString("Heal")
+	);
+
 	/*
 	 * State Tags
 	 */
@@ -200,6 +205,21 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Abilities_Lightning_Electrocute = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Abilities.Lightning.Electrocute"),
 		FString("Electrocute Ability Tag")
+	);
+
+	GameplayTags.Abilities_GardenRobot_ClawSwipe = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.GardenRobot.ClawSwipe"),
+		FString("ClawSwipe Ability Tag")
+	);
+
+	GameplayTags.Abilities_GardenRobot_WaterPump = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.GardenRobot.WaterPump"),
+		FString("WaterPump Ability Tag")
+	);
+
+	GameplayTags.Abilities_GardenRobot_SeedCannon = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.GardenRobot.SeedCannon"),
+		FString("SeedCannon Ability Tag")
 	);
 
 	GameplayTags.Abilities_HitReact = UGameplayTagsManager::Get().AddNativeGameplayTag(

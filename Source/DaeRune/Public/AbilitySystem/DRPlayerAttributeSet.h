@@ -7,14 +7,14 @@
 #include "DRPlayerAttributeSet.generated.h"
 
 /**
- * 
+ *
  */
 UCLASS()
 class DAERUNE_API UDRPlayerAttributeSet : public UDRAttributeSet
 {
 	GENERATED_BODY()
-	
-public:
+
+	public:
 	// 컨테이너 정보 설정 (게임 시작 시 한 번만)
 	void SetContainerInfo(int32 InNumContainers, float InContainerHealth);
 
@@ -40,6 +40,7 @@ private:
 	void ProcessNormalDamage(const FEffectProperties& Props, float Damage);
 	float CalculateContainerDamage(float CurrentHealth, float Damage) const;
 	void ApplyHitReactAndKnockback(const FEffectProperties& Props);
+	void HandleCorruptionPurification(const FEffectProperties& Props, float HealAmount);
 
 	// 캐릭터별 컨테이너 설정 (Replicate 불필요 - 각 클라이언트가 자체 계산)
 	UPROPERTY()

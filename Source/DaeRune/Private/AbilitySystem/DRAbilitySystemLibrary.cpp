@@ -12,6 +12,7 @@
 #include "UI/HUD/DRHUD.h"
 #include "UI/WidgetController/DRWidgetController.h"
 #include "Engine/OverlapResult.h"
+#include "GameFramework/Character.h"
 
 bool UDRAbilitySystemLibrary::MakeWidgetControllerParams(const UObject* WorldContextObject, FWidgetControllerParams& OutWCParams, ADRHUD*& OutDRHUD)
 {
@@ -338,4 +339,47 @@ TArray<FVector> UDRAbilitySystemLibrary::EvenlyRotatedVectors(const FVector& For
 		Vectors.Add(Forward);
 	}
 	return Vectors;
+}
+
+bool UDRAbilitySystemLibrary::CheckActorWallCollision(AActor* Target, float CheckDistance)
+{
+	if (!Target)
+	{
+		return false;
+	}
+
+	// 넉백 방향 계산 (타겟의 현재 속도 방향)
+	FVector Velocity = FVector::ZeroVector;
+	if (ACharacter* Character = Cast<ACharacter>(Target))
+	{
+		Velocity = Character->GetVelocity();
+	}
+
+	if (Velocity.IsNearlyZero())
+	{
+		return false;
+	}
+
+	// 벽 체크를 위한 트레이스
+	FVector StartLocation = Target->GetActorLocation();
+	FVector EndLocation = StartLocation + (Velocity.GetSafeNormal() * CheckDistance);
+
+	FHitResult WallHitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(Target);
+
+	bool bHitWall = Target->GetWorld()->LineTraceSingleByChannel(
+		WallHitResult,
+		StartLocation,
+		EndLocation,
+		ECC_WorldStatic,
+		QueryParams
+	);
+
+	if (bHitWall && WallHitResult.bBlockingHit)
+	{
+		return true;
+	}
+
+	return false;
 }

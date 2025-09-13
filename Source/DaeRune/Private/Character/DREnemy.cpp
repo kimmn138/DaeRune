@@ -16,6 +16,8 @@
 #include "Character/DRCharacter.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "Engine/OverlapResult.h"
+#include "Components/CapsuleComponent.h"
+#include "DRAbilityTypes.h"
 
 ADREnemy::ADREnemy()
 {
@@ -90,7 +92,20 @@ void ADREnemy::OnAttackExecuted()
 void ADREnemy::HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 {
 	bHitReacting = NewCount > 0;
-	GetCharacterMovement()->MaxWalkSpeed = bHitReacting ? 0.f : BaseWalkSpeed;
+	if (bHitReacting)
+	{
+		// HitReact 중에는 이동 정지
+		GetCharacterMovement()->MaxWalkSpeed = 0.f;
+	}
+	else
+	{
+		// HitReact 종료 시 GAS 속성값으로 복구
+		if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
+		{
+			GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
+		}
+	}
+
 	if (DRAIController && DRAIController->GetBlackboardComponent())
 	{
 		DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("HitReacting"), bHitReacting);
@@ -122,10 +137,12 @@ void ADREnemy::ReduceWaterReward()
 		);
 
 		AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-
-		UE_LOG(LogTemp, Log, TEXT("%s - Attack #%d, Water reduced by %f (Current: %f)"),
-			*GetName(), AttackCount, WaterReductionPerAttack, DRAS->GetWater());
 	}
+}
+
+void ADREnemy::SetKnockbackState(bool bInKnockback)
+{
+	bIsBeingKnockedBack = bInKnockback;
 }
 
 void ADREnemy::BeginPlay()
@@ -167,6 +184,14 @@ void ADREnemy::BeginPlay()
 		OnHealthChanged.Broadcast(DRAS->GetHealth());
 		OnMaxHealthChanged.Broadcast(DRAS->GetMaxHealth());
 	}
+
+	// Physics Hit 이벤트 바인딩
+	if (GetCapsuleComponent())
+	{
+		GetCapsuleComponent()->OnComponentHit.AddDynamic(this, &ADREnemy::OnHit);
+		// 물리 충돌 알림 활성화
+		GetCapsuleComponent()->SetNotifyRigidBodyCollision(true);
+	}
 }
 
 void ADREnemy::InitAbilityActorInfo()
@@ -197,6 +222,113 @@ void ADREnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 	}
 }
 
+void ADREnemy::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit)
+{
+	// 서버에서만 처리
+	if (!HasAuthority()) return;
+
+	// 넉백 상태가 아니거나 스턴 면역이면 무시
+	if (!bIsBeingKnockedBack || bIsStunImmune) return;
+
+	// 벽인지 확인
+	if (!OtherActor) return;
+
+	FString ActorName = OtherActor->GetName();
+
+	// Floor는 무시
+	if (ActorName.Contains(TEXT("Floor"))) return;
+
+	// StaticMeshActor인지 확인 (벽)
+	if (!ActorName.Contains(TEXT("StaticMeshActor"))) return;
+
+	// 속도 체크 (Impact가 0이므로 속도로 판단)
+	FVector Velocity = GetVelocity();
+	float Speed = Velocity.Size();
+
+	// 속도 임계값 체크
+	if (Speed > MinSpeedForStun)  // MinSpeedForStun = 50.f
+	{
+		ApplyWallStun();
+	}
+}
+
+void ADREnemy::ApplyWallStun()
+{
+	if (bIsStunImmune || !AbilitySystemComponent) return;
+
+	// AttributeSet 올바른 캐스팅
+	UDRAttributeSet* BaseAttributeSet = nullptr;
+
+	// 먼저 DREnemyAttributeSet으로 시도 (Enemy는 이걸 사용)
+	if (UDREnemyAttributeSet* EnemyAS = Cast<UDREnemyAttributeSet>(AttributeSet))
+	{
+		BaseAttributeSet = EnemyAS;  // DREnemyAttributeSet은 DRAttributeSet을 상속
+	}
+	else if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
+	{
+		BaseAttributeSet = DRAS;
+	}
+
+	if (!BaseAttributeSet)
+	{
+		return;
+	}
+
+	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+
+	// EffectProperties 구성
+	FEffectProperties Props;
+	Props.SourceASC = AbilitySystemComponent;
+	Props.TargetASC = AbilitySystemComponent;
+	Props.SourceAvatarActor = this;
+	Props.TargetAvatarActor = this;
+	Props.SourceCharacter = this;
+	Props.TargetCharacter = this;
+
+	// Context 생성
+	FGameplayEffectContextHandle ContextHandle = AbilitySystemComponent->MakeEffectContext();
+	ContextHandle.AddSourceObject(this);
+
+	// 커스텀 컨텍스트 설정
+	if (FDRGameplayEffectContext* DRContext = static_cast<FDRGameplayEffectContext*>(ContextHandle.Get()))
+	{
+		DRContext->SetIsSuccessfulDebuff(true);
+		DRContext->SetDebuffDamage(0.f);  // 벽 스턴은 추가 데미지 없음
+		DRContext->SetDebuffDuration(WallStunDuration);
+		DRContext->SetDebuffFrequency(0.1f);  // 0이 아닌 작은 값 (Period 문제 방지)
+
+		// Lightning 타입으로 설정 (기절 이펙트)
+		TSharedPtr<FGameplayTag> DamageType = MakeShareable(new FGameplayTag(GameplayTags.Damage_Lightning));
+		DRContext->SetDamageType(DamageType);
+	}
+
+	Props.EffectContextHandle = ContextHandle;
+
+	// 기존 Debuff 시스템 호출
+	BaseAttributeSet->Debuff(Props);
+
+	// 넉백 상태 해제
+	bIsBeingKnockedBack = false;
+
+	// 스턴 면역 설정
+	bIsStunImmune = true;
+
+	// 면역 타이머
+	float TotalImmunityTime = WallStunDuration + StunImmunityDuration;
+	GetWorld()->GetTimerManager().SetTimer(
+		StunImmunityTimerHandle,
+		this,
+		&ADREnemy::EndStunImmunity,
+		TotalImmunityTime,
+		false
+	);
+}
+
+void ADREnemy::EndStunImmunity()
+{
+	bIsStunImmune = false;
+}
+
 void ADREnemy::GrantWaterToPlayers()
 {
 	if (!HasAuthority() || !WaterGrantEffectClass) return;
@@ -217,9 +349,6 @@ void ADREnemy::GrantWaterToPlayers()
 			ADRCharacter::StaticClass(),
 			PlayersToGrant
 		);
-
-		UE_LOG(LogTemp, Log, TEXT("Boss %s died - Granting MAX water to all %d players"),
-			*GetName(), PlayersToGrant.Num());
 	}
 	else
 	{
@@ -244,9 +373,6 @@ void ADREnemy::GrantWaterToPlayers()
 				PlayersToGrant.Add(Player);
 			}
 		}
-
-		UE_LOG(LogTemp, Log, TEXT("Enemy %s died - Granting %f water to %d players (Radius: %f)"),
-			*GetName(), CurrentWater, PlayersToGrant.Num(), WaterExplosionRadius);
 	}
 
 	// 물 부여 적용
@@ -290,9 +416,6 @@ void ADREnemy::GrantWaterToPlayers()
 				*SpecHandle.Data.Get(),
 				TargetASC
 			);
-
-			UE_LOG(LogTemp, Verbose, TEXT("Granted %f water to %s"),
-				WaterAmount, *Player->GetName());
 		}
 	}
 }
