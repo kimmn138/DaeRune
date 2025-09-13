@@ -35,7 +35,7 @@ void UDRSeedCannon::SpawnSeedProjectile(const FVector& ForwardVector, const FGam
     // Transform 설정
     FTransform SpawnTransform;
     SpawnTransform.SetLocation(SocketLocation);
-    //SpawnTransform.SetRotation(LaunchDirection.Rotation().Quaternion());
+    SpawnTransform.SetRotation(LaunchDirection.Rotation().Quaternion());
 
     // 발사체 생성 (Deferred Spawn)
     ADRSeedProjectile* Projectile = GetWorld()->SpawnActorDeferred<ADRSeedProjectile>(
@@ -48,10 +48,6 @@ void UDRSeedCannon::SpawnSeedProjectile(const FVector& ForwardVector, const FGam
 
     // 데미지 파라미터 설정
     Projectile->DamageEffectParams = MakeDamageEffectParamsFromClassDefaults();
-
-    // 발사체 속도 설정
-    Projectile->ProjectileMovement->InitialSpeed = LaunchSpeed;
-    Projectile->ProjectileMovement->MaxSpeed = LaunchSpeed * 1.5f;
 
     // 속도 벡터 직접 설정
     Projectile->ProjectileMovement->Velocity = LaunchDirection * LaunchSpeed;

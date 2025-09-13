@@ -18,8 +18,8 @@ ADRSeedProjectile::ADRSeedProjectile()
 {
     // 중력 활성화 (포물선 궤적)
     ProjectileMovement->ProjectileGravityScale = 1.0f;
-    ProjectileMovement->InitialSpeed = 500.f;
-    ProjectileMovement->MaxSpeed = 500.f;
+    ProjectileMovement->InitialSpeed = 700.f;
+    ProjectileMovement->MaxSpeed = 700.f;
 
     // 유도 기능 비활성화
     ProjectileMovement->bIsHomingProjectile = false;
