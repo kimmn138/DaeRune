@@ -98,6 +98,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Physical Damage Type")
 	);
 
+	GameplayTags.Damage_Bite = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Damage.Bite"),
+		FString("Bite Damage Type")
+	);
+
 	/*
 	 * Debuffs
 	 */
@@ -120,6 +125,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Debuff_Stun = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Debuff.Stun"),
 		FString("Debuff for Lightning damage")
+	);
+
+	GameplayTags.Debuff_Bleed = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Debuff.Bleed"),
+		FString("Debuff for Bleed damage")
 	);
 
 	GameplayTags.Debuff_Chance = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -150,6 +160,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.DamageTypeTags.Add(GameplayTags.Damage_Lightning);
 	GameplayTags.DamageTypeTags.Add(GameplayTags.Damage_Physical);
 	GameplayTags.DamageTypeTags.Add(GameplayTags.Damage_Fire);
+	GameplayTags.DamageTypeTags.Add(GameplayTags.Damage_Bite);
 
 	/*
 	 * Map of Damage Types to Debuffs
@@ -159,6 +170,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.DamageTypesToDebuffs.Add(GameplayTags.Damage_Lightning, GameplayTags.Debuff_Stun);
 	GameplayTags.DamageTypesToDebuffs.Add(GameplayTags.Damage_Physical, GameplayTags.Debuff_Physical);
 	GameplayTags.DamageTypesToDebuffs.Add(GameplayTags.Damage_Fire, GameplayTags.Debuff_Burn);
+	GameplayTags.DamageTypesToDebuffs.Add(GameplayTags.Damage_Bite, GameplayTags.Debuff_Bleed);
 
 	/*
 	 * Effects
@@ -195,6 +207,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Abilities_Summon = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Abilities.Summon"),
 		FString("Summon Ability Tag")
+	);
+
+	GameplayTags.Abilities_Skill1 = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.Skill1"),
+		FString("Skill1 Ability Tag")
 	);
 
 	GameplayTags.Abilities_Fire_FireBolt = UGameplayTagsManager::Get().AddNativeGameplayTag(

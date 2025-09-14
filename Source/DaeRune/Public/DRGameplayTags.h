@@ -34,6 +34,7 @@ public:
 	FGameplayTag Damage_Lightning;
 	FGameplayTag Damage_Arcane; 
 	FGameplayTag Damage_Physical;
+	FGameplayTag Damage_Bite;
 
 	FGameplayTag Heal;
 
@@ -41,6 +42,7 @@ public:
 	FGameplayTag Debuff_Stun;
 	FGameplayTag Debuff_Arcane;
 	FGameplayTag Debuff_Physical;
+	FGameplayTag Debuff_Bleed;
 
 	FGameplayTag Debuff_Chance; 
 	FGameplayTag Debuff_Damage;
@@ -52,6 +54,7 @@ public:
 
 	FGameplayTag Abilities_Attack;
 	FGameplayTag Abilities_Summon;
+	FGameplayTag Abilities_Skill1;
 
 	FGameplayTag Abilities_HitReact;
 

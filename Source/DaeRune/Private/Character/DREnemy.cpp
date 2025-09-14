@@ -218,7 +218,16 @@ void ADREnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 
 	if (DRAIController && DRAIController->GetBlackboardComponent())
 	{
-		DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("Stunned"), bIsStunned);
+		UBlackboardComponent* BB = DRAIController->GetBlackboardComponent();
+		BB->SetValueAsBool(FName("Stunned"), bIsStunned);
+
+		// 스턴 걸렸을 때 타겟 초기화
+		if (bIsStunned)
+		{
+			BB->ClearValue("FirstAttacker");
+			BB->SetValueAsBool("HasFirstAttacker", false);
+			BB->ClearValue("TargetToFollow");
+		}
 	}
 }
 
