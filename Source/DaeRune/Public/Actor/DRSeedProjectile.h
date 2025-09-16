@@ -9,7 +9,7 @@
 class UDRSeedCannon;
 
 /**
- * 
+ * 시드 캐논 전용 발사체 클래스
  */
 UCLASS()
 class DAERUNE_API ADRSeedProjectile : public ADRProjectile
@@ -22,52 +22,56 @@ public:
 protected:
     virtual void BeginPlay() override;
 
+    // 충돌 감지 - 지형/액터와 접촉 시 폭발
     virtual void OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
         UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep,
         const FHitResult& SweepResult) override;
 
-    // 폭발 처리
+    // 지정된 위치에서 범위 폭발 실행
     void ExplodeAtLocation(const FVector& ImpactLocation);
 
-    // Line of Sight 체크 (벽 뒤에 있는지 확인)
+    // 시선 차단 검사 (벽 뒤의 대상 제외용)
     bool HasLineOfSight(const FVector& StartLocation, const FVector& EndLocation, const AActor* TargetActor) const;
 
-    // Line of Sight 체크 활성화 여부
+    // 시선 차단 검사 활성화 여부
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon|LineOfSight")
     bool bEnableLineOfSightCheck = true;  // 기본적으로 비활성화
 
-    // 거리별 효과 적용
+    // 거리별 차등 효과 적용
     void ApplyEffectToActor(AActor* Target, float Distance);
 
-    // 힐 효과 적용 (아군용)
+    // 아군 대상 힐 효과 적용
     void ApplyHealToAlly(AActor* AllyActor, float HealAmount);
 
 private:
-    // 범위 설정
+    // 내부 범위 반경 (최대 효과)
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon|Range")
     float InnerRadius = 200.f;
 
+    // 외부 범위 반경 (감소된 효과)
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon|Range")
     float OuterRadius = 400.f;
 
-    // 데미지 설정 (적군)
+    // 내부 범위 데미지량
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon|Damage")
     float InnerDamage = 70.f;
 
+    // 외부 범위 데미지량
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon|Damage")
     float OuterDamage = 30.f;
 
-    // 힐 설정 (아군)
+    // 내부 범위 힐량
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon|Heal")
     float InnerHeal = 100.f;
 
+    // 외부 범위 힐량
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon|Heal")
     float OuterHeal = 50.f;
 
-    // 힐 이펙트 클래스
+    // 힐 적용용 GameplayEffect 클래스
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon|Heal")
     TSubclassOf<UGameplayEffect> HealEffectClass;
 
-    // 폭발 여부 체크
+    // 폭발 중복 실행 방지 플래그
     bool bHasExploded = false;
 };

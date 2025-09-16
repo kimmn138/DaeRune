@@ -7,7 +7,7 @@
 #include "DRCharacter.generated.h"
 
 /**
- * 
+ * 플레이어 캐릭터 클래스
  */
 UCLASS()
 class DAERUNE_API ADRCharacter : public ADRCharacterBase
@@ -16,9 +16,12 @@ class DAERUNE_API ADRCharacter : public ADRCharacterBase
 	
 public:
 	ADRCharacter();
+	// 서버에서 컨트롤러가 빙의될 때 호출 (서버용 GAS 초기화)
 	virtual void PossessedBy(AController* NewController) override;
+	// PlayerState 리플리케이션 시 호출 (클라이언트용 GAS 초기화)
 	virtual void OnRep_PlayerState() override;
 
+	// 플레이어 전용 디버프 RepNotify 함수들
 	virtual void OnRep_Stunned() override;
 	virtual void OnRep_Burned() override;
 
@@ -30,8 +33,10 @@ public:
 	float ContainerHealth = 100.f;
 
 private:
+	// GAS 초기화
 	virtual void InitAbilityActorInfo() override;
 
+	// 카메라 시스템
 	UPROPERTY(VisibleAnywhere, Category = Camera)
 	TObjectPtr<class USpringArmComponent> CameraBoom;
 

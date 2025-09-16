@@ -17,7 +17,9 @@ void UDRAssetManager::StartInitialLoading()
 {
 	Super::StartInitialLoading();
 
+	// 프로젝트 GameplayTags 네이티브 등록
 	FDRGameplayTags::InitializeNativeGameplayTags();
 
+	// GAS 시스템 글로벌 데이터 초기화
 	UAbilitySystemGlobals::Get().InitGlobalData();
 }
