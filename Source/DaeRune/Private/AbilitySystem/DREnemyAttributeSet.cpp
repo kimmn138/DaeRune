@@ -7,6 +7,8 @@
 #include "DRGameplayTags.h"
 #include "GameFramework/Character.h"
 #include "Character/DREnemy.h"
+#include "BehaviorTree/BlackboardComponent.h"
+#include "AI/DRAIController.h"
 
 void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 {
@@ -16,6 +18,25 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 	{
 		// 데미지가 발생하면 전투 상태 진입
 		NotifyEnterCombat(Props);
+
+		if (ADREnemy* Enemy = Cast<ADREnemy>(Props.TargetAvatarActor))
+		{
+			if (ADRAIController* AIController = Cast<ADRAIController>(Enemy->GetController()))
+			{
+				UBlackboardComponent* BB = AIController->GetBlackboardComponent();
+
+				// FirstAttacker가 없는 경우에만 설정
+				if (!BB->GetValueAsBool("HasFirstAttacker"))
+				{
+					// 첫 공격자 설정
+					BB->SetValueAsObject("FirstAttacker", Props.SourceAvatarActor);
+					BB->SetValueAsBool("HasFirstAttacker", true);
+
+					// 현재 타겟도 첫 공격자로 설정
+					BB->SetValueAsObject("TargetToFollow", Props.SourceAvatarActor);
+				}
+			}
+		}
 
 		const float NewHealth = GetHealth() - LocalIncomingDamage;
 		SetHealth(FMath::Clamp(NewHealth, 0.f, GetMaxHealth()));

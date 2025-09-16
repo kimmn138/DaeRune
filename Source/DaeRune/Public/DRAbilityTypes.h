@@ -5,6 +5,7 @@
 
 class UGameplayEffect;
 
+// 데미지 이펙트 적용에 사용되는 구조체
 USTRUCT(BlueprintType)
 struct FDamageEffectParams
 {
@@ -61,6 +62,7 @@ struct FDamageEffectParams
 	FVector KnockbackForce = FVector::ZeroVector;
 };
 
+// DaeRune 전용 확장된 GameplayEffectContext
 USTRUCT(BlueprintType)
 struct FDRGameplayEffectContext : public FGameplayEffectContext
 {
@@ -83,12 +85,14 @@ public:
 	void SetDeathImpulse(const FVector& InImpulse) { DeathImpulse = InImpulse; }
 	void SetKnockbackForce(const FVector& InForce) { KnockbackForce = InForce; }
 
+	// 언리얼 직렬화 시스템 연동
 	/** Returns the actual struct used for serialization, subclasses must override this! */
 	virtual UScriptStruct* GetScriptStruct() const override
 	{
 		return StaticStruct();
 	}
 
+	// 컨텍스트 깊은 복사
 	/** Creates a copy of this context, used to duplicate for later modifications */
 	virtual FGameplayEffectContext* Duplicate() const override
 	{
@@ -102,6 +106,7 @@ public:
 		return NewContext;
 	}
 
+	// 네트워크 직렬화
 	/** Custom serialization, subclasses must override this */
 	virtual bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess) override;
 
@@ -126,6 +131,7 @@ public:
 	FVector KnockbackForce = FVector::ZeroVector;
 };
 
+// 네트워크 직렬화 및 복사 연산 지원을 위한 특성 정의
 template<>
 struct TStructOpsTypeTraits<FDRGameplayEffectContext> : public TStructOpsTypeTraitsBase2<FDRGameplayEffectContext>
 {

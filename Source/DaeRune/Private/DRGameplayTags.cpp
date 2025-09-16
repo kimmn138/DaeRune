@@ -9,7 +9,7 @@ FDRGameplayTags FDRGameplayTags::GameplayTags;
 void FDRGameplayTags::InitializeNativeGameplayTags()
 {
 	/*
-	 * Cost Tags
+	 * 리소스 비용
 	 */
 
 	GameplayTags.Cost_Water = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -18,7 +18,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * Primary Attributes
+	 * 기본 속성
 	 */
 
 	GameplayTags.Attributes_Primary_MaxHealth = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -32,7 +32,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * Input Tags
+	 * 입력 태그
 	 */
 
 	GameplayTags.InputTag_LMB = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -55,18 +55,8 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Input Tag for E key")
 	);
 
-	GameplayTags.Damage = UGameplayTagsManager::Get().AddNativeGameplayTag(
-		FName("Damage"),
-		FString("Damage")
-	);
-
-	GameplayTags.Heal = UGameplayTagsManager::Get().AddNativeGameplayTag(
-		FName("Heal"),
-		FString("Heal")
-	);
-
 	/*
-	 * State Tags
+	 * 플레이어 상태
 	 */
 
 	GameplayTags.State_Corrupt = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -75,8 +65,13 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * Damage Types
+	 * 기본 데미지, 타입 별 데미지
 	 */
+
+	GameplayTags.Damage = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Damage"),
+		FString("Damage")
+	);
 
 	GameplayTags.Damage_Fire = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Damage.Fire"),
@@ -98,8 +93,22 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Physical Damage Type")
 	);
 
+	GameplayTags.Damage_Bite = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Damage.Bite"),
+		FString("Bite Damage Type")
+	);
+
 	/*
-	 * Debuffs
+	 * 기본 힐
+	 */
+
+	GameplayTags.Heal = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Heal"),
+		FString("Heal")
+	);
+
+	/*
+	 * 디버프 효과
 	 */
 
 	GameplayTags.Debuff_Arcane = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -122,6 +131,15 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Debuff for Lightning damage")
 	);
 
+	GameplayTags.Debuff_Bleed = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Debuff.Bleed"),
+		FString("Debuff for Bleed damage")
+	);
+
+	/*
+	 * 디버프 계산용 태그
+	 */
+
 	GameplayTags.Debuff_Chance = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Debuff.Chance"),
 		FString("Debuff Chance")
@@ -143,25 +161,27 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * Array of Damage Types
+	 * 데미지 타입 배열
 	 */
 
 	GameplayTags.DamageTypeTags.Add(GameplayTags.Damage_Arcane);
 	GameplayTags.DamageTypeTags.Add(GameplayTags.Damage_Lightning);
 	GameplayTags.DamageTypeTags.Add(GameplayTags.Damage_Physical);
 	GameplayTags.DamageTypeTags.Add(GameplayTags.Damage_Fire);
+	GameplayTags.DamageTypeTags.Add(GameplayTags.Damage_Bite);
 
 	/*
-	 * Map of Damage Types to Debuffs
+	 * 데미지 타입, 디버프 매핑
 	 */
 
 	GameplayTags.DamageTypesToDebuffs.Add(GameplayTags.Damage_Arcane, GameplayTags.Debuff_Arcane);
 	GameplayTags.DamageTypesToDebuffs.Add(GameplayTags.Damage_Lightning, GameplayTags.Debuff_Stun);
 	GameplayTags.DamageTypesToDebuffs.Add(GameplayTags.Damage_Physical, GameplayTags.Debuff_Physical);
 	GameplayTags.DamageTypesToDebuffs.Add(GameplayTags.Damage_Fire, GameplayTags.Debuff_Burn);
+	GameplayTags.DamageTypesToDebuffs.Add(GameplayTags.Damage_Bite, GameplayTags.Debuff_Bleed);
 
 	/*
-	 * Effects
+	 * 타격 반응 이펙트
 	 */
 
 	GameplayTags.Effects_HitReact = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -170,7 +190,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * Water
+	 * 물 시스템 (SetByCaller 방식)
 	 */
 
 	GameplayTags.Water_SetByCaller_Reduction = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -184,7 +204,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * Abilities
+	 * 어빌리티 분류
 	 */
 
 	GameplayTags.Abilities_Attack = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -196,6 +216,15 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FName("Abilities.Summon"),
 		FString("Summon Ability Tag")
 	);
+
+	GameplayTags.Abilities_Skill1 = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.Skill1"),
+		FString("Skill1 Ability Tag")
+	);
+
+	/*
+	 * 구체적 어빌리티 
+	 */
 
 	GameplayTags.Abilities_Fire_FireBolt = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Abilities.Fire.FireBolt"),
@@ -222,10 +251,18 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("SeedCannon Ability Tag")
 	);
 
+	/*
+	 * 타격 반응
+	 */
+
 	GameplayTags.Abilities_HitReact = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Abilities.HitReact"),
 		FString("Hit React Ability")
 	);
+
+	/*
+	 * 어빌리티 타입 분류
+	 */
 
 	GameplayTags.Abilities_Type_None = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Abilities.Type.None"),
@@ -243,8 +280,8 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	* Cooldown
-	*/
+	 * 어빌리티 쿨다운
+	 */
 
 	GameplayTags.Cooldown_Fire_FireBolt = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Cooldown.Fire.FireBolt"),
@@ -252,7 +289,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * Combat Sockets
+	 * 공격 위치 소켓
 	 */
 
 	GameplayTags.CombatSocket_Weapon = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -276,7 +313,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * Montage Tags
+	 * 공격 몽타주
 	 */
 
 	GameplayTags.Montage_Attack_1 = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -300,7 +337,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * Player Tags
+	 * 입력 블록
 	 */
 
 	GameplayTags.Player_Block_InputHeld = UGameplayTagsManager::Get().AddNativeGameplayTag(

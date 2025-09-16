@@ -21,19 +21,24 @@
 
 ADREnemy::ADREnemy()
 {
+	// 메시 가시성 충돌 설정
 	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
+	// GAS 컴포넌트 초기화 - 리슨서버용 최소 리플리케이션
 	AbilitySystemComponent = CreateDefaultSubobject<UDRAbilitySystemComponent>("AbilitySystemComponent");
 	AbilitySystemComponent->SetIsReplicated(true);
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
 
+	// AI 회전 설정 - 컨트롤러 기반 부드러운 회전
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationRoll = false;
 	bUseControllerRotationYaw = false;
 	GetCharacterMovement()->bUseControllerDesiredRotation = true;
 
+	// 적 전용 어트리뷰트셋
 	AttributeSet = CreateDefaultSubobject<UDREnemyAttributeSet>("AttributeSet");
 
+	// 체력바 UI 설정
 	HealthBar = CreateDefaultSubobject<UWidgetComponent>("HealthBar");
 	HealthBar->SetupAttachment(GetRootComponent());
 
@@ -44,10 +49,13 @@ void ADREnemy::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 
+	// 서버에서만 AI 초기화
 	if (!HasAuthority()) return;
 	DRAIController = Cast<ADRAIController>(NewController);
+	// 블랙보드 초기화 및 비헤이비어 트리 실행
 	DRAIController->GetBlackboardComponent()->InitializeBlackboard(*BehaviorTree->BlackboardAsset);
 	DRAIController->RunBehaviorTree(BehaviorTree);
+	// 초기 AI 상태 설정
 	DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("HitReacting"), false);
 	DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("RangedAttacker"), CharacterClass != ECharacterClass::Warrior);
 }
@@ -59,10 +67,12 @@ int32 ADREnemy::GetPlayerLevel_Implementation()
 
 void ADREnemy::Die(const FVector& DeathImpulse)
 {
+	// 사망 처리 - 일정 시간 후 소멸
 	SetLifeSpan(LifeSpan);
+	// AI 상태 업데이트
 	if (DRAIController) DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("Dead"), true);
 
-	// 사망시 물 부여
+	// 사망시 플레이어들에게 물 보상 지급
 	if (HasAuthority())
 	{
 		GrantWaterToPlayers();
@@ -85,6 +95,7 @@ void ADREnemy::OnAttackExecuted()
 {
 	if (!HasAuthority()) return;
 
+	// 공격 횟수 증가 및 물 보상 감소
 	AttackCount++;
 	ReduceWaterReward();
 }
@@ -94,18 +105,19 @@ void ADREnemy::HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount
 	bHitReacting = NewCount > 0;
 	if (bHitReacting)
 	{
-		// HitReact 중에는 이동 정지
+		// 히트 리액션 중 이동 정지
 		GetCharacterMovement()->MaxWalkSpeed = 0.f;
 	}
 	else
 	{
-		// HitReact 종료 시 GAS 속성값으로 복구
+		// 히트 리액션 종료 시 GAS 속성값으로 이동속도 복구
 		if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
 		{
 			GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
 		}
 	}
 
+	// AI 블랙보드 상태 업데이트
 	if (DRAIController && DRAIController->GetBlackboardComponent())
 	{
 		DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("HitReacting"), bHitReacting);
@@ -116,9 +128,11 @@ void ADREnemy::ReduceWaterReward()
 {
 	if (!HasAuthority() || !WaterReductionEffectClass) return;
 
+	// 현재 물이 없으면 감소시키지 않음
 	const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet);
 	if (!DRAS || DRAS->GetWater() <= 0.f) return;
 
+	// GameplayEffect로 물 감소 적용
 	FGameplayEffectContextHandle ContextHandle = AbilitySystemComponent->MakeEffectContext();
 	ContextHandle.AddSourceObject(this);
 
@@ -131,6 +145,7 @@ void ADREnemy::ReduceWaterReward()
 	if (SpecHandle.IsValid())
 	{
 		const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+		// SetByCaller로 감소량 설정
 		SpecHandle.Data.Get()->SetSetByCallerMagnitude(
 			GameplayTags.Water_SetByCaller_Reduction,
 			WaterReductionPerAttack
@@ -149,20 +164,26 @@ void ADREnemy::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// 기본 이동속도 설정
 	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
+	// GAS 초기화
 	InitAbilityActorInfo();
+	// 서버에서만 시작 어빌리티 부여
 	if (HasAuthority())
 	{
 		UDRAbilitySystemLibrary::GiveStartupAbilities(this, AbilitySystemComponent, CharacterClass);
 	}
 
+	// UI 위젯 컨트롤러 설정
 	if (UDRUserWidget* DRUserWidget = Cast<UDRUserWidget>(HealthBar->GetUserWidgetObject()))
 	{
 		DRUserWidget->SetWidgetController(this);
 	}
 
+	// 어트리뷰트 변화 이벤트 바인딩
 	if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
 	{
+		// 체력 변화 델리게이트 바인딩
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetHealthAttribute()).AddLambda(
 			[this](const FOnAttributeChangeData& Data)
 			{
@@ -176,30 +197,34 @@ void ADREnemy::BeginPlay()
 			}
 		);
 
+		// 히트 리액션 태그 이벤트 바인딩
 		AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Effects_HitReact, EGameplayTagEventType::NewOrRemoved).AddUObject(
 			this,
 			&ADREnemy::HitReactTagChanged
 		);
 
+		// 초기값 브로드캐스트
 		OnHealthChanged.Broadcast(DRAS->GetHealth());
 		OnMaxHealthChanged.Broadcast(DRAS->GetMaxHealth());
 	}
 
-	// Physics Hit 이벤트 바인딩
+	// 물리 충돌 이벤트 바인딩 (넉백 처리용)
 	if (GetCapsuleComponent())
 	{
 		GetCapsuleComponent()->OnComponentHit.AddDynamic(this, &ADREnemy::OnHit);
-		// 물리 충돌 알림 활성화
 		GetCapsuleComponent()->SetNotifyRigidBodyCollision(true);
 	}
 }
 
 void ADREnemy::InitAbilityActorInfo()
 {
+	// GAS 초기화
 	AbilitySystemComponent->InitAbilityActorInfo(this, this);
 	Cast<UDRAbilitySystemComponent>(AbilitySystemComponent)->AbilityActorInfoSet();
+	// 스턴 태그 이벤트 바인딩
 	AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Debuff_Stun, EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ADREnemy::StunTagChanged);
 
+	// 서버에서만 기본 어트리뷰트 초기화
 	if (HasAuthority())
 	{
 		InitializeDefaultAttributes();
@@ -209,6 +234,7 @@ void ADREnemy::InitAbilityActorInfo()
 
 void ADREnemy::InitializeDefaultAttributes() const
 {
+	// 캐릭터 클래스와 레벨에 따른 기본 어트리뷰트 초기화
 	UDRAbilitySystemLibrary::InitializeDefaultAttributes(this, CharacterClass, Level, AbilitySystemComponent);
 }
 
@@ -216,15 +242,25 @@ void ADREnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 {
 	Super::StunTagChanged(CallbackTag, NewCount);
 
+	// AI 블랙보드에 스턴 상태 업데이트
 	if (DRAIController && DRAIController->GetBlackboardComponent())
 	{
-		DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("Stunned"), bIsStunned);
+		UBlackboardComponent* BB = DRAIController->GetBlackboardComponent();
+		BB->SetValueAsBool(FName("Stunned"), bIsStunned);
+
+		// 스턴 시 타겟 정보 초기화 (어그로 리셋)
+		if (bIsStunned)
+		{
+			BB->ClearValue("FirstAttacker");
+			BB->SetValueAsBool("HasFirstAttacker", false);
+			BB->ClearValue("TargetToFollow");
+		}
 	}
 }
 
 void ADREnemy::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit)
 {
-	// 서버에서만 처리
+	// 서버에서만 넉백 처리
 	if (!HasAuthority()) return;
 
 	// 넉백 상태가 아니거나 스턴 면역이면 무시
@@ -337,13 +373,14 @@ void ADREnemy::GrantWaterToPlayers()
 	if (!DRAS) return;
 
 	const float CurrentWater = DRAS->GetWater();
+	// 일반 적은 물이 없으면 지급하지 않음, 보스는 항상 지급
 	if (CurrentWater <= 0.f && !bIsBoss) return;
 
 	TArray<AActor*> PlayersToGrant;
 
 	if (bIsBoss)
 	{
-		// 보스: 전체 맵 플레이어
+		// 보스: 맵 전체 플레이어에게 지급
 		UGameplayStatics::GetAllActorsOfClass(
 			GetWorld(),
 			ADRCharacter::StaticClass(),
@@ -352,7 +389,7 @@ void ADREnemy::GrantWaterToPlayers()
 	}
 	else
 	{
-		// 일반 적: 범위 내 플레이어
+		// 일반 적: 폭발 반경 내 플레이어에게만 지급
 		TArray<FOverlapResult> OverlapResults;
 		FCollisionQueryParams QueryParams;
 		QueryParams.AddIgnoredActor(this);
@@ -375,7 +412,7 @@ void ADREnemy::GrantWaterToPlayers()
 		}
 	}
 
-	// 물 부여 적용
+	// 각 플레이어에게 물 지급 GameplayEffect 적용
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 
 	for (AActor* Player : PlayersToGrant)
@@ -403,15 +440,17 @@ void ADREnemy::GrantWaterToPlayers()
 
 			if (bIsBoss)
 			{
-				// 보스: MaxWater까지 채우기
+				// 보스는 MaxWater까지 채워주기
 				WaterAmount = TargetAS->GetMaxWater() - TargetAS->GetWater();
 			}
 
+			// SetByCaller로 지급량 설정
 			SpecHandle.Data.Get()->SetSetByCallerMagnitude(
 				GameplayTags.Water_SetByCaller_Grant,
 				WaterAmount
 			);
 
+			// 타겟에게 효과 적용
 			TargetASC->ApplyGameplayEffectSpecToTarget(
 				*SpecHandle.Data.Get(),
 				TargetASC

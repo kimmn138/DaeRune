@@ -16,12 +16,12 @@
 
 ADRSeedProjectile::ADRSeedProjectile()
 {
-    // 중력 활성화 (포물선 궤적)
+    // 포물선 궤적을 위한 중력 활성화
     ProjectileMovement->ProjectileGravityScale = 1.0f;
     ProjectileMovement->InitialSpeed = 700.f;
     ProjectileMovement->MaxSpeed = 700.f;
 
-    // 유도 기능 비활성화
+    // 유도 기능 비활성화 (직선 포물선 궤적)
     ProjectileMovement->bIsHomingProjectile = false;
 }
 
@@ -29,6 +29,7 @@ void ADRSeedProjectile::BeginPlay()
 {
     Super::BeginPlay();
 
+    // 시드 발사체는 이동 동기화 비활성화 (서버에서만 처리)
     SetReplicateMovement(false);
 }
 
@@ -36,13 +37,13 @@ void ADRSeedProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent
     AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
     bool bFromSweep, const FHitResult& SweepResult)
 {
-    // 이미 폭발했으면 무시
+    // 중복 폭발 방지
     if (bHasExploded) return;
 
     // 자기 자신이거나 소유자면 무시
     if (!OtherActor || OtherActor == GetOwner()) return;
 
-    // 발사한 캐릭터는 통과
+    // 발사한 캐릭터는 통과 (자폭 방지)
     if (DamageEffectParams.SourceAbilitySystemComponent)
     {
         AActor* SourceActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
@@ -51,7 +52,7 @@ void ADRSeedProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent
 
     if (OtherComp)
     {
-        // 충돌 지점에서 폭발
+        // 충돌 지점 계산 (정확한 폭발 위치 설정)
         FVector ImpactPoint = SweepResult.Location;
         if (ImpactPoint.IsZero())
         {
@@ -65,7 +66,7 @@ void ADRSeedProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent
 
 void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
 {
-    // 서버에서만 처리
+    // 중복 폭발 방지, 서버에서만 범위 데미지/힐 처리
     if (!HasAuthority() || bHasExploded) return;
     bHasExploded = true;
 
@@ -108,7 +109,6 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
 
     if (!bOverlapSuccess)
     {
-        UE_LOG(LogTemp, Warning, TEXT("SeedCannon: No overlaps found"));
         Destroy();
         return;
     }
@@ -143,14 +143,9 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
         }
         else
         {
-            UE_LOG(LogTemp, Log, TEXT("SeedCannon: %s is behind wall (LOS Check Enabled)"), *Target->GetName());
             BlockedCount++;
         }
     }
-
-    // 결과 로그
-    GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green,
-        FString::Printf(TEXT("Explosion: %d affected, %d blocked"), AffectedCount, BlockedCount));
 
     // 발사체 제거
     Destroy();
@@ -238,7 +233,6 @@ void ADRSeedProjectile::ApplyEffectToActor(AActor* Target, float Distance)
         if (HealAmount > 0.f)
         {
             ApplyHealToAlly(Target, HealAmount);
-            UE_LOG(LogTemp, Log, TEXT("SeedCannon: Healed %s for %f"), *Target->GetName(), HealAmount);
         }
     }
     else
@@ -268,7 +262,6 @@ void ADRSeedProjectile::ApplyEffectToActor(AActor* Target, float Distance)
 
             // 데미지 적용
             UDRAbilitySystemLibrary::ApplyDamageEffect(LocalDamageParams);
-            UE_LOG(LogTemp, Log, TEXT("SeedCannon: Damaged %s for %f"), *Target->GetName(), DamageAmount);
         }
     }
 }

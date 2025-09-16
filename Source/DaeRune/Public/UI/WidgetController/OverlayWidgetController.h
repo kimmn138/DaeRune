@@ -6,6 +6,7 @@
 #include "UI/WidgetController/DRWidgetController.h"
 #include "OverlayWidgetController.generated.h"
 
+// UI 메시지 표시를 위한 데이터 테이블 구조체
 struct FDRAbilityInfo;
 USTRUCT(BlueprintType)
 struct FUIWidgetRow : public FTableRowBase
@@ -29,10 +30,11 @@ class UDRUserWidget;
 class UAbilityInfo;
 class UDRAbilitySystemComponent;
 
+// 어트리뷰트 변경 시 UI 업데이트용 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAttributeChangedSignature, float, NewValue);
 
 /**
- * 
+ * 메인 게임 UI 오버레이를 관리하는 컨트롤러
  */
 UCLASS(BlueprintType, Blueprintable)
 class DAERUNE_API UOverlayWidgetController : public UDRWidgetController
@@ -40,15 +42,18 @@ class DAERUNE_API UOverlayWidgetController : public UDRWidgetController
 	GENERATED_BODY()
 	
 public:
+	// 부모 클래스 가상 함수 오버라이드
 	virtual void BroadcastInitialValues() override;
 	virtual void BindCallbacksToDependencies() override;
 
+	// 체력 관련 UI 업데이트 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnHealthChanged;
 
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnMaxHealthChanged;
 
+	// 물 관련 UI 업데이트 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnWaterChanged;
 
