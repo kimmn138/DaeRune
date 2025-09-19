@@ -62,7 +62,7 @@ void ADREnemy::Die(const FVector& DeathImpulse)
 	SetLifeSpan(LifeSpan);
 	if (DRAIController) DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("Dead"), true);
 
-	// »ç¸Á½Ã ¹° ºÎ¿©
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Î¿ï¿½
 	if (HasAuthority())
 	{
 		GrantWaterToPlayers();
@@ -94,12 +94,12 @@ void ADREnemy::HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount
 	bHitReacting = NewCount > 0;
 	if (bHitReacting)
 	{
-		// HitReact Áß¿¡´Â ÀÌµ¿ Á¤Áö
+		// HitReact ï¿½ß¿ï¿½ï¿½ï¿½ ï¿½Ìµï¿½ ï¿½ï¿½ï¿½ï¿½
 		GetCharacterMovement()->MaxWalkSpeed = 0.f;
 	}
 	else
 	{
-		// HitReact Á¾·á ½Ã GAS ¼Ó¼º°ªÀ¸·Î º¹±¸
+		// HitReact ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ GAS ï¿½Ó¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
 		{
 			GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
@@ -185,11 +185,11 @@ void ADREnemy::BeginPlay()
 		OnMaxHealthChanged.Broadcast(DRAS->GetMaxHealth());
 	}
 
-	// Physics Hit ÀÌº¥Æ® ¹ÙÀÎµù
+	// Physics Hit ï¿½Ìºï¿½Æ® ï¿½ï¿½ï¿½Îµï¿½
 	if (GetCapsuleComponent())
 	{
 		GetCapsuleComponent()->OnComponentHit.AddDynamic(this, &ADREnemy::OnHit);
-		// ¹°¸® Ãæµ¹ ¾Ë¸² È°¼ºÈ­
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½æµ¹ ï¿½Ë¸ï¿½ È°ï¿½ï¿½È­
 		GetCapsuleComponent()->SetNotifyRigidBodyCollision(true);
 	}
 }
@@ -224,28 +224,28 @@ void ADREnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 
 void ADREnemy::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit)
 {
-	// ¼­¹ö¿¡¼­¸¸ Ã³¸®
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 	if (!HasAuthority()) return;
 
-	// ³Ë¹é »óÅÂ°¡ ¾Æ´Ï°Å³ª ½ºÅÏ ¸é¿ªÀÌ¸é ¹«½Ã
+	// ï¿½Ë¹ï¿½ ï¿½ï¿½ï¿½Â°ï¿½ ï¿½Æ´Ï°Å³ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½é¿ªï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (!bIsBeingKnockedBack || bIsStunImmune) return;
 
-	// º®ÀÎÁö È®ÀÎ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (!OtherActor) return;
 
 	FString ActorName = OtherActor->GetName();
 
-	// Floor´Â ¹«½Ã
+	// Floorï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (ActorName.Contains(TEXT("Floor"))) return;
 
-	// StaticMeshActorÀÎÁö È®ÀÎ (º®)
+	// StaticMeshActorï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½ (ï¿½ï¿½)
 	if (!ActorName.Contains(TEXT("StaticMeshActor"))) return;
 
-	// ¼Óµµ Ã¼Å© (Impact°¡ 0ÀÌ¹Ç·Î ¼Óµµ·Î ÆÇ´Ü)
+	// ï¿½Óµï¿½ Ã¼Å© (Impactï¿½ï¿½ 0ï¿½Ì¹Ç·ï¿½ ï¿½Óµï¿½ï¿½ï¿½ ï¿½Ç´ï¿½)
 	FVector Velocity = GetVelocity();
 	float Speed = Velocity.Size();
 
-	// ¼Óµµ ÀÓ°è°ª Ã¼Å©
+	// ï¿½Óµï¿½ ï¿½Ó°è°ª Ã¼Å©
 	if (Speed > MinSpeedForStun)  // MinSpeedForStun = 50.f
 	{
 		ApplyWallStun();
@@ -256,13 +256,13 @@ void ADREnemy::ApplyWallStun()
 {
 	if (bIsStunImmune || !AbilitySystemComponent) return;
 
-	// AttributeSet ¿Ã¹Ù¸¥ Ä³½ºÆÃ
+	// AttributeSet ï¿½Ã¹Ù¸ï¿½ Ä³ï¿½ï¿½ï¿½ï¿½
 	UDRAttributeSet* BaseAttributeSet = nullptr;
 
-	// ¸ÕÀú DREnemyAttributeSetÀ¸·Î ½Ãµµ (Enemy´Â ÀÌ°É »ç¿ë)
+	// ï¿½ï¿½ï¿½ï¿½ DREnemyAttributeSetï¿½ï¿½ï¿½ï¿½ ï¿½Ãµï¿½ (Enemyï¿½ï¿½ ï¿½Ì°ï¿½ ï¿½ï¿½ï¿½)
 	if (UDREnemyAttributeSet* EnemyAS = Cast<UDREnemyAttributeSet>(AttributeSet))
 	{
-		BaseAttributeSet = EnemyAS;  // DREnemyAttributeSetÀº DRAttributeSetÀ» »ó¼Ó
+		BaseAttributeSet = EnemyAS;  // DREnemyAttributeSetï¿½ï¿½ DRAttributeSetï¿½ï¿½ ï¿½ï¿½ï¿½
 	}
 	else if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
 	{
@@ -276,7 +276,7 @@ void ADREnemy::ApplyWallStun()
 
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 
-	// EffectProperties ±¸¼º
+	// EffectProperties ï¿½ï¿½ï¿½ï¿½
 	FEffectProperties Props;
 	Props.SourceASC = AbilitySystemComponent;
 	Props.TargetASC = AbilitySystemComponent;
@@ -285,35 +285,35 @@ void ADREnemy::ApplyWallStun()
 	Props.SourceCharacter = this;
 	Props.TargetCharacter = this;
 
-	// Context »ý¼º
+	// Context ï¿½ï¿½ï¿½ï¿½
 	FGameplayEffectContextHandle ContextHandle = AbilitySystemComponent->MakeEffectContext();
 	ContextHandle.AddSourceObject(this);
 
-	// Ä¿½ºÅÒ ÄÁÅØ½ºÆ® ¼³Á¤
+	// Ä¿ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ø½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 	if (FDRGameplayEffectContext* DRContext = static_cast<FDRGameplayEffectContext*>(ContextHandle.Get()))
 	{
 		DRContext->SetIsSuccessfulDebuff(true);
-		DRContext->SetDebuffDamage(0.f);  // º® ½ºÅÏÀº Ãß°¡ µ¥¹ÌÁö ¾øÀ½
+		DRContext->SetDebuffDamage(0.f);  // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ß°ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		DRContext->SetDebuffDuration(WallStunDuration);
-		DRContext->SetDebuffFrequency(0.1f);  // 0ÀÌ ¾Æ´Ñ ÀÛÀº °ª (Period ¹®Á¦ ¹æÁö)
+		DRContext->SetDebuffFrequency(0.1f);  // 0ï¿½ï¿½ ï¿½Æ´ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ (Period ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
 
-		// Lightning Å¸ÀÔÀ¸·Î ¼³Á¤ (±âÀý ÀÌÆåÆ®)
+		// Lightning Å¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®)
 		TSharedPtr<FGameplayTag> DamageType = MakeShareable(new FGameplayTag(GameplayTags.Damage_Lightning));
 		DRContext->SetDamageType(DamageType);
 	}
 
 	Props.EffectContextHandle = ContextHandle;
 
-	// ±âÁ¸ Debuff ½Ã½ºÅÛ È£Ãâ
+	// ï¿½ï¿½ï¿½ï¿½ Debuff ï¿½Ã½ï¿½ï¿½ï¿½ È£ï¿½ï¿½
 	BaseAttributeSet->Debuff(Props);
 
-	// ³Ë¹é »óÅÂ ÇØÁ¦
+	// ï¿½Ë¹ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	bIsBeingKnockedBack = false;
 
-	// ½ºÅÏ ¸é¿ª ¼³Á¤
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½é¿ª ï¿½ï¿½ï¿½ï¿½
 	bIsStunImmune = true;
 
-	// ¸é¿ª Å¸ÀÌ¸Ó
+	// ï¿½é¿ª Å¸ï¿½Ì¸ï¿½
 	float TotalImmunityTime = WallStunDuration + StunImmunityDuration;
 	GetWorld()->GetTimerManager().SetTimer(
 		StunImmunityTimerHandle,
@@ -343,7 +343,7 @@ void ADREnemy::GrantWaterToPlayers()
 
 	if (bIsBoss)
 	{
-		// º¸½º: ÀüÃ¼ ¸Ê ÇÃ·¹ÀÌ¾î
+		// ï¿½ï¿½ï¿½ï¿½: ï¿½ï¿½Ã¼ ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½
 		UGameplayStatics::GetAllActorsOfClass(
 			GetWorld(),
 			ADRCharacter::StaticClass(),
@@ -352,7 +352,7 @@ void ADREnemy::GrantWaterToPlayers()
 	}
 	else
 	{
-		// ÀÏ¹Ý Àû: ¹üÀ§ ³» ÇÃ·¹ÀÌ¾î
+		// ï¿½Ï¹ï¿½ ï¿½ï¿½: ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½
 		TArray<FOverlapResult> OverlapResults;
 		FCollisionQueryParams QueryParams;
 		QueryParams.AddIgnoredActor(this);
@@ -375,7 +375,7 @@ void ADREnemy::GrantWaterToPlayers()
 		}
 	}
 
-	// ¹° ºÎ¿© Àû¿ë
+	// ï¿½ï¿½ ï¿½Î¿ï¿½ ï¿½ï¿½ï¿½ï¿½
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 
 	for (AActor* Player : PlayersToGrant)
@@ -403,7 +403,7 @@ void ADREnemy::GrantWaterToPlayers()
 
 			if (bIsBoss)
 			{
-				// º¸½º: MaxWater±îÁö Ã¤¿ì±â
+				// ï¿½ï¿½ï¿½ï¿½: MaxWaterï¿½ï¿½ï¿½ï¿½ Ã¤ï¿½ï¿½ï¿½
 				WaterAmount = TargetAS->GetMaxWater() - TargetAS->GetWater();
 			}
 

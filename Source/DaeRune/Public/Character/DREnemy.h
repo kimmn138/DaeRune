@@ -52,7 +52,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
 	float LifeSpan = 5.f;
 
-	// ³Ë¹é »óÅÂ ¼³Á¤
+	// ï¿½Ë¹ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	void SetKnockbackState(bool bInKnockback);
 
@@ -90,33 +90,33 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Water System")
 	TSubclassOf<UGameplayEffect> WaterGrantEffectClass;
 
-	// ========== º® Ãæµ¹ ±âÀý ½Ã½ºÅÛ Ãß°¡ ==========
+	// ========== ï¿½ï¿½ ï¿½æµ¹ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã½ï¿½ï¿½ï¿½ ï¿½ß°ï¿½ ==========
 
-	// Hit ÀÌº¥Æ® ÇÚµé·¯
+	// Hit ï¿½Ìºï¿½Æ® ï¿½Úµé·¯
 	UFUNCTION()
 	void OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
 		UPrimitiveComponent* OtherComponent, FVector NormalImpulse,
 		const FHitResult& Hit);
 
-	// º® ½ºÅÏ Àû¿ë ÇÔ¼ö
+	// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ô¼ï¿½
 	void ApplyWallStun();
 
-	// ½ºÅÏ ¸é¿ª Á¾·á
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½é¿ª ï¿½ï¿½ï¿½ï¿½
 	void EndStunImmunity();
 
-	// ³Ë¹é »óÅÂ
+	// ï¿½Ë¹ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(BlueprintReadOnly, Category = "Combat|Wall Stun")
 	bool bIsBeingKnockedBack = false;
 
-	// Ãæµ¹ °­µµ ÀÓ°è°ª
+	// ï¿½æµ¹ ï¿½ï¿½ï¿½ï¿½ ï¿½Ó°è°ª
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "100.0", ClampMax = "2000.0"))
 	float MinSpeedForStun = 50.f;
 
-	// ½ºÅÏ Áö¼Ó ½Ã°£
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "0.5", ClampMax = "5.0"))
 	float WallStunDuration = 5.0f;
 
-	// ½ºÅÏ ¸é¿ª ½Ã°£ (½ºÅÏ Á¾·á ÈÄ)
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½é¿ª ï¿½Ã°ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½)
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "0.0", ClampMax = "10.0"))
 	float StunImmunityDuration = 5.0f;
 
@@ -127,9 +127,9 @@ private:
 	UPROPERTY()
 	int32 AttackCount = 0;
 
-	// ½ºÅÏ ¸é¿ª »óÅÂ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½é¿ª ï¿½ï¿½ï¿½ï¿½
 	bool bIsStunImmune = false;
 
-	// ½ºÅÏ ¸é¿ª Å¸ÀÌ¸Ó
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½é¿ª Å¸ï¿½Ì¸ï¿½
 	FTimerHandle StunImmunityTimerHandle;
 };

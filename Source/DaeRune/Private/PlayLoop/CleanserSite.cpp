@@ -2,7 +2,7 @@
 
 
 #include "PlayLoop/CleanserSite.h"
-#include "PlayLoop/EnemyDummy.h"
+#include "Character/DREnemy.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/StaticMeshComponent.h"
@@ -48,35 +48,22 @@ void ACleanserSite::SpawnEnemiesAround()
         const FVector Loc = GetActorLocation() + Offset;
 
         const FTransform T(FRotator::ZeroRotator, Loc);
-        AEnemyDummy* E = W->SpawnActorDeferred<AEnemyDummy>(EnemyClass, T, this);
+        ADREnemy* E = W->SpawnActorDeferred<ADREnemy>(EnemyClass, T, this);
         if (E)
         {
             UGameplayStatics::FinishSpawningActor(E, T);
-            E->OnEnemyDied.AddDynamic(this, &ACleanserSite::OnEnemyDiedHandler);
             Spawned.Add(E);
         }
     }
-}
-
-void ACleanserSite::OnEnemyDiedHandler(AActor* Enemy)
-{
-    Spawned.Remove(static_cast<AEnemyDummy*>(Enemy));
-    TryClear();
 }
 
 void ACleanserSite::TryClear()
 {
     if (Spawned.Num() == 0 && State != ECleanserState::Cylinder)
     {
-        SetState(ECleanserState::Cylinder);   // ±ê¹ß ¡æ ¿øÅë
-        OnSiteCleared.Broadcast(this);        // ÆäÀÌÁî1 ¿Ï·á ¾Ë¸²
+        SetState(ECleanserState::Cylinder);   // ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+        OnSiteCleared.Broadcast(this);        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½1 ï¿½Ï·ï¿½ ï¿½Ë¸ï¿½
     }
-}
-
-void ACleanserSite::ForceKillAll()
-{
-    for (auto* E : Spawned)
-        if (IsValid(E)) E->Die();
 }
 
 // Called every frame
