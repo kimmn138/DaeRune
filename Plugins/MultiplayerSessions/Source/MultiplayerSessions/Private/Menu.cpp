@@ -111,6 +111,7 @@ void UMenu::OnFindSessions(const TArray<FOnlineSessionSearchResult>& SessionResu
 {
 	if (MultiplayerSessionsSubsystem == nullptr)
 	{
+		JoinButton->SetIsEnabled(true);
 		return;
 	}
 
@@ -127,7 +128,7 @@ void UMenu::OnFindSessions(const TArray<FOnlineSessionSearchResult>& SessionResu
 			return;
 		}
 	}
-	if (!bWasSuccessful || SessionResults.Num() == 0)
+	if (!bWasSuccessful || SessionResults.Num() > 0)
 	{
 		JoinButton->SetIsEnabled(true);
 	}
@@ -151,6 +152,7 @@ void UMenu::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
 			}
 		}
 	}
+	
 	if (Result != EOnJoinSessionCompleteResult::Success)
 	{
 		JoinButton->SetIsEnabled(true);

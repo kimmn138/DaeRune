@@ -6,6 +6,8 @@
 #include "Character/DRCharacterBase.h"
 #include "DRCharacter.generated.h"
 
+class UWidgetComponent;
+
 /**
  * 플레이어 캐릭터 클래스
  */
