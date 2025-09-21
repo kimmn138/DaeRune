@@ -58,6 +58,7 @@ void ADREnemy::PossessedBy(AController* NewController)
 	// 초기 AI 상태 설정
 	DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("HitReacting"), false);
 	DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("RangedAttacker"), CharacterClass != ECharacterClass::Warrior);
+	DRAIController->GetBlackboardComponent()->SetValueAsVector(FName("HomeLocation"), GetActorLocation());
 }
 
 int32 ADREnemy::GetPlayerLevel_Implementation()
