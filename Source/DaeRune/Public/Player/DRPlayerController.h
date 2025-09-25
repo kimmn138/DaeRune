@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "GameplayTagContainer.h"
+#include "GenericTeamAgentInterface.h"
 #include "DRPlayerController.generated.h"
 
 class UDamageTextComponent;
@@ -18,12 +19,16 @@ class UDRAbilitySystemComponent;
  * DaeRune 플레이어의 입력 처리 및 UI 관리 클래스
  */
 UCLASS()
-class DAERUNE_API ADRPlayerController : public APlayerController
+class DAERUNE_API ADRPlayerController : public APlayerController, public IGenericTeamAgentInterface
 {
 	GENERATED_BODY()
 
 public:
 	ADRPlayerController();
+
+	// Team Interface
+	virtual FGenericTeamId GetGenericTeamId() const override { return TeamId; }
+	virtual void SetGenericTeamId(const FGenericTeamId& NewTeamId) override { TeamId = NewTeamId; }
 
 	// 데미지 수치 표시
 	UFUNCTION(Client, Reliable)
@@ -55,6 +60,8 @@ protected:
 	bool bIsCorrupted = false;
 
 private:
+	FGenericTeamId TeamId;
+
 	// Enhanced Input System 설정
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputMappingContext> DRContext;

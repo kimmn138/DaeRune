@@ -63,6 +63,9 @@ void ADRPlayerController::BeginPlay()
 	// UI 설정
 	bShowMouseCursor = false;
 	SetInputMode(FInputModeGameOnly());
+
+	// 플레이어는 TeamId 0
+	SetGenericTeamId(FGenericTeamId(0));
 }
 
 void ADRPlayerController::SetupInputComponent()

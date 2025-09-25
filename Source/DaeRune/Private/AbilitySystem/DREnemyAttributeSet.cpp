@@ -19,6 +19,9 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		// 데미지가 발생하면 전투 상태 진입
 		NotifyEnterCombat(Props);
 
+		const float NewHealth = GetHealth() - LocalIncomingDamage;
+		SetHealth(FMath::Clamp(NewHealth, 0.f, GetMaxHealth()));
+
 		if (ADREnemy* Enemy = Cast<ADREnemy>(Props.TargetAvatarActor))
 		{
 			if (ADRAIController* AIController = Cast<ADRAIController>(Enemy->GetController()))
@@ -35,11 +38,15 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 					// 현재 타겟도 첫 공격자로 설정
 					BB->SetValueAsObject("TargetToFollow", Props.SourceAvatarActor);
 				}
+				BB->SetValueAsObject("AttackingPlayer", Props.SourceAvatarActor);
+
+				if (NewHealth <= GetMaxHealth() * 0.3f)
+				{
+					BB->SetValueAsBool("IsHealthLow", true);
+					BB->SetValueAsBool("IsInitialized", false);
+				}
 			}
 		}
-
-		const float NewHealth = GetHealth() - LocalIncomingDamage;
-		SetHealth(FMath::Clamp(NewHealth, 0.f, GetMaxHealth()));
 
 		const bool bFatal = NewHealth <= 0.f;
 		if (bFatal)
