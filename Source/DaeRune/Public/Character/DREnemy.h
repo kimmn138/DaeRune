@@ -62,6 +62,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	void SetKnockbackState(bool bInKnockback);
 
+	// ===== 부품 시스템 추가 =====
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Part System")
+	TObjectPtr<UStaticMeshComponent> PartMeshComponent;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part System")
+	bool bCarriesPart = false;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Part System")
+	TSubclassOf<AActor> PartActorClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Part System")
+	float PartDropForce = 300.f;
+
+	UFUNCTION(BlueprintCallable, Category = "Part System")
+	bool DropPart();
+
+	UFUNCTION(BlueprintPure, Category = "Part System")
+	bool HasPart() const { return bCarriesPart && PartMeshComponent && PartMeshComponent->IsVisible(); }
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void InitAbilityActorInfo() override;
@@ -147,4 +166,6 @@ private:
 
 	// 스턴 면역 타이머
 	FTimerHandle StunImmunityTimerHandle;
+
+	bool bPartDropped = false;
 };
