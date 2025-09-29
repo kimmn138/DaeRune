@@ -54,7 +54,7 @@ void UDRAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute
 	}
 	if (Attribute == GetMoveSpeedAttribute())
 	{
-		NewValue = FMath::Clamp(NewValue, 50.f, 600.f);
+		NewValue = FMath::Clamp(NewValue, 50.f, 2000.f);
 	}
 }
 
@@ -72,7 +72,7 @@ void UDRAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, fl
 	}
 	if (Attribute == GetMoveSpeedAttribute())
 	{
-		NewValue = FMath::Clamp(NewValue, 50.f, 600.f);
+		NewValue = FMath::Clamp(NewValue, 50.f, 2000.f);
 	}
 }
 

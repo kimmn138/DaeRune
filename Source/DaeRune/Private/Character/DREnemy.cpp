@@ -42,6 +42,13 @@ ADREnemy::ADREnemy()
 	HealthBar = CreateDefaultSubobject<UWidgetComponent>("HealthBar");
 	HealthBar->SetupAttachment(GetRootComponent());
 
+	// 부품 메시 컴포넌트 생성 (선택적)
+	PartMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>("PartMesh");
+	PartMeshComponent->SetupAttachment(GetMesh(), "PartSocket");
+	PartMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	PartMeshComponent->SetVisibility(false); // 기본적으로 숨김
+	PartMeshComponent->SetIsReplicated(true);
+
 	BaseWalkSpeed = 250.f;
 }
 
@@ -68,6 +75,12 @@ int32 ADREnemy::GetPlayerLevel_Implementation()
 
 void ADREnemy::Die(const FVector& DeathImpulse)
 {
+	// 죽을 때 부품 자동 드랍
+	if (HasPart())
+	{
+		DropPart();
+	}
+
 	// 사망 처리 - 일정 시간 후 소멸
 	SetLifeSpan(LifeSpan);
 	// AI 상태 업데이트
@@ -161,6 +174,46 @@ void ADREnemy::SetKnockbackState(bool bInKnockback)
 	bIsBeingKnockedBack = bInKnockback;
 }
 
+bool ADREnemy::DropPart()
+{
+	if (!HasAuthority() || !bCarriesPart || bPartDropped || !PartActorClass)
+		return false;
+
+	// 부품 메시 숨기기
+	if (PartMeshComponent)
+	{
+		PartMeshComponent->SetVisibility(false);
+	}
+
+	// 실제 부품 액터 스폰
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	FVector SpawnLocation = GetActorLocation() + GetActorUpVector() * 50.f;
+	if (PartMeshComponent && PartMeshComponent->IsVisible())
+	{
+		SpawnLocation = PartMeshComponent->GetComponentLocation();
+	}
+
+	AActor* DroppedPart = GetWorld()->SpawnActor<AActor>(
+		PartActorClass,
+		SpawnLocation,
+		GetActorRotation(),
+		SpawnParams);
+
+	bPartDropped = true;
+	bCarriesPart = false;
+
+	// 블랙보드 업데이트
+	if (DRAIController && DRAIController->GetBlackboardComponent())
+	{
+		DRAIController->GetBlackboardComponent()->SetValueAsBool("HasPart", false);
+	}
+
+	return true;
+}
+
 void ADREnemy::BeginPlay()
 {
 	Super::BeginPlay();
@@ -214,6 +267,21 @@ void ADREnemy::BeginPlay()
 	{
 		GetCapsuleComponent()->OnComponentHit.AddDynamic(this, &ADREnemy::OnHit);
 		GetCapsuleComponent()->SetNotifyRigidBodyCollision(true);
+	}
+
+	// 부품 운반자인 경우 설정
+	if (bCarriesPart)
+	{
+		if (PartMeshComponent)
+		{
+			PartMeshComponent->SetVisibility(true);
+		}
+
+		// 블랙보드에 부품 보유 상태 설정
+		if (HasAuthority() && DRAIController && DRAIController->GetBlackboardComponent())
+		{
+			DRAIController->GetBlackboardComponent()->SetValueAsBool("HasPart", true);
+		}
 	}
 }
 
