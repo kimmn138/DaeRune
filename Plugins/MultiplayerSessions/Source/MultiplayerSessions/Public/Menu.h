@@ -8,6 +8,7 @@
 #include "Menu.generated.h"
 
 class UButton;
+class UEditableTextBox;
 class UMultiplayerSessionsSubsystem;
 
 /**
@@ -20,7 +21,7 @@ class MULTIPLAYERSESSIONS_API UMenu : public UUserWidget
 	
 public:
 	UFUNCTION(BlueprintCallable)
-	void MenuSetup(int32 NumberOfPublicConnections = 4, FString TypeOfMatch = FString(TEXT("FreeForAll")), FString LobbyPath = FString(TEXT("/Game/Maps/StartupMap")));
+	void MenuSetup(int32 NumberOfPublicConnections = 4, FString LobbyPath = FString(TEXT("/Game/Maps/StartupMap")));
 
 protected:
 	virtual bool Initialize() override;
@@ -43,6 +44,9 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	UButton* JoinButton;
 
+	UPROPERTY(meta = (BindWidget))
+	UEditableTextBox* RoomCodeInputBox;
+
 	UFUNCTION()
 	void HostButtonClicked();
 
@@ -55,6 +59,8 @@ private:
 	UMultiplayerSessionsSubsystem* MultiplayerSessionsSubsystem;
 
 	int32 NumPublicConnections{4};
-	FString MatchType{TEXT("FreeForAll")};
 	FString PathToLobby{TEXT("")};
+
+	// 조인하려는 방 코드 저장
+	FString PendingJoinRoomCode;
 };

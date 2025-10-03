@@ -8,6 +8,9 @@
 #include "GenericTeamAgentInterface.h"
 #include "DRPlayerController.generated.h"
 
+// 상호작용 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInteractPressed);
+
 class UDamageTextComponent;
 class UInputMappingContext;
 class UInputAction;
@@ -50,6 +53,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Corruption")
 	bool IsInCorruptedState() const { return bIsCorrupted; }
 
+	// 상호작용 이벤트
+	UPROPERTY(BlueprintAssignable, Category = "Input")
+	FOnInteractPressed OnInteractPressed;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -76,11 +83,16 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> JumpAction;
 
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<UInputAction> InteractAction;
+
 	// 입력 처리 함수들
 	void Move(const FInputActionValue& InputActionValue);
 	void Look(const FInputActionValue& InputActionValue);
 	void StartJump(const FInputActionValue& InputActionValue);
 	void StopJump(const FInputActionValue& InputActionValue);
+	// 상호작용 키를 눌렀을 때
+	void HandleInteract();
 
 	// GAS 어빌리티 입력 처리
 	void AbilityInputTagPressed(FGameplayTag InputTag);

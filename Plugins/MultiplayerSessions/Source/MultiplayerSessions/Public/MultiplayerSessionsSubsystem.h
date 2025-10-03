@@ -13,6 +13,8 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FMultiplayerOnFindSessionsComplete, const T
 DECLARE_MULTICAST_DELEGATE_OneParam(FMultiplayerOnJoinSessionComplete, EOnJoinSessionCompleteResult::Type Result);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnDestroySessionComplete, bool, bWasSuccessful);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnStartSessionComplete, bool, bWasSuccessful);
+// 방 코드 생성 완료 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnRoomCodeGenerated, const FString&, RoomCode);
 
 
 /**
@@ -27,11 +29,17 @@ public:
 	UMultiplayerSessionsSubsystem();
 
 	// To handle session functionality. The Menu class will call these
-	void CreateSession(int32 NumPublicConnections, FString MatchType);
-	void FindSessions(int32 MaxSearchResults);
+	UFUNCTION(BlueprintCallable, Category = "Multiplayer Sessions")
+	void CreateSessionWithRoomCode(int32 NumPublicConnections, const FString& MatchType = "RoomCodeOnly");
+
+	UFUNCTION(BlueprintCallable, Category = "Multiplayer Sessions")
+	void FindSessionByRoomCode(const FString& RoomCode);
 	void JoinSession(const FOnlineSessionSearchResult& SessionResult);
 	void DestroySession();
 	void StartSession();
+
+	UFUNCTION(BlueprintCallable, Category = "Multiplayer Sessions")
+	FString GetCurrentRoomCode() const { return CurrentRoomCode; }
 
 	// Our own custom delegates for the Menu class to bind callbacks to
 	FMultiplayerOnCreateSessionComplete MultiplayerOnCreateSessionComplete;
@@ -39,6 +47,7 @@ public:
 	FMultiplayerOnJoinSessionComplete MultiplayerOnJoinSessionComplete;
 	FMultiplayerOnDestroySessionComplete MultiplayerOnDestroySessionComplete;
 	FMultiplayerOnStartSessionComplete MultiplayerOnStartSessionComplete;
+	FMultiplayerOnRoomCodeGenerated MultiplayerOnRoomCodeGenerated;
 
 protected:
 	// Internal callbacks for the delegates we'll add to the Online Session Interface delegate list.
@@ -52,7 +61,18 @@ protected:
 private:
 	IOnlineSessionPtr SessionInterface;
 	TSharedPtr<FOnlineSessionSettings> LastSessionSettings;
-	TSharedPtr<FOnlineSessionSearch> LastSessionSearch; 
+	TSharedPtr<FOnlineSessionSearch> LastSessionSearch;
+
+	// 방 코드 관련 변수들
+	FString CurrentRoomCode;
+	FString PendingRoomCode;
+	FString SearchingRoomCode;
+	bool bIsCreatingWithRoomCode{false};
+
+	// 방 코드 생성 함수
+	FString GenerateRoomCode();
+	void ValidateAndCreateSessionWithCode();
+	void CreateSessionInternal(int32 NumPublicConnections);
 
 	// To add to the Online Session Interface delegate list.
 	// We'll bind our MultiplayerSessionsSubsystem internal callback to these.
@@ -69,5 +89,4 @@ private:
 
 	bool bCreateSessionOnDestroy{false};
 	int32 LastNumPublicConnections;
-	FString LastMatchType;
 };

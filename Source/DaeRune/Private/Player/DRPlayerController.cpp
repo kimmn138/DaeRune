@@ -79,6 +79,7 @@ void ADRPlayerController::SetupInputComponent()
 	DRInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Look);
 	DRInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ADRPlayerController::StartJump);
 	DRInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ADRPlayerController::StopJump);
+	DRInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &ADRPlayerController::HandleInteract);
 	// 어빌리티 입력 바인딩 (InputConfig 기반)
 	DRInputComponent->BindAbilityActions(InputConfig, this, &ThisClass::AbilityInputTagPressed, &ThisClass::AbilityInputTagReleased, &ThisClass::AbilityInputTagHeld);
 }
@@ -128,6 +129,11 @@ void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 	{
 		ControlledCharacter->StopJumping();
 	}
+}
+
+void ADRPlayerController::HandleInteract()
+{
+	OnInteractPressed.Broadcast();
 }
 
 void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)

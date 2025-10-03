@@ -5,6 +5,7 @@
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "AbilitySystem/DRAttributeSet.h"
 #include "AbilitySystem/Data/AbilityInfo.h"
+#include "MultiplayerSessionsSubsystem.h"
 
 void UOverlayWidgetController::BroadcastInitialValues()
 {
