@@ -3,15 +3,16 @@
 
 #include "Menu.h"
 #include "Components/Button.h"
+#include "Components/EditableTextBox.h"
 #include "MultiplayerSessionsSubsystem.h"
 #include "OnlineSessionSettings.h"
 #include "OnlineSubsystem.h"
 
-void UMenu::MenuSetup(int32 NumberOfPublicConnections, FString TypeOfMatch, FString LobbyPath)
+void UMenu::MenuSetup(int32 NumberOfPublicConnections, FString LobbyPath)
 {
 	PathToLobby = FString::Printf(TEXT("%s?listen"), *LobbyPath);
 	NumPublicConnections = NumberOfPublicConnections;
-	MatchType = TypeOfMatch;
+	
 	AddToViewport();
 	SetVisibility(ESlateVisibility::Visible);
 	SetIsFocusable(true);
@@ -115,47 +116,81 @@ void UMenu::OnFindSessions(const TArray<FOnlineSessionSearchResult>& SessionResu
 		return;
 	}
 
-	for (auto Result : SessionResults)
-	{
-		FString SettingsValue;
-		Result.Session.SessionSettings.Get(FName("MatchType"), SettingsValue);
-		if (SettingsValue == MatchType)
-		{
-			Result.Session.SessionSettings.bUseLobbiesIfAvailable = true;
-			Result.Session.SessionSettings.bUsesPresence = true;
+	// 방 코드로만 매치메이킹
+	bool bFoundRoom = false;
 
-			MultiplayerSessionsSubsystem->JoinSession(Result);
-			return;
+	if (bWasSuccessful && SessionResults.Num() > 0)
+	{
+		for (auto Result : SessionResults)
+		{
+			FString FoundRoomCode;
+			Result.Session.SessionSettings.Get(FName("RoomCode"), FoundRoomCode);
+
+			// 입력한 방 코드와 일치하는지 확인
+			if (FoundRoomCode == PendingJoinRoomCode)
+			{
+				if (GEngine)
+				{
+					GEngine->AddOnScreenDebugMessage(
+						-1,
+						5.f,
+						FColor::Green,
+						FString::Printf(TEXT("[Menu] MATCH! Joining session with code: %s"), *FoundRoomCode)
+					);
+				}
+				Result.Session.SessionSettings.bUseLobbiesIfAvailable = true;
+				Result.Session.SessionSettings.bUsesPresence = true;
+				MultiplayerSessionsSubsystem->JoinSession(Result);
+				bFoundRoom = true;
+				return;
+			}
 		}
 	}
-	if (!bWasSuccessful || SessionResults.Num() > 0)
+
+	if (!bFoundRoom)
 	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1,
+				5.f,
+				FColor::Red,
+				FString::Printf(TEXT("No room found with code: %s"), *PendingJoinRoomCode)
+			);
+		}
+
 		JoinButton->SetIsEnabled(true);
+		PendingJoinRoomCode.Empty();
 	}
 }
 
 void UMenu::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
 {
-	IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get();
-	if (Subsystem)
+	if (Result == EOnJoinSessionCompleteResult::Success)
 	{
-		IOnlineSessionPtr SessionInterface = Subsystem->GetSessionInterface();
-		if (SessionInterface.IsValid())
+		IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get();
+		if (Subsystem)
 		{
-			FString Address;
-			SessionInterface->GetResolvedConnectString(NAME_GameSession, Address);
-
-			APlayerController* PlayerController = GetGameInstance()->GetFirstLocalPlayerController();
-			if (PlayerController)
+			IOnlineSessionPtr SessionInterface = Subsystem->GetSessionInterface();
+			if (SessionInterface.IsValid())
 			{
-				PlayerController->ClientTravel(Address, ETravelType::TRAVEL_Absolute);
+				FString Address;
+				SessionInterface->GetResolvedConnectString(NAME_GameSession, Address);
+
+				APlayerController* PlayerController = GetGameInstance()->GetFirstLocalPlayerController();
+				if (PlayerController)
+				{
+					PlayerController->ClientTravel(Address, ETravelType::TRAVEL_Absolute);
+				}
 			}
 		}
+
+		PendingJoinRoomCode.Empty();
 	}
-	
-	if (Result != EOnJoinSessionCompleteResult::Success)
+	else
 	{
 		JoinButton->SetIsEnabled(true);
+		PendingJoinRoomCode.Empty();
 	}
 }
 
@@ -172,16 +207,68 @@ void UMenu::HostButtonClicked()
 	HostButton->SetIsEnabled(false);
 	if (MultiplayerSessionsSubsystem)
 	{
-		MultiplayerSessionsSubsystem->CreateSession(NumPublicConnections, MatchType);
+		MultiplayerSessionsSubsystem->CreateSessionWithRoomCode(NumPublicConnections, FString("RoomCodeOnly"));
 	}
 }
 
 void UMenu::JoinButtonClicked()
 {
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			-1,
+			5.f,
+			FColor::Cyan,
+			TEXT("[Menu] JoinButtonClicked() called!")
+		);
+	}
+
+	if (!RoomCodeInputBox || !JoinButton)
+	{
+		return;
+	}
+
+	FString InputRoomCode = RoomCodeInputBox->GetText().ToString().ToUpper();
+
+	// 8글자 체크
+	if (InputRoomCode.Len() != 8)
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1,
+				5.f,
+				FColor::Red,
+				FString::Printf(TEXT("Room code must be 8 characters!"))
+			);
+		}
+		return;
+	}
+
+	// 알파벳과 숫자만 허용
+	for (TCHAR Char : InputRoomCode)
+	{
+		if (!FChar::IsAlnum(Char))
+		{
+			if (GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(
+					-1,
+					5.f,
+					FColor::Red,
+					TEXT("Room code must contain only letters and numbers!")
+				);
+			}
+			return;
+		}
+	}
+
 	JoinButton->SetIsEnabled(false);
+	PendingJoinRoomCode = InputRoomCode;
+
 	if (MultiplayerSessionsSubsystem)
 	{
-		MultiplayerSessionsSubsystem->FindSessions(10000);
+		MultiplayerSessionsSubsystem->FindSessionByRoomCode(InputRoomCode);
 	}
 }
 

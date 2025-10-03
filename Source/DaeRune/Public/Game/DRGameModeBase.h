@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/GameModeBase.h"
+#include "GameFramework/GameMode.h"
 #include "DRGameModeBase.generated.h"
 
 class UAbilityInfo;
@@ -13,7 +13,7 @@ class UCharacterClassInfo;
  * DaeRune 기본 게임 모드 클래스
  */
 UCLASS()
-class DAERUNE_API ADRGameModeBase : public AGameModeBase
+class DAERUNE_API ADRGameModeBase : public AGameMode
 {
 	GENERATED_BODY()
 	

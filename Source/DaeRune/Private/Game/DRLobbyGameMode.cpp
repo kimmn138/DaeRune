@@ -4,6 +4,7 @@
 #include "Game/DRLobbyGameMode.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerState.h"
+#include "Player/DRPlayerController.h"
 
 void ADRLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 {
@@ -59,6 +60,40 @@ void ADRLobbyGameMode::Logout(AController* Exiting)
 			FColor::Cyan,
 			FString::Printf(TEXT("%s has exited the game!"), *PlayerName)
 		);
+	}
+}
+
+void ADRLobbyGameMode::TravelToStage(const FString& StageMapName, ADRPlayerController* Requester)
+{
+	// 서버 체크
+	if (!HasAuthority()) return;
+
+	// 호스트 권한 체크
+	if (!Requester || !Requester->IsLocalController()) return;
+
+	// 맵 이름 유효성
+	if (StageMapName.IsEmpty()) return;
+
+	ExecuteTravel(StageMapName);
+}
+
+void ADRLobbyGameMode::ExecuteTravel(const FString& StageMapName)
+{
+	if (!HasAuthority()) return;
+
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		bUseSeamlessTravel = true;
+		// URL 구성
+		FString TravelURL = StageMapName;
+		if (!TravelURL.Contains(TEXT("?")))
+		{
+			TravelURL += TEXT("?listen");
+		}
+
+		// 맵 이동
+		World->ServerTravel(TravelURL);
 	}
 }
 
