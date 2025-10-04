@@ -12,6 +12,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "AbilitySystem/DRAttributeSet.h"
+#include "Game/DRGameModeBase.h" 
 
 ADRCharacterBase::ADRCharacterBase()
 {
@@ -72,6 +73,16 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 			// 부패 상태에서 죽으면 진짜 사망
 			Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
 			MulticastHandleDeath(DeathImpulse);
+
+			// GameMode에 플레이어 사망 알림 (전멸 체크)
+			if (ADRGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRGameModeBase>())
+			{
+				APlayerState* PS = GetPlayerState();
+				if (PS)
+				{
+					GameMode->OnPlayerDied(PS);
+				}
+			}
 
 			// 관전자 모드로 전환
 			if (PC)

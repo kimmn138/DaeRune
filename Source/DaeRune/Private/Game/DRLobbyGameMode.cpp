@@ -6,6 +6,11 @@
 #include "GameFramework/PlayerState.h"
 #include "Player/DRPlayerController.h"
 
+ADRLobbyGameMode::ADRLobbyGameMode()
+{
+	WipeoutDelayTime = 2.0f;
+}
+
 void ADRLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
@@ -75,6 +80,38 @@ void ADRLobbyGameMode::TravelToStage(const FString& StageMapName, ADRPlayerContr
 	if (StageMapName.IsEmpty()) return;
 
 	ExecuteTravel(StageMapName);
+}
+
+void ADRLobbyGameMode::HandleWipeout()
+{
+	if (!HasAuthority()) return;
+
+	// TODO: 전멸 UI 표시 (로비는 가벼운 UI)
+
+	RestartLobby();
+}
+
+void ADRLobbyGameMode::RestartLobby()
+{
+	if (!HasAuthority()) return;
+
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		FString CurrentMapName = World->GetMapName();
+
+		// PIE(Play In Editor) 프리픽스 제거
+		// PIE에서는 "UEDPIE_0_MapName" 형식으로 나옴
+		CurrentMapName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+		bUseSeamlessTravel = true;
+
+		// 같은 맵 재시작
+		World->ServerTravel(CurrentMapName + TEXT("?listen"));
+	}
+
+	// 플래그 리셋
+	bIsWipeoutInProgress = false;
 }
 
 void ADRLobbyGameMode::ExecuteTravel(const FString& StageMapName)
