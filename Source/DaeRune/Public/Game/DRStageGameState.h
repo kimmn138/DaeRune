@@ -47,7 +47,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Phase|Cleanser")
     int32 GetRemainingEnemiesInArea() const { return RemainingEnemiesInArea; }
 
+    // 지역을 완전히 확보했을 때
     void SetCleanserAreaSecured(bool bSecured);
+    // 적을 처치할 때마다 호출 (남은 적 수)
     void SetRemainingEnemiesInArea(int32 Count);
 
     // ========== Phase 2: 부품 회수 ==========
@@ -57,7 +59,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Phase|Parts")
     bool IsCleanserActivated() const { return bCleanserActivated; }
 
+    // 부품을 획득할 때마다 호출 (획득한 갯수)
     void SetCollectedParts(int32 Count);
+    // 클렌저를 활성화했을 때
     void SetCleanserActivated(bool bActivated);
 
     // ========== Phase 3: 방어 ==========
@@ -70,14 +74,18 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Phase|Defense")
     float GetCleanserHealth() const { return CleanserHealth; }
 
+    // 새 웨이브 시작 시 (현재 웨이브 번호)
     void SetCurrentWave(int32 Wave);
+    // 총 웨이브 수
     void SetTotalWaves(int32 Total);
+    // 클렌저가 데미지 받을 때 (클렌저 남은 체력)
     void SetCleanserHealth(float Health);
 
     // ========== Phase 4: 보스 ==========
     UFUNCTION(BlueprintCallable, Category = "Phase|Boss")
     float GetBossHealth() const { return BossHealth; }
 
+    // 보스가 데미지 받을 때 (현재 보스 체력)
     void SetBossHealth(float Health);
 
 protected:

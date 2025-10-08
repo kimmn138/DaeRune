@@ -42,9 +42,11 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	void EndCurrentPhase();
 
+	// 다음 페이즈로 전환하기 위해 호출
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	void TransitionToNextPhase();
 
+	// 페이즈 완료 조건을 만족했는지 확인
 	/*UFUNCTION(BlueprintCallable, Category = "Phase")
 	bool ValidatePhaseCompletion();*/
 
