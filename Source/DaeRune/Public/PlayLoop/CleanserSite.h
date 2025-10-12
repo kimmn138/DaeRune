@@ -6,7 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "CleanserSite.generated.h"
 
-class AEnemyDummy;
+class ADREnemy;
 
 UENUM(BluePrintType)
 enum class ECleanserState : uint8 { Flag, Cylinder};
@@ -31,7 +31,7 @@ public:
     UStaticMesh* CylinderMesh;
 
     UPROPERTY(EditAnywhere, Category = "Cleanser")
-    TSubclassOf<AEnemyDummy> EnemyClass;
+    TSubclassOf<ADREnemy> EnemyClass;
 
     UPROPERTY(EditAnywhere, Category = "Cleanser")
     int32 NumEnemiesToSpawn = 4;
@@ -43,10 +43,7 @@ public:
     FOnSiteCleared OnSiteCleared;
 
     UFUNCTION(BlueprintCallable)
-    void InitializeAndSpawn();     // 스폰 직후 호출
-
-    UFUNCTION(BlueprintCallable)
-    void ForceKillAll();           // 디버그용
+    void InitializeAndSpawn();
 
 
 protected:
@@ -57,13 +54,10 @@ private:
     ECleanserState State = ECleanserState::Flag;
 
     UPROPERTY()
-    TArray<AEnemyDummy*> Spawned;
+    TArray<ADREnemy*> Spawned;
 
     void SetState(ECleanserState NewState);
     void SpawnEnemiesAround();
-
-    UFUNCTION()
-    void OnEnemyDiedHandler(AActor* Enemy);
 
     void TryClear();
 

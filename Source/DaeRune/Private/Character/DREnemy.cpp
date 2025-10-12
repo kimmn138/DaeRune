@@ -21,32 +21,32 @@
 
 ADREnemy::ADREnemy()
 {
-	// ¸Ş½Ã °¡½Ã¼º Ãæµ¹ ¼³Á¤
+	// ë©”ì‹œ ê°€ì‹œì„± ì¶©ëŒ ì„¤ì •
 	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
-	// GAS ÄÄÆ÷³ÍÆ® ÃÊ±âÈ­ - ¸®½¼¼­¹ö¿ë ÃÖ¼Ò ¸®ÇÃ¸®ÄÉÀÌ¼Ç
+	// GAS ì»´í¬ë„ŒíŠ¸ ì´ˆê¸°í™” - ë¦¬ìŠ¨ì„œë²„ìš© ìµœì†Œ ë¦¬í”Œë¦¬ì¼€ì´ì…˜
 	AbilitySystemComponent = CreateDefaultSubobject<UDRAbilitySystemComponent>("AbilitySystemComponent");
 	AbilitySystemComponent->SetIsReplicated(true);
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
 
-	// AI È¸Àü ¼³Á¤ - ÄÁÆ®·Ñ·¯ ±â¹İ ºÎµå·¯¿î È¸Àü
+	// AI íšŒì „ ì„¤ì • - ì»¨íŠ¸ë¡¤ëŸ¬ ê¸°ë°˜ ë¶€ë“œëŸ¬ìš´ íšŒì „
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationRoll = false;
 	bUseControllerRotationYaw = false;
 	GetCharacterMovement()->bUseControllerDesiredRotation = true;
 
-	// Àû Àü¿ë ¾îÆ®¸®ºäÆ®¼Â
+	// ì  ì „ìš© ì–´íŠ¸ë¦¬ë·°íŠ¸ì…‹
 	AttributeSet = CreateDefaultSubobject<UDREnemyAttributeSet>("AttributeSet");
 
-	// Ã¼·Â¹Ù UI ¼³Á¤
+	// ì²´ë ¥ë°” UI ì„¤ì •
 	HealthBar = CreateDefaultSubobject<UWidgetComponent>("HealthBar");
 	HealthBar->SetupAttachment(GetRootComponent());
 
-	// ºÎÇ° ¸Ş½Ã ÄÄÆ÷³ÍÆ® »ı¼º (¼±ÅÃÀû)
+	// ë¶€í’ˆ ë©”ì‹œ ì»´í¬ë„ŒíŠ¸ ìƒì„± (ì„ íƒì )
 	PartMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>("PartMesh");
 	PartMeshComponent->SetupAttachment(GetMesh(), "PartSocket");
 	PartMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	PartMeshComponent->SetVisibility(false); // ±âº»ÀûÀ¸·Î ¼û±è
+	PartMeshComponent->SetVisibility(false); // ê¸°ë³¸ì ìœ¼ë¡œ ìˆ¨ê¹€
 	PartMeshComponent->SetIsReplicated(true);
 
 	BaseWalkSpeed = 250.f;
@@ -56,13 +56,13 @@ void ADREnemy::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 
-	// ¼­¹ö¿¡¼­¸¸ AI ÃÊ±âÈ­
+	// ì„œë²„ì—ì„œë§Œ AI ì´ˆê¸°í™”
 	if (!HasAuthority()) return;
 	DRAIController = Cast<ADRAIController>(NewController);
-	// ºí·¢º¸µå ÃÊ±âÈ­ ¹× ºñÇìÀÌºñ¾î Æ®¸® ½ÇÇà
+	// ë¸”ë™ë³´ë“œ ì´ˆê¸°í™” ë° ë¹„í—¤ì´ë¹„ì–´ íŠ¸ë¦¬ ì‹¤í–‰
 	DRAIController->GetBlackboardComponent()->InitializeBlackboard(*BehaviorTree->BlackboardAsset);
 	DRAIController->RunBehaviorTree(BehaviorTree);
-	// ÃÊ±â AI »óÅÂ ¼³Á¤
+	// ì´ˆê¸° AI ìƒíƒœ ì„¤ì •
 	DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("HitReacting"), false);
 	DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("RangedAttacker"), CharacterClass != ECharacterClass::Warrior);
 	DRAIController->GetBlackboardComponent()->SetValueAsVector(FName("HomeLocation"), GetActorLocation());
@@ -75,18 +75,18 @@ int32 ADREnemy::GetPlayerLevel_Implementation()
 
 void ADREnemy::Die(const FVector& DeathImpulse)
 {
-	// Á×À» ¶§ ºÎÇ° ÀÚµ¿ µå¶ø
+	// ì£½ì„ ë•Œ ë¶€í’ˆ ìë™ ë“œë
 	if (HasPart())
 	{
 		DropPart();
 	}
 
-	// »ç¸Á Ã³¸® - ÀÏÁ¤ ½Ã°£ ÈÄ ¼Ò¸ê
+	// ì‚¬ë§ ì²˜ë¦¬ - ì¼ì • ì‹œê°„ í›„ ì†Œë©¸
 	SetLifeSpan(LifeSpan);
-	// AI »óÅÂ ¾÷µ¥ÀÌÆ®
+	// AI ìƒíƒœ ì—…ë°ì´íŠ¸
 	if (DRAIController) DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("Dead"), true);
 
-	// »ç¸Á½Ã ÇÃ·¹ÀÌ¾îµé¿¡°Ô ¹° º¸»ó Áö±Ş
+	// ì‚¬ë§ì‹œ í”Œë ˆì´ì–´ë“¤ì—ê²Œ ë¬¼ ë³´ìƒ ì§€ê¸‰
 	if (HasAuthority())
 	{
 		GrantWaterToPlayers();
@@ -109,7 +109,7 @@ void ADREnemy::OnAttackExecuted()
 {
 	if (!HasAuthority()) return;
 
-	// °ø°İ È½¼ö Áõ°¡ ¹× ¹° º¸»ó °¨¼Ò
+	// ê³µê²© íšŸìˆ˜ ì¦ê°€ ë° ë¬¼ ë³´ìƒ ê°ì†Œ
 	AttackCount++;
 	ReduceWaterReward();
 }
@@ -119,19 +119,19 @@ void ADREnemy::HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount
 	bHitReacting = NewCount > 0;
 	if (bHitReacting)
 	{
-		// È÷Æ® ¸®¾×¼Ç Áß ÀÌµ¿ Á¤Áö
+		// íˆíŠ¸ ë¦¬ì•¡ì…˜ ì¤‘ ì´ë™ ì •ì§€
 		GetCharacterMovement()->MaxWalkSpeed = 0.f;
 	}
 	else
 	{
-		// È÷Æ® ¸®¾×¼Ç Á¾·á ½Ã GAS ¼Ó¼º°ªÀ¸·Î ÀÌµ¿¼Óµµ º¹±¸
+		// íˆíŠ¸ ë¦¬ì•¡ì…˜ ì¢…ë£Œ ì‹œ GAS ì†ì„±ê°’ìœ¼ë¡œ ì´ë™ì†ë„ ë³µêµ¬
 		if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
 		{
 			GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
 		}
 	}
 
-	// AI ºí·¢º¸µå »óÅÂ ¾÷µ¥ÀÌÆ®
+	// AI ë¸”ë™ë³´ë“œ ìƒíƒœ ì—…ë°ì´íŠ¸
 	if (DRAIController && DRAIController->GetBlackboardComponent())
 	{
 		DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("HitReacting"), bHitReacting);
@@ -142,11 +142,11 @@ void ADREnemy::ReduceWaterReward()
 {
 	if (!HasAuthority() || !WaterReductionEffectClass) return;
 
-	// ÇöÀç ¹°ÀÌ ¾øÀ¸¸é °¨¼Ò½ÃÅ°Áö ¾ÊÀ½
+	// í˜„ì¬ ë¬¼ì´ ì—†ìœ¼ë©´ ê°ì†Œì‹œí‚¤ì§€ ì•ŠìŒ
 	const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet);
 	if (!DRAS || DRAS->GetWater() <= 0.f) return;
 
-	// GameplayEffect·Î ¹° °¨¼Ò Àû¿ë
+	// GameplayEffectë¡œ ë¬¼ ê°ì†Œ ì ìš©
 	FGameplayEffectContextHandle ContextHandle = AbilitySystemComponent->MakeEffectContext();
 	ContextHandle.AddSourceObject(this);
 
@@ -159,7 +159,7 @@ void ADREnemy::ReduceWaterReward()
 	if (SpecHandle.IsValid())
 	{
 		const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
-		// SetByCaller·Î °¨¼Ò·® ¼³Á¤
+		// SetByCallerë¡œ ê°ì†ŒëŸ‰ ì„¤ì •
 		SpecHandle.Data.Get()->SetSetByCallerMagnitude(
 			GameplayTags.Water_SetByCaller_Reduction,
 			WaterReductionPerAttack
@@ -179,13 +179,13 @@ bool ADREnemy::DropPart()
 	if (!HasAuthority() || !bCarriesPart || bPartDropped || !PartActorClass)
 		return false;
 
-	// ºÎÇ° ¸Ş½Ã ¼û±â±â
+	// ë¶€í’ˆ ë©”ì‹œ ìˆ¨ê¸°ê¸°
 	if (PartMeshComponent)
 	{
 		PartMeshComponent->SetVisibility(false);
 	}
 
-	// ½ÇÁ¦ ºÎÇ° ¾×ÅÍ ½ºÆù
+	// ì‹¤ì œ ë¶€í’ˆ ì•¡í„° ìŠ¤í°
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride =
 		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
@@ -205,7 +205,7 @@ bool ADREnemy::DropPart()
 	bPartDropped = true;
 	bCarriesPart = false;
 
-	// ºí·¢º¸µå ¾÷µ¥ÀÌÆ®
+	// ë¸”ë™ë³´ë“œ ì—…ë°ì´íŠ¸
 	if (DRAIController && DRAIController->GetBlackboardComponent())
 	{
 		DRAIController->GetBlackboardComponent()->SetValueAsBool("HasPart", false);
@@ -218,26 +218,26 @@ void ADREnemy::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// ±âº» ÀÌµ¿¼Óµµ ¼³Á¤
+	// ê¸°ë³¸ ì´ë™ì†ë„ ì„¤ì •
 	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
-	// GAS ÃÊ±âÈ­
+	// GAS ì´ˆê¸°í™”
 	InitAbilityActorInfo();
-	// ¼­¹ö¿¡¼­¸¸ ½ÃÀÛ ¾îºô¸®Æ¼ ºÎ¿©
+	// ì„œë²„ì—ì„œë§Œ ì‹œì‘ ì–´ë¹Œë¦¬í‹° ë¶€ì—¬
 	if (HasAuthority())
 	{
 		UDRAbilitySystemLibrary::GiveStartupAbilities(this, AbilitySystemComponent, CharacterClass);
 	}
 
-	// UI À§Á¬ ÄÁÆ®·Ñ·¯ ¼³Á¤
+	// UI ìœ„ì ¯ ì»¨íŠ¸ë¡¤ëŸ¬ ì„¤ì •
 	if (UDRUserWidget* DRUserWidget = Cast<UDRUserWidget>(HealthBar->GetUserWidgetObject()))
 	{
 		DRUserWidget->SetWidgetController(this);
 	}
 
-	// ¾îÆ®¸®ºäÆ® º¯È­ ÀÌº¥Æ® ¹ÙÀÎµù
+	// ì–´íŠ¸ë¦¬ë·°íŠ¸ ë³€í™” ì´ë²¤íŠ¸ ë°”ì¸ë”©
 	if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
 	{
-		// Ã¼·Â º¯È­ µ¨¸®°ÔÀÌÆ® ¹ÙÀÎµù
+		// ì²´ë ¥ ë³€í™” ë¸ë¦¬ê²Œì´íŠ¸ ë°”ì¸ë”©
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetHealthAttribute()).AddLambda(
 			[this](const FOnAttributeChangeData& Data)
 			{
@@ -251,25 +251,25 @@ void ADREnemy::BeginPlay()
 			}
 		);
 
-		// È÷Æ® ¸®¾×¼Ç ÅÂ±× ÀÌº¥Æ® ¹ÙÀÎµù
+		// íˆíŠ¸ ë¦¬ì•¡ì…˜ íƒœê·¸ ì´ë²¤íŠ¸ ë°”ì¸ë”©
 		AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Effects_HitReact, EGameplayTagEventType::NewOrRemoved).AddUObject(
 			this,
 			&ADREnemy::HitReactTagChanged
 		);
 
-		// ÃÊ±â°ª ºê·ÎµåÄ³½ºÆ®
+		// ì´ˆê¸°ê°’ ë¸Œë¡œë“œìºìŠ¤íŠ¸
 		OnHealthChanged.Broadcast(DRAS->GetHealth());
 		OnMaxHealthChanged.Broadcast(DRAS->GetMaxHealth());
 	}
 
-	// ¹°¸® Ãæµ¹ ÀÌº¥Æ® ¹ÙÀÎµù (³Ë¹é Ã³¸®¿ë)
+	// ë¬¼ë¦¬ ì¶©ëŒ ì´ë²¤íŠ¸ ë°”ì¸ë”© (ë„‰ë°± ì²˜ë¦¬ìš©)
 	if (GetCapsuleComponent())
 	{
 		GetCapsuleComponent()->OnComponentHit.AddDynamic(this, &ADREnemy::OnHit);
 		GetCapsuleComponent()->SetNotifyRigidBodyCollision(true);
 	}
 
-	// ºÎÇ° ¿î¹İÀÚÀÎ °æ¿ì ¼³Á¤
+	// ë¶€í’ˆ ìš´ë°˜ìì¸ ê²½ìš° ì„¤ì •
 	if (bCarriesPart)
 	{
 		if (PartMeshComponent)
@@ -277,7 +277,7 @@ void ADREnemy::BeginPlay()
 			PartMeshComponent->SetVisibility(true);
 		}
 
-		// ºí·¢º¸µå¿¡ ºÎÇ° º¸À¯ »óÅÂ ¼³Á¤
+		// ë¸”ë™ë³´ë“œì— ë¶€í’ˆ ë³´ìœ  ìƒíƒœ ì„¤ì •
 		if (HasAuthority() && DRAIController && DRAIController->GetBlackboardComponent())
 		{
 			DRAIController->GetBlackboardComponent()->SetValueAsBool("HasPart", true);
@@ -287,13 +287,13 @@ void ADREnemy::BeginPlay()
 
 void ADREnemy::InitAbilityActorInfo()
 {
-	// GAS ÃÊ±âÈ­
+	// GAS ì´ˆê¸°í™”
 	AbilitySystemComponent->InitAbilityActorInfo(this, this);
 	Cast<UDRAbilitySystemComponent>(AbilitySystemComponent)->AbilityActorInfoSet();
-	// ½ºÅÏ ÅÂ±× ÀÌº¥Æ® ¹ÙÀÎµù
+	// ìŠ¤í„´ íƒœê·¸ ì´ë²¤íŠ¸ ë°”ì¸ë”©
 	AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Debuff_Stun, EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ADREnemy::StunTagChanged);
 
-	// ¼­¹ö¿¡¼­¸¸ ±âº» ¾îÆ®¸®ºäÆ® ÃÊ±âÈ­
+	// ì„œë²„ì—ì„œë§Œ ê¸°ë³¸ ì–´íŠ¸ë¦¬ë·°íŠ¸ ì´ˆê¸°í™”
 	if (HasAuthority())
 	{
 		InitializeDefaultAttributes();
@@ -303,7 +303,7 @@ void ADREnemy::InitAbilityActorInfo()
 
 void ADREnemy::InitializeDefaultAttributes() const
 {
-	// Ä³¸¯ÅÍ Å¬·¡½º¿Í ·¹º§¿¡ µû¸¥ ±âº» ¾îÆ®¸®ºäÆ® ÃÊ±âÈ­
+	// ìºë¦­í„° í´ë˜ìŠ¤ì™€ ë ˆë²¨ì— ë”°ë¥¸ ê¸°ë³¸ ì–´íŠ¸ë¦¬ë·°íŠ¸ ì´ˆê¸°í™”
 	UDRAbilitySystemLibrary::InitializeDefaultAttributes(this, CharacterClass, Level, AbilitySystemComponent);
 }
 
@@ -311,13 +311,13 @@ void ADREnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 {
 	Super::StunTagChanged(CallbackTag, NewCount);
 
-	// AI ºí·¢º¸µå¿¡ ½ºÅÏ »óÅÂ ¾÷µ¥ÀÌÆ®
+	// AI ë¸”ë™ë³´ë“œì— ìŠ¤í„´ ìƒíƒœ ì—…ë°ì´íŠ¸
 	if (DRAIController && DRAIController->GetBlackboardComponent())
 	{
 		UBlackboardComponent* BB = DRAIController->GetBlackboardComponent();
 		BB->SetValueAsBool(FName("Stunned"), bIsStunned);
 
-		// ½ºÅÏ ½Ã Å¸°Ù Á¤º¸ ÃÊ±âÈ­ (¾î±×·Î ¸®¼Â)
+		// ìŠ¤í„´ ì‹œ íƒ€ê²Ÿ ì •ë³´ ì´ˆê¸°í™” (ì–´ê·¸ë¡œ ë¦¬ì…‹)
 		if (bIsStunned)
 		{
 			BB->ClearValue("FirstAttacker");
@@ -329,28 +329,28 @@ void ADREnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 
 void ADREnemy::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit)
 {
-	// ¼­¹ö¿¡¼­¸¸ ³Ë¹é Ã³¸®
+	// ì„œë²„ì—ì„œë§Œ ë„‰ë°± ì²˜ë¦¬
 	if (!HasAuthority()) return;
 
-	// ³Ë¹é »óÅÂ°¡ ¾Æ´Ï°Å³ª ½ºÅÏ ¸é¿ªÀÌ¸é ¹«½Ã
+	// å ì‹¯ë±„ì˜™ å ì™ì˜™å ìŠ¹ê³¤ì˜™ å ì‹£ë‹ˆê±°ë†‚ì˜™ å ì™ì˜™å ì™ì˜™ å ì½ì—­å ì‹±ëªŒì˜™ å ì™ì˜™å ì™ì˜™
 	if (!bIsBeingKnockedBack || bIsStunImmune) return;
 
-	// º®ÀÎÁö È®ÀÎ
+	// å ì™ì˜™å ì™ì˜™å ì™ì˜™ í™•å ì™ì˜™
 	if (!OtherActor) return;
 
 	FString ActorName = OtherActor->GetName();
 
-	// Floor´Â ¹«½Ã
+	// Floorå ì™ì˜™ å ì™ì˜™å ì™ì˜™
 	if (ActorName.Contains(TEXT("Floor"))) return;
 
-	// StaticMeshActorÀÎÁö È®ÀÎ (º®)
+	// StaticMeshActorå ì™ì˜™å ì™ì˜™ í™•å ì™ì˜™ (å ì™ì˜™)
 	if (!ActorName.Contains(TEXT("StaticMeshActor"))) return;
 
-	// ¼Óµµ Ã¼Å© (Impact°¡ 0ÀÌ¹Ç·Î ¼Óµµ·Î ÆÇ´Ü)
+	// å ìŒˆë“¸ì˜™ ì²´í¬ (Impactå ì™ì˜™ 0å ì‹±ë¯€ë¤„ì˜™ å ìŒˆë“¸ì˜™å ì™ì˜™ å ì‹¤ëŒì˜™)
 	FVector Velocity = GetVelocity();
 	float Speed = Velocity.Size();
 
-	// ¼Óµµ ÀÓ°è°ª Ã¼Å©
+	// å ìŒˆë“¸ì˜™ å ìŒˆê³„ê°’ ì²´í¬
 	if (Speed > MinSpeedForStun)  // MinSpeedForStun = 50.f
 	{
 		ApplyWallStun();
@@ -361,13 +361,13 @@ void ADREnemy::ApplyWallStun()
 {
 	if (bIsStunImmune || !AbilitySystemComponent) return;
 
-	// AttributeSet ¿Ã¹Ù¸¥ Ä³½ºÆÃ
+	// AttributeSet å ì‹œë°”ëªŒì˜™ ìºå ì™ì˜™å ì™ì˜™
 	UDRAttributeSet* BaseAttributeSet = nullptr;
 
-	// ¸ÕÀú DREnemyAttributeSetÀ¸·Î ½Ãµµ (Enemy´Â ÀÌ°É »ç¿ë)
+	// å ì™ì˜™å ì™ì˜™ DREnemyAttributeSetå ì™ì˜™å ì™ì˜™ å ì‹œë“¸ì˜™ (Enemyå ì™ì˜™ å ì‹±ê³¤ì˜™ å ì™ì˜™å )
 	if (UDREnemyAttributeSet* EnemyAS = Cast<UDREnemyAttributeSet>(AttributeSet))
 	{
-		BaseAttributeSet = EnemyAS;  // DREnemyAttributeSetÀº DRAttributeSetÀ» »ó¼Ó
+		BaseAttributeSet = EnemyAS;  // DREnemyAttributeSetå ì™ì˜™ DRAttributeSetå ì™ì˜™ å ì™ì˜™å 
 	}
 	else if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
 	{
@@ -381,7 +381,7 @@ void ADREnemy::ApplyWallStun()
 
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 
-	// EffectProperties ±¸¼º
+	// EffectProperties å ì™ì˜™å ì™ì˜™
 	FEffectProperties Props;
 	Props.SourceASC = AbilitySystemComponent;
 	Props.TargetASC = AbilitySystemComponent;
@@ -390,35 +390,35 @@ void ADREnemy::ApplyWallStun()
 	Props.SourceCharacter = this;
 	Props.TargetCharacter = this;
 
-	// Context »ı¼º
+	// Context å ì™ì˜™å ì™ì˜™
 	FGameplayEffectContextHandle ContextHandle = AbilitySystemComponent->MakeEffectContext();
 	ContextHandle.AddSourceObject(this);
 
-	// Ä¿½ºÅÒ ÄÁÅØ½ºÆ® ¼³Á¤
+	// ì»¤å ì™ì˜™å ì™ì˜™ å ì™ì˜™å ìŒ”ì™ì˜™íŠ¸ å ì™ì˜™å ì™ì˜™
 	if (FDRGameplayEffectContext* DRContext = static_cast<FDRGameplayEffectContext*>(ContextHandle.Get()))
 	{
 		DRContext->SetIsSuccessfulDebuff(true);
-		DRContext->SetDebuffDamage(0.f);  // º® ½ºÅÏÀº Ãß°¡ µ¥¹ÌÁö ¾øÀ½
+		DRContext->SetDebuffDamage(0.f);  // å ì™ì˜™ å ì™ì˜™å ì™ì˜™å ì™ì˜™ å ìŒ©ê³¤ì˜™ å ì™ì˜™å ì™ì˜™å ì™ì˜™ å ì™ì˜™å ì™ì˜™
 		DRContext->SetDebuffDuration(WallStunDuration);
-		DRContext->SetDebuffFrequency(0.1f);  // 0ÀÌ ¾Æ´Ñ ÀÛÀº °ª (Period ¹®Á¦ ¹æÁö)
+		DRContext->SetDebuffFrequency(0.1f);  // 0å ì™ì˜™ å ì‹£ëŒì˜™ å ì™ì˜™å ì™ì˜™ å ì™ì˜™ (Period å ì™ì˜™å ì™ì˜™ å ì™ì˜™å ì™ì˜™)
 
-		// Lightning Å¸ÀÔÀ¸·Î ¼³Á¤ (±âÀı ÀÌÆåÆ®)
+		// Lightning íƒ€å ì™ì˜™å ì™ì˜™å ì™ì˜™ å ì™ì˜™å ì™ì˜™ (å ì™ì˜™å ì™ì˜™ å ì™ì˜™å ì™ì˜™íŠ¸)
 		TSharedPtr<FGameplayTag> DamageType = MakeShareable(new FGameplayTag(GameplayTags.Damage_Lightning));
 		DRContext->SetDamageType(DamageType);
 	}
 
 	Props.EffectContextHandle = ContextHandle;
 
-	// ±âÁ¸ Debuff ½Ã½ºÅÛ È£Ãâ
+	// å ì™ì˜™å ì™ì˜™ Debuff å ì‹œì™ì˜™å ì™ì˜™ í˜¸å ì™ì˜™
 	BaseAttributeSet->Debuff(Props);
 
-	// ³Ë¹é »óÅÂ ÇØÁ¦
+	// å ì‹¯ë±„ì˜™ å ì™ì˜™å ì™ì˜™ å ì™ì˜™å ì™ì˜™
 	bIsBeingKnockedBack = false;
 
-	// ½ºÅÏ ¸é¿ª ¼³Á¤
+	// å ì™ì˜™å ì™ì˜™ å ì½ì—­ å ì™ì˜™å ì™ì˜™
 	bIsStunImmune = true;
 
-	// ¸é¿ª Å¸ÀÌ¸Ó
+	// å ì½ì—­ íƒ€å ì‹±ëªŒì˜™
 	float TotalImmunityTime = WallStunDuration + StunImmunityDuration;
 	GetWorld()->GetTimerManager().SetTimer(
 		StunImmunityTimerHandle,
@@ -442,14 +442,14 @@ void ADREnemy::GrantWaterToPlayers()
 	if (!DRAS) return;
 
 	const float CurrentWater = DRAS->GetWater();
-	// ÀÏ¹İ ÀûÀº ¹°ÀÌ ¾øÀ¸¸é Áö±ŞÇÏÁö ¾ÊÀ½, º¸½º´Â Ç×»ó Áö±Ş
+	// ì¼ë°˜ ì ì€ ë¬¼ì´ ì—†ìœ¼ë©´ ì§€ê¸‰í•˜ì§€ ì•ŠìŒ, ë³´ìŠ¤ëŠ” í•­ìƒ ì§€ê¸‰
 	if (CurrentWater <= 0.f && !bIsBoss) return;
 
 	TArray<AActor*> PlayersToGrant;
 
 	if (bIsBoss)
 	{
-		// º¸½º: ¸Ê ÀüÃ¼ ÇÃ·¹ÀÌ¾î¿¡°Ô Áö±Ş
+		// ë³´ìŠ¤: ë§µ ì „ì²´ í”Œë ˆì´ì–´ì—ê²Œ ì§€ê¸‰
 		UGameplayStatics::GetAllActorsOfClass(
 			GetWorld(),
 			ADRCharacter::StaticClass(),
@@ -458,7 +458,7 @@ void ADREnemy::GrantWaterToPlayers()
 	}
 	else
 	{
-		// ÀÏ¹İ Àû: Æø¹ß ¹İ°æ ³» ÇÃ·¹ÀÌ¾î¿¡°Ô¸¸ Áö±Ş
+		// ì¼ë°˜ ì : í­ë°œ ë°˜ê²½ ë‚´ í”Œë ˆì´ì–´ì—ê²Œë§Œ ì§€ê¸‰
 		TArray<FOverlapResult> OverlapResults;
 		FCollisionQueryParams QueryParams;
 		QueryParams.AddIgnoredActor(this);
@@ -481,7 +481,7 @@ void ADREnemy::GrantWaterToPlayers()
 		}
 	}
 
-	// °¢ ÇÃ·¹ÀÌ¾î¿¡°Ô ¹° Áö±Ş GameplayEffect Àû¿ë
+	// ê° í”Œë ˆì´ì–´ì—ê²Œ ë¬¼ ì§€ê¸‰ GameplayEffect ì ìš©
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 
 	for (AActor* Player : PlayersToGrant)
@@ -509,17 +509,17 @@ void ADREnemy::GrantWaterToPlayers()
 
 			if (bIsBoss)
 			{
-				// º¸½º´Â MaxWater±îÁö Ã¤¿öÁÖ±â
+				// ë³´ìŠ¤ëŠ” MaxWaterê¹Œì§€ ì±„ì›Œì£¼ê¸°
 				WaterAmount = TargetAS->GetMaxWater() - TargetAS->GetWater();
 			}
 
-			// SetByCaller·Î Áö±Ş·® ¼³Á¤
+			// SetByCallerë¡œ ì§€ê¸‰ëŸ‰ ì„¤ì •
 			SpecHandle.Data.Get()->SetSetByCallerMagnitude(
 				GameplayTags.Water_SetByCaller_Grant,
 				WaterAmount
 			);
 
-			// Å¸°Ù¿¡°Ô È¿°ú Àû¿ë
+			// íƒ€ê²Ÿì—ê²Œ íš¨ê³¼ ì ìš©
 			TargetASC->ApplyGameplayEffectSpecToTarget(
 				*SpecHandle.Data.Get(),
 				TargetASC

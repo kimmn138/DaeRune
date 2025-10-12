@@ -13,7 +13,7 @@ class UBehaviorTree;
 class ADRAIController;
 
 /**
- * Àû Ä³¸¯ÅÍ ±âº» Å¬·¡½º
+ * ì  ìºë¦­í„° ê¸°ë³¸ í´ë˜ìŠ¤
  */
 UCLASS()
 class DAERUNE_API ADREnemy : public ADRCharacterBase, public IEnemyInterface
@@ -22,7 +22,7 @@ class DAERUNE_API ADREnemy : public ADRCharacterBase, public IEnemyInterface
 	
 public:
 	ADREnemy();
-	// AI ÄÁÆ®·Ñ·¯¿¡ ÀÇÇØ ¼ÒÀ¯µÉ ¶§ ½ÇÇà
+	// AI ì»¨íŠ¸ë¡¤ëŸ¬ì— ì˜í•´ ì†Œìœ ë  ë•Œ ì‹¤í–‰
 	virtual void PossessedBy(AController* NewController) override;
 
 	/** Combat Interface */
@@ -32,37 +32,37 @@ public:
 	virtual AActor* GetCombatTarget_Implementation() const override;
 	/** end Combat Interface */
 
-	// ÇöÀç ÀüÅõ ´ë»ó
+	// í˜„ì¬ ì „íˆ¬ ëŒ€ìƒ
 	UPROPERTY(BlueprintReadWrite, Category = "Combat")
 	TObjectPtr<AActor> CombatTarget;
 
-	// Ã¼·Â º¯È­ ÀÌº¥Æ® µ¨¸®°ÔÀÌÆ®
+	// ì²´ë ¥ ë³€í™” ì´ë²¤íŠ¸ ë¸ë¦¬ê²Œì´íŠ¸
 	UPROPERTY(BlueprintAssignable)
 	FOnAttributeChangedSignature OnHealthChanged;
 
 	UPROPERTY(BlueprintAssignable)
 	FOnAttributeChangedSignature OnMaxHealthChanged;
 
-	// °ø°İ ½ÇÇà ½Ã ¹° º¸»ó °¨¼Ò Ã³¸®
+	// ê³µê²© ì‹¤í–‰ ì‹œ ë¬¼ ë³´ìƒ ê°ì†Œ ì²˜ë¦¬
 	UFUNCTION(BlueprintCallable, Category = "Water System")
 	void OnAttackExecuted();
 
-	// È÷Æ® ¸®¾×¼Ç ÅÂ±× º¯È­ Äİ¹é
+	// íˆíŠ¸ ë¦¬ì•¡ì…˜ íƒœê·¸ ë³€í™” ì½œë°±
 	void HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 
-	// È÷Æ® ¸®¾×¼Ç »óÅÂ ÇÃ·¡±×
+	// íˆíŠ¸ ë¦¬ì•¡ì…˜ ìƒíƒœ í”Œë˜ê·¸
 	UPROPERTY(BlueprintReadOnly, Category = "Combat")
 	bool bHitReacting = false;
 
-	// »ç¸Á ÈÄ »ıÁ¸ ½Ã°£
+	// ì‚¬ë§ í›„ ìƒì¡´ ì‹œê°„
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
 	float LifeSpan = 5.f;
 
-	// ³Ë¹é »óÅÂ ¼³Á¤/ÇØÁ¦
+	// ë„‰ë°± ìƒíƒœ ì„¤ì •/í•´ì œ
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	void SetKnockbackState(bool bInKnockback);
 
-	// ===== ºÎÇ° ½Ã½ºÅÛ Ãß°¡ =====
+	// ===== ë¶€í’ˆ ì‹œìŠ¤í…œ ì¶”ê°€ =====
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Part System")
 	TObjectPtr<UStaticMeshComponent> PartMeshComponent;
 
@@ -87,84 +87,84 @@ protected:
 	virtual void InitializeDefaultAttributes() const override;
 	virtual void StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount) override;
 
-	// Àû ·¹º§
+	// ì  ë ˆë²¨
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Class Defaults")
 	int32 Level = 1;
 
-	// Ã¼·Â¹Ù UI À§Á¬
+	// ì²´ë ¥ë°” UI ìœ„ì ¯
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TObjectPtr<UWidgetComponent> HealthBar;
 
-	// AI ºñÇìÀÌºñ¾î Æ®¸®
+	// AI ë¹„í—¤ì´ë¹„ì–´ íŠ¸ë¦¬
 	UPROPERTY(EditAnywhere, Category = "AI")
 	TObjectPtr<UBehaviorTree> BehaviorTree;
 
-	// AI ÄÁÆ®·Ñ·¯ ÂüÁ¶
+	// AI ì»¨íŠ¸ë¡¤ëŸ¬ ì°¸ì¡°
 	UPROPERTY()
 	TObjectPtr<ADRAIController> DRAIController;
 
-	// °ø°İ´ç ¹° º¸»ó °¨¼Ò·® (À½¼ö°ª)
+	// ê³µê²©ë‹¹ ë¬¼ ë³´ìƒ ê°ì†ŒëŸ‰ (ìŒìˆ˜ê°’)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water System", meta = (ClampMin = "0.0"))
 	float WaterReductionPerAttack = -10.f;
 
-	// ¹° Æø¹ß ¹İ°æ (ÀÏ¹İ Àû)
+	// ë¬¼ í­ë°œ ë°˜ê²½ (ì¼ë°˜ ì )
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water System", meta = (ClampMin = "100.0"))
 	float WaterExplosionRadius = 500.f;
 
-	// º¸½º ¿©ºÎ (ÀüÃ¼ ¸Ê ÇÃ·¹ÀÌ¾î¿¡°Ô ¹° Áö±Ş)
+	// ë³´ìŠ¤ ì—¬ë¶€ (ì „ì²´ ë§µ í”Œë ˆì´ì–´ì—ê²Œ ë¬¼ ì§€ê¸‰)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water System")
 	bool bIsBoss = false;
 
-	// ¹° °¨¼Ò ÀÌÆåÆ® Å¬·¡½º
+	// ë¬¼ ê°ì†Œ ì´í™íŠ¸ í´ë˜ìŠ¤
 	UPROPERTY(EditDefaultsOnly, Category = "Water System")
 	TSubclassOf<UGameplayEffect> WaterReductionEffectClass;
 
-	// ¹° Áö±Ş ÀÌÆåÆ® Å¬·¡½º
+	// ë¬¼ ì§€ê¸‰ ì´í™íŠ¸ í´ë˜ìŠ¤
 	UPROPERTY(EditDefaultsOnly, Category = "Water System")
 	TSubclassOf<UGameplayEffect> WaterGrantEffectClass;
 
-	// ========== º® Ãæµ¹ ±âÀı ½Ã½ºÅÛ Ãß°¡ ==========
+	// ========== å ì™ì˜™ å ì¸ëŒ å ì™ì˜™å ì™ì˜™ å ì‹œì™ì˜™å ì™ì˜™ å ìŒ©ê³¤ì˜™ ==========
 
-	// Hit ÀÌº¥Æ® ÇÚµé·¯
+	// Hit å ì‹±ë¸ì˜™íŠ¸ å ìŒ˜ë“¤ëŸ¬
 	UFUNCTION()
 	void OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit);
 
-	// º® ½ºÅÏ Àû¿ë ÇÔ¼ö
+	// å ì™ì˜™ å ì™ì˜™å ì™ì˜™ å ì™ì˜™å ì™ì˜™ å ìŒ‰ì‡½ì˜™
 	void ApplyWallStun();
 
-	// ½ºÅÏ ¸é¿ª Á¾·á
+	// å ì™ì˜™å ì™ì˜™ å ì½ì—­ å ì™ì˜™å ì™ì˜™
 	void EndStunImmunity();
 
-	// ³Ë¹é »óÅÂ ÇÃ·¡±×
+	// ë„‰ë°± ìƒíƒœ í”Œë˜ê·¸
 	UPROPERTY(BlueprintReadOnly, Category = "Combat|Wall Stun")
 	bool bIsBeingKnockedBack = false;
 
-	// Ãæµ¹ °­µµ ÀÓ°è°ª
+	// å ì¸ëŒ å ì™ì˜™å ì™ì˜™ å ìŒˆê³„ê°’
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "100.0", ClampMax = "2000.0"))
 	float MinSpeedForStun = 50.f;
 
-	// ½ºÅÏ Áö¼Ó ½Ã°£
+	// å ì™ì˜™å ì™ì˜™ å ì™ì˜™å ì™ì˜™ å ì‹œê³¤ì˜™
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "0.5", ClampMax = "5.0"))
 	float WallStunDuration = 5.0f;
 
-	// ½ºÅÏ ¸é¿ª ½Ã°£ (½ºÅÏ Á¾·á ÈÄ)
+	// å ì™ì˜™å ì™ì˜™ å ì½ì—­ å ì‹œê³¤ì˜™ (å ì™ì˜™å ì™ì˜™ å ì™ì˜™å ì™ì˜™ å ì™ì˜™)
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "0.0", ClampMax = "10.0"))
 	float StunImmunityDuration = 5.0f;
 
 private:
-	// ¹° º¸»ó °¨¼Ò Ã³¸®
+	// ë¬¼ ë³´ìƒ ê°ì†Œ ì²˜ë¦¬
 	void ReduceWaterReward();
-	// ÇÃ·¹ÀÌ¾îµé¿¡°Ô ¹° Áö±Ş
+	// í”Œë ˆì´ì–´ë“¤ì—ê²Œ ë¬¼ ì§€ê¸‰
 	void GrantWaterToPlayers();
 
-	// °ø°İ È½¼ö Ä«¿îÅÍ (¹° º¸»ó °¨¼Ò¿ë)
+	// ê³µê²© íšŸìˆ˜ ì¹´ìš´í„° (ë¬¼ ë³´ìƒ ê°ì†Œìš©)
 	UPROPERTY()
 	int32 AttackCount = 0;
 
-	// ½ºÅÏ ¸é¿ª »óÅÂ
+	// å ì™ì˜™å ì™ì˜™ å ì½ì—­ å ì™ì˜™å ì™ì˜™
 	bool bIsStunImmune = false;
 
-	// ½ºÅÏ ¸é¿ª Å¸ÀÌ¸Ó
+	// å ì™ì˜™å ì™ì˜™ å ì½ì—­ íƒ€å ì‹±ëªŒì˜™
 	FTimerHandle StunImmunityTimerHandle;
 
 	bool bPartDropped = false;
