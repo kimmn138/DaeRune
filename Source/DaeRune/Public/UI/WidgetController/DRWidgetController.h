@@ -17,6 +17,7 @@ class UDRAbilitySystemComponent;
 class UDRAttributeSet;
 class UAbilityInfo;
 
+// WidgetController 초기화에 필요한 구조체
 USTRUCT(BlueprintType)
 struct FWidgetControllerParams
 {
@@ -40,7 +41,7 @@ struct FWidgetControllerParams
 };
 
 /**
- * 
+ * UI와 게임 로직 사이의 중간 계층
  */
 UCLASS()
 class DAERUNE_API UDRWidgetController : public UObject
@@ -48,19 +49,24 @@ class DAERUNE_API UDRWidgetController : public UObject
 	GENERATED_BODY()
 	
 public:
+	// 초기화 함수
 	UFUNCTION(BlueprintCallable)
 	void SetWidgetControllerParams(const FWidgetControllerParams& WCParams);
 
+	// 파생 클래스에서 오버라이드할 가상 함수들
 	UFUNCTION(BlueprintCallable)
 	virtual void BroadcastInitialValues();
 	virtual void BindCallbacksToDependencies();
 
+	// 어빌리티 정보 브로드캐스트 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Messages")
 	FAbilityInfoSignature AbilityInfoDelegate;
 
+	// 어빌리티 정보를 UI에 전달
 	void BroadcastAbilityInfo();
 	
 protected:
+	// 어빌리티 데이터 에셋
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Widget Data")
 	TObjectPtr<UAbilityInfo> AbilityInfo;
 

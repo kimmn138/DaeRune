@@ -4,6 +4,7 @@
 bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
 {
 	uint32 RepBits = 0;
+	// 직렬화할 데이터 비트 마스킹
 	if (Ar.IsSaving())
 	{
 		if (bReplicateInstigator && Instigator.IsValid())
@@ -64,6 +65,7 @@ bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool
 		}
 	}
 
+	// 비트 마스크 직렬화
 	Ar.SerializeBits(&RepBits, 14);
 
 	if (RepBits & (1 << 0))
@@ -142,6 +144,7 @@ bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool
 		KnockbackForce.NetSerialize(Ar, Map, bOutSuccess);
 	}
 
+	// 로딩 시 InstigatorAbilitySystemComponent 초기화
 	if (Ar.IsLoading())
 	{
 		AddInstigator(Instigator.Get(), EffectCauser.Get()); // Just to initialize InstigatorAbilitySystemComponent

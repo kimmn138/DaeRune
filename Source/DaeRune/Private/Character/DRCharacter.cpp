@@ -18,11 +18,13 @@
 
 ADRCharacter::ADRCharacter()
 {
+	// 이동 방향으로 회전 설정
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 400.f, 0.f);
 	GetCharacterMovement()->bConstrainToPlane = true;
 	GetCharacterMovement()->bSnapToPlaneAtStart = true;
 
+	// 카메라 붐 설정
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(GetCapsuleComponent());
 	CameraBoom->SetRelativeLocation(FVector(30.f, 0.f, 50.f));
@@ -30,14 +32,17 @@ ADRCharacter::ADRCharacter()
 	CameraBoom->bUsePawnControlRotation = true;
 	CameraBoom->bDoCollisionTest = false;
 
+	// 따라다니는 카메라 설정
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
+	// 컨트롤러 회전 설정
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationRoll = false;
 	bUseControllerRotationYaw = true;
 
+	// 기본 캐릭터 클래스는 엘리멘탈리스트
 	CharacterClass = ECharacterClass::Elementalist;
 }
 
@@ -45,7 +50,7 @@ void ADRCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 
-	// Init ability actor info for the Server
+	// 서버에서 GAS 초기화 및 어빌리티 부여
 	InitAbilityActorInfo();
 	AddCharacterAbilities();
 }
@@ -54,7 +59,7 @@ void ADRCharacter::OnRep_PlayerState()
 {
 	Super::OnRep_PlayerState();
 
-	// Init ability actor info for the Client
+	// 클라이언트에서 GAS 초기화
 	InitAbilityActorInfo();
 }
 
@@ -63,17 +68,20 @@ void ADRCharacter::OnRep_Stunned()
 	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(AbilitySystemComponent))
 	{
 		const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+		// 입력 차단 태그들 설정
 		FGameplayTagContainer BlockedTags;
 		BlockedTags.AddTag(GameplayTags.Player_Block_InputHeld);
 		BlockedTags.AddTag(GameplayTags.Player_Block_InputPressed);
 		BlockedTags.AddTag(GameplayTags.Player_Block_InputReleased);
 		if (bIsStunned)
 		{
+			// 스턴 시작: 입력 차단 + 스턴 이펙트 활성화
 			DRASC->AddLooseGameplayTags(BlockedTags);
 			StunDebuffComponent->Activate();
 		}
 		else
 		{
+			// 스턴 종료: 입력 복구 + 스턴 이펙트 비활성화
 			DRASC->RemoveLooseGameplayTags(BlockedTags);
 			StunDebuffComponent->Deactivate();
 		}
@@ -94,21 +102,15 @@ void ADRCharacter::OnRep_Burned()
 
 void ADRCharacter::InitAbilityActorInfo()
 {
-	// PlayerState null 체크 추가
+	// PlayerState 유효성 검사
 	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
-	if (!DRPlayerState)
-	{
-		return;
-	}
+	if (!DRPlayerState) return;
 
 	// AbilitySystemComponent null 체크
 	UAbilitySystemComponent* ASC = DRPlayerState->GetAbilitySystemComponent();
-	if (!ASC)
-	{
-		return;
-	}
+	if (!ASC) return;
 
-	// 초기화 진행
+	// GAS 컴포넌트들을 PlayerState에서 가져와 초기화
 	ASC->InitAbilityActorInfo(DRPlayerState, this);
 	Cast<UDRAbilitySystemComponent>(ASC)->AbilityActorInfoSet();
 
@@ -121,15 +123,16 @@ void ADRCharacter::InitAbilityActorInfo()
 		PlayerAS->SetContainerInfo(NumContainers, ContainerHealth);
 	}
 
+	// ASC 등록 완료 이벤트 브로드캐스트
 	OnAscRegistered.Broadcast(AbilitySystemComponent);
 
-	// Debuff 태그 이벤트 등록
+	// GAS 태그 바인딩
 	AbilitySystemComponent->RegisterGameplayTagEvent(
 		FDRGameplayTags::Get().Debuff_Stun,
 		EGameplayTagEventType::NewOrRemoved
 	).AddUObject(this, &ADRCharacter::StunTagChanged);
 
-	// HUD 초기화 (컨트롤러가 있는 경우만)
+	// 플레이어 컨트롤러에 HUD 초기화 요청
 	if (ADRPlayerController* DRPlayerController = Cast<ADRPlayerController>(GetController()))
 	{
 		if (ADRHUD* DRHUD = Cast<ADRHUD>(DRPlayerController->GetHUD()))

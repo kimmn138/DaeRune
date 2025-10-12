@@ -9,12 +9,14 @@
 
 ADRPlayerState::ADRPlayerState()
 {
+    // GAS 컴포넌트 생성 및 설정
 	AbilitySystemComponent = CreateDefaultSubobject<UDRAbilitySystemComponent>("AbilitySystemComponent");
 	AbilitySystemComponent->SetIsReplicated(true);
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
 
 	AttributeSet = CreateDefaultSubobject<UDRPlayerAttributeSet>("AttributeSet");
 	
+    // 높은 업데이트 빈도로 실시간 동기화
 	NetUpdateFrequency = 100.f;
 }
 
@@ -27,6 +29,7 @@ void ADRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
+    // 전투 및 부패 상태 리플리케이션
     DOREPLIFETIME(ADRPlayerState, bIsInCombat);
     DOREPLIFETIME(ADRPlayerState, bIsCorrupted);
 }
@@ -35,14 +38,16 @@ void ADRPlayerState::BeginPlay()
 {
     Super::BeginPlay();
 
+    // 서버에서만 체력 변경 콜백 등록
     if (HasAuthority())
     {
+        // 체력 회복 스펙 미리 캐싱
         InitializeHealthRegenSpec();
 
         // 게임 시작 시 정상 상태이므로 체력 회복 체크
         CheckAndStartHealthRegen();
 
-        // 체력 변경 감지를 위한 델리게이트 바인딩
+        // 체력 변경 감지 콜백 등록
         if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
         {
             AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
@@ -55,10 +60,9 @@ void ADRPlayerState::OnHealthChanged(const FOnAttributeChangeData& Data)
 {
     if (!HasAuthority()) return;
 
-    // 부패 상태면 무시
     if (bIsCorrupted || bIsInCombat) return;
 
-    // 현재 컨테이너 체크
+    // 체력이 변경될 때마다 회복 상태 재평가
     CheckHealthRegenStatus();
 }
 
@@ -66,6 +70,7 @@ void ADRPlayerState::CheckHealthRegenStatus()
 {
     if (!HasAuthority() || bIsCorrupted || bIsInCombat) return;
 
+    // PlayerAttributeSet에서 컨테이너 상태 확인
     const UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSet);
     if (!PlayerAS) return;
 
@@ -74,12 +79,12 @@ void ADRPlayerState::CheckHealthRegenStatus()
     const float ContainerHealth = PlayerAS->GetContainerHealth();
     const float ContainerMax = (ContainerIndex + 1) * ContainerHealth;
 
-    // 현재 컨테이너가 가득 찬지 체크
+    // 현재 컨테이너가 가득 찼는지 확인
     const bool bIsContainerFull = FMath::IsNearlyEqual(CurrentHealth, ContainerMax, 0.1f);
 
     if (bIsContainerFull)
     {
-        // 컨테이너가 가득 차면 체력 재생 중지
+        // 컨테이너가 가득 차면 체력 회복 중지
         if (HealthRegenEffectHandle.IsValid())
         {
             StopHealthRegen();
@@ -87,7 +92,7 @@ void ADRPlayerState::CheckHealthRegenStatus()
     }
     else
     {
-        // 컨테이너가 가득 차지 않았으면 체력 재생 시작
+        // 컨테이너가 가득 차지 않았으면 체력 회복 시작
         if (!HealthRegenEffectHandle.IsValid())
         {
             StartHealthRegen();
@@ -95,14 +100,13 @@ void ADRPlayerState::CheckHealthRegenStatus()
     }
 }
 
-// 전투 상태 돌입
 void ADRPlayerState::EnterCombat()
 {
     if (!HasAuthority()) return;
 
     if (bIsInCombat)
     {
-        // 타이머 리셋
+        // 이미 전투 중이면 타이머만 리셋
         GetWorld()->GetTimerManager().SetTimer(
             CombatTimerHandle,
             this,
@@ -113,11 +117,12 @@ void ADRPlayerState::EnterCombat()
         return;
     }
 
+    // 전투 상태 진입
     bIsInCombat = true;
 
     StopHealthRegen();
 
-    // 타이머 설정
+    // 전투 종료 타이머 설정
     GetWorld()->GetTimerManager().SetTimer(
         CombatTimerHandle,
         this,
@@ -126,6 +131,7 @@ void ADRPlayerState::EnterCombat()
         false
     );
 
+    // 클라이언트에 알림
     OnCombatStateChanged.Broadcast(true);
 }
 
@@ -133,7 +139,7 @@ void ADRPlayerState::CheckCombatExit()
 {
     if (!HasAuthority()) return;
 
-    // 전투 종료 조건 확인 (10초간 전투 행동이 없었음)
+    // 타이머 만료 시 전투 종료
     ExitCombat();
 }
 
@@ -141,21 +147,20 @@ void ADRPlayerState::ExitCombat()
 {
     if (!HasAuthority() || !bIsInCombat) return;
 
-    // 1. 먼저 전투 상태 플래그 변경
+    // 전투 상태 해제
     bIsInCombat = false;
-
-    // 2. 타이머 정리
     GetWorld()->GetTimerManager().ClearTimer(CombatTimerHandle);
 
-    // 3. 클라이언트에 알림
+    // 클라이언트 알림
     OnCombatStateChanged.Broadcast(false);
 
-    // 4. 마지막에 체력 재생 체크 (bIsInCombat이 false가 된 후)
+    // 체력 회복 재개 체크
     CheckAndStartHealthRegen();
 }
 
 int32 ADRPlayerState::GetCurrentContainerIndex() const
 {
+    // PlayerAttributeSet의 컨테이너 시스템 연동
     if (const UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSet))
     {
         return PlayerAS->GetCurrentContainerIndex();
@@ -173,10 +178,10 @@ void ADRPlayerState::SetCorruptedState(bool bNewCorrupted)
 
     if (bIsCorrupted)
     {
-        // 부패 상태 진입: 체력 회복 중지
+        // 부패 상태 진입
         StopHealthRegen();
 
-        // 태그 추가 (Gameplay Effect 상호작용용)
+        // 부패 태그 추가
         if (AbilitySystemComponent)
         {
             AbilitySystemComponent->AddLooseGameplayTag(FDRGameplayTags::Get().State_Corrupt);
@@ -184,17 +189,17 @@ void ADRPlayerState::SetCorruptedState(bool bNewCorrupted)
     }
     else
     {
-        // 부패 상태 해제: 체력 회복 체크 후 재개
+        // 부패 상태 해제
         CheckAndStartHealthRegen();
 
-        // 태그 제거
+        // 부패 태그 제거
         if (AbilitySystemComponent)
         {
             AbilitySystemComponent->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Corrupt);
         }
     }
 
-    // 클라이언트에 알림
+    // 클라이언트 알림
     OnCorruptedStateChanged.Broadcast(bIsCorrupted);
 }
 
@@ -202,7 +207,7 @@ void ADRPlayerState::CheckAndStartHealthRegen()
 {
     if (!HasAuthority() || bIsCorrupted) return;
 
-    // 현재 체력 상태 체크 후 재생 시작 여부 결정
+    // 현재 체력 상태를 확인한 후 회복 시작 여부 결정
     CheckHealthRegenStatus();
 }
 
@@ -213,48 +218,44 @@ bool ADRPlayerState::IsPlayerCorrupted() const
 
 void ADRPlayerState::OnRep_IsInCombat()
 {
-    // 클라이언트에서 상태 변경 알림
+    // 클라이언트에서 전투 상태 변경 알림
     OnCombatStateChanged.Broadcast(bIsInCombat);
 }
 
 void ADRPlayerState::OnRep_IsCorrupted()
 {
-    // 클라이언트에서 태그 동기화
+    // 클라이언트에서 부패 태그 동기화
     if (AbilitySystemComponent)
     {
         if (bIsCorrupted)
         {
-            // 부패 상태 태그 추가
             AbilitySystemComponent->AddLooseGameplayTag(FDRGameplayTags::Get().State_Corrupt);
-            UE_LOG(LogTemp, Log, TEXT("Client: Added Corrupt tag"));
         }
         else
         {
-            // 부패 상태 태그 제거
             AbilitySystemComponent->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Corrupt);
-            UE_LOG(LogTemp, Log, TEXT("Client: Removed Corrupt tag"));
         }
     }
 
+    // 클라이언트 알림
     OnCorruptedStateChanged.Broadcast(bIsCorrupted);
 }
 
 void ADRPlayerState::StartHealthRegen()
 {
-    if (!HasAuthority() || bIsCorrupted) return; // 부패 상태 체크 추가
+    if (!HasAuthority() || bIsCorrupted) return;
 
     // 이미 실행 중이면 무시
     if (HealthRegenEffectHandle.IsValid()) return;
 
+    // 캐시된 스펙 검증
     if (!CachedHealthRegenSpec.IsValid())
     {
         InitializeHealthRegenSpec();
-        if (!CachedHealthRegenSpec.IsValid())
-        {
-            return;
-        }
+        if (!CachedHealthRegenSpec.IsValid()) return;
     }
 
+    // 체력 회복 효과 적용
     HealthRegenEffectHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*CachedHealthRegenSpec.Data.Get());
 }
 
@@ -262,6 +263,7 @@ void ADRPlayerState::StopHealthRegen()
 {
     if (!HasAuthority()) return;
 
+    // 활성화된 체력 회복 효과 제거
     if (HealthRegenEffectHandle.IsValid())
     {
         AbilitySystemComponent->RemoveActiveGameplayEffect(HealthRegenEffectHandle);
@@ -273,6 +275,7 @@ void ADRPlayerState::InitializeHealthRegenSpec()
 {
     if (!HealthRegenEffectClass || !AbilitySystemComponent) return;
 
+    // 성능 최적화를 위한 GameplayEffect 스펙 사전 캐싱
     FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
     EffectContext.AddSourceObject(this);
     CachedHealthRegenSpec = AbilitySystemComponent->MakeOutgoingSpec(HealthRegenEffectClass, 1.f, EffectContext);
