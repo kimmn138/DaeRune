@@ -2,6 +2,7 @@
 
 
 #include "Game/DRStageGameState.h"
+#include "Net/UnrealNetwork.h"
 
 ADRStageGameState::ADRStageGameState()
 {
@@ -120,6 +121,12 @@ void ADRStageGameState::SetCleanserHealth(float Health)
     if (HasAuthority())
     {
         CleanserHealth = FMath::Clamp(Health, 0.0f, 1000.0f);
+
+        // 클렌저 체력이 0이 되면 실패 처리
+        if (CleanserHealth <= 0.0f)
+        {
+            SetCurrentPhaseState(EPhaseState::Failed);
+        }
     }   
 }
 

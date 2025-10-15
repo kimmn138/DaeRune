@@ -332,25 +332,25 @@ void ADREnemy::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPri
 	// 서버에서만 넉백 처리
 	if (!HasAuthority()) return;
 
-	// 占싯뱄옙 占쏙옙占승곤옙 占싣니거놂옙 占쏙옙占쏙옙 占썽역占싱몌옙 占쏙옙占쏙옙
+	// 넉백 상태가 아니거나 스턴 면역이면 무시
 	if (!bIsBeingKnockedBack || bIsStunImmune) return;
 
-	// 占쏙옙占쏙옙占쏙옙 확占쏙옙
+	// 벽인지 확인
 	if (!OtherActor) return;
 
 	FString ActorName = OtherActor->GetName();
 
-	// Floor占쏙옙 占쏙옙占쏙옙
+	// Floor는 무시
 	if (ActorName.Contains(TEXT("Floor"))) return;
 
-	// StaticMeshActor占쏙옙占쏙옙 확占쏙옙 (占쏙옙)
+	// StaticMeshActor인지 확인 (벽)
 	if (!ActorName.Contains(TEXT("StaticMeshActor"))) return;
 
-	// 占쌈듸옙 체크 (Impact占쏙옙 0占싱므뤄옙 占쌈듸옙占쏙옙 占실댐옙)
+	// 속도 체크 (Impact가 0이므로 속도로 판단)
 	FVector Velocity = GetVelocity();
 	float Speed = Velocity.Size();
 
-	// 占쌈듸옙 占쌈계값 체크
+	// 속도 임계값 체크
 	if (Speed > MinSpeedForStun)  // MinSpeedForStun = 50.f
 	{
 		ApplyWallStun();
@@ -361,13 +361,13 @@ void ADREnemy::ApplyWallStun()
 {
 	if (bIsStunImmune || !AbilitySystemComponent) return;
 
-	// AttributeSet 占시바몌옙 캐占쏙옙占쏙옙
+	// AttributeSet 올바른 캐스팅
 	UDRAttributeSet* BaseAttributeSet = nullptr;
 
-	// 占쏙옙占쏙옙 DREnemyAttributeSet占쏙옙占쏙옙 占시듸옙 (Enemy占쏙옙 占싱곤옙 占쏙옙占)
+	// 먼저 DREnemyAttributeSet으로 시도 (Enemy는 이걸 사용)
 	if (UDREnemyAttributeSet* EnemyAS = Cast<UDREnemyAttributeSet>(AttributeSet))
 	{
-		BaseAttributeSet = EnemyAS;  // DREnemyAttributeSet占쏙옙 DRAttributeSet占쏙옙 占쏙옙占
+		BaseAttributeSet = EnemyAS;  // DREnemyAttributeSet은 DRAttributeSet을 상속
 	}
 	else if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
 	{
@@ -381,7 +381,7 @@ void ADREnemy::ApplyWallStun()
 
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 
-	// EffectProperties 占쏙옙占쏙옙
+	// EffectProperties 구성
 	FEffectProperties Props;
 	Props.SourceASC = AbilitySystemComponent;
 	Props.TargetASC = AbilitySystemComponent;
@@ -390,35 +390,35 @@ void ADREnemy::ApplyWallStun()
 	Props.SourceCharacter = this;
 	Props.TargetCharacter = this;
 
-	// Context 占쏙옙占쏙옙
+	// Context 생성
 	FGameplayEffectContextHandle ContextHandle = AbilitySystemComponent->MakeEffectContext();
 	ContextHandle.AddSourceObject(this);
 
-	// 커占쏙옙占쏙옙 占쏙옙占쌔쏙옙트 占쏙옙占쏙옙
+	// 커스텀 컨텍스트 설정
 	if (FDRGameplayEffectContext* DRContext = static_cast<FDRGameplayEffectContext*>(ContextHandle.Get()))
 	{
 		DRContext->SetIsSuccessfulDebuff(true);
-		DRContext->SetDebuffDamage(0.f);  // 占쏙옙 占쏙옙占쏙옙占쏙옙 占쌩곤옙 占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙
+		DRContext->SetDebuffDamage(0.f);  // 벽 스턴은 추가 데미지 없음
 		DRContext->SetDebuffDuration(WallStunDuration);
-		DRContext->SetDebuffFrequency(0.1f);  // 0占쏙옙 占싣댐옙 占쏙옙占쏙옙 占쏙옙 (Period 占쏙옙占쏙옙 占쏙옙占쏙옙)
+		DRContext->SetDebuffFrequency(0.1f);  // 0이 아닌 작은 값 (Period 문제 방지)
 
-		// Lightning 타占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙 (占쏙옙占쏙옙 占쏙옙占쏙옙트)
+		// Lightning 타입으로 설정 (기절 이펙트)
 		TSharedPtr<FGameplayTag> DamageType = MakeShareable(new FGameplayTag(GameplayTags.Damage_Lightning));
 		DRContext->SetDamageType(DamageType);
 	}
 
 	Props.EffectContextHandle = ContextHandle;
 
-	// 占쏙옙占쏙옙 Debuff 占시쏙옙占쏙옙 호占쏙옙
+	// 기존 Debuff 시스템 호출
 	BaseAttributeSet->Debuff(Props);
 
-	// 占싯뱄옙 占쏙옙占쏙옙 占쏙옙占쏙옙
+	// 넉백 상태 해제
 	bIsBeingKnockedBack = false;
 
-	// 占쏙옙占쏙옙 占썽역 占쏙옙占쏙옙
+	// 스턴 면역 설정
 	bIsStunImmune = true;
 
-	// 占썽역 타占싱몌옙
+	// 면역 타이머
 	float TotalImmunityTime = WallStunDuration + StunImmunityDuration;
 	GetWorld()->GetTimerManager().SetTimer(
 		StunImmunityTimerHandle,

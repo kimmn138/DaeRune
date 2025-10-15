@@ -3,8 +3,10 @@
 
 #include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
+#include "Actor/DRCleanserSite.h"
 #include "Kismet/GameplayStatics.h"
-//#include "PlayLoop/DRPhaseBase.h"
+#include "Phase/DRPhaseBase.h"
+#include "EngineUtils.h"
 
 ADRStageGameMode::ADRStageGameMode()
 {
@@ -19,6 +21,23 @@ void ADRStageGameMode::BeginPlay()
 
 	// GameState 캐싱
 	CachedGameState = GetGameState<ADRStageGameState>();
+
+	// 레벨에서 클렌저 사이트 자동 탐색
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		CleanserSites.Empty();
+
+		// 태그로 클렌저 사이트 찾기
+		for (TActorIterator<ADRCleanserSite> It(World); It; ++It)
+		{
+			ADRCleanserSite* Site = *It;
+			if (Site && Site->ActorHasTag(CleanserSiteTag))
+			{
+				CleanserSites.Add(Site);
+			}
+		}
+	}
 
 	// 페이즈 시스템 초기화
 	InitializePhaseSystem();
@@ -52,122 +71,141 @@ void ADRStageGameMode::InitializePhaseSystem()
 {
 	if (!HasAuthority()) return;
 
-	//// 기존 페이즈 인스턴스 정리
-	//PhaseInstances.Empty();
+	// 클렌저 사이트 유효성 검증
+	if (CleanserSites.Num() < 3) return;
 
-	//// 페이즈 클래스들로부터 인스턴스 생성
-	//for (TSubclassOf<UDRPhaseBase> PhaseClass : PhaseClasses)
-	//{
-	//	if (PhaseClass)
-	//	{
-	//		UDRPhaseBase* NewPhase = NewObject<UDRPhaseBase>(this, PhaseClass);
-	//		PhaseInstances.Add(NewPhase);
-	//	}
-	//}
+	// 기존 페이즈 인스턴스 정리
+	PhaseInstances.Empty();
 
-	//// 첫 번째 페이즈로 시작
-	//if (PhaseInstances.Num() > 0)
-	//{
-	//	StartPhase(0);
-	//}
+	// 페이즈 클래스들로부터 인스턴스 생성
+	for (TSubclassOf<UDRPhaseBase> PhaseClass : PhaseClasses)
+	{
+		if (PhaseClass)
+		{
+			UDRPhaseBase* NewPhase = NewObject<UDRPhaseBase>(this, PhaseClass);
+
+			// 페이즈 초기화 (GameMode, GameState 전달)
+			NewPhase->Initialize(this, CachedGameState);
+
+			// 클렌저 사이트 설정 (모든 페이즈가 공유)
+			TArray<ADRCleanserSite*> SitesArray;
+			for (const TObjectPtr<ADRCleanserSite>& Site : CleanserSites)
+			{
+				if (Site)
+				{
+					SitesArray.Add(Site.Get());
+				}
+			}
+			NewPhase->SetCleanserSites(SitesArray);
+
+			PhaseInstances.Add(NewPhase);
+		}
+	}
+
+	// 첫 번째 페이즈로 시작
+	if (PhaseInstances.Num() > 0)
+	{
+		StartPhase(0);
+	}
 }
 
 void ADRStageGameMode::StartPhase(int32 PhaseIndex)
 {
 	if (!HasAuthority() || !CachedGameState) return;
 
-	//if (PhaseIndex < 0 || PhaseIndex >= PhaseInstances.Num()) return;
+	if (PhaseIndex < 0 || PhaseIndex >= PhaseInstances.Num()) return;
 
-	//// 이전 페이즈 정리
-	//if (CurrentPhase)
-	//{
-	//	// CurrentPhase->OnPhaseEnd(); // PhaseBase에서 구현
-	//}
+	// 이전 페이즈 정리
+	if (CurrentPhase)
+	{
+		CurrentPhase->OnPhaseEnd();
+	}
 
-	//// 새 페이즈 설정
-	//CurrentPhase = PhaseInstances[PhaseIndex];
+	// 새 페이즈 설정
+	CurrentPhase = PhaseInstances[PhaseIndex];
 
-	//// GameState 업데이트
-	//CachedGameState->SetCurrentPhaseIndex(PhaseIndex);
-	//CachedGameState->SetCurrentPhaseState(EPhaseState::InProgress);
+	// GameState 업데이트
+	CachedGameState->SetCurrentPhaseIndex(PhaseIndex);
+	CachedGameState->SetCurrentPhaseState(EPhaseState::InProgress);
 
-	//// 페이즈 시작
-	//if (CurrentPhase)
-	//{
-	//	// CurrentPhase->OnPhaseStart(); // PhaseBase에서 구현
-	//}
+	// 페이즈 시작
+	if (CurrentPhase)
+	{
+		CurrentPhase->OnPhaseStart();
+	}
 
-	//// 이벤트 호출
-	//OnPhaseStarted();
+	// 블루프린트 이벤트 호출
+	// OnPhaseStarted();
 }
 
 void ADRStageGameMode::EndCurrentPhase()
 {
-	//if (!HasAuthority() || !CachedGameState || !CurrentPhase) return;
+	if (!HasAuthority() || !CachedGameState || !CurrentPhase) return;
 
-	//// 페이즈 완료 상태로 변경
-	//CachedGameState->SetCurrentPhaseState(EPhaseState::Completed);
+	// 페이즈 완료 상태로 변경
+	CachedGameState->SetCurrentPhaseState(EPhaseState::Completed);
 
-	//// 페이즈 종료 처리
-	//if (CurrentPhase)
-	//{
-	//	// CurrentPhase->OnPhaseEnd(); // PhaseBase에서 구현
-	//}
+	// 페이즈 종료 처리
+	if (CurrentPhase)
+	{
+		CurrentPhase->OnPhaseEnd(); // PhaseBase에서 구현
+	}
 
-	//// 완료 이벤트 호출
-	//OnPhaseCompleted();
+	// 블루프린트 완료 이벤트 호출
+	// OnPhaseCompleted();
 }
 
 void ADRStageGameMode::TransitionToNextPhase()
 {
 	if (!HasAuthority() || !CachedGameState) return;
 
-	//int32 CurrentIndex = CachedGameState->GetCurrentPhaseIndex();
-	//int32 NextIndex = CurrentIndex + 1;
+	int32 CurrentIndex = CachedGameState->GetCurrentPhaseIndex();
+	int32 NextIndex = CurrentIndex + 1;
 
-	//// 모든 페이즈 완료 체크
-	//if (NextIndex >= PhaseInstances.Num())
-	//{
-	//	OnAllPhasesCompleted();
-	//	return;
-	//}
+	// 모든 페이즈 완료 체크
+	if (NextIndex >= PhaseInstances.Num())
+	{
+		// 블루프린트 전체 완료 이벤트 호출
+		// OnAllPhasesCompleted();
+		return;
+	}
 
-	//// 다음 페이즈로 전환
-	//StartPhase(NextIndex);
+	// 다음 페이즈로 전환
+	StartPhase(NextIndex);
 }
 
-//bool ADRStageGameMode::ValidatePhaseCompletion()
-//{
-//	if (!CurrentPhase || !CachedGameState) return false;
-//
-//	int32 CurrentPhaseIndex = CachedGameState->GetCurrentPhaseIndex();
-//	bool bIsCompleted = false;
-//
-//	// 페이즈별 완료 조건 검증
-//	switch (CurrentPhaseIndex)
-//	{
-//	case 0: // Phase 1: 클렌저 확보
-//		bIsCompleted = CachedGameState->IsCleanserAreaSecured() &&
-//			CachedGameState->GetRemainingEnemiesInArea() == 0;
-//		break;
-//
-//	case 1: // Phase 2: 부품 회수
-//		bIsCompleted = CachedGameState->GetCollectedParts() >= 4 &&
-//			CachedGameState->IsCleanserActivated();
-//		break;
-//
-//	case 2: // Phase 3: 방어
-//		bIsCompleted = CachedGameState->GetCurrentWave() >= CachedGameState->GetTotalWaves();
-//		break;
-//
-//	case 3: // Phase 4: 보스
-//		bIsCompleted = CachedGameState->GetBossHealth() <= 0.0f;
-//		break;
-//
-//	default:
-//		break;
-//	}
-//
-//	return bIsCompleted;
-//}
+bool ADRStageGameMode::ValidatePhaseCompletion()
+{
+	if (!CurrentPhase || !CachedGameState) return false;
+
+	int32 CurrentPhaseIndex = CachedGameState->GetCurrentPhaseIndex();
+	bool bIsCompleted = false;
+
+	// 페이즈별 완료 조건 검증
+	switch (CurrentPhaseIndex)
+	{
+	case 0: // Phase 1: 클렌저 확보
+		bIsCompleted = CachedGameState->IsCleanserAreaSecured() &&
+			CachedGameState->GetRemainingEnemiesInArea() == 0;
+		break;
+
+	case 1: // Phase 2: 부품 회수
+		bIsCompleted = CachedGameState->GetCollectedParts() >= 4 &&
+			CachedGameState->IsCleanserActivated();
+		break;
+
+	case 2: // Phase 3: 방어
+		bIsCompleted = CachedGameState->GetCurrentWave() >= CachedGameState->GetTotalWaves();
+		break;
+
+	case 3: // Phase 4: 보스
+		bIsCompleted = CachedGameState->GetBossHealth() <= 0.0f;
+		break;
+
+	default:
+		break;
+	}
+
+	return bIsCompleted;
+}
 
