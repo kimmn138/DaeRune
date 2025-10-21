@@ -27,9 +27,12 @@ ADRAIController::ADRAIController()
 	// 시야 감지 설정
 	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>("SightConfig");
 	SightConfig->SightRadius = 2100.f;  // 시야 거리
-	SightConfig->LoseSightRadius = SightConfig->SightRadius + 200.f;  // 시야 잃는 거리
+	SightConfig->LoseSightRadius = SightConfig->SightRadius + 500.f;  // 시야 잃는 거리
 	SightConfig->PeripheralVisionAngleDegrees = 360.f;  // 시야각
-	SightConfig->SetMaxAge(1.f);  // 기억 유지 시간
+	SightConfig->SetMaxAge(5.f);  // 기억 유지 시간
+
+	// 마지막 위치 1000 유닛 이내면 자동 성공
+	SightConfig->AutoSuccessRangeFromLastSeenLocation = 1000.f;
 
 	// 감지 대상 설정 - 플레이어만 감지
 	SightConfig->DetectionByAffiliation.bDetectEnemies = true;
@@ -94,17 +97,11 @@ void ADRAIController::OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus Stimu
 	{
 		// 플레이어 감지됨 - 맵에 추가
 		UpdatePlayer(Actor);
-
-		UE_LOG(LogTemp, Log, TEXT("[AIPerception] Player Detect: %s"),
-			*Actor->GetName());
 	}
 	else
 	{
 		// 플레이어 시야에서 벗어남 - 맵에서 제거
 		RemovePlayer(Actor);
-
-		UE_LOG(LogTemp, Log, TEXT("[AIPerception] Player sight out: %s"),
-			*Actor->GetName());
 	}
 }
 

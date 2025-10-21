@@ -15,6 +15,8 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "UI/HUD/DRHUD.h"
 #include "AbilitySystem/DRPlayerAttributeSet.h"
+#include "Actor/DRCleanserPart.h"
+#include "Net/UnrealNetwork.h"
 
 ADRCharacter::ADRCharacter()
 {
@@ -44,6 +46,18 @@ ADRCharacter::ADRCharacter()
 
 	// 기본 캐릭터 클래스는 엘리멘탈리스트
 	CharacterClass = ECharacterClass::Elementalist;
+
+	// 부품 시스템 초기화
+	bIsCarryingPart = false;
+	CarriedPart = nullptr;
+}
+
+void ADRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ADRCharacter, bIsCarryingPart);
+	DOREPLIFETIME(ADRCharacter, CarriedPart);
 }
 
 void ADRCharacter::PossessedBy(AController* NewController)
@@ -98,6 +112,42 @@ void ADRCharacter::OnRep_Burned()
 	{
 		BurnDebuffComponent->Deactivate();
 	}
+}
+
+bool ADRCharacter::PickupPart(ADRCleanserPart* Part)
+{
+	if (!HasAuthority() || !Part || bIsCarryingPart) return false;
+
+	// 부품 획득 처리
+	Part->PickupPart(this);
+
+	// 상태 업데이트
+	bIsCarryingPart = true;
+	CarriedPart = Part;
+
+	return true;
+}
+
+void ADRCharacter::InstallCarriedPart()
+{
+	if (!HasAuthority() || !bIsCarryingPart || !CarriedPart) return;
+
+	// 부품 설치 처리
+	CarriedPart->InstallPart();
+
+	// 상태 초기화
+	bIsCarryingPart = false;
+	CarriedPart = nullptr;
+}
+
+void ADRCharacter::OnRep_bIsCarryingPart()
+{
+	// 클라이언트 시각적 효과
+}
+
+void ADRCharacter::OnRep_CarriedPart()
+{
+	// 클라이언트 시각적 효과
 }
 
 void ADRCharacter::InitAbilityActorInfo()

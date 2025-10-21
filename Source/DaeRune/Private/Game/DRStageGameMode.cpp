@@ -118,7 +118,20 @@ void ADRStageGameMode::StartPhase(int32 PhaseIndex)
 	// 이전 페이즈 정리
 	if (CurrentPhase)
 	{
+		// 이전 Phase의 ActiveCleanserSites 저장
+		TArray<TObjectPtr<ADRCleanserSite>> PreviousActiveSites = CurrentPhase->GetActiveCleanserSites();
+
 		CurrentPhase->OnPhaseEnd();
+
+		// 새 Phase로 전달
+		if (PhaseIndex > 0 && PreviousActiveSites.Num() > 0)
+		{
+			UDRPhaseBase* NextPhase = PhaseInstances[PhaseIndex];
+			if (NextPhase)
+			{
+				NextPhase->SetActiveCleanserSites(PreviousActiveSites);
+			}
+		}
 	}
 
 	// 새 페이즈 설정
@@ -153,6 +166,9 @@ void ADRStageGameMode::EndCurrentPhase()
 
 	// 블루프린트 완료 이벤트 호출
 	// OnPhaseCompleted();
+
+	UE_LOG(LogTemp, Warning, TEXT("Transitioning to next phase..."));  // ← 추가
+	TransitionToNextPhase();
 }
 
 void ADRStageGameMode::TransitionToNextPhase()
@@ -181,29 +197,70 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 	int32 CurrentPhaseIndex = CachedGameState->GetCurrentPhaseIndex();
 	bool bIsCompleted = false;
 
+	UE_LOG(LogTemp, Warning, TEXT("========== ValidatePhaseCompletion: Phase %d =========="), CurrentPhaseIndex);
+
 	// 페이즈별 완료 조건 검증
 	switch (CurrentPhaseIndex)
 	{
 	case 0: // Phase 1: 클렌저 확보
-		bIsCompleted = CachedGameState->IsCleanserAreaSecured() &&
-			CachedGameState->GetRemainingEnemiesInArea() == 0;
-		break;
+	{
+		bool bAreaSecured = CachedGameState->IsCleanserAreaSecured();
+		int32 RemainingEnemies = CachedGameState->GetRemainingEnemiesInArea();
+
+		UE_LOG(LogTemp, Warning, TEXT("Phase1 Check - AreaSecured: %s, RemainingEnemies: %d"),
+			bAreaSecured ? TEXT("TRUE") : TEXT("FALSE"), RemainingEnemies);  // ← 추가
+
+		bIsCompleted = bAreaSecured && (RemainingEnemies == 0);
+	}
+	break;
 
 	case 1: // Phase 2: 부품 회수
-		bIsCompleted = CachedGameState->GetCollectedParts() >= 4 &&
-			CachedGameState->IsCleanserActivated();
-		break;
+	{
+		int32 CollectedParts = CachedGameState->GetCollectedParts();
+		bool bActivated = CachedGameState->IsCleanserActivated();
+
+		UE_LOG(LogTemp, Warning, TEXT("Phase2 Check - CollectedParts: %d, Activated: %s"),
+			CollectedParts, bActivated ? TEXT("TRUE") : TEXT("FALSE"));  // ← 추가
+
+		bIsCompleted = (CollectedParts >= 4) && bActivated;
+	}
+	break;
 
 	case 2: // Phase 3: 방어
-		bIsCompleted = CachedGameState->GetCurrentWave() >= CachedGameState->GetTotalWaves();
-		break;
+	{
+		int32 CurrentWave = CachedGameState->GetCurrentWave();
+		int32 TotalWaves = CachedGameState->GetTotalWaves();
+
+		UE_LOG(LogTemp, Warning, TEXT("Phase3 Check - CurrentWave: %d, TotalWaves: %d"),
+			CurrentWave, TotalWaves);  // ← 추가
+
+		bIsCompleted = CurrentWave >= TotalWaves;
+	}
+	break;
 
 	case 3: // Phase 4: 보스
-		bIsCompleted = CachedGameState->GetBossHealth() <= 0.0f;
-		break;
+	{
+		float BossHealth = CachedGameState->GetBossHealth();
+
+		UE_LOG(LogTemp, Warning, TEXT("Phase4 Check - BossHealth: %f"), BossHealth);  // ← 추가
+
+		bIsCompleted = BossHealth <= 0.0f;
+	}
+	break;
 
 	default:
+		UE_LOG(LogTemp, Error, TEXT("ValidatePhaseCompletion: Invalid phase index %d"), CurrentPhaseIndex);  // ← 추가
 		break;
+	}
+
+	if (bIsCompleted)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("========== Phase %d COMPLETED! =========="), CurrentPhaseIndex);  // ← 추가
+		EndCurrentPhase();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Phase %d not completed yet"), CurrentPhaseIndex);  // ← 추가
 	}
 
 	return bIsCompleted;

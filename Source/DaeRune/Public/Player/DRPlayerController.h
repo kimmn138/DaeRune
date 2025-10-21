@@ -17,6 +17,7 @@ class UInputAction;
 struct FInputActionValue;
 class UDRInputConfig;
 class UDRAbilitySystemComponent;
+class ADRCleanserPart;
 
 /**
  * DaeRune 플레이어의 입력 처리 및 UI 관리 클래스
@@ -57,14 +58,41 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Input")
 	FOnInteractPressed OnInteractPressed;
 
+	// ========== 부품 시스템 ==========
+
+	// 부품 감지 활성화/비활성화
+	UFUNCTION(BlueprintCallable, Category = "Part System")
+	void SetPartDetectionEnabled(bool bEnabled, class ADRCleanserPart* Part);
+
+	// 라인트레이싱으로 부품 찾기
+	UFUNCTION(BlueprintCallable, Category = "Part System")
+	ADRCleanserPart* FindPartByLineTrace();
+
+	// 부품 획득 UI 표시 여부
+	UFUNCTION(BlueprintImplementableEvent, Category = "Part System")
+	void ShowPartPickupUI();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Part System")
+	void HidePartPickupUI();
+
 protected:
 	virtual void BeginPlay() override;
-
+	virtual void PlayerTick(float DeltaTime) override;
 	virtual void SetupInputComponent() override;
 
 	// 부패 상태 플래그
 	UPROPERTY(BlueprintReadOnly, Category = "Corruption")
 	bool bIsCorrupted = false;
+
+	// ========== 부품 시스템 설정 ==========
+
+	// 라인트레이싱 거리
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Part System|Config")
+	float LineTraceDistance = 100.f;
+
+	// 라인트레이싱 업데이트 간격 (초)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Part System|Config")
+	float LineTraceUpdateInterval = 0.1f;
 
 private:
 	FGenericTeamId TeamId;
@@ -111,4 +139,22 @@ private:
 	// 데미지 텍스트 컴포넌트 클래스
 	UPROPERTY(EditDefaultsOnly)
 	TSubclassOf<UDamageTextComponent> DamageTextComponentClass;
+
+	// 라인트레이싱 활성화 여부
+	bool bPartDetectionEnabled = false;
+
+	// 라인트레이싱 타이머
+	float LineTraceTimer = 0.f;
+
+	// 현재 근처에 있는 부품
+	UPROPERTY()
+	TObjectPtr<ADRCleanserPart> NearbyPart;
+
+	// 현재 감지된 부품
+	UPROPERTY()
+	TObjectPtr<ADRCleanserPart> CurrentDetectedPart;
+
+	// 부품 획득 요청 (서버 RPC)
+	UFUNCTION(Server, Reliable)
+	void ServerRequestPickupPart(ADRCleanserPart* Part);
 };
