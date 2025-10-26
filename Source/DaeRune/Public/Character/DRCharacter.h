@@ -7,6 +7,7 @@
 #include "DRCharacter.generated.h"
 
 class UWidgetComponent;
+class ADRCleanserPart;
 
 /**
  * 플레이어 캐릭터 클래스
@@ -18,6 +19,7 @@ class DAERUNE_API ADRCharacter : public ADRCharacterBase
 	
 public:
 	ADRCharacter();
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	// 서버에서 컨트롤러가 빙의될 때 호출 (서버용 GAS 초기화)
 	virtual void PossessedBy(AController* NewController) override;
 	// PlayerState 리플리케이션 시 호출 (클라이언트용 GAS 초기화)
@@ -33,6 +35,39 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Container System")
 	float ContainerHealth = 100.f;
+
+	// ========== 부품 시스템 ==========
+
+	// 부품 보유 상태 조회
+	UFUNCTION(BlueprintCallable, Category = "Part System")
+	bool IsCarryingPart() const { return bIsCarryingPart; }
+
+	// 부품 획득 처리
+	UFUNCTION(BlueprintCallable, Category = "Part System")
+	bool PickupPart(class ADRCleanserPart* Part);
+
+	// 부품 설치 처리
+	UFUNCTION(BlueprintCallable, Category = "Part System")
+	void InstallCarriedPart();
+
+protected:
+	// ========== 부품 상태 ==========
+
+	// 부품 보유 여부
+	UPROPERTY(ReplicatedUsing = OnRep_bIsCarryingPart, BlueprintReadOnly, Category = "Part System")
+	bool bIsCarryingPart;
+
+	// 들고 있는 부품
+	UPROPERTY(ReplicatedUsing = OnRep_CarriedPart, BlueprintReadOnly, Category = "Part System")
+	TObjectPtr<class ADRCleanserPart> CarriedPart;
+
+	// ========== 리플리케이션 콜백 ==========
+
+	UFUNCTION()
+	void OnRep_bIsCarryingPart();
+
+	UFUNCTION()
+	void OnRep_CarriedPart();
 
 private:
 	// GAS 초기화

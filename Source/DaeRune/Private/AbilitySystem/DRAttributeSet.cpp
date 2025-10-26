@@ -308,6 +308,8 @@ void UDRAttributeSet::SetEffectProperties(const FGameplayEffectModCallbackData& 
 
 void UDRAttributeSet::ShowFloatingText(const FEffectProperties& Props, float Damage) const
 {
+	if (!Props.SourceCharacter || !Props.TargetCharacter) return;
+
 	if (Props.SourceCharacter != Props.TargetCharacter)
 	{
 		if (ADRPlayerController* PC = Cast<ADRPlayerController>(Props.SourceCharacter->Controller))

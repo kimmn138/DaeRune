@@ -9,11 +9,20 @@
 #include "Input/DRInputComponent.h"
 #include "GameFramework/Character.h"
 #include "UI/Widget/DamageTextComponent.h"
+#include "Actor/DRCleanserPart.h"
+#include "Character/DRCharacter.h"
+#include "Camera/CameraComponent.h"
 
 ADRPlayerController::ADRPlayerController()
 {
 	// 멀티플레이 리플리케이션 활성화
 	bReplicates = true;
+
+	// 부품 시스템 초기화
+	bPartDetectionEnabled = false;
+	CurrentDetectedPart = nullptr;
+	NearbyPart = nullptr;
+	LineTraceTimer = 0.f;
 }
 
 void ADRPlayerController::OnCorruptedStateChanged(bool bIsStateChanged)
@@ -46,6 +55,76 @@ void ADRPlayerController::ShowDamageNumber_Implementation(float DamageAmount, AC
 	}
 }
 
+void ADRPlayerController::SetPartDetectionEnabled(bool bEnabled, ADRCleanserPart* Part)
+{
+	if (bEnabled)
+	{
+		// 라인트레이싱 활성화
+		bPartDetectionEnabled = true;
+		NearbyPart = Part;
+		LineTraceTimer = 0.f;
+	}
+	else
+	{
+		// 해당 부품이 현재 근처 부품과 같을 때만 비활성화
+		if (NearbyPart == Part)
+		{
+			bPartDetectionEnabled = false;
+			NearbyPart = nullptr;
+			
+			// 현재 감지된 부품이 있으면 UI 숨김 알림
+			if (CurrentDetectedPart)
+			{
+				CurrentDetectedPart->OnLineTraceLost(this);
+				CurrentDetectedPart = nullptr;
+			}
+		}
+	}
+}
+
+ADRCleanserPart* ADRPlayerController::FindPartByLineTrace()
+{
+	// 캐릭터 가져오기
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter) return nullptr;
+
+	// 캐릭터가 이미 부품을 들고 있으면 감지하지 않음
+	if (DRCharacter->IsCarryingPart()) return nullptr;
+
+	// 카메라 컴포넌트 가져오기
+	UCameraComponent* Camera = DRCharacter->FindComponentByClass<UCameraComponent>();
+	if (!Camera) return nullptr;
+
+	// 라인트레이싱 시작/끝 위치 계산
+	FVector Start = Camera->GetComponentLocation();
+	FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
+
+	// 라인트레이싱 실행
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(DRCharacter);
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(
+		HitResult,
+		Start,
+		End,
+		ECC_Visibility,
+		QueryParams
+	);
+
+	// 부품에 히트했는지 확인
+	if (bHit)
+	{
+		ADRCleanserPart* HitPart = Cast<ADRCleanserPart>(HitResult.GetActor());
+		if (HitPart && HitPart->CanBePickedUp())
+		{
+			return HitPart;
+		}
+	}
+
+	return nullptr;
+}
+
 void ADRPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
@@ -66,6 +145,42 @@ void ADRPlayerController::BeginPlay()
 
 	// 플레이어는 TeamId 0
 	SetGenericTeamId(FGenericTeamId(0));
+}
+
+void ADRPlayerController::PlayerTick(float DeltaTime)
+{
+	Super::PlayerTick(DeltaTime);
+
+	// 부품 감지가 비활성화되어 있으면 스킵
+	if (!bPartDetectionEnabled) return;
+
+	// 라인트레이싱 타이머 업데이트
+	LineTraceTimer += DeltaTime;
+	if (LineTraceTimer >= LineTraceUpdateInterval)
+	{
+		LineTraceTimer = 0.f;
+
+		// 부품 감지
+		ADRCleanserPart* DetectedPart = FindPartByLineTrace();
+
+		// 감지된 부품이 변경되었는지 확인
+		if (DetectedPart != CurrentDetectedPart)
+		{
+			// 이전에 감지된 부품이 있으면 알림
+			if (CurrentDetectedPart)
+			{
+				CurrentDetectedPart->OnLineTraceLost(this);
+			}
+
+			CurrentDetectedPart = DetectedPart;
+
+			// 새로 감지된 부품이 있으면 알림
+			if (CurrentDetectedPart)
+			{
+				CurrentDetectedPart->OnLineTraceDetected(this);
+			}
+		}
+	}
 }
 
 void ADRPlayerController::SetupInputComponent()
@@ -133,6 +248,14 @@ void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::HandleInteract()
 {
+	// 부품 획득 시도
+	if (CurrentDetectedPart)
+	{
+		ServerRequestPickupPart(CurrentDetectedPart);
+		return;
+	}
+
+	// 기존 델리게이트 브로드캐스트 (클렌저 사이트 설치용)
 	OnInteractPressed.Broadcast();
 }
 
@@ -173,4 +296,16 @@ UDRAbilitySystemComponent* ADRPlayerController::GetASC()
 		DRAbilitySystemComponent = Cast<UDRAbilitySystemComponent>(UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetPawn<APawn>()));
 	}
 	return DRAbilitySystemComponent;
+}
+
+void ADRPlayerController::ServerRequestPickupPart_Implementation(ADRCleanserPart* Part)
+{
+	if (!HasAuthority() || !Part) return;
+
+	// 캐릭터 가져오기
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter) return;
+
+	// 부품 획득 시도
+	DRCharacter->PickupPart(Part);
 }

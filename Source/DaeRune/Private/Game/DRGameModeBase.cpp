@@ -61,8 +61,14 @@ bool ADRGameModeBase::CheckTeamWipeout()
 		ADRCharacterBase* Character = Cast<ADRCharacterBase>(PlayerState->GetPawn());
 		if (!Character) continue;
 
-		// bDead 변수로 정확하게 체크!
-		if (!Character->IsDead()) AlivePlayerCount++;
+		// CombatInterface로 죽음 체크
+		if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(Character))
+		{
+			if (!CombatInterface->Execute_IsDead(Character)) 
+			{
+				AlivePlayerCount++;
+			}
+		}
 	}
 
 	// 플레이어가 1명 이상 있고, 생존자가 0명이면 전멸
