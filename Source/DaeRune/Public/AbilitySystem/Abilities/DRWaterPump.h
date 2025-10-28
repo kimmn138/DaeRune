@@ -59,7 +59,7 @@ protected:
 
     // 데미지 적용 간격 (1초 = 10 ticks)
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Pump")
-    int32 DamageApplicationInterval = 10;
+    int32 DamageApplicationInterval = 5;
 
     // 현재 타겟과 이전 타겟 추적
     UPROPERTY(BlueprintReadOnly, Category = "Water Pump")

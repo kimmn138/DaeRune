@@ -35,7 +35,7 @@ protected:
 
 	// 로비 맵 이름
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage|Config")
-	FString LobbyMapName = TEXT("StartupMap");
+	FString LobbyMapName = TEXT("LobbyMap");
 
 	// ========== 클렌저 사이트 ==========
 

@@ -11,7 +11,7 @@
 ADRStageGameMode::ADRStageGameMode()
 {
 	// 기본 설정
-	LobbyMapName = TEXT("StartupMap");
+	LobbyMapName = TEXT("LobbyMap");
 	WipeoutDelayTime = 3.0f;
 }
 
