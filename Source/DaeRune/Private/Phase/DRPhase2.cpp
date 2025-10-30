@@ -13,30 +13,20 @@ void UDRPhase2::OnPhaseStart()
 {
 	Super::OnPhaseStart();
 
-	UE_LOG(LogTemp, Warning, TEXT("========== Phase2: OnPhaseStart =========="));
+	if (!GameMode || !GameState) return;
 
-	if (!GameMode || !GameState)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Phase2: GameMode or GameState is null!"));  // ← 추가
-		return;
-	}
+	// 목표 설정
+	SetupPhaseObjective(2);
 
 	// GameState Phase2 초기화
 	GameState->SetCollectedParts(0);
 	GameState->SetCleanserActivated(false);
-	UE_LOG(LogTemp, Log, TEXT("Phase2: GameState initialized"));  // ← 추가
 
 	// Phase1에서 선택된 활성 클렌저 사이트 가져오기
 	const TArray<TObjectPtr<ADRCleanserSite>>& ActiveSites = GetActiveCleanserSites();
 
-	UE_LOG(LogTemp, Warning, TEXT("Phase2: Found %d active cleanser sites"), ActiveSites.Num());  // ← 추가
-
 	// 클렌저 사이트 유효성 검증
-	if (ActiveSites.Num() != 2)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Phase2: ActiveCleanserSites must be exactly 2!"));
-		return;
-	}
+	if (ActiveSites.Num() != 2) return;
 
 	// 완료된 사이트 추적 초기화
 	CompletedSites.Empty();
@@ -48,21 +38,14 @@ void UDRPhase2::OnPhaseStart()
 		{
 			// 부품 설치 이벤트 구독
 			Site->OnPartInstalled.AddDynamic(this, &UDRPhase2::OnPartInstalled);
-			UE_LOG(LogTemp, Log, TEXT("Phase2: Subscribed to OnPartInstalled for site %s"), *Site->GetName());  // ← 추가
 		}
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("Phase2: Finding spawn points..."));  // ← 추가
 
 	// 스폰 포인트 찾기
 	FindEnemySpawnPoints();
 
-	UE_LOG(LogTemp, Warning, TEXT("Phase2: Spawning enemies..."));  // ← 추가
-
 	// 부품을 들고 도망치는 적 스폰
 	SpawnPartCarryingEnemies();
-
-	UE_LOG(LogTemp, Warning, TEXT("Phase2: OnPhaseStart completed"));  // ← 추가
 }
 
 void UDRPhase2::OnPhaseEnd()
@@ -88,22 +71,12 @@ void UDRPhase2::OnPhaseEnd()
 
 void UDRPhase2::FindEnemySpawnPoints()
 {
-	if (!GameMode)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Phase2: GameMode is null in FindEnemySpawnPoints!"));  // ← 추가
-		return;
-	}
+	if (!GameMode) return;
 
 	UWorld* World = GameMode->GetWorld();
-	if (!World)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Phase2: World is null!"));  // ← 추가
-		return;
-	}
+	if (!World) return;
 
 	EnemySpawnPoints.Empty();
-
-	UE_LOG(LogTemp, Warning, TEXT("Phase2: Searching for spawn points with tag '%s'"), *SpawnPointTag.ToString());  // ← 추가
 
 	// 태그로 레벨에서 스폰 포인트 찾기
 	for (TActorIterator<AActor> It(World); It; ++It)
@@ -112,106 +85,44 @@ void UDRPhase2::FindEnemySpawnPoints()
 		if (Actor && Actor->ActorHasTag(SpawnPointTag))
 		{
 			EnemySpawnPoints.Add(Actor);
-			UE_LOG(LogTemp, Log, TEXT("Phase2: Found spawn point: %s at %s"),
-				*Actor->GetName(), *Actor->GetActorLocation().ToString());  // ← 추가
 		}
-	}
-
-	// 유효성 검증
-	if (EnemySpawnPoints.Num() != 4)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Phase2: Found %d spawn points with tag '%s', but need exactly 4!"),
-			EnemySpawnPoints.Num(), *SpawnPointTag.ToString());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Phase2: Found 4 spawn points successfully"));
 	}
 }
 
 void UDRPhase2::SpawnPartCarryingEnemies()
 {
-	if (!GameMode)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Phase2: GameMode is null in SpawnPartCarryingEnemies!"));  // ← 추가
-		return;
-	}
+	if (!GameMode) return;
 
 	// 적 클래스 유효성 검증
-	if (!PartCarryingEnemyClass)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Phase2: PartCarryingEnemyClass is not set!"));
-		return;
-	}
-	else
-	{
-		UE_LOG(LogTemp, Log, TEXT("Phase2: PartCarryingEnemyClass is set to %s"),
-			*PartCarryingEnemyClass->GetName());  // ← 추가
-	}
+	if (!PartCarryingEnemyClass) return;
 
 	// 스폰 포인트 유효성 검증
-	if (EnemySpawnPoints.Num() != 4)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Phase2: Cannot spawn enemies, spawn points count is %d (need 4)!"),
-			EnemySpawnPoints.Num());  // ← 수정
-		return;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("Phase2: Starting enemy spawn loop..."));  // ← 추가
+	if (EnemySpawnPoints.Num() != 4) return;
 
 	// 각 스폰 포인트에 적 스폰
-	int32 SpawnIndex = 0;  // ← 추가
 	for (AActor* SpawnPoint : EnemySpawnPoints)
 	{
-		SpawnIndex++;  // ← 추가
-		if (!SpawnPoint)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Phase2: Spawn point %d is null, skipping..."), SpawnIndex);
-			continue;
-		}
-
-		UE_LOG(LogTemp, Warning, TEXT("Phase2: Spawning enemy %d at %s"),
-			SpawnIndex, *SpawnPoint->GetName());  // ← 추가
+		if (!SpawnPoint) continue;
 
 		ADREnemy* SpawnedEnemy = SpawnEnemyAtLocation(SpawnPoint);
 		if (SpawnedEnemy)
 		{
 			// 스폰된 적 추적 (OnPhaseEnd에서 남은 적 정리용)
 			SpawnedEnemies.Add(SpawnedEnemy);
-			UE_LOG(LogTemp, Warning, TEXT("Phase2: Successfully spawned enemy %d. Total spawned: %d"),
-				SpawnIndex, SpawnedEnemies.Num());  // ← 추가
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("Phase2: Failed to spawn enemy %d!"), SpawnIndex);  // ← 추가
 		}
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("Phase2: Spawn loop completed. Total enemies spawned: %d"),
-		SpawnedEnemies.Num());  // ← 추가
 }
 
 ADREnemy* UDRPhase2::SpawnEnemyAtLocation(AActor* SpawnPoint)
 {
-	if (!GameMode || !SpawnPoint)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Phase2: GameMode or SpawnPoint is null in SpawnEnemyAtActor!"));  // ← 추가
-		return nullptr;
-	}
+	if (!GameMode || !SpawnPoint) return nullptr;
 
 	UWorld* World = GameMode->GetWorld();
-	if (!World)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Phase2: World is null in SpawnEnemyAtActor!"));  // ← 추가
-		return nullptr;
-	}
+	if (!World) return nullptr;
 
 	// 스폰 포인트의 위치와 회전 가져오기
 	FVector Location = SpawnPoint->GetActorLocation();
 	FRotator Rotation = SpawnPoint->GetActorRotation();
-
-	UE_LOG(LogTemp, Log, TEXT("Phase2: Attempting to spawn %s at location %s"),
-		*PartCarryingEnemyClass->GetName(), *Location.ToString());  // ← 추가
 
 	// 스폰 파라미터 설정
 	FActorSpawnParameters SpawnParams;
@@ -224,17 +135,6 @@ ADREnemy* UDRPhase2::SpawnEnemyAtLocation(AActor* SpawnPoint)
 		Rotation,
 		SpawnParams
 	);
-
-	if (SpawnedEnemy)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Phase2: Spawned part-carrying enemy '%s' at %s (from %s)"),
-			*SpawnedEnemy->GetName(), *Location.ToString(), *SpawnPoint->GetName());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("Phase2: Failed to spawn enemy at %s (from %s)"),
-			*Location.ToString(), *SpawnPoint->GetName());
-	}
 
 	return SpawnedEnemy;
 }
@@ -254,6 +154,7 @@ void UDRPhase2::OnPartInstalled(ADRCleanserSite* Site)
 		}
 	}
 	GameState->SetCollectedParts(TotalInstalledParts);
+	GameState->UpdatePhaseObjectiveProgress(TotalInstalledParts);
 
 	// 해당 사이트의 부품 설치가 완료되었는지 확인
 	if (Site->IsPartInstallationComplete())

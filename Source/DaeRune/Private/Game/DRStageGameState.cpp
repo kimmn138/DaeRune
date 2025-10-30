@@ -6,7 +6,7 @@
 
 ADRStageGameState::ADRStageGameState()
 {
-    // ÃÊ±â°ª ¼³Á¤
+    // ï¿½Ê±â°ª ï¿½ï¿½ï¿½ï¿½
     CurrentPhaseIndex = -1;
     CurrentPhaseState = EPhaseState::NotStarted;
 
@@ -20,18 +20,23 @@ ADRStageGameState::ADRStageGameState()
 
     // Phase 3
     CurrentWave = 0;
-    TotalWaves = 5; // ±âº»°ª
+    TotalWaves = 5; // ï¿½âº»ï¿½ï¿½
     CleanserHealth = 1000.0f;
 
     // Phase 4
     BossHealth = 1000.0f;
+
+    CurrentPhaseObjective.PhaseNumber = 0;  // 0ì€ "ì¤€ë¹„ ì¤‘" ì˜ë¯¸
+    CurrentPhaseObjective.ObjectiveTitle = FText::FromString("Preparing...");
+    CurrentPhaseObjective.ProgressFormat = FText::FromString("Progress");
+    CurrentPhaseObjective.RequiredCount = 0;
 }
 
 void ADRStageGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-    // »óÅÂ ¸®ÇÃ¸®ÄÉÀÌ¼Ç
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ã¸ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½
     DOREPLIFETIME(ADRStageGameState, CurrentPhaseIndex);
     DOREPLIFETIME(ADRStageGameState, CurrentPhaseState);
 
@@ -50,6 +55,10 @@ void ADRStageGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 
     // Phase 4
     DOREPLIFETIME(ADRStageGameState, BossHealth);
+
+    // UI ì—…ë°ì´íŠ¸
+    DOREPLIFETIME(ADRStageGameState, CurrentPhaseObjective);
+    DOREPLIFETIME(ADRStageGameState, CurrentObjectiveProgress);
 }
 
 void ADRStageGameState::SetCurrentPhaseIndex(int32 NewIndex)
@@ -122,7 +131,7 @@ void ADRStageGameState::SetCleanserHealth(float Health)
     {
         CleanserHealth = FMath::Clamp(Health, 0.0f, 1000.0f);
 
-        // Å¬·»Àú Ã¼·ÂÀÌ 0ÀÌ µÇ¸é ½ÇÆĞ Ã³¸®
+        // Å¬ï¿½ï¿½ï¿½ï¿½ Ã¼ï¿½ï¿½ï¿½ï¿½ 0ï¿½ï¿½ ï¿½Ç¸ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
         if (CleanserHealth <= 0.0f)
         {
             SetCurrentPhaseState(EPhaseState::Failed);
@@ -138,14 +147,36 @@ void ADRStageGameState::SetBossHealth(float Health)
     }
 }
 
+void ADRStageGameState::SetPhaseObjective(const FPhaseObjectiveData& ObjectiveData)
+{
+    if (!HasAuthority()) return;
+    
+    CurrentPhaseObjective = ObjectiveData;
+    CurrentObjectiveProgress = 0;
+    OnPhaseObjectiveChangedDelegate.Broadcast();
+}
+
+void ADRStageGameState::UpdatePhaseObjectiveProgress(int32 NewCount)
+{
+    if (!HasAuthority()) return;
+    
+    CurrentObjectiveProgress = FMath::Clamp(NewCount, 0, CurrentPhaseObjective.RequiredCount);
+    OnPhaseObjectiveChangedDelegate.Broadcast();
+}
+
 void ADRStageGameState::OnRep_CurrentPhaseIndex()
 {
-    // Å¬¶óÀÌ¾ğÆ® UI ¾÷µ¥ÀÌÆ®
+    // Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ® UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
+}
+
+void ADRStageGameState::OnRep_CurrentPhaseObjective()
+{
+    OnPhaseObjectiveChangedDelegate.Broadcast();
 }
 
 void ADRStageGameState::OnRep_CurrentPhaseState()
 {
-    // Å¬¶óÀÌ¾ğÆ® »óÅÂ º¯°æ ¾Ë¸²
+    // Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ë¸ï¿½
     FString StateString;
     switch (CurrentPhaseState)
     {
@@ -162,4 +193,9 @@ void ADRStageGameState::OnRep_CurrentPhaseState()
         StateString = "Failed";
         break;
     }
+}
+
+void ADRStageGameState::OnRep_CurrentObjectiveProgress()
+{
+    OnPhaseObjectiveChangedDelegate.Broadcast();
 }

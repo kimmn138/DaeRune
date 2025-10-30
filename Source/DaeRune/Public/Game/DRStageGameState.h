@@ -4,8 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "Game/DRGameStateBase.h"
-#include "Net/UnrealNetwork.h"
+#include "Phase/DRPhaseBase.h"
 #include "DRStageGameState.generated.h"
+
+// 페이즈 목표 업데이트 델리게이트
+DECLARE_MULTICAST_DELEGATE(FOnPhaseObjectiveChanged);
 
 // 페이즈 상태 열거형
 UENUM(BlueprintType)
@@ -88,6 +91,18 @@ public:
     // 보스가 데미지 받을 때 (현재 보스 체력)
     void SetBossHealth(float Health);
 
+    // Phase 목표 UI 관련
+    FOnPhaseObjectiveChanged OnPhaseObjectiveChangedDelegate;
+    
+    void SetPhaseObjective(const FPhaseObjectiveData& ObjectiveData);
+    void UpdatePhaseObjectiveProgress(int32 NewCount);
+    
+    FPhaseObjectiveData GetCurrentPhaseObjective() const { return CurrentPhaseObjective; }
+    int32 GetCurrentObjectiveProgress() const { return CurrentObjectiveProgress; }
+
+    UPROPERTY(ReplicatedUsing = OnRep_CurrentPhaseObjective)
+    FPhaseObjectiveData CurrentPhaseObjective;
+
 protected:
     // ========== 리플리케이션 콜백 ==========
     UFUNCTION()
@@ -95,6 +110,12 @@ protected:
 
     UFUNCTION()
     void OnRep_CurrentPhaseState();
+
+    UFUNCTION()
+    void OnRep_CurrentPhaseObjective();
+    
+    UFUNCTION()
+    void OnRep_CurrentObjectiveProgress();
 
 private:
     // ========== 상태 리플리케이션 변수들 ==========
@@ -131,4 +152,8 @@ private:
     // ========== Phase 4: 보스 ==========
     UPROPERTY(Replicated)
     float BossHealth;
+
+    // ========== UI 업데이트 ==========
+    UPROPERTY(ReplicatedUsing = OnRep_CurrentObjectiveProgress)
+    int32 CurrentObjectiveProgress = 0;
 };

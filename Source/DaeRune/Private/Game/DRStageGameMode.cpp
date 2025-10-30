@@ -4,13 +4,12 @@
 #include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
 #include "Actor/DRCleanserSite.h"
-#include "Kismet/GameplayStatics.h"
 #include "Phase/DRPhaseBase.h"
 #include "EngineUtils.h"
 
 ADRStageGameMode::ADRStageGameMode()
 {
-	// ±âº» ¼³Á¤
+	// ï¿½âº» ï¿½ï¿½ï¿½ï¿½
 	LobbyMapName = TEXT("LobbyMap");
 	WipeoutDelayTime = 3.0f;
 }
@@ -19,16 +18,16 @@ void ADRStageGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// GameState Ä³½Ì
+	// GameState Ä³ï¿½ï¿½
 	CachedGameState = GetGameState<ADRStageGameState>();
 
-	// ·¹º§¿¡¼­ Å¬·»Àú »çÀÌÆ® ÀÚµ¿ Å½»ö
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½Úµï¿½ Å½ï¿½ï¿½
 	UWorld* World = GetWorld();
 	if (World)
 	{
 		CleanserSites.Empty();
 
-		// ÅÂ±×·Î Å¬·»Àú »çÀÌÆ® Ã£±â
+		// ï¿½Â±×·ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® Ã£ï¿½ï¿½
 		for (TActorIterator<ADRCleanserSite> It(World); It; ++It)
 		{
 			ADRCleanserSite* Site = *It;
@@ -39,7 +38,7 @@ void ADRStageGameMode::BeginPlay()
 		}
 	}
 
-	// ÆäÀÌÁî ½Ã½ºÅÛ ÃÊ±âÈ­
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ã½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­
 	InitializePhaseSystem();
 }
 
@@ -47,7 +46,7 @@ void ADRStageGameMode::HandleWipeout()
 {
 	if (!HasAuthority()) return;
 
-	// TODO: ÆÐ¹è UI Ç¥½Ã, ÆÐ¹è »ç¿îµå Àç»ý µî
+	// TODO: ï¿½Ð¹ï¿½ UI Ç¥ï¿½ï¿½, ï¿½Ð¹ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½
 
 	ReturnToLobby();
 }
@@ -63,7 +62,7 @@ void ADRStageGameMode::ReturnToLobby()
 		World->ServerTravel(LobbyMapName + TEXT("?listen"));
 	}
 
-	// ÇÃ·¡±× ¸®¼Â
+	// ï¿½Ã·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	bIsWipeoutInProgress = false;
 }
 
@@ -71,23 +70,23 @@ void ADRStageGameMode::InitializePhaseSystem()
 {
 	if (!HasAuthority()) return;
 
-	// Å¬·»Àú »çÀÌÆ® À¯È¿¼º °ËÁõ
+	// Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½È¿ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (CleanserSites.Num() < 3) return;
 
-	// ±âÁ¸ ÆäÀÌÁî ÀÎ½ºÅÏ½º Á¤¸®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Î½ï¿½ï¿½Ï½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	PhaseInstances.Empty();
 
-	// ÆäÀÌÁî Å¬·¡½ºµé·ÎºÎÅÍ ÀÎ½ºÅÏ½º »ý¼º
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Îºï¿½ï¿½ï¿½ ï¿½Î½ï¿½ï¿½Ï½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	for (TSubclassOf<UDRPhaseBase> PhaseClass : PhaseClasses)
 	{
 		if (PhaseClass)
 		{
 			UDRPhaseBase* NewPhase = NewObject<UDRPhaseBase>(this, PhaseClass);
 
-			// ÆäÀÌÁî ÃÊ±âÈ­ (GameMode, GameState Àü´Þ)
+			// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­ (GameMode, GameState ï¿½ï¿½ï¿½ï¿½)
 			NewPhase->Initialize(this, CachedGameState);
 
-			// Å¬·»Àú »çÀÌÆ® ¼³Á¤ (¸ðµç ÆäÀÌÁî°¡ °øÀ¯)
+			// Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½î°¡ ï¿½ï¿½ï¿½ï¿½)
 			TArray<ADRCleanserSite*> SitesArray;
 			for (const TObjectPtr<ADRCleanserSite>& Site : CleanserSites)
 			{
@@ -102,7 +101,7 @@ void ADRStageGameMode::InitializePhaseSystem()
 		}
 	}
 
-	// Ã¹ ¹øÂ° ÆäÀÌÁî·Î ½ÃÀÛ
+	// Ã¹ ï¿½ï¿½Â° ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (PhaseInstances.Num() > 0)
 	{
 		StartPhase(0);
@@ -115,15 +114,15 @@ void ADRStageGameMode::StartPhase(int32 PhaseIndex)
 
 	if (PhaseIndex < 0 || PhaseIndex >= PhaseInstances.Num()) return;
 
-	// ÀÌÀü ÆäÀÌÁî Á¤¸®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (CurrentPhase)
 	{
-		// ÀÌÀü PhaseÀÇ ActiveCleanserSites ÀúÀå
+		// ï¿½ï¿½ï¿½ï¿½ Phaseï¿½ï¿½ ActiveCleanserSites ï¿½ï¿½ï¿½ï¿½
 		TArray<TObjectPtr<ADRCleanserSite>> PreviousActiveSites = CurrentPhase->GetActiveCleanserSites();
 
 		CurrentPhase->OnPhaseEnd();
 
-		// »õ Phase·Î Àü´Þ
+		// ï¿½ï¿½ Phaseï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		if (PhaseIndex > 0 && PreviousActiveSites.Num() > 0)
 		{
 			UDRPhaseBase* NextPhase = PhaseInstances[PhaseIndex];
@@ -134,20 +133,20 @@ void ADRStageGameMode::StartPhase(int32 PhaseIndex)
 		}
 	}
 
-	// »õ ÆäÀÌÁî ¼³Á¤
+	// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	CurrentPhase = PhaseInstances[PhaseIndex];
 
-	// GameState ¾÷µ¥ÀÌÆ®
+	// GameState ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	CachedGameState->SetCurrentPhaseIndex(PhaseIndex);
 	CachedGameState->SetCurrentPhaseState(EPhaseState::InProgress);
 
-	// ÆäÀÌÁî ½ÃÀÛ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (CurrentPhase)
 	{
 		CurrentPhase->OnPhaseStart();
 	}
 
-	// ºí·çÇÁ¸°Æ® ÀÌº¥Æ® È£Ãâ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½Ìºï¿½Æ® È£ï¿½ï¿½
 	// OnPhaseStarted();
 }
 
@@ -155,19 +154,19 @@ void ADRStageGameMode::EndCurrentPhase()
 {
 	if (!HasAuthority() || !CachedGameState || !CurrentPhase) return;
 
-	// ÆäÀÌÁî ¿Ï·á »óÅÂ·Î º¯°æ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½ ï¿½ï¿½ï¿½Â·ï¿½ ï¿½ï¿½ï¿½ï¿½
 	CachedGameState->SetCurrentPhaseState(EPhaseState::Completed);
 
-	// ÆäÀÌÁî Á¾·á Ã³¸®
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 	if (CurrentPhase)
 	{
-		CurrentPhase->OnPhaseEnd(); // PhaseBase¿¡¼­ ±¸Çö
+		CurrentPhase->OnPhaseEnd(); // PhaseBaseï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	}
 
-	// ºí·çÇÁ¸°Æ® ¿Ï·á ÀÌº¥Æ® È£Ãâ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½Ï·ï¿½ ï¿½Ìºï¿½Æ® È£ï¿½ï¿½
 	// OnPhaseCompleted();
 
-	UE_LOG(LogTemp, Warning, TEXT("Transitioning to next phase..."));  // ¡ç Ãß°¡
+	UE_LOG(LogTemp, Warning, TEXT("Transitioning to next phase..."));  // ï¿½ï¿½ ï¿½ß°ï¿½
 	TransitionToNextPhase();
 }
 
@@ -178,15 +177,15 @@ void ADRStageGameMode::TransitionToNextPhase()
 	int32 CurrentIndex = CachedGameState->GetCurrentPhaseIndex();
 	int32 NextIndex = CurrentIndex + 1;
 
-	// ¸ðµç ÆäÀÌÁî ¿Ï·á Ã¼Å©
+	// ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½ Ã¼Å©
 	if (NextIndex >= PhaseInstances.Num())
 	{
-		// ºí·çÇÁ¸°Æ® ÀüÃ¼ ¿Ï·á ÀÌº¥Æ® È£Ãâ
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½Ã¼ ï¿½Ï·ï¿½ ï¿½Ìºï¿½Æ® È£ï¿½ï¿½
 		// OnAllPhasesCompleted();
 		return;
 	}
 
-	// ´ÙÀ½ ÆäÀÌÁî·Î ÀüÈ¯
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È¯
 	StartPhase(NextIndex);
 }
 
@@ -199,68 +198,68 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 
 	UE_LOG(LogTemp, Warning, TEXT("========== ValidatePhaseCompletion: Phase %d =========="), CurrentPhaseIndex);
 
-	// ÆäÀÌÁîº° ¿Ï·á Á¶°Ç °ËÁõ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½îº° ï¿½Ï·ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	switch (CurrentPhaseIndex)
 	{
-	case 0: // Phase 1: Å¬·»Àú È®º¸
+	case 0: // Phase 1: Å¬ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	{
 		bool bAreaSecured = CachedGameState->IsCleanserAreaSecured();
 		int32 RemainingEnemies = CachedGameState->GetRemainingEnemiesInArea();
 
 		UE_LOG(LogTemp, Warning, TEXT("Phase1 Check - AreaSecured: %s, RemainingEnemies: %d"),
-			bAreaSecured ? TEXT("TRUE") : TEXT("FALSE"), RemainingEnemies);  // ¡ç Ãß°¡
+			bAreaSecured ? TEXT("TRUE") : TEXT("FALSE"), RemainingEnemies);  // ï¿½ï¿½ ï¿½ß°ï¿½
 
 		bIsCompleted = bAreaSecured && (RemainingEnemies == 0);
 	}
 	break;
 
-	case 1: // Phase 2: ºÎÇ° È¸¼ö
+	case 1: // Phase 2: ï¿½ï¿½Ç° È¸ï¿½ï¿½
 	{
 		int32 CollectedParts = CachedGameState->GetCollectedParts();
 		bool bActivated = CachedGameState->IsCleanserActivated();
 
 		UE_LOG(LogTemp, Warning, TEXT("Phase2 Check - CollectedParts: %d, Activated: %s"),
-			CollectedParts, bActivated ? TEXT("TRUE") : TEXT("FALSE"));  // ¡ç Ãß°¡
+			CollectedParts, bActivated ? TEXT("TRUE") : TEXT("FALSE"));  // ï¿½ï¿½ ï¿½ß°ï¿½
 
 		bIsCompleted = (CollectedParts >= 4) && bActivated;
 	}
 	break;
 
-	case 2: // Phase 3: ¹æ¾î
+	case 2: // Phase 3: ï¿½ï¿½ï¿½
 	{
 		int32 CurrentWave = CachedGameState->GetCurrentWave();
 		int32 TotalWaves = CachedGameState->GetTotalWaves();
 
 		UE_LOG(LogTemp, Warning, TEXT("Phase3 Check - CurrentWave: %d, TotalWaves: %d"),
-			CurrentWave, TotalWaves);  // ¡ç Ãß°¡
+			CurrentWave, TotalWaves);  // ï¿½ï¿½ ï¿½ß°ï¿½
 
 		bIsCompleted = CurrentWave >= TotalWaves;
 	}
 	break;
 
-	case 3: // Phase 4: º¸½º
+	case 3: // Phase 4: ï¿½ï¿½ï¿½ï¿½
 	{
 		float BossHealth = CachedGameState->GetBossHealth();
 
-		UE_LOG(LogTemp, Warning, TEXT("Phase4 Check - BossHealth: %f"), BossHealth);  // ¡ç Ãß°¡
+		UE_LOG(LogTemp, Warning, TEXT("Phase4 Check - BossHealth: %f"), BossHealth);  // ï¿½ï¿½ ï¿½ß°ï¿½
 
 		bIsCompleted = BossHealth <= 0.0f;
 	}
 	break;
 
 	default:
-		UE_LOG(LogTemp, Error, TEXT("ValidatePhaseCompletion: Invalid phase index %d"), CurrentPhaseIndex);  // ¡ç Ãß°¡
+		UE_LOG(LogTemp, Error, TEXT("ValidatePhaseCompletion: Invalid phase index %d"), CurrentPhaseIndex);  // ï¿½ï¿½ ï¿½ß°ï¿½
 		break;
 	}
 
 	if (bIsCompleted)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("========== Phase %d COMPLETED! =========="), CurrentPhaseIndex);  // ¡ç Ãß°¡
+		UE_LOG(LogTemp, Warning, TEXT("========== Phase %d COMPLETED! =========="), CurrentPhaseIndex);  // ï¿½ï¿½ ï¿½ß°ï¿½
 		EndCurrentPhase();
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Phase %d not completed yet"), CurrentPhaseIndex);  // ¡ç Ãß°¡
+		UE_LOG(LogTemp, Warning, TEXT("Phase %d not completed yet"), CurrentPhaseIndex);  // ï¿½ï¿½ ï¿½ß°ï¿½
 	}
 
 	return bIsCompleted;

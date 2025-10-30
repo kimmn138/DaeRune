@@ -10,6 +10,24 @@ class ADRStageGameMode;
 class ADRStageGameState;
 class ADRCleanserSite;
 
+USTRUCT(BlueprintType)
+struct FPhaseObjectiveData : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 PhaseNumber = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FText ObjectiveTitle; // "클렌저를 확보하세요"
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FText ProgressFormat; // "확보한 클렌저"
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 RequiredCount = 0;
+};
+
 /**
  * 모든 페이즈의 기본 클래스
  * 각 페이즈의 공통 로직을 담당
@@ -88,4 +106,11 @@ protected:
 	// Phase2, 3에서도 이 사이트들을 사용
 	UPROPERTY(BlueprintReadOnly, Category = "Phase")
 	TArray<TObjectPtr<ADRCleanserSite>> ActiveCleanserSites;
+
+	// ========== 페이즈 목표 UI ==========
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase|Config")
+	UDataTable* PhaseObjectiveDataTable;
+	
+	void SetupPhaseObjective(int32 PhaseNumber);
 };

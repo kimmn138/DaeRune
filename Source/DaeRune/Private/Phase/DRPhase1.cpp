@@ -13,6 +13,9 @@ void UDRPhase1::OnPhaseStart()
 
 	if (!GameMode || !GameState) return;
 
+	// 목표 설정
+	SetupPhaseObjective(1);
+
 	// GameState Phase 1 초기화
 	GameState->SetCleanserAreaSecured(false);
 	GameState->SetRemainingEnemiesInArea(0);
@@ -44,6 +47,7 @@ void UDRPhase1::OnEnemyDeath(AActor* DeadEnemy)
 
 	// GameState 업데이트
 	GameState->SetRemainingEnemiesInArea(AliveCount);
+	GameState->UpdatePhaseObjectiveProgress(GameState->CurrentPhaseObjective.RequiredCount - AliveCount);
 
 	// 모든 적이 죽었으면 지역 확보 완료
 	if (AliveCount == 0)

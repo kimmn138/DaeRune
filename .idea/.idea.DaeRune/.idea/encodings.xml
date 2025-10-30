@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Encoding">
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/DRLogChannels.cpp" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/DRLogChannels.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/DaeRune.cpp" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/DaeRune.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Private/Phase/DRPhase1.cpp" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Private/Phase/DRPhase2.cpp" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/AI/DRAIController.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Actor/DRCleanserPart.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Actor/DRCleanserSite.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Actor/DREffectActor.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Actor/DRProjectile.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Actor/DRSeedProjectile.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Actor/DRStageSelectActor.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Actor/DRWaterSource.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Character/DRCharacter.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Character/DRCharacterBase.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/DRAbilityTypes.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/DRAssetManager.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/DRGameplayTags.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Game/DRGameModeBase.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Game/DRGameStateBase.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Game/DRLobbyGameMode.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Game/DRLobbyGameState.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Game/DRStageGameMode.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Game/DRStageGameState.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Input/DRInputComponent.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Input/DRInputConfig.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Interaction/CombatInterface.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Interaction/EnemyInterface.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Phase/DRPhase1.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Phase/DRPhase2.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Phase/DRPhaseBase.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Player/DRPlayerController.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Player/DRPlayerState.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/UI/HUD/DRHUD.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/UI/Widget/DRUserWidget.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/UI/Widget/DamageTextComponent.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/UI/WidgetController/DRWidgetController.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/UI/WidgetController/OverlayWidgetController.h" charset="EUC-KR" />
+  </component>
+</project>

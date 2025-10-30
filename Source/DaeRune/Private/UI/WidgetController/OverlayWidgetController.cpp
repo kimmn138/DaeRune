@@ -4,21 +4,24 @@
 #include "UI/WidgetController/OverlayWidgetController.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "AbilitySystem/DRAttributeSet.h"
-#include "AbilitySystem/Data/AbilityInfo.h"
-#include "MultiplayerSessionsSubsystem.h"
+#include "Game/DRStageGameState.h"
+#include "Phase/DRPhaseBase.h"
 
 void UOverlayWidgetController::BroadcastInitialValues()
 {
-	// °ÔÀÓ ½ÃÀÛ ½Ã ÇöÀç ¾îÆ®¸®ºäÆ® °ªµéÀ» UI¿¡ Àü¼Û
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ UIï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	OnHealthChanged.Broadcast(GetDRAS()->GetHealth());
 	OnMaxHealthChanged.Broadcast(GetDRAS()->GetMaxHealth());
 	OnWaterChanged.Broadcast(GetDRAS()->GetWater());
 	OnMaxWaterChanged.Broadcast(GetDRAS()->GetMaxWater());
+
+	// í˜ì´ì¦ˆ ëª©í‘œ ì´ˆê¸°ê°’ ì¶”ê°€
+	HandlePhaseObjectiveChanged();
 }
 
 void UOverlayWidgetController::BindCallbacksToDependencies()
 {
-	// Äİ¹é ¹ÙÀÎµù
+	// ï¿½İ¹ï¿½ ï¿½ï¿½ï¿½Îµï¿½
 	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetHealthAttribute()).AddLambda(
 		[this](const FOnAttributeChangeData& Data)
 		{
@@ -47,19 +50,84 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 		}
 	);
 
-	// ¾îºô¸®Æ¼ Á¤º¸ ÃÊ±âÈ­ Ã³¸®
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­ Ã³ï¿½ï¿½
 	if (GetDRASC())
 	{
-		// ½ÃÀÛ ¾îºô¸®Æ¼°¡ ÀÌ¹Ì ºÎ¿©µÇ¾ú´Ù¸é Áï½Ã ºê·ÎµåÄ³½ºÆ®
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ï¿½ï¿½ ï¿½Ì¹ï¿½ ï¿½Î¿ï¿½ï¿½Ç¾ï¿½ï¿½Ù¸ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½Îµï¿½Ä³ï¿½ï¿½Æ®
 		if (GetDRASC()->bStartupAbilitiesGiven)
 		{
 			BroadcastAbilityInfo();
 		}
 		else
 		{
-			// ¾ÆÁ÷ ºÎ¿©µÇÁö ¾Ê¾Ò´Ù¸é ºÎ¿© ¿Ï·á ½ÃÁ¡¿¡ ºê·ÎµåÄ³½ºÆ®ÇÏµµ·Ï µ¨¸®°ÔÀÌÆ® ¹ÙÀÎµù
+			// ï¿½ï¿½ï¿½ï¿½ ï¿½Î¿ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¾Ò´Ù¸ï¿½ ï¿½Î¿ï¿½ ï¿½Ï·ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Îµï¿½Ä³ï¿½ï¿½Æ®ï¿½Ïµï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½Îµï¿½
 			GetDRASC()->AbilitiesGivenDelegate.AddUObject(this, &UOverlayWidgetController::BroadcastAbilityInfo);
 		}
 	}
+
+	// GameState í˜ì´ì¦ˆ ëª©í‘œ ë¸ë¦¬ê²Œì´íŠ¸ ë°”ì¸ë”©
+	if (ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>())
+	{
+		DRGameState->OnPhaseObjectiveChangedDelegate.AddLambda(
+			[this]()
+			{
+				HandlePhaseObjectiveChanged();
+			}
+		);
+	}
+}
+
+void UOverlayWidgetController::HandlePhaseObjectiveChanged()
+{
+	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
+    if (!DRGameState) 
+    {
+        UE_LOG(LogTemp, Warning, TEXT("HandlePhaseObjectiveChanged: GameState is null"));
+        return;
+    }
+    
+    FPhaseObjectiveData ObjectiveData = DRGameState->GetCurrentPhaseObjective();
+    int32 CurrentProgress = DRGameState->GetCurrentObjectiveProgress();
+    
+    // ë””ë²„ê¹… ë¡œê·¸
+    UE_LOG(LogTemp, Warning, TEXT("PhaseNumber: %d"), ObjectiveData.PhaseNumber);
+    UE_LOG(LogTemp, Warning, TEXT("ObjectiveTitle: %s"), *ObjectiveData.ObjectiveTitle.ToString());
+    UE_LOG(LogTemp, Warning, TEXT("ProgressFormat: %s"), *ObjectiveData.ProgressFormat.ToString());
+    
+    // âš¡ ì¤‘ìš”í•œ ìˆ˜ì •: í…ìŠ¤íŠ¸ê°€ ë¹„ì–´ìˆìœ¼ë©´ ìºì‹±í•˜ì§€ ì•Šê³  ë¦¬í„´
+    if (ObjectiveData.ObjectiveTitle.IsEmpty() || ObjectiveData.ProgressFormat.IsEmpty())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Objective texts are empty! Skipping update."));
+        return;  // ë¹„ì–´ìˆìœ¼ë©´ ìºì‹±ë„ í•˜ì§€ ì•Šê³  ê·¸ëƒ¥ ë¦¬í„´!
+    }
+    
+    // í…ìŠ¤íŠ¸ ì—…ë°ì´íŠ¸ (PhaseNumber ì²´í¬ + ê°•ì œ ì—…ë°ì´íŠ¸ ì¡°ê±´ ì¶”ê°€)
+    if (ObjectiveData.PhaseNumber != CachedPhaseNumber || 
+        (CachedPhaseNumber == ObjectiveData.PhaseNumber && !CachedObjectiveTitle.EqualTo(ObjectiveData.ObjectiveTitle)))
+    {
+        CachedPhaseNumber = ObjectiveData.PhaseNumber;
+        CachedObjectiveTitle = ObjectiveData.ObjectiveTitle;  // í…ìŠ¤íŠ¸ë„ ìºì‹±
+        
+        UE_LOG(LogTemp, Warning, TEXT("Broadcasting texts: Title=%s, Format=%s"), 
+            *ObjectiveData.ObjectiveTitle.ToString(), 
+            *ObjectiveData.ProgressFormat.ToString());
+            
+        OnObjectiveTextChanged.Broadcast(
+            ObjectiveData.ObjectiveTitle,
+            ObjectiveData.ProgressFormat
+        );
+    }
+    
+    // ì§„í–‰ë„ ì—…ë°ì´íŠ¸
+    if (CurrentProgress != CachedProgress || ObjectiveData.RequiredCount != CachedRequiredCount)
+    {
+        CachedProgress = CurrentProgress;
+        CachedRequiredCount = ObjectiveData.RequiredCount;
+        
+        OnObjectiveProgressChanged.Broadcast(
+            CurrentProgress,
+            ObjectiveData.RequiredCount
+        );
+    }
 }
 

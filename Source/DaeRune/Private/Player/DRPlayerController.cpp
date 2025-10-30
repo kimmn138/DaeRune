@@ -15,10 +15,10 @@
 
 ADRPlayerController::ADRPlayerController()
 {
-	// ¸ÖÆ¼ÇÃ·¹ÀÌ ¸®ÇÃ¸®ÄÉÀÌ¼Ç È°¼ºÈ­
+	// ï¿½ï¿½Æ¼ï¿½Ã·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ã¸ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ È°ï¿½ï¿½È­
 	bReplicates = true;
 
-	// ºÎÇ° ½Ã½ºÅÛ ÃÊ±âÈ­
+	// ï¿½ï¿½Ç° ï¿½Ã½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­
 	bPartDetectionEnabled = false;
 	CurrentDetectedPart = nullptr;
 	NearbyPart = nullptr;
@@ -27,30 +27,30 @@ ADRPlayerController::ADRPlayerController()
 
 void ADRPlayerController::OnCorruptedStateChanged(bool bIsStateChanged)
 {
-	// ºÎÆÐ »óÅÂ ÇÃ·¡±× ¾÷µ¥ÀÌÆ®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	bIsCorrupted = bIsStateChanged;
 
-	// À½¼º Ã¤ÆÃ ¼³Á¤
+	// ï¿½ï¿½ï¿½ï¿½ Ã¤ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	//SetVoiceChatEnabled(!bIsCorrupted);
 
-	// ÆÀ ±¸ºÐ ½Ã°¢ È¿°ú ¼³Á¤
+	// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½ È¿ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	//SetTeamVisualsEnabled(!bIsCorrupted);
 }
 
 void ADRPlayerController::ShowDamageNumber_Implementation(float DamageAmount, ACharacter* TargetCharacter)
 {
-	// ·ÎÄÃ ÄÁÆ®·Ñ·¯¿¡¼­¸¸ µ¥¹ÌÁö ÅØ½ºÆ® Ç¥½Ã
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ®ï¿½Ñ·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ø½ï¿½Æ® Ç¥ï¿½ï¿½
 	if (IsValid(TargetCharacter) && DamageTextComponentClass && IsLocalController())
 	{
-		// µ¥¹ÌÁö ÅØ½ºÆ® ÄÄÆ÷³ÍÆ® »ý¼º ¹× ¼³Á¤
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ø½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		UDamageTextComponent* DamageText = NewObject<UDamageTextComponent>(TargetCharacter, DamageTextComponentClass);
 		DamageText->RegisterComponent();
 
-		// Å¸°Ù Ä³¸¯ÅÍ¿¡ ÀÏ½ÃÀûÀ¸·Î ºÎÂø ÈÄ ºÐ¸® (¿ùµå À§Ä¡ À¯Áö)
+		// Å¸ï¿½ï¿½ Ä³ï¿½ï¿½ï¿½Í¿ï¿½ ï¿½Ï½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ð¸ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½)
 		DamageText->AttachToComponent(TargetCharacter->GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
 		DamageText->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
 
-		// µ¥¹ÌÁö ¼öÄ¡ ¼³Á¤ ¹× ¾Ö´Ï¸ÞÀÌ¼Ç ½ÃÀÛ
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ö´Ï¸ï¿½ï¿½Ì¼ï¿½ ï¿½ï¿½ï¿½ï¿½
 		DamageText->SetDamageText(DamageAmount);
 	}
 }
@@ -59,20 +59,20 @@ void ADRPlayerController::SetPartDetectionEnabled(bool bEnabled, ADRCleanserPart
 {
 	if (bEnabled)
 	{
-		// ¶óÀÎÆ®·¹ÀÌ½Ì È°¼ºÈ­
+		// ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½ È°ï¿½ï¿½È­
 		bPartDetectionEnabled = true;
 		NearbyPart = Part;
 		LineTraceTimer = 0.f;
 	}
 	else
 	{
-		// ÇØ´ç ºÎÇ°ÀÌ ÇöÀç ±ÙÃ³ ºÎÇ°°ú °°À» ¶§¸¸ ºñÈ°¼ºÈ­
+		// ï¿½Ø´ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã³ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­
 		if (NearbyPart == Part)
 		{
 			bPartDetectionEnabled = false;
 			NearbyPart = nullptr;
 			
-			// ÇöÀç °¨ÁöµÈ ºÎÇ°ÀÌ ÀÖÀ¸¸é UI ¼û±è ¾Ë¸²
+			// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ UI ï¿½ï¿½ï¿½ï¿½ ï¿½Ë¸ï¿½
 			if (CurrentDetectedPart)
 			{
 				CurrentDetectedPart->OnLineTraceLost(this);
@@ -84,22 +84,22 @@ void ADRPlayerController::SetPartDetectionEnabled(bool bEnabled, ADRCleanserPart
 
 ADRCleanserPart* ADRPlayerController::FindPartByLineTrace()
 {
-	// Ä³¸¯ÅÍ °¡Á®¿À±â
+	// Ä³ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
 	if (!DRCharacter) return nullptr;
 
-	// Ä³¸¯ÅÍ°¡ ÀÌ¹Ì ºÎÇ°À» µé°í ÀÖÀ¸¸é °¨ÁöÇÏÁö ¾ÊÀ½
+	// Ä³ï¿½ï¿½ï¿½Í°ï¿½ ï¿½Ì¹ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (DRCharacter->IsCarryingPart()) return nullptr;
 
-	// Ä«¸Þ¶ó ÄÄÆ÷³ÍÆ® °¡Á®¿À±â
+	// Ä«ï¿½Þ¶ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	UCameraComponent* Camera = DRCharacter->FindComponentByClass<UCameraComponent>();
 	if (!Camera) return nullptr;
 
-	// ¶óÀÎÆ®·¹ÀÌ½Ì ½ÃÀÛ/³¡ À§Ä¡ °è»ê
+	// ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½ ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½
 	FVector Start = Camera->GetComponentLocation();
 	FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
 
-	// ¶óÀÎÆ®·¹ÀÌ½Ì ½ÇÇà
+	// ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	FHitResult HitResult;
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(DRCharacter);
@@ -112,7 +112,7 @@ ADRCleanserPart* ADRPlayerController::FindPartByLineTrace()
 		QueryParams
 	);
 
-	// ºÎÇ°¿¡ È÷Æ®Çß´ÂÁö È®ÀÎ
+	// ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½Æ®ï¿½ß´ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (bHit)
 	{
 		ADRCleanserPart* HitPart = Cast<ADRCleanserPart>(HitResult.GetActor());
@@ -129,21 +129,21 @@ void ADRPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Enhanced Input Context°¡ ¼³Á¤µÇ¾î ÀÖ´ÂÁö È®ÀÎ
+	// Enhanced Input Contextï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ç¾ï¿½ ï¿½Ö´ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	check(DRContext);
 
-	// Enhanced Input ¼­ºê½Ã½ºÅÛ¿¡ ¸ÅÇÎ ÄÁÅØ½ºÆ® Ãß°¡
+	// Enhanced Input ï¿½ï¿½ï¿½ï¿½Ã½ï¿½ï¿½Û¿ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ø½ï¿½Æ® ï¿½ß°ï¿½
 	UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer());
 	if (Subsystem)
 	{
 		Subsystem->AddMappingContext(DRContext, 0);
 	}
 
-	// UI ¼³Á¤
+	// UI ï¿½ï¿½ï¿½ï¿½
 	bShowMouseCursor = false;
 	SetInputMode(FInputModeGameOnly());
 
-	// ÇÃ·¹ÀÌ¾î´Â TeamId 0
+	// ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ï¿½ TeamId 0
 	SetGenericTeamId(FGenericTeamId(0));
 }
 
@@ -151,22 +151,22 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 
-	// ºÎÇ° °¨Áö°¡ ºñÈ°¼ºÈ­µÇ¾î ÀÖÀ¸¸é ½ºÅµ
+	// ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­ï¿½Ç¾ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Åµ
 	if (!bPartDetectionEnabled) return;
 
-	// ¶óÀÎÆ®·¹ÀÌ½Ì Å¸ÀÌ¸Ó ¾÷µ¥ÀÌÆ®
+	// ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½ Å¸ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	LineTraceTimer += DeltaTime;
 	if (LineTraceTimer >= LineTraceUpdateInterval)
 	{
 		LineTraceTimer = 0.f;
 
-		// ºÎÇ° °¨Áö
+		// ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½
 		ADRCleanserPart* DetectedPart = FindPartByLineTrace();
 
-		// °¨ÁöµÈ ºÎÇ°ÀÌ º¯°æµÇ¾ú´ÂÁö È®ÀÎ
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ç¾ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 		if (DetectedPart != CurrentDetectedPart)
 		{
-			// ÀÌÀü¿¡ °¨ÁöµÈ ºÎÇ°ÀÌ ÀÖÀ¸¸é ¾Ë¸²
+			// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ë¸ï¿½
 			if (CurrentDetectedPart)
 			{
 				CurrentDetectedPart->OnLineTraceLost(this);
@@ -174,7 +174,7 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 
 			CurrentDetectedPart = DetectedPart;
 
-			// »õ·Î °¨ÁöµÈ ºÎÇ°ÀÌ ÀÖÀ¸¸é ¾Ë¸²
+			// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ë¸ï¿½
 			if (CurrentDetectedPart)
 			{
 				CurrentDetectedPart->OnLineTraceDetected(this);
@@ -187,24 +187,24 @@ void ADRPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 
-	// DRInputComponent·Î Ä³½ºÆÃ
+	// DRInputComponentï¿½ï¿½ Ä³ï¿½ï¿½ï¿½ï¿½
 	UDRInputComponent* DRInputComponent = CastChecked<UDRInputComponent>(InputComponent);
-	// ±âº» ÀÔ·Â ¾×¼Ç ¹ÙÀÎµù
+	// ï¿½âº» ï¿½Ô·ï¿½ ï¿½×¼ï¿½ ï¿½ï¿½ï¿½Îµï¿½
 	DRInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Move);
 	DRInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Look);
 	DRInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ADRPlayerController::StartJump);
 	DRInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ADRPlayerController::StopJump);
 	DRInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &ADRPlayerController::HandleInteract);
-	// ¾îºô¸®Æ¼ ÀÔ·Â ¹ÙÀÎµù (InputConfig ±â¹Ý)
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½Îµï¿½ (InputConfig ï¿½ï¿½ï¿½)
 	DRInputComponent->BindAbilityActions(InputConfig, this, &ThisClass::AbilityInputTagPressed, &ThisClass::AbilityInputTagReleased, &ThisClass::AbilityInputTagHeld);
 }
 
 void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 {
-	// ÀÔ·Â ºí·Ï »óÅÂ È®ÀÎ
+	// ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
 
-	// 2D ÀÔ·ÂÀ» ¿ùµå ÁÂÇ¥°è·Î º¯È¯
+	// 2D ï¿½Ô·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç¥ï¿½ï¿½ï¿½ ï¿½ï¿½È¯
 	const FVector2D InputAxisVector = InputActionValue.Get<FVector2D>();
 	const FRotator Rotation = GetControlRotation();
 	const FRotator YawRotation(0.f, Rotation.Yaw, 0.f);
@@ -212,7 +212,7 @@ void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-	// Æù¿¡ ÀÌµ¿ ÀÔ·Â Àü´Þ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½ ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (APawn* ControlledPawn = GetPawn<APawn>())
 	{
 		ControlledPawn->AddMovementInput(ForwardDirection, InputAxisVector.Y);
@@ -222,7 +222,7 @@ void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 {
-	// ¸¶¿ì½º ½Ã¼± Ã³¸®
+	// ï¿½ï¿½ï¿½ì½º ï¿½Ã¼ï¿½ Ã³ï¿½ï¿½
 	const FVector2D Axis = InputActionValue.Get<FVector2D>();
 	AddYawInput(Axis.X);
 	AddPitchInput(Axis.Y);
@@ -230,7 +230,7 @@ void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
 {
-	// Á¡ÇÁ ½ÃÀÛ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>()))
 	{
 		ControlledCharacter->Jump();
@@ -239,7 +239,7 @@ void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 {
-	// Á¡ÇÁ Á¾·á
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>()))
 	{
 		ControlledCharacter->StopJumping();
@@ -248,20 +248,20 @@ void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::HandleInteract()
 {
-	// ºÎÇ° È¹µæ ½Ãµµ
+	// ï¿½ï¿½Ç° È¹ï¿½ï¿½ ï¿½Ãµï¿½
 	if (CurrentDetectedPart)
 	{
 		ServerRequestPickupPart(CurrentDetectedPart);
 		return;
 	}
 
-	// ±âÁ¸ µ¨¸®°ÔÀÌÆ® ºê·ÎµåÄ³½ºÆ® (Å¬·»Àú »çÀÌÆ® ¼³Ä¡¿ë)
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½Îµï¿½Ä³ï¿½ï¿½Æ® (Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½Ä¡ï¿½ï¿½)
 	OnInteractPressed.Broadcast();
 }
 
 void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 {
-	// ÀÔ·Â ºí·Ï È®ÀÎ ÈÄ ¾îºô¸®Æ¼ ÀÔ·Â Ã³¸®
+	// ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ È®ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ ï¿½Ô·ï¿½ Ã³ï¿½ï¿½
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
 
 	if (GetASC())
@@ -272,7 +272,7 @@ void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 
 void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 {
-	// ÀÔ·Â ÇØÁ¦ ºí·Ï È®ÀÎ
+	// ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputReleased)) return;
 
 	if (GetASC() == nullptr) return;
@@ -281,7 +281,7 @@ void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 
 void ADRPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
 {
-	// ÀÔ·Â È¦µå ºí·Ï È®ÀÎ
+	// ï¿½Ô·ï¿½ È¦ï¿½ï¿½ ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputHeld)) return;
 
 	if (GetASC() == nullptr) return;
@@ -290,7 +290,7 @@ void ADRPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
 
 UDRAbilitySystemComponent* ADRPlayerController::GetASC()
 {
-	// ASC Ä³½ÌÀ» ÅëÇÑ ¼º´É ÃÖÀûÈ­
+	// ASC Ä³ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½È­
 	if (DRAbilitySystemComponent == nullptr)
 	{
 		DRAbilitySystemComponent = Cast<UDRAbilitySystemComponent>(UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetPawn<APawn>()));
@@ -302,10 +302,10 @@ void ADRPlayerController::ServerRequestPickupPart_Implementation(ADRCleanserPart
 {
 	if (!HasAuthority() || !Part) return;
 
-	// Ä³¸¯ÅÍ °¡Á®¿À±â
+	// Ä³ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
 	if (!DRCharacter) return;
 
-	// ºÎÇ° È¹µæ ½Ãµµ
+	// ï¿½ï¿½Ç° È¹ï¿½ï¿½ ï¿½Ãµï¿½
 	DRCharacter->PickupPart(Part);
 }

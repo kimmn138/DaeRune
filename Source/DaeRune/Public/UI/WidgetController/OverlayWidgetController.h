@@ -32,6 +32,9 @@ class UDRAbilitySystemComponent;
 
 // 어트리뷰트 변경 시 UI 업데이트용 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAttributeChangedSignature, float, NewValue);
+// 목표 UI 업데이트용 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveTextChangedSignature, const FText&, ObjectiveTitle, const FText&, ProgressText);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveProgressChangedSignature, int32, Current, int32, Max);
 
 /**
  * 메인 게임 UI 오버레이를 관리하는 컨트롤러
@@ -59,4 +62,19 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnMaxWaterChanged;
+
+	// 목표 UI 업데이트 델리게이트
+	UPROPERTY(BlueprintAssignable, Category = "Phase|Objective")
+	FOnObjectiveTextChangedSignature OnObjectiveTextChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Phase|Objective")
+	FOnObjectiveProgressChangedSignature OnObjectiveProgressChanged;
+
+private:
+	void HandlePhaseObjectiveChanged();
+	
+	int32 CachedPhaseNumber = -1;
+	int32 CachedProgress = -1;
+	int32 CachedRequiredCount = -1;
+	FText CachedObjectiveTitle;  
 };
