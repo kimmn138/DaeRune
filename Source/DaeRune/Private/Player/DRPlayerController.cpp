@@ -290,12 +290,7 @@ void ADRPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
 
 UDRAbilitySystemComponent* ADRPlayerController::GetASC()
 {
-	// ASC ĳ���� ���� ���� ����ȭ
-	if (DRAbilitySystemComponent == nullptr)
-	{
-		DRAbilitySystemComponent = Cast<UDRAbilitySystemComponent>(UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetPawn<APawn>()));
-	}
-	return DRAbilitySystemComponent;
+	return Cast<UDRAbilitySystemComponent>(UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetPawn<APawn>()));
 }
 
 void ADRPlayerController::ServerRequestPickupPart_Implementation(ADRCleanserPart* Part)
