@@ -117,19 +117,7 @@ void ADREnemy::OnAttackExecuted()
 void ADREnemy::HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 {
 	bHitReacting = NewCount > 0;
-	if (bHitReacting)
-	{
-		// 히트 리액션 중 이동 정지
-		GetCharacterMovement()->MaxWalkSpeed = 0.f;
-	}
-	else
-	{
-		// 히트 리액션 종료 시 GAS 속성값으로 이동속도 복구
-		if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
-		{
-			GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
-		}
-	}
+	GetCharacterMovement()->MaxWalkSpeed = bHitReacting ? 0.f : GetMoveSpeed();
 
 	// AI 블랙보드 상태 업데이트
 	if (DRAIController && DRAIController->GetBlackboardComponent())
@@ -217,9 +205,7 @@ bool ADREnemy::DropPart()
 void ADREnemy::BeginPlay()
 {
 	Super::BeginPlay();
-
-	// 기본 이동속도 설정
-	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
+	
 	// GAS 초기화
 	InitAbilityActorInfo();
 	// 서버에서만 시작 어빌리티 부여
@@ -250,6 +236,9 @@ void ADREnemy::BeginPlay()
 				OnMaxHealthChanged.Broadcast(Data.NewValue);
 			}
 		);
+
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMoveSpeedAttribute()).AddUObject(this, &ADREnemy::OnMoveSpeedChanged);
+		GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
 
 		// 히트 리액션 태그 이벤트 바인딩
 		AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Effects_HitReact, EGameplayTagEventType::NewOrRemoved).AddUObject(
@@ -325,6 +314,16 @@ void ADREnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 			BB->ClearValue("TargetToFollow");
 		}
 	}
+}
+
+float ADREnemy::GetMoveSpeed()
+{
+	UDRAttributeSet* DRAS = CastChecked<UDRAttributeSet>(AttributeSet);
+	if (DRAS)
+	{
+		return DRAS->GetMoveSpeed();
+	}
+	return Super::GetMoveSpeed();
 }
 
 void ADREnemy::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit)

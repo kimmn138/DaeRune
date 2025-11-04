@@ -69,6 +69,10 @@ protected:
 	UFUNCTION()
 	void OnRep_CarriedPart();
 
+	// ========== 이동속도 관련 ==========
+
+	virtual float GetMoveSpeed() override;
+
 private:
 	// GAS 초기화
 	virtual void InitAbilityActorInfo() override;

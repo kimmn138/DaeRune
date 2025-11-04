@@ -9,6 +9,7 @@
 #include "Interaction/CombatInterface.h"
 #include "DRCharacterBase.generated.h"
 
+struct FOnAttributeChangeData;
 class UDebuffNiagaraComponent;
 class UNiagaraSystem;
 class UAbilitySystemComponent;
@@ -122,11 +123,15 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Attributes")
 	TSubclassOf<UGameplayEffect> DefaultVitalAttributes;
-
+	
 	void ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass, float Level) const;
 	virtual void InitializeDefaultAttributes() const;
 
 	void AddCharacterAbilities();
+
+	virtual void OnMoveSpeedChanged(const FOnAttributeChangeData& Data);
+
+	virtual float GetMoveSpeed();
 
 	// Dissolve È¿°ú
 	void Dissolve();

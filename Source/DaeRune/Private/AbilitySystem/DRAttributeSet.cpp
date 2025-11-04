@@ -9,7 +9,6 @@
 #include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Interaction/CombatInterface.h"
-#include "Kismet/GameplayStatics.h"
 #include "Player/DRPlayerController.h"
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
 #include "Player/DRPlayerState.h"
@@ -22,6 +21,7 @@ UDRAttributeSet::UDRAttributeSet()
 
 	/* Primary Attributes */
 	TagsToAttributes.Add(GameplayTags.Attributes_Primary_MaxHealth, GetMaxHealthAttribute);
+	TagsToAttributes.Add(GameplayTags.Attributes_Primary_MoveSpeed, GetMoveSpeedAttribute);
 }
 
 void UDRAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -54,7 +54,7 @@ void UDRAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute
 	}
 	if (Attribute == GetMoveSpeedAttribute())
 	{
-		NewValue = FMath::Clamp(NewValue, 50.f, 2000.f);
+		NewValue = FMath::Clamp(NewValue, 0.f, 2000.f);
 	}
 }
 
@@ -72,7 +72,7 @@ void UDRAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, fl
 	}
 	if (Attribute == GetMoveSpeedAttribute())
 	{
-		NewValue = FMath::Clamp(NewValue, 50.f, 2000.f);
+		NewValue = FMath::Clamp(NewValue, 0.f, 2000.f);
 	}
 }
 
@@ -92,21 +92,6 @@ void UDRAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 	if (Data.EvaluatedData.Attribute == GetWaterAttribute())
 	{
 		SetWater(FMath::Clamp(GetWater(), 0.f, GetMaxWater()));
-	}
-	if (Data.EvaluatedData.Attribute == GetMoveSpeedAttribute())
-	{
-		// 새 속도 값 설정
-		float NewSpeed = GetMoveSpeed();
-		SetMoveSpeed(NewSpeed);
-
-		// CharacterMovementComponent 업데이트
-		if (ACharacter* TargetCharacter = Cast<ACharacter>(Props.TargetAvatarActor))
-		{
-			if (UCharacterMovementComponent* MovementComp = TargetCharacter->GetCharacterMovement())
-			{
-				MovementComp->MaxWalkSpeed = NewSpeed;
-			}
-		}
 	}
 	else if (Data.EvaluatedData.Attribute == GetIncomingDamageAttribute())
 	{
@@ -217,20 +202,6 @@ void UDRAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, f
 		SetWater(GetMaxWater());
 		bTopOffWater = false;
 	}
-	if (Attribute == GetMoveSpeedAttribute())
-	{
-		// ASC에서 Avatar Actor 가져오기 (Enemy든 Player든 상관없이)
-		if (UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent())
-		{
-			if (ACharacter* AvatarCharacter = Cast<ACharacter>(ASC->GetAvatarActor()))
-			{
-				if (UCharacterMovementComponent* MovementComp = AvatarCharacter->GetCharacterMovement())
-				{
-					MovementComp->MaxWalkSpeed = NewValue;
-				}
-			}
-		}
-	}
 }
 
 void UDRAttributeSet::OnRep_Health(const FGameplayAttributeData& OldHealth) const
@@ -256,21 +227,6 @@ void UDRAttributeSet::OnRep_MaxWater(const FGameplayAttributeData& OldMaxWater) 
 void UDRAttributeSet::OnRep_MoveSpeed(const FGameplayAttributeData& OldMoveSpeed) const
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRAttributeSet, MoveSpeed, OldMoveSpeed);
-
-	// 클라이언트에서 즉시 이동속도 업데이트
-	if (UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent())
-	{
-		if (ACharacter* AvatarCharacter = Cast<ACharacter>(ASC->GetAvatarActor()))
-		{
-			if (UCharacterMovementComponent* MovementComp = AvatarCharacter->GetCharacterMovement())
-			{
-				MovementComp->MaxWalkSpeed = GetMoveSpeed();
-
-				// 클라이언트 예측을 위한 추가 설정
-				MovementComp->bNetworkSmoothingComplete = true;
-			}
-		}
-	}
 }
 
 void UDRAttributeSet::SetEffectProperties(const FGameplayEffectModCallbackData& Data, FEffectProperties& Props) const

@@ -67,6 +67,13 @@ void ADRCharacter::PossessedBy(AController* NewController)
 	// 서버에서 GAS 초기화 및 어빌리티 부여
 	InitAbilityActorInfo();
 	AddCharacterAbilities();
+
+	UDRAttributeSet* DRAS = CastChecked<UDRAttributeSet>(AttributeSet);
+	if (DRAS)
+	{
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMoveSpeedAttribute()).AddUObject(this, &ADRCharacter::OnMoveSpeedChanged);
+		GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
+	}
 }
 
 void ADRCharacter::OnRep_PlayerState()
@@ -75,6 +82,12 @@ void ADRCharacter::OnRep_PlayerState()
 
 	// 클라이언트에서 GAS 초기화
 	InitAbilityActorInfo();
+
+	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
+	{
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMoveSpeedAttribute()).AddUObject(this, &ADRCharacter::OnMoveSpeedChanged);
+		GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
+	}
 }
 
 void ADRCharacter::OnRep_Stunned()
@@ -148,6 +161,17 @@ void ADRCharacter::OnRep_bIsCarryingPart()
 void ADRCharacter::OnRep_CarriedPart()
 {
 	// 클라이언트 시각적 효과
+}
+
+float ADRCharacter::GetMoveSpeed()
+{
+	UDRAttributeSet* DRAS = CastChecked<UDRAttributeSet>(AttributeSet);
+	if (DRAS)
+	{
+		return DRAS->GetMoveSpeed();
+	}
+	
+	return Super::GetMoveSpeed();
 }
 
 void ADRCharacter::InitAbilityActorInfo()

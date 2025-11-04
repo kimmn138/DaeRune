@@ -31,6 +31,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Maximum amount of Water obtainable")
 	);
 
+	GameplayTags.Attributes_Primary_MoveSpeed = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Attributes.Primary.MoveSpeed"),
+		FString("Maximum amount of Speed obtainable")
+	);
+
 	/*
 	 * 입력 태그
 	 */

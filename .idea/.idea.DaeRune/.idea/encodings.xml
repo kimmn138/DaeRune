@@ -5,10 +5,14 @@
     <file url="file://$PROJECT_DIR$/Source/DaeRune/DRLogChannels.h" charset="EUC-KR" />
     <file url="file://$PROJECT_DIR$/Source/DaeRune/DaeRune.cpp" charset="EUC-KR" />
     <file url="file://$PROJECT_DIR$/Source/DaeRune/DaeRune.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Private/AbilitySystem/DRAttributeSet.cpp" charset="EUC-KR" />
     <file url="file://$PROJECT_DIR$/Source/DaeRune/Private/Character/DRCharacter.cpp" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Private/Character/DRCharacterBase.cpp" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Private/DRGameplayTags.cpp" charset="EUC-KR" />
     <file url="file://$PROJECT_DIR$/Source/DaeRune/Private/Phase/DRPhase1.cpp" charset="EUC-KR" />
     <file url="file://$PROJECT_DIR$/Source/DaeRune/Private/Phase/DRPhase2.cpp" charset="EUC-KR" />
     <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/AI/DRAIController.h" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/AbilitySystem/DRAttributeSet.h" charset="EUC-KR" />
     <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Actor/DRCleanserPart.h" charset="EUC-KR" />
     <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Actor/DRCleanserSite.h" charset="EUC-KR" />
     <file url="file://$PROJECT_DIR$/Source/DaeRune/Public/Actor/DREffectActor.h" charset="EUC-KR" />

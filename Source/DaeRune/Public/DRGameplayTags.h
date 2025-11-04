@@ -23,6 +23,7 @@ public:
 	// 기본 속성
 	FGameplayTag Attributes_Primary_MaxHealth;
 	FGameplayTag Attributes_Primary_MaxWater;
+	FGameplayTag Attributes_Primary_MoveSpeed;
 
 	// 입력 태그
 	FGameplayTag InputTag_LMB;
