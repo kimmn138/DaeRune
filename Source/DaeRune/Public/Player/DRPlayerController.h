@@ -68,12 +68,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	ADRCleanserPart* FindPartByLineTrace();
 
-	// ºÎÇ° È¹µæ UI Ç¥½Ã ¿©ºÎ
-	UFUNCTION(BlueprintImplementableEvent, Category = "Part System")
-	void ShowPartPickupUI();
+	UFUNCTION(Server, Reliable)
+	void ServerNotifyLineTraceDetected(ADRCleanserPart* Part);
 
-	UFUNCTION(BlueprintImplementableEvent, Category = "Part System")
-	void HidePartPickupUI();
+	UFUNCTION(Server, Reliable)
+	void ServerNotifyLineTraceLost(ADRCleanserPart* Part);
 
 protected:
 	virtual void BeginPlay() override;

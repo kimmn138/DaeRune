@@ -35,6 +35,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAttributeChangedSignature, float,
 // 목표 UI 업데이트용 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveTextChangedSignature, const FText&, ObjectiveTitle, const FText&, ProgressText);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveProgressChangedSignature, int32, Current, int32, Max);
+// 디버프 변경시 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDebuffChangedSignature, bool, bIsActive);
 
 /**
  * 메인 게임 UI 오버레이를 관리하는 컨트롤러
@@ -70,11 +72,15 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Objective")
 	FOnObjectiveProgressChangedSignature OnObjectiveProgressChanged;
 
+	// 디버프 변경 브로드캐스트 델리게이트
+	UPROPERTY(BlueprintAssignable, Category="GAS|Debuff")
+	FOnDebuffChangedSignature OnBleedDebuffChanged;
+
 private:
 	void HandlePhaseObjectiveChanged();
 	
 	int32 CachedPhaseNumber = -1;
 	int32 CachedProgress = -1;
 	int32 CachedRequiredCount = -1;
-	FText CachedObjectiveTitle;  
+	FText CachedObjectiveTitle;
 };

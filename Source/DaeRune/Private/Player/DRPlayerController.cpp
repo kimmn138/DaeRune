@@ -75,7 +75,7 @@ void ADRPlayerController::SetPartDetectionEnabled(bool bEnabled, ADRCleanserPart
 			// ���� ������ ��ǰ�� ������ UI ���� �˸�
 			if (CurrentDetectedPart)
 			{
-				CurrentDetectedPart->OnLineTraceLost(this);
+				ServerNotifyLineTraceLost(CurrentDetectedPart);
 				CurrentDetectedPart = nullptr;
 			}
 		}
@@ -125,6 +125,21 @@ ADRCleanserPart* ADRPlayerController::FindPartByLineTrace()
 	return nullptr;
 }
 
+void ADRPlayerController::ServerNotifyLineTraceDetected_Implementation(ADRCleanserPart* Part)
+{
+	if (!Part) return;
+
+	// 서버에서 처리 (UI 갱신은 멀티캐스트로)
+	Part->MulticastShowInteractionUI(this, true);
+}
+
+void ADRPlayerController::ServerNotifyLineTraceLost_Implementation(ADRCleanserPart* Part)
+{
+	if (!Part) return;
+
+	Part->MulticastShowInteractionUI(this, false);
+}
+
 void ADRPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
@@ -154,6 +169,9 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 	// ��ǰ ������ ��Ȱ��ȭ�Ǿ� ������ ��ŵ
 	if (!bPartDetectionEnabled) return;
 
+	// 로컬 컨트롤러에서만 라인트레이싱 실행
+	if (!IsLocalController()) return;
+
 	// ����Ʈ���̽� Ÿ�̸� ������Ʈ
 	LineTraceTimer += DeltaTime;
 	if (LineTraceTimer >= LineTraceUpdateInterval)
@@ -169,7 +187,7 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 			// ������ ������ ��ǰ�� ������ �˸�
 			if (CurrentDetectedPart)
 			{
-				CurrentDetectedPart->OnLineTraceLost(this);
+				ServerNotifyLineTraceLost(CurrentDetectedPart);
 			}
 
 			CurrentDetectedPart = DetectedPart;
@@ -177,7 +195,7 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 			// ���� ������ ��ǰ�� ������ �˸�
 			if (CurrentDetectedPart)
 			{
-				CurrentDetectedPart->OnLineTraceDetected(this);
+				ServerNotifyLineTraceDetected(CurrentDetectedPart);
 			}
 		}
 	}

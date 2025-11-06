@@ -127,7 +127,7 @@ void UDRWaterPump::PerformWaterPumpTick()
 
     FVector WeaponSocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(
         OwnerCharacter,
-        FDRGameplayTags::Get().CombatSocket_LeftHand
+        FDRGameplayTags::Get().CombatSocket_RightHand
     );
 
     // 트레이싱 수행

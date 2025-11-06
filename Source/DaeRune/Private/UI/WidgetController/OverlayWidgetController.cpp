@@ -2,6 +2,7 @@
 
 
 #include "UI/WidgetController/OverlayWidgetController.h"
+#include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "AbilitySystem/DRAttributeSet.h"
 #include "Game/DRStageGameState.h"
@@ -14,6 +15,11 @@ void UOverlayWidgetController::BroadcastInitialValues()
 	OnMaxHealthChanged.Broadcast(GetDRAS()->GetMaxHealth());
 	OnWaterChanged.Broadcast(GetDRAS()->GetWater());
 	OnMaxWaterChanged.Broadcast(GetDRAS()->GetMaxWater());
+
+	// 디버프 초기 상태
+	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+    
+	OnBleedDebuffChanged.Broadcast(AbilitySystemComponent->HasMatchingGameplayTag(GameplayTags.Debuff_Bleed));
 
 	// 페이즈 목표 초기값 추가
 	HandlePhaseObjectiveChanged();
@@ -50,6 +56,16 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 		}
 	);
 
+	// 디버프 태그 바인딩
+	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+
+	AbilitySystemComponent->RegisterGameplayTagEvent(GameplayTags.Debuff_Bleed, EGameplayTagEventType::NewOrRemoved).AddLambda(
+		[this](const FGameplayTag Tag, int32 NewCount)
+		{
+			OnBleedDebuffChanged.Broadcast(NewCount > 0);
+		}
+	);
+
 	// �����Ƽ ���� �ʱ�ȭ ó��
 	if (GetDRASC())
 	{
@@ -68,6 +84,7 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 	// GameState 페이즈 목표 델리게이트 바인딩
 	if (ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>())
 	{
+		UE_LOG(LogTemp, Log, TEXT("Hello Bind"));
 		DRGameState->OnPhaseObjectiveChangedDelegate.AddLambda(
 			[this]()
 			{
@@ -80,54 +97,14 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 void UOverlayWidgetController::HandlePhaseObjectiveChanged()
 {
 	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
-    if (!DRGameState) 
-    {
-        UE_LOG(LogTemp, Warning, TEXT("HandlePhaseObjectiveChanged: GameState is null"));
-        return;
-    }
+    if (!DRGameState) return;
     
     FPhaseObjectiveData ObjectiveData = DRGameState->GetCurrentPhaseObjective();
     int32 CurrentProgress = DRGameState->GetCurrentObjectiveProgress();
-    
-    // 디버깅 로그
-    UE_LOG(LogTemp, Warning, TEXT("PhaseNumber: %d"), ObjectiveData.PhaseNumber);
-    UE_LOG(LogTemp, Warning, TEXT("ObjectiveTitle: %s"), *ObjectiveData.ObjectiveTitle.ToString());
-    UE_LOG(LogTemp, Warning, TEXT("ProgressFormat: %s"), *ObjectiveData.ProgressFormat.ToString());
-    
-    // ⚡ 중요한 수정: 텍스트가 비어있으면 캐싱하지 않고 리턴
-    if (ObjectiveData.ObjectiveTitle.IsEmpty() || ObjectiveData.ProgressFormat.IsEmpty())
-    {
-        UE_LOG(LogTemp, Error, TEXT("Objective texts are empty! Skipping update."));
-        return;  // 비어있으면 캐싱도 하지 않고 그냥 리턴!
-    }
-    
-    // 텍스트 업데이트 (PhaseNumber 체크 + 강제 업데이트 조건 추가)
-    if (ObjectiveData.PhaseNumber != CachedPhaseNumber || 
-        (CachedPhaseNumber == ObjectiveData.PhaseNumber && !CachedObjectiveTitle.EqualTo(ObjectiveData.ObjectiveTitle)))
-    {
-        CachedPhaseNumber = ObjectiveData.PhaseNumber;
-        CachedObjectiveTitle = ObjectiveData.ObjectiveTitle;  // 텍스트도 캐싱
-        
-        UE_LOG(LogTemp, Warning, TEXT("Broadcasting texts: Title=%s, Format=%s"), 
-            *ObjectiveData.ObjectiveTitle.ToString(), 
-            *ObjectiveData.ProgressFormat.ToString());
-            
-        OnObjectiveTextChanged.Broadcast(
-            ObjectiveData.ObjectiveTitle,
-            ObjectiveData.ProgressFormat
-        );
-    }
-    
-    // 진행도 업데이트
-    if (CurrentProgress != CachedProgress || ObjectiveData.RequiredCount != CachedRequiredCount)
-    {
-        CachedProgress = CurrentProgress;
-        CachedRequiredCount = ObjectiveData.RequiredCount;
-        
-        OnObjectiveProgressChanged.Broadcast(
-            CurrentProgress,
-            ObjectiveData.RequiredCount
-        );
-    }
+
+	UE_LOG(LogTemp, Log, TEXT("Bye Bind"));
+	
+	OnObjectiveTextChanged.Broadcast(ObjectiveData.ObjectiveTitle,ObjectiveData.ProgressFormat);
+	OnObjectiveProgressChanged.Broadcast(CurrentProgress,ObjectiveData.RequiredCount);
 }
 

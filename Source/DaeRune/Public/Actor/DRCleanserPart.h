@@ -41,17 +41,12 @@ public:
 
 	// ========== 라인트레이싱 콜백 ========== 
 
-	// 라인트레이싱으로 감지되었을 때
-	UFUNCTION()
-	void OnLineTraceDetected(class ADRPlayerController* PlayerController);
-
-	// 라인트레이싱에서 벗어났을 때
-	UFUNCTION()
-	void OnLineTraceLost(class ADRPlayerController* PlayerController);
+	// UI 표시/숨김 (멀티캐스트 - 모든 클라이언트 실행)
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastShowInteractionUI(ADRPlayerController* PlayerController, bool bShow);
 
 protected:
 	virtual void BeginPlay() override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// ========== 컴포넌트 ==========
@@ -87,10 +82,6 @@ protected:
 	// 부품을 들고 있는 캐릭터
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "CleanserPart")
 	TObjectPtr<ADRCharacter> CarryingCharacter;
-
-	// 현재 라인트레이싱 중인 플레이어 컨트롤러
-	UPROPERTY()
-	TObjectPtr<ADRPlayerController> LineTracingPlayerController;
 
 	// ========== 오버랩 이벤트 ==========
 

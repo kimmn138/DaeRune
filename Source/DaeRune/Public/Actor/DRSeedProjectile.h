@@ -43,6 +43,9 @@ protected:
     // 아군 대상 힐 효과 적용
     void ApplyHealToAlly(AActor* AllyActor, float HealAmount);
 
+    UFUNCTION(NetMulticast, Reliable) // Unreliable이 아니라 Reliable로!
+    void MulticastExplodeAtLocation(const FVector& ImpactLocation);
+
 private:
     // 내부 범위 반경 (최대 효과)
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon|Range")

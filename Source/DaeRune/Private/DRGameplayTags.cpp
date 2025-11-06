@@ -69,6 +69,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("State Tag for Player In Corrupt")
 	);
 
+	GameplayTags.State_Carrying = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.Carrying"),
+		FString("State Tag for Player In Carrying Part")
+	);
+
 	/*
 	 * 기본 데미지, 타입 별 데미지
 	 */

@@ -2,6 +2,9 @@
 
 
 #include "Actor/DRCleanserPart.h"
+
+#include "DRGameplayTags.h"
+#include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "Character/DRCharacter.h"
 #include "Net/UnrealNetwork.h"
 #include "Components/SphereComponent.h"
@@ -38,12 +41,10 @@ ADRCleanserPart::ADRCleanserPart()
 	InteractionWidget->SetDrawSize(FVector2D(300.0f, 100.0f));
 	InteractionWidget->SetVisibility(false);
 	InteractionWidget->SetOwnerNoSee(false);
-	InteractionWidget->SetOnlyOwnerSee(true);
 
 	// 초기 상태
 	bIsCarried = false;
 	CarryingCharacter = nullptr;
-	LineTracingPlayerController = nullptr;
 }
 
 bool ADRCleanserPart::CanBePickedUp() const
@@ -75,33 +76,48 @@ void ADRCleanserPart::PickupPart(ADRCharacter* Character)
 
 	// 캐릭터 소켓에 부착
 	AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
+
+	// 캐릭터에게 태그 부착
+	UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(CarryingCharacter->GetAbilitySystemComponent());
+	if (DRASC)
+	{
+		DRASC->AddLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
+	}
 }
 
 void ADRCleanserPart::InstallPart()
 {
 	if (!HasAuthority()) return;
 
+	// 캐릭터에게 태그 제거
+	UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(CarryingCharacter->GetAbilitySystemComponent());
+	if (DRASC)
+	{
+		DRASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
+	}
+	
 	// 액터 파괴
 	Destroy();
+}
+
+void ADRCleanserPart::MulticastShowInteractionUI_Implementation(ADRPlayerController* PlayerController, bool bShow)
+{
+	// 모든 클라이언트에서 실행됨
+	if (!PlayerController) return;
+
+	// 해당 플레이어의 로컬 컨트롤러에서만 UI 표시/숨김
+	if (PlayerController->IsLocalController())
+	{
+		InteractionWidget->SetVisibility(bShow);
+	}
 }
 
 void ADRCleanserPart::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 서버에서만 오버랩 이벤트 바인딩
-	if (HasAuthority())
-	{
-		DetectionSphere->OnComponentBeginOverlap.AddDynamic(this, &ADRCleanserPart::OnDetectionSphereBeginOverlap);
-		DetectionSphere->OnComponentEndOverlap.AddDynamic(this, &ADRCleanserPart::OnDetectionSphereEndOverlap);
-	}
-}
-
-void ADRCleanserPart::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-	LineTracingPlayerController = nullptr;
-
-	Super::EndPlay(EndPlayReason);
+	DetectionSphere->OnComponentBeginOverlap.AddDynamic(this, &ADRCleanserPart::OnDetectionSphereBeginOverlap);
+	DetectionSphere->OnComponentEndOverlap.AddDynamic(this, &ADRCleanserPart::OnDetectionSphereEndOverlap);
 }
 
 void ADRCleanserPart::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -114,8 +130,6 @@ void ADRCleanserPart::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 
 void ADRCleanserPart::OnDetectionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (!HasAuthority()) return;
-
 	// 이미 들려있으면 무시
 	if (bIsCarried) return;
 
@@ -128,54 +142,26 @@ void ADRCleanserPart::OnDetectionSphereBeginOverlap(UPrimitiveComponent* Overlap
 	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
 	if (!PC) return;
 
-	// Controller에게 라인트레이싱 활성화 알림
-	PC->SetPartDetectionEnabled(true, this);
+	// 로컬 컨트롤러에서만 라인트레이싱 활성화
+	if (PC->IsLocalController())
+	{
+		PC->SetPartDetectionEnabled(true, this);
+	}
 }
 
 void ADRCleanserPart::OnDetectionSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	if (!HasAuthority()) return;
-
 	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
 	if (!Character) return;
 
 	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
 	if (!PC) return;
 
-	// Controller에게 라인트레이싱 비활성화 알림
-	PC->SetPartDetectionEnabled(false, this);
-}
-
-void ADRCleanserPart::OnLineTraceDetected(ADRPlayerController* PlayerController)
-{
-	if (!HasAuthority() || !PlayerController) return;
-
-	// 이미 다른 플레이어가 보고 있으면 무시
-	if (LineTracingPlayerController) return;
-
-	LineTracingPlayerController = PlayerController;
-
-	// 해당 플레이어의 캐릭터 가져오기
-	ADRCharacter* Character = PlayerController->GetPawn<ADRCharacter>();
-	if (!Character) return;
-
-	// Owner 설정 및 UI 표시만!
-	SetOwner(Character);
-	InteractionWidget->SetVisibility(true);
-}
-
-void ADRCleanserPart::OnLineTraceLost(ADRPlayerController* PlayerController)
-{
-	if (!HasAuthority() || !PlayerController) return;
-
-	// 현재 보고 있는 플레이어가 아니면 무시
-	if (LineTracingPlayerController != PlayerController) return;
-
-	// UI 숨김만!
-	InteractionWidget->SetVisibility(false);
-	SetOwner(nullptr);
-
-	LineTracingPlayerController = nullptr;
+	// 로컬 컨트롤러에서만 라인트레이싱 비활성화
+	if (PC->IsLocalController())
+	{
+		PC->SetPartDetectionEnabled(false, this);
+	}
 }
 
 void ADRCleanserPart::OnRep_bIsCarried()
