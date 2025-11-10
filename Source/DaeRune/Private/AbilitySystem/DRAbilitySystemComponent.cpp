@@ -9,6 +9,7 @@
 void UDRAbilitySystemComponent::AbilityActorInfoSet()
 {
 	OnGameplayEffectAppliedDelegateToSelf.AddUObject(this, &UDRAbilitySystemComponent::ClientEffectApplied);
+	OnAnyGameplayEffectRemovedDelegate().AddUObject(this, &UDRAbilitySystemComponent::OnRemoveGameplayEffectCallback);
 }
 
 void UDRAbilitySystemComponent::AddCharacterAbilities(const TArray<TSubclassOf<UGameplayAbility>>& StartupAbilities)
@@ -144,10 +145,21 @@ void UDRAbilitySystemComponent::OnRep_ActivateAbilities()
 	}
 }
 
+void UDRAbilitySystemComponent::OnRemoveGameplayEffectCallback_Implementation(const FActiveGameplayEffect& EffectRemoved)
+{
+	FGameplayTagContainer TagContainer;
+	EffectRemoved.Spec.GetAllGrantedTags(TagContainer);
+	
+	EffectRemovedDelegate.Broadcast(TagContainer);
+}
+
 void UDRAbilitySystemComponent::ClientEffectApplied_Implementation(UAbilitySystemComponent* AbilitySystemComponent, const FGameplayEffectSpec& EffectSpec, FActiveGameplayEffectHandle ActiveEffectHandle)
 {
 	FGameplayTagContainer TagContainer;
-	EffectSpec.GetAllAssetTags(TagContainer);
-
-	EffectAssetTags.Broadcast(TagContainer);
+	EffectSpec.GetAllGrantedTags(TagContainer);
+	
+	const bool HasDuration = EffectSpec.Def->DurationPolicy == EGameplayEffectDurationType::HasDuration;
+	const bool DisplayStackCount = EffectSpec.Def->StackingType != EGameplayEffectStackingType::None && EffectSpec.Def->StackLimitCount > 1;
+	
+	EffectAssetTags.Broadcast(TagContainer, HasDuration, EffectSpec.Duration, DisplayStackCount, EffectSpec.GetStackCount());
 }

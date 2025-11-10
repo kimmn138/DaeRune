@@ -40,7 +40,7 @@ public:
 
 	// 부패 상태 변경 처리
 	UFUNCTION(BlueprintCallable, Category = "Corruption")
-	void OnCorruptedStateChanged(bool bIsStateChanged);
+	void CorruptedStateChanged(bool bIsStateChanged);
 
 	// 음성 채팅 활성화/비활성화
 	UFUNCTION(BlueprintImplementableEvent, Category = "Corruption")

@@ -117,7 +117,7 @@ void ADREnemy::OnAttackExecuted()
 void ADREnemy::HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 {
 	bHitReacting = NewCount > 0;
-	GetCharacterMovement()->MaxWalkSpeed = bHitReacting ? 0.f : GetMoveSpeed();
+	GetCharacterMovement()->MaxWalkSpeed = bHitReacting ? 200.f : GetMoveSpeed();
 
 	// AI 블랙보드 상태 업데이트
 	if (DRAIController && DRAIController->GetBlackboardComponent())
@@ -360,64 +360,37 @@ void ADREnemy::ApplyWallStun()
 {
 	if (bIsStunImmune || !AbilitySystemComponent) return;
 
-	// AttributeSet 올바른 캐스팅
-	UDRAttributeSet* BaseAttributeSet = nullptr;
-
-	// 먼저 DREnemyAttributeSet으로 시도 (Enemy는 이걸 사용)
-	if (UDREnemyAttributeSet* EnemyAS = Cast<UDREnemyAttributeSet>(AttributeSet))
-	{
-		BaseAttributeSet = EnemyAS;  // DREnemyAttributeSet은 DRAttributeSet을 상속
-	}
-	else if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
-	{
-		BaseAttributeSet = DRAS;
-	}
-
-	if (!BaseAttributeSet)
-	{
-		return;
-	}
-
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+    
+	// AttributeSet에서 GE 클래스 가져오기
+	UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet);
+	if (!DRAS) return;
 
-	// EffectProperties 구성
-	FEffectProperties Props;
-	Props.SourceASC = AbilitySystemComponent;
-	Props.TargetASC = AbilitySystemComponent;
-	Props.SourceAvatarActor = this;
-	Props.TargetAvatarActor = this;
-	Props.SourceCharacter = this;
-	Props.TargetCharacter = this;
+	TSubclassOf<UGameplayEffect>* StunEffectClass = DRAS->DebuffEffectMap.Find(GameplayTags.Debuff_Stun);
+	if (!StunEffectClass || !(*StunEffectClass)) return;
 
 	// Context 생성
 	FGameplayEffectContextHandle ContextHandle = AbilitySystemComponent->MakeEffectContext();
 	ContextHandle.AddSourceObject(this);
 
-	// 커스텀 컨텍스트 설정
-	if (FDRGameplayEffectContext* DRContext = static_cast<FDRGameplayEffectContext*>(ContextHandle.Get()))
-	{
-		DRContext->SetIsSuccessfulDebuff(true);
-		DRContext->SetDebuffDamage(0.f);  // 벽 스턴은 추가 데미지 없음
-		DRContext->SetDebuffDuration(WallStunDuration);
-		DRContext->SetDebuffFrequency(0.1f);  // 0이 아닌 작은 값 (Period 문제 방지)
+	// Spec 생성
+	FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(
+		*StunEffectClass,
+		1.f,
+		ContextHandle
+	);
 
-		// Lightning 타입으로 설정 (기절 이펙트)
-		TSharedPtr<FGameplayTag> DamageType = MakeShareable(new FGameplayTag(GameplayTags.Damage_Lightning));
-		DRContext->SetDamageType(DamageType);
-	}
+	if (!SpecHandle.IsValid()) return;
 
-	Props.EffectContextHandle = ContextHandle;
+	SpecHandle.Data->SetDuration(WallStunDuration, true);
 
-	// 기존 Debuff 시스템 호출
-	BaseAttributeSet->Debuff(Props);
+	// 적용
+	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 
-	// 넉백 상태 해제
+	// 넉백 해제 및 면역 설정
 	bIsBeingKnockedBack = false;
-
-	// 스턴 면역 설정
 	bIsStunImmune = true;
 
-	// 면역 타이머
 	float TotalImmunityTime = WallStunDuration + StunImmunityDuration;
 	GetWorld()->GetTimerManager().SetTimer(
 		StunImmunityTimerHandle,

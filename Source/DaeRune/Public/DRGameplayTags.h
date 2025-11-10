@@ -57,7 +57,6 @@ public:
 	FGameplayTag Debuff_Chance; 
 	FGameplayTag Debuff_Damage;
 	FGameplayTag Debuff_Duration;
-	FGameplayTag Debuff_Frequency;
 
 	// 타격 반응 이펙트
 	FGameplayTag Effects_HitReact;

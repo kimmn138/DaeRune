@@ -13,7 +13,6 @@
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
 #include "Player/DRPlayerState.h"
 #include "AbilitySystemBlueprintLibrary.h"
-#include "GameFramework/CharacterMovementComponent.h"
 
 UDRAttributeSet::UDRAttributeSet()
 {
@@ -114,52 +113,41 @@ void UDRAttributeSet::HandleIncomingHealing(const FEffectProperties& Props)
 
 void UDRAttributeSet::Debuff(const FEffectProperties& Props)
 {
-	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get(); 
+	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+
+	// Context 생성
 	FGameplayEffectContextHandle EffectContext = Props.SourceASC->MakeEffectContext();
 	EffectContext.AddSourceObject(Props.SourceAvatarActor);
 
+	// 디버프 관련 파라미터
 	const FGameplayTag DamageType = UDRAbilitySystemLibrary::GetDamageType(Props.EffectContextHandle);
 	const float DebuffDamage = UDRAbilitySystemLibrary::GetDebuffDamage(Props.EffectContextHandle);
 	const float DebuffDuration = UDRAbilitySystemLibrary::GetDebuffDuration(Props.EffectContextHandle);
-	const float DebuffFrequency = UDRAbilitySystemLibrary::GetDebuffFrequency(Props.EffectContextHandle);
 
-	FString DebuffName = FString::Printf(TEXT("DynamicDebuff_%s"), *DamageType.ToString());
-	UGameplayEffect* Effect = NewObject<UGameplayEffect>(GetTransientPackage(), FName(DebuffName));
-
-	Effect->DurationPolicy = EGameplayEffectDurationType::HasDuration;
-	Effect->Period = DebuffFrequency; 
-	Effect->DurationMagnitude = FScalableFloat(DebuffDuration);
-
-	FInheritedTagContainer TagContainer = FInheritedTagContainer();
-	UTargetTagsGameplayEffectComponent& Component = Effect->FindOrAddComponent<UTargetTagsGameplayEffectComponent>();
+	// 디버프 매핑 (예: 화염 → 불타는 디버프)
 	const FGameplayTag DebuffTag = GameplayTags.DamageTypesToDebuffs[DamageType];
-	TagContainer.Added.AddTag(DebuffTag);
-	Component.SetAndApplyTargetTagChanges(TagContainer);
-	if (DebuffTag.MatchesTagExact(GameplayTags.Debuff_Stun))
+
+	// AttributeSet에 미리 설정된 DebuffEffectMap에서 해당 태그의 GE 클래스를 가져옴
+	if (!DebuffEffectMap.Contains(DebuffTag)) return;
+
+	TSubclassOf<UGameplayEffect> DebuffEffectClass = DebuffEffectMap[DebuffTag];
+	if (!DebuffEffectClass) return;
+
+	// GE 스펙 생성
+	FGameplayEffectSpecHandle SpecHandle = Props.SourceASC->MakeOutgoingSpec(DebuffEffectClass, 1.f, EffectContext);
+	if (!SpecHandle.IsValid()) return;
+
+	if (FGameplayEffectSpec* MutableSpec = SpecHandle.Data.Get())
 	{
-		TagContainer.Added.AddTag(GameplayTags.Player_Block_InputHeld);
-		TagContainer.Added.AddTag(GameplayTags.Player_Block_InputPressed);
-		TagContainer.Added.AddTag(GameplayTags.Player_Block_InputReleased);
-	}
-	Component.SetAndApplyTargetTagChanges(TagContainer);
-
-	Effect->StackingType = EGameplayEffectStackingType::AggregateBySource; 
-	Effect->StackLimitCount = 1;
-
-	const int32 Index = Effect->Modifiers.Num();
-	Effect->Modifiers.Add(FGameplayModifierInfo());
-	FGameplayModifierInfo& ModifierInfo = Effect->Modifiers[Index];
-
-	ModifierInfo.ModifierMagnitude = FScalableFloat(DebuffDamage);
-	ModifierInfo.ModifierOp = EGameplayModOp::Additive;
-	ModifierInfo.Attribute = UDRAttributeSet::GetIncomingDamageAttribute();
-
-	if (FGameplayEffectSpec* MutableSpec = new FGameplayEffectSpec(Effect, EffectContext, 1.f))
-	{
+	    MutableSpec->SetSetByCallerMagnitude(GameplayTags.Debuff_Damage, DebuffDamage);
+        MutableSpec->SetDuration(DebuffDuration, true);
+	
+		// Context에 DamageType 설정
 		FDRGameplayEffectContext* DRContext = static_cast<FDRGameplayEffectContext*>(MutableSpec->GetContext().Get());
 		TSharedPtr<FGameplayTag> DebuffDamageType = MakeShareable(new FGameplayTag(DamageType));
 		DRContext->SetDamageType(DebuffDamageType);
-
+		
+		// 최종 적용
 		Props.TargetASC->ApplyGameplayEffectSpecToSelf(*MutableSpec);
 	}
 }

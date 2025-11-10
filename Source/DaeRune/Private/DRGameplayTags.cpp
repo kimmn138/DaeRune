@@ -165,11 +165,6 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Debuff Duration")
 	);
 
-	GameplayTags.Debuff_Frequency = UGameplayTagsManager::Get().AddNativeGameplayTag(
-		FName("Debuff.Frequency"),
-		FString("Debuff Frequency")
-	);
-
 	/*
 	 * 데미지 타입 배열
 	 */

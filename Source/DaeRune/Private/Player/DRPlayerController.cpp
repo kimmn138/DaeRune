@@ -25,7 +25,7 @@ ADRPlayerController::ADRPlayerController()
 	LineTraceTimer = 0.f;
 }
 
-void ADRPlayerController::OnCorruptedStateChanged(bool bIsStateChanged)
+void ADRPlayerController::CorruptedStateChanged(bool bIsStateChanged)
 {
 	// ���� ���� �÷��� ������Ʈ
 	bIsCorrupted = bIsStateChanged;

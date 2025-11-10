@@ -23,7 +23,7 @@ int32 UDRPlayerAttributeSet::GetCurrentContainerIndex() const
 
 	int32 ContainerIndex = FMath::FloorToInt(CurrentHealth / ContainerHealth);
 
-	// Á¤È®È÷ ÄÁÅ×ÀÌ³Ê °æ°è¿¡ ÀÖ´Â °æ¿ì
+	// ï¿½ï¿½È®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½ï¿½è¿¡ ï¿½Ö´ï¿½ ï¿½ï¿½ï¿½
 	if (FMath::IsNearlyEqual(CurrentHealth, ContainerIndex * ContainerHealth))
 	{
 		ContainerIndex = FMath::Max(0, ContainerIndex - 1);
@@ -38,11 +38,11 @@ void UDRPlayerAttributeSet::EnterCorruptedState(const FEffectProperties& Props)
 
 	bCorrupted = true;
 
-	// ºÎÆÐ »óÅÂ·Î Ã¼·Â ¼³Á¤
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Â·ï¿½ Ã¼ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	SetMaxHealth(GetCorruptMaxHealth());
 	SetHealth(GetCorruptMaxHealth());
 
-	// PlayerState¿¡ ¾Ë¸²
+	// PlayerStateï¿½ï¿½ ï¿½Ë¸ï¿½
 	if (Props.TargetAvatarActor && Props.TargetController)
 	{
 		if (ADRPlayerState* DRPS = Props.TargetController->GetPlayerState<ADRPlayerState>())
@@ -52,7 +52,7 @@ void UDRPlayerAttributeSet::EnterCorruptedState(const FEffectProperties& Props)
 
 		if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(Props.TargetController))
 		{
-			DRPC->OnCorruptedStateChanged(true);
+			DRPC->CorruptedStateChanged(true);
 		}
 	}
 }
@@ -63,12 +63,12 @@ void UDRPlayerAttributeSet::ExitCorruptedState(const FEffectProperties& Props)
 
 	bCorrupted = false;
 
-	// Á¤»ó »óÅÂ·Î º¹¿ø (ÃÖ´ë Ã¼·ÂÀ» ¿ø·¡´ë·Î)
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Â·ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½Ö´ï¿½ Ã¼ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
 	const float NormalMaxHealth = NumContainers * ContainerHealth;
 	SetMaxHealth(NormalMaxHealth);
-	SetHealth(ContainerHealth); // Ã¹ ¹øÂ° ÄÁÅ×ÀÌ³Ê¸¸ È¸º¹
+	SetHealth(ContainerHealth); // Ã¹ ï¿½ï¿½Â° ï¿½ï¿½ï¿½ï¿½ï¿½Ì³Ê¸ï¿½ È¸ï¿½ï¿½
 
-	// PlayerState¿¡ ¾Ë¸²
+	// PlayerStateï¿½ï¿½ ï¿½Ë¸ï¿½
 	if (Props.TargetAvatarActor && Props.TargetController)
 	{
 		if (ADRPlayerState* PS = Props.TargetController->GetPlayerState<ADRPlayerState>())
@@ -78,7 +78,7 @@ void UDRPlayerAttributeSet::ExitCorruptedState(const FEffectProperties& Props)
 
 		if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(Props.TargetController))
 		{
-			DRPC->OnCorruptedStateChanged(false);
+			DRPC->CorruptedStateChanged(false);
 		}
 	}
 }
@@ -90,10 +90,10 @@ void UDRPlayerAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 
 	if (LocalIncomingDamage <= 0.f) return;
 
-	// ÀüÅõ »óÅÂ ÁøÀÔ ¾Ë¸²
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ë¸ï¿½
 	NotifyEnterCombat(Props);
 
-	// ºÎÆÐ »óÅÂ Ã³¸®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 	if (bCorrupted)
 	{
 		ProcessCorruptedDamage(Props, LocalIncomingDamage);
@@ -103,7 +103,7 @@ void UDRPlayerAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		ProcessNormalDamage(Props, LocalIncomingDamage);
 	}
 
-	// °øÅë Ã³¸®
+	// ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 	ShowFloatingText(Props, LocalIncomingDamage);
 
 	if (UDRAbilitySystemLibrary::IsSuccessfulDebuff(Props.EffectContextHandle))
@@ -119,7 +119,7 @@ void UDRPlayerAttributeSet::ProcessCorruptedDamage(const FEffectProperties& Prop
 
 	if (NewHealth <= 0.f)
 	{
-		// ºÎÆÐ »óÅÂ¿¡¼­ Áï½Ã »ç¸Á
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Â¿ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 		if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(Props.TargetAvatarActor))
 		{
 			CombatInterface->Die(UDRAbilitySystemLibrary::GetDeathImpulse(Props.EffectContextHandle));
@@ -138,7 +138,7 @@ void UDRPlayerAttributeSet::ProcessNormalDamage(const FEffectProperties& Props, 
 
 	if (NewHealth <= 0.f)
 	{
-		// ºÎÆÐ »óÅÂ·Î ÀüÈ¯
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Â·ï¿½ ï¿½ï¿½È¯
 		EnterCorruptedState(Props);
 	}
 	else
@@ -171,7 +171,7 @@ float UDRPlayerAttributeSet::CalculateContainerDamage(float CurrentHealth, float
 
 		float OverflowDamage = RemainingDamage - HealthInContainer;
 
-		// ¿À¹öÇÃ·Î¿ì Ã¼Å©
+		// ï¿½ï¿½ï¿½ï¿½ï¿½Ã·Î¿ï¿½ Ã¼Å©
 		if (OverflowDamage <= (Damage * OVERFLOW_THRESHOLD))
 		{
 			NewHealth = ContainerIndex * ContainerHealth + 1.f;
@@ -214,15 +214,15 @@ void UDRPlayerAttributeSet::HandleIncomingHealing(const FEffectProperties& Props
 	const float CurrentHealth = GetHealth();
 	const float MaxHealthValue = GetMaxHealth();
 
-	// ºÎÆÐ »óÅÂ È®ÀÎ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (IsCorrupted())
 	{
-		// ºÎÆÐ Á¤È­ Ã³¸®
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È­ Ã³ï¿½ï¿½
 		HandleCorruptionPurification(Props, LocalIncomingHealing);
 		return;
 	}
 
-	// Á¤»ó »óÅÂ: ±×³É Èú·® Àû¿ë (ÄÁÅ×ÀÌ³Ê ¹«°üÇÏ°Ô)
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½: ï¿½×³ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï°ï¿½)
 	float NewHealth = FMath::Min(CurrentHealth + LocalIncomingHealing, MaxHealthValue);
 	SetHealth(NewHealth);
 }
@@ -233,17 +233,17 @@ void UDRPlayerAttributeSet::HandleCorruptionPurification(const FEffectProperties
 
 	bCorrupted = false;
 
-	// 1. Á¤»ó »óÅÂ·Î º¹¿ø (ÃÖ´ë Ã¼·ÂÀ» ¿ø·¡´ë·Î)
+	// 1. ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Â·ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½Ö´ï¿½ Ã¼ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
 	const float NormalMaxHealth = NumContainers * ContainerHealth;
 	SetMaxHealth(NormalMaxHealth);
 	SetHealth(ContainerHealth);
 
-	// DRPlayerStateÀÇ SetCorruptedState »ç¿ë
+	// DRPlayerStateï¿½ï¿½ SetCorruptedState ï¿½ï¿½ï¿½
 	if (ADRCharacter* Owner = Cast<ADRCharacter>(Props.TargetAvatarActor))
 	{
 		if (ADRPlayerState* PlayerState = Owner->GetPlayerState<ADRPlayerState>())
 		{
-			// false·Î ¼³Á¤ÇÏ¿© ºÎÆÐ »óÅÂ ÇØÁ¦
+			// falseï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï¿ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 			PlayerState->SetCorruptedState(false);
 
 			UE_LOG(LogTemp, Log, TEXT("Corruption purified using SetCorruptedState"));

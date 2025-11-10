@@ -5,6 +5,7 @@
 #include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "AbilitySystem/DRAttributeSet.h"
+#include "AbilitySystem/Data/StatusEffectInfo.h"
 #include "Game/DRStageGameState.h"
 #include "Phase/DRPhaseBase.h"
 
@@ -15,11 +16,6 @@ void UOverlayWidgetController::BroadcastInitialValues()
 	OnMaxHealthChanged.Broadcast(GetDRAS()->GetMaxHealth());
 	OnWaterChanged.Broadcast(GetDRAS()->GetWater());
 	OnMaxWaterChanged.Broadcast(GetDRAS()->GetMaxWater());
-
-	// 디버프 초기 상태
-	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
-    
-	OnBleedDebuffChanged.Broadcast(AbilitySystemComponent->HasMatchingGameplayTag(GameplayTags.Debuff_Bleed));
 
 	// 페이즈 목표 초기값 추가
 	HandlePhaseObjectiveChanged();
@@ -55,20 +51,66 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 			OnMaxWaterChanged.Broadcast(Data.NewValue);
 		}
 	);
-
-	// 디버프 태그 바인딩
-	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
-
-	AbilitySystemComponent->RegisterGameplayTagEvent(GameplayTags.Debuff_Bleed, EGameplayTagEventType::NewOrRemoved).AddLambda(
-		[this](const FGameplayTag Tag, int32 NewCount)
-		{
-			OnBleedDebuffChanged.Broadcast(NewCount > 0);
-		}
-	);
+	
 
 	// �����Ƽ ���� �ʱ�ȭ ó��
 	if (GetDRASC())
 	{
+		GetDRASC()->EffectAssetTags.AddLambda(
+			[this](const FGameplayTagContainer& AssetTags, bool HasDuration, const float Duration, bool DisplayStackCount, const int32 StackCount)
+			{
+				FGameplayTag BuffTag = FGameplayTag::RequestGameplayTag(FName("Buff"));
+				FGameplayTag DebuffTag = FGameplayTag::RequestGameplayTag(FName("Debuff"));
+				for (const FGameplayTag& Tag : AssetTags)
+				{
+					if (Tag.MatchesTag(BuffTag))
+					{
+						FEffectInfo EffectInfo = StatusEffectData->FindEffectInfoForTag(Tag);
+						if (EffectInfo.EffectTag.IsValid())
+						{
+							EffectInfo.bHasDuration = HasDuration;
+							EffectInfo.Duration = Duration;
+							EffectInfo.bDisplayStack = DisplayStackCount;
+							EffectInfo.StackCount = StackCount;
+							StatusEffectWidgetDelegate.Broadcast(EffectInfo);
+						}
+					}
+					if (Tag.MatchesTag(DebuffTag))
+					{
+						FEffectInfo EffectInfo = StatusEffectData->FindEffectInfoForTag(Tag);
+						if (EffectInfo.EffectTag.IsValid())
+						{
+							EffectInfo.bHasDuration = HasDuration;
+							EffectInfo.Duration = Duration;
+							EffectInfo.bDisplayStack = DisplayStackCount;
+							EffectInfo.StackCount = StackCount;
+							EffectInfo.bIsDebuff = true;
+							StatusEffectWidgetDelegate.Broadcast(EffectInfo);
+						}
+					}
+				}
+			}
+		);
+
+		GetDRASC()->EffectRemovedDelegate.AddLambda(
+			[this](const FGameplayTagContainer& AssetTags)
+			{
+				FGameplayTag BuffTag = FGameplayTag::RequestGameplayTag(FName("Buff"));
+				FGameplayTag DebuffTag = FGameplayTag::RequestGameplayTag(FName("Debuff"));
+				for (const FGameplayTag& Tag : AssetTags)
+				{
+					if (Tag.MatchesTag(BuffTag))
+					{
+						EffectTagRemovedDelegate.Broadcast(Tag, false);
+					}
+					if (Tag.MatchesTag(DebuffTag))
+					{
+						EffectTagRemovedDelegate.Broadcast(Tag, true);
+					}
+				}
+			}
+		);
+		
 		// ���� �����Ƽ�� �̹� �ο��Ǿ��ٸ� ��� ��ε�ĳ��Ʈ
 		if (GetDRASC()->bStartupAbilitiesGiven)
 		{
@@ -84,7 +126,6 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 	// GameState 페이즈 목표 델리게이트 바인딩
 	if (ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>())
 	{
-		UE_LOG(LogTemp, Log, TEXT("Hello Bind"));
 		DRGameState->OnPhaseObjectiveChangedDelegate.AddLambda(
 			[this]()
 			{
@@ -101,8 +142,6 @@ void UOverlayWidgetController::HandlePhaseObjectiveChanged()
     
     FPhaseObjectiveData ObjectiveData = DRGameState->GetCurrentPhaseObjective();
     int32 CurrentProgress = DRGameState->GetCurrentObjectiveProgress();
-
-	UE_LOG(LogTemp, Log, TEXT("Bye Bind"));
 	
 	OnObjectiveTextChanged.Broadcast(ObjectiveData.ObjectiveTitle,ObjectiveData.ProgressFormat);
 	OnObjectiveProgressChanged.Broadcast(CurrentProgress,ObjectiveData.RequiredCount);
