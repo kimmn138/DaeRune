@@ -124,13 +124,14 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 	}
 
 	// GameState 페이즈 목표 델리게이트 바인딩
-	if (ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>())
+	if (UWorld* World = GetWorld())
 	{
-		DRGameState->OnPhaseObjectiveChangedDelegate.AddLambda(
-			[this]()
-			{
-				HandlePhaseObjectiveChanged();
-			}
+		World->GetTimerManager().SetTimer(
+			PhaseBindingDelayTimer,
+			this,
+			&UOverlayWidgetController::BindPhaseObjectiveDelegate,
+			1.0f,  // 1.0초 대기
+			false  // 한 번만 실행
 		);
 	}
 }
@@ -145,5 +146,24 @@ void UOverlayWidgetController::HandlePhaseObjectiveChanged()
 	
 	OnObjectiveTextChanged.Broadcast(ObjectiveData.ObjectiveTitle,ObjectiveData.ProgressFormat);
 	OnObjectiveProgressChanged.Broadcast(CurrentProgress,ObjectiveData.RequiredCount);
+}
+
+void UOverlayWidgetController::BindPhaseObjectiveDelegate()
+{
+	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
+    
+	if (DRGameState)
+	{
+		// 델리게이트 바인딩
+		DRGameState->OnPhaseObjectiveChangedDelegate.AddLambda(
+			[this]()
+			{
+				HandlePhaseObjectiveChanged();
+			}
+		);
+        
+		// 현재 값 즉시 받아오기
+		HandlePhaseObjectiveChanged();
+	}
 }
 

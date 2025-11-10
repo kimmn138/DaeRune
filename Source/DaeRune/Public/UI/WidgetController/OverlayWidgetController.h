@@ -86,6 +86,9 @@ public:
 
 private:
 	void HandlePhaseObjectiveChanged();
+	void BindPhaseObjectiveDelegate();
+
+	FTimerHandle PhaseBindingDelayTimer;
 	
 	int32 CachedPhaseNumber = -1;
 	int32 CachedProgress = -1;
