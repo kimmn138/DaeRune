@@ -10,6 +10,7 @@
 #include "GameFramework/Character.h"
 #include "UI/Widget/DamageTextComponent.h"
 #include "Actor/DRCleanserPart.h"
+#include "Actor/DRCleanserSite.h"
 #include "Character/DRCharacter.h"
 #include "Camera/CameraComponent.h"
 
@@ -140,6 +141,17 @@ void ADRPlayerController::ServerNotifyLineTraceLost_Implementation(ADRCleanserPa
 	Part->MulticastShowInteractionUI(this, false);
 }
 
+void ADRPlayerController::ServerRequestInstallPartToSite_Implementation(ADRCleanserSite* Site)
+{
+	if (!HasAuthority() || !Site) return;
+	// 캐릭터 가져오기
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter) return;
+
+	// 클렌저 사이트에 부품 설치
+	Site->InstallPart(DRCharacter);
+}
+
 void ADRPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
@@ -266,14 +278,23 @@ void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::HandleInteract()
 {
-	// ��ǰ ȹ�� �õ�
-	if (CurrentDetectedPart)
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter) return;
+	
+	// 부품을 들고 있지 않을 때만 부품 획득 시도
+	if (!DRCharacter->IsCarryingPart() && CurrentDetectedPart)
 	{
 		ServerRequestPickupPart(CurrentDetectedPart);
 		return;
 	}
-
-	// ���� ��������Ʈ ��ε�ĳ��Ʈ (Ŭ���� ����Ʈ ��ġ��)
+	
+	// 부품을 들고 있고 클렌저 사이트 오버랩 중이면 설치
+	if (DRCharacter->IsCarryingPart() && CurrentOverlappedSite)
+	{
+		ServerRequestInstallPartToSite(CurrentOverlappedSite);
+		return;
+	}
+	
 	OnInteractPressed.Broadcast();
 }
 

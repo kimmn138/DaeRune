@@ -119,10 +119,6 @@ protected:
 	UFUNCTION()
 	void OnBoxEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
-	// 상호작용 키 입력 시
-	UFUNCTION()
-	void OnPlayerInteract();
-
 	// UI 업데이트
 	void UpdateInteractionUI();
 
@@ -164,10 +160,6 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_InstalledPartsCount, BlueprintReadOnly, Category = "CleanserSite|Phase2")
 	int32 InstalledPartsCount;
 
-	// 현재 오버랩 중인 플레이어 컨트롤러
-	UPROPERTY()
-	TObjectPtr<ADRPlayerController> OverlappingPlayerController;
-
 	UFUNCTION()
 	void OnRep_CurrentState();
 
@@ -192,6 +184,4 @@ protected:
 private:
 	// GAS 초기화
 	void InitAbilityActorInfo();
-
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 };

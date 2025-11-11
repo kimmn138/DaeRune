@@ -43,7 +43,6 @@ ADRCleanserSite::ADRCleanserSite()
 	InteractionWidget->SetDrawSize(FVector2D(300.0f, 100.0f));
 	InteractionWidget->SetVisibility(false);
 	InteractionWidget->SetOwnerNoSee(false);
-	InteractionWidget->SetOnlyOwnerSee(true);
 
 	// GAS 컴포넌트 생성
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
@@ -56,7 +55,6 @@ ADRCleanserSite::ADRCleanserSite()
 	CurrentState = ECleanserSiteState::Inactive;
 	bHealthEnabled = false;
 	InstalledPartsCount = 0;
-	OverlappingPlayerController = nullptr;
 }
 
 void ADRCleanserSite::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -188,17 +186,15 @@ void ADRCleanserSite::BeginPlay()
 	if (HasAuthority())
 	{
 		InitAbilityActorInfo();
-
-		// 오버랩 이벤트 바인딩
-		InteractionBox->OnComponentBeginOverlap.AddDynamic(this, &ADRCleanserSite::OnBoxBeginOverlap);
-		InteractionBox->OnComponentEndOverlap.AddDynamic(this, &ADRCleanserSite::OnBoxEndOverlap);
 	}
+
+	// 오버랩 이벤트 바인딩
+	InteractionBox->OnComponentBeginOverlap.AddDynamic(this, &ADRCleanserSite::OnBoxBeginOverlap);
+	InteractionBox->OnComponentEndOverlap.AddDynamic(this, &ADRCleanserSite::OnBoxEndOverlap);
 }
 
 void ADRCleanserSite::OnBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (!HasAuthority()) return;
-
 	// Phase2가 아니면 무시
 	if (CurrentState != ECleanserSiteState::Active) return;
 
@@ -208,60 +204,40 @@ void ADRCleanserSite::OnBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent
 	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
 	if (!Character) return;
 
-	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
-	if (!PC) return;
-
 	// 플레이어가 부품을 들고 있는지 확인
 	if (!Character->IsCarryingPart()) return;
 
-	// 이미 다른 플레이어가 상호작용 중이면 무시
-	if (OverlappingPlayerController) return;
+	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
+	if (!PC) return;
 
-	OverlappingPlayerController = PC;
-
-	// Owner 설정 및 UI 표시
-	SetOwner(Character);
-	InteractionWidget->SetVisibility(true);
-
-	// 상호작용 델리게이트 구독
-	OverlappingPlayerController->OnInteractPressed.AddDynamic(this, &ADRCleanserSite::OnPlayerInteract);
+	// 로컬 컨트롤러에서만 처리
+	if (PC->IsLocalController())
+	{
+		// PlayerController에 현재 사이트 설정 (CleanserPart 방식과 동일!)
+		PC->CurrentOverlappedSite = this;
+		
+		// UI 표시
+		InteractionWidget->SetVisibility(true);
+	}
 }
 
 void ADRCleanserSite::OnBoxEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	if (!HasAuthority()) return;
-
 	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
 	if (!Character) return;
 
 	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
 	if (!PC) return;
 
-	// 현재 오버랩 중인 플레이어가 아니면 무시
-	if (OverlappingPlayerController != PC) return;
-
-	// UI 숨김
-	InteractionWidget->SetVisibility(false);
-	SetOwner(nullptr);
-
-	// 델리게이트 구독 해제
-	OverlappingPlayerController->OnInteractPressed.RemoveDynamic(this, &ADRCleanserSite::OnPlayerInteract);
-	OverlappingPlayerController = nullptr;
-}
-
-void ADRCleanserSite::OnPlayerInteract()
-{
-	// 서버에서 부품 설치 처리
-	if (!HasAuthority()) return;
-
-	// 오버랩 중인 플레이어의 캐릭터 가져오기
-	if (!OverlappingPlayerController) return;
-
-	ADRCharacter* Character = OverlappingPlayerController->GetPawn<ADRCharacter>();
-	if (!Character) return;
-
-	// 부품 설치
-	InstallPart(Character);
+	// 로컬 컨트롤러에서만 처리
+	if (PC->IsLocalController())
+	{
+		// PlayerController의 사이트 참조 제거
+		PC->CurrentOverlappedSite = nullptr;
+		
+		// UI 숨김
+		InteractionWidget->SetVisibility(false);
+	}
 }
 
 void ADRCleanserSite::UpdateInteractionUI()
@@ -334,16 +310,4 @@ void ADRCleanserSite::InitAbilityActorInfo()
 	{
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
 	}
-}
-
-void ADRCleanserSite::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-	// 델리게이트 구독 해제
-	if (OverlappingPlayerController)
-	{
-		OverlappingPlayerController->OnInteractPressed.RemoveDynamic(this, &ADRCleanserSite::OnPlayerInteract);
-		OverlappingPlayerController = nullptr;
-	}
-
-	Super::EndPlay(EndPlayReason);
 }

@@ -18,6 +18,7 @@ struct FInputActionValue;
 class UDRInputConfig;
 class UDRAbilitySystemComponent;
 class ADRCleanserPart;
+class ADRCleanserSite;
 
 /**
  * DaeRune 플레이어의 입력 처리 및 UI 관리 클래스
@@ -73,6 +74,12 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void ServerNotifyLineTraceLost(ADRCleanserPart* Part);
+
+	UPROPERTY()
+	TObjectPtr<class ADRCleanserSite> CurrentOverlappedSite;
+	
+	UFUNCTION(Server, Reliable)
+	void ServerRequestInstallPartToSite(ADRCleanserSite* Site);
 
 protected:
 	virtual void BeginPlay() override;
