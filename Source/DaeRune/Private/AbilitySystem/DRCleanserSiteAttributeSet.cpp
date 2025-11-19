@@ -5,6 +5,8 @@
 #include "Net/UnrealNetwork.h"
 #include "GameplayEffectExtension.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "DRGameplayTags.h"
+#include "Actor/DRCleanserSite.h"
 
 UDRCleanserSiteAttributeSet::UDRCleanserSiteAttributeSet()
 {
@@ -49,21 +51,48 @@ void UDRCleanserSiteAttributeSet::PostGameplayEffectExecute(const FGameplayEffec
 	// IncomingDamage 처리
 	if (Data.EvaluatedData.Attribute == GetIncomingDamageAttribute())
 	{
-		const float LocalIncomingDamage = GetIncomingDamage();
-		SetIncomingDamage(0.0f);
+		HandleIncomingDamage(Data);
+	}
+}
 
-		if (LocalIncomingDamage > 0.0f)
+void UDRCleanserSiteAttributeSet::HandleIncomingDamage(const FGameplayEffectModCallbackData& Data)
+{
+	float LocalIncomingDamage = GetIncomingDamage();
+	SetIncomingDamage(0.0f);
+
+	if (LocalIncomingDamage > 0.0f)
+	{
+		if (ADRCleanserSite* CleanserSite = Cast<ADRCleanserSite>(GetOwningActor()))
 		{
-			// 체력 감소
-			const float NewHealth = GetHealth() - LocalIncomingDamage;
-			SetHealth(FMath::Clamp(NewHealth, 0.0f, GetMaxHealth()));
-
-			// 체력이 0이 되면 파괴 이벤트
-			if (GetHealth() <= 0.0f)
+			if(UAbilitySystemComponent* ASC = CleanserSite->GetAbilitySystemComponent())
 			{
-				// TODO: 클렌저 사이트 파괴 처리
-				UE_LOG(LogTemp, Warning, TEXT("CleanserSite destroyed!"));
+				if (ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Debuff_Elite))
+				{
+					LocalIncomingDamage *= EliteDebuffModifier;
+				}
 			}
+		}
+		
+		// 체력 감소
+		const float NewHealth = GetHealth() - LocalIncomingDamage;
+		SetHealth(FMath::Clamp(NewHealth, 0.0f, GetMaxHealth()));
+
+		UE_LOG(LogTemp, Log, TEXT("CleanserSite Health: %f"), GetHealth());
+
+		// 체력 비율 계산
+		const float HealthRatio = GetMaxHealth() > 0.0f ? NewHealth / GetMaxHealth() : 0.0f;
+
+		// 체력이 50% 이하이고 아직 트리거 안 됐으면
+		if (HealthRatio <= 0.5f && !bHalfHealthTriggered)
+		{
+			bHalfHealthTriggered = true;
+			OnHealthBelowHalfDelegate.Broadcast();
+		}
+
+		// 체력이 0이 되면 파괴 이벤트
+		if (NewHealth <= 0.0f)
+		{
+			OnHealthZeroDelegate.Broadcast();
 		}
 	}
 }

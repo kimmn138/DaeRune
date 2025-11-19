@@ -7,6 +7,7 @@
 #include "AbilitySystemInterface.h"
 #include "DRCleanserSite.generated.h"
 
+class UGameplayEffect;
 class UAbilitySystemComponent;
 class UDRCleanserSiteAttributeSet;
 class UStaticMeshComponent;
@@ -30,6 +31,8 @@ enum class ECleanserSiteState : uint8
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCleanserSiteDestroyed, ADRCleanserSite*, DestroyedSite);
 // 부품 설치 완료 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPartInstalled, ADRCleanserSite*, Site);
+// 클렌저 사이트 체력 50% 이하 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCleanserSiteHealthHalf, ADRCleanserSite*, Site);
 
 /**
  * 클렌저 설치 지점
@@ -78,18 +81,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite|Phase2")
 	bool IsPartInstallationComplete() const { return InstalledPartsCount >= RequiredPartsCount; }
 
-	// 가동 시작 (Phase3 - 체력 활성화)
-	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
-	void StartOperation();
-
-	// 가동 종료 (Phase3 끝 - 체력 비활성화)
-	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
-	void StopOperation();
-
-	// 방어 완료 (Phase4)
-	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
-	void SetCompleted();
-
 	// 현재 상태 가져오기
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	ECleanserSiteState GetCurrentState() const { return CurrentState; }
@@ -110,6 +101,12 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "CleanserSite")
 	FOnCleanserSiteDestroyed OnCleanserSiteDestroyed;
 
+	// 클렌저 사이트 체력 50% 이하일 때
+	UPROPERTY(BlueprintAssignable, Category = "CleanserSite")
+	FOnCleanserSiteHealthHalf OnCleanserSiteHealthHalf;
+
+	void InitializeDefaultAttributes() const;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -120,7 +117,7 @@ protected:
 	void OnBoxEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
 	// UI 업데이트
-	void UpdateInteractionUI();
+	void UpdateInteractionUI() const;
 
 	// ========== Components ==========
 
@@ -147,6 +144,15 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UDRCleanserSiteAttributeSet> AttributeSet;
 
+	// ========== GAS Attributes ==========
+
+	// 기본 체력 속성 (Phase3에서 사용)
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Attributes")
+	TSubclassOf<UGameplayEffect> DefaultPrimaryAttributes;
+	
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Attributes")
+	TSubclassOf<UGameplayEffect> DefaultVitalAttributes;
+
 	// ========== State ==========
 
 	// 필요한 부품 개수
@@ -161,10 +167,10 @@ protected:
 	int32 InstalledPartsCount;
 
 	UFUNCTION()
-	void OnRep_CurrentState();
+	void OnRep_CurrentState() const;
 
 	UFUNCTION()
-	void OnRep_InstalledPartsCount();
+	static void OnRep_InstalledPartsCount();
 
 	// ========== 체력 관리 (Phase3 전용) ==========
 
@@ -172,14 +178,8 @@ protected:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "CleanserSite")
 	bool bHealthEnabled;
 
-	// 체력 초기화
-	void InitializeHealth();
-
-	// 체력 비활성화
-	void DisableHealth();
-
-	// 체력 변경 감지
-	void OnHealthChanged(const FOnAttributeChangeData& Data);
+	// GAS 관련 함수
+	void ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass) const;
 
 private:
 	// GAS 초기화

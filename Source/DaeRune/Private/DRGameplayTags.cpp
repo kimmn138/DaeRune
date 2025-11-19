@@ -121,6 +121,15 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	 * 디버프 효과
 	 */
 
+	GameplayTags.Buff_Elite = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.Elite"),
+		FString("Buff for Elite Monster")
+	);
+	
+	/*
+	 * 디버프 효과
+	 */
+
 	GameplayTags.Debuff_Arcane = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Debuff.Arcane"),
 		FString("Debuff for Arcane damage")
@@ -144,6 +153,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Debuff_Bleed = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Debuff.Bleed"),
 		FString("Debuff for Bleed damage")
+	);
+
+	GameplayTags.Debuff_Elite = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Debuff.Elite"),
+		FString("Debuff for Elite Monster")
 	);
 
 	/*

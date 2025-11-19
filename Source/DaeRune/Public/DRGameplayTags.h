@@ -46,12 +46,16 @@ public:
 	// 기본 힐
 	FGameplayTag Heal;
 
+	// 버프 효과
+	FGameplayTag Buff_Elite;
+	
 	// 디버프 효과
 	FGameplayTag Debuff_Burn; 
 	FGameplayTag Debuff_Stun;
 	FGameplayTag Debuff_Arcane;
 	FGameplayTag Debuff_Physical;
 	FGameplayTag Debuff_Bleed;
+	FGameplayTag Debuff_Elite;
 
 	// 디버프 계산용 태그
 	FGameplayTag Debuff_Chance; 

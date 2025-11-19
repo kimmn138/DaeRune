@@ -8,6 +8,7 @@
 #include "UI/WidgetController/OverlayWidgetController.h"
 #include "DREnemy.generated.h"
 
+class UBlackboardComponent;
 class UWidgetComponent;
 class UBehaviorTree;
 class ADRAIController;
@@ -31,6 +32,8 @@ public:
 	virtual void SetCombatTarget_Implementation(AActor* InCombatTarget) override;
 	virtual AActor* GetCombatTarget_Implementation() const override;
 	/** end Combat Interface */
+
+	UBlackboardComponent* GetBlackboardComponent() const;
 
 	// 현재 전투 대상
 	UPROPERTY(BlueprintReadWrite, Category = "Combat")
@@ -81,6 +84,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Part System")
 	bool HasPart() const { return bCarriesPart && PartMeshComponent && PartMeshComponent->IsVisible(); }
 
+	// 광폭화 시스템
+	
+	UPROPERTY(BlueprintReadWrite, Category = "Enemy|Phase")
+	bool bIsPhase3Enemy = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Enemy|Combat")
+	bool bIsEnraged = false;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Enemy|Combat")
+	float EnrageHealthThreshold = 0.2f; // 20%
+
+	UPROPERTY(EditDefaultsOnly, Category = "Enemy|Combat")
+	TSubclassOf<UGameplayEffect> EnrageMovementSpeedGE;
+
+	void TriggerEnrage();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void InitAbilityActorInfo() override;
@@ -88,10 +107,6 @@ protected:
 	virtual void StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount) override;
 
 	virtual float GetMoveSpeed() override;
-
-	// 적 레벨
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Class Defaults")
-	int32 Level = 1;
 
 	// 체력바 UI 위젯
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)

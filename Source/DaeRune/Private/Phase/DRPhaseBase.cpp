@@ -69,28 +69,14 @@ void UDRPhaseBase::SetActiveCleanserSites(const TArray<TObjectPtr<ADRCleanserSit
 void UDRPhaseBase::OnEnemyDeath(AActor* DeadEnemy)
 {
 	if (!DeadEnemy || !bIsPhaseActive) return;
+
+	// SpawnedEnemies 배열에서 죽은 적 제거
+	SpawnedEnemies.Remove(DeadEnemy);
 }
 
 int32 UDRPhaseBase::GetAliveEnemyCount() const
 {
-	int32 AliveCount = 0;
-
-	for (const TWeakObjectPtr<AActor>& EnemyPtr : SpawnedEnemies)
-	{
-		if (EnemyPtr.IsValid())
-		{
-			// �׾����� Ȯ��
-			if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(EnemyPtr.Get()))
-			{
-				if (!CombatInterface->Execute_IsDead(EnemyPtr.Get()))
-				{
-					AliveCount++;
-				}
-			}
-		}
-	}
-
-	return AliveCount;
+	return SpawnedEnemies.Num();
 }
 
 void UDRPhaseBase::SetupPhaseObjective(int32 PhaseNumber)

@@ -107,6 +107,12 @@ void UDRPhase2::SpawnPartCarryingEnemies()
 		ADREnemy* SpawnedEnemy = SpawnEnemyAtLocation(SpawnPoint);
 		if (SpawnedEnemy)
 		{
+			// 델리게이트 바인딩
+			if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(SpawnedEnemy))
+			{
+				CombatInterface->GetOnDeathDelegate().AddDynamic(this, &UDRPhaseBase::OnEnemyDeath);
+			}
+			
 			// 스폰된 적 추적 (OnPhaseEnd에서 남은 적 정리용)
 			SpawnedEnemies.Add(SpawnedEnemy);
 		}

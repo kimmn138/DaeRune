@@ -9,89 +9,184 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Interaction/CombatInterface.h"
+#include "DrawDebugHelpers.h"
+#include "Engine/OverlapResult.h"
 
-bool UDRWaterPump::TraceFromWeaponToAim(const FVector& WeaponSocketLocation, FHitResult& OutHitResult)
+FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLocation, bool& bHitObstacle, FHitResult& OutHitResult)
 {
-    // 소유자 캐릭터 확인
+    FVector AimStart, AimDirection;
+    if (!GetAimDirection(AimStart, AimDirection))
+    {
+        bHitObstacle = false;
+        return WeaponSocketLocation + FVector::ForwardVector * WeaponRange;
+    }
+
+    // 카메라에서 최대 사정거리까지의 목표 지점
+    FVector CameraTargetPoint = AimStart + (AimDirection * WeaponRange);
+
+    // 무기 소켓에서 목표 지점으로 LineTrace
     ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
-    if (!OwnerCharacter)
-    {
-        return false;
-    }
-
-    // 플레이어 컨트롤러 확인
-    APlayerController* PC = Cast<APlayerController>(OwnerCharacter->GetController());
-    if (!PC)
-    {
-        return false;
-    }
-
-    // 카메라 위치와 방향 구하기
-    FVector CameraLocation;
-    FRotator CameraRotation;
-    PC->GetPlayerViewPoint(CameraLocation, CameraRotation);
-
-    // 카메라에서 사정거리만큼 떨어진 지점 계산 (벡터 계산)
-    FVector AimDirection = CameraRotation.Vector();
-    FVector TargetLocation = CameraLocation + (AimDirection * WeaponRange);
-
-    // 무기 소켓에서 목표 지점으로 라인 트레이스
+    
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(OwnerCharacter);
     QueryParams.bTraceComplex = false;
     QueryParams.bReturnPhysicalMaterial = false;
 
-    // 라인 트레이스 실행
-    bool bHit = GetWorld()->LineTraceSingleByChannel(
+    // LineTrace 실행 (장애물 감지)
+    bHitObstacle = GetWorld()->LineTraceSingleByChannel(
         OutHitResult,
         WeaponSocketLocation,
-        TargetLocation,
-        ECC_Target,
+        CameraTargetPoint,
+        ECC_Visibility, // 벽/장애물 감지용 채널
         QueryParams
     );
 
-    // 디버그 시각화 (옵션)
-#if ENABLE_DRAW_DEBUG
-    const float DebugDuration = 2.0f;
-    const FColor TraceColor = bHit ? FColor::Red : FColor::Green;
+    FVector BeamEndPoint;
+    if (bHitObstacle)
+    {
+        // 중간에 장애물 있으면 그 지점까지만
+        BeamEndPoint = OutHitResult.ImpactPoint;
+    }
+    else
+    {
+        // 장애물 없으면 최대 거리까지
+        BeamEndPoint = CameraTargetPoint;
+    }
 
-    DrawDebugLine(
-        GetWorld(),
-        WeaponSocketLocation,
-        bHit ? OutHitResult.ImpactPoint : TargetLocation,
-        TraceColor,
-        false,
-        DebugDuration,
-        0,
-        2.0f
+    // 디버그 시각화
+#if ENABLE_DRAW_DEBUG
+    if (bShowDebugVisualization)
+    {
+        const float DebugDuration = 0.1f;
+        const FColor TraceColor = bHitObstacle ? FColor::Red : FColor::Green;
+
+        DrawDebugLine(
+            GetWorld(),
+            WeaponSocketLocation,
+            BeamEndPoint,
+            TraceColor,
+            false,
+            DebugDuration,
+            0,
+            3.0f
+        );
+
+        if (bHitObstacle)
+        {
+            DrawDebugSphere(
+                GetWorld(),
+                OutHitResult.ImpactPoint,
+                20.0f,
+                12,
+                FColor::Red,
+                false,
+                DebugDuration
+            );
+        }
+    }
+#endif
+
+    return BeamEndPoint;
+}
+
+AActor* UDRWaterPump::FindClosestTargetInBeam(const FVector& WeaponSocketLocation, const FVector& BeamEndPoint)
+{
+    ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+    if (!OwnerCharacter) return nullptr;
+
+    // 물대포 방향과 길이 계산
+    FVector BeamDirection = (BeamEndPoint - WeaponSocketLocation).GetSafeNormal();
+    float BeamLength = FVector::Distance(WeaponSocketLocation, BeamEndPoint);
+
+    // 박스 중심점 (무기 소켓과 끝점의 중간)
+    FVector BoxCenter = WeaponSocketLocation + (BeamDirection * BeamLength * 0.5f);
+
+    // 박스 크기 (좁고 긴 형태)
+    FVector BoxHalfExtent(BeamLength * 0.5f, BeamWidth * 0.5f, BeamHeight * 0.5f);
+
+    // 회전 계산 (물대포 방향으로)
+    FRotator BoxRotation = BeamDirection.Rotation();
+    FQuat BoxQuat = BoxRotation.Quaternion();
+
+    // Overlap 결과 저장
+    TArray<FOverlapResult> OverlapResults;
+
+    // 충돌 쿼리 파라미터
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(OwnerCharacter);
+    QueryParams.bTraceComplex = false;
+
+    // BoxOverlapMulti 실행
+    bool bHasOverlaps = GetWorld()->OverlapMultiByChannel(
+        OverlapResults,
+        BoxCenter,
+        BoxQuat,
+        ECC_Target,
+        FCollisionShape::MakeBox(BoxHalfExtent),
+        QueryParams
     );
 
-    if (bHit)
+    // 디버그 시각화
+#if ENABLE_DRAW_DEBUG
+    if (bShowDebugVisualization)
     {
-        DrawDebugSphere(
+        const float DebugDuration = 0.1f;
+        DrawDebugBox(
             GetWorld(),
-            OutHitResult.ImpactPoint,
-            10.0f,
-            12,
-            FColor::Red,
+            BoxCenter,
+            BoxHalfExtent,
+            BoxQuat,
+            bHasOverlaps ? FColor::Yellow : FColor::Blue,
             false,
-            DebugDuration
+            DebugDuration,
+            0,
+            2.0f
         );
     }
 #endif
 
-    return bHit;
+    if (!bHasOverlaps) return nullptr;
+
+    // 가장 가까운 적 찾기
+    AActor* ClosestTarget = nullptr;
+    float ClosestDistanceSq = FLT_MAX;
+
+    for (const FOverlapResult& Result : OverlapResults)
+    {
+        AActor* OverlappedActor = Result.GetActor();
+        if (!OverlappedActor) continue;
+
+        // CombatInterface 체크
+        if (!OverlappedActor->Implements<UCombatInterface>()) continue;
+
+        // 죽은 적 제외
+        if (ICombatInterface::Execute_IsDead(OverlappedActor)) continue;
+
+        // 거리 계산
+        float DistanceSq = FVector::DistSquared(WeaponSocketLocation, OverlappedActor->GetActorLocation());
+
+        if (DistanceSq < ClosestDistanceSq)
+        {
+            ClosestDistanceSq = DistanceSq;
+            ClosestTarget = OverlappedActor;
+        }
+    }
+
+    return ClosestTarget;
 }
 
 void UDRWaterPump::StartWaterPumpLoop()
 {
-    // 타이머 시작
     if (UWorld* World = GetWorld())
     {
+        // 초기화
         DamageTickCounter = 0;
         CurrentTarget = nullptr;
         PreviousTarget = nullptr;
+        CachedBeamEndPoint = FVector::ZeroVector;
 
+        // 타이머 시작
         World->GetTimerManager().SetTimer(
             WaterPumpTimerHandle,
             this,
@@ -105,14 +200,15 @@ void UDRWaterPump::StartWaterPumpLoop()
 
 void UDRWaterPump::StopWaterPumpLoop()
 {
-    // 타이머 정지
     if (UWorld* World = GetWorld())
     {
         World->GetTimerManager().ClearTimer(WaterPumpTimerHandle);
 
+        // 정리
         DamageTickCounter = 0;
         CurrentTarget = nullptr;
         PreviousTarget = nullptr;
+        CachedBeamEndPoint = FVector::ZeroVector;
     }
 }
 
@@ -120,40 +216,46 @@ void UDRWaterPump::PerformWaterPumpTick()
 {
     // 무기 소켓 위치 가져오기
     ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
-    if (!OwnerCharacter || !OwnerCharacter->Implements<UCombatInterface>())
-    {
-        return;
-    }
+    if (!OwnerCharacter || !OwnerCharacter->Implements<UCombatInterface>()) return;
 
     FVector WeaponSocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(
         OwnerCharacter,
         FDRGameplayTags::Get().CombatSocket_RightHand
     );
 
-    // 트레이싱 수행
+    // 1단계: LineTrace로 물대포 끝점 계산
+    bool bHitObstacle = false;
     FHitResult HitResult;
-    bool bHit = TraceFromWeaponToAim(WeaponSocketLocation, HitResult);
+    FVector BeamEndPoint = CalculateWaterBeamEndPoint(WeaponSocketLocation, bHitObstacle, HitResult);
 
-    if (bHit && HitResult.GetActor())
+    // 끝점 캐시 (블루프린트에서 이펙트 위치로 사용)
+    CachedBeamEndPoint = BeamEndPoint;
+    OnBeamEndPointUpdated(BeamEndPoint);
+
+    // 2단계: BoxOverlap으로 가장 가까운 적 1명 찾기
+    AActor* NewTarget = FindClosestTargetInBeam(WeaponSocketLocation, BeamEndPoint);
+
+    // 3단계: 타겟 변경 체크
+    if (NewTarget)
     {
         // 새로운 타겟인지 확인
-        if (CurrentTarget != HitResult.GetActor())
+        if (CurrentTarget != NewTarget)
         {
             PreviousTarget = CurrentTarget;
-            CurrentTarget = HitResult.GetActor();
+            CurrentTarget = NewTarget;
             DamageTickCounter = 0; // 새 타겟이면 카운터 리셋
 
-            // 블루프린트에서 타겟 변경 이벤트 처리 가능
+            // 블루프린트 이벤트
             OnTargetChanged(PreviousTarget.Get(), CurrentTarget.Get());
         }
 
         // 틱 카운터 증가
         DamageTickCounter++;
-
-        // 데미지/효과 적용 시점 체크 (1초마다)
+        
+        // 데미지 적용 시점 체크 (1초마다)
         if (DamageTickCounter >= DamageApplicationInterval)
         {
-            DamageTickCounter = 0;
+            DamageTickCounter = 0; // 카운터 리셋
 
             // 블루프린트에서 효과 적용
             OnDamageTickReached(CurrentTarget.Get());
@@ -173,14 +275,11 @@ void UDRWaterPump::PerformWaterPumpTick()
     }
 }
 
-FGameplayAbilityTargetDataHandle UDRWaterPump::MakeTargetDataHandleFromActor(AActor* TargetActor)
+FGameplayAbilityTargetDataHandle UDRWaterPump::MakeTargetDataHandleFromActors(AActor* TargetActor)
 {
     FGameplayAbilityTargetDataHandle TargetDataHandle;
 
-    if (!TargetActor)
-    {
-        return TargetDataHandle;
-    }
+    if (!TargetActor) return TargetDataHandle;
 
     FGameplayAbilityTargetData_ActorArray* TargetData = new FGameplayAbilityTargetData_ActorArray();
     TargetData->TargetActorArray.Add(TargetActor);
@@ -188,5 +287,24 @@ FGameplayAbilityTargetDataHandle UDRWaterPump::MakeTargetDataHandleFromActor(AAc
     TargetDataHandle.Add(TargetData);
 
     return TargetDataHandle;
+}
+
+bool UDRWaterPump::GetAimDirection(FVector& OutAimStart, FVector& OutAimDirection) const
+{
+    ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+    if (!OwnerCharacter) return false;
+
+    APlayerController* PC = Cast<APlayerController>(OwnerCharacter->GetController());
+    if (!PC) return false;
+
+    // 카메라 위치와 방향 구하기
+    FVector CameraLocation;
+    FRotator CameraRotation;
+    PC->GetPlayerViewPoint(CameraLocation, CameraRotation);
+
+    OutAimStart = CameraLocation;
+    OutAimDirection = CameraRotation.Vector();
+
+    return true;
 }
 

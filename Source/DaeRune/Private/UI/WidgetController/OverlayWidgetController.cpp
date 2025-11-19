@@ -5,8 +5,12 @@
 #include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "AbilitySystem/DRAttributeSet.h"
+#include "AbilitySystem/DRCleanserSiteAttributeSet.h"
 #include "AbilitySystem/Data/StatusEffectInfo.h"
+#include "Actor/DRCleanserSite.h"
+#include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
+#include "Phase/DRPhase3.h"
 #include "Phase/DRPhaseBase.h"
 
 void UOverlayWidgetController::BroadcastInitialValues()
@@ -134,14 +138,32 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 			false  // 한 번만 실행
 		);
 	}
+
+	// Phase 변경 델리게이트 바인딩
+	if (ADRStageGameState* DRStageGameState = GetWorld()->GetGameState<ADRStageGameState>())
+	{
+		DRStageGameState->OnPhaseChangedDelegate.AddDynamic(this, &UOverlayWidgetController::OnPhaseChanged);
+	}
+}
+
+void UOverlayWidgetController::BindCallbacksCleanserSiteToDependencies()
+{
+	// 클렌저사이트 체력 델리게이트 바인딩 (서버 전용)
+	if (ADRStageGameMode* SGM = Cast<ADRStageGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		if(UDRPhase3* Phase3 = Cast<UDRPhase3>(SGM->GetCurrentPhase()))
+		{
+			Phase3->OnCleanserSiteReadyDelegate.AddDynamic(this, &UOverlayWidgetController::BindCleanserSite);
+		}
+	}
 }
 
 void UOverlayWidgetController::HandlePhaseObjectiveChanged()
 {
-	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
+	const ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
     if (!DRGameState) return;
-    
-    FPhaseObjectiveData ObjectiveData = DRGameState->GetCurrentPhaseObjective();
+
+    const FPhaseObjectiveData ObjectiveData = DRGameState->GetCurrentPhaseObjective();
     int32 CurrentProgress = DRGameState->GetCurrentObjectiveProgress();
 	
 	OnObjectiveTextChanged.Broadcast(ObjectiveData.ObjectiveTitle,ObjectiveData.ProgressFormat);
@@ -150,20 +172,127 @@ void UOverlayWidgetController::HandlePhaseObjectiveChanged()
 
 void UOverlayWidgetController::BindPhaseObjectiveDelegate()
 {
-	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
-    
-	if (DRGameState)
+	if (ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>())
 	{
 		// 델리게이트 바인딩
 		DRGameState->OnPhaseObjectiveChangedDelegate.AddLambda(
 			[this]()
 			{
 				HandlePhaseObjectiveChanged();
+
+				// Phase가 변경될 때마다 웨이브 타이머 바인딩 체크
+				CheckAndBindWaveTimer();
 			}
 		);
         
 		// 현재 값 즉시 받아오기
 		HandlePhaseObjectiveChanged();
 	}
+}
+
+void UOverlayWidgetController::BindWaveTimerDelegate()
+{
+	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
+	if (!DRGameState) return;
+	
+	// 웨이브 타이머 델리게이트 바인딩
+	DRGameState->OnWaveTimerChangedDelegate.AddLambda(
+		[this](int32 WaveNumber, float RemainingTime, bool bIsRestTime)
+		{
+			OnWaveTimerChanged.Broadcast(WaveNumber, RemainingTime, bIsRestTime);
+		}
+	);
+	
+	// 초기값 즉시 브로드캐스트
+	OnWaveTimerChanged.Broadcast(
+		DRGameState->GetCurrentWaveNumber(),
+		DRGameState->GetWaveRemainingTime(),
+		DRGameState->IsWaveRestTime()
+	);
+}
+
+void UOverlayWidgetController::CheckAndBindWaveTimer()
+{
+	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
+	if (!DRGameState) return;
+	
+	const int32 CurrentPhase = DRGameState->GetCurrentPhaseIndex();
+	
+	// Phase 3일 때만 바인딩 (인덱스 2)
+	if (CurrentPhase == 2)
+	{
+		// 이미 바인딩되었는지 체크
+		if (CachedPhaseNumber != 2)
+		{
+			CachedPhaseNumber = 2;
+			BindWaveTimerDelegate();
+		}
+	}
+	else
+	{
+		// Phase 3가 아니면 캐시 초기화
+		if (CachedPhaseNumber == 2)
+		{
+			CachedPhaseNumber = -1;
+		}
+	}
+}
+
+void UOverlayWidgetController::OnPhaseChanged(int32 NewPhaseIndex)
+{
+	// Phase 3 (인덱스 2)로 변경되었을 때만 처리
+	if (NewPhaseIndex == 2)
+	{
+		BindCallbacksCleanserSiteToDependencies();
+	}
+}
+
+void UOverlayWidgetController::BindCleanserSite(ADRCleanserSite* FirstCleanserSite,ADRCleanserSite* SecondCleanserSite)
+{
+	if (!FirstCleanserSite || !SecondCleanserSite) return;
+
+	UAbilitySystemComponent* FirstSiteAsc = FirstCleanserSite->GetAbilitySystemComponent();
+	const UDRCleanserSiteAttributeSet* FirstSiteAs = FirstCleanserSite->GetAttributeSet();
+	if (!FirstSiteAsc || !FirstSiteAs) return;
+
+	UAbilitySystemComponent* SecondSiteAsc = SecondCleanserSite->GetAbilitySystemComponent();
+	const UDRCleanserSiteAttributeSet* SecondSiteAs = SecondCleanserSite->GetAttributeSet();
+	if (!SecondSiteAsc || !SecondSiteAs) return;
+
+	// 체력 변경 바인딩
+	FirstSiteAsc->GetGameplayAttributeValueChangeDelegate(FirstSiteAs->GetHealthAttribute()).AddLambda(
+		[this](const FOnAttributeChangeData& Data)
+		{
+			OnFirstCleanserHealthChanged.Broadcast(Data.NewValue);
+		}
+	);
+
+	FirstSiteAsc->GetGameplayAttributeValueChangeDelegate(FirstSiteAs->GetMaxHealthAttribute()).AddLambda(
+		[this](const FOnAttributeChangeData& Data)
+		{
+			OnFirstCleanserMaxHealthChanged.Broadcast(Data.NewValue);
+		}
+	);
+
+	// 체력 변경 바인딩
+	SecondSiteAsc->GetGameplayAttributeValueChangeDelegate(SecondSiteAs->GetHealthAttribute()).AddLambda(
+		[this](const FOnAttributeChangeData& Data)
+		{
+			OnSecondCleanserHealthChanged.Broadcast(Data.NewValue);
+		}
+	);		
+
+	SecondSiteAsc->GetGameplayAttributeValueChangeDelegate(SecondSiteAs->GetMaxHealthAttribute()).AddLambda(
+		[this](const FOnAttributeChangeData& Data)
+		{
+			OnSecondCleanserMaxHealthChanged.Broadcast(Data.NewValue);
+		}
+	);
+
+	// 초기값 UI 표시
+	OnFirstCleanserHealthChanged.Broadcast(FirstSiteAs->GetHealth());
+	OnFirstCleanserMaxHealthChanged.Broadcast(FirstSiteAs->GetMaxHealth());
+	OnSecondCleanserHealthChanged.Broadcast(SecondSiteAs->GetHealth());
+	OnSecondCleanserMaxHealthChanged.Broadcast(SecondSiteAs->GetMaxHealth());
 }
 

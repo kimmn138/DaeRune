@@ -12,12 +12,23 @@
 
 void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 {
-	const float LocalIncomingDamage = GetIncomingDamage();
+	float LocalIncomingDamage = GetIncomingDamage();
 	SetIncomingDamage(0.f);
 	if (LocalIncomingDamage > 0.f)
 	{
 		// 데미지가 발생하면 전투 상태 진입
 		NotifyEnterCombat(Props);
+
+		if (ADREnemy* Enemy = Cast<ADREnemy>(Props.TargetAvatarActor))
+		{
+			if(UAbilitySystemComponent* ASC = Enemy->GetAbilitySystemComponent())
+			{
+				if (ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Buff_Elite))
+				{
+					LocalIncomingDamage *= EliteBuffModifier;
+				}
+			}
+		}
 
 		const float NewHealth = GetHealth() - LocalIncomingDamage;
 		SetHealth(FMath::Clamp(NewHealth, 0.f, GetMaxHealth()));
@@ -45,6 +56,12 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 					BB->SetValueAsBool("IsHealthLow", true);
 					BB->SetValueAsBool("IsInitialized", false);
 				}
+			}
+
+			const float HealthPercent = GetHealth() / GetMaxHealth();
+			if (HealthPercent <= Enemy->EnrageHealthThreshold && !Enemy->bIsEnraged && Enemy->bIsPhase3Enemy)
+			{
+				Enemy->TriggerEnrage();
 			}
 		}
 

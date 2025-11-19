@@ -14,6 +14,48 @@ ADRStageGameMode::ADRStageGameMode()
 	WipeoutDelayTime = 3.0f;
 }
 
+void ADRStageGameMode::TriggerGameOver()
+{
+	if (!HasAuthority()) return;
+    
+	// 이미 게임 오버 처리 중이면 중복 호출 방지
+	if (bIsWipeoutInProgress) return;
+    
+	bIsWipeoutInProgress = true;
+    
+	// TODO: 게임 오버 UI 표시, 사운드 재생 등
+    
+	// 약간의 딜레이 후 로비로 복귀 (플레이어가 상황 인지할 시간)
+	GetWorldTimerManager().SetTimer(
+		WipeoutTimerHandle,
+		this,
+		&ADRStageGameMode::ReturnToLobby,
+		WipeoutDelayTime,
+		false
+	);
+}
+
+void ADRStageGameMode::TriggerGameClear()
+{
+	if (!HasAuthority()) return;
+    
+	// 이미 게임 오버 처리 중이면 중복 호출 방지
+	if (bIsWipeoutInProgress) return;
+    
+	bIsWipeoutInProgress = true;
+    
+	// TODO: 게임 클리어 UI 표시, 사운드 재생 등
+    
+	// 약간의 딜레이 후 로비로 복귀 (플레이어가 상황 인지할 시간)
+	GetWorldTimerManager().SetTimer(
+		WipeoutTimerHandle,
+		this,
+		&ADRStageGameMode::ReturnToLobby,
+		WipeoutDelayTime,
+		false
+	);
+}
+
 void ADRStageGameMode::BeginPlay()
 {
 	Super::BeginPlay();
@@ -166,7 +208,6 @@ void ADRStageGameMode::EndCurrentPhase()
 	// ��������Ʈ �Ϸ� �̺�Ʈ ȣ��
 	// OnPhaseCompleted();
 
-	UE_LOG(LogTemp, Warning, TEXT("Transitioning to next phase..."));  // �� �߰�
 	TransitionToNextPhase();
 }
 
@@ -181,7 +222,7 @@ void ADRStageGameMode::TransitionToNextPhase()
 	if (NextIndex >= PhaseInstances.Num())
 	{
 		// ��������Ʈ ��ü �Ϸ� �̺�Ʈ ȣ��
-		// OnAllPhasesCompleted();
+		TriggerGameClear();
 		return;
 	}
 
@@ -196,8 +237,6 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 	int32 CurrentPhaseIndex = CachedGameState->GetCurrentPhaseIndex();
 	bool bIsCompleted = false;
 
-	UE_LOG(LogTemp, Warning, TEXT("========== ValidatePhaseCompletion: Phase %d =========="), CurrentPhaseIndex);
-
 	// ����� �Ϸ� ���� ����
 	switch (CurrentPhaseIndex)
 	{
@@ -205,9 +244,6 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 	{
 		bool bAreaSecured = CachedGameState->IsCleanserAreaSecured();
 		int32 RemainingEnemies = CachedGameState->GetRemainingEnemiesInArea();
-
-		UE_LOG(LogTemp, Warning, TEXT("Phase1 Check - AreaSecured: %s, RemainingEnemies: %d"),
-			bAreaSecured ? TEXT("TRUE") : TEXT("FALSE"), RemainingEnemies);  // �� �߰�
 
 		bIsCompleted = bAreaSecured && (RemainingEnemies == 0);
 	}
@@ -218,22 +254,16 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 		int32 CollectedParts = CachedGameState->GetCollectedParts();
 		bool bActivated = CachedGameState->IsCleanserActivated();
 
-		UE_LOG(LogTemp, Warning, TEXT("Phase2 Check - CollectedParts: %d, Activated: %s"),
-			CollectedParts, bActivated ? TEXT("TRUE") : TEXT("FALSE"));  // �� �߰�
-
 		bIsCompleted = (CollectedParts >= 4) && bActivated;
 	}
 	break;
 
 	case 2: // Phase 3: ���
 	{
-		int32 CurrentWave = CachedGameState->GetCurrentWave();
+		int32 CurrentWaveNumber = CachedGameState->GetCurrentWaveNumber();
 		int32 TotalWaves = CachedGameState->GetTotalWaves();
 
-		UE_LOG(LogTemp, Warning, TEXT("Phase3 Check - CurrentWave: %d, TotalWaves: %d"),
-			CurrentWave, TotalWaves);  // �� �߰�
-
-		bIsCompleted = CurrentWave >= TotalWaves;
+		bIsCompleted = CurrentWaveNumber >= TotalWaves;
 	}
 	break;
 
@@ -241,25 +271,17 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 	{
 		float BossHealth = CachedGameState->GetBossHealth();
 
-		UE_LOG(LogTemp, Warning, TEXT("Phase4 Check - BossHealth: %f"), BossHealth);  // �� �߰�
-
 		bIsCompleted = BossHealth <= 0.0f;
 	}
 	break;
 
 	default:
-		UE_LOG(LogTemp, Error, TEXT("ValidatePhaseCompletion: Invalid phase index %d"), CurrentPhaseIndex);  // �� �߰�
 		break;
 	}
 
 	if (bIsCompleted)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("========== Phase %d COMPLETED! =========="), CurrentPhaseIndex);  // �� �߰�
 		EndCurrentPhase();
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Phase %d not completed yet"), CurrentPhaseIndex);  // �� �߰�
 	}
 
 	return bIsCompleted;

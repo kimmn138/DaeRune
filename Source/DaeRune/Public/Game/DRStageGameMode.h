@@ -26,6 +26,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	bool ValidatePhaseCompletion();
 
+	UDRPhaseBase* GetCurrentPhase() { return CurrentPhase; }
+
+	// Phase별 게임 오버 트리거
+	UFUNCTION()
+	void TriggerGameOver();
+
+	UFUNCTION()
+	void TriggerGameClear();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void HandleWipeout() override;

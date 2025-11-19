@@ -97,6 +97,21 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 					0.5f,
 					false
 				);
+
+				// 캐릭터 액터 파괴
+				FTimerHandle DestroyTimerHandle;
+				GetWorld()->GetTimerManager().SetTimer(
+				   DestroyTimerHandle,
+				   [this]()
+				   {
+					  if (IsValid(this))
+					  {
+						 Destroy();
+					  }
+				   },
+				   2.5f,
+				   false
+				);
 			}
 		}
 	}
@@ -281,7 +296,7 @@ void ADRCharacterBase::InitAbilityActorInfo()
 {
 }
 
-void ADRCharacterBase::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass, float Level) const
+void ADRCharacterBase::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass) const
 {
 	check(IsValid(GetAbilitySystemComponent()));
 	check(GameplayEffectClass);
@@ -295,8 +310,8 @@ void ADRCharacterBase::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEf
 
 void ADRCharacterBase::InitializeDefaultAttributes() const
 {
-	ApplyEffectToSelf(DefaultPrimaryAttributes, 1.f);
-	ApplyEffectToSelf(DefaultVitalAttributes, 1.f);
+	ApplyEffectToSelf(DefaultPrimaryAttributes);
+	ApplyEffectToSelf(DefaultVitalAttributes);
 }
 
 void ADRCharacterBase::AddCharacterAbilities()

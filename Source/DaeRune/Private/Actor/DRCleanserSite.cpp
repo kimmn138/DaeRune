@@ -134,46 +134,6 @@ void ADRCleanserSite::InstallPart(ADRCharacter* Character)
 	}
 }
 
-void ADRCleanserSite::StartOperation()
-{
-	if (!HasAuthority()) return;
-
-	CurrentState = ECleanserSiteState::Operational;
-	bHealthEnabled = true;
-
-	// 체력 초기화
-	InitializeHealth();
-
-	// 체력 변경 감지 바인딩
-	if (AbilitySystemComponent && AttributeSet)
-	{
-		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetHealthAttribute()).AddUObject(this, &ADRCleanserSite::OnHealthChanged);
-	}
-}
-
-void ADRCleanserSite::StopOperation()
-{
-	if (!HasAuthority()) return;
-
-	bHealthEnabled = false;
-
-	// 체력 비활성화
-	DisableHealth();
-
-	// 체력 변경 감지 언바인딩
-	if (AbilitySystemComponent && AttributeSet)
-	{
-		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetHealthAttribute()).RemoveAll(this);
-	}
-}
-
-void ADRCleanserSite::SetCompleted()
-{
-	if (!HasAuthority()) return;
-
-	CurrentState = ECleanserSiteState::Completed;
-}
-
 FVector ADRCleanserSite::GetSpawnLocation() const
 {
 	return GetActorLocation();
@@ -213,7 +173,7 @@ void ADRCleanserSite::OnBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent
 	// 로컬 컨트롤러에서만 처리
 	if (PC->IsLocalController())
 	{
-		// PlayerController에 현재 사이트 설정 (CleanserPart 방식과 동일!)
+		// PlayerController에 현재 사이트 설정
 		PC->CurrentOverlappedSite = this;
 		
 		// UI 표시
@@ -240,7 +200,7 @@ void ADRCleanserSite::OnBoxEndOverlap(UPrimitiveComponent* OverlappedComponent, 
 	}
 }
 
-void ADRCleanserSite::UpdateInteractionUI()
+void ADRCleanserSite::UpdateInteractionUI() const
 {
 	// 부품이 다 설치되었으면 UI 숨김
 	if (InstalledPartsCount >= RequiredPartsCount)
@@ -249,7 +209,7 @@ void ADRCleanserSite::UpdateInteractionUI()
 	}
 }
 
-void ADRCleanserSite::OnRep_CurrentState()
+void ADRCleanserSite::OnRep_CurrentState() const
 {
 	// 클라이언트에서 상태 변경 시 시각 효과 업데이트
 	switch (CurrentState)
@@ -272,36 +232,25 @@ void ADRCleanserSite::OnRep_InstalledPartsCount()
 	// 예: 부품 개수에 따라 메시나 이펙트 변경
 }
 
-void ADRCleanserSite::InitializeHealth()
+void ADRCleanserSite::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass) const
 {
-	if (!HasAuthority() || !AttributeSet) return;
-
-	// 체력을 최대치로 초기화
-	AttributeSet->SetHealth(AttributeSet->GetMaxHealth());
+	check(IsValid(GetAbilitySystemComponent()));
+	check(GameplayEffectClass);
+	
+	// 컨텍스트 생성 및 소스 설정
+	FGameplayEffectContextHandle ContextHandle = GetAbilitySystemComponent()->MakeEffectContext();
+	ContextHandle.AddSourceObject(this);
+	
+	// 스펙 생성 및 적용 (레벨 1로 고정)
+	const FGameplayEffectSpecHandle SpecHandle = GetAbilitySystemComponent()->MakeOutgoingSpec(GameplayEffectClass, 1.0f, ContextHandle);
+	GetAbilitySystemComponent()->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), GetAbilitySystemComponent());
 }
 
-void ADRCleanserSite::DisableHealth()
+void ADRCleanserSite::InitializeDefaultAttributes() const
 {
-	if (!HasAuthority()) return;
-
-	// 체력을 0으로 설정하여 비활성화 표시
-	// (실제로는 체력 시스템을 사용하지 않음)
-}
-
-void ADRCleanserSite::OnHealthChanged(const FOnAttributeChangeData& Data)
-{
-	if (!HasAuthority() || !bHealthEnabled) return;
-
-	float NewHealth = Data.NewValue;
-
-	// 체력이 0이 되면 파괴
-	if (NewHealth <= 0.0f)
-	{
-		// 델리게이트 브로드캐스트
-		OnCleanserSiteDestroyed.Broadcast(this);
-
-		// GameMode에 알림 (Phase3에서 처리)
-	}
+	// 기본 체력 속성 초기화
+	ApplyEffectToSelf(DefaultPrimaryAttributes);
+	ApplyEffectToSelf(DefaultVitalAttributes);
 }
 
 void ADRCleanserSite::InitAbilityActorInfo()

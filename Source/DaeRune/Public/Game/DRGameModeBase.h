@@ -31,10 +31,10 @@ public:
 	// 플레이어가 사망했을 때 호출
 	void OnPlayerDied(APlayerState* DeadPlayer);
 
-protected:
 	// 팀 전멸 체크
 	virtual bool CheckTeamWipeout();
-
+	
+protected:
 	// 전멸 시 처리
 	virtual void HandleWipeout();
 

@@ -105,6 +105,15 @@ AActor* ADREnemy::GetCombatTarget_Implementation() const
 	return CombatTarget;
 }
 
+UBlackboardComponent* ADREnemy::GetBlackboardComponent() const
+{
+	if (DRAIController)
+	{
+		return DRAIController->GetBlackboardComponent();
+	}
+	return nullptr;
+}
+
 void ADREnemy::OnAttackExecuted()
 {
 	if (!HasAuthority()) return;
@@ -202,6 +211,38 @@ bool ADREnemy::DropPart()
 	return true;
 }
 
+void ADREnemy::TriggerEnrage()
+{
+	if (!HasAuthority() || bIsEnraged || !bIsPhase3Enemy) return;
+    
+	bIsEnraged = true;
+    
+	// 블랙보드에 광폭화 상태 설정
+	if (ADRAIController* AIController = Cast<ADRAIController>(GetController()))
+	{
+		if (UBlackboardComponent* BB = AIController->GetBlackboardComponent())
+		{
+			BB->SetValueAsBool(FName("bIsEnraged"), true);
+			float CurrentAttackSpeed = BB->GetValueAsFloat(FName("AttackSpeed"));
+			BB->SetValueAsFloat(FName("AttackSpeed"), CurrentAttackSpeed / 2.f);
+		}
+	}
+    
+	// 이동속도 증가 GE 적용
+	if (EnrageMovementSpeedGE && AbilitySystemComponent)
+	{
+		FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
+		EffectContext.AddSourceObject(this);
+        
+		FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(EnrageMovementSpeedGE, 1, EffectContext);
+            
+		if (SpecHandle.IsValid())
+		{
+			AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+		}
+	}
+}
+
 void ADREnemy::BeginPlay()
 {
 	Super::BeginPlay();
@@ -236,9 +277,6 @@ void ADREnemy::BeginPlay()
 				OnMaxHealthChanged.Broadcast(Data.NewValue);
 			}
 		);
-
-		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMoveSpeedAttribute()).AddUObject(this, &ADREnemy::OnMoveSpeedChanged);
-		GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
 
 		// 히트 리액션 태그 이벤트 바인딩
 		AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Effects_HitReact, EGameplayTagEventType::NewOrRemoved).AddUObject(

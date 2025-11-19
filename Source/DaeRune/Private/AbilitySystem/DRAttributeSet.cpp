@@ -13,6 +13,7 @@
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
 #include "Player/DRPlayerState.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 UDRAttributeSet::UDRAttributeSet()
 {
@@ -189,6 +190,13 @@ void UDRAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, f
 	{
 		SetWater(GetMaxWater());
 		bTopOffWater = false;
+	}
+	if (Attribute == GetMoveSpeedAttribute())
+	{
+		if (ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwningActor()))
+		{
+			OwnerCharacter->GetCharacterMovement()->MaxWalkSpeed = NewValue;
+		}
 	}
 }
 

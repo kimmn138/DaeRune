@@ -85,13 +85,24 @@ void UDRPlayerAttributeSet::ExitCorruptedState(const FEffectProperties& Props)
 
 void UDRPlayerAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 {
-	const float LocalIncomingDamage = GetIncomingDamage();
+	float LocalIncomingDamage = GetIncomingDamage();
 	SetIncomingDamage(0.f);
 
 	if (LocalIncomingDamage <= 0.f) return;
 
 	// ���� ���� ���� �˸�
 	NotifyEnterCombat(Props);
+
+	if (ADRPlayerState* PS = Cast<ADRPlayerState>(Props.TargetAvatarActor))
+	{
+		if(UAbilitySystemComponent* ASC = PS->GetAbilitySystemComponent())
+		{
+			if (ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Debuff_Elite))
+			{
+				LocalIncomingDamage *= EliteDebuffModifier;
+			}
+		}
+	}
 
 	// ���� ���� ó��
 	if (bCorrupted)

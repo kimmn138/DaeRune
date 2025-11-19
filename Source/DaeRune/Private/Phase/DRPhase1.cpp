@@ -94,6 +94,7 @@ void UDRPhase1::SpawnEnemiesAtCleanserSites()
 
 	// 3. 선택된 사이트를 PhaseBase에 저장 (Phase2, 3에서 사용)
 	SetActiveCleanserSites(SelectedCleanserSites);
+	GameState->SetCleanserSites(SelectedCleanserSites);
 
 	// 4. 선택된 사이트 활성화 및 적 스폰
 	for (const TObjectPtr<ADRCleanserSite>& SelectedSite : SelectedCleanserSites)
