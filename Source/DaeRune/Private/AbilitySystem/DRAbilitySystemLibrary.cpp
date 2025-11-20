@@ -87,6 +87,11 @@ void UDRAbilitySystemLibrary::GiveStartupAbilities(const UObject* WorldContextOb
 		FGameplayAbilitySpec AbilitySpec = FGameplayAbilitySpec(AbilityClass, CharacterLevel);
 		ASC->GiveAbility(AbilitySpec);
 	}
+	for (TSubclassOf<UGameplayAbility> AbilityClass : DefaultInfo.DeathAbilities)
+	{
+		FGameplayAbilitySpec AbilitySpec = FGameplayAbilitySpec(AbilityClass, CharacterLevel);
+		ASC->GiveAbility(AbilitySpec);
+	}
 }
 
 UCharacterClassInfo* UDRAbilitySystemLibrary::GetCharacterClassInfo(const UObject* WorldContextObject)

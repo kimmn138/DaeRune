@@ -624,7 +624,7 @@ void UDRPhase3::OnCleanserSiteHealthZero()
 
 // ========== 게임 오버/승리 조건 ==========
 
-void UDRPhase3::CheckGameOverConditions()
+void UDRPhase3::CheckGameOverConditions() const
 {
 	// 몬스터 수가 100마리 초과하면 게임 오버
 	if (IsMonsterCountExceeded())

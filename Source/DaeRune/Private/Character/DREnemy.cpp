@@ -81,6 +81,12 @@ void ADREnemy::Die(const FVector& DeathImpulse)
 		DropPart();
 	}
 
+	// Death Ability 발동
+	if (HasAuthority())
+	{
+		ActivateDeathAbilities();
+	}
+
 	// 사망 처리 - 일정 시간 후 소멸
 	SetLifeSpan(LifeSpan);
 	// AI 상태 업데이트
@@ -132,6 +138,39 @@ void ADREnemy::HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount
 	if (DRAIController && DRAIController->GetBlackboardComponent())
 	{
 		DRAIController->GetBlackboardComponent()->SetValueAsBool(FName("HitReacting"), bHitReacting);
+	}
+}
+
+void ADREnemy::ActivateDeathAbilities()
+{
+	if (!AbilitySystemComponent || DeathAbilities.Num() == 0) return;
+    
+	UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(AbilitySystemComponent);
+	if (!DRASC) return;
+    
+	// 모든 Death Ability 발동
+	for (TSubclassOf<UGameplayAbility> DeathAbilityClass : DeathAbilities)
+	{
+		if (!DeathAbilityClass) continue;
+        
+		// 해당 클래스의 어빌리티 스펙 찾기
+		TArray<FGameplayAbilitySpec*> ActivatableAbilities;
+		DRASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(
+			FGameplayTagContainer(), 
+			ActivatableAbilities
+		);
+        
+		for (FGameplayAbilitySpec* Spec : ActivatableAbilities)
+		{
+			if (!Spec || !Spec->Ability) continue;
+            
+			// 클래스가 일치하면 발동
+			if (Spec->Ability->GetClass() == DeathAbilityClass)
+			{
+				DRASC->TryActivateAbility(Spec->Handle);
+				break; // 같은 클래스 중복 발동 방지
+			}
+		}
 	}
 }
 
@@ -253,6 +292,13 @@ void ADREnemy::BeginPlay()
 	if (HasAuthority())
 	{
 		UDRAbilitySystemLibrary::GiveStartupAbilities(this, AbilitySystemComponent, CharacterClass);
+
+		// CharacterClassInfo에서 DeathAbilities 정보 가져오기
+		if (UCharacterClassInfo* CharacterClassInfo = UDRAbilitySystemLibrary::GetCharacterClassInfo(this))
+		{
+			FCharacterClassDefaultInfo ClassInfo = CharacterClassInfo->GetClassDefaultInfo(CharacterClass);
+			DeathAbilities = ClassInfo.DeathAbilities;
+		}
 	}
 
 	// UI 위젯 컨트롤러 설정

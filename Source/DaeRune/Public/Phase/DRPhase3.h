@@ -184,7 +184,7 @@ protected:
 	// ========== 게임 오버/승리 조건 ==========
 
 	// 게임 오버 조건 체크
-	void CheckGameOverConditions();
+	void CheckGameOverConditions() const;
 
 	// 게임 승리 조건 체크
 	void CheckVictoryConditions();

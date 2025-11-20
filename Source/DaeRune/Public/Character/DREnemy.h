@@ -168,6 +168,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "0.0", ClampMax = "10.0"))
 	float StunImmunityDuration = 5.0f;
 
+	// 죽을 때 자동 발동되는 어빌리티들
+	UPROPERTY(BlueprintReadOnly, Category = "Abilities")
+	TArray<TSubclassOf<UGameplayAbility>> DeathAbilities;
+
+	// Death Ability 활성화
+	void ActivateDeathAbilities();
+
 private:
 	// 물 보상 감소 처리
 	void ReduceWaterReward();
