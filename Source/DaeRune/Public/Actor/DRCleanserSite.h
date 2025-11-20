@@ -91,6 +91,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	FVector GetSpawnLocation() const;
 
+	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
+	FVector GetClosestSurfacePoint(const FVector& FromLocation) const;
+
 	// ========== 델리게이트 ==========
 
 	// 부품 설치 완료 델리게이트

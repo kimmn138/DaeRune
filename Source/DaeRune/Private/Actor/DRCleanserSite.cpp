@@ -25,7 +25,8 @@ ADRCleanserSite::ADRCleanserSite()
 	CleanserMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CleanserMesh"));
 	CleanserMesh->SetupAttachment(RootComponent);
 	CleanserMesh->SetVisibility(false);
-	CleanserMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	CleanserMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	CleanserMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 
 	// 상호작용 박스 생성
 	InteractionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractionBox"));
@@ -137,6 +138,23 @@ void ADRCleanserSite::InstallPart(ADRCharacter* Character)
 FVector ADRCleanserSite::GetSpawnLocation() const
 {
 	return GetActorLocation();
+}
+
+FVector ADRCleanserSite::GetClosestSurfacePoint(const FVector& FromLocation) const
+{
+	if (!CleanserMesh || !CleanserMesh->GetStaticMesh())
+	{
+		return GetActorLocation();
+	}
+    
+	// 메시의 바운딩 박스 가져오기
+	const FBox BoundingBox = CleanserMesh->Bounds.GetBox();
+    
+	// 바운딩 박스에서 가장 가까운 점 계산
+	// 이 함수는 박스 표면의 가장 가까운 점을 자동으로 반환
+	const FVector ClosestPoint = BoundingBox.GetClosestPointTo(FromLocation);
+    
+	return ClosestPoint;
 }
 
 void ADRCleanserSite::BeginPlay()
