@@ -12,6 +12,8 @@ ADRPoisonGasActor::ADRPoisonGasActor()
 {
 	InfiniteEffectApplicationPolicy = EEffectApplicationPolicy::ApplyOnOverlap;
 	InfiniteEffectRemovalPolicy = EEffectRemovalPolicy::RemoveOnEndOverlap;
+
+	bApplyEffectsToEnemies = true;
 }
 
 void ADRPoisonGasActor::BeginPlay()
