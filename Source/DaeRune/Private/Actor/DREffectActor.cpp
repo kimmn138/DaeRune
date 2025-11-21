@@ -4,6 +4,7 @@
 #include "Actor/DREffectActor.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "Actor/DRCleanserSite.h"
 
 ADREffectActor::ADREffectActor()
 {
@@ -22,6 +23,9 @@ void ADREffectActor::ApplyEffectToTarget(AActor* TargetActor, TSubclassOf<UGamep
 {
 	// 적 태그 확인 - bApplyEffectsToEnemies 설정에 따라 필터링
 	if (TargetActor->ActorHasTag(FName("Enemy")) && !bApplyEffectsToEnemies) return;
+
+	// 클렌저사이트 필터링
+	if (Cast<ADRCleanserSite>(TargetActor)) return;
 
 	// 타겟의 AbilitySystemComponent 가져오기
 	UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
@@ -56,6 +60,9 @@ void ADREffectActor::OnOverlap(AActor* TargetActor)
 	// 적 필터링
 	if (TargetActor->ActorHasTag(FName("Enemy")) && !bApplyEffectsToEnemies) return;
 
+	// 클렌저사이트 필터링
+	if (Cast<ADRCleanserSite>(TargetActor)) return;
+
 	// 각 효과 타입별 적용 정책에 따라 오버랩 시 효과 적용
 	if (InstantEffectApplicationPolicy == EEffectApplicationPolicy::ApplyOnOverlap)
 	{
@@ -75,6 +82,9 @@ void ADREffectActor::OnEndOverlap(AActor* TargetActor)
 {
 	// 적 필터링
 	if (TargetActor->ActorHasTag(FName("Enemy")) && !bApplyEffectsToEnemies) return;
+
+	// 클렌저사이트 필터링
+	if (Cast<ADRCleanserSite>(TargetActor)) return;
 
 	// 오버랩 종료 시 효과 적용
 	if (InstantEffectApplicationPolicy == EEffectApplicationPolicy::ApplyOnEndOverlap)

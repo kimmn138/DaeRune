@@ -14,6 +14,7 @@
     <file url="file://$PROJECT_DIR$/Source/DaeRune/Private/AbilitySystem/DREnemyAttributeSet.cpp" charset="EUC-KR" />
     <file url="file://$PROJECT_DIR$/Source/DaeRune/Private/Actor/DRCleanserPart.cpp" charset="EUC-KR" />
     <file url="file://$PROJECT_DIR$/Source/DaeRune/Private/Actor/DRCleanserSite.cpp" charset="EUC-KR" />
+    <file url="file://$PROJECT_DIR$/Source/DaeRune/Private/Actor/DREffectActor.cpp" charset="EUC-KR" />
     <file url="file://$PROJECT_DIR$/Source/DaeRune/Private/Actor/DRSeedProjectile.cpp" charset="EUC-KR" />
     <file url="file://$PROJECT_DIR$/Source/DaeRune/Private/Character/DRCharacter.cpp" charset="EUC-KR" />
     <file url="file://$PROJECT_DIR$/Source/DaeRune/Private/Character/DRCharacterBase.cpp" charset="EUC-KR" />

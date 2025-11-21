@@ -26,6 +26,7 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 				if (ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Buff_Elite))
 				{
 					LocalIncomingDamage *= EliteBuffModifier;
+					FMath::RoundToFloat(LocalIncomingDamage);
 				}
 			}
 		}

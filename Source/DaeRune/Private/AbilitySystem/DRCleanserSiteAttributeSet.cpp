@@ -69,6 +69,7 @@ void UDRCleanserSiteAttributeSet::HandleIncomingDamage(const FGameplayEffectModC
 				if (ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Debuff_Elite))
 				{
 					LocalIncomingDamage *= EliteDebuffModifier;
+					FMath::RoundToFloat(LocalIncomingDamage);
 				}
 			}
 		}

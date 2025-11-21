@@ -100,6 +100,7 @@ void UDRPlayerAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			if (ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Debuff_Elite))
 			{
 				LocalIncomingDamage *= EliteDebuffModifier;
+				FMath::RoundToFloat(LocalIncomingDamage);
 			}
 		}
 	}
