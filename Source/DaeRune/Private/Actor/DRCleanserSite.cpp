@@ -142,19 +142,21 @@ FVector ADRCleanserSite::GetSpawnLocation() const
 
 FVector ADRCleanserSite::GetClosestSurfacePoint(const FVector& FromLocation) const
 {
-	if (!CleanserMesh || !CleanserMesh->GetStaticMesh())
+	if (!CleanserMesh)
 	{
 		return GetActorLocation();
 	}
     
-	// 메시의 바운딩 박스 가져오기
-	const FBox BoundingBox = CleanserMesh->Bounds.GetBox();
+	FVector ClosestPoint;
     
-	// 바운딩 박스에서 가장 가까운 점 계산
-	// 이 함수는 박스 표면의 가장 가까운 점을 자동으로 반환
-	const FVector ClosestPoint = BoundingBox.GetClosestPointTo(FromLocation);
+	// 실제 콜리전 형태에서 가장 가까운 점 계산
+	if (CleanserMesh->GetClosestPointOnCollision(FromLocation, ClosestPoint))
+	{
+		return ClosestPoint;
+	}
     
-	return ClosestPoint;
+	// 실패하면 액터 위치 반환
+	return GetActorLocation();
 }
 
 void ADRCleanserSite::BeginPlay()

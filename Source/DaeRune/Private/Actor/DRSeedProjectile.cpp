@@ -8,6 +8,7 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Character/DRCharacter.h"
 #include "DrawDebugHelpers.h"
+#include "Actor/DRCleanserSite.h"
 #include "Engine/OverlapResult.h"
 
 ADRSeedProjectile::ADRSeedProjectile()
@@ -69,7 +70,7 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
     // 폭발 이펙트 재생 (기존 OnHit 함수 활용)
     OnHit();
 
-    // ★★★ 모든 클라이언트에게 폭발 위치 전달 (디버그 드로우용)
+    // 모든 클라이언트에게 폭발 위치 전달 (디버그 드로우용)
     MulticastExplodeAtLocation(ImpactLocation);
 
     // 범위 내 모든 액터 검색
@@ -114,6 +115,12 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
 
         // 죽은 캐릭터는 무시
         if (Target->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Target))
+        {
+            continue;
+        }
+
+        // 클렌저 사이트는 무시
+        if (ADRCleanserSite* CleanserSite = Cast<ADRCleanserSite>(Target))
         {
             continue;
         }
