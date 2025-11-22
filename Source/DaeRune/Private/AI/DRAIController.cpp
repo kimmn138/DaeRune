@@ -6,8 +6,6 @@
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AISenseConfig_Sight.h"
-#include "Character/DRCharacter.h"
-#include "Character/DREnemy.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 
@@ -69,6 +67,30 @@ ETeamAttitude::Type ADRAIController::GetTeamAttitudeTowards(const AActor& Other)
 	}
 
 	return ETeamAttitude::Neutral;
+}
+
+void ADRAIController::UpdateCombatTime()
+{
+	if (!Blackboard) return;
+	
+	// 현재 월드 시간을 블랙보드에 저장
+	const float CurrentTime = GetWorld()->GetTimeSeconds();
+	Blackboard->SetValueAsFloat(FName("LastCombatTime"), CurrentTime);
+}
+
+bool ADRAIController::HasCombatTimedOut(float TimeoutSeconds) const
+{
+	if (!Blackboard) return true; // 블랙보드 없으면 전투 종료로 간주
+	
+	const float LastCombatTime = Blackboard->GetValueAsFloat(FName("LastCombatTime"));
+	
+	// 아직 전투한 적 없음 (초기값 0)
+	if (LastCombatTime <= 0.0f) return true;
+	
+	const float CurrentTime = GetWorld()->GetTimeSeconds();
+	const float ElapsedTime = CurrentTime - LastCombatTime;
+	
+	return ElapsedTime > TimeoutSeconds;
 }
 
 void ADRAIController::BeginPlay()

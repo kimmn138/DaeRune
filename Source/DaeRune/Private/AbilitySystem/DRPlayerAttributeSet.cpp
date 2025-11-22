@@ -5,10 +5,12 @@
 #include "Interaction/CombatInterface.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "DRGameplayTags.h"
+#include "AI/DRAIController.h"
 #include "GameFramework/Character.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
 #include "Character/DRCharacter.h"
+#include "Character/DREnemy.h"
 
 void UDRPlayerAttributeSet::SetContainerInfo(int32 InNumContainers, float InContainerHealth)
 {
@@ -92,6 +94,15 @@ void UDRPlayerAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 
 	// ���� ���� ���� �˸�
 	NotifyEnterCombat(Props);
+
+	// 디버프/데미지 원인 적의 전투 상태 갱신
+	if (ADREnemy* SourceEnemy = Cast<ADREnemy>(Props.SourceAvatarActor))
+	{
+		if (ADRAIController* AIC = Cast<ADRAIController>(SourceEnemy->GetController()))
+		{
+			AIC->UpdateCombatTime();
+		}
+	}
 
 	if (ADRPlayerState* PS = Cast<ADRPlayerState>(Props.TargetAvatarActor))
 	{

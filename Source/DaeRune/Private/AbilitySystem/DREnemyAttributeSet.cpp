@@ -29,6 +29,10 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 					FMath::RoundToFloat(LocalIncomingDamage);
 				}
 			}
+			if (ADRAIController* AIC = Cast<ADRAIController>(Enemy->GetController()))
+			{
+				AIC->UpdateCombatTime();
+			}
 		}
 
 		const float NewHealth = GetHealth() - LocalIncomingDamage;
