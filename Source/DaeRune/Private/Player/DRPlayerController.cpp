@@ -13,6 +13,7 @@
 #include "Actor/DRCleanserSite.h"
 #include "Character/DRCharacter.h"
 #include "Camera/CameraComponent.h"
+#include "Game/DRStageGameMode.h"
 
 ADRPlayerController::ADRPlayerController()
 {
@@ -150,6 +151,16 @@ void ADRPlayerController::ServerRequestInstallPartToSite_Implementation(ADRClean
 
 	// 클렌저 사이트에 부품 설치
 	Site->InstallPart(DRCharacter);
+}
+
+void ADRPlayerController::CheatSkipToNextPhase()
+{
+// 개발 빌드에서만 동작하도록 체크
+#if !UE_BUILD_SHIPPING
+	ServerCheatSkipToNextPhase();
+#else
+	UE_LOG(LogTemp, Warning, TEXT("CheatSkipToNextPhase: Shipping 빌드에서는 사용할 수 없습니다."));
+#endif
 }
 
 void ADRPlayerController::BeginPlay()
@@ -330,6 +341,28 @@ void ADRPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
 UDRAbilitySystemComponent* ADRPlayerController::GetASC()
 {
 	return Cast<UDRAbilitySystemComponent>(UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetPawn<APawn>()));
+}
+
+void ADRPlayerController::ServerCheatSkipToNextPhase_Implementation()
+{
+	// 서버에서만 실행되는 RPC
+	if (!HasAuthority())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ServerCheatSkipToNextPhase: 서버 권한 없음!"));
+		return;
+	}
+
+	// GameMode 가져오기
+	ADRStageGameMode* StageGameMode = GetWorld()->GetAuthGameMode<ADRStageGameMode>();
+	if (!StageGameMode)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ServerCheatSkipToNextPhase: StageGameMode를 찾을 수 없습니다."));
+		return;
+	}
+
+	// 페이즈 전환
+	UE_LOG(LogTemp, Log, TEXT("ServerCheatSkipToNextPhase: 다음 페이즈로 전환합니다!"));
+	StageGameMode->TransitionToNextPhase();
 }
 
 void ADRPlayerController::ServerRequestPickupPart_Implementation(ADRCleanserPart* Part)

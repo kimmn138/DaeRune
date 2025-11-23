@@ -80,6 +80,12 @@ public:
 	
 	UFUNCTION(Server, Reliable)
 	void ServerRequestInstallPartToSite(ADRCleanserSite* Site);
+	
+	// ========== 치트/디버그 기능 ==========
+    	
+    // 테스트용 페이즈 스킵 (블루프린트에서 호출)
+    UFUNCTION(BlueprintCallable, Category = "Cheat|Phase")
+    void CheatSkipToNextPhase();
 
 protected:
 	virtual void BeginPlay() override;
@@ -163,4 +169,8 @@ private:
 	// 부품 획득 요청 (서버 RPC)
 	UFUNCTION(Server, Reliable)
 	void ServerRequestPickupPart(ADRCleanserPart* Part);
+	
+	// 서버에서 페이즈 스킵 실행
+    UFUNCTION(Server, Reliable)
+    void ServerCheatSkipToNextPhase();
 };

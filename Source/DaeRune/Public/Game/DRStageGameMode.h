@@ -35,6 +35,10 @@ public:
 	UFUNCTION()
 	void TriggerGameClear();
 
+	// 다음 페이즈로 전환하기 위해 호출
+	UFUNCTION(BlueprintCallable, Category = "Phase")
+	void TransitionToNextPhase();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void HandleWipeout() override;
@@ -61,10 +65,6 @@ protected:
 
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	void EndCurrentPhase();
-
-	// 다음 페이즈로 전환하기 위해 호출
-	UFUNCTION(BlueprintCallable, Category = "Phase")
-	void TransitionToNextPhase();
 
 private:
 	// 현재 실행 중인 페이즈
