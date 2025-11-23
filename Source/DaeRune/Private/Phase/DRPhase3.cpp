@@ -243,6 +243,7 @@ void UDRPhase3::EndCurrentWave()
 	if (UWorld* World = GameMode->GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(SpawnTimerHandle);
+		World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
 	}
 
 	// GameState 업데이트
