@@ -11,6 +11,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "NavigationSystem.h"
 #include "AbilitySystem/DRCleanserSiteAttributeSet.h"
+#include "Actor/DRPoisonGasActor.h"
 #include "Character/DRCharacter.h"
 
 UDRPhase3::UDRPhase3()
@@ -45,6 +46,16 @@ void UDRPhase3::OnPhaseStart()
 	// 방어 시간 시작
 	if (UWorld* World = GameMode->GetWorld())
 	{
+		PoisonGasSpawnPoints.Empty();
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			AActor* Actor = *It;
+			if (Actor && Actor->ActorHasTag(PoisonGasSpawnPointTag))
+			{
+				PoisonGasSpawnPoints.Add(Actor);
+			}
+		}
+		
 		DefenseStartTime = World->GetTimeSeconds();
 		World->GetTimerManager().SetTimer(
 			DefenseTimerHandle,
@@ -71,6 +82,7 @@ void UDRPhase3::OnPhaseEnd()
 		World->GetTimerManager().ClearTimer(SpawnTimerHandle);
 		World->GetTimerManager().ClearTimer(DefenseTimerHandle);
 		World->GetTimerManager().ClearTimer(WaveTimerUpdateHandle);
+		World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
 	}
 
 	// 클렌저 사이트 델리게이트 언바인딩
@@ -91,6 +103,7 @@ void UDRPhase3::OnPhaseEnd()
 	}
 	
 	// 유독 가스 제거
+	PoisonGasSpawnPoints.Empty();
 	RemoveToxicGas();
 }
 
@@ -679,12 +692,79 @@ bool UDRPhase3::IsMonsterCountExceeded() const
 
 void UDRPhase3::SpawnToxicGas()
 {
-	// TODO: 유독 가스 액터 스폰
-	// 맵 전역에 일정 간격으로 유독 가스 배치
+	if (!GameMode) return;
+    
+	UWorld* World = GameMode->GetWorld();
+	if (!World) return;
+    
+	// 기존 타이머가 있으면 먼저 정리
+	if (PoisonGasSpawnTimerHandle.IsValid())
+	{
+		World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
+	}
+    
+	// 5초 후 첫 스폰, 이후 15초마다 반복
+	World->GetTimerManager().SetTimer(
+		PoisonGasSpawnTimerHandle,
+		this,
+		&UDRPhase3::SpawnPoisonGasActor,
+		15.0f,  // 15초 주기
+		true,   // 반복
+		5.0f    // 5초 후 시작
+	);
+}
+
+void UDRPhase3::SpawnPoisonGasActor()
+{
+	if (!GameMode) return;
+    
+	if (PoisonGasSpawnPoints.Num() == 0) return;
+    
+	if (!PoisonGasActorClass) return;
+    
+	UWorld* World = GameMode->GetWorld();
+	if (!World) return;
+    
+	// 랜덤 스폰 포인트 선택
+	int32 RandomIndex = FMath::RandRange(0, PoisonGasSpawnPoints.Num() - 1);
+	AActor* SpawnPoint = PoisonGasSpawnPoints[RandomIndex];
+    
+	if (!SpawnPoint) return;
+    
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+    
+	ADRPoisonGasActor* PoisonGas = World->SpawnActor<ADRPoisonGasActor>(
+		PoisonGasActorClass,
+		SpawnPoint->GetActorLocation(),
+		FRotator::ZeroRotator,
+		SpawnParams
+	);
+    
+	if (PoisonGas)
+	{
+		// 7초 후 자동 소멸
+		PoisonGas->SetLifeSpan(7.0f);
+        
+		// ToxicGasActors 배열에 추가 (페이즈 종료 시 정리용)
+		ToxicGasActors.Add(PoisonGas);
+	}
 }
 
 void UDRPhase3::RemoveToxicGas()
 {
+	// 독가스 스폰 타이머 정리
+	if (GameMode)
+	{
+		if (UWorld* World = GameMode->GetWorld())
+		{
+			if (PoisonGasSpawnTimerHandle.IsValid())
+			{
+				World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
+			}
+		}
+	}
+    
 	// 모든 유독 가스 제거
 	for (TWeakObjectPtr<AActor> GasActor : ToxicGasActors)
 	{
@@ -693,7 +773,7 @@ void UDRPhase3::RemoveToxicGas()
 			GasActor->Destroy();
 		}
 	}
-	
+    
 	ToxicGasActors.Empty();
 }
 

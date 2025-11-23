@@ -6,6 +6,7 @@
 #include "Phase/DRPhaseBase.h"
 #include "DRPhase3.generated.h"
 
+class ADRPoisonGasActor;
 class ADREnemy;
 
 // 웨이브 상태 열거형
@@ -195,7 +196,10 @@ protected:
 	// ========== 환경 위협 ==========
 
 	// 유독 가스 생성 (레벨 4)
-	static void SpawnToxicGas();
+	void SpawnToxicGas();
+
+	// 독가스 액터 스폰
+	void SpawnPoisonGasActor();
 
 	// 유독 가스 제거
 	void RemoveToxicGas();
@@ -203,6 +207,9 @@ protected:
 	// 스폰 포인트를 찾을 태그 이름
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|Config")
 	FName SpawnPointTag = "Phase3SpawnPoint";
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|Config")
+	FName PoisonGasSpawnPointTag = "PoisonGasSpawnLocation";
 
 private:
 	// 엘리트 보스 태그 부여
@@ -254,6 +261,10 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Phase3|Enemies")
 	TSubclassOf<ADREnemy> EliteBossClass;
 
+	// 독가스 액터 클래스
+	UPROPERTY(EditDefaultsOnly, Category = "Phase3|Enemies")
+	TSubclassOf<ADRPoisonGasActor> PoisonGasActorClass;
+
 	// ========== 런타임 데이터 ==========
 
 	// 현재 웨이브 번호 (1~5, 진행도)
@@ -276,6 +287,10 @@ private:
 	UPROPERTY()
 	TArray<TWeakObjectPtr<AActor>> ToxicGasActors;
 
+	// 독가스 스폰 포인트 배열
+	UPROPERTY()
+	TArray<AActor*> PoisonGasSpawnPoints;
+
 	// ========== 타이머 핸들 ==========
 
 	// 웨이브 타이머
@@ -286,6 +301,9 @@ private:
 
 	// 방어 시간 타이머
 	FTimerHandle DefenseTimerHandle;
+
+	// 독가스 스폰 타이머
+	FTimerHandle PoisonGasSpawnTimerHandle;
 
 	// ========== 추적 변수 ==========
 
