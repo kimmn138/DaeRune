@@ -12,6 +12,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Game/DRGameModeBase.h" 
+#include "GameFramework/SpectatorPawn.h"
 #include "Player/DRPlayerController.h"
 
 ADRCharacterBase::ADRCharacterBase()
@@ -84,7 +85,7 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 				}
 			}
 
-			// 커스텀 관전 시스템으로 전환
+			// 관전 시작
 			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
 			{
 				// 약간의 딜레이 후 관전 모드 전환
@@ -93,7 +94,10 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 					SpectatorTimerHandle,
 					[DRPC]()
 					{
-						DRPC->ClientStartSpectating();
+						if (IsValid(DRPC))
+						{
+							DRPC->StartSpectating();
+						}
 					},
 					0.5f,
 					false

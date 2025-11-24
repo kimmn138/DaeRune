@@ -40,6 +40,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Game State")
 	bool IsPlayerHost(APlayerState* PlayerState) const;
 
+	// 살아있는 플레이어 리스트 반환
+	UFUNCTION(BlueprintCallable, Category = "Spectating")
+	TArray<ACharacter*> GetAlivePlayers() const;
+
 protected:
 	// 현재 플레이어 수
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Game State")

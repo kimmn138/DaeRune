@@ -90,9 +90,12 @@ public:
 	// 현재 관전 중인 플레이어 인덱스
 	int32 CurrentSpectatedPlayerIndex = 0;
 
+	// 관전용 카메라 Actor
+	UPROPERTY()
+	TObjectPtr<class ADRSpectatorCamera> SpectatorCamera;
+
 	// 관전 시작
-	UFUNCTION(Client, Reliable)
-	void ClientStartSpectating();
+	void StartSpectating();
 
 	// 다음 플레이어로 전환
 	UFUNCTION(BlueprintCallable, Category = "Spectating")

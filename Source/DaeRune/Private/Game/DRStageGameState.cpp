@@ -204,32 +204,6 @@ void ADRStageGameState::UpdatePhaseObjectiveProgress(int32 NewCount)
     OnPhaseObjectiveChangedDelegate.Broadcast();
 }
 
-TArray<APlayerState*> ADRStageGameState::GetAlivePlayers() const
-{
-    TArray<APlayerState*> AlivePlayers;
-
-    // 모든 PlayerState 순회
-    for (APlayerState* PS : PlayerArray)
-    {
-        if (!PS) continue;
-
-        // 플레이어의 폰이 살아있는지 확인
-        if (APawn* PlayerPawn = PS->GetPawn())
-        {
-            // IsDead 인터페이스 확인
-            if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(PlayerPawn))
-            {
-                if (!CombatInterface->Execute_IsDead(PlayerPawn))
-                {
-                    AlivePlayers.Add(PS);
-                }
-            }
-        }
-    }
-
-    return AlivePlayers;
-}
-
 void ADRStageGameState::OnRep_CurrentPhaseIndex()
 {
     OnPhaseChangedDelegate.Broadcast(CurrentPhaseIndex);

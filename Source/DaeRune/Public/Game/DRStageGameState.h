@@ -131,10 +131,6 @@ public:
     UPROPERTY(ReplicatedUsing = OnRep_CurrentPhaseObjective)
     FPhaseObjectiveData CurrentPhaseObjective;
 
-    // 살아있는 플레이어 리스트 반환
-    UFUNCTION(BlueprintCallable, Category = "Spectating")
-    TArray<APlayerState*> GetAlivePlayers() const;
-
 protected:
     // ========== 리플리케이션 콜백 ==========
     UFUNCTION()

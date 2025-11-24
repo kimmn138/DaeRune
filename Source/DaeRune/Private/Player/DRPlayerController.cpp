@@ -11,6 +11,7 @@
 #include "UI/Widget/DamageTextComponent.h"
 #include "Actor/DRCleanserPart.h"
 #include "Actor/DRCleanserSite.h"
+#include "Actor/DRSpectatorCamera.h"
 #include "Character/DRCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "Game/DRStageGameMode.h"
@@ -155,25 +156,41 @@ void ADRPlayerController::ServerRequestInstallPartToSite_Implementation(ADRClean
 	Site->InstallPart(DRCharacter);
 }
 
-void ADRPlayerController::ClientStartSpectating_Implementation()
+void ADRPlayerController::StartSpectating()
 {
-	if (!IsLocalController()) return;
-
+	// 서버와 클라이언트 모두에서 실행
 	bIsSpectating = true;
 	CurrentSpectatedPlayerIndex = 0;
 
-	ADRStageGameState* StageGS = GetWorld()->GetGameState<ADRStageGameState>();
-	if (!StageGS) return;
-
-	TArray<APlayerState*> AlivePlayers = StageGS->GetAlivePlayers();
-	if (AlivePlayers.Num() > 0)
+	// 로컬 컨트롤러에서만 카메라 생성 및 설정
+	if (IsLocalController())
 	{
-		// 첫 번째 살아있는 플레이어의 폰으로 ViewTarget 설정
-		if (APlayerState* FirstAlive = AlivePlayers[0])
+		// SpectatorCamera 생성 (로컬에만)
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+        
+		SpectatorCamera = GetWorld()->SpawnActor<ADRSpectatorCamera>(
+			ADRSpectatorCamera::StaticClass(),
+			FVector::ZeroVector,
+			FRotator::ZeroRotator,
+			SpawnParams
+		);
+
+		if (SpectatorCamera)
 		{
-			if (APawn* TargetPawn = FirstAlive->GetPawn())
+			// 살아있는 플레이어 찾기
+			ADRGameStateBase* GameStateBase = GetWorld()->GetGameState<ADRGameStateBase>();
+			if (!GameStateBase) return;
+
+			TArray<ACharacter*> AliveCharacters = GameStateBase->GetAlivePlayers();
+			if (AliveCharacters.Num() == 0) return;
+
+			// 첫 번째 살아있는 캐릭터에게 부착
+			if (ACharacter* FirstAlive = AliveCharacters[0])
 			{
-				SetViewTarget(TargetPawn);
+				SpectatorCamera->AttachToPlayer(FirstAlive);
+				SetViewTarget(SpectatorCamera);
 			}
 		}
 	}
@@ -181,56 +198,47 @@ void ADRPlayerController::ClientStartSpectating_Implementation()
 
 void ADRPlayerController::SpectateNextPlayer()
 {
-	// 관전 모드 체크
 	if (!bIsSpectating || !IsLocalController()) return;
+	if (!SpectatorCamera) return;
 
-	ADRStageGameState* StageGS = GetWorld()->GetGameState<ADRStageGameState>();
-	if (!StageGS) return;
+	ADRGameStateBase* GameStateBase = GetWorld()->GetGameState<ADRGameStateBase>();
+	if (!GameStateBase) return;
 
-	TArray<APlayerState*> AlivePlayers = StageGS->GetAlivePlayers();
-	if (AlivePlayers.Num() == 0) return;
+	TArray<ACharacter*> AliveCharacters = GameStateBase->GetAlivePlayers();
+	if (AliveCharacters.Num() == 0) return;
 
 	// 다음 플레이어로 인덱스 이동
-	CurrentSpectatedPlayerIndex = (CurrentSpectatedPlayerIndex + 1) % AlivePlayers.Num();
+	CurrentSpectatedPlayerIndex = (CurrentSpectatedPlayerIndex + 1) % AliveCharacters.Num();
 
-	// ViewTarget 전환
-	if (APlayerState* NextPlayer = AlivePlayers[CurrentSpectatedPlayerIndex])
+	// 새 플레이어에게 부착
+	if (ACharacter* NextCharacter = AliveCharacters[CurrentSpectatedPlayerIndex])
 	{
-		if (APawn* TargetPawn = NextPlayer->GetPawn())
-		{
-			SetViewTarget(TargetPawn);
-		}
+		SpectatorCamera->AttachToPlayer(NextCharacter);
 	}
 }
 
 void ADRPlayerController::SpectatePreviousPlayer()
 {
-	// 관전 모드 체크만
-	if (!bIsSpectating) return;
-    
-	// 로컬 컨트롤러 체크
-	if (!IsLocalController()) return;
+	if (!bIsSpectating || !IsLocalController()) return;
+	if (!SpectatorCamera) return;
 
-	ADRStageGameState* StageGS = GetWorld()->GetGameState<ADRStageGameState>();
-	if (!StageGS) return;
+	ADRGameStateBase* GameStateBase = GetWorld()->GetGameState<ADRGameStateBase>();
+	if (!GameStateBase) return;
 
-	TArray<APlayerState*> AlivePlayers = StageGS->GetAlivePlayers();
-	if (AlivePlayers.Num() == 0) return;
+	TArray<ACharacter*> AliveCharacters = GameStateBase->GetAlivePlayers();
+	if (AliveCharacters.Num() == 0) return;
 
 	// 이전 플레이어로 인덱스 이동
 	CurrentSpectatedPlayerIndex--;
 	if (CurrentSpectatedPlayerIndex < 0)
 	{
-		CurrentSpectatedPlayerIndex = AlivePlayers.Num() - 1;
+		CurrentSpectatedPlayerIndex = AliveCharacters.Num() - 1;
 	}
 
-	// ViewTarget 전환
-	if (APlayerState* PrevPlayer = AlivePlayers[CurrentSpectatedPlayerIndex])
+	// 새 플레이어에게 부착
+	if (ACharacter* PrevCharacter = AliveCharacters[CurrentSpectatedPlayerIndex])
 	{
-		if (APawn* TargetPawn = PrevPlayer->GetPawn())
-		{
-			SetViewTarget(TargetPawn);
-		}
+		SpectatorCamera->AttachToPlayer(PrevCharacter);
 	}
 }
 
@@ -341,9 +349,6 @@ void ADRPlayerController::HandleSpectatePrevious()
 
 void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 {
-	// 관전 모드면 이동 입력 무시
-	if (bIsSpectating) return;
-	
 	// �Է� ��� ���� Ȯ��
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
 
@@ -365,9 +370,6 @@ void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 {
-	// 관전 모드면 시점 변경 무시
-	if (bIsSpectating) return;
-	
 	// ���콺 �ü� ó��
 	const FVector2D Axis = InputActionValue.Get<FVector2D>();
 	AddYawInput(Axis.X);
@@ -376,9 +378,6 @@ void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
 {
-	// 관전 모드면 어빌리티 입력 무시
-	if (bIsSpectating) return;
-	
 	// ���� ����
 	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>()))
 	{
@@ -388,9 +387,6 @@ void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 {
-	// 관전 모드면 어빌리티 입력 무시
-	if (bIsSpectating) return;
-	
 	// ���� ����
 	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>()))
 	{
@@ -400,9 +396,6 @@ void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::HandleInteract()
 {
-	// 관전 모드면 어빌리티 입력 무시
-	if (bIsSpectating) return;
-	
 	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
 	if (!DRCharacter) return;
 	
