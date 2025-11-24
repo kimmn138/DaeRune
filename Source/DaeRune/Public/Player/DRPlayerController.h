@@ -80,6 +80,27 @@ public:
 	
 	UFUNCTION(Server, Reliable)
 	void ServerRequestInstallPartToSite(ADRCleanserSite* Site);
+
+	// ========== 관전 시스템 ==========
+
+	// 관전 모드 여부
+	UPROPERTY(BlueprintReadOnly, Category = "Spectating")
+	bool bIsSpectating = false;
+
+	// 현재 관전 중인 플레이어 인덱스
+	int32 CurrentSpectatedPlayerIndex = 0;
+
+	// 관전 시작
+	UFUNCTION(Client, Reliable)
+	void ClientStartSpectating();
+
+	// 다음 플레이어로 전환
+	UFUNCTION(BlueprintCallable, Category = "Spectating")
+	void SpectateNextPlayer();
+
+	// 이전 플레이어로 전환
+	UFUNCTION(BlueprintCallable, Category = "Spectating")
+	void SpectatePreviousPlayer();
 	
 	// ========== 치트/디버그 기능 ==========
     	
@@ -91,6 +112,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void PlayerTick(float DeltaTime) override;
 	virtual void SetupInputComponent() override;
+	virtual void CalcCamera(float DeltaTime, struct FMinimalViewInfo& OutResult) override;
 
 	// 부패 상태 플래그
 	UPROPERTY(BlueprintReadOnly, Category = "Corruption")
@@ -125,6 +147,17 @@ private:
 
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> InteractAction;
+
+	// 관전 입력 액션
+	UPROPERTY(EditAnywhere, Category = "Input|Spectating")
+	TObjectPtr<UInputAction> SpectateNextAction;
+
+	UPROPERTY(EditAnywhere, Category = "Input|Spectating")
+	TObjectPtr<UInputAction> SpectatePreviousAction;
+
+	// 관전 입력 처리
+	void HandleSpectateNext();
+	void HandleSpectatePrevious();
 
 	// 입력 처리 함수들
 	void Move(const FInputActionValue& InputActionValue);
@@ -166,7 +199,7 @@ private:
 	UPROPERTY()
 	TObjectPtr<ADRCleanserPart> CurrentDetectedPart;
 
-	// 부품 획득 요청 (서버 RPC)
+	// 부품 획득 요청
 	UFUNCTION(Server, Reliable)
 	void ServerRequestPickupPart(ADRCleanserPart* Part);
 	

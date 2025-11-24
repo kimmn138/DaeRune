@@ -12,6 +12,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Game/DRGameModeBase.h" 
+#include "Player/DRPlayerController.h"
 
 ADRCharacterBase::ADRCharacterBase()
 {
@@ -83,36 +84,36 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 				}
 			}
 
-			// 관전자 모드로 전환
-			if (PC)
+			// 커스텀 관전 시스템으로 전환
+			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
 			{
 				// 약간의 딜레이 후 관전 모드 전환
 				FTimerHandle SpectatorTimerHandle;
 				GetWorld()->GetTimerManager().SetTimer(
 					SpectatorTimerHandle,
-					[PC]()
+					[DRPC]()
 					{
-						PC->StartSpectatingOnly();
+						DRPC->ClientStartSpectating();
 					},
 					0.5f,
 					false
 				);
-
-				// 캐릭터 액터 파괴
-				FTimerHandle DestroyTimerHandle;
-				GetWorld()->GetTimerManager().SetTimer(
-				   DestroyTimerHandle,
-				   [this]()
-				   {
-					  if (IsValid(this))
-					  {
-						 Destroy();
-					  }
-				   },
-				   2.5f,
-				   false
-				);
 			}
+
+			// 캐릭터 액터는 바로 파괴
+			FTimerHandle DestroyTimerHandle;
+			GetWorld()->GetTimerManager().SetTimer(
+			   DestroyTimerHandle,
+			   [this]()
+			   {
+				  if (IsValid(this))
+				  {
+					 Destroy();
+				  }
+			   },
+			   2.5f,
+			   false
+			);
 		}
 	}
 	else

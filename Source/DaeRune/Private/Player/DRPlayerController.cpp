@@ -14,6 +14,8 @@
 #include "Character/DRCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "Game/DRStageGameMode.h"
+#include "Game/DRStageGameState.h"
+#include "GameFramework/PlayerState.h"
 
 ADRPlayerController::ADRPlayerController()
 {
@@ -153,6 +155,94 @@ void ADRPlayerController::ServerRequestInstallPartToSite_Implementation(ADRClean
 	Site->InstallPart(DRCharacter);
 }
 
+void ADRPlayerController::ClientStartSpectating_Implementation()
+{
+	// 로컬 컨트롤러에서만 실행
+	if (!IsLocalController()) return;
+
+	bIsSpectating = true;
+	CurrentSpectatedPlayerIndex = 0;
+
+	// 살아있는 플레이어 찾기
+	ADRStageGameState* StageGS = GetWorld()->GetGameState<ADRStageGameState>();
+	if (!StageGS) return;
+
+	TArray<APlayerState*> AlivePlayers = StageGS->GetAlivePlayers();
+	if (AlivePlayers.Num() > 0)
+	{
+		// 첫 번째 살아있는 플레이어의 폰으로 ViewTarget 설정
+		if (APlayerState* FirstAlive = AlivePlayers[0])
+		{
+			if (APawn* TargetPawn = FirstAlive->GetPawn())
+			{
+				SetViewTarget(TargetPawn);
+
+				FRotator InitialRotation = TargetPawn->GetActorRotation();
+				SetControlRotation(InitialRotation);
+			}
+		}
+	}
+}
+
+void ADRPlayerController::SpectateNextPlayer()
+{
+	// 관전 모드 체크
+	if (!bIsSpectating || !IsLocalController()) return;
+
+	ADRStageGameState* StageGS = GetWorld()->GetGameState<ADRStageGameState>();
+	if (!StageGS) return;
+
+	TArray<APlayerState*> AlivePlayers = StageGS->GetAlivePlayers();
+	if (AlivePlayers.Num() == 0) return;
+
+	// 다음 플레이어로 인덱스 이동
+	CurrentSpectatedPlayerIndex = (CurrentSpectatedPlayerIndex + 1) % AlivePlayers.Num();
+
+	// ViewTarget 전환
+	if (APlayerState* NextPlayer = AlivePlayers[CurrentSpectatedPlayerIndex])
+	{
+		if (APawn* TargetPawn = NextPlayer->GetPawn())
+		{
+			SetViewTarget(TargetPawn);
+
+			SetControlRotation(TargetPawn->GetActorRotation());
+		}
+	}
+}
+
+void ADRPlayerController::SpectatePreviousPlayer()
+{
+	// 관전 모드 체크만
+	if (!bIsSpectating) return;
+    
+	// 로컬 컨트롤러 체크
+	if (!IsLocalController()) return;
+
+	ADRStageGameState* StageGS = GetWorld()->GetGameState<ADRStageGameState>();
+	if (!StageGS) return;
+
+	TArray<APlayerState*> AlivePlayers = StageGS->GetAlivePlayers();
+	if (AlivePlayers.Num() == 0) return;
+
+	// 이전 플레이어로 인덱스 이동
+	CurrentSpectatedPlayerIndex--;
+	if (CurrentSpectatedPlayerIndex < 0)
+	{
+		CurrentSpectatedPlayerIndex = AlivePlayers.Num() - 1;
+	}
+
+	// ViewTarget 전환
+	if (APlayerState* PrevPlayer = AlivePlayers[CurrentSpectatedPlayerIndex])
+	{
+		if (APawn* TargetPawn = PrevPlayer->GetPawn())
+		{
+			SetViewTarget(TargetPawn);
+
+			SetControlRotation(TargetPawn->GetActorRotation());
+		}
+	}
+}
+
 void ADRPlayerController::CheatSkipToNextPhase()
 {
 // 개발 빌드에서만 동작하도록 체크
@@ -236,8 +326,83 @@ void ADRPlayerController::SetupInputComponent()
 	DRInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ADRPlayerController::StartJump);
 	DRInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ADRPlayerController::StopJump);
 	DRInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &ADRPlayerController::HandleInteract);
+	DRInputComponent->BindAction(SpectateNextAction, ETriggerEvent::Started, this, &ADRPlayerController::HandleSpectateNext);
+	DRInputComponent->BindAction(SpectatePreviousAction, ETriggerEvent::Started, this, &ADRPlayerController::HandleSpectatePrevious);
 	// �����Ƽ �Է� ���ε� (InputConfig ���)
 	DRInputComponent->BindAbilityActions(InputConfig, this, &ThisClass::AbilityInputTagPressed, &ThisClass::AbilityInputTagReleased, &ThisClass::AbilityInputTagHeld);
+}
+
+void ADRPlayerController::CalcCamera(float DeltaTime, struct FMinimalViewInfo& OutResult)
+{
+	// 관전 모드가 아니면 기본 동작
+	if (!bIsSpectating)
+	{
+		Super::CalcCamera(DeltaTime, OutResult);
+		return;
+	}
+
+	// 관전 대상이 있으면
+	if (APawn* TargetPawn = Cast<APawn>(GetViewTarget()))
+	{
+		// 관전 대상의 위치 (캐릭터 중심)
+		FVector TargetLocation = TargetPawn->GetActorLocation();
+        
+		// 관전자의 컨트롤 회전 (마우스로 조종)
+		FRotator ViewRotation = GetControlRotation();
+        
+		// SpringArm 효과를 수동으로 계산
+		float ArmLength = 300.f; // TargetArmLength
+		FVector Offset = FVector(0.f, 0.f, 80.f); // SocketOffset (어깨 높이)
+        
+		// 회전된 Offset 적용
+		FVector RotatedOffset = ViewRotation.RotateVector(FVector(-ArmLength, 0.f, 0.f));
+        
+		// 최종 카메라 위치 = 캐릭터 위치 + 오프셋 + 회전된 팔 길이
+		FVector DesiredCameraLocation = TargetLocation + Offset + RotatedOffset;
+        
+		// 충돌 체크 (벽 뒤로 카메라 안 가게)
+		FHitResult HitResult;
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(TargetPawn);
+		QueryParams.AddIgnoredActor(GetPawn()); // 자기 자신도 무시
+        
+		bool bHit = GetWorld()->LineTraceSingleByChannel(
+			HitResult,
+			TargetLocation + Offset,
+			DesiredCameraLocation,
+			ECC_Camera,
+			QueryParams
+		);
+        
+		// 충돌하면 가까운 위치로 조정
+		FVector FinalCameraLocation = bHit ? HitResult.Location : DesiredCameraLocation;
+        
+		// 카메라 정보 설정
+		OutResult.Location = FinalCameraLocation;
+		OutResult.Rotation = ViewRotation;
+		OutResult.FOV = 90.f; // 원하는 FOV
+        
+		return;
+	}
+
+	// 폴백
+	Super::CalcCamera(DeltaTime, OutResult);
+}
+
+void ADRPlayerController::HandleSpectateNext()
+{
+	if (bIsSpectating)
+	{
+		SpectateNextPlayer();
+	}
+}
+
+void ADRPlayerController::HandleSpectatePrevious()
+{
+	if (bIsSpectating)
+	{
+		SpectatePreviousPlayer();
+	}
 }
 
 void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
@@ -346,22 +511,13 @@ UDRAbilitySystemComponent* ADRPlayerController::GetASC()
 void ADRPlayerController::ServerCheatSkipToNextPhase_Implementation()
 {
 	// 서버에서만 실행되는 RPC
-	if (!HasAuthority())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("ServerCheatSkipToNextPhase: 서버 권한 없음!"));
-		return;
-	}
+	if (!HasAuthority()) return;
 
 	// GameMode 가져오기
 	ADRStageGameMode* StageGameMode = GetWorld()->GetAuthGameMode<ADRStageGameMode>();
-	if (!StageGameMode)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("ServerCheatSkipToNextPhase: StageGameMode를 찾을 수 없습니다."));
-		return;
-	}
+	if (!StageGameMode) return;
 
 	// 페이즈 전환
-	UE_LOG(LogTemp, Log, TEXT("ServerCheatSkipToNextPhase: 다음 페이즈로 전환합니다!"));
 	StageGameMode->TransitionToNextPhase();
 }
 
