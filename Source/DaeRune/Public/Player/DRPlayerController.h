@@ -112,7 +112,6 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void PlayerTick(float DeltaTime) override;
 	virtual void SetupInputComponent() override;
-	virtual void CalcCamera(float DeltaTime, struct FMinimalViewInfo& OutResult) override;
 
 	// 부패 상태 플래그
 	UPROPERTY(BlueprintReadOnly, Category = "Corruption")

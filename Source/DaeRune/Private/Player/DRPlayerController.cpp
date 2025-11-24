@@ -157,13 +157,11 @@ void ADRPlayerController::ServerRequestInstallPartToSite_Implementation(ADRClean
 
 void ADRPlayerController::ClientStartSpectating_Implementation()
 {
-	// 로컬 컨트롤러에서만 실행
 	if (!IsLocalController()) return;
 
 	bIsSpectating = true;
 	CurrentSpectatedPlayerIndex = 0;
 
-	// 살아있는 플레이어 찾기
 	ADRStageGameState* StageGS = GetWorld()->GetGameState<ADRStageGameState>();
 	if (!StageGS) return;
 
@@ -176,9 +174,6 @@ void ADRPlayerController::ClientStartSpectating_Implementation()
 			if (APawn* TargetPawn = FirstAlive->GetPawn())
 			{
 				SetViewTarget(TargetPawn);
-
-				FRotator InitialRotation = TargetPawn->GetActorRotation();
-				SetControlRotation(InitialRotation);
 			}
 		}
 	}
@@ -204,8 +199,6 @@ void ADRPlayerController::SpectateNextPlayer()
 		if (APawn* TargetPawn = NextPlayer->GetPawn())
 		{
 			SetViewTarget(TargetPawn);
-
-			SetControlRotation(TargetPawn->GetActorRotation());
 		}
 	}
 }
@@ -237,8 +230,6 @@ void ADRPlayerController::SpectatePreviousPlayer()
 		if (APawn* TargetPawn = PrevPlayer->GetPawn())
 		{
 			SetViewTarget(TargetPawn);
-
-			SetControlRotation(TargetPawn->GetActorRotation());
 		}
 	}
 }
@@ -332,63 +323,6 @@ void ADRPlayerController::SetupInputComponent()
 	DRInputComponent->BindAbilityActions(InputConfig, this, &ThisClass::AbilityInputTagPressed, &ThisClass::AbilityInputTagReleased, &ThisClass::AbilityInputTagHeld);
 }
 
-void ADRPlayerController::CalcCamera(float DeltaTime, struct FMinimalViewInfo& OutResult)
-{
-	// 관전 모드가 아니면 기본 동작
-	if (!bIsSpectating)
-	{
-		Super::CalcCamera(DeltaTime, OutResult);
-		return;
-	}
-
-	// 관전 대상이 있으면
-	if (APawn* TargetPawn = Cast<APawn>(GetViewTarget()))
-	{
-		// 관전 대상의 위치 (캐릭터 중심)
-		FVector TargetLocation = TargetPawn->GetActorLocation();
-        
-		// 관전자의 컨트롤 회전 (마우스로 조종)
-		FRotator ViewRotation = GetControlRotation();
-        
-		// SpringArm 효과를 수동으로 계산
-		float ArmLength = 300.f; // TargetArmLength
-		FVector Offset = FVector(0.f, 0.f, 80.f); // SocketOffset (어깨 높이)
-        
-		// 회전된 Offset 적용
-		FVector RotatedOffset = ViewRotation.RotateVector(FVector(-ArmLength, 0.f, 0.f));
-        
-		// 최종 카메라 위치 = 캐릭터 위치 + 오프셋 + 회전된 팔 길이
-		FVector DesiredCameraLocation = TargetLocation + Offset + RotatedOffset;
-        
-		// 충돌 체크 (벽 뒤로 카메라 안 가게)
-		FHitResult HitResult;
-		FCollisionQueryParams QueryParams;
-		QueryParams.AddIgnoredActor(TargetPawn);
-		QueryParams.AddIgnoredActor(GetPawn()); // 자기 자신도 무시
-        
-		bool bHit = GetWorld()->LineTraceSingleByChannel(
-			HitResult,
-			TargetLocation + Offset,
-			DesiredCameraLocation,
-			ECC_Camera,
-			QueryParams
-		);
-        
-		// 충돌하면 가까운 위치로 조정
-		FVector FinalCameraLocation = bHit ? HitResult.Location : DesiredCameraLocation;
-        
-		// 카메라 정보 설정
-		OutResult.Location = FinalCameraLocation;
-		OutResult.Rotation = ViewRotation;
-		OutResult.FOV = 90.f; // 원하는 FOV
-        
-		return;
-	}
-
-	// 폴백
-	Super::CalcCamera(DeltaTime, OutResult);
-}
-
 void ADRPlayerController::HandleSpectateNext()
 {
 	if (bIsSpectating)
@@ -407,6 +341,9 @@ void ADRPlayerController::HandleSpectatePrevious()
 
 void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 {
+	// 관전 모드면 이동 입력 무시
+	if (bIsSpectating) return;
+	
 	// �Է� ��� ���� Ȯ��
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
 
@@ -428,6 +365,9 @@ void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 {
+	// 관전 모드면 시점 변경 무시
+	if (bIsSpectating) return;
+	
 	// ���콺 �ü� ó��
 	const FVector2D Axis = InputActionValue.Get<FVector2D>();
 	AddYawInput(Axis.X);
@@ -436,6 +376,9 @@ void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
 {
+	// 관전 모드면 어빌리티 입력 무시
+	if (bIsSpectating) return;
+	
 	// ���� ����
 	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>()))
 	{
@@ -445,6 +388,9 @@ void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 {
+	// 관전 모드면 어빌리티 입력 무시
+	if (bIsSpectating) return;
+	
 	// ���� ����
 	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>()))
 	{
@@ -454,6 +400,9 @@ void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::HandleInteract()
 {
+	// 관전 모드면 어빌리티 입력 무시
+	if (bIsSpectating) return;
+	
 	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
 	if (!DRCharacter) return;
 	
