@@ -13,6 +13,7 @@
 #include "Net/UnrealNetwork.h"
 #include "Game/DRGameModeBase.h" 
 #include "Player/DRPlayerController.h"
+#include "Character/DRCharacter.h"
 
 ADRCharacterBase::ADRCharacterBase()
 {
@@ -73,6 +74,15 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 			// 부패 상태에서 죽으면 진짜 사망
 			Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
 			MulticastHandleDeath(DeathImpulse);
+
+			// 플레이어가 부품을 들고 있으면 떨어뜨리기
+			if (ADRCharacter* DRCharacter = Cast<ADRCharacter>(this))
+			{
+				if (DRCharacter->IsCarryingPart())
+				{
+					DRCharacter->DropCarriedPart();
+				}
+			}
 
 			// GameMode에 플레이어 사망 알림 (전멸 체크)
 			if (ADRGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRGameModeBase>())

@@ -39,6 +39,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CleanserPart")
 	void InstallPart();
 
+	// 캐릭터로부터 떨어뜨리기 
+	UFUNCTION(BlueprintCallable, Category = "CleanserPart")
+	void DropFromCarrier();
+
 	// ========== 라인트레이싱 콜백 ========== 
 
 	// UI 표시/숨김 (멀티캐스트 - 모든 클라이언트 실행)

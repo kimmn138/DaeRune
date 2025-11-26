@@ -50,6 +50,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void InstallCarriedPart();
 
+	// 何前 冻绢哆府扁
+	UFUNCTION(BlueprintCallable, Category = "Part System")
+	void DropCarriedPart();
+
 protected:
 	// ========== 何前 惑怕 ==========
 

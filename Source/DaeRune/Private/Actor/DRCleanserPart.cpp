@@ -100,6 +100,31 @@ void ADRCleanserPart::InstallPart()
 	Destroy();
 }
 
+void ADRCleanserPart::DropFromCarrier()
+{
+	// 서버에서만 실행
+	if (!HasAuthority()) return;
+
+	// 캐릭터에서 분리
+	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+
+	// 내부 상태 초기화
+	bIsCarried = false;
+	CarryingCharacter = nullptr;
+
+	SetActorRotation(FRotator::ZeroRotator);
+
+	// 메시 콜리전 재활성화
+	PartMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	PartMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+	PartMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
+	// 감지 범위 재활성화
+	DetectionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	DetectionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+	DetectionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+}
+
 void ADRCleanserPart::MulticastShowInteractionUI_Implementation(ADRPlayerController* PlayerController, bool bShow)
 {
 	// 모든 클라이언트에서 실행됨

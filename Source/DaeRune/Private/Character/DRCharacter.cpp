@@ -153,6 +153,28 @@ void ADRCharacter::InstallCarriedPart()
 	CarriedPart = nullptr;
 }
 
+void ADRCharacter::DropCarriedPart()
+{
+	// 서버에서만 실행
+	if (!HasAuthority()) return;
+
+	// 부품을 들고 있지 않으면 무시
+	if (!bIsCarryingPart || !CarriedPart) return;
+
+	// State_Carrying 태그 제거
+	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(GetAbilitySystemComponent()))
+	{
+		DRASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
+	}
+
+	// 부품에게 떨어지라고 요청
+	CarriedPart->DropFromCarrier();
+
+	// 캐릭터 상태만 초기화
+	bIsCarryingPart = false;
+	CarriedPart = nullptr;
+}
+
 void ADRCharacter::OnRep_bIsCarryingPart()
 {
 	// 클라이언트 시각적 효과
