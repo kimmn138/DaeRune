@@ -34,7 +34,7 @@ public:
 	// Team Interface
 	virtual FGenericTeamId GetGenericTeamId() const override { return TeamId; }
 	virtual void SetGenericTeamId(const FGenericTeamId& NewTeamId) override { TeamId = NewTeamId; }
-
+	
 	// 데미지 수치 표시
 	UFUNCTION(Client, Reliable)
 	void ShowDamageNumber(float DamageAmount, ACharacter* TargetCharacter);
@@ -76,7 +76,7 @@ public:
 	void ServerNotifyLineTraceLost(ADRCleanserPart* Part);
 
 	UPROPERTY()
-	TObjectPtr<class ADRCleanserSite> CurrentOverlappedSite;
+	TObjectPtr<ADRCleanserSite> CurrentOverlappedSite;
 	
 	UFUNCTION(Server, Reliable)
 	void ServerRequestInstallPartToSite(ADRCleanserSite* Site);
@@ -90,12 +90,17 @@ public:
 	// 현재 관전 중인 플레이어 인덱스
 	int32 CurrentSpectatedPlayerIndex = 0;
 
-	// 관전용 카메라 Actor
+	// 현재 관전 중인 캐릭터 (직접 참조)
 	UPROPERTY()
-	TObjectPtr<class ADRSpectatorCamera> SpectatorCamera;
+	TWeakObjectPtr<ACharacter> CurrentSpectatedCharacter;
 
 	// 관전 시작
-	void StartSpectating();
+	UFUNCTION(Client, Reliable)
+	void ClientStartSpectating();
+
+	// 관전 종료
+	UFUNCTION(Client, Reliable)
+	void ClientStopSpectating();
 
 	// 다음 플레이어로 전환
 	UFUNCTION(BlueprintCallable, Category = "Spectating")
@@ -160,6 +165,16 @@ private:
 	// 관전 입력 처리
 	void HandleSpectateNext();
 	void HandleSpectatePrevious();
+
+	// 관전 대상 설정
+	void SetSpectateTarget(ACharacter* NewTarget);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetSpectateTarget(ACharacter* NewTarget);
+
+	// 관전 대상 사망 처리
+	UFUNCTION()
+	void OnSpectatedPlayerDied(AActor* DeadActor);
 
 	// 입력 처리 함수들
 	void Move(const FInputActionValue& InputActionValue);

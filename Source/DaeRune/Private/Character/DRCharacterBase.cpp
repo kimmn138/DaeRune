@@ -12,7 +12,6 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Game/DRGameModeBase.h" 
-#include "GameFramework/SpectatorPawn.h"
 #include "Player/DRPlayerController.h"
 
 ADRCharacterBase::ADRCharacterBase()
@@ -96,10 +95,10 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 					{
 						if (IsValid(DRPC))
 						{
-							DRPC->StartSpectating();
+							DRPC->ClientStartSpectating();
 						}
 					},
-					0.5f,
+					3.0f,
 					false
 				);
 			}

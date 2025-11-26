@@ -11,18 +11,16 @@
 #include "UI/Widget/DamageTextComponent.h"
 #include "Actor/DRCleanserPart.h"
 #include "Actor/DRCleanserSite.h"
-#include "Actor/DRSpectatorCamera.h"
 #include "Character/DRCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
-#include "GameFramework/PlayerState.h"
 
 ADRPlayerController::ADRPlayerController()
 {
 	// ��Ƽ�÷��� ���ø����̼� Ȱ��ȭ
 	bReplicates = true;
-
+	
 	// ��ǰ �ý��� �ʱ�ȭ
 	bPartDetectionEnabled = false;
 	CurrentDetectedPart = nullptr;
@@ -156,90 +154,97 @@ void ADRPlayerController::ServerRequestInstallPartToSite_Implementation(ADRClean
 	Site->InstallPart(DRCharacter);
 }
 
-void ADRPlayerController::StartSpectating()
+void ADRPlayerController::ClientStartSpectating_Implementation()
 {
-	// 서버와 클라이언트 모두에서 실행
+	if (!IsLocalController()) return;
+    
 	bIsSpectating = true;
 	CurrentSpectatedPlayerIndex = 0;
 
-	// 로컬 컨트롤러에서만 카메라 생성 및 설정
-	if (IsLocalController())
+	ADRGameStateBase* GameStateBase = GetWorld()->GetGameState<ADRGameStateBase>();
+	if (!GameStateBase) return;
+
+	TArray<ACharacter*> AlivePlayers = GameStateBase->GetAlivePlayers();
+	
+	if (AlivePlayers.Num() > 0)
 	{
-		// SpectatorCamera 생성 (로컬에만)
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.Owner = this;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-        
-		SpectatorCamera = GetWorld()->SpawnActor<ADRSpectatorCamera>(
-			ADRSpectatorCamera::StaticClass(),
-			FVector::ZeroVector,
-			FRotator::ZeroRotator,
-			SpawnParams
-		);
+		SetSpectateTarget(AlivePlayers[0]);
+	}
+}
 
-		if (SpectatorCamera)
+void ADRPlayerController::ClientStopSpectating_Implementation()
+{
+	if (!IsLocalController()) return;
+    
+	bIsSpectating = false;
+	CurrentSpectatedPlayerIndex = 0;
+    
+	// 델리게이트 해제
+	if (CurrentSpectatedCharacter.IsValid())
+	{
+		if (ADRCharacterBase* OldTarget = Cast<ADRCharacterBase>(CurrentSpectatedCharacter.Get()))
 		{
-			// 살아있는 플레이어 찾기
-			ADRGameStateBase* GameStateBase = GetWorld()->GetGameState<ADRGameStateBase>();
-			if (!GameStateBase) return;
-
-			TArray<ACharacter*> AliveCharacters = GameStateBase->GetAlivePlayers();
-			if (AliveCharacters.Num() == 0) return;
-
-			// 첫 번째 살아있는 캐릭터에게 부착
-			if (ACharacter* FirstAlive = AliveCharacters[0])
-			{
-				SpectatorCamera->AttachToPlayer(FirstAlive);
-				SetViewTarget(SpectatorCamera);
-			}
+			OldTarget->OnDeathDelegate.RemoveDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
 		}
+	}
+	CurrentSpectatedCharacter.Reset();
+    
+	// 자기 자신으로 ViewTarget 복원
+	if (GetPawn())
+	{
+		SetViewTarget(GetPawn());
 	}
 }
 
 void ADRPlayerController::SpectateNextPlayer()
 {
 	if (!bIsSpectating || !IsLocalController()) return;
-	if (!SpectatorCamera) return;
 
 	ADRGameStateBase* GameStateBase = GetWorld()->GetGameState<ADRGameStateBase>();
 	if (!GameStateBase) return;
 
 	TArray<ACharacter*> AliveCharacters = GameStateBase->GetAlivePlayers();
-	if (AliveCharacters.Num() == 0) return;
-
-	// 다음 플레이어로 인덱스 이동
-	CurrentSpectatedPlayerIndex = (CurrentSpectatedPlayerIndex + 1) % AliveCharacters.Num();
-
-	// 새 플레이어에게 부착
-	if (ACharacter* NextCharacter = AliveCharacters[CurrentSpectatedPlayerIndex])
+	if (AliveCharacters.Num() == 0)
 	{
-		SpectatorCamera->AttachToPlayer(NextCharacter);
+		// 모두 사망 - 관전 대상 없음
+		CurrentSpectatedCharacter.Reset();
+		return;
 	}
+	
+	if(AliveCharacters.Num() == 1) return;
+
+	// 다음 인덱스 계산
+	CurrentSpectatedPlayerIndex = (CurrentSpectatedPlayerIndex + 1) % AliveCharacters.Num();
+    
+	// 새 관전 대상 설정
+	SetSpectateTarget(AliveCharacters[CurrentSpectatedPlayerIndex]);
 }
 
 void ADRPlayerController::SpectatePreviousPlayer()
 {
 	if (!bIsSpectating || !IsLocalController()) return;
-	if (!SpectatorCamera) return;
 
 	ADRGameStateBase* GameStateBase = GetWorld()->GetGameState<ADRGameStateBase>();
 	if (!GameStateBase) return;
 
 	TArray<ACharacter*> AliveCharacters = GameStateBase->GetAlivePlayers();
-	if (AliveCharacters.Num() == 0) return;
+	if (AliveCharacters.Num() == 0)
+	{
+		CurrentSpectatedCharacter.Reset();
+		return;
+	}
 
-	// 이전 플레이어로 인덱스 이동
+	if(AliveCharacters.Num() == 1) return;
+
+	// 이전 인덱스 계산
 	CurrentSpectatedPlayerIndex--;
 	if (CurrentSpectatedPlayerIndex < 0)
 	{
 		CurrentSpectatedPlayerIndex = AliveCharacters.Num() - 1;
 	}
 
-	// 새 플레이어에게 부착
-	if (ACharacter* PrevCharacter = AliveCharacters[CurrentSpectatedPlayerIndex])
-	{
-		SpectatorCamera->AttachToPlayer(PrevCharacter);
-	}
+	// 새 관전 대상 설정
+	SetSpectateTarget(AliveCharacters[CurrentSpectatedPlayerIndex]);
 }
 
 void ADRPlayerController::CheatSkipToNextPhase()
@@ -278,6 +283,8 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 
+	if (bIsSpectating) return;
+	
 	// ��ǰ ������ ��Ȱ��ȭ�Ǿ� ������ ��ŵ
 	if (!bPartDetectionEnabled) return;
 
@@ -347,8 +354,73 @@ void ADRPlayerController::HandleSpectatePrevious()
 	}
 }
 
+void ADRPlayerController::SetSpectateTarget(ACharacter* NewTarget)
+{
+	UE_LOG(LogTemp, Warning, TEXT("[Spectate] SetSpectateTarget Called. NewTarget = %s (Authority=%d)"),
+		*GetNameSafe(NewTarget),
+		HasAuthority());
+	
+	// 서버에 요청
+	if (!HasAuthority())
+	{
+		ServerSetSpectateTarget(NewTarget);
+		return;
+	}
+
+	// 이전 대상의 사망 델리게이트 해제
+	if (CurrentSpectatedCharacter.IsValid())
+	{
+		if (ADRCharacterBase* OldTarget = Cast<ADRCharacterBase>(CurrentSpectatedCharacter.Get()))
+		{
+			OldTarget->OnDeathDelegate.RemoveDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
+		}
+	}
+
+	CurrentSpectatedCharacter = NewTarget;
+
+	if (NewTarget)
+	{
+		// ViewTarget 설정
+		SetViewTarget(NewTarget);
+        
+		// 새 대상의 사망 델리게이트 바인딩
+		if (ADRCharacterBase* DRTarget = Cast<ADRCharacterBase>(NewTarget))
+		{
+			DRTarget->OnDeathDelegate.AddDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
+		}
+	}
+}
+
+void ADRPlayerController::ServerSetSpectateTarget_Implementation(ACharacter* NewTarget)
+{
+	// 서버에서 SetSpectateTarget 실행
+	SetSpectateTarget(NewTarget);
+}
+
+void ADRPlayerController::OnSpectatedPlayerDied(AActor* DeadActor)
+{
+	if (!bIsSpectating) return;
+
+	// 약간의 딜레이 후 다음 플레이어로 전환
+	FTimerHandle SwitchTimerHandle;
+	GetWorld()->GetTimerManager().SetTimer(
+		SwitchTimerHandle,
+		[this]()
+		{
+			if (IsValid(this) && bIsSpectating)
+			{
+				SpectateNextPlayer();
+			}
+		},
+		1.0f,
+		false
+	);
+}
+
 void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 {
+	if (bIsSpectating) return;
+	
 	// �Է� ��� ���� Ȯ��
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
 
@@ -370,6 +442,8 @@ void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 {
+	if (bIsSpectating) return;
+	
 	// ���콺 �ü� ó��
 	const FVector2D Axis = InputActionValue.Get<FVector2D>();
 	AddYawInput(Axis.X);
@@ -378,6 +452,8 @@ void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
 {
+	if (bIsSpectating) return;
+	
 	// ���� ����
 	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>()))
 	{
@@ -387,6 +463,8 @@ void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 {
+	if (bIsSpectating) return;
+	
 	// ���� ����
 	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>()))
 	{
@@ -396,6 +474,8 @@ void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::HandleInteract()
 {
+	if (bIsSpectating) return;
+	
 	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
 	if (!DRCharacter) return;
 	
@@ -418,6 +498,8 @@ void ADRPlayerController::HandleInteract()
 
 void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 {
+	if (bIsSpectating) return;
+	
 	// �Է� ��� Ȯ�� �� �����Ƽ �Է� ó��
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
 
@@ -429,6 +511,8 @@ void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 
 void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 {
+	if (bIsSpectating) return;
+	
 	// �Է� ���� ��� Ȯ��
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputReleased)) return;
 
@@ -438,6 +522,8 @@ void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 
 void ADRPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
 {
+	if (bIsSpectating) return;
+		
 	// �Է� Ȧ�� ��� Ȯ��
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputHeld)) return;
 
