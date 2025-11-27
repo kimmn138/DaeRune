@@ -49,10 +49,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Config")
 	TSubclassOf<AActor> NormalEnemyClass;
 
-	// 맵에 배치된 클렌저 사이트 3개 (블루프린트에서 할당)
-	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Phase1|Config", meta = (AllowPrivateAccess = "true"))
-	TArray<TObjectPtr<ADRCleanserSite>> AllCleanserSites;
-
 	// 일반 몬스터 스폰 수
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Config")
 	int32 NormalEnemyCount = 4;

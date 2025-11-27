@@ -46,15 +46,8 @@ void UDRPhase3::OnPhaseStart()
 	// 방어 시간 시작
 	if (UWorld* World = GameMode->GetWorld())
 	{
-		PoisonGasSpawnPoints.Empty();
-		for (TActorIterator<AActor> It(World); It; ++It)
-		{
-			AActor* Actor = *It;
-			if (Actor && Actor->ActorHasTag(PoisonGasSpawnPointTag))
-			{
-				PoisonGasSpawnPoints.Add(Actor);
-			}
-		}
+		// 활성화된 스폰 포인트 계산
+		InitializeActiveSpawnPoints();
 		
 		DefenseStartTime = World->GetTimeSeconds();
 		World->GetTimerManager().SetTimer(
@@ -103,7 +96,8 @@ void UDRPhase3::OnPhaseEnd()
 	}
 	
 	// 유독 가스 제거
-	PoisonGasSpawnPoints.Empty();
+	ActiveSpawnPointIndices.Empty();
+	ActiveBlueSpawnPointIndices.Empty();
 	RemoveToxicGas();
 }
 
@@ -605,6 +599,50 @@ void UDRPhase3::InitializeCleanserSite()
 	OnCleanserSiteReadyDelegate.Broadcast(FirstCleanserSite, SecondCleanserSite);
 }
 
+void UDRPhase3::InitializeActiveSpawnPoints()
+{
+	ActiveSpawnPointIndices.Empty();
+	ActiveBlueSpawnPointIndices.Empty();
+
+	// ActiveCleanserSites는 Phase1에서 설정된 2개의 활성 클렌저
+	if (ActiveCleanserSites.Num() == 0) return;
+
+	// 활성화된 클렌저 사이트의 ID 목록 생성
+	TSet<FName> ActiveCleanserIDs;
+	for (const TObjectPtr<ADRCleanserSite>& CleanserSite : ActiveCleanserSites)
+	{
+		if (CleanserSite)
+		{
+			FName CleanserID = CleanserSite->GetCleanserID();
+			if (CleanserID != NAME_None)
+			{
+			     ActiveCleanserIDs.Add(CleanserID);
+			}
+		}
+	}
+
+	// 스폰 포인트 활성화 여부 판단
+	for (int32 i = 0; i < AllPoisonGasSpawnPoints.Num(); ++i)
+	{
+		const FPoisonGasSpawnPointData& Point = AllPoisonGasSpawnPoints[i];
+
+		if (Point.SpawnType == EPoisonGasSpawnPointType::Normal)
+		{
+			// 초록색 포인트는 항상 활성화 (36개)
+			ActiveSpawnPointIndices.Add(i);
+		}
+		else if (Point.SpawnType == EPoisonGasSpawnPointType::CleanserLinked)
+		{
+			// 파란색 포인트는 연결된 클렌저가 활성화되어 있는지 확인
+			if (Point.LinkedCleanserTag != NAME_None && ActiveCleanserIDs.Contains(Point.LinkedCleanserTag))
+			{
+				ActiveSpawnPointIndices.Add(i);
+				ActiveBlueSpawnPointIndices.Add(i);
+			}
+		}
+	}
+}
+
 void UDRPhase3::OnCleanserSiteDestroyed(ADRCleanserSite* DestroyedSite) const
 {
 	// 클렌저 사이트가 하나라도 파괴되면 게임 오버
@@ -691,6 +729,43 @@ bool UDRPhase3::IsMonsterCountExceeded() const
 
 // ========== 환경 위협 ==========
 
+TArray<int32> UDRPhase3::SelectRandomSpawnPointIndices() const
+{
+	TArray<int32> SelectedIndices;
+
+	// 활성화된 포인트가 8개 이하면 전부 선택
+	if (ActiveSpawnPointIndices.Num() <= 8)
+	{
+		return ActiveSpawnPointIndices;
+	}
+
+	// 파란색 포인트 중 최소 1개 선택
+	if (ActiveBlueSpawnPointIndices.Num() > 0)
+	{
+		int32 RandomBlueIndex = FMath::RandRange(0, ActiveBlueSpawnPointIndices.Num() - 1);
+		SelectedIndices.Add(ActiveBlueSpawnPointIndices[RandomBlueIndex]);
+	}
+
+	// 나머지 7개를 전체 활성화된 포인트에서 선택
+	TArray<int32> RemainingPoints = ActiveSpawnPointIndices;
+
+	// 이미 선택된 파란색 포인트 제거
+	for (int32 SelectedIdx : SelectedIndices)
+	{
+		RemainingPoints.Remove(SelectedIdx);
+	}
+
+	// 7개를 랜덤으로 추가 선택
+	while (SelectedIndices.Num() < 8 && RemainingPoints.Num() > 0)
+	{
+		int32 RandomIndex = FMath::RandRange(0, RemainingPoints.Num() - 1);
+		SelectedIndices.Add(RemainingPoints[RandomIndex]);
+		RemainingPoints.RemoveAt(RandomIndex);
+	}
+
+	return SelectedIndices;
+}
+
 void UDRPhase3::SpawnToxicGas()
 {
 	if (!GameMode) return;
@@ -704,51 +779,54 @@ void UDRPhase3::SpawnToxicGas()
 		World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
 	}
     
-	// 5초 후 첫 스폰, 이후 15초마다 반복
+	// 3초 후 첫 스폰, 이후 10초마다 반복
 	World->GetTimerManager().SetTimer(
 		PoisonGasSpawnTimerHandle,
 		this,
 		&UDRPhase3::SpawnPoisonGasActor,
-		15.0f,  // 15초 주기
+		PoisonGasSpawnInterval,  // 10초 주기
 		true,   // 반복
-		5.0f    // 5초 후 시작
+		3.0f    // 3초 후 시작
 	);
 }
 
 void UDRPhase3::SpawnPoisonGasActor()
 {
-	if (!GameMode) return;
-    
-	if (PoisonGasSpawnPoints.Num() == 0) return;
-    
-	if (!PoisonGasActorClass) return;
-    
+	if (!GameMode || !PoisonGasActorClass) return;
+
 	UWorld* World = GameMode->GetWorld();
 	if (!World) return;
-    
-	// 랜덤 스폰 포인트 선택
-	int32 RandomIndex = FMath::RandRange(0, PoisonGasSpawnPoints.Num() - 1);
-	AActor* SpawnPoint = PoisonGasSpawnPoints[RandomIndex];
-    
-	if (!SpawnPoint) return;
-    
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-    
-	ADRPoisonGasActor* PoisonGas = World->SpawnActor<ADRPoisonGasActor>(
-		PoisonGasActorClass,
-		SpawnPoint->GetActorLocation(),
-		FRotator::ZeroRotator,
-		SpawnParams
-	);
-    
-	if (PoisonGas)
+
+	// 8개의 랜덤 스폰 지점 선택
+	TArray<int32> SelectedIndices = SelectRandomSpawnPointIndices();
+
+	if (SelectedIndices.Num() == 0) return;
+
+	// 선택된 8개 지점에 독가스 스폰
+	for (int32 Index : SelectedIndices)
 	{
-		// 7초 후 자동 소멸
-		PoisonGas->SetLifeSpan(7.0f);
-        
-		// ToxicGasActors 배열에 추가 (페이즈 종료 시 정리용)
-		ToxicGasActors.Add(PoisonGas);
+		if (!AllPoisonGasSpawnPoints.IsValidIndex(Index)) continue;
+
+		const FVector& SpawnLocation = AllPoisonGasSpawnPoints[Index].Location;
+
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+		ADRPoisonGasActor* PoisonGas = World->SpawnActor<ADRPoisonGasActor>(
+			PoisonGasActorClass,
+			SpawnLocation,
+			FRotator::ZeroRotator,
+			SpawnParams
+		);
+
+		if (PoisonGas)
+		{
+			// 7초 후 자동 소멸
+			PoisonGas->SetLifeSpan(7.0f);
+
+			// ToxicGasActors 배열에 추가 (페이즈 종료 시 정리용)
+			ToxicGasActors.Add(PoisonGas);
+		}
 	}
 }
 

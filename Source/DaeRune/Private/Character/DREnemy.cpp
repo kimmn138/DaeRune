@@ -262,8 +262,12 @@ void ADREnemy::TriggerEnrage()
 		if (UBlackboardComponent* BB = AIController->GetBlackboardComponent())
 		{
 			BB->SetValueAsBool(FName("bIsEnraged"), true);
+
 			float CurrentAttackSpeed = BB->GetValueAsFloat(FName("AttackSpeed"));
 			BB->SetValueAsFloat(FName("AttackSpeed"), CurrentAttackSpeed / 2.f);
+
+			float CurrentEliteAttackSpeed = BB->GetValueAsFloat(FName("EliteAttackSpeed"));
+			BB->SetValueAsFloat(FName("EliteAttackSpeed"), CurrentEliteAttackSpeed / 2.f);
 		}
 	}
     

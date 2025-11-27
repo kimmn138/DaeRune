@@ -55,6 +55,9 @@ public:
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	UDRCleanserSiteAttributeSet* GetAttributeSet() const { return AttributeSet; }
 
+	UFUNCTION(BlueprintPure, Category = "Cleanser Site")
+	FName GetCleanserID() const { return CleanserID; }
+
 	// ========== 상태 관리 ==========
 
 	// 사이트 활성화 (Phase1에서 선택됨)
@@ -121,6 +124,10 @@ protected:
 
 	// UI 업데이트
 	void UpdateInteractionUI() const;
+
+	// 클렌저 사이트 고유 식별자
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cleanser Site")
+	FName CleanserID = NAME_None;
 
 	// ========== Components ==========
 

@@ -9,6 +9,34 @@
 class ADRPoisonGasActor;
 class ADREnemy;
 
+// 독가스 스폰 포인트 타입
+UENUM(BlueprintType)
+enum class EPoisonGasSpawnPointType : uint8
+{
+	Normal			UMETA(DisplayName = "Normal (Green)"),		// 일반 스폰 지점 (초록색, 36개)
+	CleanserLinked	UMETA(DisplayName = "Cleanser Linked (Blue)")	// 클렌저 연결 지점 (파란색, 12개)
+};
+
+// 독가스 스폰 포인트 데이터
+USTRUCT(BlueprintType)
+struct FPoisonGasSpawnPointData
+{
+	GENERATED_BODY()
+
+	// 스폰 위치
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector Location = FVector::ZeroVector;
+
+	// 스폰 포인트 타입
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EPoisonGasSpawnPointType SpawnType = EPoisonGasSpawnPointType::Normal;
+
+	// 연결된 클렌저 사이트 (파란색인 경우)
+	// 예: "Cleanser_TopLeft", "Cleanser_TopRight", "Cleanser_BottomCenter"
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (EditCondition = "SpawnType == EPoisonGasSpawnPointType::CleanserLinked"))
+	FName LinkedCleanserTag = NAME_None;
+};
+
 // 웨이브 상태 열거형
 UENUM(BlueprintType)
 enum class EWaveState : uint8
@@ -165,6 +193,9 @@ protected:
 	// 클렌저 사이트 초기화
 	void InitializeCleanserSite();
 
+	// 활성화된 스폰 포인트 계산
+	void InitializeActiveSpawnPoints();
+
 	// 클렌저 사이트 파괴 처리
 	UFUNCTION()
 	void OnCleanserSiteDestroyed(ADRCleanserSite* DestroyedSite) const;
@@ -195,6 +226,9 @@ protected:
 
 	// ========== 환경 위협 ==========
 
+	// 8개의 랜덤 스폰 위치 선택
+	TArray<int32> SelectRandomSpawnPointIndices() const;
+
 	// 유독 가스 생성 (레벨 4)
 	void SpawnToxicGas();
 
@@ -204,12 +238,17 @@ protected:
 	// 유독 가스 제거
 	void RemoveToxicGas();
 
+	// 48개의 모든 스폰 포인트 정보 (에디터에서 설정)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|Config")
+	TArray<FPoisonGasSpawnPointData> AllPoisonGasSpawnPoints;
+
+	// 독가스 스폰 주기
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|Config")
+	float PoisonGasSpawnInterval = 10.0f;
+
 	// 스폰 포인트를 찾을 태그 이름
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|Config")
 	FName SpawnPointTag = "Phase3SpawnPoint";
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|Config")
-	FName PoisonGasSpawnPointTag = "PoisonGasSpawnLocation";
 
 private:
 	// 엘리트 보스 태그 부여
@@ -287,9 +326,11 @@ private:
 	UPROPERTY()
 	TArray<TWeakObjectPtr<AActor>> ToxicGasActors;
 
-	// 독가스 스폰 포인트 배열
-	UPROPERTY()
-	TArray<AActor*> PoisonGasSpawnPoints;
+	// 현재 활성화된 스폰 포인트 인덱스 (44개, 런타임 계산)
+	TArray<int32> ActiveSpawnPointIndices;
+
+	// 현재 활성화된 파란색 포인트 인덱스 (8개, 런타임 계산)
+	TArray<int32> ActiveBlueSpawnPointIndices;
 
 	// ========== 타이머 핸들 ==========
 
