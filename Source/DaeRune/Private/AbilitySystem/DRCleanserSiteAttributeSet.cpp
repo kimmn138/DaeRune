@@ -8,13 +8,6 @@
 #include "DRGameplayTags.h"
 #include "Actor/DRCleanserSite.h"
 
-UDRCleanserSiteAttributeSet::UDRCleanserSiteAttributeSet()
-{
-	// 기본값 설정
-	InitHealth(1000.0f);
-	InitMaxHealth(1000.0f);
-}
-
 void UDRCleanserSiteAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);

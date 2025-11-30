@@ -29,8 +29,6 @@ class DAERUNE_API UDRCleanserSiteAttributeSet : public UAttributeSet
 	GENERATED_BODY()
 	
 public:
-	UDRCleanserSiteAttributeSet();
-
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// ========== Attributes ==========
