@@ -27,6 +27,9 @@ public:
 	// 오버레이 UI 초기화
 	void InitOverlay(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS);
 
+	// 관전용 오버레이 업데이트
+	void UpdateOverlayForSpectating(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS);
+
 protected:
 
 private:

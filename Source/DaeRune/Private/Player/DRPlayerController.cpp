@@ -15,6 +15,10 @@
 #include "Camera/CameraComponent.h"
 #include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
+#include "UI/HUD/DRHUD.h"
+#include "Player/DRPlayerState.h"
+#include "UI/WidgetController/DRWidgetController.h"
+#include "UI/WidgetController/OverlayWidgetController.h"
 
 ADRPlayerController::ADRPlayerController()
 {
@@ -378,6 +382,9 @@ void ADRPlayerController::SetSpectateTarget(ACharacter* NewTarget)
 	{
 		// ViewTarget 설정
 		SetViewTarget(NewTarget);
+
+		// UI 업데이트
+		ClientUpdateSpectatorUI(NewTarget);
         
 		// 새 대상의 사망 델리게이트 바인딩
 		if (ADRCharacterBase* DRTarget = Cast<ADRCharacterBase>(NewTarget))
@@ -391,6 +398,36 @@ void ADRPlayerController::ServerSetSpectateTarget_Implementation(ACharacter* New
 {
 	// 서버에서 SetSpectateTarget 실행
 	SetSpectateTarget(NewTarget);
+}
+
+void ADRPlayerController::ClientUpdateSpectatorUI_Implementation(ACharacter* SpectatedTarget)
+{
+	// 클라이언트에서만 실행
+	if (!IsLocalController()) return;
+
+	UpdateSpectatorUI(SpectatedTarget);
+}
+
+void ADRPlayerController::UpdateSpectatorUI(ACharacter* SpectatedTarget)
+{
+	if (!SpectatedTarget) return;
+
+	// HUD 가져오기
+	ADRHUD* DRHUD = Cast<ADRHUD>(GetHUD());
+	if (!DRHUD) return;
+
+	// 관전 대상의 PlayerState 가져오기
+	ADRPlayerState* SpectatedPS = SpectatedTarget->GetPlayerState<ADRPlayerState>();
+	if (!SpectatedPS) return;
+
+	// 관전 대상의 GAS 컴포넌트들 가져오기
+	UAbilitySystemComponent* SpectatedASC = SpectatedPS->GetAbilitySystemComponent();
+	UAttributeSet* SpectatedAS = SpectatedPS->GetAttributeSet();
+
+	if (!SpectatedASC || !SpectatedAS) return;
+
+	// 기존 WidgetController를 파괴하고 새로 만들어줌
+	DRHUD->UpdateOverlayForSpectating(this, SpectatedPS, SpectatedASC, SpectatedAS);
 }
 
 void ADRPlayerController::OnSpectatedPlayerDied(AActor* DeadActor)

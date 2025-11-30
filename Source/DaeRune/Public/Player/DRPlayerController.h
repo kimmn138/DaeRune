@@ -172,6 +172,12 @@ private:
 	UFUNCTION(Server, Reliable)
 	void ServerSetSpectateTarget(ACharacter* NewTarget);
 
+	// 관전 UI 업데이트
+	UFUNCTION(Client, Reliable)
+	void ClientUpdateSpectatorUI(ACharacter* SpectatedTarget);
+
+	void UpdateSpectatorUI(ACharacter* SpectatedTarget);
+
 	// 관전 대상 사망 처리
 	UFUNCTION()
 	void OnSpectatedPlayerDied(AActor* DeadActor);

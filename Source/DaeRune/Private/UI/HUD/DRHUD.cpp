@@ -39,3 +39,25 @@ void ADRHUD::InitOverlay(APlayerController* PC, APlayerState* PS, UAbilitySystem
 	// 화면에 위젯 추가
 	Widget->AddToViewport();
 }
+
+void ADRHUD::UpdateOverlayForSpectating(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS)
+{
+	// 기존 WidgetController 파괴
+	if (OverlayWidgetController)
+	{
+		OverlayWidgetController->ConditionalBeginDestroy();
+		OverlayWidgetController = nullptr;
+	}
+
+	// 새로운 파라미터로 WidgetController 생성
+	const FWidgetControllerParams WidgetControllerParams(PC, PS, ASC, AS);
+	UOverlayWidgetController* WidgetController = GetOverlayWidgetController(WidgetControllerParams);
+
+	// 기존 위젯에 새 컨트롤러 연결
+	if (OverlayWidget)
+	{
+		OverlayWidget->SetWidgetController(WidgetController);
+		WidgetController->BroadcastInitialValues();
+		WidgetController->BroadcastAbilityInfo();
+	}
+}
