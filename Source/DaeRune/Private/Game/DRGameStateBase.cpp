@@ -5,7 +5,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework//PlayerState.h"
 #include "Engine/World.h"
-#include "GameFramework/Character.h"
+#include "Character/DRCharacter.h"
 #include "Interaction/CombatInterface.h"
 
 ADRGameStateBase::ADRGameStateBase()
@@ -76,9 +76,9 @@ bool ADRGameStateBase::IsPlayerHost(APlayerState* PlayerState) const
 	return PlayerState == GetHostPlayer();
 }
 
-TArray<ACharacter*> ADRGameStateBase::GetAlivePlayers() const
+TArray<ADRCharacter*> ADRGameStateBase::GetAlivePlayers() const
 {
-	TArray<ACharacter*> AlivePlayers;
+	TArray<ADRCharacter*> AlivePlayers;
 
 	// 모든 PlayerState 순회
 	for (APlayerState* PS : PlayerArray)
@@ -86,7 +86,7 @@ TArray<ACharacter*> ADRGameStateBase::GetAlivePlayers() const
 		if (!PS) continue;
 
 		// 플레이어의 폰이 살아있는지 확인
-		if (ACharacter* PlayerCharacter = Cast<ACharacter>(PS->GetPawn()))
+		if (ADRCharacter* PlayerCharacter = Cast<ADRCharacter>(PS->GetPawn()))
 		{
 			// IsDead 인터페이스 확인
 			if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(PlayerCharacter))

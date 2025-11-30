@@ -74,6 +74,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("State Tag for Player In Carrying Part")
 	);
 
+	GameplayTags.Enemy_Detected = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Enemy.Detected"),
+		FString("State Tag for Enemy In Detected")
+	);
+
 	/*
 	 * 기본 데미지, 타입 별 데미지
 	 */

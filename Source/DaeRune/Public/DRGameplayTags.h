@@ -34,6 +34,7 @@ public:
 	// 플레이어 상태
 	FGameplayTag State_Corrupt;
 	FGameplayTag State_Carrying;
+	FGameplayTag Enemy_Detected;
 
 	// 기본 데미지, 타입 별 데미지
 	FGameplayTag Damage;

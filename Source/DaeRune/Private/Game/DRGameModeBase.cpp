@@ -6,6 +6,7 @@
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/GameStateBase.h"
 #include "TimerManager.h"
+#include "Game/DRDetectionManager.h"
 
 ADRGameModeBase::ADRGameModeBase()
 {
@@ -75,10 +76,37 @@ bool ADRGameModeBase::CheckTeamWipeout()
 	return (TotalPlayerCount > 0) && (AlivePlayerCount == 0);
 }
 
+void ADRGameModeBase::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// 탐지 매니저 스폰
+	SpawnDetectionManager();
+}
+
 void ADRGameModeBase::HandleWipeout()
 {
 	if (!HasAuthority()) return;
 
 	// 플래그 리셋
 	bIsWipeoutInProgress = false;
+}
+
+void ADRGameModeBase::SpawnDetectionManager()
+{
+	// 서버에서만 스폰
+	if (!HasAuthority()) return;
+
+	if (!DetectionManagerClass) return;
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	DetectionManager = GetWorld()->SpawnActor<ADRDetectionManager>(
+		DetectionManagerClass,
+		FVector::ZeroVector,
+		FRotator::ZeroRotator,
+		SpawnParams
+	);
 }

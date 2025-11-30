@@ -164,7 +164,7 @@ void ADRPlayerController::ClientStartSpectating_Implementation()
 	ADRGameStateBase* GameStateBase = GetWorld()->GetGameState<ADRGameStateBase>();
 	if (!GameStateBase) return;
 
-	TArray<ACharacter*> AlivePlayers = GameStateBase->GetAlivePlayers();
+	TArray<ADRCharacter*> AlivePlayers = GameStateBase->GetAlivePlayers();
 	
 	if (AlivePlayers.Num() > 0)
 	{
@@ -203,7 +203,7 @@ void ADRPlayerController::SpectateNextPlayer()
 	ADRGameStateBase* GameStateBase = GetWorld()->GetGameState<ADRGameStateBase>();
 	if (!GameStateBase) return;
 
-	TArray<ACharacter*> AliveCharacters = GameStateBase->GetAlivePlayers();
+	TArray<ADRCharacter*> AliveCharacters = GameStateBase->GetAlivePlayers();
 	if (AliveCharacters.Num() == 0)
 	{
 		// 모두 사망 - 관전 대상 없음
@@ -227,7 +227,7 @@ void ADRPlayerController::SpectatePreviousPlayer()
 	ADRGameStateBase* GameStateBase = GetWorld()->GetGameState<ADRGameStateBase>();
 	if (!GameStateBase) return;
 
-	TArray<ACharacter*> AliveCharacters = GameStateBase->GetAlivePlayers();
+	TArray<ADRCharacter*> AliveCharacters = GameStateBase->GetAlivePlayers();
 	if (AliveCharacters.Num() == 0)
 	{
 		CurrentSpectatedCharacter.Reset();
@@ -356,10 +356,6 @@ void ADRPlayerController::HandleSpectatePrevious()
 
 void ADRPlayerController::SetSpectateTarget(ACharacter* NewTarget)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[Spectate] SetSpectateTarget Called. NewTarget = %s (Authority=%d)"),
-		*GetNameSafe(NewTarget),
-		HasAuthority());
-	
 	// 서버에 요청
 	if (!HasAuthority())
 	{
