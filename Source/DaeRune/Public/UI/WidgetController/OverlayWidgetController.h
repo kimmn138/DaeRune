@@ -58,6 +58,9 @@ public:
 	virtual void BindCallbacksToDependencies() override;
 	void BindCallbacksCleanserSiteToDependencies();
 
+	// 델리게이트 언바인딩 함수
+	void UnbindAllDelegates();
+
 	// 체력 관련 UI 업데이트 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnHealthChanged;
@@ -120,6 +123,10 @@ private:
 
 	FTimerHandle PhaseBindingDelayTimer;
 	FTimerHandle WaveTimerBindingDelayTimer;
+
+	// 델리게이트 핸들 저장용 변수
+	FDelegateHandle PhaseObjectiveDelegateHandle;
+	FDelegateHandle WaveTimerDelegateHandle;
 	
 	int32 CachedPhaseNumber = -1;
 	int32 CachedProgress = -1;

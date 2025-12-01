@@ -45,6 +45,8 @@ void ADRHUD::UpdateOverlayForSpectating(APlayerController* PC, APlayerState* PS,
 	// ±âÁ¸ WidgetController ÆÄ±«
 	if (OverlayWidgetController)
 	{
+		OverlayWidgetController->UnbindAllDelegates();
+
 		OverlayWidgetController->ConditionalBeginDestroy();
 		OverlayWidgetController = nullptr;
 	}

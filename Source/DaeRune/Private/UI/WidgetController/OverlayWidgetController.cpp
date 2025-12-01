@@ -158,6 +158,32 @@ void UOverlayWidgetController::BindCallbacksCleanserSiteToDependencies()
 	}
 }
 
+void UOverlayWidgetController::UnbindAllDelegates()
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	ADRStageGameState* DRGameState = World->GetGameState<ADRStageGameState>();
+	if (!DRGameState) return;
+
+	// PhaseObjective 델리게이트 언바인딩
+	if (PhaseObjectiveDelegateHandle.IsValid())
+	{
+		DRGameState->OnPhaseObjectiveChangedDelegate.Remove(PhaseObjectiveDelegateHandle);
+		PhaseObjectiveDelegateHandle.Reset();
+	}
+
+	// WaveTimer 델리게이트 언바인딩
+	if (WaveTimerDelegateHandle.IsValid())
+	{
+		DRGameState->OnWaveTimerChangedDelegate.Remove(WaveTimerDelegateHandle);
+		WaveTimerDelegateHandle.Reset();
+	}
+
+	// PhaseChanged 델리게이트 언바인딩
+	DRGameState->OnPhaseChangedDelegate.RemoveDynamic(this, &UOverlayWidgetController::OnPhaseChanged);
+}
+
 void UOverlayWidgetController::HandlePhaseObjectiveChanged()
 {
 	const ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
@@ -172,22 +198,20 @@ void UOverlayWidgetController::HandlePhaseObjectiveChanged()
 
 void UOverlayWidgetController::BindPhaseObjectiveDelegate()
 {
-	if (ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>())
-	{
-		// 델리게이트 바인딩
-		DRGameState->OnPhaseObjectiveChangedDelegate.AddLambda(
-			[this]()
-			{
-				HandlePhaseObjectiveChanged();
+	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
+	if (!DRGameState) return;
 
-				// Phase가 변경될 때마다 웨이브 타이머 바인딩 체크
-				CheckAndBindWaveTimer();
-			}
-		);
-        
-		// 현재 값 즉시 받아오기
-		HandlePhaseObjectiveChanged();
-	}
+	// 핸들 저장하면서 델리게이트 바인딩
+	PhaseObjectiveDelegateHandle = DRGameState->OnPhaseObjectiveChangedDelegate.AddLambda(
+		[this]()
+		{
+			HandlePhaseObjectiveChanged();
+			CheckAndBindWaveTimer();
+		}
+	);
+
+	// 현재 값 즉시 받아오기
+	HandlePhaseObjectiveChanged();
 }
 
 void UOverlayWidgetController::BindWaveTimerDelegate()
@@ -196,7 +220,7 @@ void UOverlayWidgetController::BindWaveTimerDelegate()
 	if (!DRGameState) return;
 	
 	// 웨이브 타이머 델리게이트 바인딩
-	DRGameState->OnWaveTimerChangedDelegate.AddLambda(
+	WaveTimerDelegateHandle = DRGameState->OnWaveTimerChangedDelegate.AddLambda(
 		[this](int32 WaveNumber, float RemainingTime, bool bIsRestTime)
 		{
 			OnWaveTimerChanged.Broadcast(WaveNumber, RemainingTime, bIsRestTime);
