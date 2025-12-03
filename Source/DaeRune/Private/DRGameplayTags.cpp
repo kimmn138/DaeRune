@@ -236,6 +236,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Attack Ability Tag")
 	);
 
+	GameplayTags.Abilities_Death = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.Death"),
+		FString("Death Ability Tag")
+	);
+
 	GameplayTags.Abilities_Summon = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Abilities.Summon"),
 		FString("Summon Ability Tag")

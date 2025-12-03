@@ -72,6 +72,7 @@ public:
 
 	// 어빌리티 분류
 	FGameplayTag Abilities_Attack;
+	FGameplayTag Abilities_Death;
 	FGameplayTag Abilities_Summon;
 	FGameplayTag Abilities_Skill1;
 

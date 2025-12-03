@@ -143,35 +143,16 @@ void ADREnemy::HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount
 
 void ADREnemy::ActivateDeathAbilities()
 {
-	if (!AbilitySystemComponent || DeathAbilities.Num() == 0) return;
-    
-	UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(AbilitySystemComponent);
-	if (!DRASC) return;
-    
-	// 모든 Death Ability 발동
-	for (TSubclassOf<UGameplayAbility> DeathAbilityClass : DeathAbilities)
-	{
-		if (!DeathAbilityClass) continue;
-        
-		// 해당 클래스의 어빌리티 스펙 찾기
-		TArray<FGameplayAbilitySpec*> ActivatableAbilities;
-		DRASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(
-			FGameplayTagContainer(), 
-			ActivatableAbilities
-		);
-        
-		for (FGameplayAbilitySpec* Spec : ActivatableAbilities)
-		{
-			if (!Spec || !Spec->Ability) continue;
-            
-			// 클래스가 일치하면 발동
-			if (Spec->Ability->GetClass() == DeathAbilityClass)
-			{
-				DRASC->TryActivateAbility(Spec->Handle);
-				break; // 같은 클래스 중복 발동 방지
-			}
-		}
-	}
+	if (!AbilitySystemComponent) return;
+
+	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+
+	// "Ability.Death" 태그를 가진 모든 어빌리티 발동
+	FGameplayTagContainer DeathTags;
+	DeathTags.AddTag(GameplayTags.Abilities_Death);
+
+	// 발동 시도
+	bool bActivated = AbilitySystemComponent->TryActivateAbilitiesByTag(DeathTags);
 }
 
 void ADREnemy::ReduceWaterReward()
