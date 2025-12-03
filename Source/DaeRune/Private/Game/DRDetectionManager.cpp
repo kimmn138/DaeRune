@@ -179,18 +179,37 @@ bool ADRDetectionManager::CanPlayerSeeEnemy(const ADRCharacter* Player, const AD
 void ADRDetectionManager::UpdateEnemyDetectionTag(ADREnemy* Enemy, bool bIsDetected) const
 {
     UAbilitySystemComponent* ASC = Enemy->GetAbilitySystemComponent();
-    if (!ASC) return;
+    if (!ASC || !DetectedEffectClass) return;
 
-    const FGameplayTag DetectedTag = FDRGameplayTags::Get().Enemy_Detected;
-    const bool bCurrentlyDetected = ASC->HasMatchingGameplayTag(DetectedTag);
+    // 현재 발각 상태 확인
+    FGameplayTag DetectedTag = FDRGameplayTags::Get().Enemy_Detected;
+    bool bCurrentlyDetected = ASC->HasMatchingGameplayTag(DetectedTag);
 
-    // 상태 변화 있을 때만 처리
+    // 발각됨
     if (bIsDetected && !bCurrentlyDetected)
     {
-        ASC->AddLooseGameplayTag(DetectedTag);
+        // GameplayEffect 적용
+        FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+        Context.AddSourceObject(this);
+
+        FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(
+            DetectedEffectClass,
+            1.f,
+            Context
+        );
+
+        if (SpecHandle.IsValid())
+        {
+            ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+        }
     }
+    // 발각 해제
     else if (!bIsDetected && bCurrentlyDetected)
     {
-        ASC->RemoveLooseGameplayTag(DetectedTag);
+        // 해당 태그 가진 모든 GE 제거
+        FGameplayTagContainer TagContainer;
+        TagContainer.AddTag(DetectedTag);
+
+        ASC->RemoveActiveEffectsWithGrantedTags(TagContainer);
     }
 }

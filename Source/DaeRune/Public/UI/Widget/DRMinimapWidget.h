@@ -27,7 +27,7 @@ class DAERUNE_API UDRMinimapWidget : public UDRUserWidget
 public:
     // 월드 좌표를 미니맵 좌표로 변환
     UFUNCTION(BlueprintCallable, Category = "Minimap")
-    FVector2D WorldToMinimapPosition(const FVector& WorldLocation, float MinimapRange, float MinimapRadius) const;
+    FVector2D WorldToMinimapPosition(const FVector& WorldLocation, const FVector InPlayerLocation, float InPlayerYaw, float MinimapRange, float MinimapRadius) const;
 
     // 적이 발각 상태인지 확인
     UFUNCTION(BlueprintCallable, Category = "Minimap")

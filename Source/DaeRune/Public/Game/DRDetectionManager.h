@@ -8,6 +8,7 @@
 
 class ADRCharacter;
 class ADREnemy;
+class UGameplayEffect;
 
 UCLASS()
 class DAERUNE_API ADRDetectionManager : public AActor
@@ -20,6 +21,10 @@ public:
 protected:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+    // 발각 상태 부여용 GameplayEffect
+    UPROPERTY(EditDefaultsOnly, Category = "Detection")
+    TSubclassOf<UGameplayEffect> DetectedEffectClass;
 
 private:
     // 탐지 범위
