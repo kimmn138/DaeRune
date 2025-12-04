@@ -33,12 +33,12 @@ FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLoca
     QueryParams.bTraceComplex = false;
     QueryParams.bReturnPhysicalMaterial = false;
 
-    // LineTrace 실행 (장애물 감지)
+    // LineTrace 실행
     bHitObstacle = GetWorld()->LineTraceSingleByChannel(
         OutHitResult,
         WeaponSocketLocation,
         CameraTargetPoint,
-        ECC_Visibility, // 벽/장애물 감지용 채널
+        ECC_Pawn, // 벽/장애물 감지용 채널
         QueryParams
     );
 
