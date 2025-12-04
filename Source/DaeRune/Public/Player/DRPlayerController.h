@@ -81,6 +81,13 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestInstallPartToSite(ADRCleanserSite* Site);
 
+	// 부품 획득 시 UI 표시
+	UFUNCTION(BlueprintImplementableEvent, Category = "Part System")
+	void OnPartPickedUp();
+
+	UFUNCTION(Client, Reliable)
+	void ClientShowPartPickupUI();
+
 	// ========== 관전 시스템 ==========
 
 	// 관전 모드 여부
@@ -225,6 +232,10 @@ private:
 	// 부품 획득 요청
 	UFUNCTION(Server, Reliable)
 	void ServerRequestPickupPart(ADRCleanserPart* Part);
+
+	// 부품 드랍 요청
+	UFUNCTION(Server, Reliable)
+	void ServerRequestDropPart();
 	
 	// 서버에서 페이즈 스킵 실행
     UFUNCTION(Server, Reliable)

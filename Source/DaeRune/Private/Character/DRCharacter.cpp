@@ -138,6 +138,15 @@ bool ADRCharacter::PickupPart(ADRCleanserPart* Part)
 	bIsCarryingPart = true;
 	CarriedPart = Part;
 
+	// 획득 시간 기록
+	LastPartPickupTime = GetWorld()->GetTimeSeconds();
+
+	// PlayerController에게 UI 표시 요청
+	if (ADRPlayerController* PC = Cast<ADRPlayerController>(GetController()))
+	{
+		PC->ClientShowPartPickupUI();
+	}
+
 	return true;
 }
 
@@ -160,6 +169,11 @@ void ADRCharacter::DropCarriedPart()
 
 	// 부품을 들고 있지 않으면 무시
 	if (!bIsCarryingPart || !CarriedPart) return;
+
+	// 쿨다운 체크
+	const float CurrentTime = GetWorld()->GetTimeSeconds();
+	const float TimeSincePickup = CurrentTime - LastPartPickupTime;
+	if (TimeSincePickup < PartDropCooldown) return;
 
 	// State_Carrying 태그 제거
 	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(GetAbilitySystemComponent()))

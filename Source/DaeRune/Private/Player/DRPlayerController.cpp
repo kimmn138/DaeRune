@@ -132,6 +132,11 @@ ADRCleanserPart* ADRPlayerController::FindPartByLineTrace()
 	return nullptr;
 }
 
+void ADRPlayerController::ClientShowPartPickupUI_Implementation()
+{
+	OnPartPickedUp();
+}
+
 void ADRPlayerController::ServerNotifyLineTraceDetected_Implementation(ADRCleanserPart* Part)
 {
 	if (!Part) return;
@@ -520,10 +525,20 @@ void ADRPlayerController::HandleInteract()
 	}
 	
 	// 부품을 들고 있고 클렌저 사이트 오버랩 중이면 설치
-	if (DRCharacter->IsCarryingPart() && CurrentOverlappedSite)
+	if (DRCharacter->IsCarryingPart())
 	{
-		ServerRequestInstallPartToSite(CurrentOverlappedSite);
-		return;
+		// 클렌저 사이트 범위 안이면 설치
+		if (CurrentOverlappedSite)
+		{
+			ServerRequestInstallPartToSite(CurrentOverlappedSite);
+			return;
+		}
+		// 클렌저 사이트 범위 밖이면 떨어트리기
+		else
+		{
+			ServerRequestDropPart();
+			return;
+		}
 	}
 	
 	OnInteractPressed.Broadcast();
@@ -592,4 +607,16 @@ void ADRPlayerController::ServerRequestPickupPart_Implementation(ADRCleanserPart
 
 	// ��ǰ ȹ�� �õ�
 	DRCharacter->PickupPart(Part);
+}
+
+void ADRPlayerController::ServerRequestDropPart_Implementation()
+{
+	if (!HasAuthority()) return;
+
+	// 캐릭터 가져오기
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter) return;
+
+	// 부품 떨어트리기
+	DRCharacter->DropCarriedPart();
 }

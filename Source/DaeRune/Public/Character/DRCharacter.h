@@ -65,6 +65,13 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_CarriedPart, BlueprintReadOnly, Category = "Part System")
 	TObjectPtr<class ADRCleanserPart> CarriedPart;
 
+	// 부품 획득 시간 기록
+	float LastPartPickupTime = 0.f;
+
+	// 부품 떨어트리기 쿨다운 시간
+	UPROPERTY(EditDefaultsOnly, Category = "Part System", meta = (ClampMin = "0.0", ClampMax = "5.0"))
+	float PartDropCooldown = 2.0f;
+
 	// ========== 리플리케이션 콜백 ==========
 
 	UFUNCTION()

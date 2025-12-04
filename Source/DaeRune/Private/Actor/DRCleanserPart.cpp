@@ -191,7 +191,7 @@ void ADRCleanserPart::OnDetectionSphereEndOverlap(UPrimitiveComponent* Overlappe
 
 void ADRCleanserPart::OnRep_bIsCarried()
 {
-	// 클라이언트에서 시각적 업데이트
+	// 부품을 주울 때 클라이언트에서 시각적 업데이트
 	if (bIsCarried && CarryingCharacter)
 	{
 		// 캐릭터 메시 가져오기
@@ -207,5 +207,23 @@ void ADRCleanserPart::OnRep_bIsCarried()
 
 		// 캐릭터 소켓에 부착
 		AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
+	}
+	// 부품을 떨어트릴 때
+	else
+	{
+		// 캐릭터에서 분리
+		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+
+		SetActorRotation(FRotator::ZeroRotator);
+
+		// 메시 콜리전 재활성화
+		PartMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		PartMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+		PartMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
+		// 감지 범위 재활성화
+		DetectionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		DetectionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+		DetectionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	}
 }
