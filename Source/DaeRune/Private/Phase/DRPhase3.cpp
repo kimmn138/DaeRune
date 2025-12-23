@@ -8,7 +8,6 @@
 #include "Actor/DRCleanserSite.h"
 #include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
-#include "Kismet/GameplayStatics.h"
 #include "NavigationSystem.h"
 #include "AbilitySystem/DRCleanserSiteAttributeSet.h"
 #include "Actor/DRPoisonGasActor.h"
@@ -114,8 +113,6 @@ void UDRPhase3::OnEliteEnemyDeath(AActor* DeadEnemy)
 	}
 }
 
-// ========== 웨이브 시스템 ==========
-
 void UDRPhase3::StartNextWave()
 {
 	CurrentWaveNumber++;
@@ -157,16 +154,13 @@ void UDRPhase3::StartNextWave()
 		WaveTimeRemaining = CurrentWave.PlayDuration;
 		
 		// 스폰 타이머 시작
-		if (GameMode)
+		if (GameMode && GameState)
 		{
 			if (const UWorld* World = GameMode->GetWorld())
 			{
-				// 살아있는 플레이어 목록 가져오기
-				TArray<AActor*> PlayerCharacters;
-				UGameplayStatics::GetAllActorsOfClass(World, ADRCharacter::StaticClass(), PlayerCharacters);
-				if (PlayerCharacters.Num() == 0) return;
+				if (InitialPlayerCount == 0) return;
 
-				TotalSpawnCount = FMath::CeilToInt(CurrentWave.BaseMonstersPerPlayer * PlayerCharacters.Num() * Modifier.MonsterCountMultiplier);
+				TotalSpawnCount = FMath::CeilToInt(CurrentWave.BaseMonstersPerPlayer * InitialPlayerCount * Modifier.MonsterCountMultiplier);
 				
 				World->GetTimerManager().SetTimer(
 					SpawnTimerHandle,
@@ -325,9 +319,13 @@ void UDRPhase3::ProcessWaveSpawn()
 	const UWorld* World = GameMode->GetWorld();
 	if (!World) return;
 	
+	if(!GameState) return;
+
+
+
 	// 살아있는 플레이어 목록 가져오기
-	TArray<AActor*> PlayerCharacters;
-	UGameplayStatics::GetAllActorsOfClass(World, ADRCharacter::StaticClass(), PlayerCharacters);
+	TArray<ADRCharacter*> PlayerCharacters;
+	PlayerCharacters = GameState->GetAlivePlayers();
 	if (PlayerCharacters.Num() == 0) return;
 
 	CurrentPlayerCounts = PlayerCharacters.Num();
@@ -355,7 +353,7 @@ void UDRPhase3::ProcessWaveSpawn()
 
 // ========== 스폰 시스템 ==========
 
-void UDRPhase3::SpawnMonstersAroundPlayers(const TArray<AActor*>& PlayerCharacters, int32 MonstersPerSpawnThisWave)
+void UDRPhase3::SpawnMonstersAroundPlayers(const TArray<ADRCharacter*>& PlayerCharacters, int32 MonstersPerSpawnThisWave)
 {
 	if (!GameMode) return;
 	
@@ -860,6 +858,8 @@ void UDRPhase3::GrantEliteBossTag()
 {
 	if (!bEliteBossSpawned) return;
 
+	if(!GameState) return;
+
 	for (TWeakObjectPtr<AActor>& EnemyPtr : SpawnedEnemies)
 	{
 		if (!EnemyPtr.IsValid()) continue;
@@ -876,16 +876,13 @@ void UDRPhase3::GrantEliteBossTag()
 	if (const UWorld* World = GameMode->GetWorld())
 	{
 		// 살아있는 플레이어 목록 가져오기
-		TArray<AActor*> PlayerCharacters;
-		UGameplayStatics::GetAllActorsOfClass(World, ADRCharacter::StaticClass(), PlayerCharacters);
+		TArray<ADRCharacter*> PlayerCharacters;
+		PlayerCharacters = GameState->GetAlivePlayers();
 		if (PlayerCharacters.Num() == 0) return;
 
-		for (AActor* Player : PlayerCharacters)
+		for (ADRCharacter* Player : PlayerCharacters)
 		{
-			ADRCharacter* PlayerCharacter = Cast<ADRCharacter>(Player);
-			if (!PlayerCharacter) continue;
-
-			if (UAbilitySystemComponent* ASC = PlayerCharacter->GetAbilitySystemComponent())
+			if (UAbilitySystemComponent* ASC = Player->GetAbilitySystemComponent())
 			{
 				ASC->AddLooseGameplayTag(FDRGameplayTags::Get().Debuff_Elite);
 			}
@@ -907,6 +904,8 @@ void UDRPhase3::RemoveEliteBossTag()
 {
 	if (bEliteBossSpawned) return;
 
+	if (!GameState) return;
+
 	for (TWeakObjectPtr<AActor>& EnemyPtr : SpawnedEnemies)
 	{
 		if (!EnemyPtr.IsValid()) continue;
@@ -923,16 +922,13 @@ void UDRPhase3::RemoveEliteBossTag()
 	if (const UWorld* World = GameMode->GetWorld())
 	{
 		// 살아있는 플레이어 목록 가져오기
-		TArray<AActor*> PlayerCharacters;
-		UGameplayStatics::GetAllActorsOfClass(World, ADRCharacter::StaticClass(), PlayerCharacters);
+		TArray<ADRCharacter*> PlayerCharacters;
+		PlayerCharacters = GameState->GetAlivePlayers();
 		if (PlayerCharacters.Num() == 0) return;
 
-		for (AActor* Player : PlayerCharacters)
+		for (ADRCharacter* Player : PlayerCharacters)
 		{
-			ADRCharacter* PlayerCharacter = Cast<ADRCharacter>(Player);
-			if (!PlayerCharacter) continue;
-
-			if (UAbilitySystemComponent* ASC = PlayerCharacter->GetAbilitySystemComponent())
+			if (UAbilitySystemComponent* ASC = Player->GetAbilitySystemComponent())
 			{
 				ASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().Debuff_Elite);
 			}

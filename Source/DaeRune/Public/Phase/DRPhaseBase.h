@@ -86,7 +86,11 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Phase")
 	bool bIsPhaseActive;
 
-	// 스폰된 적들 (WeakObjectPtr로 안전하게 관리)
+	// Phase1 시작 시점의 플레이어 수
+	UPROPERTY(BlueprintReadOnly, Category = "Phase")
+	int32 InitialPlayerCount;
+
+	// 스폰된 적들
 	UPROPERTY()
 	TArray<TWeakObjectPtr<AActor>> SpawnedEnemies;
 

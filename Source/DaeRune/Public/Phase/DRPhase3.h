@@ -8,6 +8,7 @@
 
 class ADRPoisonGasActor;
 class ADREnemy;
+class ADRCharacter;
 
 // 독가스 스폰 포인트 타입
 UENUM(BlueprintType)
@@ -172,7 +173,7 @@ protected:
 	// ========== 스폰 시스템 ==========
 
 	// 몬스터 스폰 (플레이어 위치 기반)
-	void SpawnMonstersAroundPlayers(const TArray<AActor*>& PlayerCharacters, int32 RequiredSpawnCount);
+	void SpawnMonstersAroundPlayers(const TArray<ADRCharacter*>& PlayerCharacters, int32 RequiredSpawnCount);
 
 	// 스폰 위치 계산 (플레이어 주변)
 	FVector CalculateSpawnLocation(const FVector& PlayerLocation) const;
