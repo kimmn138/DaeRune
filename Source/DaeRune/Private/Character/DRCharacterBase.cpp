@@ -97,6 +97,9 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 			// 관전 시작
 			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
 			{
+				// 음성 채널을 죽은 상태로 업데이트
+				DRPC->UpdateVoiceChannelForDeathState(true);
+
 				// 약간의 딜레이 후 관전 모드 전환
 				FTimerHandle SpectatorTimerHandle;
 				GetWorld()->GetTimerManager().SetTimer(
@@ -195,6 +198,17 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 
 	// 사망 이벤트 브로드캐스트
 	OnDeathDelegate.Broadcast(this);
+
+	if (UWorld* World = GetWorld())
+	{
+		if (APlayerController* LocalPC = World->GetFirstPlayerController())
+		{
+			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(LocalPC))
+			{
+				DRPC->RefreshAllPlayerVoiceMutes();
+			}
+		}
+	}
 }
 
 void ADRCharacterBase::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)

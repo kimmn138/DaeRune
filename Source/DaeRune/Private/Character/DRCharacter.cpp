@@ -39,6 +39,9 @@ ADRCharacter::ADRCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
+	// VOIPTalker 컴포넌트 생성
+	VOIPTalkerComponent = CreateDefaultSubobject<UVOIPTalker>(TEXT("VOIPTalker"));
+
 	// 컨트롤러 회전 설정
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationRoll = false;
@@ -73,6 +76,9 @@ void ADRCharacter::PossessedBy(AController* NewController)
 	{
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMoveSpeedAttribute()).AddUObject(this, &ADRCharacter::OnMoveSpeedChanged);
 		GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
+
+		// 음성 채팅 초기화
+		InitializeVoiceChat();
 	}
 }
 
@@ -187,6 +193,17 @@ void ADRCharacter::DropCarriedPart()
 	// 캐릭터 상태만 초기화
 	bIsCarryingPart = false;
 	CarriedPart = nullptr;
+}
+
+void ADRCharacter::InitializeVoiceChat()
+{
+	if (!VOIPTalkerComponent) return;
+
+	// VOIPTalker에 PlayerState 등록
+	if (APlayerState* PS = GetPlayerState())
+	{
+		VOIPTalkerComponent->RegisterWithPlayerState(PS);
+	}
 }
 
 void ADRCharacter::OnRep_bIsCarryingPart()

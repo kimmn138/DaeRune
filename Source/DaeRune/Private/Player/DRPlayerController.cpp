@@ -44,6 +44,91 @@ void ADRPlayerController::CorruptedStateChanged(bool bIsStateChanged)
 	//SetTeamVisualsEnabled(!bIsCorrupted);
 }
 
+void ADRPlayerController::UpdateVoiceChannelForDeathState(bool bIsDead)
+{
+	// 로컬 컨트롤러에서만 실행
+	if (!IsLocalController()) return;
+
+	bIsDeadForVoice = bIsDead;
+
+	// 모든 플레이어에 대한 뮤트 상태 업데이트
+	RefreshAllPlayerVoiceMutes();
+}
+
+void ADRPlayerController::SetPlayerVoiceMuted(APlayerState* TargetPlayer, bool bMute)
+{
+	if (!TargetPlayer || !IsLocalController()) return;
+
+	// 자기 자신은 뮤트하지 않음
+	if (TargetPlayer == PlayerState) return;
+
+	// PlayerController의 내장 뮤트 함수 사용
+	FUniqueNetIdRepl TargetNetId = TargetPlayer->GetUniqueId();
+	if (TargetNetId.IsValid())
+	{
+		if (bMute)
+		{
+			// 뮤트 리스트에 추가
+			GameplayMutePlayer(TargetNetId);
+		}
+		else
+		{
+			// 뮤트 리스트에서 제거
+			GameplayUnmutePlayer(TargetNetId);
+		}
+	}
+}
+
+void ADRPlayerController::RefreshAllPlayerVoiceMutes()
+{
+	if (!IsLocalController()) return;
+
+	if (bIsDeadForVoice) return;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	AGameStateBase* GameState = World->GetGameState();
+	if (!GameState) return;
+
+	// 모든 플레이어 순회
+	for (APlayerState* OtherPS : GameState->PlayerArray)
+	{
+		if (!OtherPS || OtherPS == PlayerState) continue;
+
+		// 상대방의 사망 상태 확인
+		bool bOtherIsDead = false;
+
+		if (APawn* OtherPawn = OtherPS->GetPawn())
+		{
+			if (OtherPawn->Implements<UCombatInterface>())
+			{
+				bOtherIsDead = ICombatInterface::Execute_IsDead(OtherPawn);
+			}
+		}
+		else
+		{
+			// Pawn이 없으면 죽은 것으로 간주 (관전 중)
+			bOtherIsDead = true;
+		}
+
+		bool bShouldMute = false;
+
+		if (!bIsDeadForVoice)
+		{
+			// 내가 살아있으면, 죽은 플레이어는 뮤트
+			bShouldMute = bOtherIsDead;
+		}
+		else
+		{
+			// 내가 죽었으면, 모두 들림
+			bShouldMute = false;
+		}
+
+		SetPlayerVoiceMuted(OtherPS, bShouldMute);
+	}
+}
+
 void ADRPlayerController::ShowDamageNumber_Implementation(float DamageAmount, ACharacter* TargetCharacter)
 {
 	// ���� ��Ʈ�ѷ������� ������ �ؽ�Ʈ ǥ��

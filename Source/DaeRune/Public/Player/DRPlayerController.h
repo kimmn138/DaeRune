@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "GameplayTagContainer.h"
+#include "Interfaces/OnlineIdentityInterface.h"
 #include "GenericTeamAgentInterface.h"
 #include "DRPlayerController.generated.h"
 
@@ -54,6 +55,17 @@ public:
 	// 부패 상태 확인
 	UFUNCTION(BlueprintCallable, Category = "Corruption")
 	bool IsInCorruptedState() const { return bIsCorrupted; }
+
+	// 음성 채널 업데이트
+	UFUNCTION(BlueprintCallable, Category = "Voice Chat")
+	void UpdateVoiceChannelForDeathState(bool bIsDead);
+
+	// 특정 플레이어 뮤트/언뮤트
+	UFUNCTION(BlueprintCallable, Category = "Voice Chat")
+	void SetPlayerVoiceMuted(APlayerState* TargetPlayer, bool bMute);
+
+	// 모든 플레이어 음성 뮤트 상태 업데이트
+	void RefreshAllPlayerVoiceMutes();
 
 	// 상호작용 이벤트
 	UPROPERTY(BlueprintAssignable, Category = "Input")
@@ -217,6 +229,9 @@ private:
 
 	// 라인트레이싱 활성화 여부
 	bool bPartDetectionEnabled = false;
+
+	// 현재 플레이어가 죽었는지 여부
+	bool bIsDeadForVoice = false;
 
 	// 라인트레이싱 타이머
 	float LineTraceTimer = 0.f;

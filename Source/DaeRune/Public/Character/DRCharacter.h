@@ -4,10 +4,12 @@
 
 #include "CoreMinimal.h"
 #include "Character/DRCharacterBase.h"
+#include "Net/VoiceConfig.h"
 #include "DRCharacter.generated.h"
 
 class UWidgetComponent;
 class ADRCleanserPart;
+class UVOIPTalker;
 
 /**
  * 플레이어 캐릭터 클래스
@@ -54,6 +56,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void DropCarriedPart();
 
+	// ========== 음성 채팅 ==========
+
+	// VOIPTalker 컴포넌트 반환
+	UFUNCTION(BlueprintCallable, Category = "Voice Chat")
+	UVOIPTalker* GetVOIPTalker() const { return VOIPTalkerComponent; }
+
+	// 음성 채팅 초기화
+	void InitializeVoiceChat();
+
 protected:
 	// ========== 부품 상태 ==========
 
@@ -71,6 +82,12 @@ protected:
 	// 부품 떨어트리기 쿨다운 시간
 	UPROPERTY(EditDefaultsOnly, Category = "Part System", meta = (ClampMin = "0.0", ClampMax = "5.0"))
 	float PartDropCooldown = 2.0f;
+
+	// ========== 음성 채팅 ==========
+
+	// VOIP 송신 컴포넌트
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Voice Chat")
+	TObjectPtr<UVOIPTalker> VOIPTalkerComponent;
 
 	// ========== 리플리케이션 콜백 ==========
 
