@@ -5,6 +5,7 @@
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerState.h"
 #include "Player/DRPlayerController.h"
+#include "MultiplayerSessionsSubsystem.h"
 
 ADRLobbyGameMode::ADRLobbyGameMode()
 {
@@ -82,6 +83,14 @@ void ADRLobbyGameMode::TravelToStage(const FString& StageMapName, ADRPlayerContr
 	ExecuteTravel(StageMapName);
 }
 
+void ADRLobbyGameMode::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// 로비는 도중 참가 허용!
+	AllowJoinInProgress();
+}
+
 void ADRLobbyGameMode::HandleWipeout()
 {
 	if (!HasAuthority()) return;
@@ -89,6 +98,27 @@ void ADRLobbyGameMode::HandleWipeout()
 	// TODO: 전멸 UI 표시 (로비는 가벼운 UI)
 
 	RestartLobby();
+}
+
+void ADRLobbyGameMode::AllowJoinInProgress()
+{
+	if (!HasAuthority()) return;
+
+	UGameInstance* GameInstance = GetGameInstance();
+	if (!GameInstance) return;
+
+	UMultiplayerSessionsSubsystem* SessionsSubsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>();
+	if (SessionsSubsystem)
+	{
+		// 로비에서는 도중 참가 허용!
+		SessionsSubsystem->UpdateSessionJoinability(true);
+
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Green,
+				TEXT("Lobby loaded - Join in progress ALLOWED!"));
+		}
+	}
 }
 
 void ADRLobbyGameMode::RestartLobby()

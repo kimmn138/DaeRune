@@ -43,6 +43,8 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void HandleWipeout() override;
 
+	void BlockJoinInProgress();
+
 	// 로비 맵으로 이동
 	void ReturnToLobby();
 

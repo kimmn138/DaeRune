@@ -37,6 +37,8 @@ public:
 	void JoinSession(const FOnlineSessionSearchResult& SessionResult);
 	void DestroySession();
 	void StartSession();
+	UFUNCTION(BlueprintCallable, Category = "Multiplayer Sessions")
+	void UpdateSessionJoinability(bool bAllowJoin);
 
 	UFUNCTION(BlueprintCallable, Category = "Multiplayer Sessions")
 	FString GetCurrentRoomCode() const { return CurrentRoomCode; }
@@ -57,6 +59,7 @@ protected:
 	void OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
 	void OnDestroySessionComplete(FName SessionName, bool bWasSuccessful);
 	void OnStartSessionComplete(FName SessionName, bool bWasSuccessful);
+	void OnUpdateSessionComplete(FName SessionName, bool bWasSuccessful);
 
 private:
 	IOnlineSessionPtr SessionInterface;
@@ -86,6 +89,8 @@ private:
 	FDelegateHandle DestroySessionCompleteDelegateHandle;
 	FOnStartSessionCompleteDelegate StartSessionCompleteDelegate;
 	FDelegateHandle StartSessionCompleteDelegateHandle;
+	FOnUpdateSessionCompleteDelegate UpdateSessionCompleteDelegate;
+	FDelegateHandle UpdateSessionCompleteDelegateHandle;
 
 	bool bCreateSessionOnDestroy{false};
 	int32 LastNumPublicConnections;

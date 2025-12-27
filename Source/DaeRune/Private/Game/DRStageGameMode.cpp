@@ -6,6 +6,7 @@
 #include "Actor/DRCleanserSite.h"
 #include "Phase/DRPhaseBase.h"
 #include "EngineUtils.h"
+#include "MultiplayerSessionsSubsystem.h"
 
 ADRStageGameMode::ADRStageGameMode()
 {
@@ -60,6 +61,9 @@ void ADRStageGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// 도중 참가 차단
+	BlockJoinInProgress();
+
 	// GameState ĳ��
 	CachedGameState = GetGameState<ADRStageGameState>();
 
@@ -91,6 +95,27 @@ void ADRStageGameMode::HandleWipeout()
 	// TODO: �й� UI ǥ��, �й� ���� ��� ��
 
 	ReturnToLobby();
+}
+
+void ADRStageGameMode::BlockJoinInProgress()
+{
+	if (!HasAuthority()) return;
+
+	UGameInstance* GameInstance = GetGameInstance();
+	if (!GameInstance) return;
+
+	UMultiplayerSessionsSubsystem* SessionsSubsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>();
+	if (SessionsSubsystem)
+	{
+		// 스테이지에서는 도중 참가 차단!
+		SessionsSubsystem->UpdateSessionJoinability(false);
+
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Orange,
+				TEXT("Stage started - Join in progress BLOCKED!"));
+		}
+	}
 }
 
 void ADRStageGameMode::ReturnToLobby()
