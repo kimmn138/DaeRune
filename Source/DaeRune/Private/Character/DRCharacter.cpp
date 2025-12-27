@@ -203,6 +203,11 @@ void ADRCharacter::InitializeVoiceChat()
 	if (APlayerState* PS = GetPlayerState())
 	{
 		VOIPTalkerComponent->RegisterWithPlayerState(PS);
+
+		// 거리 감쇠 비활성화
+		VOIPTalkerComponent->Settings.ComponentToAttachTo = nullptr;
+		VOIPTalkerComponent->Settings.AttenuationSettings = nullptr;
+		VOIPTalkerComponent->Settings.SourceEffectChain = nullptr;
 	}
 }
 
