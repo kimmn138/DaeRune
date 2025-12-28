@@ -66,6 +66,8 @@ public:
 	void InitializeVoiceChat();
 
 protected:
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 	// ========== 何前 惑怕 ==========
 
 	// 何前 焊蜡 咯何

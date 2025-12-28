@@ -210,6 +210,24 @@ void ADRCharacter::InitializeVoiceChat()
 	}
 }
 
+void ADRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// VOIPTalker 정리
+	if (VOIPTalkerComponent)
+	{
+		// 오디오 스트림 즉시 중지
+		if (VOIPTalkerComponent->IsActive())
+		{
+			VOIPTalkerComponent->Deactivate();
+		}
+
+		// 컴포넌트 명시적 파괴
+		VOIPTalkerComponent->DestroyComponent();
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void ADRCharacter::OnRep_bIsCarryingPart()
 {
 	// 클라이언트 시각적 효과
