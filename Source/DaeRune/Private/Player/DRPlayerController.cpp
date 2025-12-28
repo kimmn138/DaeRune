@@ -239,7 +239,7 @@ void ADRPlayerController::ServerNotifyLineTraceLost_Implementation(ADRCleanserPa
 
 void ADRPlayerController::ServerRequestInstallPartToSite_Implementation(ADRCleanserSite* Site)
 {
-	if (!HasAuthority() || !Site) return;
+	if (!Site) return;
 	// 캐릭터 가져오기
 	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
 	if (!DRCharacter) return;
@@ -671,9 +671,6 @@ UDRAbilitySystemComponent* ADRPlayerController::GetASC()
 
 void ADRPlayerController::ServerCheatSkipToNextPhase_Implementation()
 {
-	// 서버에서만 실행되는 RPC
-	if (!HasAuthority()) return;
-
 	// GameMode 가져오기
 	ADRStageGameMode* StageGameMode = GetWorld()->GetAuthGameMode<ADRStageGameMode>();
 	if (!StageGameMode) return;
@@ -684,7 +681,7 @@ void ADRPlayerController::ServerCheatSkipToNextPhase_Implementation()
 
 void ADRPlayerController::ServerRequestPickupPart_Implementation(ADRCleanserPart* Part)
 {
-	if (!HasAuthority() || !Part) return;
+	if (!Part) return;
 
 	// ĳ���� ��������
 	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
@@ -696,8 +693,6 @@ void ADRPlayerController::ServerRequestPickupPart_Implementation(ADRCleanserPart
 
 void ADRPlayerController::ServerRequestDropPart_Implementation()
 {
-	if (!HasAuthority()) return;
-
 	// 캐릭터 가져오기
 	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
 	if (!DRCharacter) return;

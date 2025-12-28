@@ -59,6 +59,9 @@ void ADREnemy::PossessedBy(AController* NewController)
 	// 서버에서만 AI 초기화
 	if (!HasAuthority()) return;
 	DRAIController = Cast<ADRAIController>(NewController);
+
+	if (!DRAIController || !BehaviorTree || !BehaviorTree->BlackboardAsset) return;
+
 	// 블랙보드 초기화 및 비헤이비어 트리 실행
 	DRAIController->GetBlackboardComponent()->InitializeBlackboard(*BehaviorTree->BlackboardAsset);
 	DRAIController->RunBehaviorTree(BehaviorTree);
@@ -387,8 +390,7 @@ void ADREnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 
 float ADREnemy::GetMoveSpeed()
 {
-	UDRAttributeSet* DRAS = CastChecked<UDRAttributeSet>(AttributeSet);
-	if (DRAS)
+	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
 	{
 		return DRAS->GetMoveSpeed();
 	}

@@ -873,19 +873,16 @@ void UDRPhase3::GrantEliteBossTag()
 		}
 	}
 	
-	if (const UWorld* World = GameMode->GetWorld())
-	{
-		// 살아있는 플레이어 목록 가져오기
-		TArray<ADRCharacter*> PlayerCharacters;
-		PlayerCharacters = GameState->GetAlivePlayers();
-		if (PlayerCharacters.Num() == 0) return;
+	// 살아있는 플레이어 목록 가져오기
+	TArray<ADRCharacter*> PlayerCharacters;
+	PlayerCharacters = GameState->GetAlivePlayers();
+	if (PlayerCharacters.Num() == 0) return;
 
-		for (ADRCharacter* Player : PlayerCharacters)
+	for (ADRCharacter* Player : PlayerCharacters)
+	{
+		if (UAbilitySystemComponent* ASC = Player->GetAbilitySystemComponent())
 		{
-			if (UAbilitySystemComponent* ASC = Player->GetAbilitySystemComponent())
-			{
-				ASC->AddLooseGameplayTag(FDRGameplayTags::Get().Debuff_Elite);
-			}
+			ASC->AddLooseGameplayTag(FDRGameplayTags::Get().Debuff_Elite);
 		}
 	}
 
@@ -919,19 +916,16 @@ void UDRPhase3::RemoveEliteBossTag()
 		}
 	}
 	
-	if (const UWorld* World = GameMode->GetWorld())
-	{
-		// 살아있는 플레이어 목록 가져오기
-		TArray<ADRCharacter*> PlayerCharacters;
-		PlayerCharacters = GameState->GetAlivePlayers();
-		if (PlayerCharacters.Num() == 0) return;
+	// 살아있는 플레이어 목록 가져오기
+	TArray<ADRCharacter*> PlayerCharacters;
+	PlayerCharacters = GameState->GetAlivePlayers();
+	if (PlayerCharacters.Num() == 0) return;
 
-		for (ADRCharacter* Player : PlayerCharacters)
+	for (ADRCharacter* Player : PlayerCharacters)
+	{
+		if (UAbilitySystemComponent* ASC = Player->GetAbilitySystemComponent())
 		{
-			if (UAbilitySystemComponent* ASC = Player->GetAbilitySystemComponent())
-			{
-				ASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().Debuff_Elite);
-			}
+			ASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().Debuff_Elite);
 		}
 	}
 

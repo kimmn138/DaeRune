@@ -42,7 +42,6 @@ void UDRAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& Input
 
 	for (FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
 	{
-		const FString SpecTags = AbilitySpec.GetDynamicSpecSourceTags().ToStringSimple();
 		if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
 		{
 			AbilitySpecInputPressed(AbilitySpec);
@@ -64,7 +63,6 @@ void UDRAbilitySystemComponent::AbilityInputTagHeld(const FGameplayTag& InputTag
 
 	for (FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
 	{
-		const FString SpecTags = AbilitySpec.GetDynamicSpecSourceTags().ToStringSimple();
 		if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
 		{
 			AbilitySpecInputPressed(AbilitySpec);
@@ -82,7 +80,6 @@ void UDRAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& Inpu
 
 	for (FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
 	{
-		const FString SpecTags = AbilitySpec.GetDynamicSpecSourceTags().ToStringSimple();
 		if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag) && AbilitySpec.IsActive())
 		{
 			AbilitySpecInputReleased(AbilitySpec);

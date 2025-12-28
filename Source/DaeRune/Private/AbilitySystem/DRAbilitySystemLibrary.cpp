@@ -252,7 +252,7 @@ void UDRAbilitySystemLibrary::GetClosestTargets(int32 MaxTargets, const TArray<A
 	{
 		if (ActorsToCheck.Num() == 0) break;
 		double ClosestDistance = TNumericLimits<double>::Max();
-		AActor* ClosestActor;
+		AActor* ClosestActor = nullptr;
 		for (AActor* PotentialTarget : ActorsToCheck)
 		{
 			const double Distance = (PotentialTarget->GetActorLocation() - Origin).Length();
@@ -279,6 +279,9 @@ AActor* UDRAbilitySystemLibrary::GetClosestCleanserSite(APawn* ControlledPawn)
 	if (!GameState) return nullptr;
 
 	TArray<ADRCleanserSite*> CleanserSites = GameState->GetCleanserSites();
+
+	if (CleanserSites.Num() < 2) return nullptr;
+	if (!CleanserSites[0] || !CleanserSites[1]) return nullptr;
 	
 	const float Dist0 = FVector::Dist(CleanserSites[0]->GetActorLocation(), ControlledPawn->GetActorLocation());
 	const float Dist1 = FVector::Dist(CleanserSites[1]->GetActorLocation(), ControlledPawn->GetActorLocation());

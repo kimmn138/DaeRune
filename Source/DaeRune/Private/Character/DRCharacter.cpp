@@ -71,8 +71,7 @@ void ADRCharacter::PossessedBy(AController* NewController)
 	InitAbilityActorInfo();
 	AddCharacterAbilities();
 
-	UDRAttributeSet* DRAS = CastChecked<UDRAttributeSet>(AttributeSet);
-	if (DRAS)
+	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
 	{
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMoveSpeedAttribute()).AddUObject(this, &ADRCharacter::OnMoveSpeedChanged);
 		GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
@@ -223,8 +222,7 @@ void ADRCharacter::OnRep_CarriedPart()
 
 float ADRCharacter::GetMoveSpeed()
 {
-	UDRAttributeSet* DRAS = CastChecked<UDRAttributeSet>(AttributeSet);
-	if (DRAS)
+	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
 	{
 		return DRAS->GetMoveSpeed();
 	}
