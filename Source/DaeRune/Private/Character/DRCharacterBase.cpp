@@ -100,7 +100,7 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 				// 음성 채널을 죽은 상태로 업데이트
 				DRPC->UpdateVoiceChannelForDeathState(true);
 
-				// 약간의 딜레이 후 관전 모드 전환
+				// 딜레이 후 관전 모드 전환
 				FTimerHandle SpectatorTimerHandle;
 				GetWorld()->GetTimerManager().SetTimer(
 					SpectatorTimerHandle,
@@ -111,12 +111,12 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 							DRPC->ClientStartSpectating();
 						}
 					},
-					3.0f,
+					4.0f,
 					false
 				);
 			}
 
-			// 캐릭터 액터는 바로 파괴
+			// 캐릭터 액터 파괴
 			FTimerHandle DestroyTimerHandle;
 			GetWorld()->GetTimerManager().SetTimer(
 			   DestroyTimerHandle,
@@ -127,7 +127,7 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 					 Destroy();
 				  }
 			   },
-			   2.5f,
+			   3.5f,
 			   false
 			);
 		}
@@ -151,6 +151,12 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 	if (bDead) return;
 
 	bDead = true;
+
+	// 죽음 카메라 연출
+	if (ADRCharacter* PlayerCharacter = Cast<ADRCharacter>(this))
+	{
+		PlayerCharacter->PlayDeathCameraAnimation();
+	}
 
 	// 사망 사운드 재생
 	if (DeathSound)

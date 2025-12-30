@@ -31,6 +31,9 @@ public:
 	virtual void OnRep_Stunned() override;
 	virtual void OnRep_Burned() override;
 
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+
 	// 컨테이너 시스템 설정
 	UPROPERTY(EditDefaultsOnly, Category = "Container System")
 	int32 NumContainers = 4;
@@ -64,6 +67,12 @@ public:
 
 	// 음성 채팅 초기화
 	void InitializeVoiceChat();
+
+	// ========== 카메라 ==========
+
+	// 죽음 카메라 연출
+	UFUNCTION(BlueprintImplementableEvent, Category = "Death")
+	void PlayDeathCameraAnimation();
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
