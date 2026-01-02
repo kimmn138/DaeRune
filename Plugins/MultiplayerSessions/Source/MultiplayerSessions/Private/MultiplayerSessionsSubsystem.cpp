@@ -12,12 +12,19 @@ UMultiplayerSessionsSubsystem::UMultiplayerSessionsSubsystem():
 	JoinSessionCompleteDelegate(FOnJoinSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnJoinSessionComplete)),
 	DestroySessionCompleteDelegate(FOnDestroySessionCompleteDelegate::CreateUObject(this, &ThisClass::OnDestroySessionComplete)),
 	StartSessionCompleteDelegate(FOnStartSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnStartSessionComplete)),
-	UpdateSessionCompleteDelegate(FOnUpdateSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnUpdateSessionComplete))
+	UpdateSessionCompleteDelegate(FOnUpdateSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnUpdateSessionComplete)),
+	SessionUserInviteAcceptedDelegate(FOnSessionUserInviteAcceptedDelegate::CreateUObject(this, &ThisClass::OnSessionUserInviteAccepted))
 {
 	IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get();
 	if (Subsystem)
 	{
 		SessionInterface = Subsystem->GetSessionInterface();
+
+		// 스팀 초대 리스너 등록
+		if (SessionInterface.IsValid())
+		{
+			SessionUserInviteAcceptedDelegateHandle = SessionInterface->AddOnSessionUserInviteAcceptedDelegate_Handle(SessionUserInviteAcceptedDelegate);
+		}
 	}
 }
 
@@ -257,6 +264,87 @@ void UMultiplayerSessionsSubsystem::OnUpdateSessionComplete(FName SessionName, b
 	if (SessionInterface)
 	{
 		SessionInterface->ClearOnUpdateSessionCompleteDelegate_Handle(UpdateSessionCompleteDelegateHandle);
+	}
+}
+
+void UMultiplayerSessionsSubsystem::OnSessionUserInviteAccepted(const bool bWasSuccessful, const int32 ControllerId, FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& InviteResult)
+{
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Cyan, TEXT("=== 1. 초대 콜백 시작 ==="));
+	}
+
+	if (!bWasSuccessful)
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("=== 2. bWasSuccessful = false ==="));
+		}
+		return;
+	}
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Green, TEXT("=== 3. bWasSuccessful = true ==="));
+	}
+
+	if (!SessionInterface.IsValid())
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("=== 4. SessionInterface 없음 ==="));
+		}
+		return;
+	}
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Green, TEXT("=== 5. SessionInterface 있음 ==="));
+	}
+
+	// 중요: 기존 세션 체크!
+	auto ExistingSession = SessionInterface->GetNamedSession(NAME_GameSession);
+	if (ExistingSession != nullptr)
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Orange, TEXT("=== 6. 이미 세션 있음! 먼저 파괴해야 함 ==="));
+		}
+
+		// 기존 세션 있으면 안전하게 리턴
+		// (나중에 자동으로 파괴 후 조인하는 로직 추가 가능)
+		return;
+	}
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Green, TEXT("=== 7. 기존 세션 없음, 조인 가능 ==="));
+	}
+
+	// World 체크 (혹시 모르니)
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("=== 8. World 없음! ==="));
+		}
+		return;
+	}
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Green, TEXT("=== 9. 조인 시작! ==="));
+	}
+
+	// 조인 전에 한 번 더 로그
+	UE_LOG(LogTemp, Warning, TEXT("OnSessionUserInviteAccepted: 조인 직전!"));
+
+	JoinSession(InviteResult);
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Green, TEXT("=== 10. JoinSession 호출 완료 ==="));
 	}
 }
 

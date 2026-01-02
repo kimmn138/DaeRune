@@ -60,6 +60,7 @@ protected:
 	void OnDestroySessionComplete(FName SessionName, bool bWasSuccessful);
 	void OnStartSessionComplete(FName SessionName, bool bWasSuccessful);
 	void OnUpdateSessionComplete(FName SessionName, bool bWasSuccessful);
+	void OnSessionUserInviteAccepted(const bool bWasSuccessful, const int32 ControllerId, FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& InviteResult);
 
 private:
 	IOnlineSessionPtr SessionInterface;
@@ -91,6 +92,8 @@ private:
 	FDelegateHandle StartSessionCompleteDelegateHandle;
 	FOnUpdateSessionCompleteDelegate UpdateSessionCompleteDelegate;
 	FDelegateHandle UpdateSessionCompleteDelegateHandle;
+	FOnSessionUserInviteAcceptedDelegate SessionUserInviteAcceptedDelegate;
+	FDelegateHandle SessionUserInviteAcceptedDelegateHandle;
 
 	bool bCreateSessionOnDestroy{false};
 	int32 LastNumPublicConnections;
