@@ -16,7 +16,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnStartSessionComplete, 
 // 방 코드 생성 완료 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnRoomCodeGenerated, const FString&, RoomCode);
 
-
 /**
  * 
  */
@@ -97,4 +96,15 @@ private:
 
 	bool bCreateSessionOnDestroy{false};
 	int32 LastNumPublicConnections;
+
+	// 초대가 저장되어 있는 상태
+	bool bInvitePending = false;
+	// JoinSession을 이미 시작
+	bool bInviteJoinStarted = false;
+
+	// 초대 정보 캐싱
+	TSharedPtr<FOnlineSessionSearchResult> CachedInviteResult;
+
+	// 안전한 Join 시도 함수
+	void TryProcessPendingInvite();
 };

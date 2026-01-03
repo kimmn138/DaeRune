@@ -214,6 +214,10 @@ void UMultiplayerSessionsSubsystem::OnJoinSessionComplete(FName SessionName, EOn
 		SessionInterface->ClearOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteDelegateHandle);
 	}
 
+	bInviteJoinStarted = false;
+	bInvitePending = false;
+	CachedInviteResult.Reset();
+
 	if (Result == EOnJoinSessionCompleteResult::Success)
 	{
 		// 세션 정보 가져오기
@@ -269,83 +273,19 @@ void UMultiplayerSessionsSubsystem::OnUpdateSessionComplete(FName SessionName, b
 
 void UMultiplayerSessionsSubsystem::OnSessionUserInviteAccepted(const bool bWasSuccessful, const int32 ControllerId, FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& InviteResult)
 {
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Cyan, TEXT("=== 1. 초대 콜백 시작 ==="));
-	}
+	UE_LOG(LogTemp, Log, TEXT("[Invite] Received"));
 
-	if (!bWasSuccessful)
-	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("=== 2. bWasSuccessful = false ==="));
-		}
-		return;
-	}
+	if (!bWasSuccessful) return;
 
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Green, TEXT("=== 3. bWasSuccessful = true ==="));
-	}
+	// 이미 초대가 대기 중이거나 Join 시작됨
+	if (bInvitePending || bInviteJoinStarted) return;
 
-	if (!SessionInterface.IsValid())
-	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("=== 4. SessionInterface 없음 ==="));
-		}
-		return;
-	}
+	// 초대 정보 저장
+	bInvitePending = true;
+	CachedInviteResult = MakeShared<FOnlineSessionSearchResult>(InviteResult);
 
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Green, TEXT("=== 5. SessionInterface 있음 ==="));
-	}
-
-	// 중요: 기존 세션 체크!
-	auto ExistingSession = SessionInterface->GetNamedSession(NAME_GameSession);
-	if (ExistingSession != nullptr)
-	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Orange, TEXT("=== 6. 이미 세션 있음! 먼저 파괴해야 함 ==="));
-		}
-
-		// 기존 세션 있으면 안전하게 리턴
-		// (나중에 자동으로 파괴 후 조인하는 로직 추가 가능)
-		return;
-	}
-
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Green, TEXT("=== 7. 기존 세션 없음, 조인 가능 ==="));
-	}
-
-	// World 체크 (혹시 모르니)
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("=== 8. World 없음! ==="));
-		}
-		return;
-	}
-
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Green, TEXT("=== 9. 조인 시작! ==="));
-	}
-
-	// 조인 전에 한 번 더 로그
-	UE_LOG(LogTemp, Warning, TEXT("OnSessionUserInviteAccepted: 조인 직전!"));
-
-	JoinSession(InviteResult);
-
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Green, TEXT("=== 10. JoinSession 호출 완료 ==="));
-	}
+	// Join을 시도하되, 성공 조건 만족 시에만 진행됨
+	TryProcessPendingInvite();
 }
 
 FString UMultiplayerSessionsSubsystem::GenerateRoomCode()
@@ -419,4 +359,28 @@ void UMultiplayerSessionsSubsystem::CreateSessionInternal(int32 NumPublicConnect
 		CurrentRoomCode.Empty();
 		MultiplayerOnCreateSessionComplete.Broadcast(false);
 	}
+}
+
+void UMultiplayerSessionsSubsystem::TryProcessPendingInvite()
+{
+	if (!bInvitePending || bInviteJoinStarted || !CachedInviteResult.IsValid()) return;
+
+	UGameInstance* GameInstance = GetGameInstance();
+	if (!GameInstance) return;
+
+	UWorld* World = GameInstance->GetWorld();
+	if (!World) return;
+
+	if (World->GetFirstLocalPlayerFromController() == nullptr) return;
+
+	if (!SessionInterface.IsValid()) return;
+
+	bInviteJoinStarted = true;
+	bInvitePending = false;
+
+	CachedInviteResult->Session.SessionSettings.bUsesPresence = true;
+	CachedInviteResult->Session.SessionSettings.bUseLobbiesIfAvailable = true;
+
+	JoinSession(*CachedInviteResult);
+	CachedInviteResult.Reset();
 }
