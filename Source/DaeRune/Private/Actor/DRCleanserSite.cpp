@@ -21,12 +21,19 @@ ADRCleanserSite::ADRCleanserSite()
 	RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootComponent"));
 	SetRootComponent(RootSceneComponent);
 
-	// 클렌저 메시 생성 (초기: 숨김)
+	// 클렌저 메시 생성
 	CleanserMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CleanserMesh"));
 	CleanserMesh->SetupAttachment(RootComponent);
 	CleanserMesh->SetVisibility(false);
 	CleanserMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	CleanserMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+
+	// 클렌저 물 메시 생성
+	WaterMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WaterMesh"));
+	WaterMesh->SetupAttachment(CleanserMesh);
+	WaterMesh->SetVisibility(false);
+	WaterMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	WaterMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 
 	// 상호작용 박스 생성
 	InteractionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractionBox"));
@@ -82,6 +89,11 @@ void ADRCleanserSite::ActivateSite()
 	{
 		CleanserMesh->SetVisibility(true);
 	}
+
+	if (CleanserMesh)
+	{
+		WaterMesh->SetVisibility(true);
+	}
 }
 
 void ADRCleanserSite::DeactivateSite()
@@ -101,6 +113,17 @@ void ADRCleanserSite::SetPartsCollected()
 	if (!HasAuthority()) return;
 
 	CurrentState = ECleanserSiteState::PartsCollected;
+
+	// 메시 교체
+	if (CleanserMesh && CleanserMesh_AfterParts)
+	{
+		CleanserMesh->SetStaticMesh(CleanserMesh_AfterParts);
+	}
+
+	if (WaterMesh && WaterMesh_AfterParts)
+	{
+		WaterMesh->SetStaticMesh(WaterMesh_AfterParts);
+	}
 }
 
 void ADRCleanserSite::InstallPart(ADRCharacter* Character)
@@ -236,12 +259,23 @@ void ADRCleanserSite::OnRep_CurrentState() const
 	{
 		case ECleanserSiteState::Inactive:
 			if (CleanserMesh) CleanserMesh->SetVisibility(false);
+			if (WaterMesh) WaterMesh->SetVisibility(false);
 			break;
 		case ECleanserSiteState::Active:
 		case ECleanserSiteState::PartsCollected:
 		case ECleanserSiteState::Operational:
 		case ECleanserSiteState::Completed:
-			if (CleanserMesh) CleanserMesh->SetVisibility(true);
+			// 부품 설치 후 메시 설정
+			if (CleanserMesh && CleanserMesh_AfterParts)
+			{
+				CleanserMesh->SetStaticMesh(CleanserMesh_AfterParts);
+				CleanserMesh->SetVisibility(true);
+			}
+			if (WaterMesh && WaterMesh_AfterParts)
+			{
+				WaterMesh->SetStaticMesh(WaterMesh_AfterParts);
+				WaterMesh->SetVisibility(true);
+			}
 			break;
 	}
 }

@@ -134,9 +134,21 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USceneComponent> RootSceneComponent;
 
-	// 클렌저 메시 (상태에 따라 보이기/숨기기)
+	// 클렌저 메시
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent> CleanserMesh;
+
+	// 클렌저 물 메시
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UStaticMeshComponent> WaterMesh;
+
+	// 부품 설치 후 클렌저 메시
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mesh Assets")
+	TObjectPtr<UStaticMesh> CleanserMesh_AfterParts;
+
+	// 부품 설치 후 물 메시
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mesh Assets")
+	TObjectPtr<UStaticMesh> WaterMesh_AfterParts;
 
 	// 상호작용 범위
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")

@@ -146,22 +146,23 @@ void UDRPhase3::StartNextWave()
 		const FWaveData& CurrentWave = WaveDataArray[CurrentWaveNumber - 1];
 		const FWaveLevelModifier& Modifier = GetWaveLevelModifier(CurrentWaveLevel);
 		
-		// 스폰 간격 계산 (레벨별 수정자 적용)
+		// 스폰 간격 계산
 		float ActualSpawnInterval = CurrentWave.BaseSpawnInterval * Modifier.SpawnIntervalMultiplier;
 		TotalSpawnTick = FMath::FloorToInt32(50.f / ActualSpawnInterval);
 
 		// 웨이브 타이머 초기화 및 업데이트 시작
 		WaveTimeRemaining = CurrentWave.PlayDuration;
-		
 		// 스폰 타이머 시작
 		if (GameMode && GameState)
 		{
 			if (const UWorld* World = GameMode->GetWorld())
 			{
+				int32 InitialPlayerCount = GameState->GetInitialPlayerCount();
 				if (InitialPlayerCount == 0) return;
+				UE_LOG(LogTemp, Warning, TEXT("Phase3Start7"));
 
 				TotalSpawnCount = FMath::CeilToInt(CurrentWave.BaseMonstersPerPlayer * InitialPlayerCount * Modifier.MonsterCountMultiplier);
-				
+
 				World->GetTimerManager().SetTimer(
 					SpawnTimerHandle,
 					this,
@@ -201,13 +202,13 @@ void UDRPhase3::StartNextWave()
 		// 웨이브 레벨별 특수 처리
 		if (Modifier.bSpawnToxicGas)
 		{
-			// 유독 가스 생성 (레벨 4+)
+			// 유독 가스 생성
 			SpawnToxicGas();
 		}
 		
 		if (Modifier.bSpawnEliteBoss && EliteBossClass)
 		{
-			// 엘리트 보스 스폰 (레벨 5, 클렌저 사이트 근처)
+			// 엘리트 보스 스폰
 			if (CleanserSites.Num() > 0 && CleanserSites[0])
 			{
 				for (TActorIterator<AActor> It(GetWorld()); It; ++It)

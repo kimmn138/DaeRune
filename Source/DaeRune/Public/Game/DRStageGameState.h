@@ -38,7 +38,9 @@ public:
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     TArray<ADRCleanserSite*> GetCleanserSites() { return CleanserSites; }
+    int32 GetInitialPlayerCount() { return InitialPlayerCount; }
     void SetCleanserSites(TArray<ADRCleanserSite*> InCleanserSites) { CleanserSites = InCleanserSites; }
+    void SetInitialPlayerCount(float NewInitialPlayerCount) { InitialPlayerCount = NewInitialPlayerCount; }
 
     // ========== 상태 리플리케이션 ==========
     UFUNCTION(BlueprintCallable, Category = "Phase")
@@ -154,6 +156,10 @@ protected:
 private:
     UPROPERTY()
     TArray<ADRCleanserSite*> CleanserSites;
+
+    // Phase1 시작 시점의 플레이어 수
+    UPROPERTY()
+    int32 InitialPlayerCount;
     
     // ========== 상태 리플리케이션 변수들 ==========
     UPROPERTY(ReplicatedUsing = OnRep_CurrentPhaseIndex)

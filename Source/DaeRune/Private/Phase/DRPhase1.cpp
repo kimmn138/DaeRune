@@ -26,9 +26,7 @@ void UDRPhase1::OnPhaseStart()
 	// 총 적 수로 GameState 업데이트
 	GameState->SetRemainingEnemiesInArea(TotalEnemyCount);
 
-	TArray<ADRCharacter*> InitialPlayers;
-	InitialPlayers = GameState->GetAlivePlayers();
-	InitialPlayerCount = InitialPlayers.Num();
+	GameState->SetInitialPlayerCount(GameState->GetAlivePlayers().Num());
 }
 
 void UDRPhase1::OnPhaseEnd()
