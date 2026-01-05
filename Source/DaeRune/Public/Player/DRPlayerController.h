@@ -128,6 +128,20 @@ public:
 	// 이전 플레이어로 전환
 	UFUNCTION(BlueprintCallable, Category = "Spectating")
 	void SpectatePreviousPlayer();
+
+	// ========== 설정 메뉴 ========== 
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void ToggleSettingsMenu();
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void OpenSettingsMenu();
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void CloseSettingsMenu();
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	bool IsSettingsMenuOpen() const { return bIsSettingsMenuOpen; }
 	
 	// ========== 치트/디버그 기능 ==========
     	
@@ -181,9 +195,19 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Input|Spectating")
 	TObjectPtr<UInputAction> SpectatePreviousAction;
 
+	// 설정 메뉴 토글 액션
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<UInputAction> ToggleSettingsAction;
+
+	// 설정 메뉴 토글 처리
+	void HandleToggleSettings();
+
 	// 관전 입력 처리
 	void HandleSpectateNext();
 	void HandleSpectatePrevious();
+
+	// 설정 메뉴 열림 상태
+	bool bIsSettingsMenuOpen = false;
 
 	// 관전 대상 설정
 	void SetSpectateTarget(ACharacter* NewTarget);
@@ -208,6 +232,12 @@ private:
 	void StopJump(const FInputActionValue& InputActionValue);
 	// 상호작용 키를 눌렀을 때
 	void HandleInteract();
+
+	UPROPERTY()
+	TObjectPtr<class UDRSettingsWidget> SettingsWidget;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UDRSettingsWidget> SettingsWidgetClass;
 
 	// GAS 어빌리티 입력 처리
 	void AbilityInputTagPressed(FGameplayTag InputTag);

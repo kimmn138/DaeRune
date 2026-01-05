@@ -19,6 +19,8 @@
 #include "Player/DRPlayerState.h"
 #include "UI/WidgetController/DRWidgetController.h"
 #include "UI/WidgetController/OverlayWidgetController.h"
+#include "UI/Widget/DRSettingsWidget.h"
+#include "Game/DRGameUserSettings.h"
 
 ADRPlayerController::ADRPlayerController()
 {
@@ -371,6 +373,33 @@ void ADRPlayerController::BeginPlay()
 
 	// �÷��̾�� TeamId 0
 	SetGenericTeamId(FGenericTeamId(0));
+
+	// 로컬 플레이어만 오디오 설정 적용
+	if (IsLocalController())
+	{
+		if (UDRGameUserSettings* Settings = UDRGameUserSettings::GetDRGameUserSettings())
+		{
+			// 저장된 설정 로드
+			Settings->LoadSettings();
+			// 오디오 설정 적용
+			Settings->ApplyAudioSettings();
+		}
+
+		// 현재 레벨이 메인메뉴인지 체크
+		UWorld* World = GetWorld();
+		if (World)
+		{
+			FString CurrentLevelName = World->GetMapName();
+			CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+			// 메인메뉴면 UI 입력 모드로 설정
+			if (CurrentLevelName.Contains(TEXT("MainMenu")))
+			{
+				SetInputMode(FInputModeUIOnly());
+				SetShowMouseCursor(true);
+			}
+		}
+	}
 }
 
 void ADRPlayerController::PlayerTick(float DeltaTime)
@@ -428,8 +457,14 @@ void ADRPlayerController::SetupInputComponent()
 	DRInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &ADRPlayerController::HandleInteract);
 	DRInputComponent->BindAction(SpectateNextAction, ETriggerEvent::Started, this, &ADRPlayerController::HandleSpectateNext);
 	DRInputComponent->BindAction(SpectatePreviousAction, ETriggerEvent::Started, this, &ADRPlayerController::HandleSpectatePrevious);
+	DRInputComponent->BindAction(ToggleSettingsAction, ETriggerEvent::Started, this, &ADRPlayerController::HandleToggleSettings);
 	// �����Ƽ �Է� ���ε� (InputConfig ���)
 	DRInputComponent->BindAbilityActions(InputConfig, this, &ThisClass::AbilityInputTagPressed, &ThisClass::AbilityInputTagReleased, &ThisClass::AbilityInputTagHeld);
+}
+
+void ADRPlayerController::HandleToggleSettings()
+{
+	ToggleSettingsMenu();
 }
 
 void ADRPlayerController::HandleSpectateNext()
@@ -569,8 +604,17 @@ void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 	
 	// ���콺 �ü� ó��
 	const FVector2D Axis = InputActionValue.Get<FVector2D>();
-	AddYawInput(Axis.X);
-	AddPitchInput(Axis.Y);
+
+	// 설정에서 마우스 감도 가져오기
+	float Sensitivity = 1.0f;
+	if (UDRGameUserSettings* Settings = UDRGameUserSettings::GetDRGameUserSettings())
+	{
+		Sensitivity = Settings->GetMouseSensitivity();
+	}
+
+	// 감도 적용
+	AddYawInput(Axis.X * Sensitivity);
+	AddPitchInput(Axis.Y * Sensitivity);
 }
 
 void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
@@ -627,6 +671,87 @@ void ADRPlayerController::HandleInteract()
 	}
 	
 	OnInteractPressed.Broadcast();
+}
+
+void ADRPlayerController::ToggleSettingsMenu()
+{
+	if (bIsSettingsMenuOpen)
+	{
+		CloseSettingsMenu();
+	}
+	else
+	{
+		OpenSettingsMenu();
+	}
+}
+
+void ADRPlayerController::OpenSettingsMenu()
+{
+	// 로컬 컨트롤러에서만 실행
+	if (!IsLocalController()) return;
+
+	// 이미 열려있으면 무시
+	if (bIsSettingsMenuOpen) return;
+
+	// 위젯이 없으면 생성
+	if (!SettingsWidget && SettingsWidgetClass)
+	{
+		SettingsWidget = CreateWidget<UDRSettingsWidget>(this, SettingsWidgetClass);
+		if (SettingsWidget)
+		{
+			SettingsWidget->AddToViewport(100); // 높은 Z-Order로 다른 UI 위에 표시
+			SettingsWidget->SetVisibility(ESlateVisibility::Collapsed); // 처음엔 숨김
+		}
+	}
+
+	if (SettingsWidget)
+	{
+		SettingsWidget->OpenSettings();
+		bIsSettingsMenuOpen = true;
+
+		// 입력 모드 변경
+		FInputModeGameAndUI InputMode;
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		InputMode.SetHideCursorDuringCapture(false);
+		SetInputMode(InputMode);
+		SetShowMouseCursor(true);
+	}
+}
+
+void ADRPlayerController::CloseSettingsMenu()
+{
+	// 로컬 컨트롤러에서만 실행
+	if (!IsLocalController()) return;
+
+	// 이미 닫혀있으면 무시
+	if (!bIsSettingsMenuOpen) return;
+
+	if (SettingsWidget)
+	{
+		SettingsWidget->CloseSettings();
+		bIsSettingsMenuOpen = false;
+
+		// 현재 레벨이 메인메뉴인지 체크
+		UWorld* World = GetWorld();
+		if (World)
+		{
+			FString CurrentLevelName = World->GetMapName();
+			CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+			// 메인메뉴면 UI 모드 유지
+			if (CurrentLevelName.Contains(TEXT("MainMenu")))
+			{
+				SetInputMode(FInputModeUIOnly());
+				SetShowMouseCursor(true);
+			}
+			else
+			{
+				// 게임 레벨이면 게임 모드로
+				SetInputMode(FInputModeGameOnly());
+				SetShowMouseCursor(false);
+			}
+		}
+	}
 }
 
 void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
