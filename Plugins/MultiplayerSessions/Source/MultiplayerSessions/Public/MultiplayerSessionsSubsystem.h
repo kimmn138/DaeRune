@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Interfaces/OnlineSessionInterface.h"
+#include "OnlineSessionSettings.h"
 #include "MultiplayerSessionsSubsystem.generated.h"
 
 // Declaring our own custom delegates for the Menu class to bind callbacks to
@@ -27,6 +28,9 @@ class MULTIPLAYERSESSIONS_API UMultiplayerSessionsSubsystem : public UGameInstan
 public:
 	UMultiplayerSessionsSubsystem();
 
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
+
 	// To handle session functionality. The Menu class will call these
 	UFUNCTION(BlueprintCallable, Category = "Multiplayer Sessions")
 	void CreateSessionWithRoomCode(int32 NumPublicConnections, const FString& MatchType = "RoomCodeOnly");
@@ -38,6 +42,14 @@ public:
 	void StartSession();
 	UFUNCTION(BlueprintCallable, Category = "Multiplayer Sessions")
 	void UpdateSessionJoinability(bool bAllowJoin);
+	UFUNCTION()
+	void LeaveServer();
+
+	UFUNCTION(BlueprintCallable, Category = "VoiceChat")
+	void StartVoiceChat();
+
+	UFUNCTION(BlueprintCallable, Category = "Session")
+	void StopVoiceChat();
 
 	UFUNCTION(BlueprintCallable, Category = "Multiplayer Sessions")
 	FString GetCurrentRoomCode() const { return CurrentRoomCode; }
@@ -62,7 +74,10 @@ protected:
 	void OnSessionUserInviteAccepted(const bool bWasSuccessful, const int32 ControllerId, FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& InviteResult);
 
 private:
+	void HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver, ENetworkFailure::Type FailureType, const FString& ErrorString);
+
 	IOnlineSessionPtr SessionInterface;
+	IOnlineVoicePtr VoiceInterface = nullptr;
 	TSharedPtr<FOnlineSessionSettings> LastSessionSettings;
 	TSharedPtr<FOnlineSessionSearch> LastSessionSearch;
 

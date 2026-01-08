@@ -344,12 +344,9 @@ void UDRSettingsWidget::OnMainMenuClicked()
     {
         if (UMultiplayerSessionsSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>())
         {
-            SessionSubsystem->DestroySession();
+            SessionSubsystem->LeaveServer();
         }
     }
-
-    // 메인메뉴 이동
-    PC->ClientTravel(TEXT("/Game/Maps/MainMenu"), ETravelType::TRAVEL_Absolute);
 }
 
 void UDRSettingsWidget::OnQuitGameClicked()

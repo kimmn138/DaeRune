@@ -75,9 +75,6 @@ void ADRCharacter::PossessedBy(AController* NewController)
 	{
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMoveSpeedAttribute()).AddUObject(this, &ADRCharacter::OnMoveSpeedChanged);
 		GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
-
-		// 음성 채팅 초기화
-		InitializeVoiceChat();
 	}
 }
 
@@ -194,19 +191,44 @@ void ADRCharacter::DropCarriedPart()
 	CarriedPart = nullptr;
 }
 
-void ADRCharacter::InitializeVoiceChat()
+void ADRCharacter::TryRegisterVoiceTalker()
 {
-	if (!VOIPTalkerComponent) return;
-
-	// VOIPTalker에 PlayerState 등록
 	if (APlayerState* PS = GetPlayerState())
 	{
-		VOIPTalkerComponent->RegisterWithPlayerState(PS);
+		GetWorld()->GetTimerManager().ClearTimer(PlayerStateRegisterTimerHanlde);
+		RegisterVoiceTalker();
+	}
+}
 
-		// 거리 감쇠 비활성화
-		VOIPTalkerComponent->Settings.ComponentToAttachTo = nullptr;
-		VOIPTalkerComponent->Settings.AttenuationSettings = nullptr;
-		VOIPTalkerComponent->Settings.SourceEffectChain = nullptr;
+void ADRCharacter::RegisterVoiceTalker()
+{
+	if (VOIPTalkerComponent)
+	{
+		if (APlayerState* PS = GetPlayerState())
+		{
+			VOIPTalkerComponent->RegisterWithPlayerState(PS);
+
+			// 거리 감쇠 비활성화
+			VOIPTalkerComponent->Settings.ComponentToAttachTo = nullptr;
+			VOIPTalkerComponent->Settings.AttenuationSettings = nullptr;
+			VOIPTalkerComponent->Settings.SourceEffectChain = nullptr;
+		}
+	}
+}
+
+void ADRCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			PlayerStateRegisterTimerHanlde,
+			this,
+			&ADRCharacter::TryRegisterVoiceTalker,
+			0.2f,
+			true
+		);
 	}
 }
 

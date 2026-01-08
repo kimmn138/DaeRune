@@ -8,7 +8,7 @@ public class DaeRune : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "GameplayAbilities", "Slate", "SlateCore", "UMG", "MultiplayerSessions", "NavigationSystem", "OnlineSubsystem", "OnlineSubsystemUtils" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "GameplayAbilities", "Slate", "SlateCore", "UMG", "MultiplayerSessions", "NavigationSystem", "OnlineSubsystem", "OnlineSubsystemUtils", "Voice" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "GameplayTags", "GameplayTasks", "Niagara", "AIModule" });
 
