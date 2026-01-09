@@ -39,6 +39,17 @@ ADRCharacter::ADRCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
+	// 1인칭 메쉬 설정
+	FirstPersonMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonMesh"));
+	FirstPersonMesh->SetupAttachment(FollowCamera); 
+	FirstPersonMesh->SetOnlyOwnerSee(true); 
+	FirstPersonMesh->bCastDynamicShadow = false;
+	FirstPersonMesh->CastShadow = false;
+	FirstPersonMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// 3인칭 메쉬 설정
+	GetMesh()->SetOwnerNoSee(true);
+
 	// VOIPTalker 컴포넌트 생성
 	VOIPTalkerComponent = CreateDefaultSubobject<UVOIPTalker>(TEXT("VOIPTalker"));
 
@@ -216,9 +227,45 @@ void ADRCharacter::RegisterVoiceTalker()
 	}
 }
 
+void ADRCharacter::UpdateMeshVisibility()
+{
+	// 로컬 플레이어인지 확인
+	const bool bIsLocalPlayer = IsLocallyControlled();
+
+	if (bIsLocalPlayer)
+	{
+		// 로컬 플레이어: 1인칭 메쉬 보임, 3인칭 메쉬 숨김
+		if (FirstPersonMesh)
+		{
+			FirstPersonMesh->SetVisibility(true);
+		}
+		GetMesh()->SetVisibility(false);
+		if (Weapon)
+		{
+			Weapon->SetVisibility(false);
+		}
+	}
+	else
+	{
+		// 다른 플레이어: 3인칭 메쉬 보임, 1인칭 메쉬 숨김
+		if (FirstPersonMesh)
+		{
+			FirstPersonMesh->SetVisibility(false);
+		}
+		GetMesh()->SetVisibility(true);
+		if (Weapon)
+		{
+			Weapon->SetVisibility(true);
+		}
+	}
+}
+
 void ADRCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 메쉬 가시성 업데이트
+	UpdateMeshVisibility();
 
 	if (UWorld* World = GetWorld())
 	{

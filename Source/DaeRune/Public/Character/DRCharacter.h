@@ -79,6 +79,15 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Death")
 	void PlayDeathCameraAnimation();
 
+	// ========== 1인칭/3인칭 메쉬 시스템 ==========
+
+	// 1인칭 메쉬
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mesh")
+	TObjectPtr<USkeletalMeshComponent> FirstPersonMesh;
+
+	// 메쉬 가시성 업데이트
+	void UpdateMeshVisibility();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
