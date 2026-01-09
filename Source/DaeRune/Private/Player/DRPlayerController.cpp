@@ -20,6 +20,7 @@
 #include "UI/WidgetController/DRWidgetController.h"
 #include "UI/WidgetController/OverlayWidgetController.h"
 #include "UI/Widget/DRSettingsWidget.h"
+#include "Game/DRSettingsManager.h"
 #include "Game/DRGameUserSettings.h"
 
 ADRPlayerController::ADRPlayerController()
@@ -85,8 +86,6 @@ void ADRPlayerController::RefreshAllPlayerVoiceMutes()
 {
 	if (!IsLocalController()) return;
 
-	if (bIsDeadForVoice) return;
-
 	UWorld* World = GetWorld();
 	if (!World) return;
 
@@ -110,7 +109,7 @@ void ADRPlayerController::RefreshAllPlayerVoiceMutes()
 		}
 		else
 		{
-			// Pawn이 없으면 죽은 것으로 간주 (관전 중)
+			// Pawn이 없으면 죽은 것으로 간주
 			bOtherIsDead = true;
 		}
 
@@ -377,12 +376,13 @@ void ADRPlayerController::BeginPlay()
 	// 로컬 플레이어만 오디오 설정 적용
 	if (IsLocalController())
 	{
-		if (UDRGameUserSettings* Settings = UDRGameUserSettings::GetDRGameUserSettings())
+		// Manager 통해서 오디오 설정 적용
+		if (UGameInstance* GI = GetGameInstance())
 		{
-			// 저장된 설정 로드
-			Settings->LoadSettings();
-			// 오디오 설정 적용
-			Settings->ApplyAudioSettings();
+			if (UDRSettingsManager* Manager = GI->GetSubsystem<UDRSettingsManager>())
+			{
+				Manager->ApplyAudioSettings();
+			}
 		}
 
 		// 현재 레벨이 메인메뉴인지 체크
@@ -605,11 +605,17 @@ void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 	// ���콺 �ü� ó��
 	const FVector2D Axis = InputActionValue.Get<FVector2D>();
 
-	// 설정에서 마우스 감도 가져오기
+	// Manager에서 감도 가져오기
 	float Sensitivity = 1.0f;
-	if (UDRGameUserSettings* Settings = UDRGameUserSettings::GetDRGameUserSettings())
+	if (UGameInstance* GI = GetGameInstance())
 	{
-		Sensitivity = Settings->GetMouseSensitivity();
+		if (UDRSettingsManager* Manager = GI->GetSubsystem<UDRSettingsManager>())
+		{
+			if (UDRGameUserSettings* Settings = Manager->GetSettings())
+			{
+				Sensitivity = Settings->MouseSensitivity;
+			}
+		}
 	}
 
 	// 감도 적용
@@ -710,10 +716,7 @@ void ADRPlayerController::OpenSettingsMenu()
 		bIsSettingsMenuOpen = true;
 
 		// 입력 모드 변경
-		FInputModeGameAndUI InputMode;
-		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-		InputMode.SetHideCursorDuringCapture(false);
-		SetInputMode(InputMode);
+		SetInputMode(FInputModeUIOnly());
 		SetShowMouseCursor(true);
 	}
 }
@@ -751,6 +754,56 @@ void ADRPlayerController::CloseSettingsMenu()
 				SetShowMouseCursor(false);
 			}
 		}
+	}
+}
+
+void ADRPlayerController::Client_ShowGameOverUI_Implementation()
+{
+	// 이미 UI가 표시 중이면 무시
+	if (CurrentResultWidget) return;
+
+	// 위젯 클래스가 설정되지 않았으면 리턴
+	if (!GameOverWidgetClass) return;
+
+	// 게임 오버 위젯 생성
+	CurrentResultWidget = CreateWidget<UUserWidget>(this, GameOverWidgetClass);
+	if (CurrentResultWidget)
+	{
+		// 뷰포트에 추가
+		CurrentResultWidget->AddToViewport(100);
+
+		// 입력 모드를 UI로 변경
+		FInputModeUIOnly InputMode;
+		InputMode.SetWidgetToFocus(CurrentResultWidget->TakeWidget());
+		SetInputMode(InputMode);
+
+		// 마우스 커서 표시
+		bShowMouseCursor = true;
+	}
+}
+
+void ADRPlayerController::Client_ShowGameClearUI_Implementation()
+{
+	// 이미 UI가 표시 중이면 무시
+	if (CurrentResultWidget) return;
+
+	// 위젯 클래스가 설정되지 않았으면 리턴
+	if (!GameClearWidgetClass) return;
+
+	// 게임 클리어 위젯 생성
+	CurrentResultWidget = CreateWidget<UUserWidget>(this, GameClearWidgetClass);
+	if (CurrentResultWidget)
+	{
+		// 뷰포트에 추가
+		CurrentResultWidget->AddToViewport(100);
+
+		// 입력 모드를 UI로 변경
+		FInputModeUIOnly InputMode;
+		InputMode.SetWidgetToFocus(CurrentResultWidget->TakeWidget());
+		SetInputMode(InputMode);
+
+		// 마우스 커서 표시
+		bShowMouseCursor = true;
 	}
 }
 

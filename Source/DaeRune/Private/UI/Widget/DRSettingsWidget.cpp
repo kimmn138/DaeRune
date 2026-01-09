@@ -12,6 +12,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Player/DRPlayerController.h"
 #include "MultiplayerSessionsSubsystem.h"
+#include "Game/DRSettingsManager.h"
 
 void UDRSettingsWidget::NativeConstruct()
 {
@@ -128,14 +129,22 @@ void UDRSettingsWidget::CloseSettings()
 
 void UDRSettingsWidget::LoadCurrentSettings()
 {
-    UDRGameUserSettings* Settings = UDRGameUserSettings::GetDRGameUserSettings();
+    UGameInstance* GI = GetGameInstance();
+    if (!GI) return;
+
+    UDRSettingsManager* Manager = GI->GetSubsystem<UDRSettingsManager>();
+    if (!Manager) return;
+
+    UDRGameUserSettings* Settings = Manager->GetSettings();
     if (!Settings) return;
 
-    // 사운드 설정 로드
-    PendingMasterVolume = Settings->GetMasterVolume();
-    PendingBGMVolume = Settings->GetBGMVolume();
-    PendingSFXVolume = Settings->GetSFXVolume();
-    PendingVoiceVolume = Settings->GetVoiceVolume();
+    // 값 로드
+    PendingMasterVolume = Settings->MasterVolume;
+    PendingBGMVolume = Settings->BGMVolume;
+    PendingSFXVolume = Settings->SFXVolume;
+    PendingMouseSensitivity = Settings->MouseSensitivity;
+    PendingResolution = Settings->GetScreenResolution();
+    PendingWindowMode = Settings->GetFullscreenMode();
 
     if (Slider_MasterVolume)
     {
@@ -170,8 +179,6 @@ void UDRSettingsWidget::LoadCurrentSettings()
         Text_VoiceVolume->SetText(GetPercentText(PendingVoiceVolume));
     }
 
-    // 조작 설정 로드
-    PendingMouseSensitivity = Settings->GetMouseSensitivity();
     if (Slider_MouseSensitivity)
     {
         // 감도 0.1~5.0을 슬라이더 0~1로 변환
@@ -288,28 +295,23 @@ void UDRSettingsWidget::OnControlsTabClicked()
 
 void UDRSettingsWidget::OnApplyClicked()
 {
-    UDRGameUserSettings* Settings = UDRGameUserSettings::GetDRGameUserSettings();
-    if (!Settings) return;
+    // Manager 가져오기
+    UGameInstance* GI = GetGameInstance();
+    if (!GI) return;
 
-    // 사운드 설정 적용
-    Settings->SetMasterVolume(PendingMasterVolume);
-    Settings->SetBGMVolume(PendingBGMVolume);
-    Settings->SetSFXVolume(PendingSFXVolume);
-    Settings->SetVoiceVolume(PendingVoiceVolume);
-    Settings->ApplyAudioSettings();
+    UDRSettingsManager* Manager = GI->GetSubsystem<UDRSettingsManager>();
+    if (!Manager) return;
 
-    // 조작 설정 적용
-    Settings->SetMouseSensitivity(PendingMouseSensitivity);
+    // Manager 통해 설정 변경
+    Manager->SetMasterVolume(PendingMasterVolume);
+    Manager->SetBGMVolume(PendingBGMVolume);
+    Manager->SetSFXVolume(PendingSFXVolume);
+    Manager->SetMouseSensitivity(PendingMouseSensitivity);
+    Manager->SetScreenResolution(PendingResolution);
+    Manager->SetWindowMode(PendingWindowMode);
 
-    // 그래픽 설정 적용
-    Settings->SetScreenResolution(PendingResolution);
-    Settings->SetFullscreenMode(PendingWindowMode);
-    Settings->ApplyResolutionSettings(false);
-    Settings->ApplyNonResolutionSettings();
-    Settings->ConfirmVideoMode();
-
-    // 설정 저장
-    Settings->SaveSettings();
+    // 모든 설정 적용 및 저장
+    Manager->ApplyAndSaveAllSettings();
 }
 
 void UDRSettingsWidget::OnBackClicked()

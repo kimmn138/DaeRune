@@ -142,6 +142,13 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Settings")
 	bool IsSettingsMenuOpen() const { return bIsSettingsMenuOpen; }
+
+	// 게임 결과 UI 표시
+	UFUNCTION(Client, Reliable)
+	void Client_ShowGameOverUI();
+
+	UFUNCTION(Client, Reliable)
+	void Client_ShowGameClearUI();
 	
 	// ========== 치트/디버그 기능 ==========
     	
@@ -157,6 +164,18 @@ protected:
 	// 부패 상태 플래그
 	UPROPERTY(BlueprintReadOnly, Category = "Corruption")
 	bool bIsCorrupted = false;
+
+	// 게임 오버 위젯 클래스
+	UPROPERTY(EditDefaultsOnly, Category = "UI|GameResult")
+	TSubclassOf<UUserWidget> GameOverWidgetClass;
+
+	// 게임 클리어 위젯 클래스
+	UPROPERTY(EditDefaultsOnly, Category = "UI|GameResult")
+	TSubclassOf<UUserWidget> GameClearWidgetClass;
+
+	// 현재 표시 중인 결과 위젯
+	UPROPERTY()
+	TObjectPtr<UUserWidget> CurrentResultWidget;
 
 	// ========== 부품 시스템 설정 ==========
 

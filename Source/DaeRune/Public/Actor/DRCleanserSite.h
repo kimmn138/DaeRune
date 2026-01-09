@@ -97,6 +97,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	FVector GetClosestSurfacePoint(const FVector& FromLocation) const;
 
+	// ========== 물 메시 관리 ==========
+
+	// 체력 비율에 따라 물 메시 스케일 업데이트
+	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
+	void UpdateWaterMeshScale(float HealthRatio);
+
 	// ========== 델리게이트 ==========
 
 	// 부품 설치 완료 델리게이트
@@ -206,4 +212,8 @@ protected:
 private:
 	// GAS 초기화
 	void InitAbilityActorInfo();
+
+	// 물 메시 초기 스케일 저장
+	FVector InitialWaterMeshScale;
+	FVector InitialWaterMeshLocation;
 };

@@ -726,8 +726,6 @@ bool UDRPhase3::IsMonsterCountExceeded() const
 	return CurrentMonsterCount >= MaxMonsterCount;
 }
 
-// ========== 환경 위협 ==========
-
 TArray<int32> UDRPhase3::SelectRandomSpawnPointIndices() const
 {
 	TArray<int32> SelectedIndices;

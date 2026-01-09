@@ -35,6 +35,10 @@ ADRCleanserSite::ADRCleanserSite()
 	WaterMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	WaterMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 
+	// 물 메시 초기 스케일 및 위치 저장
+	InitialWaterMeshScale = FVector(1.0f, 1.0f, 1.0f);
+	InitialWaterMeshLocation = FVector::ZeroVector;
+
 	// 상호작용 박스 생성
 	InteractionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractionBox"));
 	InteractionBox->SetupAttachment(RootComponent);
@@ -182,6 +186,28 @@ FVector ADRCleanserSite::GetClosestSurfacePoint(const FVector& FromLocation) con
 	return GetActorLocation();
 }
 
+void ADRCleanserSite::UpdateWaterMeshScale(float HealthRatio)
+{
+	if (!WaterMesh) return;
+
+	// 체력 비율을 0~1 사이로 제한
+	HealthRatio = FMath::Clamp(HealthRatio, 0.0f, 1.0f);
+
+	// 새 스케일 계산
+	FVector NewScale = InitialWaterMeshScale;
+	NewScale.Z = InitialWaterMeshScale.Z * HealthRatio;
+
+	// 새 위치 계산
+	const float ScaleChange = InitialWaterMeshScale.Z - NewScale.Z;
+	const float LocationOffset = ScaleChange * 250.0f;
+	FVector NewLocation = InitialWaterMeshLocation;
+	NewLocation.Z = InitialWaterMeshLocation.Z + LocationOffset;
+
+	// 적용
+	WaterMesh->SetRelativeScale3D(NewScale);
+	WaterMesh->SetRelativeLocation(NewLocation);
+}
+
 void ADRCleanserSite::BeginPlay()
 {
 	Super::BeginPlay();
@@ -189,6 +215,12 @@ void ADRCleanserSite::BeginPlay()
 	if (HasAuthority())
 	{
 		InitAbilityActorInfo();
+	}
+
+	if (WaterMesh)
+	{
+		InitialWaterMeshScale = WaterMesh->GetRelativeScale3D();
+		InitialWaterMeshLocation = WaterMesh->GetRelativeLocation();
 	}
 
 	// 오버랩 이벤트 바인딩

@@ -7,6 +7,7 @@
 #include "GameFramework/GameStateBase.h"
 #include "TimerManager.h"
 #include "Game/DRDetectionManager.h"
+#include "Player/DRPlayerController.h"
 
 ADRGameModeBase::ADRGameModeBase()
 {
@@ -28,7 +29,14 @@ void ADRGameModeBase::OnPlayerDied(APlayerState* DeadPlayer)
 	{
 		bIsWipeoutInProgress = true;
 
-		// TODO: 전멸 UI 표시, 사운드 재생 등
+		// 모든 플레이어에게 게임 오버 UI 표시
+		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+		{
+			if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
+			{
+				PC->Client_ShowGameOverUI();
+			}
+		}
 
 		// 일정 시간 후 전멸 처리
 		GetWorldTimerManager().SetTimer(

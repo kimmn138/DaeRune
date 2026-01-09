@@ -71,10 +71,13 @@ void UDRCleanserSiteAttributeSet::HandleIncomingDamage(const FGameplayEffectModC
 		const float NewHealth = GetHealth() - LocalIncomingDamage;
 		SetHealth(FMath::Clamp(NewHealth, 0.0f, GetMaxHealth()));
 
-		UE_LOG(LogTemp, Log, TEXT("CleanserSite Health: %f"), GetHealth());
-
 		// 체력 비율 계산
 		const float HealthRatio = GetMaxHealth() > 0.0f ? NewHealth / GetMaxHealth() : 0.0f;
+
+		if (ADRCleanserSite* CleanserSite = Cast<ADRCleanserSite>(GetOwningActor()))
+		{
+			CleanserSite->UpdateWaterMeshScale(HealthRatio);
+		}
 
 		// 체력이 50% 이하이고 아직 트리거 안 됐으면
 		if (HealthRatio <= 0.5f && !bHalfHealthTriggered)

@@ -7,12 +7,13 @@
 #include "Phase/DRPhaseBase.h"
 #include "EngineUtils.h"
 #include "MultiplayerSessionsSubsystem.h"
+#include "Player/DRPlayerController.h"
 
 ADRStageGameMode::ADRStageGameMode()
 {
 	// �⺻ ����
 	LobbyMapName = TEXT("LobbyMap");
-	WipeoutDelayTime = 3.0f;
+	WipeoutDelayTime = 5.0f;
 }
 
 void ADRStageGameMode::TriggerGameOver()
@@ -23,10 +24,17 @@ void ADRStageGameMode::TriggerGameOver()
 	if (bIsWipeoutInProgress) return;
     
 	bIsWipeoutInProgress = true;
+
+	// 모든 플레이어에게 게임 오버 UI 표시
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
+		{
+			PC->Client_ShowGameOverUI();
+		}
+	}
     
-	// TODO: 게임 오버 UI 표시, 사운드 재생 등
-    
-	// 약간의 딜레이 후 로비로 복귀 (플레이어가 상황 인지할 시간)
+	// 약간의 딜레이 후 로비로 복귀
 	GetWorldTimerManager().SetTimer(
 		WipeoutTimerHandle,
 		this,
@@ -45,9 +53,16 @@ void ADRStageGameMode::TriggerGameClear()
     
 	bIsWipeoutInProgress = true;
     
-	// TODO: 게임 클리어 UI 표시, 사운드 재생 등
+	// 모든 플레이어에게 게임 클리어 UI 표시
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
+		{
+			PC->Client_ShowGameClearUI();
+		}
+	}
     
-	// 약간의 딜레이 후 로비로 복귀 (플레이어가 상황 인지할 시간)
+	// 약간의 딜레이 후 로비로 복귀
 	GetWorldTimerManager().SetTimer(
 		WipeoutTimerHandle,
 		this,
