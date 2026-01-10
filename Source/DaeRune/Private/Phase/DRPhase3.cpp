@@ -100,6 +100,24 @@ void UDRPhase3::OnPhaseEnd()
 	RemoveToxicGas();
 }
 
+void UDRPhase3::BeginDestroy()
+{
+	// Phase 객체가 소멸되기 전 모든 타이머 강제 정리
+	if (GameMode)
+	{
+		if (UWorld* World = GameMode->GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(WaveTimerHandle);
+			World->GetTimerManager().ClearTimer(SpawnTimerHandle);
+			World->GetTimerManager().ClearTimer(DefenseTimerHandle);
+			World->GetTimerManager().ClearTimer(WaveTimerUpdateHandle);
+			World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
+		}
+	}
+
+	Super::BeginDestroy();
+}
+
 void UDRPhase3::OnEliteEnemyDeath(AActor* DeadEnemy)
 {
 	if (!DeadEnemy || !bIsPhaseActive) return;
@@ -186,6 +204,8 @@ void UDRPhase3::StartNextWave()
 					WaveTimerUpdateHandle,
 					[this]()
 					{
+						if (!this || !IsValid(this)) return;
+
 						WaveTimeRemaining = FMath::Max(0.0f, WaveTimeRemaining - 1.0f);
 						if (GameState)
 						{
@@ -277,6 +297,8 @@ void UDRPhase3::StartRestTime()
 					WaveTimerUpdateHandle,
 					[this]()
 					{
+						if (!this || !IsValid(this)) return;
+
 						RestTimeRemaining = FMath::Max(0.0f, RestTimeRemaining - 1.0f);
 						if (GameState)
 						{

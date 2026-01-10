@@ -25,6 +25,11 @@ void ADRStageGameMode::TriggerGameOver()
     
 	bIsWipeoutInProgress = true;
 
+	if (CurrentPhase && IsValid(CurrentPhase))
+	{
+		CurrentPhase->OnPhaseEnd();
+	}
+
 	// 모든 플레이어에게 게임 오버 UI 표시
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
@@ -52,6 +57,11 @@ void ADRStageGameMode::TriggerGameClear()
 	if (bIsWipeoutInProgress) return;
     
 	bIsWipeoutInProgress = true;
+
+	if (CurrentPhase && IsValid(CurrentPhase))
+	{
+		CurrentPhase->OnPhaseEnd();
+	}
     
 	// 모든 플레이어에게 게임 클리어 UI 표시
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)

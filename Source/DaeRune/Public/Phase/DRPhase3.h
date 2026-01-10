@@ -148,6 +148,8 @@ public:
 	FOnCleanserSiteReadySignature OnCleanserSiteReadyDelegate;
 
 protected:
+	virtual void BeginDestroy() override;
+
 	// ========== 웨이브 시스템 ==========
 	
 	// 다음 웨이브 시작
