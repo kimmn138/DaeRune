@@ -34,7 +34,7 @@ void ADRDetectionManager::BeginPlay()
         DetectionTimerHandle,
         this,
         &ADRDetectionManager::PerformDetectionCheck,
-        CheckInterval,
+        CheckInterval, // CheckInterval
         true  // นÝบน
     );
 }

@@ -108,10 +108,6 @@ protected:
 
 	virtual float GetMoveSpeed() override;
 
-	// 체력바 UI 위젯
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-	TObjectPtr<UWidgetComponent> HealthBar;
-
 	// AI 비헤이비어 트리
 	UPROPERTY(EditAnywhere, Category = "AI")
 	TObjectPtr<UBehaviorTree> BehaviorTree;

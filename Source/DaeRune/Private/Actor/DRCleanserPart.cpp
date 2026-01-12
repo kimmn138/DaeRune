@@ -29,6 +29,7 @@ ADRCleanserPart::ADRCleanserPart()
 	DetectionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("DetectionSphere"));
 	DetectionSphere->SetupAttachment(RootComponent);
 	DetectionSphere->SetSphereRadius(DetectionRadius);
+	DetectionSphere->bMultiBodyOverlap = false;
 	DetectionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	DetectionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	DetectionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);

@@ -38,10 +38,6 @@ ADREnemy::ADREnemy()
 	// 적 전용 어트리뷰트셋
 	AttributeSet = CreateDefaultSubobject<UDREnemyAttributeSet>("AttributeSet");
 
-	// 체력바 UI 설정
-	HealthBar = CreateDefaultSubobject<UWidgetComponent>("HealthBar");
-	HealthBar->SetupAttachment(GetRootComponent());
-
 	// 부품 메시 컴포넌트 생성 (선택적)
 	PartMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>("PartMesh");
 	PartMeshComponent->SetupAttachment(GetMesh(), "PartSocket");
@@ -287,12 +283,6 @@ void ADREnemy::BeginPlay()
 			FCharacterClassDefaultInfo ClassInfo = CharacterClassInfo->GetClassDefaultInfo(CharacterClass);
 			DeathAbilities = ClassInfo.DeathAbilities;
 		}
-	}
-
-	// UI 위젯 컨트롤러 설정
-	if (UDRUserWidget* DRUserWidget = Cast<UDRUserWidget>(HealthBar->GetUserWidgetObject()))
-	{
-		DRUserWidget->SetWidgetController(this);
 	}
 
 	// 어트리뷰트 변화 이벤트 바인딩
