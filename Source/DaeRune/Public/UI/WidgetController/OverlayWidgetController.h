@@ -43,6 +43,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FStatusEffectWidgetSignature, const 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FEffectTagRemovedSignature, FGameplayTag, EffectTag, bool, IsDebuff);
 // 웨이브 타이머 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWaveTimerChangedSignature, int32, WaveNumber, float, RemainingTime, bool, bIsRestTime);
+// 웨이브 알림 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPhaseAlarmSignature, const FText&, PhaseText);
 
 /**
  * 메인 게임 UI 오버레이를 관리하는 컨트롤러
@@ -108,6 +110,10 @@ public:
 	// 웨이브 타이머 업데이트 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Wave")
 	FOnWaveTimerChangedSignature OnWaveTimerChanged;
+
+	// 웨이브 알람 델리게이트
+	UPROPERTY(BlueprintAssignable, Category = "Phase|Alarm")
+	FOnPhaseAlarmSignature OnPhaseAlarm;
 
 private:
 	void HandlePhaseObjectiveChanged();

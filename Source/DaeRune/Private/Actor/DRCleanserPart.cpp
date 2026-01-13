@@ -20,7 +20,7 @@ ADRCleanserPart::ADRCleanserPart()
 	PartMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PartMesh"));
 	RootComponent = PartMesh;
 
-	// 콜리전 설정 (라인트레이싱에 감지되도록)
+	// 콜리전 설정
 	PartMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	PartMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
 	PartMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block); // 라인트레이싱용
@@ -34,7 +34,7 @@ ADRCleanserPart::ADRCleanserPart()
 	DetectionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	DetectionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-	// UI 위젯 생성  // ← 추가
+	// UI 위젯 생성
 	InteractionWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidget"));
 	InteractionWidget->SetupAttachment(RootComponent);
 	InteractionWidget->SetRelativeLocation(FVector(0.0f, 0.0f, 100.0f));

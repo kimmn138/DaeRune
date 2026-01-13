@@ -269,6 +269,26 @@ void UOverlayWidgetController::OnPhaseChanged(int32 NewPhaseIndex)
 	{
 		BindCallbacksCleanserSiteToDependencies();
 	}
+
+	// PhaseAlarm 델리게이트 브로드캐스트
+	FText PhaseText;
+	switch (NewPhaseIndex)
+	{
+	case 0:
+		PhaseText = FText::FromString(TEXT("Phase 1: Secure"));
+		break;
+	case 1:
+		PhaseText = FText::FromString(TEXT("Phase 2: Collect"));
+		break;
+	case 2:
+		PhaseText = FText::FromString(TEXT("Phase 3: Defense"));
+		break;
+	default:
+		PhaseText = FText::FromString(TEXT("Unknown Phase"));
+		break;
+	}
+
+	OnPhaseAlarm.Broadcast(PhaseText);
 }
 
 void UOverlayWidgetController::BindCleanserSite(ADRCleanserSite* FirstCleanserSite,ADRCleanserSite* SecondCleanserSite)
