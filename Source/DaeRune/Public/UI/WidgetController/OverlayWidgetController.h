@@ -119,6 +119,7 @@ private:
 	void HandlePhaseObjectiveChanged();
 	void BindPhaseObjectiveDelegate();
 	void BindWaveTimerDelegate();
+	void BindPhaseAlarmDelegate();
 	void CheckAndBindWaveTimer();
 	UFUNCTION()
 	void OnPhaseChanged(int32 NewPhaseIndex);
@@ -129,6 +130,7 @@ private:
 
 	FTimerHandle PhaseBindingDelayTimer;
 	FTimerHandle WaveTimerBindingDelayTimer;
+	FTimerHandle PhaseAlarmBindingDelayTimer;
 
 	// 델리게이트 핸들 저장용 변수
 	FDelegateHandle PhaseObjectiveDelegateHandle;

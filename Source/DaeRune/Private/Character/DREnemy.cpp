@@ -21,6 +21,9 @@
 
 ADREnemy::ADREnemy()
 {
+	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bStartWithTickEnabled = false;
+
 	// 메시 가시성 충돌 설정
 	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 

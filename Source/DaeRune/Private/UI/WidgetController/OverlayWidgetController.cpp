@@ -140,9 +140,15 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 	}
 
 	// Phase 변경 델리게이트 바인딩
-	if (ADRStageGameState* DRStageGameState = GetWorld()->GetGameState<ADRStageGameState>())
+	if (UWorld* World = GetWorld())
 	{
-		DRStageGameState->OnPhaseChangedDelegate.AddDynamic(this, &UOverlayWidgetController::OnPhaseChanged);
+		World->GetTimerManager().SetTimer(
+			PhaseAlarmBindingDelayTimer,
+			this,
+			&UOverlayWidgetController::BindPhaseAlarmDelegate,
+			1.0f,  // 1.0초 대기
+			false  // 한 번만 실행
+		);
 	}
 }
 
@@ -180,7 +186,6 @@ void UOverlayWidgetController::UnbindAllDelegates()
 		WaveTimerDelegateHandle.Reset();
 	}
 
-	// PhaseChanged 델리게이트 언바인딩
 	DRGameState->OnPhaseChangedDelegate.RemoveDynamic(this, &UOverlayWidgetController::OnPhaseChanged);
 }
 
@@ -233,6 +238,21 @@ void UOverlayWidgetController::BindWaveTimerDelegate()
 		DRGameState->GetWaveRemainingTime(),
 		DRGameState->IsWaveRestTime()
 	);
+}
+
+void UOverlayWidgetController::BindPhaseAlarmDelegate()
+{
+	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
+	if (!DRGameState) return;
+
+	DRGameState->OnPhaseChangedDelegate.AddDynamic(this, &UOverlayWidgetController::OnPhaseChanged);
+
+	// 현재 페이즈 즉시 호
+	int32 CurrentPhase = DRGameState->GetCurrentPhaseIndex();
+	if (CurrentPhase >= 0)
+	{
+		OnPhaseChanged(CurrentPhase);
+	}
 }
 
 void UOverlayWidgetController::CheckAndBindWaveTimer()

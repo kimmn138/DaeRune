@@ -89,15 +89,7 @@ void ADRCleanserSite::ActivateSite()
 
 	CurrentState = ECleanserSiteState::Active;
 
-	if (CleanserMesh)
-	{
-		CleanserMesh->SetVisibility(true);
-	}
-
-	if (CleanserMesh)
-	{
-		WaterMesh->SetVisibility(true);
-	}
+	UpdateMeshByState();
 }
 
 void ADRCleanserSite::DeactivateSite()
@@ -106,10 +98,7 @@ void ADRCleanserSite::DeactivateSite()
 
 	CurrentState = ECleanserSiteState::Inactive;
 
-	if (CleanserMesh)
-	{
-		CleanserMesh->SetVisibility(false);
-	}
+	UpdateMeshByState();
 }
 
 void ADRCleanserSite::SetPartsCollected()
@@ -226,6 +215,11 @@ void ADRCleanserSite::BeginPlay()
 	// 오버랩 이벤트 바인딩
 	InteractionBox->OnComponentBeginOverlap.AddDynamic(this, &ADRCleanserSite::OnBoxBeginOverlap);
 	InteractionBox->OnComponentEndOverlap.AddDynamic(this, &ADRCleanserSite::OnBoxEndOverlap);
+
+	if (!HasAuthority())
+	{
+		UpdateMeshByState();
+	}
 }
 
 void ADRCleanserSite::OnBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
@@ -284,32 +278,10 @@ void ADRCleanserSite::UpdateInteractionUI() const
 	}
 }
 
-void ADRCleanserSite::OnRep_CurrentState() const
+void ADRCleanserSite::OnRep_CurrentState()
 {
-	// 클라이언트에서 상태 변경 시 시각 효과 업데이트
-	switch (CurrentState)
-	{
-		case ECleanserSiteState::Inactive:
-			if (CleanserMesh) CleanserMesh->SetVisibility(false);
-			if (WaterMesh) WaterMesh->SetVisibility(false);
-			break;
-		case ECleanserSiteState::Active:
-		case ECleanserSiteState::PartsCollected:
-		case ECleanserSiteState::Operational:
-		case ECleanserSiteState::Completed:
-			// 부품 설치 후 메시 설정
-			if (CleanserMesh && CleanserMesh_AfterParts)
-			{
-				CleanserMesh->SetStaticMesh(CleanserMesh_AfterParts);
-				CleanserMesh->SetVisibility(true);
-			}
-			if (WaterMesh && WaterMesh_AfterParts)
-			{
-				WaterMesh->SetStaticMesh(WaterMesh_AfterParts);
-				WaterMesh->SetVisibility(true);
-			}
-			break;
-	}
+	// 클라이언트에서 상태 변경 시 메시 업데이트
+	UpdateMeshByState();
 }
 
 void ADRCleanserSite::OnRep_InstalledPartsCount()
@@ -337,6 +309,38 @@ void ADRCleanserSite::InitializeDefaultAttributes() const
 	// 기본 체력 속성 초기화
 	ApplyEffectToSelf(DefaultPrimaryAttributes);
 	ApplyEffectToSelf(DefaultVitalAttributes);
+}
+
+void ADRCleanserSite::UpdateMeshByState()
+{
+	switch (CurrentState)
+	{
+	case ECleanserSiteState::Inactive:
+		if (CleanserMesh) CleanserMesh->SetVisibility(false);
+		if (WaterMesh) WaterMesh->SetVisibility(false);
+		break;
+
+	case ECleanserSiteState::Active:
+		if (CleanserMesh) CleanserMesh->SetVisibility(true);
+		if (WaterMesh) WaterMesh->SetVisibility(true);
+		break;
+
+	case ECleanserSiteState::PartsCollected:
+	case ECleanserSiteState::Operational:
+	case ECleanserSiteState::Completed:
+		// 부품 설치 후 메시로 교체
+		if (CleanserMesh && CleanserMesh_AfterParts)
+		{
+			CleanserMesh->SetStaticMesh(CleanserMesh_AfterParts);
+			CleanserMesh->SetVisibility(true);
+		}
+		if (WaterMesh && WaterMesh_AfterParts)
+		{
+			WaterMesh->SetStaticMesh(WaterMesh_AfterParts);
+			WaterMesh->SetVisibility(true);
+		}
+		break;
+	}
 }
 
 void ADRCleanserSite::InitAbilityActorInfo()

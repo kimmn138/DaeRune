@@ -119,6 +119,8 @@ public:
 
 	void InitializeDefaultAttributes() const;
 
+	void UpdateMeshByState();
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -195,7 +197,7 @@ protected:
 	int32 InstalledPartsCount;
 
 	UFUNCTION()
-	void OnRep_CurrentState() const;
+	void OnRep_CurrentState();
 
 	UFUNCTION()
 	static void OnRep_InstalledPartsCount();

@@ -24,10 +24,10 @@ ADRAIController::ADRAIController()
 
 	// 시야 감지 설정
 	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>("SightConfig");
-	SightConfig->SightRadius = 2100.f;  // 시야 거리
+	SightConfig->SightRadius = 2000.f;  // 시야 거리
 	SightConfig->LoseSightRadius = SightConfig->SightRadius + 500.f;  // 시야 잃는 거리
 	SightConfig->PeripheralVisionAngleDegrees = 360.f;  // 시야각
-	SightConfig->SetMaxAge(5.f);  // 기억 유지 시간
+	SightConfig->SetMaxAge(3.f);  // 기억 유지 시간
 
 	// 마지막 위치 1000 유닛 이내면 자동 성공
 	SightConfig->AutoSuccessRangeFromLastSeenLocation = 1000.f;
