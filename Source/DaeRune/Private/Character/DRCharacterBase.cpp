@@ -157,31 +157,29 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 	if (ADRCharacter* PlayerCharacter = Cast<ADRCharacter>(this))
 	{
 		PlayerCharacter->PlayDeathCameraAnimation();
+
+		// 1인칭 메쉬 숨기고 3인칭 메쉬 보이게
+		if (PlayerCharacter->IsLocallyControlled())
+		{
+			if (PlayerCharacter->FirstPersonMesh)
+			{
+				PlayerCharacter->FirstPersonMesh->SetVisibility(false);
+			}
+
+			GetMesh()->SetOwnerNoSee(false);
+			GetMesh()->SetVisibility(true);
+			if (Weapon)
+			{
+				Weapon->SetOwnerNoSee(false);
+				Weapon->SetVisibility(true);
+			}
+		}
 	}
 
 	// 사망 사운드 재생
 	if (DeathSound)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation(), GetActorRotation());
-	}
-
-	// 무기에 물리 시뮬레이션 적용
-	if (Weapon)
-	{
-		Weapon->SetSimulatePhysics(true);
-		Weapon->SetEnableGravity(true);
-		Weapon->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
-		Weapon->AddImpulse(DeathImpulse * 0.1f, NAME_None, true);
-	}
-
-	// 캐릭터 메시에 물리 시뮬레이션 적용
-	if (GetMesh())
-	{
-		GetMesh()->SetSimulatePhysics(true);
-		GetMesh()->SetEnableGravity(true);
-		GetMesh()->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
-		GetMesh()->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
-		GetMesh()->AddImpulse(DeathImpulse, NAME_None, true);
 	}
 
 	// 캡슐 충돌 비활성화
