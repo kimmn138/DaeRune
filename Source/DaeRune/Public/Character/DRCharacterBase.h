@@ -182,5 +182,5 @@ private:
 
 	// 피격 몽타주
 	UPROPERTY(EditAnywhere, Category = "Combat")
-	TObjectPtr<UAnimMontage> HitReactMontage;
+	TArray<TObjectPtr<UAnimMontage>> HitReactMontages;
 };

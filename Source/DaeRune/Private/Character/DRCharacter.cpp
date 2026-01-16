@@ -17,6 +17,7 @@
 #include "AbilitySystem/DRPlayerAttributeSet.h"
 #include "Actor/DRCleanserPart.h"
 #include "Net/UnrealNetwork.h"
+#include "Components/PointLightComponent.h"
 
 ADRCharacter::ADRCharacter()
 {
@@ -276,6 +277,19 @@ void ADRCharacter::BeginPlay()
 			0.2f,
 			true
 		);
+	}
+
+	// 1인칭 시점 밝게 하는 라이트 추가
+	if (IsLocallyControlled())
+	{
+		UPointLightComponent* Light = NewObject<UPointLightComponent>(this);
+		Light->SetupAttachment(FollowCamera);
+		Light->SetRelativeLocation(FVector(-14.2f, 0.f, 23.5f));
+		Light->SetIntensity(1500.f);
+		Light->SetAttenuationRadius(300.f);
+		Light->SetCastShadows(false);
+		Light->SetMobility(EComponentMobility::Movable);
+		Light->RegisterComponent();
 	}
 }
 

@@ -61,7 +61,21 @@ UAbilitySystemComponent* ADRCharacterBase::GetAbilitySystemComponent() const
 
 UAnimMontage* ADRCharacterBase::GetHitReactMontage_Implementation()
 {
-	return HitReactMontage;
+	// 배열이 비어있으면 nullptr 반환
+	if (HitReactMontages.Num() == 0)
+	{
+		return nullptr;
+	}
+
+	// 배열에 하나만 있으면 그것을 반환
+	if (HitReactMontages.Num() == 1)
+	{
+		return HitReactMontages[0];
+	}
+
+	// 여러 개 있으면 랜덤으로 선택
+	const int32 RandomIndex = FMath::RandRange(0, HitReactMontages.Num() - 1);
+	return HitReactMontages[RandomIndex];
 }
 
 void ADRCharacterBase::Die(const FVector& DeathImpulse)
