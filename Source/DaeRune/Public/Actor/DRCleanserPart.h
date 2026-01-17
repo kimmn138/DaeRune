@@ -43,6 +43,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CleanserPart")
 	void DropFromCarrier();
 
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayPickupSound();
+
 	// ========== 라인트레이싱 콜백 ========== 
 
 	// UI 표시/숨김 (멀티캐스트 - 모든 클라이언트 실행)
@@ -71,7 +74,7 @@ protected:
 
 	// 캐릭터에 부착할 소켓 이름
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "CleanserPart|Config")
-	FName AttachSocketName = "hand_l";
+	FName AttachSocketName = "TestLeftHand";
 
 	// 감지 범위 반경
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "CleanserPart|Config")

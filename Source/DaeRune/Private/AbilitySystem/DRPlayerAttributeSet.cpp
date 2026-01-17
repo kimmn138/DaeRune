@@ -92,6 +92,18 @@ void UDRPlayerAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 
 	if (LocalIncomingDamage <= 0.f) return;
 
+	if (Props.TargetASC)
+	{
+		FGameplayCueParameters CueParams;
+		CueParams.Location = Props.TargetAvatarActor ? Props.TargetAvatarActor->GetActorLocation() : FVector::ZeroVector;
+		CueParams.RawMagnitude = LocalIncomingDamage;
+
+		Props.TargetASC->ExecuteGameplayCue(
+			FDRGameplayTags::Get().GameplayCue_Player_Damage,
+			CueParams
+		);
+	}
+
 	// ���� ���� ���� �˸�
 	NotifyEnterCombat(Props);
 

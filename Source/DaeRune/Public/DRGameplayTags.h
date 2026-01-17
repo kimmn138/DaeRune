@@ -116,6 +116,15 @@ public:
 	FGameplayTag Player_Block_InputHeld;
 	FGameplayTag Player_Block_InputReleased;
 
+	// »ç¿îµå
+	FGameplayTag GameplayCue_Player_Damage;
+	FGameplayTag GameplayCue_Player_Death;
+	FGameplayTag GameplayCue_Player_LowHealth;
+	FGameplayTag GameplayCue_Player_WaterDepleted;
+	FGameplayTag GameplayCue_Enemy_Damage;
+	FGameplayTag GameplayCue_Cleanser_Damage;
+	FGameplayTag GameplayCue_Skill_WaterPump;
+
 private:
 	static FDRGameplayTags GameplayTags;
 };

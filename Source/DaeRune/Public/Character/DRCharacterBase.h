@@ -156,9 +156,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
 	UNiagaraSystem* BloodEffect;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
-	USoundBase* DeathSound;
-
 	// 소환수 관련
 	int32 MinionCount = 0;
 

@@ -12,6 +12,7 @@
 #include "Interaction/CombatInterface.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/OverlapResult.h"
+#include "AbilitySystemComponent.h"
 
 FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLocation, bool& bHitObstacle, FHitResult& OutHitResult)
 {
@@ -186,6 +187,14 @@ void UDRWaterPump::StartWaterPumpLoop()
         PreviousTarget = nullptr;
         CachedBeamEndPoint = FVector::ZeroVector;
 
+        if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+        {
+            ASC->AddGameplayCue(
+                FDRGameplayTags::Get().GameplayCue_Skill_WaterPump,
+                FGameplayCueParameters()
+            );
+        }
+
         // 타이머 시작
         World->GetTimerManager().SetTimer(
             WaterPumpTimerHandle,
@@ -203,6 +212,13 @@ void UDRWaterPump::StopWaterPumpLoop()
     if (UWorld* World = GetWorld())
     {
         World->GetTimerManager().ClearTimer(WaterPumpTimerHandle);
+
+        if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+        {
+            ASC->RemoveGameplayCue(
+                FDRGameplayTags::Get().GameplayCue_Skill_WaterPump
+            );
+        }
 
         // 정리
         DamageTickCounter = 0;

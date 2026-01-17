@@ -8,6 +8,7 @@
 #include "EngineUtils.h"
 #include "MultiplayerSessionsSubsystem.h"
 #include "Player/DRPlayerController.h"
+#include "Sound/DRSoundManager.h"
 
 ADRStageGameMode::ADRStageGameMode()
 {
@@ -28,6 +29,14 @@ void ADRStageGameMode::TriggerGameOver()
 	if (CurrentPhase && IsValid(CurrentPhase))
 	{
 		CurrentPhase->OnPhaseEnd();
+	}
+
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+		{
+			SM->PlayGameOverSound();
+		}
 	}
 
 	// 모든 플레이어에게 게임 오버 UI 표시
@@ -61,6 +70,14 @@ void ADRStageGameMode::TriggerGameClear()
 	if (CurrentPhase && IsValid(CurrentPhase))
 	{
 		CurrentPhase->OnPhaseEnd();
+	}
+
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+		{
+			SM->PlayGameClearSound();
+		}
 	}
     
 	// 모든 플레이어에게 게임 클리어 UI 표시

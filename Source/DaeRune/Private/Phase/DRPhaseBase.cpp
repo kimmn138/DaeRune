@@ -6,6 +6,7 @@
 #include "Game/DRStageGameState.h"
 #include "Actor/DRCleanserSite.h"
 #include "Interaction/CombatInterface.h"
+#include "Sound/DRSoundManager.h"
 
 void UDRPhaseBase::Initialize(ADRStageGameMode* InGameMode, ADRStageGameState* InGameState)
 {
@@ -22,6 +23,17 @@ void UDRPhaseBase::OnPhaseStart()
 	if (bIsPhaseActive) return;
 
 	bIsPhaseActive = true;
+
+	if (UWorld* World = GameMode->GetWorld())
+	{
+		if (UGameInstance* GI = World->GetGameInstance())
+		{
+			if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+			{
+				SM->PlayPhaseStartSound();
+			}
+		}
+	}
 }
 
 void UDRPhaseBase::OnPhaseEnd()

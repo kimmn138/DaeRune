@@ -11,6 +11,7 @@
 #include "Components/WidgetComponent.h"
 #include "Player/DRPlayerController.h"
 #include "Character/DRCharacter.h"
+#include "Sound/DRSoundManager.h"
 
 ADRCleanserSite::ADRCleanserSite()
 {
@@ -83,6 +84,37 @@ UAbilitySystemComponent* ADRCleanserSite::GetAbilitySystemComponent() const
 	return AbilitySystemComponent;
 }
 
+void ADRCleanserSite::MulticastPlayInstallSound_Implementation(bool bIsComplete)
+{
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+		{
+			SM->PlayPartInstallSound(GetActorLocation(), bIsComplete);
+		}
+	}
+}
+
+void ADRCleanserSite::MulticastStartOperatingSound_Implementation()
+{
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+		{
+			OperatingSoundComponent = SM->StartCleanserOperatingSound(GetActorLocation());
+		}
+	}
+}
+
+void ADRCleanserSite::MulticastStopOperatingSound_Implementation()
+{
+	if (OperatingSoundComponent)
+	{
+		OperatingSoundComponent->Stop();
+		OperatingSoundComponent = nullptr;
+	}
+}
+
 void ADRCleanserSite::ActivateSite()
 {
 	if (!HasAuthority()) return;
@@ -137,6 +169,9 @@ void ADRCleanserSite::InstallPart(ADRCharacter* Character)
 
 	// 설치 개수 증가
 	InstalledPartsCount++;
+
+	bool bIsComplete = (InstalledPartsCount >= RequiredPartsCount);
+	MulticastPlayInstallSound(bIsComplete);
 
 	// UI 업데이트
 	UpdateInteractionUI();

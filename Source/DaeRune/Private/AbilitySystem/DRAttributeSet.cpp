@@ -190,6 +190,24 @@ void UDRAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, f
 	{
 		SetWater(GetMaxWater());
 		bTopOffWater = false;
+
+		if (NewValue <= 0.f && OldValue > 0.f)
+		{
+			// ¹°ÀÌ ¹Ù´Ú³²
+			if (UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent())
+			{
+				FGameplayCueParameters CueParams;
+				if (AActor* Avatar = ASC->GetAvatarActor())
+				{
+					CueParams.Location = Avatar->GetActorLocation();
+				}
+
+				ASC->ExecuteGameplayCue(
+					FDRGameplayTags::Get().GameplayCue_Player_WaterDepleted,
+					CueParams
+				);
+			}
+		}
 	}
 	if (Attribute == GetMoveSpeedAttribute())
 	{

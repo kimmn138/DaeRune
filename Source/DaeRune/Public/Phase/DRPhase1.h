@@ -7,6 +7,7 @@
 #include "DRPhase1.generated.h"
 
 class ADRCleanserSite;
+class ADRDoorManager;
 
 /**
  * Phase 1: 클렌저 확보
@@ -68,4 +69,10 @@ private:
 
 	// 총 스폰된 적 수
 	int32 TotalEnemyCount = 0;
+
+	// 캐싱된 DoorManager 참조
+	UPROPERTY()
+	TObjectPtr<ADRDoorManager> CachedDoorManager;
+
+	ADRDoorManager* GetDoorManager();
 };

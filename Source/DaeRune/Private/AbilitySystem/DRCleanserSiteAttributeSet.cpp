@@ -63,6 +63,15 @@ void UDRCleanserSiteAttributeSet::HandleIncomingDamage(const FGameplayEffectModC
 				{
 					LocalIncomingDamage *= EliteDebuffModifier;
 					FMath::RoundToFloat(LocalIncomingDamage);
+
+					FGameplayCueParameters CueParams;
+					CueParams.Location = CleanserSite ? CleanserSite->GetActorLocation() : FVector::ZeroVector;
+					CueParams.RawMagnitude = LocalIncomingDamage;
+
+					ASC->ExecuteGameplayCue(
+						FDRGameplayTags::Get().GameplayCue_Cleanser_Damage,
+						CueParams
+					);
 				}
 			}
 		}

@@ -172,6 +172,17 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 	{
 		PlayerCharacter->PlayDeathCameraAnimation();
 
+		if (AbilitySystemComponent)
+		{
+			FGameplayCueParameters CueParams;
+			CueParams.Location = GetActorLocation();
+
+			AbilitySystemComponent->ExecuteGameplayCue(
+				FDRGameplayTags::Get().GameplayCue_Player_Death,
+				CueParams
+			);
+		}
+
 		// 1ÀÎÄª ¸Þ½¬ ¼û±â°í 3ÀÎÄª ¸Þ½¬ º¸ÀÌ°Ô
 		if (PlayerCharacter->IsLocallyControlled())
 		{
@@ -188,12 +199,6 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 				Weapon->SetVisibility(true);
 			}
 		}
-	}
-
-	// »ç¸Á »ç¿îµå Àç»ý
-	if (DeathSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation(), GetActorRotation());
 	}
 
 	// Ä¸½¶ Ãæµ¹ ºñÈ°¼ºÈ­

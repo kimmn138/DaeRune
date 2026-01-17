@@ -2,10 +2,10 @@
 
 
 #include "Game/DRStageGameState.h"
-
 #include "GameFramework/PlayerState.h"
 #include "Interaction/CombatInterface.h"
 #include "Net/UnrealNetwork.h"
+#include "Actor/DRDoorManager.h"
 
 ADRStageGameState::ADRStageGameState()
 {
@@ -68,6 +68,13 @@ void ADRStageGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     // UI 업데이트
     DOREPLIFETIME(ADRStageGameState, CurrentPhaseObjective);
     DOREPLIFETIME(ADRStageGameState, CurrentObjectiveProgress);
+}
+
+void ADRStageGameState::RegisterDoorManager(ADRDoorManager* InDoorManager)
+{
+    if (!InDoorManager) return;
+
+    DoorManager = InDoorManager;
 }
 
 void ADRStageGameState::SetCurrentPhaseIndex(int32 NewIndex)

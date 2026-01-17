@@ -10,6 +10,7 @@
 #include "DrawDebugHelpers.h"
 #include "Actor/DRCleanserSite.h"
 #include "Engine/OverlapResult.h"
+#include "Sound/DRSoundManager.h"
 
 ADRSeedProjectile::ADRSeedProjectile()
 {
@@ -69,6 +70,8 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
 
     // 폭발 이펙트 재생 (기존 OnHit 함수 활용)
     OnHit();
+
+    MulticastPlayExplosionSound(ImpactLocation);
 
     // 모든 클라이언트에게 폭발 위치 전달 (디버그 드로우용)
     MulticastExplodeAtLocation(ImpactLocation);
@@ -278,6 +281,17 @@ void ADRSeedProjectile::ApplyHealToAlly(AActor* AllyActor, float HealAmount)
         );
 
         TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+    }
+}
+
+void ADRSeedProjectile::MulticastPlayExplosionSound_Implementation(const FVector& Location)
+{
+    if (UGameInstance* GI = GetGameInstance())
+    {
+        if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+        {
+            SM->PlaySeedExplosionSound(Location);
+        }
     }
 }
 

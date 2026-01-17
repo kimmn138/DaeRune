@@ -58,6 +58,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Cleanser Site")
 	FName GetCleanserID() const { return CleanserID; }
 
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayInstallSound(bool bIsComplete);
+
+	// Phase3 클렌저 작동 사운드
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastStartOperatingSound();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastStopOperatingSound();
+
 	// ========== 상태 관리 ==========
 
 	// 사이트 활성화 (Phase1에서 선택됨)
@@ -218,4 +228,7 @@ private:
 	// 물 메시 초기 스케일 저장
 	FVector InitialWaterMeshScale;
 	FVector InitialWaterMeshLocation;
+
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> OperatingSoundComponent;
 };

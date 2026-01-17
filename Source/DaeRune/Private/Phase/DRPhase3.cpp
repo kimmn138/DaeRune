@@ -12,6 +12,7 @@
 #include "AbilitySystem/DRCleanserSiteAttributeSet.h"
 #include "Actor/DRPoisonGasActor.h"
 #include "Character/DRCharacter.h"
+#include "Sound/DRSoundManager.h"
 
 UDRPhase3::UDRPhase3()
 {
@@ -59,6 +60,14 @@ void UDRPhase3::OnPhaseStart()
 	
 	// 첫 웨이브 시작
 	StartNextWave();
+
+	for (const TObjectPtr<ADRCleanserSite>& Site : ActiveCleanserSites)
+	{
+		if (Site)
+		{
+			Site->MulticastStartOperatingSound();
+		}
+	}
 }
 
 void UDRPhase3::OnPhaseEnd()
@@ -91,6 +100,7 @@ void UDRPhase3::OnPhaseEnd()
         
 			// CleanserSite 델리게이트 언바인딩
 			Site->OnCleanserSiteDestroyed.RemoveAll(this);
+			Site->MulticastStopOperatingSound();
 		}
 	}
 	
@@ -177,7 +187,14 @@ void UDRPhase3::StartNextWave()
 			{
 				int32 InitialPlayerCount = GameState->GetInitialPlayerCount();
 				if (InitialPlayerCount == 0) return;
-				UE_LOG(LogTemp, Warning, TEXT("Phase3Start7"));
+
+				if (UGameInstance* GI = World->GetGameInstance())
+				{
+					if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+					{
+						SM->PlayWaveStartSound();
+					}
+				}
 
 				TotalSpawnCount = FMath::CeilToInt(CurrentWave.BaseMonstersPerPlayer * InitialPlayerCount * Modifier.MonsterCountMultiplier);
 
@@ -714,7 +731,7 @@ void UDRPhase3::CheckVictoryConditions()
 	// 방어 시간이 끝났고, 모든 클렌저 사이트가 살아있으면 승리
 	bool bAllSitesAlive = true;
 	
-	for (const TObjectPtr<ADRCleanserSite>& Site : CleanserSites)
+	for (const TObjectPtr<ADRCleanserSite>& Site : ActiveCleanserSites)
 	{
 		if (!Site || !IsValid(Site))
 		{

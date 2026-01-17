@@ -46,6 +46,9 @@ protected:
     UFUNCTION(NetMulticast, Reliable) // Unreliable이 아니라 Reliable로!
     void MulticastExplodeAtLocation(const FVector& ImpactLocation);
 
+    UFUNCTION(NetMulticast, Unreliable)
+    void MulticastPlayExplosionSound(const FVector& Location);
+
 private:
     // 내부 범위 반경 (최대 효과)
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon|Range")

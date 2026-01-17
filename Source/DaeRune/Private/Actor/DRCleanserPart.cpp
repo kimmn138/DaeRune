@@ -2,7 +2,6 @@
 
 
 #include "Actor/DRCleanserPart.h"
-
 #include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "Character/DRCharacter.h"
@@ -10,6 +9,7 @@
 #include "Components/SphereComponent.h"
 #include "Player/DRPlayerController.h"
 #include "Components/WidgetComponent.h"
+#include "Sound/DRSoundManager.h"
 
 ADRCleanserPart::ADRCleanserPart()
 {
@@ -78,6 +78,8 @@ void ADRCleanserPart::PickupPart(ADRCharacter* Character)
 	// 캐릭터 소켓에 부착
 	AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
 
+	MulticastPlayPickupSound();
+
 	// 캐릭터에게 태그 부착
 	UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(CarryingCharacter->GetAbilitySystemComponent());
 	if (DRASC)
@@ -124,6 +126,17 @@ void ADRCleanserPart::DropFromCarrier()
 	DetectionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	DetectionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	DetectionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+}
+
+void ADRCleanserPart::MulticastPlayPickupSound_Implementation()
+{
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+		{
+			SM->PlayPartPickupSound(GetActorLocation());
+		}
+	}
 }
 
 void ADRCleanserPart::MulticastShowInteractionUI_Implementation(ADRPlayerController* PlayerController, bool bShow)

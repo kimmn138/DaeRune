@@ -7,6 +7,8 @@
 #include "Phase/DRPhaseBase.h"
 #include "DRStageGameState.generated.h"
 
+class ADRDoorManager;
+
 // 페이즈 목표 업데이트 델리게이트
 DECLARE_MULTICAST_DELEGATE(FOnPhaseObjectiveChanged);
 // Phase 변경 델리게이트
@@ -41,6 +43,13 @@ public:
     int32 GetInitialPlayerCount() { return InitialPlayerCount; }
     void SetCleanserSites(TArray<ADRCleanserSite*> InCleanserSites) { CleanserSites = InCleanserSites; }
     void SetInitialPlayerCount(float NewInitialPlayerCount) { InitialPlayerCount = NewInitialPlayerCount; }
+
+    // DoorManager 등록
+    UFUNCTION(BlueprintCallable, Category = "Stage")
+    void RegisterDoorManager(ADRDoorManager* InDoorManager);
+
+    UFUNCTION(BlueprintPure, Category = "Stage")
+    ADRDoorManager* GetDoorManager() const { return DoorManager; }
 
     // ========== 상태 리플리케이션 ==========
     UFUNCTION(BlueprintCallable, Category = "Phase")
@@ -156,6 +165,9 @@ protected:
 private:
     UPROPERTY()
     TArray<ADRCleanserSite*> CleanserSites;
+
+    UPROPERTY()
+    TObjectPtr<ADRDoorManager> DoorManager;
 
     // Phase1 시작 시점의 플레이어 수
     UPROPERTY()

@@ -383,4 +383,43 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FName("Player.Block.InputReleased"),
 		FString("Block Input Released callback for input")
 	);
+
+	/*
+	 * GameplayCue - »ç¿îµå
+	 */
+
+	GameplayTags.GameplayCue_Player_Damage = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Player.Damage"),
+		FString("Player Damaged Sound")
+	);
+
+	GameplayTags.GameplayCue_Player_Death = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Player.Death"),
+		FString("Player Death Sound")
+	);
+
+	GameplayTags.GameplayCue_Player_LowHealth = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Player.LowHealth"),
+		FString("Container Low Sound")
+	);
+
+	GameplayTags.GameplayCue_Player_WaterDepleted = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Player.WaterDepleted"),
+		FString("Water Zero Sound")
+	);
+
+	GameplayTags.GameplayCue_Enemy_Damage = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Enemy.Damage"),
+		FString("Enemy Damaged Sound")
+	);
+
+	GameplayTags.GameplayCue_Cleanser_Damage = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Cleanser.Damage"),
+		FString("Cleanser Damaged Sound")
+	);
+
+	GameplayTags.GameplayCue_Skill_WaterPump = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Skill.WaterPump"),
+		FString("WaterPump Loop Sound/Effect")
+	);
 }

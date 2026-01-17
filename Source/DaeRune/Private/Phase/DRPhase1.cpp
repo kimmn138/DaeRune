@@ -6,6 +6,7 @@
 #include "Game/DRStageGameState.h"
 #include "Interaction/CombatInterface.h"
 #include "Actor/DRCleanserSite.h"
+#include "Actor/DRDoorManager.h"
 
 void UDRPhase1::OnPhaseStart()
 {
@@ -32,6 +33,12 @@ void UDRPhase1::OnPhaseStart()
 void UDRPhase1::OnPhaseEnd()
 {
 	Super::OnPhaseEnd();
+
+	// DoorManager에 알림
+	if (ADRDoorManager* DoorMgr = GetDoorManager())
+	{
+		DoorMgr->OnPhase1Ended();
+	}
 
 	// Phase1 전용 정리
 	SelectedCleanserSites.Empty();
@@ -170,4 +177,24 @@ AActor* UDRPhase1::SpawnEnemy(TSubclassOf<AActor> EnemyClass, const FVector& Loc
 	}
 
 	return SpawnedEnemy;
+}
+
+ADRDoorManager* UDRPhase1::GetDoorManager()
+{
+	// 이미 캐싱되어 있으면 반환
+	if (CachedDoorManager)
+	{
+		return CachedDoorManager;
+	}
+
+	// GameState에서 가져오기
+	if (UWorld* World = GetWorld())
+	{
+		if (ADRStageGameState* StageGameState = World->GetGameState<ADRStageGameState>())
+		{
+			CachedDoorManager = StageGameState->GetDoorManager();
+		}
+	}
+
+	return CachedDoorManager;
 }

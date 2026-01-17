@@ -16,6 +16,18 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 	SetIncomingDamage(0.f);
 	if (LocalIncomingDamage > 0.f)
 	{
+		if (Props.TargetASC)
+		{
+			FGameplayCueParameters CueParams;
+			CueParams.Location = Props.TargetAvatarActor ? Props.TargetAvatarActor->GetActorLocation() : FVector::ZeroVector;
+			CueParams.RawMagnitude = LocalIncomingDamage;
+
+			Props.TargetASC->ExecuteGameplayCue(
+				FDRGameplayTags::Get().GameplayCue_Enemy_Damage,
+				CueParams
+			);
+		}
+
 		// 데미지가 발생하면 전투 상태 진입
 		NotifyEnterCombat(Props);
 
