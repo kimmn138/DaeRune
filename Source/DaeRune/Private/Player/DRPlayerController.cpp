@@ -10,47 +10,140 @@
 #include "GameFramework/Character.h"
 #include "UI/Widget/DamageTextComponent.h"
 #include "Actor/DRCleanserPart.h"
+#include "Actor/DRCleanserSite.h"
 #include "Character/DRCharacter.h"
 #include "Camera/CameraComponent.h"
+#include "Game/DRStageGameMode.h"
+#include "Game/DRStageGameState.h"
+#include "UI/HUD/DRHUD.h"
+#include "Player/DRPlayerState.h"
+#include "UI/WidgetController/DRWidgetController.h"
+#include "UI/WidgetController/OverlayWidgetController.h"
+#include "UI/Widget/DRSettingsWidget.h"
+#include "Game/DRSettingsManager.h"
+#include "Game/DRGameUserSettings.h"
 
 ADRPlayerController::ADRPlayerController()
 {
-	// ¸ÖÆ¼ÇÃ·¹ÀÌ ¸®ÇÃ¸®ÄÉÀÌ¼Ç È°¼ºÈ­
+	// ï¿½ï¿½Æ¼ï¿½Ã·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ã¸ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ È°ï¿½ï¿½È­
 	bReplicates = true;
-
-	// ºÎÇ° ½Ã½ºÅÛ ÃÊ±âÈ­
+	
+	// ï¿½ï¿½Ç° ï¿½Ã½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­
 	bPartDetectionEnabled = false;
 	CurrentDetectedPart = nullptr;
 	NearbyPart = nullptr;
 	LineTraceTimer = 0.f;
 }
 
-void ADRPlayerController::OnCorruptedStateChanged(bool bIsStateChanged)
+void ADRPlayerController::CorruptedStateChanged(bool bIsStateChanged)
 {
-	// ºÎÆĞ »óÅÂ ÇÃ·¡±× ¾÷µ¥ÀÌÆ®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	bIsCorrupted = bIsStateChanged;
 
-	// À½¼º Ã¤ÆÃ ¼³Á¤
+	// ï¿½ï¿½ï¿½ï¿½ Ã¤ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	//SetVoiceChatEnabled(!bIsCorrupted);
 
-	// ÆÀ ±¸ºĞ ½Ã°¢ È¿°ú ¼³Á¤
+	// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½ È¿ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	//SetTeamVisualsEnabled(!bIsCorrupted);
+}
+
+void ADRPlayerController::UpdateVoiceChannelForDeathState(bool bIsDead)
+{
+	// ë¡œì»¬ ì»¨íŠ¸ë¡¤ëŸ¬ì—ì„œë§Œ ì‹¤í–‰
+	if (!IsLocalController()) return;
+
+	bIsDeadForVoice = bIsDead;
+
+	// ëª¨ë“  í”Œë ˆì´ì–´ì— ëŒ€í•œ ë®¤íŠ¸ ìƒíƒœ ì—…ë°ì´íŠ¸
+	RefreshAllPlayerVoiceMutes();
+}
+
+void ADRPlayerController::SetPlayerVoiceMuted(APlayerState* TargetPlayer, bool bMute)
+{
+	if (!TargetPlayer || !IsLocalController()) return;
+
+	// ìê¸° ìì‹ ì€ ë®¤íŠ¸í•˜ì§€ ì•ŠìŒ
+	if (TargetPlayer == PlayerState) return;
+
+	// PlayerControllerì˜ ë‚´ì¥ ë®¤íŠ¸ í•¨ìˆ˜ ì‚¬ìš©
+	FUniqueNetIdRepl TargetNetId = TargetPlayer->GetUniqueId();
+	if (TargetNetId.IsValid())
+	{
+		if (bMute)
+		{
+			// ë®¤íŠ¸ ë¦¬ìŠ¤íŠ¸ì— ì¶”ê°€
+			GameplayMutePlayer(TargetNetId);
+		}
+		else
+		{
+			// ë®¤íŠ¸ ë¦¬ìŠ¤íŠ¸ì—ì„œ ì œê±°
+			GameplayUnmutePlayer(TargetNetId);
+		}
+	}
+}
+
+void ADRPlayerController::RefreshAllPlayerVoiceMutes()
+{
+	if (!IsLocalController()) return;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	AGameStateBase* GameState = World->GetGameState();
+	if (!GameState) return;
+
+	// ëª¨ë“  í”Œë ˆì´ì–´ ìˆœíšŒ
+	for (APlayerState* OtherPS : GameState->PlayerArray)
+	{
+		if (!OtherPS || OtherPS == PlayerState) continue;
+
+		// ìƒëŒ€ë°©ì˜ ì‚¬ë§ ìƒíƒœ í™•ì¸
+		bool bOtherIsDead = false;
+
+		if (APawn* OtherPawn = OtherPS->GetPawn())
+		{
+			if (OtherPawn->Implements<UCombatInterface>())
+			{
+				bOtherIsDead = ICombatInterface::Execute_IsDead(OtherPawn);
+			}
+		}
+		else
+		{
+			// Pawnì´ ì—†ìœ¼ë©´ ì£½ì€ ê²ƒìœ¼ë¡œ ê°„ì£¼
+			bOtherIsDead = true;
+		}
+
+		bool bShouldMute = false;
+
+		if (!bIsDeadForVoice)
+		{
+			// ë‚´ê°€ ì‚´ì•„ìˆìœ¼ë©´, ì£½ì€ í”Œë ˆì´ì–´ëŠ” ë®¤íŠ¸
+			bShouldMute = bOtherIsDead;
+		}
+		else
+		{
+			// ë‚´ê°€ ì£½ì—ˆìœ¼ë©´, ëª¨ë‘ ë“¤ë¦¼
+			bShouldMute = false;
+		}
+
+		SetPlayerVoiceMuted(OtherPS, bShouldMute);
+	}
 }
 
 void ADRPlayerController::ShowDamageNumber_Implementation(float DamageAmount, ACharacter* TargetCharacter)
 {
-	// ·ÎÄÃ ÄÁÆ®·Ñ·¯¿¡¼­¸¸ µ¥¹ÌÁö ÅØ½ºÆ® Ç¥½Ã
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ®ï¿½Ñ·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ø½ï¿½Æ® Ç¥ï¿½ï¿½
 	if (IsValid(TargetCharacter) && DamageTextComponentClass && IsLocalController())
 	{
-		// µ¥¹ÌÁö ÅØ½ºÆ® ÄÄÆ÷³ÍÆ® »ı¼º ¹× ¼³Á¤
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ø½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		UDamageTextComponent* DamageText = NewObject<UDamageTextComponent>(TargetCharacter, DamageTextComponentClass);
 		DamageText->RegisterComponent();
 
-		// Å¸°Ù Ä³¸¯ÅÍ¿¡ ÀÏ½ÃÀûÀ¸·Î ºÎÂø ÈÄ ºĞ¸® (¿ùµå À§Ä¡ À¯Áö)
+		// Å¸ï¿½ï¿½ Ä³ï¿½ï¿½ï¿½Í¿ï¿½ ï¿½Ï½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ğ¸ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½)
 		DamageText->AttachToComponent(TargetCharacter->GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
 		DamageText->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
 
-		// µ¥¹ÌÁö ¼öÄ¡ ¼³Á¤ ¹× ¾Ö´Ï¸ŞÀÌ¼Ç ½ÃÀÛ
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ö´Ï¸ï¿½ï¿½Ì¼ï¿½ ï¿½ï¿½ï¿½ï¿½
 		DamageText->SetDamageText(DamageAmount);
 	}
 }
@@ -59,23 +152,23 @@ void ADRPlayerController::SetPartDetectionEnabled(bool bEnabled, ADRCleanserPart
 {
 	if (bEnabled)
 	{
-		// ¶óÀÎÆ®·¹ÀÌ½Ì È°¼ºÈ­
+		// ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½ È°ï¿½ï¿½È­
 		bPartDetectionEnabled = true;
 		NearbyPart = Part;
 		LineTraceTimer = 0.f;
 	}
 	else
 	{
-		// ÇØ´ç ºÎÇ°ÀÌ ÇöÀç ±ÙÃ³ ºÎÇ°°ú °°À» ¶§¸¸ ºñÈ°¼ºÈ­
+		// ï¿½Ø´ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã³ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­
 		if (NearbyPart == Part)
 		{
 			bPartDetectionEnabled = false;
 			NearbyPart = nullptr;
 			
-			// ÇöÀç °¨ÁöµÈ ºÎÇ°ÀÌ ÀÖÀ¸¸é UI ¼û±è ¾Ë¸²
+			// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ UI ï¿½ï¿½ï¿½ï¿½ ï¿½Ë¸ï¿½
 			if (CurrentDetectedPart)
 			{
-				CurrentDetectedPart->OnLineTraceLost(this);
+				ServerNotifyLineTraceLost(CurrentDetectedPart);
 				CurrentDetectedPart = nullptr;
 			}
 		}
@@ -84,22 +177,22 @@ void ADRPlayerController::SetPartDetectionEnabled(bool bEnabled, ADRCleanserPart
 
 ADRCleanserPart* ADRPlayerController::FindPartByLineTrace()
 {
-	// Ä³¸¯ÅÍ °¡Á®¿À±â
+	// Ä³ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
 	if (!DRCharacter) return nullptr;
 
-	// Ä³¸¯ÅÍ°¡ ÀÌ¹Ì ºÎÇ°À» µé°í ÀÖÀ¸¸é °¨ÁöÇÏÁö ¾ÊÀ½
+	// Ä³ï¿½ï¿½ï¿½Í°ï¿½ ï¿½Ì¹ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (DRCharacter->IsCarryingPart()) return nullptr;
 
-	// Ä«¸Ş¶ó ÄÄÆ÷³ÍÆ® °¡Á®¿À±â
+	// Ä«ï¿½Ş¶ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	UCameraComponent* Camera = DRCharacter->FindComponentByClass<UCameraComponent>();
 	if (!Camera) return nullptr;
 
-	// ¶óÀÎÆ®·¹ÀÌ½Ì ½ÃÀÛ/³¡ À§Ä¡ °è»ê
+	// ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½ ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½
 	FVector Start = Camera->GetComponentLocation();
 	FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
 
-	// ¶óÀÎÆ®·¹ÀÌ½Ì ½ÇÇà
+	// ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	FHitResult HitResult;
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(DRCharacter);
@@ -112,7 +205,7 @@ ADRCleanserPart* ADRPlayerController::FindPartByLineTrace()
 		QueryParams
 	);
 
-	// ºÎÇ°¿¡ È÷Æ®Çß´ÂÁö È®ÀÎ
+	// ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½Æ®ï¿½ß´ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (bHit)
 	{
 		ADRCleanserPart* HitPart = Cast<ADRCleanserPart>(HitResult.GetActor());
@@ -125,59 +218,226 @@ ADRCleanserPart* ADRPlayerController::FindPartByLineTrace()
 	return nullptr;
 }
 
+void ADRPlayerController::ClientShowPartPickupUI_Implementation()
+{
+	OnPartPickedUp();
+}
+
+void ADRPlayerController::ServerNotifyLineTraceDetected_Implementation(ADRCleanserPart* Part)
+{
+	if (!Part) return;
+
+	// ì„œë²„ì—ì„œ ì²˜ë¦¬ (UI ê°±ì‹ ì€ ë©€í‹°ìºìŠ¤íŠ¸ë¡œ)
+	Part->MulticastShowInteractionUI(this, true);
+}
+
+void ADRPlayerController::ServerNotifyLineTraceLost_Implementation(ADRCleanserPart* Part)
+{
+	if (!Part) return;
+
+	Part->MulticastShowInteractionUI(this, false);
+}
+
+void ADRPlayerController::ServerRequestInstallPartToSite_Implementation(ADRCleanserSite* Site)
+{
+	if (!Site) return;
+	// ìºë¦­í„° ê°€ì ¸ì˜¤ê¸°
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter) return;
+
+	// í´ë Œì € ì‚¬ì´íŠ¸ì— ë¶€í’ˆ ì„¤ì¹˜
+	Site->InstallPart(DRCharacter);
+}
+
+void ADRPlayerController::ClientStartSpectating_Implementation()
+{
+	if (!IsLocalController()) return;
+    
+	bIsSpectating = true;
+	CurrentSpectatedPlayerIndex = 0;
+
+	ADRGameStateBase* GameStateBase = GetWorld()->GetGameState<ADRGameStateBase>();
+	if (!GameStateBase) return;
+
+	TArray<ADRCharacter*> AlivePlayers = GameStateBase->GetAlivePlayers();
+	
+	if (AlivePlayers.Num() > 0)
+	{
+		SetSpectateTarget(AlivePlayers[0]);
+	}
+}
+
+void ADRPlayerController::ClientStopSpectating_Implementation()
+{
+	if (!IsLocalController()) return;
+    
+	bIsSpectating = false;
+	CurrentSpectatedPlayerIndex = 0;
+    
+	// ë¸ë¦¬ê²Œì´íŠ¸ í•´ì œ
+	if (CurrentSpectatedCharacter.IsValid())
+	{
+		if (ADRCharacterBase* OldTarget = Cast<ADRCharacterBase>(CurrentSpectatedCharacter.Get()))
+		{
+			OldTarget->OnDeathDelegate.RemoveDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
+		}
+	}
+	CurrentSpectatedCharacter.Reset();
+    
+	// ìê¸° ìì‹ ìœ¼ë¡œ ViewTarget ë³µì›
+	if (GetPawn())
+	{
+		SetViewTarget(GetPawn());
+	}
+}
+
+void ADRPlayerController::SpectateNextPlayer()
+{
+	if (!bIsSpectating || !IsLocalController()) return;
+
+	ADRGameStateBase* GameStateBase = GetWorld()->GetGameState<ADRGameStateBase>();
+	if (!GameStateBase) return;
+
+	TArray<ADRCharacter*> AliveCharacters = GameStateBase->GetAlivePlayers();
+	if (AliveCharacters.Num() == 0)
+	{
+		// ëª¨ë‘ ì‚¬ë§ - ê´€ì „ ëŒ€ìƒ ì—†ìŒ
+		CurrentSpectatedCharacter.Reset();
+		return;
+	}
+	
+	if(AliveCharacters.Num() == 1) return;
+
+	// ë‹¤ìŒ ì¸ë±ìŠ¤ ê³„ì‚°
+	CurrentSpectatedPlayerIndex = (CurrentSpectatedPlayerIndex + 1) % AliveCharacters.Num();
+    
+	// ìƒˆ ê´€ì „ ëŒ€ìƒ ì„¤ì •
+	SetSpectateTarget(AliveCharacters[CurrentSpectatedPlayerIndex]);
+}
+
+void ADRPlayerController::SpectatePreviousPlayer()
+{
+	if (!bIsSpectating || !IsLocalController()) return;
+
+	ADRGameStateBase* GameStateBase = GetWorld()->GetGameState<ADRGameStateBase>();
+	if (!GameStateBase) return;
+
+	TArray<ADRCharacter*> AliveCharacters = GameStateBase->GetAlivePlayers();
+	if (AliveCharacters.Num() == 0)
+	{
+		CurrentSpectatedCharacter.Reset();
+		return;
+	}
+
+	if(AliveCharacters.Num() == 1) return;
+
+	// ì´ì „ ì¸ë±ìŠ¤ ê³„ì‚°
+	CurrentSpectatedPlayerIndex--;
+	if (CurrentSpectatedPlayerIndex < 0)
+	{
+		CurrentSpectatedPlayerIndex = AliveCharacters.Num() - 1;
+	}
+
+	// ìƒˆ ê´€ì „ ëŒ€ìƒ ì„¤ì •
+	SetSpectateTarget(AliveCharacters[CurrentSpectatedPlayerIndex]);
+}
+
+void ADRPlayerController::CheatSkipToNextPhase()
+{
+// ê°œë°œ ë¹Œë“œì—ì„œë§Œ ë™ì‘í•˜ë„ë¡ ì²´í¬
+#if !UE_BUILD_SHIPPING
+	ServerCheatSkipToNextPhase();
+#else
+	UE_LOG(LogTemp, Warning, TEXT("CheatSkipToNextPhase: Shipping ë¹Œë“œì—ì„œëŠ” ì‚¬ìš©í•  ìˆ˜ ì—†ìŠµë‹ˆë‹¤."));
+#endif
+}
+
 void ADRPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Enhanced Input Context°¡ ¼³Á¤µÇ¾î ÀÖ´ÂÁö È®ÀÎ
+	// Enhanced Input Contextï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ç¾ï¿½ ï¿½Ö´ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	check(DRContext);
 
-	// Enhanced Input ¼­ºê½Ã½ºÅÛ¿¡ ¸ÅÇÎ ÄÁÅØ½ºÆ® Ãß°¡
+	// Enhanced Input ï¿½ï¿½ï¿½ï¿½Ã½ï¿½ï¿½Û¿ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ø½ï¿½Æ® ï¿½ß°ï¿½
 	UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer());
 	if (Subsystem)
 	{
 		Subsystem->AddMappingContext(DRContext, 0);
 	}
 
-	// UI ¼³Á¤
+	// UI ï¿½ï¿½ï¿½ï¿½
 	bShowMouseCursor = false;
 	SetInputMode(FInputModeGameOnly());
 
-	// ÇÃ·¹ÀÌ¾î´Â TeamId 0
+	// ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ï¿½ TeamId 0
 	SetGenericTeamId(FGenericTeamId(0));
+
+	// ë¡œì»¬ í”Œë ˆì´ì–´ë§Œ ì˜¤ë””ì˜¤ ì„¤ì • ì ìš©
+	if (IsLocalController())
+	{
+		// Manager í†µí•´ì„œ ì˜¤ë””ì˜¤ ì„¤ì • ì ìš©
+		if (UGameInstance* GI = GetGameInstance())
+		{
+			if (UDRSettingsManager* Manager = GI->GetSubsystem<UDRSettingsManager>())
+			{
+				Manager->ApplyAudioSettings();
+			}
+		}
+
+		// í˜„ì¬ ë ˆë²¨ì´ ë©”ì¸ë©”ë‰´ì¸ì§€ ì²´í¬
+		UWorld* World = GetWorld();
+		if (World)
+		{
+			FString CurrentLevelName = World->GetMapName();
+			CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+			// ë©”ì¸ë©”ë‰´ë©´ UI ì…ë ¥ ëª¨ë“œë¡œ ì„¤ì •
+			if (CurrentLevelName.Contains(TEXT("MainMenu")))
+			{
+				SetInputMode(FInputModeUIOnly());
+				SetShowMouseCursor(true);
+			}
+		}
+	}
 }
 
 void ADRPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 
-	// ºÎÇ° °¨Áö°¡ ºñÈ°¼ºÈ­µÇ¾î ÀÖÀ¸¸é ½ºÅµ
+	if (bIsSpectating) return;
+	
+	// ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­ï¿½Ç¾ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Åµ
 	if (!bPartDetectionEnabled) return;
 
-	// ¶óÀÎÆ®·¹ÀÌ½Ì Å¸ÀÌ¸Ó ¾÷µ¥ÀÌÆ®
+	// ë¡œì»¬ ì»¨íŠ¸ë¡¤ëŸ¬ì—ì„œë§Œ ë¼ì¸íŠ¸ë ˆì´ì‹± ì‹¤í–‰
+	if (!IsLocalController()) return;
+
+	// ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½ Å¸ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	LineTraceTimer += DeltaTime;
 	if (LineTraceTimer >= LineTraceUpdateInterval)
 	{
 		LineTraceTimer = 0.f;
 
-		// ºÎÇ° °¨Áö
+		// ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½
 		ADRCleanserPart* DetectedPart = FindPartByLineTrace();
 
-		// °¨ÁöµÈ ºÎÇ°ÀÌ º¯°æµÇ¾ú´ÂÁö È®ÀÎ
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ç¾ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 		if (DetectedPart != CurrentDetectedPart)
 		{
-			// ÀÌÀü¿¡ °¨ÁöµÈ ºÎÇ°ÀÌ ÀÖÀ¸¸é ¾Ë¸²
+			// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ë¸ï¿½
 			if (CurrentDetectedPart)
 			{
-				CurrentDetectedPart->OnLineTraceLost(this);
+				ServerNotifyLineTraceLost(CurrentDetectedPart);
 			}
 
 			CurrentDetectedPart = DetectedPart;
 
-			// »õ·Î °¨ÁöµÈ ºÎÇ°ÀÌ ÀÖÀ¸¸é ¾Ë¸²
+			// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ë¸ï¿½
 			if (CurrentDetectedPart)
 			{
-				CurrentDetectedPart->OnLineTraceDetected(this);
+				ServerNotifyLineTraceDetected(CurrentDetectedPart);
 			}
 		}
 	}
@@ -187,24 +447,142 @@ void ADRPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 
-	// DRInputComponent·Î Ä³½ºÆÃ
+	// DRInputComponentï¿½ï¿½ Ä³ï¿½ï¿½ï¿½ï¿½
 	UDRInputComponent* DRInputComponent = CastChecked<UDRInputComponent>(InputComponent);
-	// ±âº» ÀÔ·Â ¾×¼Ç ¹ÙÀÎµù
+	// ï¿½âº» ï¿½Ô·ï¿½ ï¿½×¼ï¿½ ï¿½ï¿½ï¿½Îµï¿½
 	DRInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Move);
 	DRInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Look);
 	DRInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ADRPlayerController::StartJump);
 	DRInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ADRPlayerController::StopJump);
 	DRInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &ADRPlayerController::HandleInteract);
-	// ¾îºô¸®Æ¼ ÀÔ·Â ¹ÙÀÎµù (InputConfig ±â¹İ)
+	DRInputComponent->BindAction(SpectateNextAction, ETriggerEvent::Started, this, &ADRPlayerController::HandleSpectateNext);
+	DRInputComponent->BindAction(SpectatePreviousAction, ETriggerEvent::Started, this, &ADRPlayerController::HandleSpectatePrevious);
+	DRInputComponent->BindAction(ToggleSettingsAction, ETriggerEvent::Started, this, &ADRPlayerController::HandleToggleSettings);
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½Îµï¿½ (InputConfig ï¿½ï¿½ï¿½)
 	DRInputComponent->BindAbilityActions(InputConfig, this, &ThisClass::AbilityInputTagPressed, &ThisClass::AbilityInputTagReleased, &ThisClass::AbilityInputTagHeld);
+}
+
+void ADRPlayerController::HandleToggleSettings()
+{
+	ToggleSettingsMenu();
+}
+
+void ADRPlayerController::HandleSpectateNext()
+{
+	if (bIsSpectating)
+	{
+		SpectateNextPlayer();
+	}
+}
+
+void ADRPlayerController::HandleSpectatePrevious()
+{
+	if (bIsSpectating)
+	{
+		SpectatePreviousPlayer();
+	}
+}
+
+void ADRPlayerController::SetSpectateTarget(ACharacter* NewTarget)
+{
+	// ì„œë²„ì— ìš”ì²­
+	if (!HasAuthority())
+	{
+		ServerSetSpectateTarget(NewTarget);
+		return;
+	}
+
+	// ì´ì „ ëŒ€ìƒì˜ ì‚¬ë§ ë¸ë¦¬ê²Œì´íŠ¸ í•´ì œ
+	if (CurrentSpectatedCharacter.IsValid())
+	{
+		if (ADRCharacterBase* OldTarget = Cast<ADRCharacterBase>(CurrentSpectatedCharacter.Get()))
+		{
+			OldTarget->OnDeathDelegate.RemoveDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
+		}
+	}
+
+	CurrentSpectatedCharacter = NewTarget;
+
+	if (NewTarget)
+	{
+		// ViewTarget ì„¤ì •
+		SetViewTarget(NewTarget);
+
+		// UI ì—…ë°ì´íŠ¸
+		ClientUpdateSpectatorUI(NewTarget);
+        
+		// ìƒˆ ëŒ€ìƒì˜ ì‚¬ë§ ë¸ë¦¬ê²Œì´íŠ¸ ë°”ì¸ë”©
+		if (ADRCharacterBase* DRTarget = Cast<ADRCharacterBase>(NewTarget))
+		{
+			DRTarget->OnDeathDelegate.AddDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
+		}
+	}
+}
+
+void ADRPlayerController::ServerSetSpectateTarget_Implementation(ACharacter* NewTarget)
+{
+	// ì„œë²„ì—ì„œ SetSpectateTarget ì‹¤í–‰
+	SetSpectateTarget(NewTarget);
+}
+
+void ADRPlayerController::ClientUpdateSpectatorUI_Implementation(ACharacter* SpectatedTarget)
+{
+	// í´ë¼ì´ì–¸íŠ¸ì—ì„œë§Œ ì‹¤í–‰
+	if (!IsLocalController()) return;
+
+	UpdateSpectatorUI(SpectatedTarget);
+}
+
+void ADRPlayerController::UpdateSpectatorUI(ACharacter* SpectatedTarget)
+{
+	if (!SpectatedTarget) return;
+
+	// HUD ê°€ì ¸ì˜¤ê¸°
+	ADRHUD* DRHUD = Cast<ADRHUD>(GetHUD());
+	if (!DRHUD) return;
+
+	// ê´€ì „ ëŒ€ìƒì˜ PlayerState ê°€ì ¸ì˜¤ê¸°
+	ADRPlayerState* SpectatedPS = SpectatedTarget->GetPlayerState<ADRPlayerState>();
+	if (!SpectatedPS) return;
+
+	// ê´€ì „ ëŒ€ìƒì˜ GAS ì»´í¬ë„ŒíŠ¸ë“¤ ê°€ì ¸ì˜¤ê¸°
+	UAbilitySystemComponent* SpectatedASC = SpectatedPS->GetAbilitySystemComponent();
+	UAttributeSet* SpectatedAS = SpectatedPS->GetAttributeSet();
+
+	if (!SpectatedASC || !SpectatedAS) return;
+
+	// ê¸°ì¡´ WidgetControllerë¥¼ íŒŒê´´í•˜ê³  ìƒˆë¡œ ë§Œë“¤ì–´ì¤Œ
+	DRHUD->UpdateOverlayForSpectating(this, SpectatedPS, SpectatedASC, SpectatedAS);
+}
+
+void ADRPlayerController::OnSpectatedPlayerDied(AActor* DeadActor)
+{
+	if (!bIsSpectating) return;
+
+	// ì•½ê°„ì˜ ë”œë ˆì´ í›„ ë‹¤ìŒ í”Œë ˆì´ì–´ë¡œ ì „í™˜
+	FTimerHandle SwitchTimerHandle;
+	GetWorld()->GetTimerManager().SetTimer(
+		SwitchTimerHandle,
+		[this]()
+		{
+			if (IsValid(this) && bIsSpectating)
+			{
+				SpectateNextPlayer();
+			}
+		},
+		1.0f,
+		false
+	);
 }
 
 void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 {
-	// ÀÔ·Â ºí·Ï »óÅÂ È®ÀÎ
+	if (bIsSpectating) return;
+	
+	// ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
 
-	// 2D ÀÔ·ÂÀ» ¿ùµå ÁÂÇ¥°è·Î º¯È¯
+	// 2D ï¿½Ô·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç¥ï¿½ï¿½ï¿½ ï¿½ï¿½È¯
 	const FVector2D InputAxisVector = InputActionValue.Get<FVector2D>();
 	const FRotator Rotation = GetControlRotation();
 	const FRotator YawRotation(0.f, Rotation.Yaw, 0.f);
@@ -212,7 +590,7 @@ void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-	// Æù¿¡ ÀÌµ¿ ÀÔ·Â Àü´Ş
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½ ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (APawn* ControlledPawn = GetPawn<APawn>())
 	{
 		ControlledPawn->AddMovementInput(ForwardDirection, InputAxisVector.Y);
@@ -222,15 +600,34 @@ void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 {
-	// ¸¶¿ì½º ½Ã¼± Ã³¸®
+	if (bIsSpectating) return;
+	
+	// ï¿½ï¿½ï¿½ì½º ï¿½Ã¼ï¿½ Ã³ï¿½ï¿½
 	const FVector2D Axis = InputActionValue.Get<FVector2D>();
-	AddYawInput(Axis.X);
-	AddPitchInput(Axis.Y);
+
+	// Managerì—ì„œ ê°ë„ ê°€ì ¸ì˜¤ê¸°
+	float Sensitivity = 1.0f;
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UDRSettingsManager* Manager = GI->GetSubsystem<UDRSettingsManager>())
+		{
+			if (UDRGameUserSettings* Settings = Manager->GetSettings())
+			{
+				Sensitivity = Settings->MouseSensitivity;
+			}
+		}
+	}
+
+	// ê°ë„ ì ìš©
+	AddYawInput(Axis.X * Sensitivity);
+	AddPitchInput(Axis.Y * Sensitivity);
 }
 
 void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
 {
-	// Á¡ÇÁ ½ÃÀÛ
+	if (bIsSpectating) return;
+	
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>()))
 	{
 		ControlledCharacter->Jump();
@@ -239,7 +636,9 @@ void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 {
-	// Á¡ÇÁ Á¾·á
+	if (bIsSpectating) return;
+	
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>()))
 	{
 		ControlledCharacter->StopJumping();
@@ -248,20 +647,171 @@ void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::HandleInteract()
 {
-	// ºÎÇ° È¹µæ ½Ãµµ
-	if (CurrentDetectedPart)
+	if (bIsSpectating) return;
+	
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter) return;
+	
+	// ë¶€í’ˆì„ ë“¤ê³  ìˆì§€ ì•Šì„ ë•Œë§Œ ë¶€í’ˆ íšë“ ì‹œë„
+	if (!DRCharacter->IsCarryingPart() && CurrentDetectedPart)
 	{
 		ServerRequestPickupPart(CurrentDetectedPart);
 		return;
 	}
-
-	// ±âÁ¸ µ¨¸®°ÔÀÌÆ® ºê·ÎµåÄ³½ºÆ® (Å¬·»Àú »çÀÌÆ® ¼³Ä¡¿ë)
+	
+	// ë¶€í’ˆì„ ë“¤ê³  ìˆê³  í´ë Œì € ì‚¬ì´íŠ¸ ì˜¤ë²„ë© ì¤‘ì´ë©´ ì„¤ì¹˜
+	if (DRCharacter->IsCarryingPart())
+	{
+		// í´ë Œì € ì‚¬ì´íŠ¸ ë²”ìœ„ ì•ˆì´ë©´ ì„¤ì¹˜
+		if (CurrentOverlappedSite)
+		{
+			ServerRequestInstallPartToSite(CurrentOverlappedSite);
+			return;
+		}
+		// í´ë Œì € ì‚¬ì´íŠ¸ ë²”ìœ„ ë°–ì´ë©´ ë–¨ì–´íŠ¸ë¦¬ê¸°
+		else
+		{
+			ServerRequestDropPart();
+			return;
+		}
+	}
+	
 	OnInteractPressed.Broadcast();
+}
+
+void ADRPlayerController::ToggleSettingsMenu()
+{
+	if (bIsSettingsMenuOpen)
+	{
+		CloseSettingsMenu();
+	}
+	else
+	{
+		OpenSettingsMenu();
+	}
+}
+
+void ADRPlayerController::OpenSettingsMenu()
+{
+	// ë¡œì»¬ ì»¨íŠ¸ë¡¤ëŸ¬ì—ì„œë§Œ ì‹¤í–‰
+	if (!IsLocalController()) return;
+
+	// ì´ë¯¸ ì—´ë ¤ìˆìœ¼ë©´ ë¬´ì‹œ
+	if (bIsSettingsMenuOpen) return;
+
+	// ìœ„ì ¯ì´ ì—†ìœ¼ë©´ ìƒì„±
+	if (!SettingsWidget && SettingsWidgetClass)
+	{
+		SettingsWidget = CreateWidget<UDRSettingsWidget>(this, SettingsWidgetClass);
+		if (SettingsWidget)
+		{
+			SettingsWidget->AddToViewport(100); // ë†’ì€ Z-Orderë¡œ ë‹¤ë¥¸ UI ìœ„ì— í‘œì‹œ
+			SettingsWidget->SetVisibility(ESlateVisibility::Collapsed); // ì²˜ìŒì—” ìˆ¨ê¹€
+		}
+	}
+
+	if (SettingsWidget)
+	{
+		SettingsWidget->OpenSettings();
+		bIsSettingsMenuOpen = true;
+
+		// ì…ë ¥ ëª¨ë“œ ë³€ê²½
+		SetInputMode(FInputModeUIOnly());
+		SetShowMouseCursor(true);
+	}
+}
+
+void ADRPlayerController::CloseSettingsMenu()
+{
+	// ë¡œì»¬ ì»¨íŠ¸ë¡¤ëŸ¬ì—ì„œë§Œ ì‹¤í–‰
+	if (!IsLocalController()) return;
+
+	// ì´ë¯¸ ë‹«í˜€ìˆìœ¼ë©´ ë¬´ì‹œ
+	if (!bIsSettingsMenuOpen) return;
+
+	if (SettingsWidget)
+	{
+		SettingsWidget->CloseSettings();
+		bIsSettingsMenuOpen = false;
+
+		// í˜„ì¬ ë ˆë²¨ì´ ë©”ì¸ë©”ë‰´ì¸ì§€ ì²´í¬
+		UWorld* World = GetWorld();
+		if (World)
+		{
+			FString CurrentLevelName = World->GetMapName();
+			CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+			// ë©”ì¸ë©”ë‰´ë©´ UI ëª¨ë“œ ìœ ì§€
+			if (CurrentLevelName.Contains(TEXT("MainMenu")))
+			{
+				SetInputMode(FInputModeUIOnly());
+				SetShowMouseCursor(true);
+			}
+			else
+			{
+				// ê²Œì„ ë ˆë²¨ì´ë©´ ê²Œì„ ëª¨ë“œë¡œ
+				SetInputMode(FInputModeGameOnly());
+				SetShowMouseCursor(false);
+			}
+		}
+	}
+}
+
+void ADRPlayerController::Client_ShowGameOverUI_Implementation()
+{
+	// ì´ë¯¸ UIê°€ í‘œì‹œ ì¤‘ì´ë©´ ë¬´ì‹œ
+	if (CurrentResultWidget) return;
+
+	// ìœ„ì ¯ í´ë˜ìŠ¤ê°€ ì„¤ì •ë˜ì§€ ì•Šì•˜ìœ¼ë©´ ë¦¬í„´
+	if (!GameOverWidgetClass) return;
+
+	// ê²Œì„ ì˜¤ë²„ ìœ„ì ¯ ìƒì„±
+	CurrentResultWidget = CreateWidget<UUserWidget>(this, GameOverWidgetClass);
+	if (CurrentResultWidget)
+	{
+		// ë·°í¬íŠ¸ì— ì¶”ê°€
+		CurrentResultWidget->AddToViewport(100);
+
+		// ì…ë ¥ ëª¨ë“œë¥¼ UIë¡œ ë³€ê²½
+		FInputModeUIOnly InputMode;
+		InputMode.SetWidgetToFocus(CurrentResultWidget->TakeWidget());
+		SetInputMode(InputMode);
+
+		// ë§ˆìš°ìŠ¤ ì»¤ì„œ í‘œì‹œ
+		bShowMouseCursor = true;
+	}
+}
+
+void ADRPlayerController::Client_ShowGameClearUI_Implementation()
+{
+	// ì´ë¯¸ UIê°€ í‘œì‹œ ì¤‘ì´ë©´ ë¬´ì‹œ
+	if (CurrentResultWidget) return;
+
+	// ìœ„ì ¯ í´ë˜ìŠ¤ê°€ ì„¤ì •ë˜ì§€ ì•Šì•˜ìœ¼ë©´ ë¦¬í„´
+	if (!GameClearWidgetClass) return;
+
+	// ê²Œì„ í´ë¦¬ì–´ ìœ„ì ¯ ìƒì„±
+	CurrentResultWidget = CreateWidget<UUserWidget>(this, GameClearWidgetClass);
+	if (CurrentResultWidget)
+	{
+		// ë·°í¬íŠ¸ì— ì¶”ê°€
+		CurrentResultWidget->AddToViewport(100);
+
+		// ì…ë ¥ ëª¨ë“œë¥¼ UIë¡œ ë³€ê²½
+		FInputModeUIOnly InputMode;
+		InputMode.SetWidgetToFocus(CurrentResultWidget->TakeWidget());
+		SetInputMode(InputMode);
+
+		// ë§ˆìš°ìŠ¤ ì»¤ì„œ í‘œì‹œ
+		bShowMouseCursor = true;
+	}
 }
 
 void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 {
-	// ÀÔ·Â ºí·Ï È®ÀÎ ÈÄ ¾îºô¸®Æ¼ ÀÔ·Â Ã³¸®
+	if (bIsSpectating) return;
+	
+	// ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ È®ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ ï¿½Ô·ï¿½ Ã³ï¿½ï¿½
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
 
 	if (GetASC())
@@ -272,7 +822,9 @@ void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 
 void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 {
-	// ÀÔ·Â ÇØÁ¦ ºí·Ï È®ÀÎ
+	if (bIsSpectating) return;
+	
+	// ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputReleased)) return;
 
 	if (GetASC() == nullptr) return;
@@ -281,7 +833,9 @@ void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 
 void ADRPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
 {
-	// ÀÔ·Â È¦µå ºí·Ï È®ÀÎ
+	if (bIsSpectating) return;
+		
+	// ï¿½Ô·ï¿½ È¦ï¿½ï¿½ ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputHeld)) return;
 
 	if (GetASC() == nullptr) return;
@@ -290,22 +844,37 @@ void ADRPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
 
 UDRAbilitySystemComponent* ADRPlayerController::GetASC()
 {
-	// ASC Ä³½ÌÀ» ÅëÇÑ ¼º´É ÃÖÀûÈ­
-	if (DRAbilitySystemComponent == nullptr)
-	{
-		DRAbilitySystemComponent = Cast<UDRAbilitySystemComponent>(UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetPawn<APawn>()));
-	}
-	return DRAbilitySystemComponent;
+	return Cast<UDRAbilitySystemComponent>(UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetPawn<APawn>()));
+}
+
+void ADRPlayerController::ServerCheatSkipToNextPhase_Implementation()
+{
+	// GameMode ê°€ì ¸ì˜¤ê¸°
+	ADRStageGameMode* StageGameMode = GetWorld()->GetAuthGameMode<ADRStageGameMode>();
+	if (!StageGameMode) return;
+
+	// í˜ì´ì¦ˆ ì „í™˜
+	StageGameMode->TransitionToNextPhase();
 }
 
 void ADRPlayerController::ServerRequestPickupPart_Implementation(ADRCleanserPart* Part)
 {
-	if (!HasAuthority() || !Part) return;
+	if (!Part) return;
 
-	// Ä³¸¯ÅÍ °¡Á®¿À±â
+	// Ä³ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
 	if (!DRCharacter) return;
 
-	// ºÎÇ° È¹µæ ½Ãµµ
+	// ï¿½ï¿½Ç° È¹ï¿½ï¿½ ï¿½Ãµï¿½
 	DRCharacter->PickupPart(Part);
+}
+
+void ADRPlayerController::ServerRequestDropPart_Implementation()
+{
+	// ìºë¦­í„° ê°€ì ¸ì˜¤ê¸°
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter) return;
+
+	// ë¶€í’ˆ ë–¨ì–´íŠ¸ë¦¬ê¸°
+	DRCharacter->DropCarriedPart();
 }

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Interfaces/OnlineSessionInterface.h"
+#include "OnlineSessionSettings.h"
 #include "MultiplayerSessionsSubsystem.generated.h"
 
 // Declaring our own custom delegates for the Menu class to bind callbacks to
@@ -15,7 +16,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnDestroySessionComplete
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnStartSessionComplete, bool, bWasSuccessful);
 // 방 코드 생성 완료 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnRoomCodeGenerated, const FString&, RoomCode);
-
 
 /**
  * 
@@ -28,6 +28,9 @@ class MULTIPLAYERSESSIONS_API UMultiplayerSessionsSubsystem : public UGameInstan
 public:
 	UMultiplayerSessionsSubsystem();
 
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
+
 	// To handle session functionality. The Menu class will call these
 	UFUNCTION(BlueprintCallable, Category = "Multiplayer Sessions")
 	void CreateSessionWithRoomCode(int32 NumPublicConnections, const FString& MatchType = "RoomCodeOnly");
@@ -37,6 +40,16 @@ public:
 	void JoinSession(const FOnlineSessionSearchResult& SessionResult);
 	void DestroySession();
 	void StartSession();
+	UFUNCTION(BlueprintCallable, Category = "Multiplayer Sessions")
+	void UpdateSessionJoinability(bool bAllowJoin);
+	UFUNCTION()
+	void LeaveServer();
+
+	UFUNCTION(BlueprintCallable, Category = "VoiceChat")
+	void StartVoiceChat();
+
+	UFUNCTION(BlueprintCallable, Category = "Session")
+	void StopVoiceChat();
 
 	UFUNCTION(BlueprintCallable, Category = "Multiplayer Sessions")
 	FString GetCurrentRoomCode() const { return CurrentRoomCode; }
@@ -57,9 +70,14 @@ protected:
 	void OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
 	void OnDestroySessionComplete(FName SessionName, bool bWasSuccessful);
 	void OnStartSessionComplete(FName SessionName, bool bWasSuccessful);
+	void OnUpdateSessionComplete(FName SessionName, bool bWasSuccessful);
+	void OnSessionUserInviteAccepted(const bool bWasSuccessful, const int32 ControllerId, FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& InviteResult);
 
 private:
+	void HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver, ENetworkFailure::Type FailureType, const FString& ErrorString);
+
 	IOnlineSessionPtr SessionInterface;
+	IOnlineVoicePtr VoiceInterface = nullptr;
 	TSharedPtr<FOnlineSessionSettings> LastSessionSettings;
 	TSharedPtr<FOnlineSessionSearch> LastSessionSearch;
 
@@ -86,7 +104,22 @@ private:
 	FDelegateHandle DestroySessionCompleteDelegateHandle;
 	FOnStartSessionCompleteDelegate StartSessionCompleteDelegate;
 	FDelegateHandle StartSessionCompleteDelegateHandle;
+	FOnUpdateSessionCompleteDelegate UpdateSessionCompleteDelegate;
+	FDelegateHandle UpdateSessionCompleteDelegateHandle;
+	FOnSessionUserInviteAcceptedDelegate SessionUserInviteAcceptedDelegate;
+	FDelegateHandle SessionUserInviteAcceptedDelegateHandle;
 
 	bool bCreateSessionOnDestroy{false};
 	int32 LastNumPublicConnections;
+
+	// 초대가 저장되어 있는 상태
+	bool bInvitePending = false;
+	// JoinSession을 이미 시작
+	bool bInviteJoinStarted = false;
+
+	// 초대 정보 캐싱
+	TSharedPtr<FOnlineSessionSearchResult> CachedInviteResult;
+
+	// 안전한 Join 시도 함수
+	void TryProcessPendingInvite();
 };

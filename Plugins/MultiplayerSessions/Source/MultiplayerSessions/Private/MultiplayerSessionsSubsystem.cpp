@@ -5,19 +5,53 @@
 #include "OnlineSubsystem.h"
 #include "OnlineSessionSettings.h"
 #include "Online/OnlineSessionNames.h"
+#include "Interfaces/VoiceInterface.h"
 
 UMultiplayerSessionsSubsystem::UMultiplayerSessionsSubsystem():
 	CreateSessionCompleteDelegate(FOnCreateSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnCreateSessionComplete)),
 	FindSessionsCompleteDelegate(FOnFindSessionsCompleteDelegate::CreateUObject(this, &ThisClass::OnFindSessionsComplete)),
 	JoinSessionCompleteDelegate(FOnJoinSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnJoinSessionComplete)),
 	DestroySessionCompleteDelegate(FOnDestroySessionCompleteDelegate::CreateUObject(this, &ThisClass::OnDestroySessionComplete)),
-	StartSessionCompleteDelegate(FOnStartSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnStartSessionComplete))
+	StartSessionCompleteDelegate(FOnStartSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnStartSessionComplete)),
+	UpdateSessionCompleteDelegate(FOnUpdateSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnUpdateSessionComplete)),
+	SessionUserInviteAcceptedDelegate(FOnSessionUserInviteAcceptedDelegate::CreateUObject(this, &ThisClass::OnSessionUserInviteAccepted))
 {
+}
+
+void UMultiplayerSessionsSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+
 	IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get();
 	if (Subsystem)
 	{
 		SessionInterface = Subsystem->GetSessionInterface();
+		VoiceInterface = Subsystem->GetVoiceInterface();
+
+		if (GEngine)
+		{
+			GEngine->OnNetworkFailure().AddUObject(this, &UMultiplayerSessionsSubsystem::HandleNetworkFailure);
+		}
+
+		// 스팀 초대 리스너 등록
+		if (SessionInterface.IsValid())
+		{
+			SessionUserInviteAcceptedDelegateHandle = SessionInterface->AddOnSessionUserInviteAcceptedDelegate_Handle(SessionUserInviteAcceptedDelegate);
+		}
 	}
+}
+
+void UMultiplayerSessionsSubsystem::Deinitialize()
+{
+	Super::Deinitialize();
+
+	if (GEngine)
+	{
+		GEngine->OnNetworkFailure().RemoveAll(this);
+	}
+
+	SessionInterface = nullptr;
+	VoiceInterface = nullptr;
 }
 
 void UMultiplayerSessionsSubsystem::CreateSessionWithRoomCode(int32 NumPublicConnections, const FString& MatchType)
@@ -116,6 +150,78 @@ void UMultiplayerSessionsSubsystem::StartSession()
 {
 }
 
+void UMultiplayerSessionsSubsystem::UpdateSessionJoinability(bool bAllowJoin)
+{
+	if (!SessionInterface.IsValid()) return;
+
+	FNamedOnlineSession* ExistingSession = SessionInterface->GetNamedSession(NAME_GameSession);
+	if (!ExistingSession) return;
+
+	// 세션 설정 업데이트
+	ExistingSession->SessionSettings.bAllowJoinInProgress = bAllowJoin;
+
+	// 델리게이트 등록
+	UpdateSessionCompleteDelegateHandle = SessionInterface->AddOnUpdateSessionCompleteDelegate_Handle(UpdateSessionCompleteDelegate);
+
+	// 세션 업데이트 실행
+	if (!SessionInterface->UpdateSession(NAME_GameSession, ExistingSession->SessionSettings))
+	{
+		SessionInterface->ClearOnUpdateSessionCompleteDelegate_Handle(UpdateSessionCompleteDelegateHandle);
+	}
+}
+
+void UMultiplayerSessionsSubsystem::LeaveServer()
+{
+	if(!SessionInterface.IsValid()) return;
+
+	UWorld* World = GetWorld();
+	if(!World) return;
+
+	APlayerController* PC = World->GetFirstPlayerController();
+	if (!PC) return;
+
+	StopVoiceChat();
+
+	if (PC->HasAuthority())
+	{
+		if (DestroySessionCompleteDelegateHandle.IsValid())
+		{
+			SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegateHandle);
+			DestroySessionCompleteDelegateHandle.Reset();
+		}
+
+		DestroySessionCompleteDelegateHandle = SessionInterface->AddOnDestroySessionCompleteDelegate_Handle(FOnDestroySessionCompleteDelegate::CreateUObject(this, &UMultiplayerSessionsSubsystem::OnDestroySessionComplete));
+		
+		SessionInterface->DestroySession(NAME_GameSession);
+	}
+	else
+	{
+		PC->ClientTravel(TEXT("/Game/Maps/MainMenu"), TRAVEL_Absolute);
+
+		SessionInterface->DestroySession(NAME_GameSession);
+	}
+}
+
+void UMultiplayerSessionsSubsystem::StartVoiceChat()
+{
+	if(!VoiceInterface.IsValid()) return;
+
+	VoiceInterface->RegisterLocalTalker(0);
+	VoiceInterface->StartNetworkedVoice(0);
+}
+
+void UMultiplayerSessionsSubsystem::StopVoiceChat()
+{
+	if(!VoiceInterface.IsValid()) return;
+
+	VoiceInterface->ClearVoicePackets();
+	VoiceInterface->StopNetworkedVoice(0);
+	VoiceInterface->RemoveAllRemoteTalkers();
+	VoiceInterface->DisconnectAllEndpoints();
+	VoiceInterface->UnregisterLocalTalker(0);
+
+}
+
 void UMultiplayerSessionsSubsystem::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
 {
 	if (SessionInterface)
@@ -186,6 +292,10 @@ void UMultiplayerSessionsSubsystem::OnJoinSessionComplete(FName SessionName, EOn
 		SessionInterface->ClearOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteDelegateHandle);
 	}
 
+	bInviteJoinStarted = false;
+	bInvitePending = false;
+	CachedInviteResult.Reset();
+
 	if (Result == EOnJoinSessionCompleteResult::Success)
 	{
 		// 세션 정보 가져오기
@@ -229,6 +339,48 @@ void UMultiplayerSessionsSubsystem::OnDestroySessionComplete(FName SessionName, 
 
 void UMultiplayerSessionsSubsystem::OnStartSessionComplete(FName SessionName, bool bWasSuccessful)
 {
+}
+
+void UMultiplayerSessionsSubsystem::OnUpdateSessionComplete(FName SessionName, bool bWasSuccessful)
+{
+	if (SessionInterface)
+	{
+		SessionInterface->ClearOnUpdateSessionCompleteDelegate_Handle(UpdateSessionCompleteDelegateHandle);
+	}
+}
+
+void UMultiplayerSessionsSubsystem::OnSessionUserInviteAccepted(const bool bWasSuccessful, const int32 ControllerId, FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& InviteResult)
+{
+	UE_LOG(LogTemp, Log, TEXT("[Invite] Received"));
+
+	if (!bWasSuccessful) return;
+
+	// 이미 초대가 대기 중이거나 Join 시작됨
+	if (bInvitePending || bInviteJoinStarted) return;
+
+	// 초대 정보 저장
+	bInvitePending = true;
+	CachedInviteResult = MakeShared<FOnlineSessionSearchResult>(InviteResult);
+
+	// Join을 시도하되, 성공 조건 만족 시에만 진행됨
+	TryProcessPendingInvite();
+}
+
+void UMultiplayerSessionsSubsystem::HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver, ENetworkFailure::Type FailureType, const FString& ErrorString)
+{
+	// 연결이 끊기면 보이스 채팅도 중지
+	StopVoiceChat();
+
+	SessionInterface->DestroySession(NAME_GameSession);
+
+	if (FailureType == ENetworkFailure::Type::ConnectionLost || FailureType == ENetworkFailure::Type::FailureReceived)
+	{
+		if (World && World->GetFirstPlayerController())
+		{
+			// NOTE: crash 발생으로 인해 명시적 Travel 주석처리. (기본 레벨로 이동하니까 그냥 냅두자)
+			// World->GetFirstPlayerController()->ClientTravel(TEXT("/Game/VoiceChat/MainMenu"), TRAVEL_Absolute);
+		}
+	}
 }
 
 FString UMultiplayerSessionsSubsystem::GenerateRoomCode()
@@ -302,4 +454,28 @@ void UMultiplayerSessionsSubsystem::CreateSessionInternal(int32 NumPublicConnect
 		CurrentRoomCode.Empty();
 		MultiplayerOnCreateSessionComplete.Broadcast(false);
 	}
+}
+
+void UMultiplayerSessionsSubsystem::TryProcessPendingInvite()
+{
+	if (!bInvitePending || bInviteJoinStarted || !CachedInviteResult.IsValid()) return;
+
+	UGameInstance* GameInstance = GetGameInstance();
+	if (!GameInstance) return;
+
+	UWorld* World = GameInstance->GetWorld();
+	if (!World) return;
+
+	if (World->GetFirstLocalPlayerFromController() == nullptr) return;
+
+	if (!SessionInterface.IsValid()) return;
+
+	bInviteJoinStarted = true;
+	bInvitePending = false;
+
+	CachedInviteResult->Session.SessionSettings.bUsesPresence = true;
+	CachedInviteResult->Session.SessionSettings.bUseLobbiesIfAvailable = true;
+
+	JoinSession(*CachedInviteResult);
+	CachedInviteResult.Reset();
 }

@@ -4,9 +4,9 @@
 
 #include "CoreMinimal.h"
 #include "AbilitySystemComponent.h"
-#include "UObject/NoExportTypes.h"
 #include "DRWidgetController.generated.h"
 
+// 능력 정보 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAbilityInfoSignature, const FDRAbilityInfo&, Info);
 
 class UAttributeSet;

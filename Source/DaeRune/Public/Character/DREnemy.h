@@ -8,6 +8,7 @@
 #include "UI/WidgetController/OverlayWidgetController.h"
 #include "DREnemy.generated.h"
 
+class UBlackboardComponent;
 class UWidgetComponent;
 class UBehaviorTree;
 class ADRAIController;
@@ -31,6 +32,8 @@ public:
 	virtual void SetCombatTarget_Implementation(AActor* InCombatTarget) override;
 	virtual AActor* GetCombatTarget_Implementation() const override;
 	/** end Combat Interface */
+
+	UBlackboardComponent* GetBlackboardComponent() const;
 
 	// 현재 전투 대상
 	UPROPERTY(BlueprintReadWrite, Category = "Combat")
@@ -56,7 +59,7 @@ public:
 
 	// 사망 후 생존 시간
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
-	float LifeSpan = 5.f;
+	float LifeSpan = 3.f;
 
 	// 넉백 상태 설정/해제
 	UFUNCTION(BlueprintCallable, Category = "Combat")
@@ -81,19 +84,29 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Part System")
 	bool HasPart() const { return bCarriesPart && PartMeshComponent && PartMeshComponent->IsVisible(); }
 
+	// 광폭화 시스템
+	
+	UPROPERTY(BlueprintReadWrite, Category = "Enemy|Phase")
+	bool bIsPhase3Enemy = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Enemy|Combat")
+	bool bIsEnraged = false;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Enemy|Combat")
+	float EnrageHealthThreshold = 0.2f; // 20%
+
+	UPROPERTY(EditDefaultsOnly, Category = "Enemy|Combat")
+	TSubclassOf<UGameplayEffect> EnrageMovementSpeedGE;
+
+	void TriggerEnrage();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void InitAbilityActorInfo() override;
 	virtual void InitializeDefaultAttributes() const override;
 	virtual void StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount) override;
 
-	// 적 레벨
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Class Defaults")
-	int32 Level = 1;
-
-	// 체력바 UI 위젯
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-	TObjectPtr<UWidgetComponent> HealthBar;
+	virtual float GetMoveSpeed() override;
 
 	// AI 비헤이비어 트리
 	UPROPERTY(EditAnywhere, Category = "AI")
@@ -150,6 +163,13 @@ protected:
 	// 占쏙옙占쏙옙 占썽역 占시곤옙 (占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙)
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "0.0", ClampMax = "10.0"))
 	float StunImmunityDuration = 5.0f;
+
+	// 죽을 때 자동 발동되는 어빌리티들
+	UPROPERTY(BlueprintReadOnly, Category = "Abilities")
+	TArray<TSubclassOf<UGameplayAbility>> DeathAbilities;
+
+	// Death Ability 활성화
+	void ActivateDeathAbilities();
 
 private:
 	// 물 보상 감소 처리

@@ -26,16 +26,31 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	bool ValidatePhaseCompletion();
 
+	UDRPhaseBase* GetCurrentPhase() { return CurrentPhase; }
+
+	// Phase별 게임 오버 트리거
+	UFUNCTION()
+	void TriggerGameOver();
+
+	UFUNCTION()
+	void TriggerGameClear();
+
+	// 다음 페이즈로 전환하기 위해 호출
+	UFUNCTION(BlueprintCallable, Category = "Phase")
+	void TransitionToNextPhase();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void HandleWipeout() override;
+
+	void BlockJoinInProgress();
 
 	// 로비 맵으로 이동
 	void ReturnToLobby();
 
 	// 로비 맵 이름
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage|Config")
-	FString LobbyMapName = TEXT("StartupMap");
+	FString LobbyMapName = TEXT("LobbyMap");
 
 	// ========== 클렌저 사이트 ==========
 
@@ -52,10 +67,6 @@ protected:
 
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	void EndCurrentPhase();
-
-	// 다음 페이즈로 전환하기 위해 호출
-	UFUNCTION(BlueprintCallable, Category = "Phase")
-	void TransitionToNextPhase();
 
 private:
 	// 현재 실행 중인 페이즈

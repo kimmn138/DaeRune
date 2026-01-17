@@ -17,11 +17,12 @@
 #include "AbilitySystem/DRPlayerAttributeSet.h"
 #include "Actor/DRCleanserPart.h"
 #include "Net/UnrealNetwork.h"
+#include "Components/PointLightComponent.h"
 
 ADRCharacter::ADRCharacter()
 {
 	// 이동 방향으로 회전 설정
-	GetCharacterMovement()->bOrientRotationToMovement = true;
+	GetCharacterMovement()->bOrientRotationToMovement = false;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 400.f, 0.f);
 	GetCharacterMovement()->bConstrainToPlane = true;
 	GetCharacterMovement()->bSnapToPlaneAtStart = true;
@@ -38,6 +39,20 @@ ADRCharacter::ADRCharacter()
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
+
+	// 1인칭 메쉬 설정
+	FirstPersonMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonMesh"));
+	FirstPersonMesh->SetupAttachment(FollowCamera); 
+	FirstPersonMesh->SetOnlyOwnerSee(true); 
+	FirstPersonMesh->bCastDynamicShadow = false;
+	FirstPersonMesh->CastShadow = false;
+	FirstPersonMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// 3인칭 메쉬 설정
+	GetMesh()->SetOwnerNoSee(true);
+
+	// VOIPTalker 컴포넌트 생성
+	VOIPTalkerComponent = CreateDefaultSubobject<UVOIPTalker>(TEXT("VOIPTalker"));
 
 	// 컨트롤러 회전 설정
 	bUseControllerRotationPitch = false;
@@ -67,6 +82,12 @@ void ADRCharacter::PossessedBy(AController* NewController)
 	// 서버에서 GAS 초기화 및 어빌리티 부여
 	InitAbilityActorInfo();
 	AddCharacterAbilities();
+
+	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
+	{
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMoveSpeedAttribute()).AddUObject(this, &ADRCharacter::OnMoveSpeedChanged);
+		GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
+	}
 }
 
 void ADRCharacter::OnRep_PlayerState()
@@ -75,6 +96,12 @@ void ADRCharacter::OnRep_PlayerState()
 
 	// 클라이언트에서 GAS 초기화
 	InitAbilityActorInfo();
+
+	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
+	{
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMoveSpeedAttribute()).AddUObject(this, &ADRCharacter::OnMoveSpeedChanged);
+		GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
+	}
 }
 
 void ADRCharacter::OnRep_Stunned()
@@ -125,6 +152,15 @@ bool ADRCharacter::PickupPart(ADRCleanserPart* Part)
 	bIsCarryingPart = true;
 	CarriedPart = Part;
 
+	// 획득 시간 기록
+	LastPartPickupTime = GetWorld()->GetTimeSeconds();
+
+	// PlayerController에게 UI 표시 요청
+	if (ADRPlayerController* PC = Cast<ADRPlayerController>(GetController()))
+	{
+		PC->ClientShowPartPickupUI();
+	}
+
 	return true;
 }
 
@@ -140,6 +176,141 @@ void ADRCharacter::InstallCarriedPart()
 	CarriedPart = nullptr;
 }
 
+void ADRCharacter::DropCarriedPart()
+{
+	// 서버에서만 실행
+	if (!HasAuthority()) return;
+
+	// 부품을 들고 있지 않으면 무시
+	if (!bIsCarryingPart || !CarriedPart) return;
+
+	// 쿨다운 체크
+	const float CurrentTime = GetWorld()->GetTimeSeconds();
+	const float TimeSincePickup = CurrentTime - LastPartPickupTime;
+	if (TimeSincePickup < PartDropCooldown) return;
+
+	// State_Carrying 태그 제거
+	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(GetAbilitySystemComponent()))
+	{
+		DRASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
+	}
+
+	// 부품에게 떨어지라고 요청
+	CarriedPart->DropFromCarrier();
+
+	// 캐릭터 상태만 초기화
+	bIsCarryingPart = false;
+	CarriedPart = nullptr;
+}
+
+void ADRCharacter::TryRegisterVoiceTalker()
+{
+	if (APlayerState* PS = GetPlayerState())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(PlayerStateRegisterTimerHanlde);
+		RegisterVoiceTalker();
+	}
+}
+
+void ADRCharacter::RegisterVoiceTalker()
+{
+	if (VOIPTalkerComponent)
+	{
+		if (APlayerState* PS = GetPlayerState())
+		{
+			VOIPTalkerComponent->RegisterWithPlayerState(PS);
+
+			// 거리 감쇠 비활성화
+			VOIPTalkerComponent->Settings.ComponentToAttachTo = nullptr;
+			VOIPTalkerComponent->Settings.AttenuationSettings = nullptr;
+			VOIPTalkerComponent->Settings.SourceEffectChain = nullptr;
+		}
+	}
+}
+
+void ADRCharacter::UpdateMeshVisibility()
+{
+	// 로컬 플레이어인지 확인
+	const bool bIsLocalPlayer = IsLocallyControlled();
+
+	if (bIsLocalPlayer)
+	{
+		// 로컬 플레이어: 1인칭 메쉬 보임, 3인칭 메쉬 숨김
+		if (FirstPersonMesh)
+		{
+			FirstPersonMesh->SetVisibility(true);
+		}
+		GetMesh()->SetVisibility(false);
+		if (Weapon)
+		{
+			Weapon->SetVisibility(false);
+		}
+	}
+	else
+	{
+		// 다른 플레이어: 3인칭 메쉬 보임, 1인칭 메쉬 숨김
+		if (FirstPersonMesh)
+		{
+			FirstPersonMesh->SetVisibility(false);
+		}
+		GetMesh()->SetVisibility(true);
+		if (Weapon)
+		{
+			Weapon->SetVisibility(true);
+		}
+	}
+}
+
+void ADRCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// 메쉬 가시성 업데이트
+	UpdateMeshVisibility();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			PlayerStateRegisterTimerHanlde,
+			this,
+			&ADRCharacter::TryRegisterVoiceTalker,
+			0.2f,
+			true
+		);
+	}
+
+	// 1인칭 시점 밝게 하는 라이트 추가
+	if (IsLocallyControlled())
+	{
+		UPointLightComponent* Light = NewObject<UPointLightComponent>(this);
+		Light->SetupAttachment(FollowCamera);
+		Light->SetRelativeLocation(FVector(-14.2f, 0.f, 23.5f));
+		Light->SetIntensity(1500.f);
+		Light->SetAttenuationRadius(300.f);
+		Light->SetCastShadows(false);
+		Light->SetMobility(EComponentMobility::Movable);
+		Light->RegisterComponent();
+	}
+}
+
+void ADRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// VOIPTalker 정리
+	if (VOIPTalkerComponent)
+	{
+		// 오디오 스트림 즉시 중지
+		if (VOIPTalkerComponent->IsActive())
+		{
+			VOIPTalkerComponent->Deactivate();
+		}
+
+		// 컴포넌트 명시적 파괴
+		VOIPTalkerComponent->DestroyComponent();
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void ADRCharacter::OnRep_bIsCarryingPart()
 {
 	// 클라이언트 시각적 효과
@@ -148,6 +319,16 @@ void ADRCharacter::OnRep_bIsCarryingPart()
 void ADRCharacter::OnRep_CarriedPart()
 {
 	// 클라이언트 시각적 효과
+}
+
+float ADRCharacter::GetMoveSpeed()
+{
+	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
+	{
+		return DRAS->GetMoveSpeed();
+	}
+	
+	return Super::GetMoveSpeed();
 }
 
 void ADRCharacter::InitAbilityActorInfo()

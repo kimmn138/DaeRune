@@ -6,12 +6,16 @@
 #include "Game/DRStageGameState.h"
 #include "Interaction/CombatInterface.h"
 #include "Actor/DRCleanserSite.h"
+#include "Actor/DRDoorManager.h"
 
 void UDRPhase1::OnPhaseStart()
 {
 	Super::OnPhaseStart();
 
 	if (!GameMode || !GameState) return;
+
+	// 목표 설정
+	SetupPhaseObjective(1);
 
 	// GameState Phase 1 초기화
 	GameState->SetCleanserAreaSecured(false);
@@ -22,11 +26,19 @@ void UDRPhase1::OnPhaseStart()
 
 	// 총 적 수로 GameState 업데이트
 	GameState->SetRemainingEnemiesInArea(TotalEnemyCount);
+
+	GameState->SetInitialPlayerCount(GameState->GetAlivePlayers().Num());
 }
 
 void UDRPhase1::OnPhaseEnd()
 {
 	Super::OnPhaseEnd();
+
+	// DoorManager에 알림
+	if (ADRDoorManager* DoorMgr = GetDoorManager())
+	{
+		DoorMgr->OnPhase1Ended();
+	}
 
 	// Phase1 전용 정리
 	SelectedCleanserSites.Empty();
@@ -44,6 +56,7 @@ void UDRPhase1::OnEnemyDeath(AActor* DeadEnemy)
 
 	// GameState 업데이트
 	GameState->SetRemainingEnemiesInArea(AliveCount);
+	GameState->UpdatePhaseObjectiveProgress(GameState->CurrentPhaseObjective.RequiredCount - AliveCount);
 
 	// 모든 적이 죽었으면 지역 확보 완료
 	if (AliveCount == 0)
@@ -59,44 +72,33 @@ void UDRPhase1::SpawnEnemiesAtCleanserSites()
 {
 	if (!GameMode) return;
 
-	// 1. PhaseBase에서 전체 클렌저 사이트 가져오기
-	if (CleanserSites.Num() < 2) return;
+	// PhaseBase에서 전체 클렌저 사이트 가져오기
+	if (CleanserSites.Num() < 3) return;
 
-	// 2. 랜덤으로 2개 선택
-	SelectedCleanserSites.Empty();
-	TArray<int32> AvailableIndices;
+	// 랜덤으로 제거할 1개 선택
+	int32 IndexToRemove = FMath::RandRange(0, CleanserSites.Num() - 1);
+	TObjectPtr<ADRCleanserSite> SiteToDestroy = CleanserSites[IndexToRemove];
 
-	// 사용 가능한 인덱스 목록 생성
-	for (int32 i = 0; i < CleanserSites.Num(); i++)
+	// 제거 대상 액터 파괴
+	if (SiteToDestroy && IsValid(SiteToDestroy))
 	{
-		if (CleanserSites[i])
-		{
-			AvailableIndices.Add(i);
-		}
+		SiteToDestroy->Destroy();
 	}
 
-	// 최소 2개가 없으면 중단
-	if (AvailableIndices.Num() < 2) return;
+	// 배열에서 제거
+	CleanserSites.RemoveAt(IndexToRemove);
 
-	// 랜덤으로 2개 선택
-	for (int32 i = 0; i < 2; i++)
-	{
-		int32 RandomArrayIndex = FMath::RandRange(0, AvailableIndices.Num() - 1);
-		int32 SelectedSiteIndex = AvailableIndices[RandomArrayIndex];
-
-		SelectedCleanserSites.Add(CleanserSites[SelectedSiteIndex]);
-		AvailableIndices.RemoveAt(RandomArrayIndex);
-	}
-
-	// 3. 선택된 사이트를 PhaseBase에 저장 (Phase2, 3에서 사용)
+	// 남은 2개를 활성 클렌저 사이트로 설정
+	SelectedCleanserSites = CleanserSites; 
 	SetActiveCleanserSites(SelectedCleanserSites);
+	GameState->SetCleanserSites(SelectedCleanserSites);
 
-	// 4. 선택된 사이트 활성화 및 적 스폰
+	// 선택된 사이트 활성화 및 적 스폰
 	for (const TObjectPtr<ADRCleanserSite>& SelectedSite : SelectedCleanserSites)
 	{
 		if (!SelectedSite) continue;
 
-		// 클렌저 사이트 활성화 (보이게 만들기)
+		// 클렌저 사이트 활성화
 		SelectedSite->ActivateSite();
 
 		// 해당 위치에 적 스폰
@@ -175,4 +177,24 @@ AActor* UDRPhase1::SpawnEnemy(TSubclassOf<AActor> EnemyClass, const FVector& Loc
 	}
 
 	return SpawnedEnemy;
+}
+
+ADRDoorManager* UDRPhase1::GetDoorManager()
+{
+	// 이미 캐싱되어 있으면 반환
+	if (CachedDoorManager)
+	{
+		return CachedDoorManager;
+	}
+
+	// GameState에서 가져오기
+	if (UWorld* World = GetWorld())
+	{
+		if (ADRStageGameState* StageGameState = World->GetGameState<ADRStageGameState>())
+		{
+			CachedDoorManager = StageGameState->GetDoorManager();
+		}
+	}
+
+	return CachedDoorManager;
 }

@@ -34,6 +34,14 @@ public:
 	// 감지된 플레이어 수
 	UFUNCTION(BlueprintCallable, Category = "AI|Perception")
 	int32 GetPerceivedPlayerCount() const { return PerceivedPlayers.Num(); }
+	
+	// 전투 시간 업데이트
+    UFUNCTION(BlueprintCallable, Category = "AI|Combat")
+    void UpdateCombatTime();
+        
+    // 전투 이탈 여부 확인
+    UFUNCTION(BlueprintCallable, Category = "AI|Combat")
+    bool HasCombatTimedOut(float TimeoutSeconds = 3.0f) const;
 
 protected:
 	// 비헤이비어 트리 실행 컴포넌트

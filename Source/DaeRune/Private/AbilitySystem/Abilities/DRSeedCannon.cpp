@@ -19,17 +19,17 @@ void UDRSeedCannon::SpawnSeedProjectile(const FVector& ForwardVector, const FGam
     );
 
     // 카메라 포워드 벡터를 받아서 60도 위로 회전
-    // 1. 포워드 벡터를 수평으로 만들기 (Z 성분 제거)
-    FVector HorizontalForward = ForwardVector;
-    HorizontalForward.Z = 0;
-    HorizontalForward.Normalize();
+    // 포워드 벡터를 수평으로 만들기
+    FVector CameraForward = ForwardVector;
+    CameraForward.Normalize();
 
-    // 2. Right 벡터 계산 (회전 축)
-    FVector RightVector = FVector::CrossProduct(FVector::UpVector, HorizontalForward);
+    // Right 벡터 계산
+    FVector CameraUp = FVector::UpVector;
+    FVector RightVector = FVector::CrossProduct(CameraUp, CameraForward);
     RightVector.Normalize();
 
-    // 3. LaunchAngle(60도)만큼 위로 회전
-    FVector LaunchDirection = HorizontalForward.RotateAngleAxis(LaunchAngle, RightVector);
+    // LaunchAngle만큼 위로 회전
+    FVector LaunchDirection = CameraForward.RotateAngleAxis(LaunchAngle, RightVector);
     LaunchDirection.Normalize();
 
     // Transform 설정

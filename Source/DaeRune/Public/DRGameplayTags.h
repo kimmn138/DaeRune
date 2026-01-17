@@ -23,6 +23,7 @@ public:
 	// 기본 속성
 	FGameplayTag Attributes_Primary_MaxHealth;
 	FGameplayTag Attributes_Primary_MaxWater;
+	FGameplayTag Attributes_Primary_MoveSpeed;
 
 	// 입력 태그
 	FGameplayTag InputTag_LMB;
@@ -32,6 +33,8 @@ public:
 
 	// 플레이어 상태
 	FGameplayTag State_Corrupt;
+	FGameplayTag State_Carrying;
+	FGameplayTag Enemy_Detected;
 
 	// 기본 데미지, 타입 별 데미지
 	FGameplayTag Damage;
@@ -44,18 +47,21 @@ public:
 	// 기본 힐
 	FGameplayTag Heal;
 
+	// 버프 효과
+	FGameplayTag Buff_Elite;
+	
 	// 디버프 효과
 	FGameplayTag Debuff_Burn; 
 	FGameplayTag Debuff_Stun;
 	FGameplayTag Debuff_Arcane;
 	FGameplayTag Debuff_Physical;
 	FGameplayTag Debuff_Bleed;
+	FGameplayTag Debuff_Elite;
 
 	// 디버프 계산용 태그
 	FGameplayTag Debuff_Chance; 
 	FGameplayTag Debuff_Damage;
 	FGameplayTag Debuff_Duration;
-	FGameplayTag Debuff_Frequency;
 
 	// 타격 반응 이펙트
 	FGameplayTag Effects_HitReact;
@@ -66,6 +72,7 @@ public:
 
 	// 어빌리티 분류
 	FGameplayTag Abilities_Attack;
+	FGameplayTag Abilities_Death;
 	FGameplayTag Abilities_Summon;
 	FGameplayTag Abilities_Skill1;
 
@@ -108,6 +115,15 @@ public:
 	FGameplayTag Player_Block_InputPressed; 
 	FGameplayTag Player_Block_InputHeld;
 	FGameplayTag Player_Block_InputReleased;
+
+	// 사운드
+	FGameplayTag GameplayCue_Player_Damage;
+	FGameplayTag GameplayCue_Player_Death;
+	FGameplayTag GameplayCue_Player_LowHealth;
+	FGameplayTag GameplayCue_Player_WaterDepleted;
+	FGameplayTag GameplayCue_Enemy_Damage;
+	FGameplayTag GameplayCue_Cleanser_Damage;
+	FGameplayTag GameplayCue_Skill_WaterPump;
 
 private:
 	static FDRGameplayTags GameplayTags;

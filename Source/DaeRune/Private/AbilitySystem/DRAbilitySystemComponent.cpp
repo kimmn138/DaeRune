@@ -9,6 +9,7 @@
 void UDRAbilitySystemComponent::AbilityActorInfoSet()
 {
 	OnGameplayEffectAppliedDelegateToSelf.AddUObject(this, &UDRAbilitySystemComponent::ClientEffectApplied);
+	OnAnyGameplayEffectRemovedDelegate().AddUObject(this, &UDRAbilitySystemComponent::OnRemoveGameplayEffectCallback);
 }
 
 void UDRAbilitySystemComponent::AddCharacterAbilities(const TArray<TSubclassOf<UGameplayAbility>>& StartupAbilities)
@@ -41,7 +42,6 @@ void UDRAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& Input
 
 	for (FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
 	{
-		const FString SpecTags = AbilitySpec.GetDynamicSpecSourceTags().ToStringSimple();
 		if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
 		{
 			AbilitySpecInputPressed(AbilitySpec);
@@ -63,7 +63,6 @@ void UDRAbilitySystemComponent::AbilityInputTagHeld(const FGameplayTag& InputTag
 
 	for (FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
 	{
-		const FString SpecTags = AbilitySpec.GetDynamicSpecSourceTags().ToStringSimple();
 		if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
 		{
 			AbilitySpecInputPressed(AbilitySpec);
@@ -81,7 +80,6 @@ void UDRAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& Inpu
 
 	for (FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
 	{
-		const FString SpecTags = AbilitySpec.GetDynamicSpecSourceTags().ToStringSimple();
 		if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag) && AbilitySpec.IsActive())
 		{
 			AbilitySpecInputReleased(AbilitySpec);
@@ -97,13 +95,13 @@ void UDRAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& Inpu
 void UDRAbilitySystemComponent::ForEachAbility(const FForEachAbility& Delegate)
 {
 	FScopedAbilityListLock ActiveScopeLock(*this); 
-		for (const FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
+	for (const FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
+	{
+		if (!Delegate.ExecuteIfBound(AbilitySpec))
 		{
-			if (!Delegate.ExecuteIfBound(AbilitySpec))
-			{
-				UE_LOG(LogDR, Error, TEXT("Failed to execute delegate in %hs"), __FUNCTION__);
-			}
+			UE_LOG(LogDR, Error, TEXT("Failed to execute delegate in %hs"), __FUNCTION__);
 		}
+	}
 }
 
 FGameplayTag UDRAbilitySystemComponent::GetAbilityTagFromSpec(const FGameplayAbilitySpec& AbilitySpec)
@@ -144,10 +142,21 @@ void UDRAbilitySystemComponent::OnRep_ActivateAbilities()
 	}
 }
 
+void UDRAbilitySystemComponent::OnRemoveGameplayEffectCallback_Implementation(const FActiveGameplayEffect& EffectRemoved)
+{
+	FGameplayTagContainer TagContainer;
+	EffectRemoved.Spec.GetAllGrantedTags(TagContainer);
+	
+	EffectRemovedDelegate.Broadcast(TagContainer);
+}
+
 void UDRAbilitySystemComponent::ClientEffectApplied_Implementation(UAbilitySystemComponent* AbilitySystemComponent, const FGameplayEffectSpec& EffectSpec, FActiveGameplayEffectHandle ActiveEffectHandle)
 {
 	FGameplayTagContainer TagContainer;
-	EffectSpec.GetAllAssetTags(TagContainer);
-
-	EffectAssetTags.Broadcast(TagContainer);
+	EffectSpec.GetAllGrantedTags(TagContainer);
+	
+	const bool HasDuration = EffectSpec.Def->DurationPolicy == EGameplayEffectDurationType::HasDuration;
+	const bool DisplayStackCount = EffectSpec.Def->StackingType != EGameplayEffectStackingType::None && EffectSpec.Def->StackLimitCount > 1;
+	
+	EffectAssetTags.Broadcast(TagContainer, HasDuration, EffectSpec.Duration, DisplayStackCount, EffectSpec.GetStackCount());
 }

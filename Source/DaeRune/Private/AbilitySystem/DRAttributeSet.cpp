@@ -9,7 +9,6 @@
 #include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Interaction/CombatInterface.h"
-#include "Kismet/GameplayStatics.h"
 #include "Player/DRPlayerController.h"
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
 #include "Player/DRPlayerState.h"
@@ -22,6 +21,7 @@ UDRAttributeSet::UDRAttributeSet()
 
 	/* Primary Attributes */
 	TagsToAttributes.Add(GameplayTags.Attributes_Primary_MaxHealth, GetMaxHealthAttribute);
+	TagsToAttributes.Add(GameplayTags.Attributes_Primary_MoveSpeed, GetMoveSpeedAttribute);
 }
 
 void UDRAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -54,7 +54,7 @@ void UDRAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute
 	}
 	if (Attribute == GetMoveSpeedAttribute())
 	{
-		NewValue = FMath::Clamp(NewValue, 50.f, 2000.f);
+		NewValue = FMath::Clamp(NewValue, 0.f, 2000.f);
 	}
 }
 
@@ -72,7 +72,7 @@ void UDRAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, fl
 	}
 	if (Attribute == GetMoveSpeedAttribute())
 	{
-		NewValue = FMath::Clamp(NewValue, 50.f, 2000.f);
+		NewValue = FMath::Clamp(NewValue, 0.f, 2000.f);
 	}
 }
 
@@ -92,21 +92,6 @@ void UDRAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 	if (Data.EvaluatedData.Attribute == GetWaterAttribute())
 	{
 		SetWater(FMath::Clamp(GetWater(), 0.f, GetMaxWater()));
-	}
-	if (Data.EvaluatedData.Attribute == GetMoveSpeedAttribute())
-	{
-		// 새 속도 값 설정
-		float NewSpeed = GetMoveSpeed();
-		SetMoveSpeed(NewSpeed);
-
-		// CharacterMovementComponent 업데이트
-		if (ACharacter* TargetCharacter = Cast<ACharacter>(Props.TargetAvatarActor))
-		{
-			if (UCharacterMovementComponent* MovementComp = TargetCharacter->GetCharacterMovement())
-			{
-				MovementComp->MaxWalkSpeed = NewSpeed;
-			}
-		}
 	}
 	else if (Data.EvaluatedData.Attribute == GetIncomingDamageAttribute())
 	{
@@ -129,52 +114,41 @@ void UDRAttributeSet::HandleIncomingHealing(const FEffectProperties& Props)
 
 void UDRAttributeSet::Debuff(const FEffectProperties& Props)
 {
-	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get(); 
+	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+
+	// Context 생성
 	FGameplayEffectContextHandle EffectContext = Props.SourceASC->MakeEffectContext();
 	EffectContext.AddSourceObject(Props.SourceAvatarActor);
 
+	// 디버프 관련 파라미터
 	const FGameplayTag DamageType = UDRAbilitySystemLibrary::GetDamageType(Props.EffectContextHandle);
 	const float DebuffDamage = UDRAbilitySystemLibrary::GetDebuffDamage(Props.EffectContextHandle);
 	const float DebuffDuration = UDRAbilitySystemLibrary::GetDebuffDuration(Props.EffectContextHandle);
-	const float DebuffFrequency = UDRAbilitySystemLibrary::GetDebuffFrequency(Props.EffectContextHandle);
 
-	FString DebuffName = FString::Printf(TEXT("DynamicDebuff_%s"), *DamageType.ToString());
-	UGameplayEffect* Effect = NewObject<UGameplayEffect>(GetTransientPackage(), FName(DebuffName));
-
-	Effect->DurationPolicy = EGameplayEffectDurationType::HasDuration;
-	Effect->Period = DebuffFrequency; 
-	Effect->DurationMagnitude = FScalableFloat(DebuffDuration);
-
-	FInheritedTagContainer TagContainer = FInheritedTagContainer();
-	UTargetTagsGameplayEffectComponent& Component = Effect->FindOrAddComponent<UTargetTagsGameplayEffectComponent>();
+	// 디버프 매핑 (예: 화염 → 불타는 디버프)
 	const FGameplayTag DebuffTag = GameplayTags.DamageTypesToDebuffs[DamageType];
-	TagContainer.Added.AddTag(DebuffTag);
-	Component.SetAndApplyTargetTagChanges(TagContainer);
-	if (DebuffTag.MatchesTagExact(GameplayTags.Debuff_Stun))
+
+	// AttributeSet에 미리 설정된 DebuffEffectMap에서 해당 태그의 GE 클래스를 가져옴
+	if (!DebuffEffectMap.Contains(DebuffTag)) return;
+
+	TSubclassOf<UGameplayEffect> DebuffEffectClass = DebuffEffectMap[DebuffTag];
+	if (!DebuffEffectClass) return;
+
+	// GE 스펙 생성
+	FGameplayEffectSpecHandle SpecHandle = Props.SourceASC->MakeOutgoingSpec(DebuffEffectClass, 1.f, EffectContext);
+	if (!SpecHandle.IsValid()) return;
+
+	if (FGameplayEffectSpec* MutableSpec = SpecHandle.Data.Get())
 	{
-		TagContainer.Added.AddTag(GameplayTags.Player_Block_InputHeld);
-		TagContainer.Added.AddTag(GameplayTags.Player_Block_InputPressed);
-		TagContainer.Added.AddTag(GameplayTags.Player_Block_InputReleased);
-	}
-	Component.SetAndApplyTargetTagChanges(TagContainer);
-
-	Effect->StackingType = EGameplayEffectStackingType::AggregateBySource; 
-	Effect->StackLimitCount = 1;
-
-	const int32 Index = Effect->Modifiers.Num();
-	Effect->Modifiers.Add(FGameplayModifierInfo());
-	FGameplayModifierInfo& ModifierInfo = Effect->Modifiers[Index];
-
-	ModifierInfo.ModifierMagnitude = FScalableFloat(DebuffDamage);
-	ModifierInfo.ModifierOp = EGameplayModOp::Additive;
-	ModifierInfo.Attribute = UDRAttributeSet::GetIncomingDamageAttribute();
-
-	if (FGameplayEffectSpec* MutableSpec = new FGameplayEffectSpec(Effect, EffectContext, 1.f))
-	{
+	    MutableSpec->SetSetByCallerMagnitude(GameplayTags.Debuff_Damage, DebuffDamage);
+        MutableSpec->SetDuration(DebuffDuration, true);
+	
+		// Context에 DamageType 설정
 		FDRGameplayEffectContext* DRContext = static_cast<FDRGameplayEffectContext*>(MutableSpec->GetContext().Get());
 		TSharedPtr<FGameplayTag> DebuffDamageType = MakeShareable(new FGameplayTag(DamageType));
 		DRContext->SetDamageType(DebuffDamageType);
-
+		
+		// 최종 적용
 		Props.TargetASC->ApplyGameplayEffectSpecToSelf(*MutableSpec);
 	}
 }
@@ -216,19 +190,30 @@ void UDRAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, f
 	{
 		SetWater(GetMaxWater());
 		bTopOffWater = false;
+
+		if (NewValue <= 0.f && OldValue > 0.f)
+		{
+			// 물이 바닥남
+			if (UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent())
+			{
+				FGameplayCueParameters CueParams;
+				if (AActor* Avatar = ASC->GetAvatarActor())
+				{
+					CueParams.Location = Avatar->GetActorLocation();
+				}
+
+				ASC->ExecuteGameplayCue(
+					FDRGameplayTags::Get().GameplayCue_Player_WaterDepleted,
+					CueParams
+				);
+			}
+		}
 	}
 	if (Attribute == GetMoveSpeedAttribute())
 	{
-		// ASC에서 Avatar Actor 가져오기 (Enemy든 Player든 상관없이)
-		if (UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent())
+		if (ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwningActor()))
 		{
-			if (ACharacter* AvatarCharacter = Cast<ACharacter>(ASC->GetAvatarActor()))
-			{
-				if (UCharacterMovementComponent* MovementComp = AvatarCharacter->GetCharacterMovement())
-				{
-					MovementComp->MaxWalkSpeed = NewValue;
-				}
-			}
+			OwnerCharacter->GetCharacterMovement()->MaxWalkSpeed = NewValue;
 		}
 	}
 }
@@ -256,21 +241,6 @@ void UDRAttributeSet::OnRep_MaxWater(const FGameplayAttributeData& OldMaxWater) 
 void UDRAttributeSet::OnRep_MoveSpeed(const FGameplayAttributeData& OldMoveSpeed) const
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRAttributeSet, MoveSpeed, OldMoveSpeed);
-
-	// 클라이언트에서 즉시 이동속도 업데이트
-	if (UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent())
-	{
-		if (ACharacter* AvatarCharacter = Cast<ACharacter>(ASC->GetAvatarActor()))
-		{
-			if (UCharacterMovementComponent* MovementComp = AvatarCharacter->GetCharacterMovement())
-			{
-				MovementComp->MaxWalkSpeed = GetMoveSpeed();
-
-				// 클라이언트 예측을 위한 추가 설정
-				MovementComp->bNetworkSmoothingComplete = true;
-			}
-		}
-	}
 }
 
 void UDRAttributeSet::SetEffectProperties(const FGameplayEffectModCallbackData& Data, FEffectProperties& Props) const

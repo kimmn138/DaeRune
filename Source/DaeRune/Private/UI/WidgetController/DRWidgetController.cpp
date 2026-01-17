@@ -10,7 +10,7 @@
 
 void UDRWidgetController::SetWidgetControllerParams(const FWidgetControllerParams& WCParams)
 {
-	// ÆÄ¶ó¹ÌÅÍ ±¸Á¶Ã¼¿¡¼­ °¢ ÄÄÆ÷³ÍÆ® ÇÒ´ç
+	// ï¿½Ä¶ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ã¼ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½Ò´ï¿½
 	PlayerController = WCParams.PlayerController;
 	PlayerState = WCParams.PlayerState;
 	AbilitySystemComponent = WCParams.AbilitySystemComponent;
@@ -27,20 +27,20 @@ void UDRWidgetController::BindCallbacksToDependencies()
 
 void UDRWidgetController::BroadcastAbilityInfo()
 {
-	// ½ÃÀÛ ¾îºô¸®Æ¼°¡ ¾ÆÁ÷ ºÎ¿©µÇÁö ¾Ê¾ÒÀ¸¸é ´ë±â
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Î¿ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 	if (!GetDRASC()->bStartupAbilitiesGiven) return;
 
-	// °¢ ¾îºô¸®Æ¼ Á¤º¸¸¦ ¼øÈ¸ÇÏ¸ç UI¿¡ Àü´Þ
+	// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È¸ï¿½Ï¸ï¿½ UIï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	FForEachAbility BroadcastDelegate;
 	BroadcastDelegate.BindLambda([this](const FGameplayAbilitySpec& AbilitySpec)
 	{
-		// AbilitySpec¿¡¼­ ÅÂ±× Á¤º¸ ÃßÃâ
+		// AbilitySpecï¿½ï¿½ï¿½ï¿½ ï¿½Â±ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		FDRAbilityInfo Info = AbilityInfo->FindAbilityInfoForTag(DRAbilitySystemComponent->GetAbilityTagFromSpec(AbilitySpec));
 		Info.InputTag = DRAbilitySystemComponent->GetInputTagFromSpec(AbilitySpec);
-		// UI¿¡ ¾îºô¸®Æ¼ Á¤º¸ ºê·ÎµåÄ³½ºÆ®
+		// UIï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Îµï¿½Ä³ï¿½ï¿½Æ®
 		AbilityInfoDelegate.Broadcast(Info);
 	});
-	// ASCÀÇ ¸ðµç ¾îºô¸®Æ¼¿¡ ´ëÇØ ¶÷´Ù ÇÔ¼ö ½ÇÇà
+	// ASCï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ô¼ï¿½ ï¿½ï¿½ï¿½ï¿½
 	GetDRASC()->ForEachAbility(BroadcastDelegate);
 }
 

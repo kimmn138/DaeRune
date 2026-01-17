@@ -5,15 +5,17 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework//PlayerState.h"
 #include "Engine/World.h"
+#include "Character/DRCharacter.h"
+#include "Interaction/CombatInterface.h"
 
 ADRGameStateBase::ADRGameStateBase()
 {
-	// ¸®ÇÃ¸®ÄÉÀÌ¼Ç È°¼ºÈ­
+	// ï¿½ï¿½ï¿½Ã¸ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ È°ï¿½ï¿½È­
 	bReplicates = true;
 
-	// ÃÊ±â°ª ¼³Á¤
+	// ï¿½Ê±â°ª ï¿½ï¿½ï¿½ï¿½
 	CurrentPlayerCount = 0;
-	MaxPlayerCount = 4;  // 4ÀÎ Çùµ¿ °ÔÀÓ
+	MaxPlayerCount = 4;  // 4ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 }
 
 void ADRGameStateBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -46,7 +48,7 @@ void ADRGameStateBase::RemovePlayerState(APlayerState* PlayerState)
 
 APlayerState* ADRGameStateBase::GetHostPlayer() const
 {
-	// È£½ºÆ®´Â º¸Åë PlayerID°¡ 0
+	// È£ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ PlayerIDï¿½ï¿½ 0
 	for (APlayerState* PS : PlayerArray)
 	{
 		if (PS->GetPlayerId() == 0)
@@ -55,7 +57,7 @@ APlayerState* ADRGameStateBase::GetHostPlayer() const
 		}
 	}
 
-	// ¸ø Ã£À¸¸é Ã¹ ¹øÂ° ÇÃ·¹ÀÌ¾î¸¦ È£½ºÆ®·Î
+	// ï¿½ï¿½ Ã£ï¿½ï¿½ï¿½ï¿½ Ã¹ ï¿½ï¿½Â° ï¿½Ã·ï¿½ï¿½Ì¾î¸¦ È£ï¿½ï¿½Æ®ï¿½ï¿½
 	if (PlayerArray.Num() > 0)
 	{
 		return PlayerArray[0];
@@ -72,6 +74,32 @@ bool ADRGameStateBase::IsPlayerHost(APlayerState* PlayerState) const
 	}
 
 	return PlayerState == GetHostPlayer();
+}
+
+TArray<ADRCharacter*> ADRGameStateBase::GetAlivePlayers() const
+{
+	TArray<ADRCharacter*> AlivePlayers;
+
+	// ëª¨ë“  PlayerState ìˆœíšŒ
+	for (APlayerState* PS : PlayerArray)
+	{
+		if (!PS) continue;
+
+		// í”Œë ˆì´ì–´ì˜ í°ì´ ì‚´ì•„ìˆëŠ”ì§€ í™•ì¸
+		if (ADRCharacter* PlayerCharacter = Cast<ADRCharacter>(PS->GetPawn()))
+		{
+			// IsDead ì¸í„°í˜ì´ìŠ¤ í™•ì¸
+			if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(PlayerCharacter))
+			{
+				if (!CombatInterface->Execute_IsDead(PlayerCharacter))
+				{
+					AlivePlayers.Add(PlayerCharacter);
+				}
+			}
+		}
+	}
+
+	return AlivePlayers;
 }
 
 void ADRGameStateBase::UpdatePlayerCount()

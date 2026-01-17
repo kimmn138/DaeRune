@@ -14,7 +14,9 @@ class DAERUNE_API UDREnemyAttributeSet : public UDRAttributeSet
 {
 	GENERATED_BODY()
 	
-public:
+protected:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Buff")
+	float EliteBuffModifier = 0.7f;
 
 private:
 	virtual void HandleIncomingDamage(const FEffectProperties& Props) override;

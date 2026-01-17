@@ -35,6 +35,9 @@ protected:
 	virtual void HandleIncomingDamage(const FEffectProperties& Props) override;
 	virtual void HandleIncomingHealing(const FEffectProperties& Props) override;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Debuff")
+	float EliteDebuffModifier = 1.5f;
+
 private:
 	void ProcessCorruptedDamage(const FEffectProperties& Props, float Damage);
 	void ProcessNormalDamage(const FEffectProperties& Props, float Damage);

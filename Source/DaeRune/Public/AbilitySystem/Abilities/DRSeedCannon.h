@@ -32,5 +32,5 @@ protected:
 
     // 발사 각도 (수평 기준 위로)
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon")
-    float LaunchAngle = 60.f;
+    float LaunchAngle = 35.f;
 };

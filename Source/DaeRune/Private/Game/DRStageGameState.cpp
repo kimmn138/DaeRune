@@ -2,11 +2,14 @@
 
 
 #include "Game/DRStageGameState.h"
+#include "GameFramework/PlayerState.h"
+#include "Interaction/CombatInterface.h"
 #include "Net/UnrealNetwork.h"
+#include "Actor/DRDoorManager.h"
 
 ADRStageGameState::ADRStageGameState()
 {
-    // �ʱⰪ ����
+    // �ʱⰪ ����
     CurrentPhaseIndex = -1;
     CurrentPhaseState = EPhaseState::NotStarted;
 
@@ -19,19 +22,27 @@ ADRStageGameState::ADRStageGameState()
     bCleanserActivated = false;
 
     // Phase 3
-    CurrentWave = 0;
-    TotalWaves = 5; // �⺻��
+    CurrentWaveNumber = 0;
+    CurrentWaveLevel = 0;
+    TotalWaves = 5; // �⺻��
     CleanserHealth = 1000.0f;
+    WaveRemainingTime = 0.0f;
+    bIsWaveRestTime = false;
 
     // Phase 4
     BossHealth = 1000.0f;
+
+    CurrentPhaseObjective.PhaseNumber = 0;  // 0은 "준비 중" 의미
+    CurrentPhaseObjective.ObjectiveTitle = FText::FromString("Preparing...");
+    CurrentPhaseObjective.ProgressFormat = FText::FromString("Progress");
+    CurrentPhaseObjective.RequiredCount = 0;
 }
 
 void ADRStageGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-    // ���� ���ø����̼�
+    // ���� ���ø����̼�
     DOREPLIFETIME(ADRStageGameState, CurrentPhaseIndex);
     DOREPLIFETIME(ADRStageGameState, CurrentPhaseState);
 
@@ -44,12 +55,26 @@ void ADRStageGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ADRStageGameState, bCleanserActivated);
 
     // Phase 3
-    DOREPLIFETIME(ADRStageGameState, CurrentWave);
+    DOREPLIFETIME(ADRStageGameState, CurrentWaveNumber);
+    DOREPLIFETIME(ADRStageGameState, CurrentWaveLevel);
     DOREPLIFETIME(ADRStageGameState, TotalWaves);
     DOREPLIFETIME(ADRStageGameState, CleanserHealth);
+    DOREPLIFETIME(ADRStageGameState, WaveRemainingTime);
+    DOREPLIFETIME(ADRStageGameState, bIsWaveRestTime);
 
     // Phase 4
     DOREPLIFETIME(ADRStageGameState, BossHealth);
+
+    // UI 업데이트
+    DOREPLIFETIME(ADRStageGameState, CurrentPhaseObjective);
+    DOREPLIFETIME(ADRStageGameState, CurrentObjectiveProgress);
+}
+
+void ADRStageGameState::RegisterDoorManager(ADRDoorManager* InDoorManager)
+{
+    if (!InDoorManager) return;
+
+    DoorManager = InDoorManager;
 }
 
 void ADRStageGameState::SetCurrentPhaseIndex(int32 NewIndex)
@@ -57,6 +82,9 @@ void ADRStageGameState::SetCurrentPhaseIndex(int32 NewIndex)
     if (HasAuthority())
     {
         CurrentPhaseIndex = NewIndex;
+
+        // Phase 변경 델리게이트 브로드캐스트
+        OnPhaseChangedDelegate.Broadcast(NewIndex);
     }
 }
 
@@ -100,11 +128,19 @@ void ADRStageGameState::SetCleanserActivated(bool bActivated)
     }
 }
 
-void ADRStageGameState::SetCurrentWave(int32 Wave)
+void ADRStageGameState::SetCurrentWaveNumber(int32 WaveNumber)
 {
     if (HasAuthority())
     {
-        CurrentWave = FMath::Max(0, Wave);
+        CurrentWaveNumber = FMath::Max(0, WaveNumber);
+    }
+}
+
+void ADRStageGameState::SetCurrentWaveLevel(int32 WaveLevel)
+{
+    if (HasAuthority())
+    {
+        CurrentWaveLevel = FMath::Max(0, WaveLevel);
     }
 }
 
@@ -122,12 +158,32 @@ void ADRStageGameState::SetCleanserHealth(float Health)
     {
         CleanserHealth = FMath::Clamp(Health, 0.0f, 1000.0f);
 
-        // Ŭ���� ü���� 0�� �Ǹ� ���� ó��
+        // Ŭ���� ü���� 0�� �Ǹ� ���� ó��
         if (CleanserHealth <= 0.0f)
         {
             SetCurrentPhaseState(EPhaseState::Failed);
         }
     }   
+}
+
+void ADRStageGameState::SetWaveRemainingTime(float Time)
+{
+    if (HasAuthority())
+    {
+        WaveRemainingTime = FMath::Max(0.0f, Time);
+        // 서버에서만 직접 브로드캐스트
+        OnWaveTimerChangedDelegate.Broadcast(CurrentWaveNumber, WaveRemainingTime, bIsWaveRestTime);
+    }
+}
+
+void ADRStageGameState::SetIsWaveRestTime(bool bIsRest)
+{
+    if (HasAuthority())
+    {
+        bIsWaveRestTime = bIsRest;
+        // 서버에서만 직접 브로드캐스트
+        OnWaveTimerChangedDelegate.Broadcast(CurrentWaveNumber, WaveRemainingTime, bIsWaveRestTime);
+    }
 }
 
 void ADRStageGameState::SetBossHealth(float Health)
@@ -138,14 +194,36 @@ void ADRStageGameState::SetBossHealth(float Health)
     }
 }
 
+void ADRStageGameState::SetPhaseObjective(const FPhaseObjectiveData& ObjectiveData)
+{
+    if (!HasAuthority()) return;
+    
+    CurrentPhaseObjective = ObjectiveData;
+    CurrentObjectiveProgress = 0;
+    OnPhaseObjectiveChangedDelegate.Broadcast();
+}
+
+void ADRStageGameState::UpdatePhaseObjectiveProgress(int32 NewCount)
+{
+    if (!HasAuthority()) return;
+    
+    CurrentObjectiveProgress = FMath::Clamp(NewCount, 0, CurrentPhaseObjective.RequiredCount);
+    OnPhaseObjectiveChangedDelegate.Broadcast();
+}
+
 void ADRStageGameState::OnRep_CurrentPhaseIndex()
 {
-    // Ŭ���̾�Ʈ UI ������Ʈ
+    OnPhaseChangedDelegate.Broadcast(CurrentPhaseIndex);
+}
+
+void ADRStageGameState::OnRep_CurrentPhaseObjective()
+{
+    OnPhaseObjectiveChangedDelegate.Broadcast();
 }
 
 void ADRStageGameState::OnRep_CurrentPhaseState()
 {
-    // Ŭ���̾�Ʈ ���� ���� �˸�
+    // Ŭ���̾�Ʈ ���� ���� �˸�
     FString StateString;
     switch (CurrentPhaseState)
     {
@@ -162,4 +240,21 @@ void ADRStageGameState::OnRep_CurrentPhaseState()
         StateString = "Failed";
         break;
     }
+}
+
+void ADRStageGameState::OnRep_CurrentObjectiveProgress()
+{
+    OnPhaseObjectiveChangedDelegate.Broadcast();
+}
+
+void ADRStageGameState::OnRep_WaveRemainingTime()
+{
+    // 클라이언트에서 Replicated 변수 변경 시 델리게이트 브로드캐스트
+    OnWaveTimerChangedDelegate.Broadcast(CurrentWaveNumber, WaveRemainingTime, bIsWaveRestTime);
+}
+
+void ADRStageGameState::OnRep_IsWaveRestTime()
+{
+    // 클라이언트에서 Replicated 변수 변경 시 델리게이트 브로드캐스트
+    OnWaveTimerChangedDelegate.Broadcast(CurrentWaveNumber, WaveRemainingTime, bIsWaveRestTime);
 }

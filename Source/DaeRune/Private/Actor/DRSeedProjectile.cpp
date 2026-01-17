@@ -5,14 +5,12 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
-#include "Components/SphereComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
-#include "Kismet/GameplayStatics.h"
-#include "NiagaraFunctionLibrary.h"
-#include "DaeRune/DaeRune.h"
 #include "Character/DRCharacter.h"
 #include "DrawDebugHelpers.h"
+#include "Actor/DRCleanserSite.h"
 #include "Engine/OverlapResult.h"
+#include "Sound/DRSoundManager.h"
 
 ADRSeedProjectile::ADRSeedProjectile()
 {
@@ -73,14 +71,10 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
     // 폭발 이펙트 재생 (기존 OnHit 함수 활용)
     OnHit();
 
-    // 디버그 시각화 (개발 빌드에서만)
-#if !UE_BUILD_SHIPPING
-    if (GEngine)
-    {
-        DrawDebugSphere(GetWorld(), ImpactLocation, InnerRadius, 16, FColor::Yellow, false, 3.0f, 0, 2.0f);
-        DrawDebugSphere(GetWorld(), ImpactLocation, OuterRadius, 24, FColor::Orange, false, 3.0f, 0, 1.0f);
-    }
-#endif
+    MulticastPlayExplosionSound(ImpactLocation);
+
+    // 모든 클라이언트에게 폭발 위치 전달 (디버그 드로우용)
+    MulticastExplodeAtLocation(ImpactLocation);
 
     // 범위 내 모든 액터 검색
     TArray<FOverlapResult> OverlapResults;
@@ -124,6 +118,12 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
 
         // 죽은 캐릭터는 무시
         if (Target->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Target))
+        {
+            continue;
+        }
+
+        // 클렌저 사이트는 무시
+        if (ADRCleanserSite* CleanserSite = Cast<ADRCleanserSite>(Target))
         {
             continue;
         }
@@ -182,18 +182,6 @@ bool ADRSeedProjectile::HasLineOfSight(const FVector& StartLocation, const FVect
         ECC_Visibility,  // 벽과 같은 Static 오브젝트 감지
         QueryParams
     );
-
-    // 디버그 라인 그리기
-#if !UE_BUILD_SHIPPING
-    FColor DebugColor = bHitResult ? FColor::Red : FColor::Green;
-    DrawDebugLine(GetWorld(), AdjustedStart, AdjustedEnd, DebugColor, false, 3.0f, 0, 2.0f);
-
-    if (bHitResult)
-    {
-        // 충돌 지점에 X 표시
-        DrawDebugBox(GetWorld(), HitResult.ImpactPoint, FVector(10.f), FColor::Red, false, 3.0f);
-    }
-#endif
 
     // 벽에 막히지 않았으면 true (시야 확보), 막혔으면 false
     return !bHitResult;
@@ -294,5 +282,95 @@ void ADRSeedProjectile::ApplyHealToAlly(AActor* AllyActor, float HealAmount)
 
         TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
     }
+}
+
+void ADRSeedProjectile::MulticastPlayExplosionSound_Implementation(const FVector& Location)
+{
+    if (UGameInstance* GI = GetGameInstance())
+    {
+        if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+        {
+            SM->PlaySeedExplosionSound(Location);
+        }
+    }
+}
+
+void ADRSeedProjectile::MulticastExplodeAtLocation_Implementation(const FVector& ImpactLocation)
+{
+    #if !UE_BUILD_SHIPPING
+    // 폭발 범위 표시
+    DrawDebugSphere(GetWorld(), ImpactLocation, InnerRadius, 16, FColor::Yellow, false, 1.0f, 0, 3.0f);
+    DrawDebugSphere(GetWorld(), ImpactLocation, OuterRadius, 24, FColor::Orange, false, 1.0f, 0, 2.0f);
+
+    // 클라이언트도 자기가 직접 계산!
+    TArray<FOverlapResult> OverlapResults;
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(this);
+
+    if (DamageEffectParams.SourceAbilitySystemComponent)
+    {
+        if (AActor* SourceActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor())
+        {
+            QueryParams.AddIgnoredActor(SourceActor);
+        }
+    }
+
+    GetWorld()->OverlapMultiByChannel(
+        OverlapResults,
+        ImpactLocation,
+        FQuat::Identity,
+        ECC_Pawn,
+        FCollisionShape::MakeSphere(OuterRadius),
+        QueryParams
+    );
+
+    // 각 타겟에 대해 라인 그리기
+    for (const FOverlapResult& Result : OverlapResults)
+    {
+        AActor* Target = Result.GetActor();
+        if (!Target) continue;
+
+        if (Target->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Target))
+        {
+            continue;
+        }
+
+        float Distance = FVector::Dist(ImpactLocation, Target->GetActorLocation());
+        if (Distance > OuterRadius) continue;
+
+        // 클라이언트가 직접 LOS 체크
+        FVector AdjustedStart = ImpactLocation + FVector(0, 0, 50.f);
+        FVector AdjustedEnd = Target->GetActorLocation() + FVector(0, 0, 50.f);
+
+        FHitResult HitResult;
+        FCollisionQueryParams LOSParams;
+        LOSParams.AddIgnoredActor(this);
+        LOSParams.AddIgnoredActor(Target);
+        if (DamageEffectParams.SourceAbilitySystemComponent)
+        {
+            if (AActor* SourceActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor())
+            {
+                LOSParams.AddIgnoredActor(SourceActor);
+            }
+        }
+
+        bool bBlocked = GetWorld()->LineTraceSingleByChannel(
+            HitResult,
+            AdjustedStart,
+            AdjustedEnd,
+            ECC_Visibility,
+            LOSParams
+        );
+
+        // 라인 그리기
+        FColor LineColor = bBlocked ? FColor::Red : FColor::Green;
+        DrawDebugLine(GetWorld(), AdjustedStart, AdjustedEnd, LineColor, false, 1.0f, 0, 1.0f);
+
+        if (bBlocked)
+        {
+            DrawDebugBox(GetWorld(), HitResult.ImpactPoint, FVector(15.f), FColor::Red, false, 1.0f, 0, 2.0f);
+        }
+    }
+#endif
 }
 

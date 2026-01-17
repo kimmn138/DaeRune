@@ -9,6 +9,7 @@
 #include "Interaction/CombatInterface.h"
 #include "DRCharacterBase.generated.h"
 
+struct FOnAttributeChangeData;
 class UDebuffNiagaraComponent;
 class UNiagaraSystem;
 class UAbilitySystemComponent;
@@ -30,6 +31,7 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const;
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	UAttributeSet* GetAttributeSet() const { return AttributeSet; }
+	void SetLevel(int32 NewLevel) { Level = NewLevel; }
 
 	/** Combat Interface */
 	virtual UAnimMontage* GetHitReactMontage_Implementation() override;
@@ -82,6 +84,10 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	// 레벨
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Class Defaults")
+	int32 Level = 1;
+	
 	// 무기 컴포넌트
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
 	TObjectPtr<USkeletalMeshComponent> Weapon;
@@ -111,7 +117,7 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
 
-	UPROPERTY()
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Abilities")
 	TObjectPtr<UAttributeSet> AttributeSet;
 
 	virtual void InitAbilityActorInfo();
@@ -122,11 +128,15 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Attributes")
 	TSubclassOf<UGameplayEffect> DefaultVitalAttributes;
-
-	void ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass, float Level) const;
+	
+	void ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass) const;
 	virtual void InitializeDefaultAttributes() const;
 
 	void AddCharacterAbilities();
+
+	virtual void OnMoveSpeedChanged(const FOnAttributeChangeData& Data);
+
+	virtual float GetMoveSpeed();
 
 	// Dissolve 효과
 	void Dissolve();
@@ -145,9 +155,6 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
 	UNiagaraSystem* BloodEffect;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
-	USoundBase* DeathSound;
 
 	// 소환수 관련
 	int32 MinionCount = 0;
@@ -172,5 +179,5 @@ private:
 
 	// 피격 몽타주
 	UPROPERTY(EditAnywhere, Category = "Combat")
-	TObjectPtr<UAnimMontage> HitReactMontage;
+	TArray<TObjectPtr<UAnimMontage>> HitReactMontages;
 };

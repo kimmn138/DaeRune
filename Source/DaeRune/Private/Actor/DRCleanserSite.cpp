@@ -11,6 +11,7 @@
 #include "Components/WidgetComponent.h"
 #include "Player/DRPlayerController.h"
 #include "Character/DRCharacter.h"
+#include "Sound/DRSoundManager.h"
 
 ADRCleanserSite::ADRCleanserSite()
 {
@@ -21,11 +22,23 @@ ADRCleanserSite::ADRCleanserSite()
 	RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootComponent"));
 	SetRootComponent(RootSceneComponent);
 
-	// 클렌저 메시 생성 (초기: 숨김)
+	// 클렌저 메시 생성
 	CleanserMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CleanserMesh"));
 	CleanserMesh->SetupAttachment(RootComponent);
 	CleanserMesh->SetVisibility(false);
-	CleanserMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	CleanserMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	CleanserMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+
+	// 클렌저 물 메시 생성
+	WaterMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WaterMesh"));
+	WaterMesh->SetupAttachment(CleanserMesh);
+	WaterMesh->SetVisibility(false);
+	WaterMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	WaterMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+
+	// 물 메시 초기 스케일 및 위치 저장
+	InitialWaterMeshScale = FVector(1.0f, 1.0f, 1.0f);
+	InitialWaterMeshLocation = FVector::ZeroVector;
 
 	// 상호작용 박스 생성
 	InteractionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractionBox"));
@@ -43,7 +56,6 @@ ADRCleanserSite::ADRCleanserSite()
 	InteractionWidget->SetDrawSize(FVector2D(300.0f, 100.0f));
 	InteractionWidget->SetVisibility(false);
 	InteractionWidget->SetOwnerNoSee(false);
-	InteractionWidget->SetOnlyOwnerSee(true);
 
 	// GAS 컴포넌트 생성
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
@@ -56,7 +68,6 @@ ADRCleanserSite::ADRCleanserSite()
 	CurrentState = ECleanserSiteState::Inactive;
 	bHealthEnabled = false;
 	InstalledPartsCount = 0;
-	OverlappingPlayerController = nullptr;
 }
 
 void ADRCleanserSite::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -73,16 +84,44 @@ UAbilitySystemComponent* ADRCleanserSite::GetAbilitySystemComponent() const
 	return AbilitySystemComponent;
 }
 
+void ADRCleanserSite::MulticastPlayInstallSound_Implementation(bool bIsComplete)
+{
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+		{
+			SM->PlayPartInstallSound(GetActorLocation(), bIsComplete);
+		}
+	}
+}
+
+void ADRCleanserSite::MulticastStartOperatingSound_Implementation()
+{
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+		{
+			OperatingSoundComponent = SM->StartCleanserOperatingSound(GetActorLocation());
+		}
+	}
+}
+
+void ADRCleanserSite::MulticastStopOperatingSound_Implementation()
+{
+	if (OperatingSoundComponent)
+	{
+		OperatingSoundComponent->Stop();
+		OperatingSoundComponent = nullptr;
+	}
+}
+
 void ADRCleanserSite::ActivateSite()
 {
 	if (!HasAuthority()) return;
 
 	CurrentState = ECleanserSiteState::Active;
 
-	if (CleanserMesh)
-	{
-		CleanserMesh->SetVisibility(true);
-	}
+	UpdateMeshByState();
 }
 
 void ADRCleanserSite::DeactivateSite()
@@ -91,10 +130,7 @@ void ADRCleanserSite::DeactivateSite()
 
 	CurrentState = ECleanserSiteState::Inactive;
 
-	if (CleanserMesh)
-	{
-		CleanserMesh->SetVisibility(false);
-	}
+	UpdateMeshByState();
 }
 
 void ADRCleanserSite::SetPartsCollected()
@@ -102,6 +138,17 @@ void ADRCleanserSite::SetPartsCollected()
 	if (!HasAuthority()) return;
 
 	CurrentState = ECleanserSiteState::PartsCollected;
+
+	// 메시 교체
+	if (CleanserMesh && CleanserMesh_AfterParts)
+	{
+		CleanserMesh->SetStaticMesh(CleanserMesh_AfterParts);
+	}
+
+	if (WaterMesh && WaterMesh_AfterParts)
+	{
+		WaterMesh->SetStaticMesh(WaterMesh_AfterParts);
+	}
 }
 
 void ADRCleanserSite::InstallPart(ADRCharacter* Character)
@@ -123,6 +170,9 @@ void ADRCleanserSite::InstallPart(ADRCharacter* Character)
 	// 설치 개수 증가
 	InstalledPartsCount++;
 
+	bool bIsComplete = (InstalledPartsCount >= RequiredPartsCount);
+	MulticastPlayInstallSound(bIsComplete);
+
 	// UI 업데이트
 	UpdateInteractionUI();
 
@@ -136,49 +186,50 @@ void ADRCleanserSite::InstallPart(ADRCharacter* Character)
 	}
 }
 
-void ADRCleanserSite::StartOperation()
-{
-	if (!HasAuthority()) return;
-
-	CurrentState = ECleanserSiteState::Operational;
-	bHealthEnabled = true;
-
-	// 체력 초기화
-	InitializeHealth();
-
-	// 체력 변경 감지 바인딩
-	if (AbilitySystemComponent && AttributeSet)
-	{
-		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetHealthAttribute()).AddUObject(this, &ADRCleanserSite::OnHealthChanged);
-	}
-}
-
-void ADRCleanserSite::StopOperation()
-{
-	if (!HasAuthority()) return;
-
-	bHealthEnabled = false;
-
-	// 체력 비활성화
-	DisableHealth();
-
-	// 체력 변경 감지 언바인딩
-	if (AbilitySystemComponent && AttributeSet)
-	{
-		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetHealthAttribute()).RemoveAll(this);
-	}
-}
-
-void ADRCleanserSite::SetCompleted()
-{
-	if (!HasAuthority()) return;
-
-	CurrentState = ECleanserSiteState::Completed;
-}
-
 FVector ADRCleanserSite::GetSpawnLocation() const
 {
 	return GetActorLocation();
+}
+
+FVector ADRCleanserSite::GetClosestSurfacePoint(const FVector& FromLocation) const
+{
+	if (!CleanserMesh)
+	{
+		return GetActorLocation();
+	}
+    
+	FVector ClosestPoint;
+    
+	// 실제 콜리전 형태에서 가장 가까운 점 계산
+	if (CleanserMesh->GetClosestPointOnCollision(FromLocation, ClosestPoint))
+	{
+		return ClosestPoint;
+	}
+    
+	// 실패하면 액터 위치 반환
+	return GetActorLocation();
+}
+
+void ADRCleanserSite::UpdateWaterMeshScale(float HealthRatio)
+{
+	if (!WaterMesh) return;
+
+	// 체력 비율을 0~1 사이로 제한
+	HealthRatio = FMath::Clamp(HealthRatio, 0.0f, 1.0f);
+
+	// 새 스케일 계산
+	FVector NewScale = InitialWaterMeshScale;
+	NewScale.Z = InitialWaterMeshScale.Z * HealthRatio;
+
+	// 새 위치 계산
+	const float ScaleChange = InitialWaterMeshScale.Z - NewScale.Z;
+	const float LocationOffset = ScaleChange * 250.0f;
+	FVector NewLocation = InitialWaterMeshLocation;
+	NewLocation.Z = InitialWaterMeshLocation.Z + LocationOffset;
+
+	// 적용
+	WaterMesh->SetRelativeScale3D(NewScale);
+	WaterMesh->SetRelativeLocation(NewLocation);
 }
 
 void ADRCleanserSite::BeginPlay()
@@ -188,17 +239,26 @@ void ADRCleanserSite::BeginPlay()
 	if (HasAuthority())
 	{
 		InitAbilityActorInfo();
+	}
 
-		// 오버랩 이벤트 바인딩
-		InteractionBox->OnComponentBeginOverlap.AddDynamic(this, &ADRCleanserSite::OnBoxBeginOverlap);
-		InteractionBox->OnComponentEndOverlap.AddDynamic(this, &ADRCleanserSite::OnBoxEndOverlap);
+	if (WaterMesh)
+	{
+		InitialWaterMeshScale = WaterMesh->GetRelativeScale3D();
+		InitialWaterMeshLocation = WaterMesh->GetRelativeLocation();
+	}
+
+	// 오버랩 이벤트 바인딩
+	InteractionBox->OnComponentBeginOverlap.AddDynamic(this, &ADRCleanserSite::OnBoxBeginOverlap);
+	InteractionBox->OnComponentEndOverlap.AddDynamic(this, &ADRCleanserSite::OnBoxEndOverlap);
+
+	if (!HasAuthority())
+	{
+		UpdateMeshByState();
 	}
 }
 
 void ADRCleanserSite::OnBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (!HasAuthority()) return;
-
 	// Phase2가 아니면 무시
 	if (CurrentState != ECleanserSiteState::Active) return;
 
@@ -208,63 +268,43 @@ void ADRCleanserSite::OnBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent
 	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
 	if (!Character) return;
 
-	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
-	if (!PC) return;
-
 	// 플레이어가 부품을 들고 있는지 확인
 	if (!Character->IsCarryingPart()) return;
 
-	// 이미 다른 플레이어가 상호작용 중이면 무시
-	if (OverlappingPlayerController) return;
+	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
+	if (!PC) return;
 
-	OverlappingPlayerController = PC;
-
-	// Owner 설정 및 UI 표시
-	SetOwner(Character);
-	InteractionWidget->SetVisibility(true);
-
-	// 상호작용 델리게이트 구독
-	OverlappingPlayerController->OnInteractPressed.AddDynamic(this, &ADRCleanserSite::OnPlayerInteract);
+	// 로컬 컨트롤러에서만 처리
+	if (PC->IsLocalController())
+	{
+		// PlayerController에 현재 사이트 설정
+		PC->CurrentOverlappedSite = this;
+		
+		// UI 표시
+		InteractionWidget->SetVisibility(true);
+	}
 }
 
 void ADRCleanserSite::OnBoxEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	if (!HasAuthority()) return;
-
 	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
 	if (!Character) return;
 
 	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
 	if (!PC) return;
 
-	// 현재 오버랩 중인 플레이어가 아니면 무시
-	if (OverlappingPlayerController != PC) return;
-
-	// UI 숨김
-	InteractionWidget->SetVisibility(false);
-	SetOwner(nullptr);
-
-	// 델리게이트 구독 해제
-	OverlappingPlayerController->OnInteractPressed.RemoveDynamic(this, &ADRCleanserSite::OnPlayerInteract);
-	OverlappingPlayerController = nullptr;
+	// 로컬 컨트롤러에서만 처리
+	if (PC->IsLocalController())
+	{
+		// PlayerController의 사이트 참조 제거
+		PC->CurrentOverlappedSite = nullptr;
+		
+		// UI 숨김
+		InteractionWidget->SetVisibility(false);
+	}
 }
 
-void ADRCleanserSite::OnPlayerInteract()
-{
-	// 서버에서 부품 설치 처리
-	if (!HasAuthority()) return;
-
-	// 오버랩 중인 플레이어의 캐릭터 가져오기
-	if (!OverlappingPlayerController) return;
-
-	ADRCharacter* Character = OverlappingPlayerController->GetPawn<ADRCharacter>();
-	if (!Character) return;
-
-	// 부품 설치
-	InstallPart(Character);
-}
-
-void ADRCleanserSite::UpdateInteractionUI()
+void ADRCleanserSite::UpdateInteractionUI() const
 {
 	// 부품이 다 설치되었으면 UI 숨김
 	if (InstalledPartsCount >= RequiredPartsCount)
@@ -275,19 +315,8 @@ void ADRCleanserSite::UpdateInteractionUI()
 
 void ADRCleanserSite::OnRep_CurrentState()
 {
-	// 클라이언트에서 상태 변경 시 시각 효과 업데이트
-	switch (CurrentState)
-	{
-		case ECleanserSiteState::Inactive:
-			if (CleanserMesh) CleanserMesh->SetVisibility(false);
-			break;
-		case ECleanserSiteState::Active:
-		case ECleanserSiteState::PartsCollected:
-		case ECleanserSiteState::Operational:
-		case ECleanserSiteState::Completed:
-			if (CleanserMesh) CleanserMesh->SetVisibility(true);
-			break;
-	}
+	// 클라이언트에서 상태 변경 시 메시 업데이트
+	UpdateMeshByState();
 }
 
 void ADRCleanserSite::OnRep_InstalledPartsCount()
@@ -296,35 +325,56 @@ void ADRCleanserSite::OnRep_InstalledPartsCount()
 	// 예: 부품 개수에 따라 메시나 이펙트 변경
 }
 
-void ADRCleanserSite::InitializeHealth()
+void ADRCleanserSite::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass) const
 {
-	if (!HasAuthority() || !AttributeSet) return;
-
-	// 체력을 최대치로 초기화
-	AttributeSet->SetHealth(AttributeSet->GetMaxHealth());
+	check(IsValid(GetAbilitySystemComponent()));
+	check(GameplayEffectClass);
+	
+	// 컨텍스트 생성 및 소스 설정
+	FGameplayEffectContextHandle ContextHandle = GetAbilitySystemComponent()->MakeEffectContext();
+	ContextHandle.AddSourceObject(this);
+	
+	// 스펙 생성 및 적용 (레벨 1로 고정)
+	const FGameplayEffectSpecHandle SpecHandle = GetAbilitySystemComponent()->MakeOutgoingSpec(GameplayEffectClass, 1.0f, ContextHandle);
+	GetAbilitySystemComponent()->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), GetAbilitySystemComponent());
 }
 
-void ADRCleanserSite::DisableHealth()
+void ADRCleanserSite::InitializeDefaultAttributes() const
 {
-	if (!HasAuthority()) return;
-
-	// 체력을 0으로 설정하여 비활성화 표시
-	// (실제로는 체력 시스템을 사용하지 않음)
+	// 기본 체력 속성 초기화
+	ApplyEffectToSelf(DefaultPrimaryAttributes);
+	ApplyEffectToSelf(DefaultVitalAttributes);
 }
 
-void ADRCleanserSite::OnHealthChanged(const FOnAttributeChangeData& Data)
+void ADRCleanserSite::UpdateMeshByState()
 {
-	if (!HasAuthority() || !bHealthEnabled) return;
-
-	float NewHealth = Data.NewValue;
-
-	// 체력이 0이 되면 파괴
-	if (NewHealth <= 0.0f)
+	switch (CurrentState)
 	{
-		// 델리게이트 브로드캐스트
-		OnCleanserSiteDestroyed.Broadcast(this);
+	case ECleanserSiteState::Inactive:
+		if (CleanserMesh) CleanserMesh->SetVisibility(false);
+		if (WaterMesh) WaterMesh->SetVisibility(false);
+		break;
 
-		// GameMode에 알림 (Phase3에서 처리)
+	case ECleanserSiteState::Active:
+		if (CleanserMesh) CleanserMesh->SetVisibility(true);
+		if (WaterMesh) WaterMesh->SetVisibility(true);
+		break;
+
+	case ECleanserSiteState::PartsCollected:
+	case ECleanserSiteState::Operational:
+	case ECleanserSiteState::Completed:
+		// 부품 설치 후 메시로 교체
+		if (CleanserMesh && CleanserMesh_AfterParts)
+		{
+			CleanserMesh->SetStaticMesh(CleanserMesh_AfterParts);
+			CleanserMesh->SetVisibility(true);
+		}
+		if (WaterMesh && WaterMesh_AfterParts)
+		{
+			WaterMesh->SetStaticMesh(WaterMesh_AfterParts);
+			WaterMesh->SetVisibility(true);
+		}
+		break;
 	}
 }
 
@@ -334,16 +384,4 @@ void ADRCleanserSite::InitAbilityActorInfo()
 	{
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
 	}
-}
-
-void ADRCleanserSite::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-	// 델리게이트 구독 해제
-	if (OverlappingPlayerController)
-	{
-		OverlappingPlayerController->OnInteractPressed.RemoveDynamic(this, &ADRCleanserSite::OnPlayerInteract);
-		OverlappingPlayerController = nullptr;
-	}
-
-	Super::EndPlay(EndPlayReason);
 }

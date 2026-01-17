@@ -32,6 +32,9 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Source")
     TSubclassOf<UGameplayEffect> WaterFillEffectClass;
 
+    UFUNCTION(NetMulticast, Unreliable)
+    void MulticastPlayWaterGainSound();
+
 protected:
     // DREffectActor의 OnOverlap/OnEndOverlap 오버라이드
     virtual void OnOverlap(AActor* TargetActor) override;
