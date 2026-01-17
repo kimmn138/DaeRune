@@ -102,6 +102,9 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable)
 	void SetInShockLoop(bool bInLoop);
 
+	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable)
+	void SetInWaterLoop(bool bInLoop);
+
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
 	USkeletalMeshComponent* GetWeapon();
 

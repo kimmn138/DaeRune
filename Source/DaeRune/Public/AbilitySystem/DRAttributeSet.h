@@ -128,6 +128,10 @@ public:
 
 	void Debuff(const FEffectProperties& Props);
 
+	// µð¹öÇÁ GE ¸Ê
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Debuff")
+	TMap<FGameplayTag, TSubclassOf<UGameplayEffect>> DebuffEffectMap;
+
 protected:
 	virtual void HandleIncomingDamage(const FEffectProperties& Props);
 	virtual void HandleIncomingHealing(const FEffectProperties& Props);

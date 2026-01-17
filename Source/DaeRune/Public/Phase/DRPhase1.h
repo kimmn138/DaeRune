@@ -7,6 +7,7 @@
 #include "DRPhase1.generated.h"
 
 class ADRCleanserSite;
+class ADRDoorManager;
 
 /**
  * Phase 1: 클렌저 확보
@@ -49,10 +50,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Config")
 	TSubclassOf<AActor> NormalEnemyClass;
 
-	// 맵에 배치된 클렌저 사이트 3개 (블루프린트에서 할당)
-	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Phase1|Config", meta = (AllowPrivateAccess = "true"))
-	TArray<TObjectPtr<ADRCleanserSite>> AllCleanserSites;
-
 	// 일반 몬스터 스폰 수
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Config")
 	int32 NormalEnemyCount = 4;
@@ -72,4 +69,10 @@ private:
 
 	// 총 스폰된 적 수
 	int32 TotalEnemyCount = 0;
+
+	// 캐싱된 DoorManager 참조
+	UPROPERTY()
+	TObjectPtr<ADRDoorManager> CachedDoorManager;
+
+	ADRDoorManager* GetDoorManager();
 };

@@ -6,6 +6,7 @@
 #include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystem/DRAttributeSet.h"
+#include "AbilitySystem/DRCleanserSiteAttributeSet.h"
 
 UExecCalc_Damage::UExecCalc_Damage()
 {
@@ -35,11 +36,9 @@ void UExecCalc_Damage::DetermineDebuff(const FGameplayEffectCustomExecutionParam
 
 				const float DebuffDamage = Spec.GetSetByCallerMagnitude(GameplayTags.Debuff_Damage, false, -1.f);
 				const float DebuffDuration = Spec.GetSetByCallerMagnitude(GameplayTags.Debuff_Duration, false, -1.f);
-				const float DebuffFrequency = Spec.GetSetByCallerMagnitude(GameplayTags.Debuff_Frequency, false, -1.f);
 
 				UDRAbilitySystemLibrary::SetDebuffDamage(ContextHandle, DebuffDamage);
 				UDRAbilitySystemLibrary::SetDebuffDuration(ContextHandle, DebuffDuration);
-				UDRAbilitySystemLibrary::SetDebuffFrequency(ContextHandle, DebuffFrequency);
 			}
 		}
 	}
@@ -66,6 +65,24 @@ void UExecCalc_Damage::Execute_Implementation(const FGameplayEffectCustomExecuti
 		Damage += DamageTypeValue;
 	}
 
-	const FGameplayModifierEvaluatedData EvaluatedData(UDRAttributeSet::GetIncomingDamageAttribute(), EGameplayModOp::Additive, Damage);
-	OutExecutionOutput.AddOutputModifier(EvaluatedData);
+	// 타겟의 AttributeSet 타입에 따라 올바른 IncomingDamage Attribute 사용
+	UAbilitySystemComponent* TargetASC = ExecutionParams.GetTargetAbilitySystemComponent();
+	FGameplayAttribute IncomingDamageAttribute;
+	
+	if (TargetASC)
+	{
+		// 클렌저 사이트 AttributeSet 체크
+		if (TargetASC->HasAttributeSetForAttribute(UDRCleanserSiteAttributeSet::GetIncomingDamageAttribute()))
+		{
+			IncomingDamageAttribute = UDRCleanserSiteAttributeSet::GetIncomingDamageAttribute();
+		}
+		// 일반 캐릭터 AttributeSet
+		else
+		{
+			IncomingDamageAttribute = UDRAttributeSet::GetIncomingDamageAttribute();
+		}
+		
+		const FGameplayModifierEvaluatedData EvaluatedData(IncomingDamageAttribute, EGameplayModOp::Additive, Damage);
+		OutExecutionOutput.AddOutputModifier(EvaluatedData);
+	}
 }

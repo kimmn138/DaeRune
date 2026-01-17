@@ -31,6 +31,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Maximum amount of Water obtainable")
 	);
 
+	GameplayTags.Attributes_Primary_MoveSpeed = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Attributes.Primary.MoveSpeed"),
+		FString("Maximum amount of Speed obtainable")
+	);
+
 	/*
 	 * 입력 태그
 	 */
@@ -62,6 +67,16 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.State_Corrupt = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("State.Corrupt"),
 		FString("State Tag for Player In Corrupt")
+	);
+
+	GameplayTags.State_Carrying = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.Carrying"),
+		FString("State Tag for Player In Carrying Part")
+	);
+
+	GameplayTags.Enemy_Detected = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Enemy.Detected"),
+		FString("State Tag for Enemy In Detected")
 	);
 
 	/*
@@ -111,6 +126,15 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	 * 디버프 효과
 	 */
 
+	GameplayTags.Buff_Elite = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.Elite"),
+		FString("Buff for Elite Monster")
+	);
+	
+	/*
+	 * 디버프 효과
+	 */
+
 	GameplayTags.Debuff_Arcane = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Debuff.Arcane"),
 		FString("Debuff for Arcane damage")
@@ -136,6 +160,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Debuff for Bleed damage")
 	);
 
+	GameplayTags.Debuff_Elite = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Debuff.Elite"),
+		FString("Debuff for Elite Monster")
+	);
+
 	/*
 	 * 디버프 계산용 태그
 	 */
@@ -153,11 +182,6 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Debuff_Duration = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Debuff.Duration"),
 		FString("Debuff Duration")
-	);
-
-	GameplayTags.Debuff_Frequency = UGameplayTagsManager::Get().AddNativeGameplayTag(
-		FName("Debuff.Frequency"),
-		FString("Debuff Frequency")
 	);
 
 	/*
@@ -210,6 +234,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Abilities_Attack = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Abilities.Attack"),
 		FString("Attack Ability Tag")
+	);
+
+	GameplayTags.Abilities_Death = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.Death"),
+		FString("Death Ability Tag")
 	);
 
 	GameplayTags.Abilities_Summon = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -353,5 +382,44 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Player_Block_InputReleased = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Player.Block.InputReleased"),
 		FString("Block Input Released callback for input")
+	);
+
+	/*
+	 * GameplayCue - 사운드
+	 */
+
+	GameplayTags.GameplayCue_Player_Damage = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Player.Damage"),
+		FString("Player Damaged Sound")
+	);
+
+	GameplayTags.GameplayCue_Player_Death = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Player.Death"),
+		FString("Player Death Sound")
+	);
+
+	GameplayTags.GameplayCue_Player_LowHealth = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Player.LowHealth"),
+		FString("Container Low Sound")
+	);
+
+	GameplayTags.GameplayCue_Player_WaterDepleted = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Player.WaterDepleted"),
+		FString("Water Zero Sound")
+	);
+
+	GameplayTags.GameplayCue_Enemy_Damage = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Enemy.Damage"),
+		FString("Enemy Damaged Sound")
+	);
+
+	GameplayTags.GameplayCue_Cleanser_Damage = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Cleanser.Damage"),
+		FString("Cleanser Damaged Sound")
+	);
+
+	GameplayTags.GameplayCue_Skill_WaterPump = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Skill.WaterPump"),
+		FString("WaterPump Loop Sound/Effect")
 	);
 }

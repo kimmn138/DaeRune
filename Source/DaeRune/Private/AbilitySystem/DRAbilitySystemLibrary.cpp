@@ -5,6 +5,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "DRAbilityTypes.h"
 #include "DRGameplayTags.h"
+#include "Actor/DRCleanserSite.h"
 #include "Game/DRGameModeBase.h"
 #include "Interaction/CombatInterface.h"
 #include "Kismet/GameplayStatics.h"
@@ -12,6 +13,7 @@
 #include "UI/HUD/DRHUD.h"
 #include "UI/WidgetController/DRWidgetController.h"
 #include "Engine/OverlapResult.h"
+#include "Game/DRStageGameState.h"
 #include "GameFramework/Character.h"
 
 bool UDRAbilitySystemLibrary::MakeWidgetControllerParams(const UObject* WorldContextObject, FWidgetControllerParams& OutWCParams, ADRHUD*& OutDRHUD)
@@ -67,19 +69,28 @@ void UDRAbilitySystemLibrary::GiveStartupAbilities(const UObject* WorldContextOb
 {
 	UCharacterClassInfo* CharacterClassInfo = GetCharacterClassInfo(WorldContextObject);
 	if (CharacterClassInfo == nullptr) return;
+
+	int32 CharacterLevel = 1;
+	if (ASC->GetAvatarActor()->Implements<UCombatInterface>())
+	{
+		CharacterLevel = ICombatInterface::Execute_GetPlayerLevel(ASC->GetAvatarActor());
+	}
+	
 	for (TSubclassOf<UGameplayAbility> AbilityClass : CharacterClassInfo->CommonAbilities)
 	{
-		FGameplayAbilitySpec AbilitySpec = FGameplayAbilitySpec(AbilityClass, 1);
+		FGameplayAbilitySpec AbilitySpec = FGameplayAbilitySpec(AbilityClass, CharacterLevel);
 		ASC->GiveAbility(AbilitySpec);
 	}
 	const FCharacterClassDefaultInfo& DefaultInfo = CharacterClassInfo->GetClassDefaultInfo(CharacterClass);
 	for (TSubclassOf<UGameplayAbility> AbilityClass : DefaultInfo.StartupAbilities)
 	{
-		if (ASC->GetAvatarActor()->Implements<UCombatInterface>())
-		{
-			FGameplayAbilitySpec AbilitySpec = FGameplayAbilitySpec(AbilityClass, ICombatInterface::Execute_GetPlayerLevel(ASC->GetAvatarActor()));
-			ASC->GiveAbility(AbilitySpec);
-		}
+		FGameplayAbilitySpec AbilitySpec = FGameplayAbilitySpec(AbilityClass, CharacterLevel);
+		ASC->GiveAbility(AbilitySpec);
+	}
+	for (TSubclassOf<UGameplayAbility> AbilityClass : DefaultInfo.DeathAbilities)
+	{
+		FGameplayAbilitySpec AbilitySpec = FGameplayAbilitySpec(AbilityClass, CharacterLevel);
+		ASC->GiveAbility(AbilitySpec);
 	}
 }
 
@@ -120,15 +131,6 @@ float UDRAbilitySystemLibrary::GetDebuffDuration(const FGameplayEffectContextHan
 	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
 	{
 		return DREffectContext->GetDebuffDuration();
-	}
-	return 0.f;
-}
-
-float UDRAbilitySystemLibrary::GetDebuffFrequency(const FGameplayEffectContextHandle& EffectContextHandle)
-{
-	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
-	{
-		return DREffectContext->GetDebuffFrequency();
 	}
 	return 0.f;
 }
@@ -187,14 +189,6 @@ void UDRAbilitySystemLibrary::SetDebuffDuration(UPARAM(ref)FGameplayEffectContex
 	}
 }
 
-void UDRAbilitySystemLibrary::SetDebuffFrequency(UPARAM(ref)FGameplayEffectContextHandle& EffectContextHandle, float InFrequency)
-{
-	if (FDRGameplayEffectContext* DREffectContext = static_cast<FDRGameplayEffectContext*>(EffectContextHandle.Get()))
-	{
-		DREffectContext->SetDebuffFrequency(InFrequency);
-	}
-}
-
 void UDRAbilitySystemLibrary::SetDamageType(UPARAM(ref)FGameplayEffectContextHandle& EffectContextHandle, const FGameplayTag& InDamageType)
 {
 	if (FDRGameplayEffectContext* DREffectContext = static_cast<FDRGameplayEffectContext*>(EffectContextHandle.Get()))
@@ -220,7 +214,7 @@ void UDRAbilitySystemLibrary::SetKnockbackForce(UPARAM(ref)FGameplayEffectContex
 	}
 }
 
-void UDRAbilitySystemLibrary::GetLivePlayersWithinRadius(const UObject* WorldContextObject, TArray<AActor*>& OutOverlappingActors, const TArray<AActor*>& ActorsToIgnore, float Radius, const FVector& SphereOrigin)
+void UDRAbilitySystemLibrary::GetLiveObjectsWithinRadius(const UObject* WorldContextObject, TArray<AActor*>& OutOverlappingActors, const TArray<AActor*>& ActorsToIgnore, float Radius, const FVector& SphereOrigin)
 {
 	FCollisionQueryParams SphereParams;
 	SphereParams.AddIgnoredActors(ActorsToIgnore);
@@ -234,6 +228,10 @@ void UDRAbilitySystemLibrary::GetLivePlayersWithinRadius(const UObject* WorldCon
 			if (Overlap.GetActor()->Implements<UCombatInterface>() && !ICombatInterface::Execute_IsDead(Overlap.GetActor()))
 			{
 				OutOverlappingActors.AddUnique(ICombatInterface::Execute_GetAvatar(Overlap.GetActor()));
+			}
+			else if (ADRCleanserSite* CleanserSite = Cast<ADRCleanserSite>(Overlap.GetActor()))
+			{
+				OutOverlappingActors.AddUnique(CleanserSite);
 			}
 		}
 	}
@@ -254,7 +252,7 @@ void UDRAbilitySystemLibrary::GetClosestTargets(int32 MaxTargets, const TArray<A
 	{
 		if (ActorsToCheck.Num() == 0) break;
 		double ClosestDistance = TNumericLimits<double>::Max();
-		AActor* ClosestActor;
+		AActor* ClosestActor = nullptr;
 		for (AActor* PotentialTarget : ActorsToCheck)
 		{
 			const double Distance = (PotentialTarget->GetActorLocation() - Origin).Length();
@@ -268,6 +266,29 @@ void UDRAbilitySystemLibrary::GetClosestTargets(int32 MaxTargets, const TArray<A
 		OutClosestTargets.AddUnique(ClosestActor); 
 		++NumTargetsFound;
 	}
+}
+
+AActor* UDRAbilitySystemLibrary::GetClosestCleanserSite(APawn* ControlledPawn)
+{
+	if (!ControlledPawn) return nullptr;
+
+	UWorld* World = ControlledPawn->GetWorld();
+	if (!World) return nullptr;
+
+	ADRStageGameState* GameState = Cast<ADRStageGameState>(World->GetGameState());
+	if (!GameState) return nullptr;
+
+	TArray<ADRCleanserSite*> CleanserSites = GameState->GetCleanserSites();
+
+	if (CleanserSites.Num() < 2) return nullptr;
+	if (!CleanserSites[0] || !CleanserSites[1]) return nullptr;
+	
+	const float Dist0 = FVector::Dist(CleanserSites[0]->GetActorLocation(), ControlledPawn->GetActorLocation());
+	const float Dist1 = FVector::Dist(CleanserSites[1]->GetActorLocation(), ControlledPawn->GetActorLocation());
+
+	AActor* ClosestCleanserSite = Dist0 < Dist1 ? CleanserSites[0] : CleanserSites[1];
+
+	return ClosestCleanserSite;
 }
 
 bool UDRAbilitySystemLibrary::IsNotFriend(AActor* FirstActor, AActor* SecondActor)
@@ -293,7 +314,6 @@ FGameplayEffectContextHandle UDRAbilitySystemLibrary::ApplyDamageEffect(const FD
 	UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(SpecHandle, GameplayTags.Debuff_Chance, DamageEffectParams.DebuffChance);
 	UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(SpecHandle, GameplayTags.Debuff_Damage, DamageEffectParams.DebuffDamage);
 	UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(SpecHandle, GameplayTags.Debuff_Duration, DamageEffectParams.DebuffDuration);
-	UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(SpecHandle, GameplayTags.Debuff_Frequency, DamageEffectParams.DebuffFrequency);
 
 	DamageEffectParams.TargetAbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data);
 	return EffectContexthandle;

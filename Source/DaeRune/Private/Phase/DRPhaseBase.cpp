@@ -6,6 +6,7 @@
 #include "Game/DRStageGameState.h"
 #include "Actor/DRCleanserSite.h"
 #include "Interaction/CombatInterface.h"
+#include "Sound/DRSoundManager.h"
 
 void UDRPhaseBase::Initialize(ADRStageGameMode* InGameMode, ADRStageGameState* InGameState)
 {
@@ -22,6 +23,17 @@ void UDRPhaseBase::OnPhaseStart()
 	if (bIsPhaseActive) return;
 
 	bIsPhaseActive = true;
+
+	if (UWorld* World = GameMode->GetWorld())
+	{
+		if (UGameInstance* GI = World->GetGameInstance())
+		{
+			if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+			{
+				SM->PlayPhaseStartSound();
+			}
+		}
+	}
 }
 
 void UDRPhaseBase::OnPhaseEnd()
@@ -30,18 +42,18 @@ void UDRPhaseBase::OnPhaseEnd()
 
 	bIsPhaseActive = false;
 
-	// µ¨¸®°ÔÀÌÆ® ¾ð¹ÙÀÎµù ¹× ³²Àº Àûµé Á¤¸®
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½Îµï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	for (TWeakObjectPtr<AActor> EnemyPtr : SpawnedEnemies)
 	{
 		if (EnemyPtr.IsValid())
 		{
-			// µ¨¸®°ÔÀÌÆ® ¾ð¹ÙÀÎµù
+			// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½Îµï¿½
 			if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(EnemyPtr.Get()))
 			{
 				CombatInterface->GetOnDeathDelegate().RemoveDynamic(this, &UDRPhaseBase::OnEnemyDeath);
 			}
 
-			// ³²Àº Àû Á¦°Å
+			// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 			EnemyPtr->Destroy();
 		}
 	}
@@ -69,26 +81,25 @@ void UDRPhaseBase::SetActiveCleanserSites(const TArray<TObjectPtr<ADRCleanserSit
 void UDRPhaseBase::OnEnemyDeath(AActor* DeadEnemy)
 {
 	if (!DeadEnemy || !bIsPhaseActive) return;
+
+	// SpawnedEnemies ë°°ì—´ì—ì„œ ì£½ì€ ì  ì œê±°
+	SpawnedEnemies.Remove(DeadEnemy);
 }
 
 int32 UDRPhaseBase::GetAliveEnemyCount() const
 {
-	int32 AliveCount = 0;
+	return SpawnedEnemies.Num();
+}
 
-	for (const TWeakObjectPtr<AActor>& EnemyPtr : SpawnedEnemies)
+void UDRPhaseBase::SetupPhaseObjective(int32 PhaseNumber)
+{
+	if (!PhaseObjectiveDataTable || !GameState) return;
+
+	FString RowName = FString::Printf(TEXT("Phase%d"), PhaseNumber);
+	FPhaseObjectiveData* ObjectiveData = PhaseObjectiveDataTable->FindRow<FPhaseObjectiveData>(FName(*RowName), TEXT(""));
+    
+	if (ObjectiveData)
 	{
-		if (EnemyPtr.IsValid())
-		{
-			// Á×¾ú´ÂÁö È®ÀÎ
-			if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(EnemyPtr.Get()))
-			{
-				if (!CombatInterface->Execute_IsDead(EnemyPtr.Get()))
-				{
-					AliveCount++;
-				}
-			}
-		}
+		GameState->SetPhaseObjective(*ObjectiveData);
 	}
-
-	return AliveCount;
 }

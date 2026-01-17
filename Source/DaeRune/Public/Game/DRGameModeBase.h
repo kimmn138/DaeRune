@@ -8,6 +8,7 @@
 
 class UAbilityInfo;
 class UCharacterClassInfo;
+class ADRDetectionManager;
 
 /**
  * DaeRune 기본 게임 모드 클래스
@@ -31,10 +32,11 @@ public:
 	// 플레이어가 사망했을 때 호출
 	void OnPlayerDied(APlayerState* DeadPlayer);
 
-protected:
 	// 팀 전멸 체크
 	virtual bool CheckTeamWipeout();
-
+	
+protected:
+	virtual void BeginPlay() override;
 	// 전멸 시 처리
 	virtual void HandleWipeout();
 
@@ -47,4 +49,15 @@ protected:
 
 	// 전멸 처리 중인지 여부
 	bool bIsWipeoutInProgress = false;
+
+	// 탐지 매니저 클래스
+	UPROPERTY(EditDefaultsOnly, Category = "Detection")
+	TSubclassOf<ADRDetectionManager> DetectionManagerClass;
+
+	// 스폰된 탐지 매니저 인스턴스
+	UPROPERTY()
+	TObjectPtr<ADRDetectionManager> DetectionManager;
+
+	// 탐지 매니저 스폰
+	void SpawnDetectionManager();
 };

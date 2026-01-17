@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "GameplayTagContainer.h"
+#include "Interfaces/OnlineIdentityInterface.h"
 #include "GenericTeamAgentInterface.h"
 #include "DRPlayerController.generated.h"
 
@@ -18,6 +19,7 @@ struct FInputActionValue;
 class UDRInputConfig;
 class UDRAbilitySystemComponent;
 class ADRCleanserPart;
+class ADRCleanserSite;
 
 /**
  * DaeRune 플레이어의 입력 처리 및 UI 관리 클래스
@@ -33,14 +35,14 @@ public:
 	// Team Interface
 	virtual FGenericTeamId GetGenericTeamId() const override { return TeamId; }
 	virtual void SetGenericTeamId(const FGenericTeamId& NewTeamId) override { TeamId = NewTeamId; }
-
+	
 	// 데미지 수치 표시
 	UFUNCTION(Client, Reliable)
 	void ShowDamageNumber(float DamageAmount, ACharacter* TargetCharacter);
 
 	// 부패 상태 변경 처리
 	UFUNCTION(BlueprintCallable, Category = "Corruption")
-	void OnCorruptedStateChanged(bool bIsStateChanged);
+	void CorruptedStateChanged(bool bIsStateChanged);
 
 	// 음성 채팅 활성화/비활성화
 	UFUNCTION(BlueprintImplementableEvent, Category = "Corruption")
@@ -53,6 +55,17 @@ public:
 	// 부패 상태 확인
 	UFUNCTION(BlueprintCallable, Category = "Corruption")
 	bool IsInCorruptedState() const { return bIsCorrupted; }
+
+	// 음성 채널 업데이트
+	UFUNCTION(BlueprintCallable, Category = "Voice Chat")
+	void UpdateVoiceChannelForDeathState(bool bIsDead);
+
+	// 특정 플레이어 뮤트/언뮤트
+	UFUNCTION(BlueprintCallable, Category = "Voice Chat")
+	void SetPlayerVoiceMuted(APlayerState* TargetPlayer, bool bMute);
+
+	// 모든 플레이어 음성 뮤트 상태 업데이트
+	void RefreshAllPlayerVoiceMutes();
 
 	// 상호작용 이벤트
 	UPROPERTY(BlueprintAssignable, Category = "Input")
@@ -68,12 +81,80 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	ADRCleanserPart* FindPartByLineTrace();
 
-	// 부품 획득 UI 표시 여부
-	UFUNCTION(BlueprintImplementableEvent, Category = "Part System")
-	void ShowPartPickupUI();
+	UFUNCTION(Server, Reliable)
+	void ServerNotifyLineTraceDetected(ADRCleanserPart* Part);
 
+	UFUNCTION(Server, Reliable)
+	void ServerNotifyLineTraceLost(ADRCleanserPart* Part);
+
+	UPROPERTY()
+	TObjectPtr<ADRCleanserSite> CurrentOverlappedSite;
+	
+	UFUNCTION(Server, Reliable)
+	void ServerRequestInstallPartToSite(ADRCleanserSite* Site);
+
+	// 부품 획득 시 UI 표시
 	UFUNCTION(BlueprintImplementableEvent, Category = "Part System")
-	void HidePartPickupUI();
+	void OnPartPickedUp();
+
+	UFUNCTION(Client, Reliable)
+	void ClientShowPartPickupUI();
+
+	// ========== 관전 시스템 ==========
+
+	// 관전 모드 여부
+	UPROPERTY(BlueprintReadOnly, Category = "Spectating")
+	bool bIsSpectating = false;
+
+	// 현재 관전 중인 플레이어 인덱스
+	int32 CurrentSpectatedPlayerIndex = 0;
+
+	// 현재 관전 중인 캐릭터 (직접 참조)
+	UPROPERTY()
+	TWeakObjectPtr<ACharacter> CurrentSpectatedCharacter;
+
+	// 관전 시작
+	UFUNCTION(Client, Reliable)
+	void ClientStartSpectating();
+
+	// 관전 종료
+	UFUNCTION(Client, Reliable)
+	void ClientStopSpectating();
+
+	// 다음 플레이어로 전환
+	UFUNCTION(BlueprintCallable, Category = "Spectating")
+	void SpectateNextPlayer();
+
+	// 이전 플레이어로 전환
+	UFUNCTION(BlueprintCallable, Category = "Spectating")
+	void SpectatePreviousPlayer();
+
+	// ========== 설정 메뉴 ========== 
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void ToggleSettingsMenu();
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void OpenSettingsMenu();
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void CloseSettingsMenu();
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	bool IsSettingsMenuOpen() const { return bIsSettingsMenuOpen; }
+
+	// 게임 결과 UI 표시
+	UFUNCTION(Client, Reliable)
+	void Client_ShowGameOverUI();
+
+	UFUNCTION(Client, Reliable)
+	void Client_ShowGameClearUI();
+	
+	// ========== 치트/디버그 기능 ==========
+    	
+    // 테스트용 페이즈 스킵 (블루프린트에서 호출)
+    UFUNCTION(BlueprintCallable, Category = "Cheat|Phase")
+    void CheatSkipToNextPhase();
 
 protected:
 	virtual void BeginPlay() override;
@@ -83,6 +164,18 @@ protected:
 	// 부패 상태 플래그
 	UPROPERTY(BlueprintReadOnly, Category = "Corruption")
 	bool bIsCorrupted = false;
+
+	// 게임 오버 위젯 클래스
+	UPROPERTY(EditDefaultsOnly, Category = "UI|GameResult")
+	TSubclassOf<UUserWidget> GameOverWidgetClass;
+
+	// 게임 클리어 위젯 클래스
+	UPROPERTY(EditDefaultsOnly, Category = "UI|GameResult")
+	TSubclassOf<UUserWidget> GameClearWidgetClass;
+
+	// 현재 표시 중인 결과 위젯
+	UPROPERTY()
+	TObjectPtr<UUserWidget> CurrentResultWidget;
 
 	// ========== 부품 시스템 설정 ==========
 
@@ -114,6 +207,43 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> InteractAction;
 
+	// 관전 입력 액션
+	UPROPERTY(EditAnywhere, Category = "Input|Spectating")
+	TObjectPtr<UInputAction> SpectateNextAction;
+
+	UPROPERTY(EditAnywhere, Category = "Input|Spectating")
+	TObjectPtr<UInputAction> SpectatePreviousAction;
+
+	// 설정 메뉴 토글 액션
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<UInputAction> ToggleSettingsAction;
+
+	// 설정 메뉴 토글 처리
+	void HandleToggleSettings();
+
+	// 관전 입력 처리
+	void HandleSpectateNext();
+	void HandleSpectatePrevious();
+
+	// 설정 메뉴 열림 상태
+	bool bIsSettingsMenuOpen = false;
+
+	// 관전 대상 설정
+	void SetSpectateTarget(ACharacter* NewTarget);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetSpectateTarget(ACharacter* NewTarget);
+
+	// 관전 UI 업데이트
+	UFUNCTION(Client, Reliable)
+	void ClientUpdateSpectatorUI(ACharacter* SpectatedTarget);
+
+	void UpdateSpectatorUI(ACharacter* SpectatedTarget);
+
+	// 관전 대상 사망 처리
+	UFUNCTION()
+	void OnSpectatedPlayerDied(AActor* DeadActor);
+
 	// 입력 처리 함수들
 	void Move(const FInputActionValue& InputActionValue);
 	void Look(const FInputActionValue& InputActionValue);
@@ -121,6 +251,12 @@ private:
 	void StopJump(const FInputActionValue& InputActionValue);
 	// 상호작용 키를 눌렀을 때
 	void HandleInteract();
+
+	UPROPERTY()
+	TObjectPtr<class UDRSettingsWidget> SettingsWidget;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UDRSettingsWidget> SettingsWidgetClass;
 
 	// GAS 어빌리티 입력 처리
 	void AbilityInputTagPressed(FGameplayTag InputTag);
@@ -143,6 +279,9 @@ private:
 	// 라인트레이싱 활성화 여부
 	bool bPartDetectionEnabled = false;
 
+	// 현재 플레이어가 죽었는지 여부
+	bool bIsDeadForVoice = false;
+
 	// 라인트레이싱 타이머
 	float LineTraceTimer = 0.f;
 
@@ -154,7 +293,15 @@ private:
 	UPROPERTY()
 	TObjectPtr<ADRCleanserPart> CurrentDetectedPart;
 
-	// 부품 획득 요청 (서버 RPC)
+	// 부품 획득 요청
 	UFUNCTION(Server, Reliable)
 	void ServerRequestPickupPart(ADRCleanserPart* Part);
+
+	// 부품 드랍 요청
+	UFUNCTION(Server, Reliable)
+	void ServerRequestDropPart();
+	
+	// 서버에서 페이즈 스킵 실행
+    UFUNCTION(Server, Reliable)
+    void ServerCheatSkipToNextPhase();
 };

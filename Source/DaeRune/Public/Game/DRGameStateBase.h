@@ -7,6 +7,8 @@
 #include "Net/UnrealNetwork.h"
 #include "DRGameStateBase.generated.h"
 
+class ADRCharacter;
+
 /**
  * DaeRune의 GameState 베이스 클래스
  * 로비와 스테이지에서 공통으로 사용하는 기능 포함
@@ -39,6 +41,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Game State")
 	bool IsPlayerHost(APlayerState* PlayerState) const;
+
+	// 살아있는 플레이어 리스트 반환
+	UFUNCTION(BlueprintCallable, Category = "Spectating")
+	TArray<ADRCharacter*> GetAlivePlayers() const;
 
 protected:
 	// 현재 플레이어 수

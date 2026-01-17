@@ -11,8 +11,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
-#include "AbilitySystem/DRAttributeSet.h"
 #include "Game/DRGameModeBase.h" 
+#include "Player/DRPlayerController.h"
+#include "Character/DRCharacter.h"
 
 ADRCharacterBase::ADRCharacterBase()
 {
@@ -34,12 +35,13 @@ ADRCharacterBase::ADRCharacterBase()
 	GetCapsuleComponent()->SetGenerateOverlapEvents(false);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Projectile, ECR_Overlap);
-	GetMesh()->SetGenerateOverlapEvents(true);
+	GetMesh()->SetGenerateOverlapEvents(false);
 
 	// 무기 컴포넌트 생성 및 소켓 부착
 	Weapon = CreateDefaultSubobject<USkeletalMeshComponent>("Weapon");
 	Weapon->SetupAttachment(GetMesh(), FName("WeaponHandSocket"));
 	Weapon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Weapon->SetOwnerNoSee(true);
 }
 
 void ADRCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -59,7 +61,21 @@ UAbilitySystemComponent* ADRCharacterBase::GetAbilitySystemComponent() const
 
 UAnimMontage* ADRCharacterBase::GetHitReactMontage_Implementation()
 {
-	return HitReactMontage;
+	// 배열이 비어있으면 nullptr 반환
+	if (HitReactMontages.Num() == 0)
+	{
+		return nullptr;
+	}
+
+	// 배열에 하나만 있으면 그것을 반환
+	if (HitReactMontages.Num() == 1)
+	{
+		return HitReactMontages[0];
+	}
+
+	// 여러 개 있으면 랜덤으로 선택
+	const int32 RandomIndex = FMath::RandRange(0, HitReactMontages.Num() - 1);
+	return HitReactMontages[RandomIndex];
 }
 
 void ADRCharacterBase::Die(const FVector& DeathImpulse)
@@ -74,6 +90,15 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 			Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
 			MulticastHandleDeath(DeathImpulse);
 
+			// 플레이어가 부품을 들고 있으면 떨어뜨리기
+			if (ADRCharacter* DRCharacter = Cast<ADRCharacter>(this))
+			{
+				if (DRCharacter->IsCarryingPart())
+				{
+					DRCharacter->DropCarriedPart();
+				}
+			}
+
 			// GameMode에 플레이어 사망 알림 (전멸 체크)
 			if (ADRGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRGameModeBase>())
 			{
@@ -84,21 +109,42 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 				}
 			}
 
-			// 관전자 모드로 전환
-			if (PC)
+			// 관전 시작
+			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
 			{
-				// 약간의 딜레이 후 관전 모드 전환
+				// 음성 채널을 죽은 상태로 업데이트
+				DRPC->UpdateVoiceChannelForDeathState(true);
+
+				// 딜레이 후 관전 모드 전환
 				FTimerHandle SpectatorTimerHandle;
 				GetWorld()->GetTimerManager().SetTimer(
 					SpectatorTimerHandle,
-					[PC]()
+					[DRPC]()
 					{
-						PC->StartSpectatingOnly();
+						if (IsValid(DRPC))
+						{
+							DRPC->ClientStartSpectating();
+						}
 					},
-					0.5f,
+					4.0f,
 					false
 				);
 			}
+
+			// 캐릭터 액터 파괴
+			FTimerHandle DestroyTimerHandle;
+			GetWorld()->GetTimerManager().SetTimer(
+			   DestroyTimerHandle,
+			   [this]()
+			   {
+				  if (IsValid(this))
+				  {
+					 Destroy();
+				  }
+			   },
+			   3.5f,
+			   false
+			);
 		}
 	}
 	else
@@ -121,29 +167,38 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 
 	bDead = true;
 
-	// 사망 사운드 재생
-	if (DeathSound)
+	// 죽음 카메라 연출
+	if (ADRCharacter* PlayerCharacter = Cast<ADRCharacter>(this))
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation(), GetActorRotation());
-	}
+		PlayerCharacter->PlayDeathCameraAnimation();
 
-	// 무기에 물리 시뮬레이션 적용
-	if (Weapon)
-	{
-		Weapon->SetSimulatePhysics(true);
-		Weapon->SetEnableGravity(true);
-		Weapon->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
-		Weapon->AddImpulse(DeathImpulse * 0.1f, NAME_None, true);
-	}
+		if (AbilitySystemComponent)
+		{
+			FGameplayCueParameters CueParams;
+			CueParams.Location = GetActorLocation();
 
-	// 캐릭터 메시에 물리 시뮬레이션 적용
-	if (GetMesh())
-	{
-		GetMesh()->SetSimulatePhysics(true);
-		GetMesh()->SetEnableGravity(true);
-		GetMesh()->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
-		GetMesh()->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
-		GetMesh()->AddImpulse(DeathImpulse, NAME_None, true);
+			AbilitySystemComponent->ExecuteGameplayCue(
+				FDRGameplayTags::Get().GameplayCue_Player_Death,
+				CueParams
+			);
+		}
+
+		// 1인칭 메쉬 숨기고 3인칭 메쉬 보이게
+		if (PlayerCharacter->IsLocallyControlled())
+		{
+			if (PlayerCharacter->FirstPersonMesh)
+			{
+				PlayerCharacter->FirstPersonMesh->SetVisibility(false);
+			}
+
+			GetMesh()->SetOwnerNoSee(false);
+			GetMesh()->SetVisibility(true);
+			if (Weapon)
+			{
+				Weapon->SetOwnerNoSee(false);
+				Weapon->SetVisibility(true);
+			}
+		}
 	}
 
 	// 캡슐 충돌 비활성화
@@ -167,29 +222,23 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 
 	// 사망 이벤트 브로드캐스트
 	OnDeathDelegate.Broadcast(this);
+
+	if (UWorld* World = GetWorld())
+	{
+		if (APlayerController* LocalPC = World->GetFirstPlayerController())
+		{
+			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(LocalPC))
+			{
+				DRPC->RefreshAllPlayerVoiceMutes();
+			}
+		}
+	}
 }
 
 void ADRCharacterBase::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 {
 	bIsStunned = NewCount > 0;
-	if (bIsStunned)
-	{
-		// 스턴 시작 - 이동 정지
-		GetCharacterMovement()->MaxWalkSpeed = 0.f;
-	}
-	else
-	{
-		// 스턴 종료 - GAS 속성값으로 복구
-		if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
-		{
-			GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
-		}
-		else
-		{
-			// 폴백: AttributeSet이 없으면 BaseWalkSpeed 사용
-			GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
-		}
-	}
+	GetCharacterMovement()->MaxWalkSpeed = bIsStunned ? 0.f : GetMoveSpeed();
 }
 
 void ADRCharacterBase::OnRep_Stunned()
@@ -299,7 +348,7 @@ void ADRCharacterBase::InitAbilityActorInfo()
 {
 }
 
-void ADRCharacterBase::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass, float Level) const
+void ADRCharacterBase::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass) const
 {
 	check(IsValid(GetAbilitySystemComponent()));
 	check(GameplayEffectClass);
@@ -313,8 +362,8 @@ void ADRCharacterBase::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEf
 
 void ADRCharacterBase::InitializeDefaultAttributes() const
 {
-	ApplyEffectToSelf(DefaultPrimaryAttributes, 1.f);
-	ApplyEffectToSelf(DefaultVitalAttributes, 1.f);
+	ApplyEffectToSelf(DefaultPrimaryAttributes);
+	ApplyEffectToSelf(DefaultVitalAttributes);
 }
 
 void ADRCharacterBase::AddCharacterAbilities()
@@ -325,6 +374,16 @@ void ADRCharacterBase::AddCharacterAbilities()
 	// 액티브 어빌리티와 패시브 어빌리티 추가
 	DRASC->AddCharacterAbilities(StartupAbilities);
 	DRASC->AddCharacterPassiveAbilities(StartupPassiveAbilities);
+}
+
+void ADRCharacterBase::OnMoveSpeedChanged(const FOnAttributeChangeData& Data)
+{
+	GetCharacterMovement()->MaxWalkSpeed = Data.NewValue;
+}
+
+float ADRCharacterBase::GetMoveSpeed()
+{
+	return BaseWalkSpeed;
 }
 
 void ADRCharacterBase::Dissolve()

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Character/DRCharacterBase.h"
+#include "Net/VoiceConfig.h"
 #include "DRCharacter.generated.h"
 
 class UWidgetComponent;
@@ -29,6 +30,9 @@ public:
 	virtual void OnRep_Stunned() override;
 	virtual void OnRep_Burned() override;
 
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+
 	// 컨테이너 시스템 설정
 	UPROPERTY(EditDefaultsOnly, Category = "Container System")
 	int32 NumContainers = 4;
@@ -50,7 +54,44 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void InstallCarriedPart();
 
+	// 부품 떨어뜨리기
+	UFUNCTION(BlueprintCallable, Category = "Part System")
+	void DropCarriedPart();
+
+	// ========== 음성 채팅 ==========
+
+	// VOIPTalker 컴포넌트 반환
+	UFUNCTION(BlueprintCallable, Category = "Voice Chat")
+	UVOIPTalker* GetVOIPTalker() const { return VOIPTalkerComponent; }
+
+	// VOIP 송신 컴포넌트
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Voice Chat")
+	TObjectPtr<UVOIPTalker> VOIPTalkerComponent;
+
+	FTimerHandle PlayerStateRegisterTimerHanlde;
+
+	void TryRegisterVoiceTalker();
+	void RegisterVoiceTalker();
+
+	// ========== 카메라 ==========
+
+	// 죽음 카메라 연출
+	UFUNCTION(BlueprintImplementableEvent, Category = "Death")
+	void PlayDeathCameraAnimation();
+
+	// ========== 1인칭/3인칭 메쉬 시스템 ==========
+
+	// 1인칭 메쉬
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mesh")
+	TObjectPtr<USkeletalMeshComponent> FirstPersonMesh;
+
+	// 메쉬 가시성 업데이트
+	void UpdateMeshVisibility();
+
 protected:
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 	// ========== 부품 상태 ==========
 
 	// 부품 보유 여부
@@ -61,6 +102,13 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_CarriedPart, BlueprintReadOnly, Category = "Part System")
 	TObjectPtr<class ADRCleanserPart> CarriedPart;
 
+	// 부품 획득 시간 기록
+	float LastPartPickupTime = 0.f;
+
+	// 부품 떨어트리기 쿨다운 시간
+	UPROPERTY(EditDefaultsOnly, Category = "Part System", meta = (ClampMin = "0.0", ClampMax = "5.0"))
+	float PartDropCooldown = 2.0f;
+
 	// ========== 리플리케이션 콜백 ==========
 
 	UFUNCTION()
@@ -68,6 +116,10 @@ protected:
 
 	UFUNCTION()
 	void OnRep_CarriedPart();
+
+	// ========== 이동속도 관련 ==========
+
+	virtual float GetMoveSpeed() override;
 
 private:
 	// GAS 초기화

@@ -73,7 +73,7 @@ void UDRBeamSpell::StoreAdditionalTargets(TArray<AActor*>& OutAdditionalTargets)
 	ActorsToIgnore.Add(CameraHitActor);
 
 	TArray<AActor*> OverlappingActors;
-	UDRAbilitySystemLibrary::GetLivePlayersWithinRadius(
+	UDRAbilitySystemLibrary::GetLiveObjectsWithinRadius(
 		GetAvatarActorFromActorInfo(),
 		OverlappingActors,
 		ActorsToIgnore,

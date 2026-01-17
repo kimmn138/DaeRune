@@ -47,26 +47,22 @@ bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool
 		{
 			RepBits |= 1 << 9;
 		}
-		if (DebuffFrequency > 0.f)
+		if (DamageType.IsValid())
 		{
 			RepBits |= 1 << 10;
 		}
-		if (DamageType.IsValid())
+		if (!DeathImpulse.IsZero())
 		{
 			RepBits |= 1 << 11;
 		}
-		if (!DeathImpulse.IsZero())
-		{
-			RepBits |= 1 << 12;
-		}
 		if (!KnockbackForce.IsZero())
 		{
-			RepBits |= 1 << 13;
+			RepBits |= 1 << 12;
 		}
 	}
 
 	// 비트 마스크 직렬화
-	Ar.SerializeBits(&RepBits, 14);
+	Ar.SerializeBits(&RepBits, 13);
 
 	if (RepBits & (1 << 0))
 	{
@@ -122,10 +118,6 @@ bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool
 	}
 	if (RepBits & (1 << 10))
 	{
-		Ar << DebuffFrequency;
-	}
-	if (RepBits & (1 << 11))
-	{
 		if (Ar.IsLoading())
 		{
 			if (!DamageType.IsValid())
@@ -135,11 +127,11 @@ bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool
 		}
 		DamageType->NetSerialize(Ar, Map, bOutSuccess);
 	}
-	if (RepBits & (1 << 12))
+	if (RepBits & (1 << 11))
 	{
 		DeathImpulse.NetSerialize(Ar, Map, bOutSuccess);
 	}
-	if (RepBits & (1 << 13))
+	if (RepBits & (1 << 12))
 	{
 		KnockbackForce.NetSerialize(Ar, Map, bOutSuccess);
 	}

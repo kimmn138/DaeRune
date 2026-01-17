@@ -6,6 +6,8 @@
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/GameStateBase.h"
 #include "TimerManager.h"
+#include "Game/DRDetectionManager.h"
+#include "Player/DRPlayerController.h"
 
 ADRGameModeBase::ADRGameModeBase()
 {
@@ -27,7 +29,14 @@ void ADRGameModeBase::OnPlayerDied(APlayerState* DeadPlayer)
 	{
 		bIsWipeoutInProgress = true;
 
-		// TODO: 전멸 UI 표시, 사운드 재생 등
+		// 모든 플레이어에게 게임 오버 UI 표시
+		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+		{
+			if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
+			{
+				PC->Client_ShowGameOverUI();
+			}
+		}
 
 		// 일정 시간 후 전멸 처리
 		GetWorldTimerManager().SetTimer(
@@ -75,10 +84,37 @@ bool ADRGameModeBase::CheckTeamWipeout()
 	return (TotalPlayerCount > 0) && (AlivePlayerCount == 0);
 }
 
+void ADRGameModeBase::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// 탐지 매니저 스폰
+	SpawnDetectionManager();
+}
+
 void ADRGameModeBase::HandleWipeout()
 {
 	if (!HasAuthority()) return;
 
 	// 플래그 리셋
 	bIsWipeoutInProgress = false;
+}
+
+void ADRGameModeBase::SpawnDetectionManager()
+{
+	// 서버에서만 스폰
+	if (!HasAuthority()) return;
+
+	if (!DetectionManagerClass) return;
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	DetectionManager = GetWorld()->SpawnActor<ADRDetectionManager>(
+		DetectionManagerClass,
+		FVector::ZeroVector,
+		FRotator::ZeroRotator,
+		SpawnParams
+	);
 }

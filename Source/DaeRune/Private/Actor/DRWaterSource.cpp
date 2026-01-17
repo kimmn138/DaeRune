@@ -8,6 +8,7 @@
 #include "Character/DRCharacter.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
+#include "Sound/DRSoundManager.h"
 
 ADRWaterSource::ADRWaterSource()
 {
@@ -21,11 +22,19 @@ void ADRWaterSource::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(ADRWaterSource, bIsAvailable);
 }
 
+void ADRWaterSource::MulticastPlayWaterGainSound_Implementation()
+{
+    if (UGameInstance* GI = GetGameInstance())
+    {
+        if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+        {
+            SM->PlayWaterGainSound(GetActorLocation());
+        }
+    }
+}
+
 void ADRWaterSource::OnOverlap(AActor* TargetActor)
 {
-    // 블루프린트에서 이 함수를 호출하면 기본 동작 수행
-    // 블루프린트에서 추가 로직을 앞뒤에 넣을 수 있음
-
     if (!HasAuthority()) return;
     if (!bIsAvailable) return;
 
@@ -78,6 +87,8 @@ void ADRWaterSource::FillPlayerWater(AActor* TargetActor)
         if (SpecHandle.IsValid())
         {
             TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+
+            MulticastPlayWaterGainSound();
 
             // 사용됨 알림
             SetWaterSourceAvailable(false);

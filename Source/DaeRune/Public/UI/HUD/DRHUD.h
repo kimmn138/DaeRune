@@ -24,8 +24,14 @@ public:
 	// OverlayWidgetController 접근자 (싱글톤 패턴)
 	UOverlayWidgetController* GetOverlayWidgetController(const FWidgetControllerParams& WCParams);
 
+	UFUNCTION(BlueprintCallable, Category = "HUD")
+	UDRUserWidget* GetOverlayWidget() const { return OverlayWidget; }
+
 	// 오버레이 UI 초기화
 	void InitOverlay(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS);
+
+	// 관전용 오버레이 업데이트
+	void UpdateOverlayForSpectating(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS);
 
 protected:
 
