@@ -66,34 +66,32 @@ void UDRSeedCannon::SpawnSeedProjectile(const FVector& ForwardVector, const FGam
     // 스폰 완료
     Projectile->FinishSpawning(SpawnTransform);
 
-    // 디버그 시각화 (개발 빌드에서만)
-#if !UE_BUILD_SHIPPING
-    // 발사 방향 화살표 그리기
-    DrawDebugDirectionalArrow(
-        GetWorld(),
-        SocketLocation,
-        SocketLocation + (LaunchDirection * 200.f),
-        50.f,
-        FColor::Green,
-        false,
-        3.0f,
-        0,
-        5.f
-    );
-
-    // 예상 궤적 그리기 (간단한 포물선)
-    FVector PrevPoint = SocketLocation;
-    float TimeStep = 0.05f;
-    for (int i = 1; i <= 20; i++)
-    {
-        float Time = TimeStep * i;
-        FVector Point = SocketLocation + (LaunchDirection * LaunchSpeed * Time) +
-            (0.5f * FVector(0, 0, -980.f) * Time * Time); // 중력 가속도
-
-        DrawDebugLine(GetWorld(), PrevPoint, Point, FColor::Yellow, false, 3.0f, 0, 2.f);
-        PrevPoint = Point;
-    }
-#endif
-
-    UE_LOG(LogTemp, Log, TEXT("SeedCannon: Projectile spawned successfully"));
+//    // 디버그 시각화 (개발 빌드에서만)
+//#if !UE_BUILD_SHIPPING
+//    // 발사 방향 화살표 그리기
+//    DrawDebugDirectionalArrow(
+//        GetWorld(),
+//        SocketLocation,
+//        SocketLocation + (LaunchDirection * 200.f),
+//        50.f,
+//        FColor::Green,
+//        false,
+//        3.0f,
+//        0,
+//        5.f
+//    );
+//
+//    // 예상 궤적 그리기 (간단한 포물선)
+//    FVector PrevPoint = SocketLocation;
+//    float TimeStep = 0.05f;
+//    for (int i = 1; i <= 20; i++)
+//    {
+//        float Time = TimeStep * i;
+//        FVector Point = SocketLocation + (LaunchDirection * LaunchSpeed * Time) +
+//            (0.5f * FVector(0, 0, -980.f) * Time * Time); // 중력 가속도
+//
+//        DrawDebugLine(GetWorld(), PrevPoint, Point, FColor::Yellow, false, 3.0f, 0, 2.f);
+//        PrevPoint = Point;
+//    }
+//#endif
 }

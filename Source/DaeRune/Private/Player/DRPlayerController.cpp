@@ -22,6 +22,7 @@
 #include "UI/Widget/DRSettingsWidget.h"
 #include "Game/DRSettingsManager.h"
 #include "Game/DRGameUserSettings.h"
+#include "Sound/DRSoundManager.h"
 
 ADRPlayerController::ADRPlayerController()
 {
@@ -397,6 +398,18 @@ void ADRPlayerController::BeginPlay()
 			{
 				SetInputMode(FInputModeUIOnly());
 				SetShowMouseCursor(true);
+			}
+
+			// 스테이지 맵이면 BGM 재생
+			if (CurrentLevelName.Contains(TEXT("Stage1")))
+			{
+				if (UGameInstance* GI = GetGameInstance())
+				{
+					if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+					{
+						SM->PlayStageBGM();
+					}
+				}
 			}
 		}
 	}

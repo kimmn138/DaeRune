@@ -69,6 +69,15 @@ public:
 	void PlayBGM(USoundBase* NewBGM, float FadeInDuration = 1.0f);
 
 	UFUNCTION(BlueprintCallable, Category = "Sound|BGM")
+	void PlayStageBGM();
+
+	UFUNCTION(BlueprintCallable, Category = "Sound|BGM")
+	void PlayLobbyBGM();
+
+	UFUNCTION(BlueprintCallable, Category = "Sound|BGM")
+	void PlayMainMenuBGM();
+
+	UFUNCTION(BlueprintCallable, Category = "Sound|BGM")
 	void StopBGM(float FadeOutDuration = 1.0f);
 
 	UFUNCTION(BlueprintCallable, Category = "Sound|BGM")

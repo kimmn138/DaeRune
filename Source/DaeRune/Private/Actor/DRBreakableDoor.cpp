@@ -282,16 +282,6 @@ void ADRBreakableDoor::SpawnEnemies()
 
 		if (SpawnedEnemy)
 		{
-			// 각 적마다 약간 다른 방향
-			FVector RandomOffset = FVector(
-				FMath::FRandRange(-0.1f, 0.1f),
-				FMath::FRandRange(-0.1f, 0.1f),
-				0.0f
-			);
-
-			FVector FinalLaunchDirection = (LaunchDirection + RandomOffset).GetSafeNormal();
-			FVector FinalLaunchVelocity = FinalLaunchDirection * EnemyLaunchStrength;
-
 			// 적을 BreakDirection 방향으로 밀어주기
 			SpawnedEnemy->LaunchCharacter(LaunchVelocity, true, true);
 		}

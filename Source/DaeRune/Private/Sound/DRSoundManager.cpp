@@ -174,6 +174,30 @@ void UDRSoundManager::PlayBGM(USoundBase* NewBGM, float FadeInDuration)
 	}
 }
 
+void UDRSoundManager::PlayStageBGM()
+{
+	if (SoundData && SoundData->BGM_Stage)
+	{
+		PlayBGM(SoundData->BGM_Stage, 2.0f);
+	}
+}
+
+void UDRSoundManager::PlayLobbyBGM()
+{
+	if (SoundData && SoundData->BGM_Lobby)
+	{
+		PlayBGM(SoundData->BGM_Lobby, 2.0f);
+	}
+}
+
+void UDRSoundManager::PlayMainMenuBGM()
+{
+	if (SoundData && SoundData->BGM_MainMenu)
+	{
+		PlayBGM(SoundData->BGM_MainMenu, 2.0f);
+	}
+}
+
 void UDRSoundManager::StopBGM(float FadeOutDuration)
 {
 	if (CurrentBGMComponent && CurrentBGMComponent->IsPlaying())
