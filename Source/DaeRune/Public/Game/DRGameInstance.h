@@ -15,9 +15,6 @@ class DAERUNE_API UDRGameInstance : public UGameInstance
 	GENERATED_BODY()
 	
 public:
-	virtual void Init() override;
-
-private:
-	// 네트워크 에러 핸들러
-	void HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver, ENetworkFailure::Type FailureType, const FString& ErrorString);
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<class UDRSoundDataAsset> SoundDataAsset;
 };

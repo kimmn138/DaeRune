@@ -92,10 +92,6 @@ private:
 
 	UAudioComponent* CreateBGMComponent(USoundBase* Sound);
 
-	// 사운드 데이터 에셋
-	UPROPERTY()
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
 	TObjectPtr<UDRSoundDataAsset> SoundData;
-
-	// 에셋 로드 경로
-	static constexpr const TCHAR* SOUND_DATA_PATH = TEXT("/Game/Blueprints/Sound/Data/DA_SoundData.DA_SoundData");
 };

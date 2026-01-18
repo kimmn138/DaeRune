@@ -143,12 +143,33 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Settings")
 	bool IsSettingsMenuOpen() const { return bIsSettingsMenuOpen; }
 
+	// ========== 입력 모드 관리 ==========
+
+	// 현재 레벨에 맞는 입력 모드로 복원
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	void RestoreDefaultInputMode();
+
+	// 현재 레벨이 메인메뉴인지 확인
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	bool IsInMainMenu() const;
+
+	// 현재 레벨이 로비인지 확인
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	bool IsInLobby() const;
+
+	// 게임 레벨인지 확인 (스테이지)
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	bool IsInGameLevel() const;
+
 	// 게임 결과 UI 표시
 	UFUNCTION(Client, Reliable)
 	void Client_ShowGameOverUI();
 
 	UFUNCTION(Client, Reliable)
 	void Client_ShowGameClearUI();
+
+	UFUNCTION(Client, Reliable)
+	void ClientStopAllAudio();
 	
 	// ========== 치트/디버그 기능 ==========
     	

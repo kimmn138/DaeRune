@@ -23,6 +23,7 @@
 #include "Game/DRSettingsManager.h"
 #include "Game/DRGameUserSettings.h"
 #include "Sound/DRSoundManager.h"
+#include "Kismet/GameplayStatics.h"
 
 ADRPlayerController::ADRPlayerController()
 {
@@ -343,6 +344,36 @@ void ADRPlayerController::SpectatePreviousPlayer()
 	SetSpectateTarget(AliveCharacters[CurrentSpectatedPlayerIndex]);
 }
 
+void ADRPlayerController::ClientStopAllAudio_Implementation()
+{
+	// BGM 정지
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+		{
+			SM->StopBGM(0.0f);
+		}
+	}
+
+	// 모든 AudioComponent 정지
+	TArray<AActor*> AllActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), AllActors);
+
+	for (AActor* Actor : AllActors)
+	{
+		TArray<UAudioComponent*> AudioComps;
+		Actor->GetComponents<UAudioComponent>(AudioComps);
+
+		for (UAudioComponent* AudioComp : AudioComps)
+		{
+			if (AudioComp && AudioComp->IsPlaying())
+			{
+				AudioComp->Stop();
+			}
+		}
+	}
+}
+
 void ADRPlayerController::CheatSkipToNextPhase()
 {
 // 개발 빌드에서만 동작하도록 체크
@@ -385,34 +416,9 @@ void ADRPlayerController::BeginPlay()
 				Manager->ApplyAudioSettings();
 			}
 		}
-
-		// 현재 레벨이 메인메뉴인지 체크
-		UWorld* World = GetWorld();
-		if (World)
-		{
-			FString CurrentLevelName = World->GetMapName();
-			CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
-
-			// 메인메뉴면 UI 입력 모드로 설정
-			if (CurrentLevelName.Contains(TEXT("MainMenu")))
-			{
-				SetInputMode(FInputModeUIOnly());
-				SetShowMouseCursor(true);
-			}
-
-			// 스테이지 맵이면 BGM 재생
-			if (CurrentLevelName.Contains(TEXT("Stage1")))
-			{
-				if (UGameInstance* GI = GetGameInstance())
-				{
-					if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
-					{
-						SM->PlayStageBGM();
-					}
-				}
-			}
-		}
 	}
+
+	RestoreDefaultInputMode();
 }
 
 void ADRPlayerController::PlayerTick(float DeltaTime)
@@ -486,20 +492,25 @@ void ADRPlayerController::ReceivedPlayer()
 	UWorld* World = GetWorld();
 	if (!World) return;
 
-	FString CurrentLevelName = World->GetMapName();
-	CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
-
-	// 로비나 메인메뉴면 UI 모드
-	if (CurrentLevelName.Contains(TEXT("Lobby")) || CurrentLevelName.Contains(TEXT("Stage1")))
+	// 게임오버 UI가 남아있으면 제거
+	if (CurrentResultWidget)
 	{
-		SetInputMode(FInputModeUIOnly());
-		SetShowMouseCursor(true);
+		CurrentResultWidget->RemoveFromParent();
+		CurrentResultWidget = nullptr;
+	}
 
-		// 게임오버 UI가 남아있으면 제거
-		if (CurrentResultWidget)
+	// 레벨에 맞는 기본 입력 모드로 복원
+	RestoreDefaultInputMode();
+
+	// 스테이지 맵이면 BGM 재생
+	if (IsInGameLevel())
+	{
+		if (UGameInstance* GI = GetGameInstance())
 		{
-			CurrentResultWidget->RemoveFromParent();
-			CurrentResultWidget = nullptr;
+			if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+			{
+				SM->PlayStageBGM();
+			}
 		}
 	}
 }
@@ -776,27 +787,59 @@ void ADRPlayerController::CloseSettingsMenu()
 		SettingsWidget->CloseSettings();
 		bIsSettingsMenuOpen = false;
 
-		// 현재 레벨이 메인메뉴인지 체크
-		UWorld* World = GetWorld();
-		if (World)
-		{
-			FString CurrentLevelName = World->GetMapName();
-			CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
-
-			// 메인메뉴면 UI 모드 유지
-			if (CurrentLevelName.Contains(TEXT("MainMenu")))
-			{
-				SetInputMode(FInputModeUIOnly());
-				SetShowMouseCursor(true);
-			}
-			else
-			{
-				// 게임 레벨이면 게임 모드로
-				SetInputMode(FInputModeGameOnly());
-				SetShowMouseCursor(false);
-			}
-		}
+		RestoreDefaultInputMode();
 	}
+}
+
+void ADRPlayerController::RestoreDefaultInputMode()
+{
+	if (!IsLocalController()) return;
+
+	if (IsInMainMenu())
+	{
+		// 메인메뉴: UI 모드
+		SetInputMode(FInputModeUIOnly());
+		SetShowMouseCursor(true);
+	}
+	else
+	{
+		// 로비, 스테이지: 게임 모드
+		SetInputMode(FInputModeGameOnly());
+		SetShowMouseCursor(false);
+	}
+}
+
+bool ADRPlayerController::IsInMainMenu() const
+{
+	UWorld* World = GetWorld();
+	if (!World) return false;
+
+	FString CurrentLevelName = World->GetMapName();
+	CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+	return CurrentLevelName.Contains(TEXT("MainMenu"));
+}
+
+bool ADRPlayerController::IsInLobby() const
+{
+	UWorld* World = GetWorld();
+	if (!World) return false;
+
+	FString CurrentLevelName = World->GetMapName();
+	CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+	return CurrentLevelName.Contains(TEXT("Lobby"));
+}
+
+bool ADRPlayerController::IsInGameLevel() const
+{
+	UWorld* World = GetWorld();
+	if (!World) return false;
+
+	FString CurrentLevelName = World->GetMapName();
+	CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+	return CurrentLevelName.Contains(TEXT("Stage1"));
 }
 
 void ADRPlayerController::Client_ShowGameOverUI_Implementation()

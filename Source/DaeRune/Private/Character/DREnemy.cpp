@@ -36,7 +36,8 @@ ADREnemy::ADREnemy()
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationRoll = false;
 	bUseControllerRotationYaw = false;
-	GetCharacterMovement()->bUseControllerDesiredRotation = true;
+	GetCharacterMovement()->bOrientRotationToMovement = true;
+	GetCharacterMovement()->RotationRate = FRotator(0.f, 400.f, 0.f);
 
 	// 적 전용 어트리뷰트셋
 	AttributeSet = CreateDefaultSubobject<UDREnemyAttributeSet>("AttributeSet");

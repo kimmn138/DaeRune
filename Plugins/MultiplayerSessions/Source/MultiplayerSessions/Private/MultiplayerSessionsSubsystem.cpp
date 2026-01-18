@@ -193,6 +193,8 @@ void UMultiplayerSessionsSubsystem::LeaveServer()
 		DestroySessionCompleteDelegateHandle = SessionInterface->AddOnDestroySessionCompleteDelegate_Handle(FOnDestroySessionCompleteDelegate::CreateUObject(this, &UMultiplayerSessionsSubsystem::OnDestroySessionComplete));
 		
 		SessionInterface->DestroySession(NAME_GameSession);
+
+		PC->ClientTravel(TEXT("/Game/Maps/MainMenu"), TRAVEL_Absolute);
 	}
 	else
 	{

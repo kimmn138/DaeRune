@@ -104,25 +104,11 @@ void UDRSettingsWidget::OpenSettings()
 {
     SetVisibility(ESlateVisibility::Visible);
     LoadCurrentSettings();
-
-    // 마우스 커서 표시 및 UI 모드
-    if (APlayerController* PC = GetOwningPlayer())
-    {
-        PC->SetShowMouseCursor(true);
-        PC->SetInputMode(FInputModeUIOnly());
-    }
 }
 
 void UDRSettingsWidget::CloseSettings()
 {
     SetVisibility(ESlateVisibility::Collapsed);
-
-    // 게임 입력 모드로 복원
-    if (APlayerController* PC = GetOwningPlayer())
-    {
-        PC->SetShowMouseCursor(false);
-        PC->SetInputMode(FInputModeGameOnly());
-    }
 
     OnSettingsClosed();
 }

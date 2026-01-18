@@ -158,6 +158,8 @@ void ADRStageGameMode::ReturnToLobby()
 {
 	if (!HasAuthority()) return;
 
+	CleanupAllAudioBeforeTravel();
+
 	UWorld* World = GetWorld();
 	if (World)
 	{
@@ -167,6 +169,23 @@ void ADRStageGameMode::ReturnToLobby()
 
 	// �÷��� ����
 	bIsWipeoutInProgress = false;
+}
+
+void ADRStageGameMode::CleanupAllAudioBeforeTravel()
+{
+	if (!HasAuthority()) return;
+
+	// 모든 클라이언트에게 오디오 정리 요청
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
+		{
+			PC->ClientStopAllAudio();
+		}
+	}
+
+	// 약간의 대기 시간 (오디오 정리 완료 보장)
+	FPlatformProcess::Sleep(0.1f);
 }
 
 void ADRStageGameMode::InitializePhaseSystem()

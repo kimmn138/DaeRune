@@ -12,15 +12,31 @@
 #include "Components/AudioComponent.h"
 
 // 에셋 경로 정의
-const TCHAR* UDRSettingsManager::SOUND_MIX_PATH = TEXT("/Game/Audio/SM_GameMix.SM_GameMix");
-const TCHAR* UDRSettingsManager::SC_MASTER_PATH = TEXT("/Game/Audio/SoundClasses/SC_Master.SC_Master");
-const TCHAR* UDRSettingsManager::SC_BGM_PATH = TEXT("/Game/Audio/SoundClasses/SC_BGM.SC_BGM");
-const TCHAR* UDRSettingsManager::SC_SFX_PATH = TEXT("/Game/Audio/SoundClasses/SC_SFX.SC_SFX");
-const TCHAR* UDRSettingsManager::SC_Voice_PATH = TEXT("/Game/Audio/SoundClasses/SC_Voice.SC_Voice");
 
 void UDRSettingsManager::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
+
+    if (!GameSoundMix)
+    {
+        GameSoundMix = LoadObject<USoundMix>(nullptr, TEXT("/Game/Blueprints/Audio/SoundMix/SM_GameMix.SM_GameMix"));
+    }
+    if (!MasterSoundClass)
+    {
+        MasterSoundClass = LoadObject<USoundClass>(nullptr, TEXT("/Game/Blueprints/Audio/SoundClasses/SC_Master.SC_Master"));
+    }
+    if (!BGMSoundClass)
+    {
+        BGMSoundClass = LoadObject<USoundClass>(nullptr, TEXT("/Game/Blueprints/Audio/SoundClasses/SC_BGM.SC_BGM"));
+    }
+    if (!SFXSoundClass)
+    {
+        SFXSoundClass = LoadObject<USoundClass>(nullptr, TEXT("/Game/Blueprints/Audio/SoundClasses/SC_SFX.SC_SFX"));
+    }
+    if (!VoiceSoundClass)
+    {
+        VoiceSoundClass = LoadObject<USoundClass>(nullptr, TEXT("/Gam/Blueprintse/Audio/SoundClasses/SC_Voice.SC_Voice"));
+    }
 
     if (UDRGameUserSettings* Settings = GetSettings())
     {
@@ -121,35 +137,27 @@ void UDRSettingsManager::ApplySoundMixToWorld(UWorld* World)
     UDRGameUserSettings* Settings = GetSettings();
     if (!Settings) return;
 
-    // SoundMix 로드
-    USoundMix* GameSoundMix = LoadObject<USoundMix>(nullptr, SOUND_MIX_PATH);
     if (!GameSoundMix) return;
-
-    // SoundClass 로드
-    USoundClass* MasterClass = LoadObject<USoundClass>(nullptr, SC_MASTER_PATH);
-    USoundClass* BGMClass = LoadObject<USoundClass>(nullptr, SC_BGM_PATH);
-    USoundClass* SFXClass = LoadObject<USoundClass>(nullptr, SC_SFX_PATH);
-    USoundClass* VoiceClass = LoadObject<USoundClass>(nullptr, SC_Voice_PATH);
 
     // SoundMix 활성화
     UGameplayStatics::PushSoundMixModifier(World, GameSoundMix);
 
     // 각 클래스 볼륨 설정
-    if (MasterClass)
+    if (MasterSoundClass)
     {
-        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, MasterClass, Settings->MasterVolume, 1.0f, 0.0f, true);
+        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, MasterSoundClass, Settings->MasterVolume, 1.0f, 0.0f, true);
     }
-    if (BGMClass)
+    if (BGMSoundClass)
     {
-        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, BGMClass, Settings->BGMVolume, 1.0f, 0.0f, false);
+        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, BGMSoundClass, Settings->BGMVolume, 1.0f, 0.0f, false);
     }
-    if (SFXClass)
+    if (SFXSoundClass)
     {
-        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, SFXClass, Settings->SFXVolume, 1.0f, 0.0f, false);
+        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, SFXSoundClass, Settings->SFXVolume, 1.0f, 0.0f, false);
     }
-    if (VoiceClass)
+    if (VoiceSoundClass)
     {
-        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, VoiceClass, Settings->SFXVolume, 1.0f, 0.0f, false);
+        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, VoiceSoundClass, Settings->SFXVolume, 1.0f, 0.0f, false);
     }
 }
 

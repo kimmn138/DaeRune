@@ -23,6 +23,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Lobby")
 	void TravelToStage(const FString& StageMapName, class ADRPlayerController* Requester);
 
+	// 맵 전환 전 오디오 정리
+	void CleanupAllAudioBeforeTravel();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void HandleWipeout() override;

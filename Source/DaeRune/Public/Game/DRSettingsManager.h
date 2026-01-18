@@ -80,9 +80,18 @@ private:
     void ApplySoundMixToWorld(UWorld* World);
 
     // 에셋 경로
-    static const TCHAR* SOUND_MIX_PATH;
-    static const TCHAR* SC_MASTER_PATH;
-    static const TCHAR* SC_BGM_PATH;
-    static const TCHAR* SC_SFX_PATH;
-    static const TCHAR* SC_Voice_PATH;
+    UPROPERTY()
+    TObjectPtr<USoundMix> GameSoundMix;
+
+    UPROPERTY()
+    TObjectPtr<USoundClass> MasterSoundClass;
+
+    UPROPERTY()
+    TObjectPtr<USoundClass> BGMSoundClass;
+
+    UPROPERTY()
+    TObjectPtr<USoundClass> SFXSoundClass;
+
+    UPROPERTY()
+    TObjectPtr<USoundClass> VoiceSoundClass;
 };

@@ -48,6 +48,9 @@ protected:
 	// 로비 맵으로 이동
 	void ReturnToLobby();
 
+	// 맵 전환 전 오디오 정리
+	void CleanupAllAudioBeforeTravel();
+
 	// 로비 맵 이름
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage|Config")
 	FString LobbyMapName = TEXT("LobbyMap");

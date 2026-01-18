@@ -6,16 +6,18 @@
 #include "Components/AudioComponent.h"
 #include "Sound/SoundBase.h"
 #include "Sound/DRSoundDataAsset.h"
+#include "Game/DRGameInstance.h"
 
 void UDRSoundManager::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	SoundData = LoadObject<UDRSoundDataAsset>(nullptr, SOUND_DATA_PATH);
-
-	if (!SoundData)
+	if (UGameInstance* GI = GetGameInstance())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("DRSoundManager: DA_SoundData not found at %s"), SOUND_DATA_PATH);
+		if (UDRGameInstance* DRGI = Cast<UDRGameInstance>(GI))
+		{
+			SoundData = DRGI->SoundDataAsset;
+		}
 	}
 }
 
