@@ -422,4 +422,9 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FName("GameplayCue.Skill.WaterPump"),
 		FString("WaterPump Loop Sound/Effect")
 	);
+
+	GameplayTags.GameplayCue_Skill_ClawSwipe = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Skill.ClawSwipe"),
+		FString("ClawSwipe Effect")
+	);
 }

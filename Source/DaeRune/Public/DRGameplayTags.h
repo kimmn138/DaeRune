@@ -124,6 +124,7 @@ public:
 	FGameplayTag GameplayCue_Enemy_Damage;
 	FGameplayTag GameplayCue_Cleanser_Damage;
 	FGameplayTag GameplayCue_Skill_WaterPump;
+	FGameplayTag GameplayCue_Skill_ClawSwipe;
 
 private:
 	static FDRGameplayTags GameplayTags;
