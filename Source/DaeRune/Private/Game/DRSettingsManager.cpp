@@ -7,12 +7,16 @@
 #include "Sound/SoundClass.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Character/DRCharacter.h"
+#include "EngineUtils.h"
+#include "Components/AudioComponent.h"
 
 // 에셋 경로 정의
 const TCHAR* UDRSettingsManager::SOUND_MIX_PATH = TEXT("/Game/Audio/SM_GameMix.SM_GameMix");
 const TCHAR* UDRSettingsManager::SC_MASTER_PATH = TEXT("/Game/Audio/SoundClasses/SC_Master.SC_Master");
 const TCHAR* UDRSettingsManager::SC_BGM_PATH = TEXT("/Game/Audio/SoundClasses/SC_BGM.SC_BGM");
 const TCHAR* UDRSettingsManager::SC_SFX_PATH = TEXT("/Game/Audio/SoundClasses/SC_SFX.SC_SFX");
+const TCHAR* UDRSettingsManager::SC_Voice_PATH = TEXT("/Game/Audio/SoundClasses/SC_Voice.SC_Voice");
 
 void UDRSettingsManager::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -122,6 +126,7 @@ void UDRSettingsManager::ApplySoundMixToWorld(UWorld* World)
     USoundClass* MasterClass = LoadObject<USoundClass>(nullptr, SC_MASTER_PATH);
     USoundClass* BGMClass = LoadObject<USoundClass>(nullptr, SC_BGM_PATH);
     USoundClass* SFXClass = LoadObject<USoundClass>(nullptr, SC_SFX_PATH);
+    USoundClass* VoiceClass = LoadObject<USoundClass>(nullptr, SC_Voice_PATH);
 
     // SoundMix 활성화
     UGameplayStatics::PushSoundMixModifier(World, GameSoundMix);
@@ -138,6 +143,10 @@ void UDRSettingsManager::ApplySoundMixToWorld(UWorld* World)
     if (SFXClass)
     {
         UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, SFXClass, Settings->SFXVolume, 1.0f, 0.0f, false);
+    }
+    if (VoiceClass)
+    {
+        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, VoiceClass, Settings->SFXVolume, 1.0f, 0.0f, false);
     }
 }
 
@@ -162,6 +171,14 @@ void UDRSettingsManager::SetSFXVolume(float NewVolume)
     if (UDRGameUserSettings* Settings = GetSettings())
     {
         Settings->SFXVolume = FMath::Clamp(NewVolume, 0.0f, 1.0f);
+    }
+}
+
+void UDRSettingsManager::SetVoiceVolume(float NewVolume)
+{
+    if (UDRGameUserSettings* Settings = GetSettings())
+    {
+        Settings->VoiceVolume = FMath::Clamp(NewVolume, 0.0f, 2.0f);
     }
 }
 

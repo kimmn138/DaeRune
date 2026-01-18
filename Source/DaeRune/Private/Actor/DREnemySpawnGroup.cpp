@@ -15,16 +15,6 @@ ADREnemySpawnGroup::ADREnemySpawnGroup()
 	// Root Component
 	RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootSceneComponent"));
 	SetRootComponent(RootSceneComponent);
-
-	// 에디터에서 보이는 빌보드
-#if WITH_EDITORONLY_DATA
-	EditorBillboard = CreateDefaultSubobject<UBillboardComponent>(TEXT("EditorBillboard"));
-	if (EditorBillboard)
-	{
-		EditorBillboard->SetupAttachment(RootSceneComponent);
-		EditorBillboard->bHiddenInGame = true;
-	}
-#endif
 }
 
 void ADREnemySpawnGroup::BeginPlay()

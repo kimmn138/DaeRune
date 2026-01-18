@@ -207,6 +207,20 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 
+	if (UCharacterMovementComponent* CharMoveComp = GetCharacterMovement())
+	{
+		CharMoveComp->StopMovementImmediately();
+		CharMoveComp->DisableMovement();
+		CharMoveComp->SetComponentTickEnabled(false);
+	}
+
+	// 메시를 현재 위치에 고정
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->SetSimulatePhysics(false);
+		MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	}
+
 	// Dissolve 효과 시작
 	Dissolve();
 

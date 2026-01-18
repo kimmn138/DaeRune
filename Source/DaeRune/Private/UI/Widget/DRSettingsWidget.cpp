@@ -142,6 +142,7 @@ void UDRSettingsWidget::LoadCurrentSettings()
     PendingMasterVolume = Settings->MasterVolume;
     PendingBGMVolume = Settings->BGMVolume;
     PendingSFXVolume = Settings->SFXVolume;
+    PendingVoiceVolume = Settings->VoiceVolume;
     PendingMouseSensitivity = Settings->MouseSensitivity;
     PendingResolution = Settings->GetScreenResolution();
     PendingWindowMode = Settings->GetFullscreenMode();
@@ -170,13 +171,19 @@ void UDRSettingsWidget::LoadCurrentSettings()
     {
         Text_SFXVolume->SetText(GetPercentText(PendingSFXVolume));
     }
+    // Voice는 0~2 범위를 슬라이더 0~1로 변환
+    PendingVoiceVolume = Settings->VoiceVolume;
     if (Slider_VoiceVolume)
     {
-        Slider_VoiceVolume->SetValue(PendingVoiceVolume);
+        // 0.0~2.0 값을 슬라이더 0~1로 변환
+        float SliderValue = PendingVoiceVolume / 2.0f;
+        Slider_VoiceVolume->SetValue(SliderValue);
     }
     if (Text_VoiceVolume)
     {
-        Text_VoiceVolume->SetText(GetPercentText(PendingVoiceVolume));
+        // 200%까지 표시
+        int32 Percent = FMath::RoundToInt(PendingVoiceVolume * 100.0f);
+        Text_VoiceVolume->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), Percent)));
     }
 
     if (Slider_MouseSensitivity)
@@ -306,6 +313,7 @@ void UDRSettingsWidget::OnApplyClicked()
     Manager->SetMasterVolume(PendingMasterVolume);
     Manager->SetBGMVolume(PendingBGMVolume);
     Manager->SetSFXVolume(PendingSFXVolume);
+    Manager->SetVoiceVolume(PendingVoiceVolume);
     Manager->SetMouseSensitivity(PendingMouseSensitivity);
     Manager->SetScreenResolution(PendingResolution);
     Manager->SetWindowMode(PendingWindowMode);
@@ -396,10 +404,13 @@ void UDRSettingsWidget::OnSFXVolumeChanged(float Value)
 
 void UDRSettingsWidget::OnVoiceVolumeChanged(float Value)
 {
-    PendingVoiceVolume = Value;
+    // 슬라이더 0~1 값을 실제 볼륨 0~2로 변환
+    PendingVoiceVolume = Value * 2.0f;
     if (Text_VoiceVolume)
     {
-        Text_VoiceVolume->SetText(GetPercentText(Value));
+        // 200%까지 표시
+        int32 Percent = FMath::RoundToInt(PendingVoiceVolume * 100.0f);
+        Text_VoiceVolume->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), Percent)));
     }
 }
 

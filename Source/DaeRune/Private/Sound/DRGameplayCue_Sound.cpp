@@ -13,7 +13,12 @@ UDRGameplayCue_Sound::UDRGameplayCue_Sound()
 
 bool UDRGameplayCue_Sound::OnExecute_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) const
 {
-	if (!Sound || !MyTarget) return false;
+	if (!IsValid(MyTarget)) return false;
+
+	if (!Sound) return false;
+
+	UWorld* World = MyTarget->GetWorld();
+	if (!IsValid(World)) return false;
 
 	if (bIs3DSound)
 	{

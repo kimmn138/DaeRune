@@ -54,6 +54,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Settings|Audio")
     void SetSFXVolume(float NewVolume);
 
+    UFUNCTION(BlueprintCallable, Category = "Settings|Audio")
+    void SetVoiceVolume(float NewVolume);
+
     UFUNCTION(BlueprintCallable, Category = "Settings|Gameplay")
     void SetMouseSensitivity(float NewSensitivity);
 
@@ -81,4 +84,5 @@ private:
     static const TCHAR* SC_MASTER_PATH;
     static const TCHAR* SC_BGM_PATH;
     static const TCHAR* SC_SFX_PATH;
+    static const TCHAR* SC_Voice_PATH;
 };

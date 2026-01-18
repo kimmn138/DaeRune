@@ -475,6 +475,35 @@ void ADRPlayerController::SetupInputComponent()
 	DRInputComponent->BindAbilityActions(InputConfig, this, &ThisClass::AbilityInputTagPressed, &ThisClass::AbilityInputTagReleased, &ThisClass::AbilityInputTagHeld);
 }
 
+void ADRPlayerController::ReceivedPlayer()
+{
+	Super::ReceivedPlayer();
+
+	// 로컬 컨트롤러만 처리
+	if (!IsLocalController()) return;
+
+	// 현재 레벨 확인
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	FString CurrentLevelName = World->GetMapName();
+	CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+	// 로비나 메인메뉴면 UI 모드
+	if (CurrentLevelName.Contains(TEXT("Lobby")) || CurrentLevelName.Contains(TEXT("Stage1")))
+	{
+		SetInputMode(FInputModeUIOnly());
+		SetShowMouseCursor(true);
+
+		// 게임오버 UI가 남아있으면 제거
+		if (CurrentResultWidget)
+		{
+			CurrentResultWidget->RemoveFromParent();
+			CurrentResultWidget = nullptr;
+		}
+	}
+}
+
 void ADRPlayerController::HandleToggleSettings()
 {
 	ToggleSettingsMenu();

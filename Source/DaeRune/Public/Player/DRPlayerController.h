@@ -160,6 +160,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void PlayerTick(float DeltaTime) override;
 	virtual void SetupInputComponent() override;
+	virtual void ReceivedPlayer() override;
 
 	// 부패 상태 플래그
 	UPROPERTY(BlueprintReadOnly, Category = "Corruption")

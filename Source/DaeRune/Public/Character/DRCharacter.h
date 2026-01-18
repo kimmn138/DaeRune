@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Character/DRCharacterBase.h"
-#include "Net/VoiceConfig.h"
+#include "Voice/DRVOIPTalker.h"
 #include "DRCharacter.generated.h"
 
 class UWidgetComponent;
@@ -62,11 +62,11 @@ public:
 
 	// VOIPTalker 컴포넌트 반환
 	UFUNCTION(BlueprintCallable, Category = "Voice Chat")
-	UVOIPTalker* GetVOIPTalker() const { return VOIPTalkerComponent; }
+	UDRVOIPTalker* GetVOIPTalker() const { return VOIPTalkerComponent; }
 
 	// VOIP 송신 컴포넌트
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Voice Chat")
-	TObjectPtr<UVOIPTalker> VOIPTalkerComponent;
+	TObjectPtr<UDRVOIPTalker> VOIPTalkerComponent;
 
 	FTimerHandle PlayerStateRegisterTimerHanlde;
 

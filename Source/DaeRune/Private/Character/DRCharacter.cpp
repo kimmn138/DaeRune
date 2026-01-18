@@ -18,6 +18,7 @@
 #include "Actor/DRCleanserPart.h"
 #include "Net/UnrealNetwork.h"
 #include "Components/PointLightComponent.h"
+#include "Game/DRGameUserSettings.h"
 
 ADRCharacter::ADRCharacter()
 {
@@ -52,7 +53,7 @@ ADRCharacter::ADRCharacter()
 	GetMesh()->SetOwnerNoSee(true);
 
 	// VOIPTalker 컴포넌트 생성
-	VOIPTalkerComponent = CreateDefaultSubobject<UVOIPTalker>(TEXT("VOIPTalker"));
+	VOIPTalkerComponent = CreateDefaultSubobject<UDRVOIPTalker>(TEXT("VDROIPTalker"));
 
 	// 컨트롤러 회전 설정
 	bUseControllerRotationPitch = false;

@@ -151,12 +151,6 @@ void ADRStageGameMode::BlockJoinInProgress()
 	{
 		// 스테이지에서는 도중 참가 차단!
 		SessionsSubsystem->UpdateSessionJoinability(false);
-
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Orange,
-				TEXT("Stage started - Join in progress BLOCKED!"));
-		}
 	}
 }
 
