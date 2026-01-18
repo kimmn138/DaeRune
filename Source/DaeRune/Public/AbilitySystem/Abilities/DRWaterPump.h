@@ -6,6 +6,8 @@
 #include "AbilitySystem/Abilities/DRDamageGameplayAbility.h"
 #include "DRWaterPump.generated.h"
 
+class UNiagaraComponent;
+
 /**
  * 
  */
@@ -59,6 +61,29 @@ public:
     FGameplayAbilityTargetDataHandle MakeTargetDataHandleFromActors(AActor* TargetActor);
 
 protected:
+    // Niagara System Asset
+    UPROPERTY(EditDefaultsOnly, Category = "Effects")
+    TObjectPtr<UNiagaraSystem> WaterCannonEffect;
+
+    // 발사 소켓 이름
+    UPROPERTY(EditDefaultsOnly, Category = "Effects")
+    FName MuzzleSocketName = FName("TestRightHand");
+
+    // 생성된 Niagara Component
+    UPROPERTY()
+    TObjectPtr<UNiagaraComponent> FirstPersonBeam;
+
+    UPROPERTY()
+    TObjectPtr<UNiagaraComponent> ThirdPersonBeam;
+
+    // 타이머
+    FTimerHandle BeamUpdateTimer;
+
+    // 함수들
+    void StartBeamEffect();
+    void UpdateBeamEndpoint();
+    void StopBeamEffect();
+
     // 무기 사정거리
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Pump")
     float WeaponRange = 1000.f;

@@ -3,16 +3,17 @@
 
 #include "AbilitySystem/Abilities/DRWaterPump.h"
 #include "Camera/CameraComponent.h"
-#include "Character/DRCharacterBase.h"
 #include "DaeRune/DaeRune.h"
 #include "DRGameplayTags.h"
-#include "GameFramework/Character.h"
+#include "Character/DRCharacter.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Interaction/CombatInterface.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/OverlapResult.h"
 #include "AbilitySystemComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraComponent.h"
 
 FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLocation, bool& bHitObstacle, FHitResult& OutHitResult)
 {
@@ -204,6 +205,18 @@ void UDRWaterPump::StartWaterPumpLoop()
             true, // Looping
             0.0f  // 즉시 시작
         );
+
+        // 빔 이펙트 시작
+        StartBeamEffect();
+
+        // 끝점 업데이트 타이머
+        GetWorld()->GetTimerManager().SetTimer(
+            BeamUpdateTimer,
+            this,
+            &UDRWaterPump::UpdateBeamEndpoint,
+            0.033f,
+            true
+        );
     }
 }
 
@@ -212,6 +225,7 @@ void UDRWaterPump::StopWaterPumpLoop()
     if (UWorld* World = GetWorld())
     {
         World->GetTimerManager().ClearTimer(WaterPumpTimerHandle);
+        World->GetTimerManager().ClearTimer(BeamUpdateTimer);
 
         if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
         {
@@ -219,6 +233,9 @@ void UDRWaterPump::StopWaterPumpLoop()
                 FDRGameplayTags::Get().GameplayCue_Skill_WaterPump
             );
         }
+
+        // 이펙트 종료
+        StopBeamEffect();
 
         // 정리
         DamageTickCounter = 0;
@@ -239,19 +256,19 @@ void UDRWaterPump::PerformWaterPumpTick()
         FDRGameplayTags::Get().CombatSocket_RightHand
     );
 
-    // 1단계: LineTrace로 물대포 끝점 계산
+    // LineTrace로 물대포 끝점 계산
     bool bHitObstacle = false;
     FHitResult HitResult;
     FVector BeamEndPoint = CalculateWaterBeamEndPoint(WeaponSocketLocation, bHitObstacle, HitResult);
 
-    // 끝점 캐시 (블루프린트에서 이펙트 위치로 사용)
+    // 끝점 캐시
     CachedBeamEndPoint = BeamEndPoint;
     OnBeamEndPointUpdated(BeamEndPoint);
 
-    // 2단계: BoxOverlap으로 가장 가까운 적 1명 찾기
+    // BoxOverlap으로 가장 가까운 적 1명 찾기
     AActor* NewTarget = FindClosestTargetInBeam(WeaponSocketLocation, BeamEndPoint);
 
-    // 3단계: 타겟 변경 체크
+    // 타겟 변경 체크
     if (NewTarget)
     {
         // 새로운 타겟인지 확인
@@ -303,6 +320,87 @@ FGameplayAbilityTargetDataHandle UDRWaterPump::MakeTargetDataHandleFromActors(AA
     TargetDataHandle.Add(TargetData);
 
     return TargetDataHandle;
+}
+
+void UDRWaterPump::StartBeamEffect()
+{
+    if (!WaterCannonEffect) return;
+
+    ADRCharacter* Character = Cast<ADRCharacter>(GetAvatarActorFromActorInfo());
+    if (!Character) return;
+
+    USkeletalMeshComponent* FirstPersonMesh = Character->FirstPersonMesh;
+    USkeletalMeshComponent* ThirdPersonMesh = Character->GetMesh();
+
+    // 1인칭 빔 (Owner만 보임)
+    if (FirstPersonMesh && FirstPersonMesh->DoesSocketExist(MuzzleSocketName))
+    {
+        FirstPersonBeam = UNiagaraFunctionLibrary::SpawnSystemAttached(
+            WaterCannonEffect,
+            FirstPersonMesh,
+            MuzzleSocketName,
+            FVector::ZeroVector,
+            FRotator::ZeroRotator,
+            EAttachLocation::SnapToTarget,
+            false
+        );
+
+        if (FirstPersonBeam)
+        {
+            FirstPersonBeam->SetOnlyOwnerSee(true);
+            FirstPersonBeam->SetVectorParameter(FName("HitEffectPosition"), CachedBeamEndPoint);
+        }
+    }
+
+    // 3인칭 빔 (다른 사람만 보임)
+    if (ThirdPersonMesh && ThirdPersonMesh->DoesSocketExist(MuzzleSocketName))
+    {
+        ThirdPersonBeam = UNiagaraFunctionLibrary::SpawnSystemAttached(
+            WaterCannonEffect,
+            ThirdPersonMesh,
+            MuzzleSocketName,
+            FVector::ZeroVector,
+            FRotator::ZeroRotator,
+            EAttachLocation::SnapToTarget,
+            false
+        );
+
+        if (ThirdPersonBeam)
+        {
+            ThirdPersonBeam->SetOwnerNoSee(true);
+            ThirdPersonBeam->SetVectorParameter(FName("HitEffectPosition"), CachedBeamEndPoint);
+        }
+    }
+}
+
+void UDRWaterPump::UpdateBeamEndpoint()
+{
+    if (FirstPersonBeam)
+    {
+        FirstPersonBeam->SetVectorParameter(FName("HitEffectPosition"), CachedBeamEndPoint);
+    }
+
+    if (ThirdPersonBeam)
+    {
+        ThirdPersonBeam->SetVectorParameter(FName("HitEffectPosition"), CachedBeamEndPoint);
+    }
+}
+
+void UDRWaterPump::StopBeamEffect()
+{
+    if (FirstPersonBeam)
+    {
+        FirstPersonBeam->DeactivateImmediate();
+        FirstPersonBeam->DestroyComponent();
+        FirstPersonBeam = nullptr;
+    }
+
+    if (ThirdPersonBeam)
+    {
+        ThirdPersonBeam->DeactivateImmediate();
+        ThirdPersonBeam->DestroyComponent();
+        ThirdPersonBeam = nullptr;
+    }
 }
 
 bool UDRWaterPump::GetAimDirection(FVector& OutAimStart, FVector& OutAimDirection) const

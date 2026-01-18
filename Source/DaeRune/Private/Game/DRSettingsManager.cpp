@@ -29,6 +29,9 @@ void UDRSettingsManager::Initialize(FSubsystemCollectionBase& Collection)
 
         // 커스텀 설정 적용
         Settings->ApplyCustomSettings();
+
+        // 임시 그래픽 낮추기
+        Settings->SetOverallScalabilityLevel(1);
     }
 }
 
