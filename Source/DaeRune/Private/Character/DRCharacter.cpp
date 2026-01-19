@@ -19,6 +19,8 @@
 #include "Net/UnrealNetwork.h"
 #include "Components/PointLightComponent.h"
 #include "Game/DRGameUserSettings.h"
+#include "UObject/UObjectIterator.h"
+#include "Components/SynthComponent.h"
 
 ADRCharacter::ADRCharacter()
 {
@@ -307,6 +309,22 @@ void ADRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 		// ÄÄÆ÷³ÍÆ® ¸í½ÃÀû ÆÄ±«
 		VOIPTalkerComponent->DestroyComponent();
+	}
+
+	if (IsLocallyControlled())
+	{
+		for (TObjectIterator<USynthComponent> It; It; ++It)
+		{
+			USynthComponent* SynthComp = *It;
+			if (SynthComp && SynthComp->GetClass()->GetName().Contains(TEXT("VoipListenerSynthComponent")))
+			{
+				SynthComp->Stop();
+				if (SynthComp->IsRegistered())
+				{
+					SynthComp->UnregisterComponent();
+				}
+			}
+		}
 	}
 
 	Super::EndPlay(EndPlayReason);

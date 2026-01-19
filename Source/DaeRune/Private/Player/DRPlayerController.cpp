@@ -372,6 +372,21 @@ void ADRPlayerController::ClientStopAllAudio_Implementation()
 			}
 		}
 	}
+
+	// VOIP 관련 SynthComponent 정리
+	for (AActor* Actor : AllActors)
+	{
+		TArray<UActorComponent*> AllComps;
+		Actor->GetComponents<UActorComponent>(AllComps);
+
+		for (UActorComponent* Comp : AllComps)
+		{
+			if (Comp && Comp->GetClass()->GetName().Contains(TEXT("VoipListenerSynthComponent")))
+			{
+				Comp->DestroyComponent();
+			}
+		}
+	}
 }
 
 void ADRPlayerController::CheatSkipToNextPhase()
@@ -856,14 +871,6 @@ void ADRPlayerController::Client_ShowGameOverUI_Implementation()
 	{
 		// 뷰포트에 추가
 		CurrentResultWidget->AddToViewport(100);
-
-		// 입력 모드를 UI로 변경
-		FInputModeUIOnly InputMode;
-		InputMode.SetWidgetToFocus(CurrentResultWidget->TakeWidget());
-		SetInputMode(InputMode);
-
-		// 마우스 커서 표시
-		bShowMouseCursor = true;
 	}
 }
 
@@ -881,14 +888,6 @@ void ADRPlayerController::Client_ShowGameClearUI_Implementation()
 	{
 		// 뷰포트에 추가
 		CurrentResultWidget->AddToViewport(100);
-
-		// 입력 모드를 UI로 변경
-		FInputModeUIOnly InputMode;
-		InputMode.SetWidgetToFocus(CurrentResultWidget->TakeWidget());
-		SetInputMode(InputMode);
-
-		// 마우스 커서 표시
-		bShowMouseCursor = true;
 	}
 }
 

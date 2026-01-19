@@ -74,10 +74,8 @@ void UDRPhase3::OnPhaseEnd()
 {
 	Super::OnPhaseEnd();
 	
-	if (!GameMode) return;
-	
 	// 모든 타이머 정리
-	if (UWorld* World = GameMode->GetWorld())
+	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(WaveTimerHandle);
 		World->GetTimerManager().ClearTimer(SpawnTimerHandle);
@@ -113,16 +111,13 @@ void UDRPhase3::OnPhaseEnd()
 void UDRPhase3::BeginDestroy()
 {
 	// Phase 객체가 소멸되기 전 모든 타이머 강제 정리
-	if (GameMode)
+	if (UWorld* World = GetWorld())
 	{
-		if (UWorld* World = GameMode->GetWorld())
-		{
-			World->GetTimerManager().ClearTimer(WaveTimerHandle);
-			World->GetTimerManager().ClearTimer(SpawnTimerHandle);
-			World->GetTimerManager().ClearTimer(DefenseTimerHandle);
-			World->GetTimerManager().ClearTimer(WaveTimerUpdateHandle);
-			World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
-		}
+		World->GetTimerManager().ClearTimer(WaveTimerHandle);
+		World->GetTimerManager().ClearTimer(SpawnTimerHandle);
+		World->GetTimerManager().ClearTimer(DefenseTimerHandle);
+		World->GetTimerManager().ClearTimer(WaveTimerUpdateHandle);
+		World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
 	}
 
 	Super::BeginDestroy();
