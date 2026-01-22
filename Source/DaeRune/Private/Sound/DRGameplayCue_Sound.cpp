@@ -4,6 +4,7 @@
 #include "Sound/DRGameplayCue_Sound.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
+#include "Sound/DRSoundManager.h"
 
 UDRGameplayCue_Sound::UDRGameplayCue_Sound()
 {
@@ -13,35 +14,39 @@ UDRGameplayCue_Sound::UDRGameplayCue_Sound()
 
 bool UDRGameplayCue_Sound::OnExecute_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) const
 {
-	if (!IsValid(MyTarget)) return false;
+    if (!Sound) return false;
 
-	if (!Sound) return false;
+    UWorld* World = MyTarget ? MyTarget->GetWorld() : nullptr;
+    if (!World) return false;
 
-	UWorld* World = MyTarget->GetWorld();
-	if (!IsValid(World)) return false;
+    UGameInstance* GI = World->GetGameInstance();
+    if (!GI) return false;
 
-	if (bIs3DSound)
-	{
-		// 3D 사운드: 타겟 위치에서 재생
-		FVector Location = MyTarget->GetActorLocation();
+    UDRSoundManager* SoundManager = GI->GetSubsystem<UDRSoundManager>();
+    if (!SoundManager) return false;
 
-		// Parameters에 위치 정보가 있으면 사용
-		if (!Parameters.Location.IsZero())
-		{
-			Location = Parameters.Location;
-		}
+    FVector Location = FVector::ZeroVector;
+    if (!Parameters.Location.IsZero())
+    {
+        Location = Parameters.Location;
+    }
+    else if (IsValid(MyTarget) && !MyTarget->IsPendingKillPending())
+    {
+        Location = MyTarget->GetActorLocation();
+    }
+    else
+    {
+        return false; // 위치를 알 수 없으면 스킵
+    }
 
-		UGameplayStatics::PlaySoundAtLocation(
-			MyTarget->GetWorld(),
-			Sound,
-			Location
-		);
-	}
-	else
-	{
-		// 2D 사운드: 전역 재생
-		UGameplayStatics::PlaySound2D(MyTarget->GetWorld(), Sound);
-	}
+    if (bIs3DSound)
+    {
+        SoundManager->PlaySoundAtLocation(Sound, Location);
+    }
+    else
+    {
+        SoundManager->PlaySound2D(Sound);
+    }
 
-	return false;
+    return false;
 }

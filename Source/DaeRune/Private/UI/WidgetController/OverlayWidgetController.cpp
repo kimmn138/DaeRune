@@ -290,25 +290,34 @@ void UOverlayWidgetController::OnPhaseChanged(int32 NewPhaseIndex)
 		BindCallbacksCleanserSiteToDependencies();
 	}
 
-	// PhaseAlarm 델리게이트 브로드캐스트
-	FText PhaseText;
-	switch (NewPhaseIndex)
+	if (CachedPhaseNumber != NewPhaseIndex || !bPhaseAlarmShown)
 	{
-	case 0:
-		PhaseText = FText::FromString(TEXT("Phase 1: Secure"));
-		break;
-	case 1:
-		PhaseText = FText::FromString(TEXT("Phase 2: Collect"));
-		break;
-	case 2:
-		PhaseText = FText::FromString(TEXT("Phase 3: Defense"));
-		break;
-	default:
-		PhaseText = FText::FromString(TEXT("Unknown Phase"));
-		break;
-	}
+		FText PhaseText;
+		switch (NewPhaseIndex)
+		{
+		case 0:
+			PhaseText = FText::FromString(TEXT("Phase 1: Secure"));
+			break;
+		case 1:
+			PhaseText = FText::FromString(TEXT("Phase 2: Collect"));
+			break;
+		case 2:
+			PhaseText = FText::FromString(TEXT("Phase 3: Defense"));
+			break;
+		default:
+			PhaseText = FText::FromString(TEXT("Unknown Phase"));
+			break;
+		}
 
-	OnPhaseAlarm.Broadcast(PhaseText);
+		// 페이즈가 실제로 변경되었을 때만 알람 브로드캐스트
+		if (CachedPhaseNumber != NewPhaseIndex)
+		{
+			OnPhaseAlarm.Broadcast(PhaseText);
+			bPhaseAlarmShown = true;
+		}
+
+		CachedPhaseNumber = NewPhaseIndex;
+	}
 }
 
 void UOverlayWidgetController::BindCleanserSite(ADRCleanserSite* FirstCleanserSite,ADRCleanserSite* SecondCleanserSite)

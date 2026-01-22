@@ -140,4 +140,7 @@ private:
 	int32 CachedProgress = -1;
 	int32 CachedRequiredCount = -1;
 	FText CachedObjectiveTitle;
+
+	// 페이즈 알람 중복 방지용 플래그
+	bool bPhaseAlarmShown = false;
 };

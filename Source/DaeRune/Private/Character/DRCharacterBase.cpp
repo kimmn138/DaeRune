@@ -14,6 +14,7 @@
 #include "Game/DRGameModeBase.h" 
 #include "Player/DRPlayerController.h"
 #include "Character/DRCharacter.h"
+#include "Components/AudioComponent.h"
 
 ADRCharacterBase::ADRCharacterBase()
 {
@@ -266,6 +267,24 @@ void ADRCharacterBase::OnRep_Burned()
 void ADRCharacterBase::BeginPlay()
 {
 	Super::BeginPlay();
+}
+
+void ADRCharacterBase::Destroyed()
+{
+	// 모든 AudioComponent 안전하게 정리
+	TArray<UAudioComponent*> AudioComps;
+	GetComponents<UAudioComponent>(AudioComps);
+
+	for (UAudioComponent* AudioComp : AudioComps)
+	{
+		if (AudioComp && AudioComp->IsPlaying())
+		{
+			// 페이드 아웃으로 부드럽게 정지
+			AudioComp->FadeOut(0.1f, 0.0f);
+		}
+	}
+
+	Super::Destroyed();
 }
 
 FVector ADRCharacterBase::GetCombatSocketLocation_Implementation(const FGameplayTag& MontageTag)

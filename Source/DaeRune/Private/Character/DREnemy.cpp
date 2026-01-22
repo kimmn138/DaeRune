@@ -27,6 +27,9 @@ ADREnemy::ADREnemy()
 	// 메시 가시성 충돌 설정
 	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
+	NetPriority = 3.0f;
+	NetUpdateFrequency = 10.0f;
+
 	// GAS 컴포넌트 초기화 - 리슨서버용 최소 리플리케이션
 	AbilitySystemComponent = CreateDefaultSubobject<UDRAbilitySystemComponent>("AbilitySystemComponent");
 	AbilitySystemComponent->SetIsReplicated(true);

@@ -12,6 +12,7 @@
 #include "Player/DRPlayerController.h"
 #include "Character/DRCharacter.h"
 #include "Sound/DRSoundManager.h"
+#include "Components/AudioComponent.h"
 
 ADRCleanserSite::ADRCleanserSite()
 {

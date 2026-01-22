@@ -83,6 +83,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void Destroyed() override;
 
 	// ·¹º§
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Class Defaults")

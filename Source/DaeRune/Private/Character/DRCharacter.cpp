@@ -55,7 +55,7 @@ ADRCharacter::ADRCharacter()
 	GetMesh()->SetOwnerNoSee(true);
 
 	// VOIPTalker 컴포넌트 생성
-	VOIPTalkerComponent = CreateDefaultSubobject<UDRVOIPTalker>(TEXT("VDROIPTalker"));
+	//VOIPTalkerComponent = CreateDefaultSubobject<UDRVOIPTalker>(TEXT("VDROIPTalker"));
 
 	// 컨트롤러 회전 설정
 	bUseControllerRotationPitch = false;
@@ -208,27 +208,27 @@ void ADRCharacter::DropCarriedPart()
 
 void ADRCharacter::TryRegisterVoiceTalker()
 {
-	if (APlayerState* PS = GetPlayerState())
+	/*if (APlayerState* PS = GetPlayerState())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(PlayerStateRegisterTimerHanlde);
 		RegisterVoiceTalker();
-	}
+	}*/
 }
 
 void ADRCharacter::RegisterVoiceTalker()
 {
-	if (VOIPTalkerComponent)
-	{
-		if (APlayerState* PS = GetPlayerState())
-		{
-			VOIPTalkerComponent->RegisterWithPlayerState(PS);
+	//if (VOIPTalkerComponent)
+	//{
+	//	if (APlayerState* PS = GetPlayerState())
+	//	{
+	//		VOIPTalkerComponent->RegisterWithPlayerState(PS);
 
-			// 거리 감쇠 비활성화
-			VOIPTalkerComponent->Settings.ComponentToAttachTo = nullptr;
-			VOIPTalkerComponent->Settings.AttenuationSettings = nullptr;
-			VOIPTalkerComponent->Settings.SourceEffectChain = nullptr;
-		}
-	}
+	//		// 거리 감쇠 비활성화
+	//		VOIPTalkerComponent->Settings.ComponentToAttachTo = nullptr;
+	//		VOIPTalkerComponent->Settings.AttenuationSettings = nullptr;
+	//		VOIPTalkerComponent->Settings.SourceEffectChain = nullptr;
+	//	}
+	//}
 }
 
 void ADRCharacter::UpdateMeshVisibility()
@@ -298,20 +298,20 @@ void ADRCharacter::BeginPlay()
 
 void ADRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	// VOIPTalker 정리
-	if (VOIPTalkerComponent)
-	{
-		// 오디오 스트림 즉시 중지
-		if (VOIPTalkerComponent->IsActive())
-		{
-			VOIPTalkerComponent->Deactivate();
-		}
+	//// VOIPTalker 정리
+	//if (VOIPTalkerComponent)
+	//{
+	//	// 오디오 스트림 즉시 중지
+	//	if (VOIPTalkerComponent->IsActive())
+	//	{
+	//		VOIPTalkerComponent->Deactivate();
+	//	}
 
-		// 컴포넌트 명시적 파괴
-		VOIPTalkerComponent->DestroyComponent();
-	}
+	//	// 컴포넌트 명시적 파괴
+	//	VOIPTalkerComponent->DestroyComponent();
+	//}
 
-	if (IsLocallyControlled())
+	/*if (IsLocallyControlled())
 	{
 		for (TObjectIterator<USynthComponent> It; It; ++It)
 		{
@@ -325,7 +325,7 @@ void ADRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 				}
 			}
 		}
-	}
+	}*/
 
 	Super::EndPlay(EndPlayReason);
 }

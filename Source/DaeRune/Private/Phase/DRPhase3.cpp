@@ -401,6 +401,9 @@ void UDRPhase3::SpawnMonstersAroundPlayers(const TArray<ADRCharacter*>& PlayerCh
 	
 	// 웨이브 데이터 가져오기
 	if (!WaveDataArray.IsValidIndex(CurrentWaveNumber - 1)) return;
+
+	int32 TotalSpawnAttempts = 0;
+	int32 SuccessfulSpawns = 0;
 	
 	// 각 플레이어 주변에 몬스터 스폰
 	for (const AActor* Player : PlayerCharacters)
@@ -414,6 +417,8 @@ void UDRPhase3::SpawnMonstersAroundPlayers(const TArray<ADRCharacter*>& PlayerCh
 			TSubclassOf<ADREnemy> SelectedMonsterClass = SelectMonsterClass(CurrentWaveLevel);
 		
 			if (!SelectedMonsterClass) continue;
+
+			TotalSpawnAttempts++;
 		
 			// SpawnActorDeferred 사용으로 BeginPlay 전에 레벨 설정
 			ADREnemy* SpawnedEnemy = World->SpawnActorDeferred<ADREnemy>(
@@ -439,28 +444,33 @@ void UDRPhase3::SpawnMonstersAroundPlayers(const TArray<ADRCharacter*>& PlayerCh
 				// FinishSpawning으로 BeginPlay 실행
 				SpawnedEnemy->FinishSpawning(FTransform(FRotator::ZeroRotator, SpawnLocation));
 				
-				CurrentSpawnCount++;
-
-				// 델리게이트 바인딩
-				if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(SpawnedEnemy))
+				// 스폰 성공 확인
+				if (SpawnedEnemy->IsValidLowLevel())
 				{
-					CombatInterface->GetOnDeathDelegate().AddDynamic(this, &UDRPhaseBase::OnEnemyDeath);
-				}
+					SuccessfulSpawns++;
+					CurrentSpawnCount++;
 
-				if (bEliteBossSpawned)
-				{
-					if (UAbilitySystemComponent* ASC = SpawnedEnemy->GetAbilitySystemComponent())
+					// 델리게이트 바인딩
+					if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(SpawnedEnemy))
 					{
-						ASC->AddLooseGameplayTag(FDRGameplayTags::Get().Buff_Elite);
+						CombatInterface->GetOnDeathDelegate().AddDynamic(this, &UDRPhaseBase::OnEnemyDeath);
 					}
+
+					if (bEliteBossSpawned)
+					{
+						if (UAbilitySystemComponent* ASC = SpawnedEnemy->GetAbilitySystemComponent())
+						{
+							ASC->AddLooseGameplayTag(FDRGameplayTags::Get().Buff_Elite);
+						}
+					}
+
+					// PhaseBase의 SpawnedEnemies 배열에 추가
+					SpawnedEnemies.Add(SpawnedEnemy);
+
+					CheckGameOverConditions();
+
+					if (TotalSpawnCount == CurrentSpawnCount) return;
 				}
-				
-				// PhaseBase의 SpawnedEnemies 배열에 추가
-				SpawnedEnemies.Add(SpawnedEnemy);
-
-				CheckGameOverConditions();
-
-				if (TotalSpawnCount == CurrentSpawnCount) return;
 			}
 		}
 	}

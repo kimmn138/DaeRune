@@ -36,9 +36,9 @@ ADRAutoSlidingDoor::ADRAutoSlidingDoor()
 	TriggerVolume->SetBoxExtent(FVector(200.0f, 300.0f, 200.0f));
 
 	// Audio Component
-	DoorAudioComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("DoorAudioComponent"));
+	/*DoorAudioComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("DoorAudioComponent"));
 	DoorAudioComponent->SetupAttachment(RootSceneComponent);
-	DoorAudioComponent->bAutoActivate = false;
+	DoorAudioComponent->bAutoActivate = false;*/
 }
 
 void ADRAutoSlidingDoor::BeginPlay()

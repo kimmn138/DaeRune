@@ -272,6 +272,8 @@ void ADRPlayerController::ClientStartSpectating_Implementation()
 void ADRPlayerController::ClientStopSpectating_Implementation()
 {
 	if (!IsLocalController()) return;
+
+	if (!bIsSpectating) return;
     
 	bIsSpectating = false;
 	CurrentSpectatedPlayerIndex = 0;
@@ -355,26 +357,26 @@ void ADRPlayerController::ClientStopAllAudio_Implementation()
 		}
 	}
 
-	// 모든 AudioComponent 정지
-	TArray<AActor*> AllActors;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), AllActors);
+	//// 모든 AudioComponent 정지
+	//TArray<AActor*> AllActors;
+	//UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), AllActors);
 
-	for (AActor* Actor : AllActors)
-	{
-		TArray<UAudioComponent*> AudioComps;
-		Actor->GetComponents<UAudioComponent>(AudioComps);
+	//for (AActor* Actor : AllActors)
+	//{
+	//	TArray<UAudioComponent*> AudioComps;
+	//	Actor->GetComponents<UAudioComponent>(AudioComps);
 
-		for (UAudioComponent* AudioComp : AudioComps)
-		{
-			if (AudioComp && AudioComp->IsPlaying())
-			{
-				AudioComp->Stop();
-			}
-		}
-	}
+	//	for (UAudioComponent* AudioComp : AudioComps)
+	//	{
+	//		if (AudioComp && AudioComp->IsPlaying())
+	//		{
+	//			AudioComp->Stop();
+	//		}
+	//	}
+	//}
 
 	// VOIP 관련 SynthComponent 정리
-	for (AActor* Actor : AllActors)
+	/*for (AActor* Actor : AllActors)
 	{
 		TArray<UActorComponent*> AllComps;
 		Actor->GetComponents<UActorComponent>(AllComps);
@@ -386,7 +388,7 @@ void ADRPlayerController::ClientStopAllAudio_Implementation()
 				Comp->DestroyComponent();
 			}
 		}
-	}
+	}*/
 }
 
 void ADRPlayerController::CheatSkipToNextPhase()
@@ -513,6 +515,9 @@ void ADRPlayerController::ReceivedPlayer()
 		CurrentResultWidget->RemoveFromParent();
 		CurrentResultWidget = nullptr;
 	}
+
+	bIsSpectating = false;
+	CurrentSpectatedCharacter = nullptr;
 
 	// 레벨에 맞는 기본 입력 모드로 복원
 	RestoreDefaultInputMode();

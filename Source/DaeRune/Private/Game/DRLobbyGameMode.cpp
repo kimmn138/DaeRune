@@ -6,6 +6,8 @@
 #include "GameFramework/PlayerState.h"
 #include "Player/DRPlayerController.h"
 #include "MultiplayerSessionsSubsystem.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Components/CapsuleComponent.h"
 
 ADRLobbyGameMode::ADRLobbyGameMode()
 {
@@ -15,6 +17,34 @@ ADRLobbyGameMode::ADRLobbyGameMode()
 void ADRLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
+
+	// 스테이지에서 돌아온 플레이어의 상태 리셋
+	if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(NewPlayer))
+	{
+		// 관전 모드 강제 해제
+		DRPC->ClientStopSpectating();
+
+		// 입력 모드 리셋
+		DRPC->SetInputMode(FInputModeGameOnly());
+		DRPC->SetShowMouseCursor(false);
+
+		// 플레이어 상태 플래그 리셋
+		if (APawn* ControlledPawn = DRPC->GetPawn())
+		{
+			// Movement 컴포넌트 재활성화
+			if (UCharacterMovementComponent* MovementComp = Cast<UCharacterMovementComponent>(ControlledPawn->GetMovementComponent()))
+			{
+				MovementComp->SetMovementMode(MOVE_Walking);
+				MovementComp->SetComponentTickEnabled(true);
+			}
+
+			// 캡슐 콜리전 재활성화
+			if (UCapsuleComponent* CapsuleComp = Cast<UCapsuleComponent>(ControlledPawn->GetRootComponent()))
+			{
+				CapsuleComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			}
+		}
+	}
 
 	if (GameState)
 	{
