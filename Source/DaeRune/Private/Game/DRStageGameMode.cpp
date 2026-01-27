@@ -20,10 +20,10 @@ ADRStageGameMode::ADRStageGameMode()
 void ADRStageGameMode::TriggerGameOver()
 {
 	if (!HasAuthority()) return;
-    
+
 	// 이미 게임 오버 처리 중이면 중복 호출 방지
 	if (bIsWipeoutInProgress) return;
-    
+
 	bIsWipeoutInProgress = true;
 
 	if (CurrentPhase && IsValid(CurrentPhase))
@@ -39,15 +39,9 @@ void ADRStageGameMode::TriggerGameOver()
 		}
 	}
 
-	// 모든 플레이어에게 게임 오버 UI 표시
-	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
-	{
-		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
-		{
-			PC->Client_ShowGameOverUI();
-		}
-	}
-    
+	// 모든 플레이어에게 게임 오버 알림 (단일 순회)
+	NotifyAllPlayersGameEnd(false);
+
 	// 약간의 딜레이 후 로비로 복귀
 	GetWorldTimerManager().SetTimer(
 		WipeoutTimerHandle,
@@ -61,10 +55,10 @@ void ADRStageGameMode::TriggerGameOver()
 void ADRStageGameMode::TriggerGameClear()
 {
 	if (!HasAuthority()) return;
-    
+
 	// 이미 게임 오버 처리 중이면 중복 호출 방지
 	if (bIsWipeoutInProgress) return;
-    
+
 	bIsWipeoutInProgress = true;
 
 	if (CurrentPhase && IsValid(CurrentPhase))
@@ -79,16 +73,10 @@ void ADRStageGameMode::TriggerGameClear()
 			SM->PlayGameClearSound();
 		}
 	}
-    
-	// 모든 플레이어에게 게임 클리어 UI 표시
-	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
-	{
-		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
-		{
-			PC->Client_ShowGameClearUI();
-		}
-	}
-    
+
+	// 모든 플레이어에게 게임 클리어 알림 (단일 순회)
+	NotifyAllPlayersGameEnd(true);
+
 	// 약간의 딜레이 후 로비로 복귀
 	GetWorldTimerManager().SetTimer(
 		WipeoutTimerHandle,
@@ -158,7 +146,8 @@ void ADRStageGameMode::ReturnToLobby()
 {
 	if (!HasAuthority()) return;
 
-	CleanupAllAudioBeforeTravel();
+	// 맵 전환 전 정리 작업 (부모 클래스의 공통 함수 사용)
+	PrepareForTravel();
 
 	UWorld* World = GetWorld();
 	if (World)
@@ -167,25 +156,33 @@ void ADRStageGameMode::ReturnToLobby()
 		World->ServerTravel(LobbyMapName + TEXT("?listen"));
 	}
 
-	// �÷��� ����
+	// 플래그 리셋
 	bIsWipeoutInProgress = false;
 }
 
-void ADRStageGameMode::CleanupAllAudioBeforeTravel()
+void ADRStageGameMode::NotifyAllPlayersGameEnd(bool bIsGameClear)
 {
 	if (!HasAuthority()) return;
 
-	// 모든 클라이언트에게 오디오 정리 요청
+	// 단일 순회로 UI 표시 + 오디오 정리 수행
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
 		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
 		{
+			// UI 표시
+			if (bIsGameClear)
+			{
+				PC->Client_ShowGameClearUI();
+			}
+			else
+			{
+				PC->Client_ShowGameOverUI();
+			}
+
+			// 오디오 정리 (맵 전환 전 미리 수행)
 			PC->ClientStopAllAudio();
 		}
 	}
-
-	// 약간의 대기 시간 (오디오 정리 완료 보장)
-	FPlatformProcess::Sleep(0.1f);
 }
 
 void ADRStageGameMode::InitializePhaseSystem()
@@ -262,13 +259,16 @@ void ADRStageGameMode::StartPhase(int32 PhaseIndex)
 	CachedGameState->SetCurrentPhaseIndex(PhaseIndex);
 	CachedGameState->SetCurrentPhaseState(EPhaseState::InProgress);
 
-	// ������ ����
+	// 페이즈 시작
 	if (CurrentPhase)
 	{
 		CurrentPhase->OnPhaseStart();
 	}
 
-	// ��������Ʈ �̺�Ʈ ȣ��
+	// Phase 전환 완료 - Race Condition 방지 플래그 해제
+	bIsTransitioningPhase = false;
+
+	// 델리게이트 이벤트 호출
 	// OnPhaseStarted();
 }
 
@@ -276,7 +276,10 @@ void ADRStageGameMode::EndCurrentPhase()
 {
 	if (!HasAuthority() || !CachedGameState || !CurrentPhase) return;
 
-	// ������ �Ϸ� ���·� ����
+	// Phase 전환 시작 - Race Condition 방지
+	bIsTransitioningPhase = true;
+
+	// 페이즈 완료 상태로 변경
 	CachedGameState->SetCurrentPhaseState(EPhaseState::Completed);
 
 	// ������ ���� ó��
@@ -313,6 +316,9 @@ void ADRStageGameMode::TransitionToNextPhase()
 bool ADRStageGameMode::ValidatePhaseCompletion()
 {
 	if (!CurrentPhase || !CachedGameState) return false;
+
+	// Phase 전환 중이거나 게임 종료 처리 중이면 중복 호출 방지
+	if (bIsTransitioningPhase || bIsWipeoutInProgress) return false;
 
 	int32 CurrentPhaseIndex = CachedGameState->GetCurrentPhaseIndex();
 	bool bIsCompleted = false;

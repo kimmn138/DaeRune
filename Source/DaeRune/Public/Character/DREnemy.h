@@ -13,6 +13,30 @@ class UWidgetComponent;
 class UBehaviorTree;
 class ADRAIController;
 
+// Blackboard 키 상수 (하드코딩 방지)
+namespace DRBlackboardKeys
+{
+	// AI 상태
+	inline const FName HitReacting = TEXT("HitReacting");
+	inline const FName RangedAttacker = TEXT("RangedAttacker");
+	inline const FName HomeLocation = TEXT("HomeLocation");
+	inline const FName Dead = TEXT("Dead");
+	inline const FName Stunned = TEXT("Stunned");
+
+	// 부품 시스템
+	inline const FName HasPart = TEXT("HasPart");
+
+	// 광폭화 시스템
+	inline const FName IsEnraged = TEXT("bIsEnraged");
+	inline const FName AttackSpeed = TEXT("AttackSpeed");
+	inline const FName EliteAttackSpeed = TEXT("EliteAttackSpeed");
+
+	// 타겟팅
+	inline const FName FirstAttacker = TEXT("FirstAttacker");
+	inline const FName HasFirstAttacker = TEXT("HasFirstAttacker");
+	inline const FName TargetToFollow = TEXT("TargetToFollow");
+}
+
 /**
  * 적 캐릭터 기본 클래스
  */
@@ -57,6 +81,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Combat")
 	bool bHitReacting = false;
 
+	// 히트 리액션 중 이동 속도
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	float HitReactingMoveSpeed = 200.f;
+
 	// 사망 후 생존 시간
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
 	float LifeSpan = 3.f;
@@ -97,6 +125,10 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Enemy|Combat")
 	TSubclassOf<UGameplayEffect> EnrageMovementSpeedGE;
+
+	// 광폭화 시 공격 속도 배율 (기본값: 0.5 = 2배 빠름)
+	UPROPERTY(EditDefaultsOnly, Category = "Enemy|Combat", meta = (ClampMin = "0.1", ClampMax = "1.0"))
+	float EnrageAttackSpeedMultiplier = 0.5f;
 
 	void TriggerEnrage();
 

@@ -7,15 +7,21 @@
 #include "DRSoundDataAsset.generated.h"
 
 /**
- * »ç¿îµå ¿¡¼Â ¼³Á¤¿ë DataAsset
+ * ê²Œì„ ì‚¬ìš´ë“œ ë°ì´í„°ë¥¼ ê´€ë¦¬í•˜ëŠ” DataAsset
+ * Primary Assetìœ¼ë¡œ ë“±ë¡ë˜ì–´ íŒ¨í‚¤ì§• ì‹œ ìë™ìœ¼ë¡œ ì¿ í‚¹ë¨
  */
 UCLASS()
 class DAERUNE_API UDRSoundDataAsset : public UPrimaryDataAsset
 {
 	GENERATED_BODY()
-	
-	public:
-	// °ÔÀÓ ÁøÇà
+
+public:
+	// Primary Asset ID ë°˜í™˜ (AssetManagerì—ì„œ ì‚¬ìš©)
+	virtual FPrimaryAssetId GetPrimaryAssetId() const override
+	{
+		return FPrimaryAssetId(TEXT("SoundData"), GetFName());
+	}
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Game")
 	TObjectPtr<USoundBase> PhaseStartSound;
 
@@ -32,7 +38,7 @@ class DAERUNE_API UDRSoundDataAsset : public UPrimaryDataAsset
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TObjectPtr<USoundBase> UIButtonClickSound;
 
-	// Å¬·»Àú/¾×ÅÍ
+	// Å¬ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Actor")
 	TObjectPtr<USoundBase> CleanserOperatingSound;
 

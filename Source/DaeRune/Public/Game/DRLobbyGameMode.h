@@ -23,17 +23,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Lobby")
 	void TravelToStage(const FString& StageMapName, class ADRPlayerController* Requester);
 
-	// ¸Ê ÀüÈ¯ Àü ¿Àµð¿À Á¤¸®
-	void CleanupAllAudioBeforeTravel();
-
 protected:
 	virtual void BeginPlay() override;
 	virtual void HandleWipeout() override;
 
-	// ¼¼¼Ç µµÁß Âü°¡ Çã¿ë
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 	void AllowJoinInProgress();
 
-	// ·Îºñ Àç½ÃÀÛ
+	// ï¿½Îºï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½
 	void RestartLobby();
 
 private:

@@ -18,7 +18,7 @@ void UDRSettingsWidget::NativeConstruct()
 {
     Super::NativeConstruct();
 
-    // ÅÇ ¹öÆ° ¹ÙÀÎµù
+    // ï¿½ï¿½ ï¿½ï¿½Æ° ï¿½ï¿½ï¿½Îµï¿½
     if (Button_Sound)
     {
         Button_Sound->OnClicked.AddDynamic(this, &UDRSettingsWidget::OnSoundTabClicked);
@@ -32,7 +32,7 @@ void UDRSettingsWidget::NativeConstruct()
         Button_Controls->OnClicked.AddDynamic(this, &UDRSettingsWidget::OnControlsTabClicked);
     }
 
-    // ÇÏ´Ü ¹öÆ° ¹ÙÀÎµù
+    // ï¿½Ï´ï¿½ ï¿½ï¿½Æ° ï¿½ï¿½ï¿½Îµï¿½
     if (Button_Apply)
     {
         Button_Apply->OnClicked.AddDynamic(this, &UDRSettingsWidget::OnApplyClicked);
@@ -50,7 +50,7 @@ void UDRSettingsWidget::NativeConstruct()
         Button_QuitGame->OnClicked.AddDynamic(this, &UDRSettingsWidget::OnQuitGameClicked);
     }
 
-    // ½½¶óÀÌ´õ ¹ÙÀÎµù
+    // ï¿½ï¿½ï¿½ï¿½ï¿½Ì´ï¿½ ï¿½ï¿½ï¿½Îµï¿½
     if (Slider_MasterVolume)
     {
         Slider_MasterVolume->OnValueChanged.AddDynamic(this, &UDRSettingsWidget::OnMasterVolumeChanged);
@@ -72,7 +72,7 @@ void UDRSettingsWidget::NativeConstruct()
         Slider_MouseSensitivity->OnValueChanged.AddDynamic(this, &UDRSettingsWidget::OnMouseSensitivityChanged);
     }
 
-    // ÄŞº¸¹Ú½º ¹ÙÀÎµù
+    // ì½¤ë³´ë°•ìŠ¤ ë°”ì¸ë”©
     if (ComboBox_Resolution)
     {
         ComboBox_Resolution->OnSelectionChanged.AddDynamic(this, &UDRSettingsWidget::OnResolutionChanged);
@@ -81,12 +81,17 @@ void UDRSettingsWidget::NativeConstruct()
     {
         ComboBox_WindowMode->OnSelectionChanged.AddDynamic(this, &UDRSettingsWidget::OnWindowModeChanged);
     }
+    if (ComboBox_GraphicsQuality)
+    {
+        ComboBox_GraphicsQuality->OnSelectionChanged.AddDynamic(this, &UDRSettingsWidget::OnGraphicsQualityChanged);
+    }
 
-    // ÇØ»óµµ/Ã¢¸ğµå ¿É¼Ç Ã¤¿ì±â
+    // í•´ìƒë„/ì°½ëª¨ë“œ/ê·¸ë˜í”½ í’ˆì§ˆ ì˜µì…˜ ì±„ìš°ê¸°
     PopulateResolutionOptions();
     PopulateWindowModeOptions();
+    PopulateGraphicsQualityOptions();
 
-    // ÇöÀç ¼³Á¤°ª ·Îµå
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Îµï¿½
     LoadCurrentSettings();
 }
 
@@ -124,7 +129,7 @@ void UDRSettingsWidget::LoadCurrentSettings()
     UDRGameUserSettings* Settings = Manager->GetSettings();
     if (!Settings) return;
 
-    // °ª ·Îµå
+    // ï¿½ï¿½ ï¿½Îµï¿½
     PendingMasterVolume = Settings->MasterVolume;
     PendingBGMVolume = Settings->BGMVolume;
     PendingSFXVolume = Settings->SFXVolume;
@@ -157,24 +162,24 @@ void UDRSettingsWidget::LoadCurrentSettings()
     {
         Text_SFXVolume->SetText(GetPercentText(PendingSFXVolume));
     }
-    // Voice´Â 0~2 ¹üÀ§¸¦ ½½¶óÀÌ´õ 0~1·Î º¯È¯
+    // Voiceï¿½ï¿½ 0~2 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì´ï¿½ 0~1ï¿½ï¿½ ï¿½ï¿½È¯
     PendingVoiceVolume = Settings->VoiceVolume;
     if (Slider_VoiceVolume)
     {
-        // 0.0~2.0 °ªÀ» ½½¶óÀÌ´õ 0~1·Î º¯È¯
+        // 0.0~2.0 ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì´ï¿½ 0~1ï¿½ï¿½ ï¿½ï¿½È¯
         float SliderValue = PendingVoiceVolume / 2.0f;
         Slider_VoiceVolume->SetValue(SliderValue);
     }
     if (Text_VoiceVolume)
     {
-        // 200%±îÁö Ç¥½Ã
+        // 200%ï¿½ï¿½ï¿½ï¿½ Ç¥ï¿½ï¿½
         int32 Percent = FMath::RoundToInt(PendingVoiceVolume * 100.0f);
         Text_VoiceVolume->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), Percent)));
     }
 
     if (Slider_MouseSensitivity)
     {
-        // °¨µµ 0.1~5.0À» ½½¶óÀÌ´õ 0~1·Î º¯È¯
+        // ï¿½ï¿½ï¿½ï¿½ 0.1~5.0ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì´ï¿½ 0~1ï¿½ï¿½ ï¿½ï¿½È¯
         float NormalizedValue = (PendingMouseSensitivity - 0.1f) / (5.0f - 0.1f);
         Slider_MouseSensitivity->SetValue(NormalizedValue);
     }
@@ -183,18 +188,18 @@ void UDRSettingsWidget::LoadCurrentSettings()
         Text_MouseSensitivity->SetText(GetSensitivityText(PendingMouseSensitivity));
     }
 
-    // ±×·¡ÇÈ ¼³Á¤ ·Îµå
+    // ï¿½×·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Îµï¿½
     PendingResolution = Settings->GetScreenResolution();
     PendingWindowMode = Settings->GetFullscreenMode();
 
-    // ÇØ»óµµ ÄŞº¸¹Ú½º ¼±ÅÃ
+    // ï¿½Ø»ï¿½ ï¿½Şºï¿½ï¿½Ú½ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (ComboBox_Resolution)
     {
         FString ResolutionString = FString::Printf(TEXT("%d x %d"), PendingResolution.X, PendingResolution.Y);
         ComboBox_Resolution->SetSelectedOption(ResolutionString);
     }
 
-    // Ã¢¸ğµå ÄŞº¸¹Ú½º ¼±ÅÃ
+    // ì°½ëª¨ë“œ ì½¤ë³´ë°•ìŠ¤ ì„¤ì •
     if (ComboBox_WindowMode)
     {
         FString WindowModeString;
@@ -215,6 +220,36 @@ void UDRSettingsWidget::LoadCurrentSettings()
         }
         ComboBox_WindowMode->SetSelectedOption(WindowModeString);
     }
+
+    // ê·¸ë˜í”½ í’ˆì§ˆ ë¡œë“œ
+    PendingGraphicsQuality = Settings->GetOverallScalabilityLevel();
+    if (ComboBox_GraphicsQuality)
+    {
+        FString QualityString;
+        switch (PendingGraphicsQuality)
+        {
+        case 0:
+            QualityString = TEXT("Low");
+            break;
+        case 1:
+            QualityString = TEXT("Medium");
+            break;
+        case 2:
+            QualityString = TEXT("High");
+            break;
+        case 3:
+            QualityString = TEXT("Epic");
+            break;
+        case 4:
+            QualityString = TEXT("Cinematic");
+            break;
+        default:
+            QualityString = TEXT("High");
+            PendingGraphicsQuality = 2;
+            break;
+        }
+        ComboBox_GraphicsQuality->SetSelectedOption(QualityString);
+    }
 }
 
 void UDRSettingsWidget::PopulateResolutionOptions()
@@ -224,14 +259,14 @@ void UDRSettingsWidget::PopulateResolutionOptions()
     ComboBox_Resolution->ClearOptions();
     SupportedResolutions.Empty();
 
-    // Áö¿ø ÇØ»óµµ °¡Á®¿À±â
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½Ø»ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     TArray<FIntPoint> Resolutions;
     UKismetSystemLibrary::GetSupportedFullscreenResolutions(Resolutions);
 
-    // ÀÏ¹İÀûÀÎ ÇØ»óµµ¸¸ ÇÊÅÍ¸µ (16:9, 16:10 µî)
+    // ï¿½Ï¹ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ø»óµµ¸ï¿½ ï¿½ï¿½ï¿½Í¸ï¿½ (16:9, 16:10 ï¿½ï¿½)
     for (const FIntPoint& Res : Resolutions)
     {
-        // ÃÖ¼Ò ÇØ»óµµ Á¦ÇÑ
+        // ï¿½Ö¼ï¿½ ï¿½Ø»ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (Res.X >= 1280 && Res.Y >= 720)
         {
             SupportedResolutions.Add(Res);
@@ -249,6 +284,18 @@ void UDRSettingsWidget::PopulateWindowModeOptions()
     ComboBox_WindowMode->AddOption(TEXT("Fullscreen"));
     ComboBox_WindowMode->AddOption(TEXT("WindowedFullscreen"));
     ComboBox_WindowMode->AddOption(TEXT("Windowed"));
+}
+
+void UDRSettingsWidget::PopulateGraphicsQualityOptions()
+{
+    if (!ComboBox_GraphicsQuality) return;
+
+    ComboBox_GraphicsQuality->ClearOptions();
+    ComboBox_GraphicsQuality->AddOption(TEXT("Low"));
+    ComboBox_GraphicsQuality->AddOption(TEXT("Medium"));
+    ComboBox_GraphicsQuality->AddOption(TEXT("High"));
+    ComboBox_GraphicsQuality->AddOption(TEXT("Epic"));
+    ComboBox_GraphicsQuality->AddOption(TEXT("Cinematic"));
 }
 
 FText UDRSettingsWidget::GetPercentText(float Value) const
@@ -288,14 +335,14 @@ void UDRSettingsWidget::OnControlsTabClicked()
 
 void UDRSettingsWidget::OnApplyClicked()
 {
-    // Manager °¡Á®¿À±â
+    // Manager ê°€ì ¸ì˜¤ê¸°
     UGameInstance* GI = GetGameInstance();
     if (!GI) return;
 
     UDRSettingsManager* Manager = GI->GetSubsystem<UDRSettingsManager>();
     if (!Manager) return;
 
-    // Manager ÅëÇØ ¼³Á¤ º¯°æ
+    // Manager í†µí•´ ì„¤ì • ì ìš©
     Manager->SetMasterVolume(PendingMasterVolume);
     Manager->SetBGMVolume(PendingBGMVolume);
     Manager->SetSFXVolume(PendingSFXVolume);
@@ -303,8 +350,9 @@ void UDRSettingsWidget::OnApplyClicked()
     Manager->SetMouseSensitivity(PendingMouseSensitivity);
     Manager->SetScreenResolution(PendingResolution);
     Manager->SetWindowMode(PendingWindowMode);
+    Manager->SetGraphicsQuality(PendingGraphicsQuality);
 
-    // ¸ğµç ¼³Á¤ Àû¿ë ¹× ÀúÀå
+    // ëª¨ë“  ì„¤ì • ì ìš© ë° ì €ì¥
     Manager->ApplyAndSaveAllSettings();
 }
 
@@ -319,13 +367,13 @@ void UDRSettingsWidget::OnBackClicked()
         }
     }
 
-    // Á÷Á¢ ´İ±â
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½İ±ï¿½
     CloseSettings();
 }
 
 void UDRSettingsWidget::OnMainMenuClicked()
 {
-    // ¼³Á¤ ÀúÀå
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (UDRGameUserSettings* Settings = UDRGameUserSettings::GetDRGameUserSettings())
     {
         Settings->SaveSettings();
@@ -334,7 +382,7 @@ void UDRSettingsWidget::OnMainMenuClicked()
     APlayerController* PC = GetOwningPlayer();
     if (!PC) return;
 
-    // ¼¼¼Ç Á¤¸®
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     UGameInstance* GameInstance = PC->GetGameInstance();
     if (GameInstance)
     {
@@ -347,13 +395,13 @@ void UDRSettingsWidget::OnMainMenuClicked()
 
 void UDRSettingsWidget::OnQuitGameClicked()
 {
-    // ¼³Á¤ ÀúÀå
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (UDRGameUserSettings* Settings = UDRGameUserSettings::GetDRGameUserSettings())
     {
         Settings->SaveSettings();
     }
 
-    // °ÔÀÓ Á¾·á
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     APlayerController* PC = GetOwningPlayer();
     if (PC)
     {
@@ -390,11 +438,11 @@ void UDRSettingsWidget::OnSFXVolumeChanged(float Value)
 
 void UDRSettingsWidget::OnVoiceVolumeChanged(float Value)
 {
-    // ½½¶óÀÌ´õ 0~1 °ªÀ» ½ÇÁ¦ º¼·ı 0~2·Î º¯È¯
+    // ï¿½ï¿½ï¿½ï¿½ï¿½Ì´ï¿½ 0~1 ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ 0~2ï¿½ï¿½ ï¿½ï¿½È¯
     PendingVoiceVolume = Value * 2.0f;
     if (Text_VoiceVolume)
     {
-        // 200%±îÁö Ç¥½Ã
+        // 200%ï¿½ï¿½ï¿½ï¿½ Ç¥ï¿½ï¿½
         int32 Percent = FMath::RoundToInt(PendingVoiceVolume * 100.0f);
         Text_VoiceVolume->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), Percent)));
     }
@@ -402,7 +450,7 @@ void UDRSettingsWidget::OnVoiceVolumeChanged(float Value)
 
 void UDRSettingsWidget::OnMouseSensitivityChanged(float Value)
 {
-    // ½½¶óÀÌ´õ 0~1À» °¨µµ 0.1~5.0À¸·Î º¯È¯
+    // ï¿½ï¿½ï¿½ï¿½ï¿½Ì´ï¿½ 0~1ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ 0.1~5.0ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È¯
     PendingMouseSensitivity = FMath::Lerp(0.1f, 5.0f, Value);
     if (Text_MouseSensitivity)
     {
@@ -412,14 +460,29 @@ void UDRSettingsWidget::OnMouseSensitivityChanged(float Value)
 
 void UDRSettingsWidget::OnResolutionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
 {
-    // "1920 x 1080" Çü½Ä¿¡¼­ ¼ıÀÚ ÃßÃâ
+    // "1920 x 1080" í˜•ì‹ì—ì„œ ê°’ì„ íŒŒì‹±
     TArray<FString> Parts;
     SelectedItem.ParseIntoArray(Parts, TEXT(" x "));
 
     if (Parts.Num() == 2)
     {
-        PendingResolution.X = FCString::Atoi(*Parts[0]);
-        PendingResolution.Y = FCString::Atoi(*Parts[1]);
+        int32 ParsedX = FCString::Atoi(*Parts[0]);
+        int32 ParsedY = FCString::Atoi(*Parts[1]);
+
+        // ìœ íš¨ì„± ê²€ì‚¬: ìµœì†Œ í•´ìƒë„ ì²´í¬
+        if (ParsedX >= 1280 && ParsedY >= 720)
+        {
+            PendingResolution.X = ParsedX;
+            PendingResolution.Y = ParsedY;
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("OnResolutionChanged: Invalid resolution parsed - %d x %d"), ParsedX, ParsedY);
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("OnResolutionChanged: Failed to parse resolution string - %s"), *SelectedItem);
     }
 }
 
@@ -436,5 +499,29 @@ void UDRSettingsWidget::OnWindowModeChanged(FString SelectedItem, ESelectInfo::T
     else if (SelectedItem == TEXT("Windowed"))
     {
         PendingWindowMode = EWindowMode::Windowed;
+    }
+}
+
+void UDRSettingsWidget::OnGraphicsQualityChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+    if (SelectedItem == TEXT("Low"))
+    {
+        PendingGraphicsQuality = 0;
+    }
+    else if (SelectedItem == TEXT("Medium"))
+    {
+        PendingGraphicsQuality = 1;
+    }
+    else if (SelectedItem == TEXT("High"))
+    {
+        PendingGraphicsQuality = 2;
+    }
+    else if (SelectedItem == TEXT("Epic"))
+    {
+        PendingGraphicsQuality = 3;
+    }
+    else if (SelectedItem == TEXT("Cinematic"))
+    {
+        PendingGraphicsQuality = 4;
     }
 }

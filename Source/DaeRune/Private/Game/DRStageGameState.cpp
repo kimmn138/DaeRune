@@ -223,23 +223,8 @@ void ADRStageGameState::OnRep_CurrentPhaseObjective()
 
 void ADRStageGameState::OnRep_CurrentPhaseState()
 {
-    // Ŭ���̾�Ʈ ���� ���� �˸�
-    FString StateString;
-    switch (CurrentPhaseState)
-    {
-    case EPhaseState::NotStarted:
-        StateString = "Not Started";
-        break;
-    case EPhaseState::InProgress:
-        StateString = "In Progress";
-        break;
-    case EPhaseState::Completed:
-        StateString = "Completed";
-        break;
-    case EPhaseState::Failed:
-        StateString = "Failed";
-        break;
-    }
+    // 클라이언트에서 Phase 상태 변경 시 필요한 처리
+    // 현재는 별도 처리 없음
 }
 
 void ADRStageGameState::OnRep_CurrentObjectiveProgress()

@@ -9,8 +9,8 @@
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRoomCodeGenerated, const FString&, RoomCode);
 
 /**
- * ·Îºñ Àü¿ë GameState
- * ¹æ ÄÚµå, Ä³¸¯ÅÍ ¼±ÅÃ, ÇÃ·¹ÀÌ¾î ¸ñ·Ï µî ·Îºñ ±â´É °ü¸®
+ * ï¿½Îºï¿½ ï¿½ï¿½ï¿½ï¿½ GameState
+ * ï¿½ï¿½ ï¿½Úµï¿½, Ä³ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½, ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Îºï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
  */
 UCLASS()
 class DAERUNE_API ADRLobbyGameState : public ADRGameStateBase
@@ -23,7 +23,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// ¹æ ÄÚµå °ü·Ã
+	// ï¿½ï¿½ ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Lobby|Room")
 	FString GetRoomCode() const { return RoomCode; }
 
@@ -32,24 +32,27 @@ public:
 
 	void SetRoomCode(const FString& NewRoomCode);
 
-	// µ¨¸®°ÔÀÌÆ®
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY(BlueprintAssignable, Category = "Lobby")
 	FOnRoomCodeGenerated OnRoomCodeGenerated;
 
 protected:
-	// ¹æ ÄÚµå
+	// ï¿½ï¿½ ï¿½Úµï¿½
 	UPROPERTY(ReplicatedUsing = OnRep_RoomCode, BlueprintReadOnly, Category = "Lobby")
 	FString RoomCode;
 
 	UFUNCTION()
 	void OnRep_RoomCode();
 
-	// ÃÖ¼Ò ½ÃÀÛ ÀÎ¿ø
+	// ï¿½Ö¼ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Î¿ï¿½
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lobby")
 	int32 MinPlayersToStart;
 
 private:
-	// ¹æ ÄÚµå ÃÊ±âÈ­
+	// ë£¸ ì½”ë“œ ì´ˆê¸°í™”
 	UFUNCTION()
 	void InitializeRoomCode(const FString& NewRoomCode);
+
+	// ë£¸ ì½”ë“œ ë¸Œë¡œë“œìºìŠ¤íŠ¸ (ì„œë²„/í´ë¼ì´ì–¸íŠ¸ ê³µìš©)
+	void BroadcastRoomCode();
 };

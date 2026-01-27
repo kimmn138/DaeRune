@@ -4,14 +4,14 @@
 
 #include "CoreMinimal.h"
 #include "Character/DRCharacterBase.h"
-//#include "Voice/DRVOIPTalker.h"
+#include "Voice/DRVOIPTalker.h"
 #include "DRCharacter.generated.h"
 
 class UWidgetComponent;
 class ADRCleanserPart;
 
 /**
- * ÇÃ·¹ÀÌ¾î Ä³¸¯ÅÍ Å¬·¡½º
+ * ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ Ä³ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½
  */
 UCLASS()
 class DAERUNE_API ADRCharacter : public ADRCharacterBase
@@ -21,95 +21,95 @@ class DAERUNE_API ADRCharacter : public ADRCharacterBase
 public:
 	ADRCharacter();
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-	// ¼­¹ö¿¡¼­ ÄÁÆ®·Ñ·¯°¡ ºùÀÇµÉ ¶§ È£Ãâ (¼­¹ö¿ë GAS ÃÊ±âÈ­)
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ®ï¿½Ñ·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Çµï¿½ ï¿½ï¿½ È£ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ GAS ï¿½Ê±ï¿½È­)
 	virtual void PossessedBy(AController* NewController) override;
-	// PlayerState ¸®ÇÃ¸®ÄÉÀÌ¼Ç ½Ã È£Ãâ (Å¬¶óÀÌ¾ğÆ®¿ë GAS ÃÊ±âÈ­)
+	// PlayerState ï¿½ï¿½ï¿½Ã¸ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ ï¿½ï¿½ È£ï¿½ï¿½ (Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ GAS ï¿½Ê±ï¿½È­)
 	virtual void OnRep_PlayerState() override;
 
-	// ÇÃ·¹ÀÌ¾î Àü¿ë µğ¹öÇÁ RepNotify ÇÔ¼öµé
+	// ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ RepNotify ï¿½Ô¼ï¿½ï¿½ï¿½
 	virtual void OnRep_Stunned() override;
 	virtual void OnRep_Burned() override;
 
 	UFUNCTION(BlueprintCallable, Category = "Camera")
 	UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
-	// ÄÁÅ×ÀÌ³Ê ½Ã½ºÅÛ ¼³Á¤
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½Ã½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditDefaultsOnly, Category = "Container System")
 	int32 NumContainers = 4;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Container System")
 	float ContainerHealth = 100.f;
 
-	// ========== ºÎÇ° ½Ã½ºÅÛ ==========
+	// ========== ï¿½ï¿½Ç° ï¿½Ã½ï¿½ï¿½ï¿½ ==========
 
-	// ºÎÇ° º¸À¯ »óÅÂ Á¶È¸
+	// ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È¸
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	bool IsCarryingPart() const { return bIsCarryingPart; }
 
-	// ºÎÇ° È¹µæ Ã³¸®
+	// ï¿½ï¿½Ç° È¹ï¿½ï¿½ Ã³ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	bool PickupPart(class ADRCleanserPart* Part);
 
-	// ºÎÇ° ¼³Ä¡ Ã³¸®
+	// ï¿½ï¿½Ç° ï¿½ï¿½Ä¡ Ã³ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void InstallCarriedPart();
 
-	// ºÎÇ° ¶³¾î¶ß¸®±â
+	// ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½ß¸ï¿½ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void DropCarriedPart();
 
-	// ========== À½¼º Ã¤ÆÃ ==========
+	// ========== ìŒì„± ì±„íŒ… ==========
 
-	// VOIPTalker ÄÄÆ÷³ÍÆ® ¹İÈ¯
-	/*UFUNCTION(BlueprintCallable, Category = "Voice Chat")
-	UDRVOIPTalker* GetVOIPTalker() const { return VOIPTalkerComponent; }*/
+	// VOIPTalker ì»´í¬ë„ŒíŠ¸ ë°˜í™˜
+	UFUNCTION(BlueprintCallable, Category = "Voice Chat")
+	UDRVOIPTalker* GetVOIPTalker() const { return VOIPTalkerComponent; }
 
-	// VOIP ¼Û½Å ÄÄÆ÷³ÍÆ®
-	/*UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Voice Chat")
-	TObjectPtr<UDRVOIPTalker> VOIPTalkerComponent;*/
+	// VOIP ì²­ì·¨ ì»´í¬ë„ŒíŠ¸
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Voice Chat")
+	TObjectPtr<UDRVOIPTalker> VOIPTalkerComponent;
 
-	FTimerHandle PlayerStateRegisterTimerHanlde;
+	FTimerHandle PlayerStateRegisterTimerHandle;
 
 	void TryRegisterVoiceTalker();
 	void RegisterVoiceTalker();
 
-	// ========== Ä«¸Ş¶ó ==========
+	// ========== Ä«ï¿½Ş¶ï¿½ ==========
 
-	// Á×À½ Ä«¸Ş¶ó ¿¬Ãâ
+	// ï¿½ï¿½ï¿½ï¿½ Ä«ï¿½Ş¶ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION(BlueprintImplementableEvent, Category = "Death")
 	void PlayDeathCameraAnimation();
 
-	// ========== 1ÀÎÄª/3ÀÎÄª ¸Ş½¬ ½Ã½ºÅÛ ==========
+	// ========== 1ï¿½ï¿½Äª/3ï¿½ï¿½Äª ï¿½Ş½ï¿½ ï¿½Ã½ï¿½ï¿½ï¿½ ==========
 
-	// 1ÀÎÄª ¸Ş½¬
+	// 1ï¿½ï¿½Äª ï¿½Ş½ï¿½
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mesh")
 	TObjectPtr<USkeletalMeshComponent> FirstPersonMesh;
 
-	// ¸Ş½¬ °¡½Ã¼º ¾÷µ¥ÀÌÆ®
+	// ï¿½Ş½ï¿½ ï¿½ï¿½ï¿½Ã¼ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	void UpdateMeshVisibility();
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	// ========== ºÎÇ° »óÅÂ ==========
+	// ========== ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½ ==========
 
-	// ºÎÇ° º¸À¯ ¿©ºÎ
+	// ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(ReplicatedUsing = OnRep_bIsCarryingPart, BlueprintReadOnly, Category = "Part System")
 	bool bIsCarryingPart;
 
-	// µé°í ÀÖ´Â ºÎÇ°
+	// ï¿½ï¿½ï¿½ ï¿½Ö´ï¿½ ï¿½ï¿½Ç°
 	UPROPERTY(ReplicatedUsing = OnRep_CarriedPart, BlueprintReadOnly, Category = "Part System")
 	TObjectPtr<class ADRCleanserPart> CarriedPart;
 
-	// ºÎÇ° È¹µæ ½Ã°£ ±â·Ï
+	// ï¿½ï¿½Ç° È¹ï¿½ï¿½ ï¿½Ã°ï¿½ ï¿½ï¿½ï¿½
 	float LastPartPickupTime = 0.f;
 
-	// ºÎÇ° ¶³¾îÆ®¸®±â Äğ´Ù¿î ½Ã°£
+	// ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ù¿ï¿½ ï¿½Ã°ï¿½
 	UPROPERTY(EditDefaultsOnly, Category = "Part System", meta = (ClampMin = "0.0", ClampMax = "5.0"))
 	float PartDropCooldown = 2.0f;
 
-	// ========== ¸®ÇÃ¸®ÄÉÀÌ¼Ç Äİ¹é ==========
+	// ========== ï¿½ï¿½ï¿½Ã¸ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ ï¿½İ¹ï¿½ ==========
 
 	UFUNCTION()
 	void OnRep_bIsCarryingPart();
@@ -117,15 +117,18 @@ protected:
 	UFUNCTION()
 	void OnRep_CarriedPart();
 
-	// ========== ÀÌµ¿¼Óµµ °ü·Ã ==========
+	// ========== ï¿½Ìµï¿½ï¿½Óµï¿½ ï¿½ï¿½ï¿½ï¿½ ==========
 
 	virtual float GetMoveSpeed() override;
 
 private:
-	// GAS ÃÊ±âÈ­
+	// GAS ì´ˆê¸°í™”
 	virtual void InitAbilityActorInfo() override;
 
-	// Ä«¸Ş¶ó ½Ã½ºÅÛ
+	// ì´ë™ ì†ë„ ë°”ì¸ë”© ì´ˆê¸°í™” (PossessedBy, OnRep_PlayerStateì—ì„œ ê³µí†µ ì‚¬ìš©)
+	void InitializeMoveSpeedBinding();
+
+	// Ä«ï¿½Ş¶ï¿½ ï¿½Ã½ï¿½ï¿½ï¿½
 	UPROPERTY(VisibleAnywhere, Category = Camera)
 	TObjectPtr<class USpringArmComponent> CameraBoom;
 

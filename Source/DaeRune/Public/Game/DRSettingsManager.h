@@ -10,11 +10,11 @@ class UDRGameUserSettings;
 class USoundMix;
 class USoundClass;
 
-// ¼³Á¤ Àû¿ë ¿Ï·á µ¨¸®°ÔÀÌÆ®
+// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSettingsApplied);
 
 /**
- * °ÔÀÓ ¼³Á¤ °ü¸®ÀÚ
+ * ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
  */
 UCLASS()
 class DAERUNE_API UDRSettingsManager : public UGameInstanceSubsystem
@@ -29,19 +29,19 @@ public:
     UFUNCTION(BlueprintPure, Category = "Settings")
     UDRGameUserSettings* GetSettings() const;
     
-    // ¸ðµç ¼³Á¤ Àû¿ë ¹× ÀúÀå
+    // ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void ApplyAndSaveAllSettings();
 
-    // ÇØ»óµµ/Ã¢¸ðµå Àû¿ë
+    // ï¿½Ø»ï¿½/Ã¢ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     UFUNCTION(BlueprintCallable, Category = "Settings|Graphics")
     void ApplyResolutionSettings();
 
-    // ÇØ»óµµ ¿Ü ¼³Á¤ Àû¿ë
+    // ï¿½Ø»ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     UFUNCTION(BlueprintCallable, Category = "Settings|Graphics")
     void ApplyNonResolutionSettings();
 
-    // ¿Àµð¿À ¼³Á¤¸¸ Àû¿ë
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     UFUNCTION(BlueprintCallable, Category = "Settings|Audio")
     void ApplyAudioSettings();
 
@@ -66,6 +66,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Settings|Graphics")
     void SetWindowMode(EWindowMode::Type NewMode);
 
+    // Scalability ì„¤ì • (0: Low, 1: Medium, 2: High, 3: Epic, 4: Cinematic)
+    UFUNCTION(BlueprintCallable, Category = "Settings|Graphics")
+    void SetGraphicsQuality(int32 QualityLevel);
+
+    UFUNCTION(BlueprintCallable, Category = "Settings|Graphics")
+    void ApplyGraphicsQualitySettings();
+
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void ResetToDefaults();
 
@@ -76,10 +83,10 @@ public:
     FOnSettingsApplied OnSettingsApplied;
 
 private:
-    // SoundMix Àû¿ë ³»ºÎ ÇÔ¼ö
+    // SoundMix ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ô¼ï¿½
     void ApplySoundMixToWorld(UWorld* World);
 
-    // ¿¡¼Â °æ·Î
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
     UPROPERTY()
     TObjectPtr<USoundMix> GameSoundMix;
 

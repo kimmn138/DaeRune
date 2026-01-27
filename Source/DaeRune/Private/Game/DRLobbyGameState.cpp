@@ -10,24 +10,24 @@
 
 ADRLobbyGameState::ADRLobbyGameState()
 {
-	// ÃÊ±â°ª ¼³Á¤
-	MinPlayersToStart = 1;  // Å×½ºÆ®¿ë 1¸í, ½ÇÁ¦´Â 2~4¸í ±ÇÀå
+	// ï¿½Ê±â°ª ï¿½ï¿½ï¿½ï¿½
+	MinPlayersToStart = 1;  // ï¿½×½ï¿½Æ®ï¿½ï¿½ 1ï¿½ï¿½, ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 2~4ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 }
 
 void ADRLobbyGameState::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// ¼­¹ö¿¡¼­¸¸ ½ÇÇà
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (HasAuthority())
 	{
-		// ¹æ ÄÚµå ÃÊ±âÈ­
-		// ¼¼¼Ç ¼­ºê½Ã½ºÅÛÀÇ ÀÌº¥Æ® ±¸µ¶
+		// ï¿½ï¿½ ï¿½Úµï¿½ ï¿½Ê±ï¿½È­
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ã½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìºï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 		if (UGameInstance* GameInstance = GetGameInstance())
 		{
 			if (UMultiplayerSessionsSubsystem* Subsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>())
 			{
-				// ÀÌ¹Ì ¹æ ÄÚµå°¡ ÀÖÀ¸¸é Áï½Ã ¼³Á¤
+				// ï¿½Ì¹ï¿½ ï¿½ï¿½ ï¿½Úµå°¡ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 				FString ExistingCode = Subsystem->GetCurrentRoomCode();
 				if (!ExistingCode.IsEmpty())
 				{
@@ -35,7 +35,7 @@ void ADRLobbyGameState::BeginPlay()
 				}
 				else
 				{
-					// ¾øÀ¸¸é ÀÌº¥Æ® ´ë±â
+					// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìºï¿½Æ® ï¿½ï¿½ï¿½
 					Subsystem->MultiplayerOnRoomCodeGenerated.AddDynamic(
 						this,
 						&ADRLobbyGameState::InitializeRoomCode
@@ -58,11 +58,18 @@ void ADRLobbyGameState::SetRoomCode(const FString& NewRoomCode)
 	if (HasAuthority())
 	{
 		RoomCode = NewRoomCode;
-		OnRep_RoomCode();
+		// ì„œë²„ì—ì„œ ì§ì ‘ ë¸Œë¡œë“œìºìŠ¤íŠ¸ (OnRepì€ ì„œë²„ì—ì„œ í˜¸ì¶œë˜ì§€ ì•ŠìŒ)
+		BroadcastRoomCode();
 	}
 }
 
 void ADRLobbyGameState::OnRep_RoomCode()
+{
+	// í´ë¼ì´ì–¸íŠ¸ì—ì„œ ë³µì œ ì‹œ ë¸Œë¡œë“œìºìŠ¤íŠ¸
+	BroadcastRoomCode();
+}
+
+void ADRLobbyGameState::BroadcastRoomCode()
 {
 	OnRoomCodeGenerated.Broadcast(RoomCode);
 }

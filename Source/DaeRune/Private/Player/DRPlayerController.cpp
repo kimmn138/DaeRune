@@ -357,27 +357,14 @@ void ADRPlayerController::ClientStopAllAudio_Implementation()
 		}
 	}
 
-	//// 모든 AudioComponent 정지
-	//TArray<AActor*> AllActors;
-	//UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), AllActors);
+	// VOIP 관련 SynthComponent 정리 (SeamlessTravel 전 필수)
+	TArray<AActor*> AllActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), AllActors);
 
-	//for (AActor* Actor : AllActors)
-	//{
-	//	TArray<UAudioComponent*> AudioComps;
-	//	Actor->GetComponents<UAudioComponent>(AudioComps);
-
-	//	for (UAudioComponent* AudioComp : AudioComps)
-	//	{
-	//		if (AudioComp && AudioComp->IsPlaying())
-	//		{
-	//			AudioComp->Stop();
-	//		}
-	//	}
-	//}
-
-	// VOIP 관련 SynthComponent 정리
-	/*for (AActor* Actor : AllActors)
+	for (AActor* Actor : AllActors)
 	{
+		if (!Actor) continue;
+
 		TArray<UActorComponent*> AllComps;
 		Actor->GetComponents<UActorComponent>(AllComps);
 
@@ -388,7 +375,7 @@ void ADRPlayerController::ClientStopAllAudio_Implementation()
 				Comp->DestroyComponent();
 			}
 		}
-	}*/
+	}
 }
 
 void ADRPlayerController::CheatSkipToNextPhase()
@@ -505,6 +492,29 @@ void ADRPlayerController::ReceivedPlayer()
 	// 로컬 컨트롤러만 처리
 	if (!IsLocalController()) return;
 
+	UE_LOG(LogTemp, Log, TEXT("ADRPlayerController::ReceivedPlayer called"));
+
+	// 레벨 진입 시 공통 초기화 수행
+	OnLevelEntered();
+}
+
+void ADRPlayerController::PostSeamlessTravel()
+{
+	Super::PostSeamlessTravel();
+
+	// 로컬 컨트롤러만 처리
+	if (!IsLocalController()) return;
+
+	UE_LOG(LogTemp, Log, TEXT("ADRPlayerController::PostSeamlessTravel called"));
+
+	// SeamlessTravel 후 레벨 진입 시 공통 초기화 수행
+	OnLevelEntered();
+}
+
+void ADRPlayerController::OnLevelEntered()
+{
+	UE_LOG(LogTemp, Log, TEXT("ADRPlayerController::OnLevelEntered called - Level: %s"), *GetWorld()->GetMapName());
+
 	// 현재 레벨 확인
 	UWorld* World = GetWorld();
 	if (!World) return;
@@ -516,20 +526,42 @@ void ADRPlayerController::ReceivedPlayer()
 		CurrentResultWidget = nullptr;
 	}
 
+	// 설정 위젯 초기화 (레벨 이동 시 무효화된 포인터 정리)
+	if (IsValid(SettingsWidget))
+	{
+		if (SettingsWidget->IsInViewport())
+		{
+			SettingsWidget->RemoveFromParent();
+		}
+	}
+	SettingsWidget = nullptr;
+	bIsSettingsMenuOpen = false;
+
 	bIsSpectating = false;
 	CurrentSpectatedCharacter = nullptr;
 
 	// 레벨에 맞는 기본 입력 모드로 복원
 	RestoreDefaultInputMode();
 
-	// 스테이지 맵이면 BGM 재생
-	if (IsInGameLevel())
+	// 레벨에 따라 BGM 재생
+	if (UGameInstance* GI = GetGameInstance())
 	{
-		if (UGameInstance* GI = GetGameInstance())
+		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
 		{
-			if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+			if (IsInGameLevel())
 			{
+				UE_LOG(LogTemp, Log, TEXT("OnLevelEntered: Playing Stage BGM"));
 				SM->PlayStageBGM();
+			}
+			else if (IsInLobby())
+			{
+				UE_LOG(LogTemp, Log, TEXT("OnLevelEntered: Playing Lobby BGM"));
+				SM->PlayLobbyBGM();
+			}
+			else if (IsInMainMenu())
+			{
+				UE_LOG(LogTemp, Log, TEXT("OnLevelEntered: Playing MainMenu BGM"));
+				SM->PlayMainMenuBGM();
 			}
 		}
 	}
@@ -772,18 +804,32 @@ void ADRPlayerController::OpenSettingsMenu()
 	// 이미 열려있으면 무시
 	if (bIsSettingsMenuOpen) return;
 
-	// 위젯이 없으면 생성
-	if (!SettingsWidget && SettingsWidgetClass)
+	// 위젯이 없거나 무효화되었거나 현재 뷰포트에 없으면 새로 생성
+	// (SeamlessTravel 후 이전 월드의 위젯이 남아있을 수 있음)
+	bool bNeedNewWidget = !IsValid(SettingsWidget) || !SettingsWidget->IsInViewport();
+
+	if (bNeedNewWidget)
 	{
-		SettingsWidget = CreateWidget<UDRSettingsWidget>(this, SettingsWidgetClass);
+		// 기존 위젯 정리
 		if (SettingsWidget)
 		{
-			SettingsWidget->AddToViewport(100); // 높은 Z-Order로 다른 UI 위에 표시
-			SettingsWidget->SetVisibility(ESlateVisibility::Collapsed); // 처음엔 숨김
+			SettingsWidget->RemoveFromParent();
+			SettingsWidget = nullptr;
+		}
+
+		// 새 위젯 생성
+		if (SettingsWidgetClass)
+		{
+			SettingsWidget = CreateWidget<UDRSettingsWidget>(this, SettingsWidgetClass);
+			if (SettingsWidget)
+			{
+				SettingsWidget->AddToViewport(100); // 높은 Z-Order로 다른 UI 위에 표시
+				SettingsWidget->SetVisibility(ESlateVisibility::Collapsed); // 처음엔 숨김
+			}
 		}
 	}
 
-	if (SettingsWidget)
+	if (IsValid(SettingsWidget))
 	{
 		SettingsWidget->OpenSettings();
 		bIsSettingsMenuOpen = true;
@@ -802,13 +848,18 @@ void ADRPlayerController::CloseSettingsMenu()
 	// 이미 닫혀있으면 무시
 	if (!bIsSettingsMenuOpen) return;
 
-	if (SettingsWidget)
+	if (IsValid(SettingsWidget))
 	{
 		SettingsWidget->CloseSettings();
-		bIsSettingsMenuOpen = false;
-
-		RestoreDefaultInputMode();
 	}
+
+	bIsSettingsMenuOpen = false;
+	RestoreDefaultInputMode();
+}
+
+void ADRPlayerController::ClientCloseSettingsMenu_Implementation()
+{
+	CloseSettingsMenu();
 }
 
 void ADRPlayerController::RestoreDefaultInputMode()

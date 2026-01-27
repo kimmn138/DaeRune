@@ -11,8 +11,8 @@ class ADRStageGameState;
 class ADRCleanserSite;
 
 /**
- * ½ºÅ×ÀÌÁö °ÔÀÓ ¸ğµå
- * 4°³ ÆäÀÌÁî ½Ã½ºÅÛÀ» °ü¸®ÇÏ´Â ¼­¹ö ±ÇÇÑ Å¬·¡½º
+ * ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
+ * 4ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ã½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½
  */
 UCLASS()
 class DAERUNE_API ADRStageGameMode : public ADRGameModeBase
@@ -22,20 +22,20 @@ class DAERUNE_API ADRStageGameMode : public ADRGameModeBase
 public:
 	ADRStageGameMode();
 
-	// ÆäÀÌÁî ¿Ï·á Á¶°ÇÀ» ¸¸Á·Çß´ÂÁö È®ÀÎ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ß´ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	bool ValidatePhaseCompletion();
 
 	UDRPhaseBase* GetCurrentPhase() { return CurrentPhase; }
 
-	// Phaseº° °ÔÀÓ ¿À¹ö Æ®¸®°Å
+	// Phaseï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Æ®ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION()
 	void TriggerGameOver();
 
 	UFUNCTION()
 	void TriggerGameClear();
 
-	// ´ÙÀ½ ÆäÀÌÁî·Î ÀüÈ¯ÇÏ±â À§ÇØ È£Ãâ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È¯ï¿½Ï±ï¿½ ï¿½ï¿½ï¿½ï¿½ È£ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	void TransitionToNextPhase();
 
@@ -45,23 +45,24 @@ protected:
 
 	void BlockJoinInProgress();
 
-	// ·Îºñ ¸ÊÀ¸·Î ÀÌµ¿
+	// ï¿½Îºï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½
 	void ReturnToLobby();
 
-	// ¸Ê ÀüÈ¯ Àü ¿Àµğ¿À Á¤¸®
-	void CleanupAllAudioBeforeTravel();
 
-	// ·Îºñ ¸Ê ÀÌ¸§
+	// ëª¨ë“  í”Œë ˆì´ì–´ì—ê²Œ ê²Œì„ ì¢…ë£Œ ì•Œë¦¼ (ë‹¨ì¼ ìˆœíšŒë¡œ ìµœì í™”)
+	void NotifyAllPlayersGameEnd(bool bIsGameClear);
+
+	// ï¿½Îºï¿½ ï¿½ï¿½ ï¿½Ì¸ï¿½
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage|Config")
 	FString LobbyMapName = TEXT("LobbyMap");
 
-	// ========== Å¬·»Àú »çÀÌÆ® ==========
+	// ========== Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ==========
 
-	// Å¬·»Àú »çÀÌÆ®¸¦ Ã£À» ¶§ »ç¿ëÇÒ ÅÂ±×
+	// Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ Ã£ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Â±ï¿½
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage|CleanserSites")
 	FName CleanserSiteTag = TEXT("CleanserSite");
 
-	// ========== ÆäÀÌÁî °ü¸® ==========
+	// ========== ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ==========
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	void InitializePhaseSystem();
 
@@ -72,22 +73,25 @@ protected:
 	void EndCurrentPhase();
 
 private:
-	// ÇöÀç ½ÇÇà ÁßÀÎ ÆäÀÌÁî
+	// í˜„ì¬ ì‹¤í–‰ ì¤‘ì¸ í˜ì´ì¦ˆ
 	UPROPERTY()
 	TObjectPtr<UDRPhaseBase> CurrentPhase;
 
-	// ¸ğµç ÆäÀÌÁî Å¬·¡½ºµé
+	// ëª¨ë“  í˜ì´ì¦ˆ í´ë˜ìŠ¤ë“¤
 	UPROPERTY(EditDefaultsOnly, Category = "Phase")
 	TArray<TSubclassOf<UDRPhaseBase>> PhaseClasses;
 
-	// »ı¼ºµÈ ÆäÀÌÁî ÀÎ½ºÅÏ½ºµé
+	// í˜ì´ì¦ˆë³„ ì¸ìŠ¤í„´ìŠ¤ë“¤
 	UPROPERTY()
 	TArray<TObjectPtr<UDRPhaseBase>> PhaseInstances;
 
-	// GameState Ä³½Ì
+	// GameState ìºì‹œ
 	TObjectPtr<ADRStageGameState> CachedGameState;
 
-	// ·¹º§¿¡¼­ Ã£Àº Å¬·»Àú »çÀÌÆ®µé (BeginPlay¿¡¼­ ÀÚµ¿ Å½»ö)
+	// ë ˆë²¨ì—ì„œ ì°¾ì€ í´ë Œì € ì‚¬ì´íŠ¸ë“¤ (BeginPlayì—ì„œ ìë™ íƒìƒ‰)
 	UPROPERTY()
 	TArray<TObjectPtr<ADRCleanserSite>> CleanserSites;
+
+	// Phase ì „í™˜ ì¤‘ Race Condition ë°©ì§€ í”Œë˜ê·¸
+	bool bIsTransitioningPhase = false;
 };

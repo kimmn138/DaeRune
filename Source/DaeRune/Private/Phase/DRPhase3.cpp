@@ -211,17 +211,19 @@ void UDRPhase3::StartNextWave()
 					false
 				);
 
-				// 1초마다 타이머 업데이트
+				// 1초마다 타이머 업데이트 (TWeakObjectPtr로 안전한 캡처)
+				TWeakObjectPtr<UDRPhase3> WeakThis(this);
 				World->GetTimerManager().SetTimer(
 					WaveTimerUpdateHandle,
-					[this]()
+					[WeakThis]()
 					{
-						if (!this || !IsValid(this)) return;
-
-						WaveTimeRemaining = FMath::Max(0.0f, WaveTimeRemaining - 1.0f);
-						if (GameState)
+						if (UDRPhase3* StrongThis = WeakThis.Get())
 						{
-							GameState->SetWaveRemainingTime(WaveTimeRemaining);
+							StrongThis->WaveTimeRemaining = FMath::Max(0.0f, StrongThis->WaveTimeRemaining - 1.0f);
+							if (StrongThis->GameState)
+							{
+								StrongThis->GameState->SetWaveRemainingTime(StrongThis->WaveTimeRemaining);
+							}
 						}
 					},
 					1.0f,
@@ -305,23 +307,26 @@ void UDRPhase3::StartRestTime()
 		{
 			if (const UWorld* World = GameMode->GetWorld())
 			{
+				// TWeakObjectPtr로 안전한 캡처
+				TWeakObjectPtr<UDRPhase3> WeakThis(this);
 				World->GetTimerManager().SetTimer(
 					WaveTimerUpdateHandle,
-					[this]()
+					[WeakThis]()
 					{
-						if (!this || !IsValid(this)) return;
-
-						RestTimeRemaining = FMath::Max(0.0f, RestTimeRemaining - 1.0f);
-						if (GameState)
+						if (UDRPhase3* StrongThis = WeakThis.Get())
 						{
-							GameState->SetWaveRemainingTime(RestTimeRemaining);
+							StrongThis->RestTimeRemaining = FMath::Max(0.0f, StrongThis->RestTimeRemaining - 1.0f);
+							if (StrongThis->GameState)
+							{
+								StrongThis->GameState->SetWaveRemainingTime(StrongThis->RestTimeRemaining);
+							}
 						}
 					},
 					1.0f,
 					true,
 					0.0f
 				);
-				
+
 				World->GetTimerManager().SetTimer(
 					WaveTimerHandle,
 					this,

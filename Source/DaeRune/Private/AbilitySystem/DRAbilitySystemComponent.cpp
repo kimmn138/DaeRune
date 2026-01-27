@@ -20,7 +20,13 @@ void UDRAbilitySystemComponent::AddCharacterAbilities(const TArray<TSubclassOf<U
 		if (const UDRGameplayAbility* DRAbility = Cast<UDRGameplayAbility>(AbilitySpec.Ability))
 		{
 			AbilitySpec.DynamicAbilityTags.AddTag(DRAbility->StartupInputTag);
-			GiveAbility(AbilitySpec);
+			FGameplayAbilitySpecHandle Handle = GiveAbility(AbilitySpec);
+
+			// InputTag 캐시에 추가
+			if (DRAbility->StartupInputTag.IsValid())
+			{
+				InputTagToAbilityMap.Add(DRAbility->StartupInputTag, Handle);
+			}
 		}
 	}
 	bStartupAbilitiesGiven = true;
@@ -38,20 +44,19 @@ void UDRAbilitySystemComponent::AddCharacterPassiveAbilities(const TArray<TSubcl
 
 void UDRAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& InputTag)
 {
-	if (!InputTag.IsValid()) return; 
+	if (!InputTag.IsValid()) return;
 
-	for (FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
+	// 캐시를 사용한 O(1) lookup
+	FGameplayAbilitySpec* AbilitySpec = FindAbilitySpecByInputTag(InputTag);
+	if (AbilitySpec)
 	{
-		if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
+		AbilitySpecInputPressed(*AbilitySpec);
+		if (AbilitySpec->IsActive())
 		{
-			AbilitySpecInputPressed(AbilitySpec);
-			if (AbilitySpec.IsActive())
+			UGameplayAbility* PrimaryInstance = AbilitySpec->GetPrimaryInstance();
+			if (PrimaryInstance)
 			{
-				UGameplayAbility* PrimaryInstance = AbilitySpec.GetPrimaryInstance();
-				if (PrimaryInstance)
-				{
-					InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed, AbilitySpec.Handle, PrimaryInstance->GetCurrentActivationInfo().GetActivationPredictionKey());
-				}
+				InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed, AbilitySpec->Handle, PrimaryInstance->GetCurrentActivationInfo().GetActivationPredictionKey());
 			}
 		}
 	}
@@ -61,15 +66,14 @@ void UDRAbilitySystemComponent::AbilityInputTagHeld(const FGameplayTag& InputTag
 {
 	if (!InputTag.IsValid()) return;
 
-	for (FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
+	// 캐시를 사용한 O(1) lookup
+	FGameplayAbilitySpec* AbilitySpec = FindAbilitySpecByInputTag(InputTag);
+	if (AbilitySpec)
 	{
-		if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
+		AbilitySpecInputPressed(*AbilitySpec);
+		if (!AbilitySpec->IsActive())
 		{
-			AbilitySpecInputPressed(AbilitySpec);
-			if (!AbilitySpec.IsActive())
-			{
-				TryActivateAbility(AbilitySpec.Handle);
-			}
+			TryActivateAbility(AbilitySpec->Handle);
 		}
 	}
 }
@@ -78,16 +82,15 @@ void UDRAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& Inpu
 {
 	if (!InputTag.IsValid()) return;
 
-	for (FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
+	// 캐시를 사용한 O(1) lookup
+	FGameplayAbilitySpec* AbilitySpec = FindAbilitySpecByInputTag(InputTag);
+	if (AbilitySpec && AbilitySpec->IsActive())
 	{
-		if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag) && AbilitySpec.IsActive())
+		AbilitySpecInputReleased(*AbilitySpec);
+		UGameplayAbility* PrimaryInstance = AbilitySpec->GetPrimaryInstance();
+		if (PrimaryInstance)
 		{
-			AbilitySpecInputReleased(AbilitySpec);
-			UGameplayAbility* PrimaryInstance = AbilitySpec.GetPrimaryInstance();
-			if (PrimaryInstance)
-			{
-				InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputReleased, AbilitySpec.Handle, PrimaryInstance->GetCurrentActivationInfo().GetActivationPredictionKey());
-			}
+			InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputReleased, AbilitySpec->Handle, PrimaryInstance->GetCurrentActivationInfo().GetActivationPredictionKey());
 		}
 	}
 }
@@ -108,9 +111,11 @@ FGameplayTag UDRAbilitySystemComponent::GetAbilityTagFromSpec(const FGameplayAbi
 {
 	if (AbilitySpec.Ability)
 	{
-		for (FGameplayTag Tag : AbilitySpec.Ability.Get()->AbilityTags)
+		// 캐시된 태그 사용 (FGameplayTag::RequestGameplayTag 호출 비용 제거)
+		static const FGameplayTag AbilitiesTag = FGameplayTag::RequestGameplayTag(FName("Abilities"));
+		for (const FGameplayTag& Tag : AbilitySpec.Ability.Get()->AbilityTags)
 		{
-			if (Tag.MatchesTag(FGameplayTag::RequestGameplayTag(FName("Abilities"))))
+			if (Tag.MatchesTag(AbilitiesTag))
 			{
 				return Tag;
 			}
@@ -121,11 +126,13 @@ FGameplayTag UDRAbilitySystemComponent::GetAbilityTagFromSpec(const FGameplayAbi
 
 FGameplayTag UDRAbilitySystemComponent::GetInputTagFromSpec(const FGameplayAbilitySpec& AbilitySpec)
 {
-	for (FGameplayTag Tag : AbilitySpec.DynamicAbilityTags)
+	// 캐시된 태그 사용 (FGameplayTag::RequestGameplayTag 호출 비용 제거)
+	static const FGameplayTag InputTagBase = FGameplayTag::RequestGameplayTag(FName("InputTag"));
+	for (const FGameplayTag& Tag : AbilitySpec.DynamicAbilityTags)
 	{
-		if (Tag.MatchesTag(FGameplayTag::RequestGameplayTag(FName("InputTag"))))
+		if (Tag.MatchesTag(InputTagBase))
 		{
-			return Tag; 
+			return Tag;
 		}
 	}
 	return FGameplayTag();
@@ -154,9 +161,55 @@ void UDRAbilitySystemComponent::ClientEffectApplied_Implementation(UAbilitySyste
 {
 	FGameplayTagContainer TagContainer;
 	EffectSpec.GetAllGrantedTags(TagContainer);
-	
+
 	const bool HasDuration = EffectSpec.Def->DurationPolicy == EGameplayEffectDurationType::HasDuration;
 	const bool DisplayStackCount = EffectSpec.Def->StackingType != EGameplayEffectStackingType::None && EffectSpec.Def->StackLimitCount > 1;
-	
+
 	EffectAssetTags.Broadcast(TagContainer, HasDuration, EffectSpec.Duration, DisplayStackCount, EffectSpec.GetStackCount());
+}
+
+FGameplayAbilitySpec* UDRAbilitySystemComponent::FindAbilitySpecByInputTag(const FGameplayTag& InputTag)
+{
+	// 캐시에서 Handle 조회
+	if (const FGameplayAbilitySpecHandle* HandlePtr = InputTagToAbilityMap.Find(InputTag))
+	{
+		return FindAbilitySpecFromHandle(*HandlePtr);
+	}
+
+	// 캐시 미스: 폴백으로 전체 검색 (캐시 동기화 문제 대비)
+	for (FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
+	{
+		if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
+		{
+			// 캐시에 추가
+			InputTagToAbilityMap.Add(InputTag, AbilitySpec.Handle);
+			return &AbilitySpec;
+		}
+	}
+
+	return nullptr;
+}
+
+void UDRAbilitySystemComponent::RebuildInputTagCache()
+{
+	InputTagToAbilityMap.Empty();
+
+	for (const FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
+	{
+		AddToInputTagCache(AbilitySpec);
+	}
+}
+
+void UDRAbilitySystemComponent::AddToInputTagCache(const FGameplayAbilitySpec& AbilitySpec)
+{
+	FGameplayTag InputTag = GetInputTagFromSpec(AbilitySpec);
+	if (InputTag.IsValid())
+	{
+		InputTagToAbilityMap.Add(InputTag, AbilitySpec.Handle);
+	}
+}
+
+void UDRAbilitySystemComponent::RemoveFromInputTagCache(const FGameplayTag& InputTag)
+{
+	InputTagToAbilityMap.Remove(InputTag);
 }

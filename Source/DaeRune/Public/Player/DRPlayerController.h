@@ -9,7 +9,7 @@
 #include "GenericTeamAgentInterface.h"
 #include "DRPlayerController.generated.h"
 
-// »óÈ£ÀÛ¿ë µ¨¸®°ÔÀÌÆ®
+// ï¿½ï¿½È£ï¿½Û¿ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInteractPressed);
 
 class UDamageTextComponent;
@@ -22,7 +22,7 @@ class ADRCleanserPart;
 class ADRCleanserSite;
 
 /**
- * DaeRune ÇÃ·¹ÀÌ¾îÀÇ ÀÔ·Â Ã³¸® ¹× UI °ü¸® Å¬·¡½º
+ * DaeRune ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ï¿½ï¿½ ï¿½Ô·ï¿½ Ã³ï¿½ï¿½ ï¿½ï¿½ UI ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½
  */
 UCLASS()
 class DAERUNE_API ADRPlayerController : public APlayerController, public IGenericTeamAgentInterface
@@ -36,48 +36,48 @@ public:
 	virtual FGenericTeamId GetGenericTeamId() const override { return TeamId; }
 	virtual void SetGenericTeamId(const FGenericTeamId& NewTeamId) override { TeamId = NewTeamId; }
 	
-	// µ¥¹ÌÁö ¼öÄ¡ Ç¥½Ã
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ Ç¥ï¿½ï¿½
 	UFUNCTION(Client, Reliable)
 	void ShowDamageNumber(float DamageAmount, ACharacter* TargetCharacter);
 
-	// ºÎÆĞ »óÅÂ º¯°æ Ã³¸®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Corruption")
 	void CorruptedStateChanged(bool bIsStateChanged);
 
-	// À½¼º Ã¤ÆÃ È°¼ºÈ­/ºñÈ°¼ºÈ­
+	// ï¿½ï¿½ï¿½ï¿½ Ã¤ï¿½ï¿½ È°ï¿½ï¿½È­/ï¿½ï¿½È°ï¿½ï¿½È­
 	UFUNCTION(BlueprintImplementableEvent, Category = "Corruption")
 	void SetVoiceChatEnabled(bool bEnabled);
 
-	// ¾Æ±º/Àû ±¸ºĞ Ç¥½Ã º¯°æ
+	// ï¿½Æ±ï¿½/ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ç¥ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION(BlueprintImplementableEvent, Category = "Corruption")
 	void SetTeamVisualsEnabled(bool bEnabled);
 
-	// ºÎÆĞ »óÅÂ È®ÀÎ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Corruption")
 	bool IsInCorruptedState() const { return bIsCorrupted; }
 
-	// À½¼º Ã¤³Î ¾÷µ¥ÀÌÆ®
+	// ï¿½ï¿½ï¿½ï¿½ Ã¤ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UFUNCTION(BlueprintCallable, Category = "Voice Chat")
 	void UpdateVoiceChannelForDeathState(bool bIsDead);
 
-	// Æ¯Á¤ ÇÃ·¹ÀÌ¾î ¹ÂÆ®/¾ğ¹ÂÆ®
+	// Æ¯ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½ï¿½Æ®/ï¿½ï¿½ï¿½Æ®
 	UFUNCTION(BlueprintCallable, Category = "Voice Chat")
 	void SetPlayerVoiceMuted(APlayerState* TargetPlayer, bool bMute);
 
-	// ¸ğµç ÇÃ·¹ÀÌ¾î À½¼º ¹ÂÆ® »óÅÂ ¾÷µ¥ÀÌÆ®
+	// ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	void RefreshAllPlayerVoiceMutes();
 
-	// »óÈ£ÀÛ¿ë ÀÌº¥Æ®
+	// ï¿½ï¿½È£ï¿½Û¿ï¿½ ï¿½Ìºï¿½Æ®
 	UPROPERTY(BlueprintAssignable, Category = "Input")
 	FOnInteractPressed OnInteractPressed;
 
-	// ========== ºÎÇ° ½Ã½ºÅÛ ==========
+	// ========== ï¿½ï¿½Ç° ï¿½Ã½ï¿½ï¿½ï¿½ ==========
 
-	// ºÎÇ° °¨Áö È°¼ºÈ­/ºñÈ°¼ºÈ­
+	// ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½ È°ï¿½ï¿½È­/ï¿½ï¿½È°ï¿½ï¿½È­
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void SetPartDetectionEnabled(bool bEnabled, class ADRCleanserPart* Part);
 
-	// ¶óÀÎÆ®·¹ÀÌ½ÌÀ¸·Î ºÎÇ° Ã£±â
+	// ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç° Ã£ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	ADRCleanserPart* FindPartByLineTrace();
 
@@ -93,43 +93,43 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestInstallPartToSite(ADRCleanserSite* Site);
 
-	// ºÎÇ° È¹µæ ½Ã UI Ç¥½Ã
+	// ï¿½ï¿½Ç° È¹ï¿½ï¿½ ï¿½ï¿½ UI Ç¥ï¿½ï¿½
 	UFUNCTION(BlueprintImplementableEvent, Category = "Part System")
 	void OnPartPickedUp();
 
 	UFUNCTION(Client, Reliable)
 	void ClientShowPartPickupUI();
 
-	// ========== °üÀü ½Ã½ºÅÛ ==========
+	// ========== ï¿½ï¿½ï¿½ï¿½ ï¿½Ã½ï¿½ï¿½ï¿½ ==========
 
-	// °üÀü ¸ğµå ¿©ºÎ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(BlueprintReadOnly, Category = "Spectating")
 	bool bIsSpectating = false;
 
-	// ÇöÀç °üÀü ÁßÀÎ ÇÃ·¹ÀÌ¾î ÀÎµ¦½º
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½Îµï¿½ï¿½ï¿½
 	int32 CurrentSpectatedPlayerIndex = 0;
 
-	// ÇöÀç °üÀü ÁßÀÎ Ä³¸¯ÅÍ (Á÷Á¢ ÂüÁ¶)
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ä³ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
 	UPROPERTY()
 	TWeakObjectPtr<ACharacter> CurrentSpectatedCharacter;
 
-	// °üÀü ½ÃÀÛ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION(Client, Reliable)
 	void ClientStartSpectating();
 
-	// °üÀü Á¾·á
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION(Client, Reliable)
 	void ClientStopSpectating();
 
-	// ´ÙÀ½ ÇÃ·¹ÀÌ¾î·Î ÀüÈ¯
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ï¿½ ï¿½ï¿½È¯
 	UFUNCTION(BlueprintCallable, Category = "Spectating")
 	void SpectateNextPlayer();
 
-	// ÀÌÀü ÇÃ·¹ÀÌ¾î·Î ÀüÈ¯
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ï¿½ ï¿½ï¿½È¯
 	UFUNCTION(BlueprintCallable, Category = "Spectating")
 	void SpectatePreviousPlayer();
 
-	// ========== ¼³Á¤ ¸Ş´º ========== 
+	// ========== ï¿½ï¿½ï¿½ï¿½ ï¿½Ş´ï¿½ ========== 
 
 	UFUNCTION(BlueprintCallable, Category = "Settings")
 	void ToggleSettingsMenu();
@@ -143,25 +143,28 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Settings")
 	bool IsSettingsMenuOpen() const { return bIsSettingsMenuOpen; }
 
-	// ========== ÀÔ·Â ¸ğµå °ü¸® ==========
+	// ========== ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ==========
 
-	// ÇöÀç ·¹º§¿¡ ¸Â´Â ÀÔ·Â ¸ğµå·Î º¹¿ø
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Â´ï¿½ ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	void RestoreDefaultInputMode();
 
-	// ÇöÀç ·¹º§ÀÌ ¸ŞÀÎ¸Ş´ºÀÎÁö È®ÀÎ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Î¸Ş´ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	bool IsInMainMenu() const;
 
-	// ÇöÀç ·¹º§ÀÌ ·ÎºñÀÎÁö È®ÀÎ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Îºï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	bool IsInLobby() const;
 
-	// °ÔÀÓ ·¹º§ÀÎÁö È®ÀÎ (½ºÅ×ÀÌÁö)
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	bool IsInGameLevel() const;
 
-	// °ÔÀÓ °á°ú UI Ç¥½Ã
+	// ë ˆë²¨ ì§„ì… ì‹œ ê³µí†µ ì´ˆê¸°í™” (ReceivedPlayer, PostSeamlessTravelì—ì„œ í˜¸ì¶œ)
+	void OnLevelEntered();
+
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ UI Ç¥ï¿½ï¿½
 	UFUNCTION(Client, Reliable)
 	void Client_ShowGameOverUI();
 
@@ -170,10 +173,14 @@ public:
 
 	UFUNCTION(Client, Reliable)
 	void ClientStopAllAudio();
+
+	// ë ˆë²¨ ì´ë™ ì „ ì„¤ì •ì°½ ë‹«ê¸° (ì„œë²„ì—ì„œ í˜¸ì¶œ)
+	UFUNCTION(Client, Reliable)
+	void ClientCloseSettingsMenu();
 	
-	// ========== Ä¡Æ®/µğ¹ö±× ±â´É ==========
+	// ========== Ä¡Æ®/ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ==========
     	
-    // Å×½ºÆ®¿ë ÆäÀÌÁî ½ºÅµ (ºí·çÇÁ¸°Æ®¿¡¼­ È£Ãâ)
+    // ï¿½×½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Åµ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ È£ï¿½ï¿½)
     UFUNCTION(BlueprintCallable, Category = "Cheat|Phase")
     void CheatSkipToNextPhase();
 
@@ -182,41 +189,42 @@ protected:
 	virtual void PlayerTick(float DeltaTime) override;
 	virtual void SetupInputComponent() override;
 	virtual void ReceivedPlayer() override;
+	virtual void PostSeamlessTravel() override;
 
-	// ºÎÆĞ »óÅÂ ÇÃ·¡±×
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½ï¿½
 	UPROPERTY(BlueprintReadOnly, Category = "Corruption")
 	bool bIsCorrupted = false;
 
-	// °ÔÀÓ ¿À¹ö À§Á¬ Å¬·¡½º
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditDefaultsOnly, Category = "UI|GameResult")
 	TSubclassOf<UUserWidget> GameOverWidgetClass;
 
-	// °ÔÀÓ Å¬¸®¾î À§Á¬ Å¬·¡½º
+	// ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditDefaultsOnly, Category = "UI|GameResult")
 	TSubclassOf<UUserWidget> GameClearWidgetClass;
 
-	// ÇöÀç Ç¥½Ã ÁßÀÎ °á°ú À§Á¬
+	// ï¿½ï¿½ï¿½ï¿½ Ç¥ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY()
 	TObjectPtr<UUserWidget> CurrentResultWidget;
 
-	// ========== ºÎÇ° ½Ã½ºÅÛ ¼³Á¤ ==========
+	// ========== ï¿½ï¿½Ç° ï¿½Ã½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ==========
 
-	// ¶óÀÎÆ®·¹ÀÌ½Ì °Å¸®
+	// ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½ ï¿½Å¸ï¿½
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Part System|Config")
 	float LineTraceDistance = 100.f;
 
-	// ¶óÀÎÆ®·¹ÀÌ½Ì ¾÷µ¥ÀÌÆ® °£°İ (ÃÊ)
+	// ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Part System|Config")
 	float LineTraceUpdateInterval = 0.1f;
 
 private:
 	FGenericTeamId TeamId;
 
-	// Enhanced Input System ¼³Á¤
+	// Enhanced Input System ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputMappingContext> DRContext;
 
-	// ±âº» ÀÔ·Â ¾×¼Çµé
+	// ï¿½âº» ï¿½Ô·ï¿½ ï¿½×¼Çµï¿½
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> MoveAction;
 
@@ -229,49 +237,49 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> InteractAction;
 
-	// °üÀü ÀÔ·Â ¾×¼Ç
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ô·ï¿½ ï¿½×¼ï¿½
 	UPROPERTY(EditAnywhere, Category = "Input|Spectating")
 	TObjectPtr<UInputAction> SpectateNextAction;
 
 	UPROPERTY(EditAnywhere, Category = "Input|Spectating")
 	TObjectPtr<UInputAction> SpectatePreviousAction;
 
-	// ¼³Á¤ ¸Ş´º Åä±Û ¾×¼Ç
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ş´ï¿½ ï¿½ï¿½ï¿½ ï¿½×¼ï¿½
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> ToggleSettingsAction;
 
-	// ¼³Á¤ ¸Ş´º Åä±Û Ã³¸®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ş´ï¿½ ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 	void HandleToggleSettings();
 
-	// °üÀü ÀÔ·Â Ã³¸®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ô·ï¿½ Ã³ï¿½ï¿½
 	void HandleSpectateNext();
 	void HandleSpectatePrevious();
 
-	// ¼³Á¤ ¸Ş´º ¿­¸² »óÅÂ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ş´ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	bool bIsSettingsMenuOpen = false;
 
-	// °üÀü ´ë»ó ¼³Á¤
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	void SetSpectateTarget(ACharacter* NewTarget);
 
 	UFUNCTION(Server, Reliable)
 	void ServerSetSpectateTarget(ACharacter* NewTarget);
 
-	// °üÀü UI ¾÷µ¥ÀÌÆ®
+	// ï¿½ï¿½ï¿½ï¿½ UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UFUNCTION(Client, Reliable)
 	void ClientUpdateSpectatorUI(ACharacter* SpectatedTarget);
 
 	void UpdateSpectatorUI(ACharacter* SpectatedTarget);
 
-	// °üÀü ´ë»ó »ç¸Á Ã³¸®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 	UFUNCTION()
 	void OnSpectatedPlayerDied(AActor* DeadActor);
 
-	// ÀÔ·Â Ã³¸® ÇÔ¼öµé
+	// ï¿½Ô·ï¿½ Ã³ï¿½ï¿½ ï¿½Ô¼ï¿½ï¿½ï¿½
 	void Move(const FInputActionValue& InputActionValue);
 	void Look(const FInputActionValue& InputActionValue);
 	void StartJump(const FInputActionValue& InputActionValue);
 	void StopJump(const FInputActionValue& InputActionValue);
-	// »óÈ£ÀÛ¿ë Å°¸¦ ´­·¶À» ¶§
+	// ï¿½ï¿½È£ï¿½Û¿ï¿½ Å°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½
 	void HandleInteract();
 
 	UPROPERTY()
@@ -280,12 +288,12 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UDRSettingsWidget> SettingsWidgetClass;
 
-	// GAS ¾îºô¸®Æ¼ ÀÔ·Â Ã³¸®
+	// GAS ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ ï¿½Ô·ï¿½ Ã³ï¿½ï¿½
 	void AbilityInputTagPressed(FGameplayTag InputTag);
 	void AbilityInputTagReleased(FGameplayTag InputTag);
 	void AbilityInputTagHeld(FGameplayTag InputTag);
 
-	// ¾îºô¸®Æ¼ ÀÔ·Â ¼³Á¤
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UDRInputConfig> InputConfig;
 
@@ -294,36 +302,36 @@ private:
 
 	UDRAbilitySystemComponent* GetASC();
 
-	// µ¥¹ÌÁö ÅØ½ºÆ® ÄÄÆ÷³ÍÆ® Å¬·¡½º
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ø½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® Å¬ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditDefaultsOnly)
 	TSubclassOf<UDamageTextComponent> DamageTextComponentClass;
 
-	// ¶óÀÎÆ®·¹ÀÌ½Ì È°¼ºÈ­ ¿©ºÎ
+	// ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½ È°ï¿½ï¿½È­ ï¿½ï¿½ï¿½ï¿½
 	bool bPartDetectionEnabled = false;
 
-	// ÇöÀç ÇÃ·¹ÀÌ¾î°¡ Á×¾ú´ÂÁö ¿©ºÎ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾î°¡ ï¿½×¾ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	bool bIsDeadForVoice = false;
 
-	// ¶óÀÎÆ®·¹ÀÌ½Ì Å¸ÀÌ¸Ó
+	// ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½ Å¸ï¿½Ì¸ï¿½
 	float LineTraceTimer = 0.f;
 
-	// ÇöÀç ±ÙÃ³¿¡ ÀÖ´Â ºÎÇ°
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã³ï¿½ï¿½ ï¿½Ö´ï¿½ ï¿½ï¿½Ç°
 	UPROPERTY()
 	TObjectPtr<ADRCleanserPart> NearbyPart;
 
-	// ÇöÀç °¨ÁöµÈ ºÎÇ°
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç°
 	UPROPERTY()
 	TObjectPtr<ADRCleanserPart> CurrentDetectedPart;
 
-	// ºÎÇ° È¹µæ ¿äÃ»
+	// ï¿½ï¿½Ç° È¹ï¿½ï¿½ ï¿½ï¿½Ã»
 	UFUNCTION(Server, Reliable)
 	void ServerRequestPickupPart(ADRCleanserPart* Part);
 
-	// ºÎÇ° µå¶ø ¿äÃ»
+	// ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ ï¿½ï¿½Ã»
 	UFUNCTION(Server, Reliable)
 	void ServerRequestDropPart();
 	
-	// ¼­¹ö¿¡¼­ ÆäÀÌÁî ½ºÅµ ½ÇÇà
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Åµ ï¿½ï¿½ï¿½ï¿½
     UFUNCTION(Server, Reliable)
     void ServerCheatSkipToNextPhase();
 };
