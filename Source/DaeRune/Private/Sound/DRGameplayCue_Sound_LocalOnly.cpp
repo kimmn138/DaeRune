@@ -3,52 +3,41 @@
 
 #include "Sound/DRGameplayCue_Sound_LocalOnly.h"
 #include "Kismet/GameplayStatics.h"
-#include "Sound/DRSoundManager.h"
 
 bool UDRGameplayCue_Sound_LocalOnly::OnExecute_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) const
 {
 	if (!Sound) return false;
+	if (!IsValid(MyTarget)) return false;
 
-	// World¸¦ ¸ÕÀú ¾ÈÀüÇÏ°Ô °¡Á®¿À±â
-	UWorld* World = MyTarget ? MyTarget->GetWorld() : nullptr;
-	if (!World) return false;
-
-	// ·ÎÄÃ ÇÃ·¹ÀÌ¾î Ã¼Å©
+	// ë¡œì»¬ í”Œë ˆì´ì–´ë§Œ ì¬ìƒ
 	APawn* Pawn = Cast<APawn>(MyTarget);
 	if (!Pawn || !Pawn->IsLocallyControlled()) return false;
 
-	// GameInstance¿¡¼­ SoundManager °¡Á®¿À±â
-	UGameInstance* GI = World->GetGameInstance();
-	if (!GI) return false;
-
-	UDRSoundManager* SoundManager = GI->GetSubsystem<UDRSoundManager>();
-	if (!SoundManager) return false;
-
-	// À§Ä¡ Á¤º¸ ¾ÈÀüÇÏ°Ô °¡Á®¿À±â
+	// ìœ„ì¹˜ ê²°ì •
 	FVector Location = FVector::ZeroVector;
 
 	if (!Parameters.Location.IsZero())
 	{
 		Location = Parameters.Location;
 	}
-	else if (IsValid(MyTarget) && !MyTarget->IsPendingKillPending())
+	else if (!MyTarget->IsPendingKillPending())
 	{
 		Location = MyTarget->GetActorLocation();
 	}
 	else if (bIs3DSound)
 	{
-		// 3D »ç¿îµåÀÎµ¥ À§Ä¡¸¦ ¾Ë ¼ö ¾øÀ¸¸é ½ºÅµ
+		// 3D ì‚¬ìš´ë“œì¸ë° ìœ„ì¹˜ë¥¼ ì•Œ ìˆ˜ ì—†ìœ¼ë©´ ìŠ¤í‚µ
 		return false;
 	}
 
-	// SoundManager¸¦ ÅëÇØ ¾ÈÀüÇÏ°Ô Àç»ı
+	// MyTargetì„ WorldContextObjectë¡œ ì‚¬ìš©í•´ì„œ ì˜¬ë°”ë¥¸ Worldì—ì„œ ì‚¬ìš´ë“œ ì¬ìƒ
 	if (bIs3DSound)
 	{
-		SoundManager->PlaySoundAtLocation(Sound, Location);
+		UGameplayStatics::PlaySoundAtLocation(MyTarget, Sound, Location);
 	}
 	else
 	{
-		SoundManager->PlaySound2D(Sound);
+		UGameplayStatics::PlaySound2D(MyTarget, Sound);
 	}
 
 	return false;

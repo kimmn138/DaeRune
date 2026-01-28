@@ -6,6 +6,10 @@
 #include "Interaction/CombatInterface.h"
 #include "Net/UnrealNetwork.h"
 #include "Actor/DRDoorManager.h"
+#include "Sound/DRSoundManager.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/DRSoundDataAsset.h"
+#include "DRAssetManager.h"
 
 ADRStageGameState::ADRStageGameState()
 {
@@ -242,4 +246,64 @@ void ADRStageGameState::OnRep_IsWaveRestTime()
 {
     // 클라이언트에서 Replicated 변수 변경 시 델리게이트 브로드캐스트
     OnWaveTimerChangedDelegate.Broadcast(CurrentWaveNumber, WaveRemainingTime, bIsWaveRestTime);
+}
+
+void ADRStageGameState::Multicast_PlayPhaseStartSound_Implementation()
+{
+    // Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
+    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
+    {
+        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
+        {
+            if (SoundData->PhaseStartSound)
+            {
+                UGameplayStatics::PlaySound2D(this, SoundData->PhaseStartSound);
+            }
+        }
+    }
+}
+
+void ADRStageGameState::Multicast_PlayWaveStartSound_Implementation()
+{
+    // Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
+    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
+    {
+        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
+        {
+            if (SoundData->WaveStartSound)
+            {
+                UGameplayStatics::PlaySound2D(this, SoundData->WaveStartSound);
+            }
+        }
+    }
+}
+
+void ADRStageGameState::Multicast_PlayGameClearSound_Implementation()
+{
+    // Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
+    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
+    {
+        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
+        {
+            if (SoundData->GameClearSound)
+            {
+                UGameplayStatics::PlaySound2D(this, SoundData->GameClearSound);
+            }
+        }
+    }
+}
+
+void ADRStageGameState::Multicast_PlayGameOverSound_Implementation()
+{
+    // Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
+    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
+    {
+        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
+        {
+            if (SoundData->GameOverSound)
+            {
+                UGameplayStatics::PlaySound2D(this, SoundData->GameOverSound);
+            }
+        }
+    }
 }

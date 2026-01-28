@@ -12,15 +12,18 @@
 #include "Engine/OverlapResult.h"
 #include "Sound/DRSoundManager.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/DRSoundDataAsset.h"
+#include "DRAssetManager.h"
 
 ADRSeedProjectile::ADRSeedProjectile()
 {
-    // Æ÷¹°¼± ±ËÀûÀ» À§ÇÑ Áß·Â È°¼ºÈ­
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ß·ï¿½ È°ï¿½ï¿½È­
     ProjectileMovement->ProjectileGravityScale = 1.0f;
     ProjectileMovement->InitialSpeed = 700.f;
     ProjectileMovement->MaxSpeed = 700.f;
 
-    // À¯µµ ±â´É ºñÈ°¼ºÈ­ (Á÷¼± Æ÷¹°¼± ±ËÀû)
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
     ProjectileMovement->bIsHomingProjectile = false;
 }
 
@@ -28,7 +31,7 @@ void ADRSeedProjectile::BeginPlay()
 {
     Super::BeginPlay();
 
-    // ½Ãµå ¹ß»çÃ¼´Â ÀÌµ¿ µ¿±âÈ­ ºñÈ°¼ºÈ­ (¼­¹ö¿¡¼­¸¸ Ã³¸®)
+    // ï¿½Ãµï¿½ ï¿½ß»ï¿½Ã¼ï¿½ï¿½ ï¿½Ìµï¿½ ï¿½ï¿½ï¿½ï¿½È­ ï¿½ï¿½È°ï¿½ï¿½È­ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½)
     SetReplicateMovement(false);
 }
 
@@ -36,13 +39,13 @@ void ADRSeedProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent
     AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
     bool bFromSweep, const FHitResult& SweepResult)
 {
-    // Áßº¹ Æø¹ß ¹æÁö
+    // ï¿½ßºï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (bHasExploded) return;
 
-    // ÀÚ±â ÀÚ½ÅÀÌ°Å³ª ¼ÒÀ¯ÀÚ¸é ¹«½Ã
+    // ï¿½Ú±ï¿½ ï¿½Ú½ï¿½ï¿½Ì°Å³ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ú¸ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (!OtherActor || OtherActor == GetOwner()) return;
 
-    // ¹ß»çÇÑ Ä³¸¯ÅÍ´Â Åë°ú (ÀÚÆø ¹æÁö)
+    // ï¿½ß»ï¿½ï¿½ï¿½ Ä³ï¿½ï¿½ï¿½Í´ï¿½ ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
     if (DamageEffectParams.SourceAbilitySystemComponent)
     {
         AActor* SourceActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
@@ -51,7 +54,7 @@ void ADRSeedProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent
 
     if (OtherComp)
     {
-        // Ãæµ¹ ÁöÁ¡ °è»ê (Á¤È®ÇÑ Æø¹ß À§Ä¡ ¼³Á¤)
+        // ï¿½æµ¹ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ (ï¿½ï¿½È®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½)
         FVector ImpactPoint = SweepResult.Location;
         if (ImpactPoint.IsZero())
         {
@@ -65,24 +68,24 @@ void ADRSeedProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent
 
 void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
 {
-    // Áßº¹ Æø¹ß ¹æÁö, ¼­¹ö¿¡¼­¸¸ ¹üÀ§ µ¥¹ÌÁö/Èú Ã³¸®
+    // ï¿½ßºï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½, ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ Ã³ï¿½ï¿½
     if (!HasAuthority() || bHasExploded) return;
     bHasExploded = true;
 
-    // Æø¹ß ÀÌÆåÆ® Àç»ı (±âÁ¸ OnHit ÇÔ¼ö È°¿ë)
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ OnHit ï¿½Ô¼ï¿½ È°ï¿½ï¿½)
     OnHit();
 
     MulticastPlayExplosionSound(ImpactLocation);
 
-    // ¸ğµç Å¬¶óÀÌ¾ğÆ®¿¡°Ô Æø¹ß À§Ä¡ Àü´Ş (µğ¹ö±× µå·Î¿ì¿ë)
+    // ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Î¿ï¿½ï¿½)
     MulticastExplodeAtLocation(ImpactLocation);
 
-    // ¹üÀ§ ³» ¸ğµç ¾×ÅÍ °Ë»ö
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ë»ï¿½
     TArray<FOverlapResult> OverlapResults;
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(this);
 
-    // ¹ß»çÇÑ Ä³¸¯ÅÍ´Â Á¦¿Ü
+    // ï¿½ß»ï¿½ï¿½ï¿½ Ä³ï¿½ï¿½ï¿½Í´ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (DamageEffectParams.SourceAbilitySystemComponent)
     {
         AActor* SourceActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
@@ -92,7 +95,7 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
         }
     }
 
-    // ±¸Ã¼ ¿À¹ö·¦ Ã¼Å©
+    // ï¿½ï¿½Ã¼ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ã¼Å©
     bool bOverlapSuccess = GetWorld()->OverlapMultiByChannel(
         OverlapResults,
         ImpactLocation,
@@ -108,7 +111,7 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
         return;
     }
 
-    // °¢ ¾×ÅÍ¿¡ ´ëÇØ Ã³¸®
+    // ï¿½ï¿½ ï¿½ï¿½ï¿½Í¿ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
     int32 AffectedCount = 0;
     int32 BlockedCount = 0;
 
@@ -117,22 +120,22 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
         AActor* Target = Result.GetActor();
         if (!Target) continue;
 
-        // Á×Àº Ä³¸¯ÅÍ´Â ¹«½Ã
+        // ï¿½ï¿½ï¿½ï¿½ Ä³ï¿½ï¿½ï¿½Í´ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (Target->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Target))
         {
             continue;
         }
 
-        // Å¬·»Àú »çÀÌÆ®´Â ¹«½Ã
+        // Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (ADRCleanserSite* CleanserSite = Cast<ADRCleanserSite>(Target))
         {
             continue;
         }
 
-        // °Å¸® °è»ê
+        // ï¿½Å¸ï¿½ ï¿½ï¿½ï¿½
         float Distance = FVector::Dist(ImpactLocation, Target->GetActorLocation());
 
-        // ¹üÀ§ ¹ÛÀÌ¸é ¹«½Ã
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (Distance > OuterRadius) continue;
 
         bool bCanApply = HasLineOfSight(ImpactLocation, Target->GetActorLocation(), Target);
@@ -148,7 +151,7 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
         }
     }
 
-    // ¹ß»çÃ¼ Á¦°Å
+    // ï¿½ß»ï¿½Ã¼ ï¿½ï¿½ï¿½ï¿½
     Destroy();
 }
 
@@ -156,10 +159,10 @@ bool ADRSeedProjectile::HasLineOfSight(const FVector& StartLocation, const FVect
 {
     FHitResult HitResult;
     FCollisionQueryParams QueryParams;
-    QueryParams.AddIgnoredActor(this);  // ¹ß»çÃ¼ ÀÚ½ÅÀº ¹«½Ã
-    QueryParams.AddIgnoredActor(TargetActor);  // Å¸°Ù ¾×ÅÍµµ ¹«½Ã
+    QueryParams.AddIgnoredActor(this);  // ï¿½ß»ï¿½Ã¼ ï¿½Ú½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+    QueryParams.AddIgnoredActor(TargetActor);  // Å¸ï¿½ï¿½ ï¿½ï¿½ï¿½Íµï¿½ ï¿½ï¿½ï¿½ï¿½
 
-    // ¹ß»çÇÑ Ä³¸¯ÅÍµµ ¹«½Ã
+    // ï¿½ß»ï¿½ï¿½ï¿½ Ä³ï¿½ï¿½ï¿½Íµï¿½ ï¿½ï¿½ï¿½ï¿½
     if (DamageEffectParams.SourceAbilitySystemComponent)
     {
         if (AActor* SourceActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor())
@@ -171,20 +174,20 @@ bool ADRSeedProjectile::HasLineOfSight(const FVector& StartLocation, const FVect
     QueryParams.bTraceComplex = false;
     QueryParams.bReturnPhysicalMaterial = false;
 
-    // ½ÃÀÛÁ¡°ú ³¡Á¡À» Á¶Á¤ (Æø¹ß Áß½É°ú Å¸°Ù Áß½É)
-    FVector AdjustedStart = StartLocation + FVector(0, 0, 50.f);  // Æø¹ß Áß½É ³ôÀÌ
-    FVector AdjustedEnd = EndLocation + FVector(0, 0, 50.f);  // Å¸°Ù Áß½É ³ôÀÌ
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ß½É°ï¿½ Å¸ï¿½ï¿½ ï¿½ß½ï¿½)
+    FVector AdjustedStart = StartLocation + FVector(0, 0, 50.f);  // ï¿½ï¿½ï¿½ï¿½ ï¿½ß½ï¿½ ï¿½ï¿½ï¿½ï¿½
+    FVector AdjustedEnd = EndLocation + FVector(0, 0, 50.f);  // Å¸ï¿½ï¿½ ï¿½ß½ï¿½ ï¿½ï¿½ï¿½ï¿½
 
-    // º® Ã¼Å©¿ë ¶óÀÎ Æ®·¹ÀÌ½º (Visibility Ã¤³Î »ç¿ë)
+    // ï¿½ï¿½ Ã¼Å©ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Æ®ï¿½ï¿½ï¿½Ì½ï¿½ (Visibility Ã¤ï¿½ï¿½ ï¿½ï¿½ï¿½)
     bool bHitResult = GetWorld()->LineTraceSingleByChannel(
         HitResult,
         AdjustedStart,
         AdjustedEnd,
-        ECC_Visibility,  // º®°ú °°Àº Static ¿ÀºêÁ§Æ® °¨Áö
+        ECC_Visibility,  // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Static ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
         QueryParams
     );
 
-    // º®¿¡ ¸·È÷Áö ¾Ê¾ÒÀ¸¸é true (½Ã¾ß È®º¸), ¸·ÇûÀ¸¸é false
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½ï¿½ true (ï¿½Ã¾ï¿½ È®ï¿½ï¿½), ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ false
     return !bHitResult;
 }
 
@@ -192,23 +195,23 @@ void ADRSeedProjectile::ApplyEffectToActor(AActor* Target, float Distance)
 {
     if (!Target) return;
 
-    // AbilitySystemComponent °¡Á®¿À±â
+    // AbilitySystemComponent ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
     if (!TargetASC) return;
 
-    // ¹ß»çÇÑ Ä³¸¯ÅÍ Á¤º¸
+    // ï¿½ß»ï¿½ï¿½ï¿½ Ä³ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     AActor* SourceActor = nullptr;
     if (DamageEffectParams.SourceAbilitySystemComponent)
     {
         SourceActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
     }
 
-    // ¾Æ±º/Àû±º ÆÇº°
+    // ï¿½Æ±ï¿½/ï¿½ï¿½ï¿½ï¿½ ï¿½Çºï¿½
     bool bIsAlly = !UDRAbilitySystemLibrary::IsNotFriend(SourceActor, Target);
 
     if (bIsAlly)
     {
-        // ¾Æ±º: Èú Àû¿ë
+        // ï¿½Æ±ï¿½: ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         float HealAmount = 0.f;
         if (Distance <= InnerRadius)
         {
@@ -226,7 +229,7 @@ void ADRSeedProjectile::ApplyEffectToActor(AActor* Target, float Distance)
     }
     else
     {
-        // Àû±º: µ¥¹ÌÁö Àû¿ë
+        // ï¿½ï¿½ï¿½ï¿½: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         float DamageAmount = 0.f;
         if (Distance <= InnerRadius)
         {
@@ -239,17 +242,17 @@ void ADRSeedProjectile::ApplyEffectToActor(AActor* Target, float Distance)
 
         if (DamageAmount > 0.f)
         {
-            // ±âÁ¸ DamageEffectParams º¹»ç ÈÄ µ¥¹ÌÁö °ª¸¸ º¯°æ
+            // ï¿½ï¿½ï¿½ï¿½ DamageEffectParams ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
             FDamageEffectParams LocalDamageParams = DamageEffectParams;
             LocalDamageParams.BaseDamage = DamageAmount;
             LocalDamageParams.TargetAbilitySystemComponent = TargetASC;
 
-            // ³Ë¹éÀº Æø¹ß Áß½É¿¡¼­ ¹Ù±ùÀ¸·Î
+            // ï¿½Ë¹ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ß½É¿ï¿½ï¿½ï¿½ ï¿½Ù±ï¿½ï¿½ï¿½ï¿½ï¿½
             FVector KnockbackDirection = (Target->GetActorLocation() - GetActorLocation()).GetSafeNormal();
-            KnockbackDirection.Z = 0.3f; // »ìÂ¦ À§·Î
+            KnockbackDirection.Z = 0.3f; // ï¿½ï¿½Â¦ ï¿½ï¿½ï¿½ï¿½
             LocalDamageParams.KnockbackForce = KnockbackDirection * LocalDamageParams.KnockbackForceMagnitude;
 
-            // µ¥¹ÌÁö Àû¿ë
+            // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
             UDRAbilitySystemLibrary::ApplyDamageEffect(LocalDamageParams);
         }
     }
@@ -262,7 +265,7 @@ void ADRSeedProjectile::ApplyHealToAlly(AActor* AllyActor, float HealAmount)
     UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(AllyActor);
     if (!TargetASC) return;
 
-    // Èú ÀÌÆåÆ®°¡ ¼³Á¤µÇ¾î ÀÖÀ¸¸é »ç¿ë
+    // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ç¾ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
     if (HealEffectClass)
     {
         FGameplayEffectContextHandle ContextHandle = TargetASC->MakeEffectContext();
@@ -274,7 +277,7 @@ void ADRSeedProjectile::ApplyHealToAlly(AActor* AllyActor, float HealAmount)
             ContextHandle
         );
 
-        // ÈúÀº À½¼ö µ¥¹ÌÁö·Î Ã³¸® °¡´É
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(
             SpecHandle,
             FGameplayTag::RequestGameplayTag("Heal"),
@@ -287,11 +290,15 @@ void ADRSeedProjectile::ApplyHealToAlly(AActor* AllyActor, float HealAmount)
 
 void ADRSeedProjectile::MulticastPlayExplosionSound_Implementation(const FVector& Location)
 {
-    if (UGameInstance* GI = GetGameInstance())
+    // Actorì˜ Worldë¥¼ ì§ì ‘ ì‚¬ìš©í•´ì„œ ì‚¬ìš´ë“œ ì¬ìƒ (í´ë¼ì´ì–¸íŠ¸ì—ì„œ í™•ì‹¤íˆ ë™ì‘)
+    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
     {
-        if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
         {
-            SM->PlaySeedExplosionSound(Location);
+            if (SoundData->SeedExplosionSound)
+            {
+                UGameplayStatics::PlaySoundAtLocation(this, SoundData->SeedExplosionSound, Location);
+            }
         }
     }
 }
@@ -314,11 +321,11 @@ void ADRSeedProjectile::MulticastExplodeAtLocation_Implementation(const FVector&
     }
 
 //    #if !UE_BUILD_SHIPPING
-//    // Æø¹ß ¹üÀ§ Ç¥½Ã
+//    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ç¥ï¿½ï¿½
 //    DrawDebugSphere(GetWorld(), ImpactLocation, InnerRadius, 16, FColor::Yellow, false, 1.0f, 0, 3.0f);
 //    DrawDebugSphere(GetWorld(), ImpactLocation, OuterRadius, 24, FColor::Orange, false, 1.0f, 0, 2.0f);
 //
-//    // Å¬¶óÀÌ¾ğÆ®µµ ÀÚ±â°¡ Á÷Á¢ °è»ê!
+//    // Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ ï¿½Ú±â°¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½!
 //    TArray<FOverlapResult> OverlapResults;
 //    FCollisionQueryParams QueryParams;
 //    QueryParams.AddIgnoredActor(this);
@@ -340,7 +347,7 @@ void ADRSeedProjectile::MulticastExplodeAtLocation_Implementation(const FVector&
 //        QueryParams
 //    );
 //
-//    // °¢ Å¸°Ù¿¡ ´ëÇØ ¶óÀÎ ±×¸®±â
+//    // ï¿½ï¿½ Å¸ï¿½Ù¿ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½×¸ï¿½ï¿½ï¿½
 //    for (const FOverlapResult& Result : OverlapResults)
 //    {
 //        AActor* Target = Result.GetActor();
@@ -354,7 +361,7 @@ void ADRSeedProjectile::MulticastExplodeAtLocation_Implementation(const FVector&
 //        float Distance = FVector::Dist(ImpactLocation, Target->GetActorLocation());
 //        if (Distance > OuterRadius) continue;
 //
-//        // Å¬¶óÀÌ¾ğÆ®°¡ Á÷Á¢ LOS Ã¼Å©
+//        // Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ LOS Ã¼Å©
 //        FVector AdjustedStart = ImpactLocation + FVector(0, 0, 50.f);
 //        FVector AdjustedEnd = Target->GetActorLocation() + FVector(0, 0, 50.f);
 //
@@ -378,7 +385,7 @@ void ADRSeedProjectile::MulticastExplodeAtLocation_Implementation(const FVector&
 //            LOSParams
 //        );
 //
-//        // ¶óÀÎ ±×¸®±â
+//        // ï¿½ï¿½ï¿½ï¿½ ï¿½×¸ï¿½ï¿½ï¿½
 //        FColor LineColor = bBlocked ? FColor::Red : FColor::Green;
 //        DrawDebugLine(GetWorld(), AdjustedStart, AdjustedEnd, LineColor, false, 1.0f, 0, 1.0f);
 //

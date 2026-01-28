@@ -20,6 +20,9 @@ public:
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 	virtual void Logout(AController* Exiting) override;
 
+	// SeamlessTravel로 돌아온 플레이어 처리
+	virtual void HandleSeamlessTravelPlayer(AController*& C) override;
+
 	UFUNCTION(BlueprintCallable, Category = "Lobby")
 	void TravelToStage(const FString& StageMapName, class ADRPlayerController* Requester);
 

@@ -4,48 +4,40 @@
 #include "Sound/DRGameplayCue_Sound.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
-#include "Sound/DRSoundManager.h"
 
 UDRGameplayCue_Sound::UDRGameplayCue_Sound()
 {
-	// Static Cue´Â ÀÎ½ºÅÏ½º »ý¼º ¾È ÇÔ
+	// Static Cueï¿½ï¿½ ï¿½Î½ï¿½ï¿½Ï½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½
 	IsOverride = true;
 }
 
 bool UDRGameplayCue_Sound::OnExecute_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) const
 {
     if (!Sound) return false;
-
-    UWorld* World = MyTarget ? MyTarget->GetWorld() : nullptr;
-    if (!World) return false;
-
-    UGameInstance* GI = World->GetGameInstance();
-    if (!GI) return false;
-
-    UDRSoundManager* SoundManager = GI->GetSubsystem<UDRSoundManager>();
-    if (!SoundManager) return false;
+    if (!IsValid(MyTarget)) return false;
 
     FVector Location = FVector::ZeroVector;
     if (!Parameters.Location.IsZero())
     {
         Location = Parameters.Location;
     }
-    else if (IsValid(MyTarget) && !MyTarget->IsPendingKillPending())
+    else if (!MyTarget->IsPendingKillPending())
     {
         Location = MyTarget->GetActorLocation();
     }
     else
     {
-        return false; // À§Ä¡¸¦ ¾Ë ¼ö ¾øÀ¸¸é ½ºÅµ
+        return false;
     }
 
+    // MyTargetì„ WorldContextObjectë¡œ ì‚¬ìš©í•´ì„œ ì˜¬ë°”ë¥¸ Worldì—ì„œ ì‚¬ìš´ë“œ ìž¬ìƒ
     if (bIs3DSound)
     {
-        SoundManager->PlaySoundAtLocation(Sound, Location);
+        UGameplayStatics::PlaySoundAtLocation(MyTarget, Sound, Location);
     }
     else
     {
-        SoundManager->PlaySound2D(Sound);
+        UGameplayStatics::PlaySound2D(MyTarget, Sound);
     }
 
     return false;

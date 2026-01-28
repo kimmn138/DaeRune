@@ -6,7 +6,7 @@
 #include "UI/WidgetController/DRWidgetController.h"
 #include "OverlayWidgetController.generated.h"
 
-// UI ¸Ş½ÃÁö Ç¥½Ã¸¦ À§ÇÑ µ¥ÀÌÅÍ Å×ÀÌºí ±¸Á¶Ã¼
+// UI ï¿½Ş½ï¿½ï¿½ï¿½ Ç¥ï¿½Ã¸ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ìºï¿½ ï¿½ï¿½ï¿½ï¿½Ã¼
 struct FDRAbilityInfo;
 USTRUCT(BlueprintType)
 struct FUIWidgetRow : public FTableRowBase
@@ -33,21 +33,21 @@ class UStatusEffectInfo;
 class ADRCleanserSite;
 class UDRCleanserSiteAttributeSet;
 
-// ¾îÆ®¸®ºäÆ® º¯°æ ½Ã UI ¾÷µ¥ÀÌÆ®¿ë µ¨¸®°ÔÀÌÆ®
+// ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAttributeChangedSignature, float, NewValue);
-// ¸ñÇ¥ UI ¾÷µ¥ÀÌÆ®¿ë µ¨¸®°ÔÀÌÆ®
+// ï¿½ï¿½Ç¥ UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveTextChangedSignature, const FText&, ObjectiveTitle, const FText&, ProgressText);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveProgressChangedSignature, int32, Current, int32, Max);
-// µğ¹öÇÁ º¯°æ½Ã µ¨¸®°ÔÀÌÆ®
+// ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FStatusEffectWidgetSignature, const FEffectInfo&, EffectInfo);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FEffectTagRemovedSignature, FGameplayTag, EffectTag, bool, IsDebuff);
-// ¿şÀÌºê Å¸ÀÌ¸Ó µ¨¸®°ÔÀÌÆ®
+// ï¿½ï¿½ï¿½Ìºï¿½ Å¸ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWaveTimerChangedSignature, int32, WaveNumber, float, RemainingTime, bool, bIsRestTime);
-// ¿şÀÌºê ¾Ë¸² µ¨¸®°ÔÀÌÆ®
+// ï¿½ï¿½ï¿½Ìºï¿½ ï¿½Ë¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPhaseAlarmSignature, const FText&, PhaseText);
 
 /**
- * ¸ŞÀÎ °ÔÀÓ UI ¿À¹ö·¹ÀÌ¸¦ °ü¸®ÇÏ´Â ÄÁÆ®·Ñ·¯
+ * ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ ï¿½ï¿½Æ®ï¿½Ñ·ï¿½
  */
 UCLASS(BlueprintType, Blueprintable)
 class DAERUNE_API UOverlayWidgetController : public UDRWidgetController
@@ -55,29 +55,29 @@ class DAERUNE_API UOverlayWidgetController : public UDRWidgetController
 	GENERATED_BODY()
 	
 public:
-	// ºÎ¸ğ Å¬·¡½º °¡»ó ÇÔ¼ö ¿À¹ö¶óÀÌµå
+	// ï¿½Î¸ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ô¼ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ìµï¿½
 	virtual void BroadcastInitialValues() override;
 	virtual void BindCallbacksToDependencies() override;
 	void BindCallbacksCleanserSiteToDependencies();
 
-	// µ¨¸®°ÔÀÌÆ® ¾ğ¹ÙÀÎµù ÇÔ¼ö
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½Îµï¿½ ï¿½Ô¼ï¿½
 	void UnbindAllDelegates();
 
-	// Ã¼·Â °ü·Ã UI ¾÷µ¥ÀÌÆ® µ¨¸®°ÔÀÌÆ®
+	// Ã¼ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnHealthChanged;
 
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnMaxHealthChanged;
 
-	// ¹° °ü·Ã UI ¾÷µ¥ÀÌÆ® µ¨¸®°ÔÀÌÆ®
+	// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnWaterChanged;
 
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnMaxWaterChanged;
 
-	// Å¬·»Àú»çÀÌÆ® Ã¼·Â °ü·Ã UI ¾÷µ¥ÀÌÆ® µ¨¸®°ÔÀÌÆ®
+	// Å¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® Ã¼ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnFirstCleanserHealthChanged;
 
@@ -90,14 +90,14 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnSecondCleanserMaxHealthChanged;
 
-	// ¸ñÇ¥ UI ¾÷µ¥ÀÌÆ® µ¨¸®°ÔÀÌÆ®
+	// ï¿½ï¿½Ç¥ UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Objective")
 	FOnObjectiveTextChangedSignature OnObjectiveTextChanged;
 
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Objective")
 	FOnObjectiveProgressChangedSignature OnObjectiveProgressChanged;
 
-	// µğ¹öÇÁ º¯°æ ºê·ÎµåÄ³½ºÆ® µ¨¸®°ÔÀÌÆ®
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Îµï¿½Ä³ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Debuff")
 	TObjectPtr<UStatusEffectInfo> StatusEffectData;
 	
@@ -107,11 +107,11 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Debuff")
 	FEffectTagRemovedSignature EffectTagRemovedDelegate;
 
-	// ¿şÀÌºê Å¸ÀÌ¸Ó ¾÷µ¥ÀÌÆ® µ¨¸®°ÔÀÌÆ®
+	// ï¿½ï¿½ï¿½Ìºï¿½ Å¸ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Wave")
 	FOnWaveTimerChangedSignature OnWaveTimerChanged;
 
-	// ¿şÀÌºê ¾Ë¶÷ µ¨¸®°ÔÀÌÆ®
+	// ï¿½ï¿½ï¿½Ìºï¿½ ï¿½Ë¶ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Alarm")
 	FOnPhaseAlarmSignature OnPhaseAlarm;
 
@@ -124,7 +124,7 @@ private:
 	UFUNCTION()
 	void OnPhaseChanged(int32 NewPhaseIndex);
 	
-	// Å¬·»Àú »çÀÌÆ® ASC/AttributeSet ¹ÙÀÎµù ÇÔ¼ö
+	// Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ASC/AttributeSet ï¿½ï¿½ï¿½Îµï¿½ ï¿½Ô¼ï¿½
 	UFUNCTION()
 	void BindCleanserSite(ADRCleanserSite* FirstCleanserSite, ADRCleanserSite* SecondCleanserSite);
 
@@ -132,15 +132,20 @@ private:
 	FTimerHandle WaveTimerBindingDelayTimer;
 	FTimerHandle PhaseAlarmBindingDelayTimer;
 
-	// µ¨¸®°ÔÀÌÆ® ÇÚµé ÀúÀå¿ë º¯¼ö
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	FDelegateHandle PhaseObjectiveDelegateHandle;
 	FDelegateHandle WaveTimerDelegateHandle;
 	
+	// Phase ì•ŒëŒìš© ìºì‹œ (Phase ë³€ê²½ ì‹œ ì•ŒëŒ í‘œì‹œ ì—¬ë¶€ íŒë‹¨)
 	int32 CachedPhaseNumber = -1;
+
+	// ì›¨ì´ë¸Œ íƒ€ì´ë¨¸ìš© ìºì‹œ (Phase 3 ì›¨ì´ë¸Œ íƒ€ì´ë¨¸ ë°”ì¸ë”© ì—¬ë¶€ íŒë‹¨)
+	int32 CachedWavePhaseNumber = -1;
+
 	int32 CachedProgress = -1;
 	int32 CachedRequiredCount = -1;
 	FText CachedObjectiveTitle;
 
-	// ÆäÀÌÁî ¾Ë¶÷ Áßº¹ ¹æÁö¿ë ÇÃ·¡±×
+	// í˜ì´ì¦ˆ ì•ŒëŒ ì¤‘ë³µ ë°©ì§€ìš© í”Œë˜ê·¸
 	bool bPhaseAlarmShown = false;
 };

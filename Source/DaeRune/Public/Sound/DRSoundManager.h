@@ -11,18 +11,18 @@ class UAudioComponent;
 class UDRSoundDataAsset;
 
 /**
- * °ÔÀÓ »ç¿îµå °ü¸®ÀÚ
+ * íš¨ê³¼ìŒ ì¬ìƒ ë§¤ë‹ˆì €
+ * BGMì€ ë ˆë²¨ì— ë°°ì¹˜ëœ DRBGMActorê°€ ë‹´ë‹¹
  */
 UCLASS()
 class DAERUNE_API UDRSoundManager : public UGameInstanceSubsystem
 {
 	GENERATED_BODY()
-	
+
 public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
-	virtual void Deinitialize() override;
 
-	// 2D »ç¿îµå Àç»ı
+	// 2D ì‚¬ìš´ë“œ ì¬ìƒ
 
 	UFUNCTION(BlueprintCallable, Category = "Sound")
 	void PlaySound2D(USoundBase* Sound);
@@ -42,7 +42,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Sound|Game")
 	void PlayGameOverSound();
 
-	// 3D »ç¿îµå Àç»ı
+	// 3D ì‚¬ìš´ë“œ ì¬ìƒ
 
 	UFUNCTION(BlueprintCallable, Category = "Sound")
 	void PlaySoundAtLocation(USoundBase* Sound, const FVector& Location);
@@ -59,39 +59,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Sound|Actor")
 	void PlayWaterGainSound(const FVector& Location);
 
-	// Loop »ç¿îµå °ü¸®
+	// Loop ì‚¬ìš´ë“œ ì‹œì‘
 	UFUNCTION(BlueprintCallable, Category = "Sound|Loop")
 	UAudioComponent* StartCleanserOperatingSound(const FVector& Location);
 
-	// BGM °ü¸®
-
-	UFUNCTION(BlueprintCallable, Category = "Sound|BGM")
-	void PlayBGM(USoundBase* NewBGM, float FadeInDuration = 1.0f);
-
-	UFUNCTION(BlueprintCallable, Category = "Sound|BGM")
-	void PlayStageBGM();
-
-	UFUNCTION(BlueprintCallable, Category = "Sound|BGM")
-	void PlayLobbyBGM();
-
-	UFUNCTION(BlueprintCallable, Category = "Sound|BGM")
-	void PlayMainMenuBGM();
-
-	UFUNCTION(BlueprintCallable, Category = "Sound|BGM")
-	void StopBGM(float FadeOutDuration = 1.0f);
-
-	UFUNCTION(BlueprintCallable, Category = "Sound|BGM")
-	void CrossfadeBGM(USoundBase* NewBGM, float CrossfadeDuration = 2.0f);
-
 private:
 	UPROPERTY()
-	TObjectPtr<UAudioComponent> CurrentBGMComponent;
-
-	UPROPERTY()
-	TObjectPtr<UAudioComponent> PreviousBGMComponent;
-
-	UAudioComponent* CreateBGMComponent(USoundBase* Sound);
-
-	UPROPERTY(EditDefaultsOnly, Category = "Sound")
 	TObjectPtr<UDRSoundDataAsset> SoundData;
 };

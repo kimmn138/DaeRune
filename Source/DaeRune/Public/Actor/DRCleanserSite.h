@@ -16,30 +16,30 @@ class UWidgetComponent;
 class ADRPlayerController;
 struct FOnAttributeChangeData;
 
-// Å¬·»Àú »çÀÌÆ® »óÅÂ
+// Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 UENUM(BlueprintType)
 enum class ECleanserSiteState : uint8
 {
-	Inactive		UMETA(DisplayName = "Inactive"),		// ºñÈ°¼ºÈ­ (¼±ÅÃ ¾È µÊ)
-	Active			UMETA(DisplayName = "Active"),			// È°¼ºÈ­ (Phase1¿¡¼­ ¼±ÅÃµÊ)
-	PartsCollected	UMETA(DisplayName = "PartsCollected"),	// ºÎÇ° ¼öÁý ¿Ï·á (Phase2)
-	Operational		UMETA(DisplayName = "Operational"),		// °¡µ¿ Áß (Phase3 ¹æ¾î ´ë»ó)
-	Completed		UMETA(DisplayName = "Completed")		// ¹æ¾î ¿Ï·á (Phase4)
+	Inactive		UMETA(DisplayName = "Inactive"),		// ï¿½ï¿½È°ï¿½ï¿½È­ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½)
+	Active			UMETA(DisplayName = "Active"),			// È°ï¿½ï¿½È­ (Phase1ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ãµï¿½)
+	PartsCollected	UMETA(DisplayName = "PartsCollected"),	// ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½ (Phase2)
+	Operational		UMETA(DisplayName = "Operational"),		// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ (Phase3 ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½)
+	Completed		UMETA(DisplayName = "Completed")		// ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½ (Phase4)
 };
 
-// Å¬·»Àú »çÀÌÆ® ÆÄ±« µ¨¸®°ÔÀÌÆ®
+// Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½Ä±ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCleanserSiteDestroyed, ADRCleanserSite*, DestroyedSite);
-// ºÎÇ° ¼³Ä¡ ¿Ï·á µ¨¸®°ÔÀÌÆ®
+// ï¿½ï¿½Ç° ï¿½ï¿½Ä¡ ï¿½Ï·ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPartInstalled, ADRCleanserSite*, Site);
-// Å¬·»Àú »çÀÌÆ® Ã¼·Â 50% ÀÌÇÏ µ¨¸®°ÔÀÌÆ®
+// Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® Ã¼ï¿½ï¿½ 50% ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCleanserSiteHealthHalf, ADRCleanserSite*, Site);
 
 /**
- * Å¬·»Àú ¼³Ä¡ ÁöÁ¡
- * - Phase1: 3°³ Áß 2°³ ¼±ÅÃµÇ¾î Àû ½ºÆù
- * - Phase2: ºÎÇ° °áÇÕ ¹× È°¼ºÈ­
- * - Phase3: ¹æ¾î ´ë»ó (Ã¼·Â È°¼ºÈ­)
- * - Phase4: º¸½ºÀü ¹è°æ
+ * Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½
+ * - Phase1: 3ï¿½ï¿½ ï¿½ï¿½ 2ï¿½ï¿½ ï¿½ï¿½ï¿½ÃµÇ¾ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+ * - Phase2: ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ È°ï¿½ï¿½È­
+ * - Phase3: ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ (Ã¼ï¿½ï¿½ È°ï¿½ï¿½È­)
+ * - Phase4: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
  */
 UCLASS()
 class DAERUNE_API ADRCleanserSite : public AActor, public IAbilitySystemInterface
@@ -61,69 +61,69 @@ public:
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayInstallSound(bool bIsComplete);
 
-	// Phase3 Å¬·»Àú ÀÛµ¿ »ç¿îµå
+	// Phase3 í´ë¦°ì € ìž‘ë™ ì‚¬ìš´ë“œ (ë£¨í”„ - ì‹œìž‘/ì¢…ë£Œ ì‹œ í•œ ë²ˆì”©ë§Œ í˜¸ì¶œ)
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastStartOperatingSound();
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastStopOperatingSound();
 
-	// ========== »óÅÂ °ü¸® ==========
+	// ========== ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ==========
 
-	// »çÀÌÆ® È°¼ºÈ­ (Phase1¿¡¼­ ¼±ÅÃµÊ)
+	// ï¿½ï¿½ï¿½ï¿½Æ® È°ï¿½ï¿½È­ (Phase1ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ãµï¿½)
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	void ActivateSite();
 
-	// »çÀÌÆ® ºñÈ°¼ºÈ­
+	// ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½È°ï¿½ï¿½È­
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	void DeactivateSite();
 
-	// ºÎÇ° ¼öÁý ¿Ï·á (Phase2)
+	// ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½ (Phase2)
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	void SetPartsCollected();
 
-	// ºÎÇ° ¼³Ä¡
+	// ï¿½ï¿½Ç° ï¿½ï¿½Ä¡
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite|Phase2")
 	void InstallPart(class ADRCharacter* Character);
 
-	// ÇöÀç ¼³Ä¡µÈ ºÎÇ° °³¼ö °¡Á®¿À±â
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite|Phase2")
 	int32 GetInstalledPartsCount() const { return InstalledPartsCount; }
 
-	// ºÎÇ° ¼³Ä¡ ¿Ï·á ¿©ºÎ
+	// ï¿½ï¿½Ç° ï¿½ï¿½Ä¡ ï¿½Ï·ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite|Phase2")
 	bool IsPartInstallationComplete() const { return InstalledPartsCount >= RequiredPartsCount; }
 
-	// ÇöÀç »óÅÂ °¡Á®¿À±â
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	ECleanserSiteState GetCurrentState() const { return CurrentState; }
 
-	// ========== À§Ä¡ Á¤º¸ ==========
+	// ========== ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ ==========
 
-	// ½ºÆù À§Ä¡ (¿¤¸®Æ®°¡ ½ºÆùµÉ Áß¾Ó)
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ (ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ß¾ï¿½)
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	FVector GetSpawnLocation() const;
 
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	FVector GetClosestSurfacePoint(const FVector& FromLocation) const;
 
-	// ========== ¹° ¸Þ½Ã °ü¸® ==========
+	// ========== ï¿½ï¿½ ï¿½Þ½ï¿½ ï¿½ï¿½ï¿½ï¿½ ==========
 
-	// Ã¼·Â ºñÀ²¿¡ µû¶ó ¹° ¸Þ½Ã ½ºÄÉÀÏ ¾÷µ¥ÀÌÆ®
+	// Ã¼ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Þ½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	void UpdateWaterMeshScale(float HealthRatio);
 
-	// ========== µ¨¸®°ÔÀÌÆ® ==========
+	// ========== ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ==========
 
-	// ºÎÇ° ¼³Ä¡ ¿Ï·á µ¨¸®°ÔÀÌÆ®
+	// ï¿½ï¿½Ç° ï¿½ï¿½Ä¡ ï¿½Ï·ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY(BlueprintAssignable, Category = "CleanserSite|Phase2")
 	FOnPartInstalled OnPartInstalled;
 
-	// Å¬·»Àú »çÀÌÆ®°¡ ÆÄ±«µÇ¾úÀ» ¶§
+	// Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½Ä±ï¿½ï¿½Ç¾ï¿½ï¿½ï¿½ ï¿½ï¿½
 	UPROPERTY(BlueprintAssignable, Category = "CleanserSite")
 	FOnCleanserSiteDestroyed OnCleanserSiteDestroyed;
 
-	// Å¬·»Àú »çÀÌÆ® Ã¼·Â 50% ÀÌÇÏÀÏ ¶§
+	// Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® Ã¼ï¿½ï¿½ 50% ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½
 	UPROPERTY(BlueprintAssignable, Category = "CleanserSite")
 	FOnCleanserSiteHealthHalf OnCleanserSiteHealthHalf;
 
@@ -140,10 +140,10 @@ protected:
 	UFUNCTION()
 	void OnBoxEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
-	// UI ¾÷µ¥ÀÌÆ®
+	// UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	void UpdateInteractionUI() const;
 
-	// Å¬·»Àú »çÀÌÆ® °íÀ¯ ½Äº°ÀÚ
+	// Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½Äºï¿½ï¿½ï¿½
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cleanser Site")
 	FName CleanserID = NAME_None;
 
@@ -152,27 +152,27 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USceneComponent> RootSceneComponent;
 
-	// Å¬·»Àú ¸Þ½Ã
+	// Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½Þ½ï¿½
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent> CleanserMesh;
 
-	// Å¬·»Àú ¹° ¸Þ½Ã
+	// Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Þ½ï¿½
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent> WaterMesh;
 
-	// ºÎÇ° ¼³Ä¡ ÈÄ Å¬·»Àú ¸Þ½Ã
+	// ï¿½ï¿½Ç° ï¿½ï¿½Ä¡ ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½Þ½ï¿½
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mesh Assets")
 	TObjectPtr<UStaticMesh> CleanserMesh_AfterParts;
 
-	// ºÎÇ° ¼³Ä¡ ÈÄ ¹° ¸Þ½Ã
+	// ï¿½ï¿½Ç° ï¿½ï¿½Ä¡ ï¿½ï¿½ ï¿½ï¿½ ï¿½Þ½ï¿½
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mesh Assets")
 	TObjectPtr<UStaticMesh> WaterMesh_AfterParts;
 
-	// »óÈ£ÀÛ¿ë ¹üÀ§
+	// ï¿½ï¿½È£ï¿½Û¿ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UBoxComponent> InteractionBox;
 
-	// »óÈ£ÀÛ¿ë UI À§Á¬
+	// ï¿½ï¿½È£ï¿½Û¿ï¿½ UI ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UWidgetComponent> InteractionWidget;
 
@@ -186,7 +186,7 @@ protected:
 
 	// ========== GAS Attributes ==========
 
-	// ±âº» Ã¼·Â ¼Ó¼º (Phase3¿¡¼­ »ç¿ë)
+	// ï¿½âº» Ã¼ï¿½ï¿½ ï¿½Ó¼ï¿½ (Phase3ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½)
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Attributes")
 	TSubclassOf<UGameplayEffect> DefaultPrimaryAttributes;
 	
@@ -195,14 +195,14 @@ protected:
 
 	// ========== State ==========
 
-	// ÇÊ¿äÇÑ ºÎÇ° °³¼ö
+	// ï¿½Ê¿ï¿½ï¿½ï¿½ ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "CleanserSite|Phase2|Config")
 	int32 RequiredPartsCount = 2;
 
 	UPROPERTY(ReplicatedUsing = OnRep_CurrentState, BlueprintReadOnly, Category = "CleanserSite")
 	ECleanserSiteState CurrentState;
 
-	// ¼³Ä¡µÈ ºÎÇ° °³¼ö
+	// ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(ReplicatedUsing = OnRep_InstalledPartsCount, BlueprintReadOnly, Category = "CleanserSite|Phase2")
 	int32 InstalledPartsCount;
 
@@ -212,20 +212,20 @@ protected:
 	UFUNCTION()
 	static void OnRep_InstalledPartsCount();
 
-	// ========== Ã¼·Â °ü¸® (Phase3 Àü¿ë) ==========
+	// ========== Ã¼ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (Phase3 ï¿½ï¿½ï¿½ï¿½) ==========
 
-	// Phase3¿¡¼­ Ã¼·Â È°¼ºÈ­ ¿©ºÎ
+	// Phase3ï¿½ï¿½ï¿½ï¿½ Ã¼ï¿½ï¿½ È°ï¿½ï¿½È­ ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "CleanserSite")
 	bool bHealthEnabled;
 
-	// GAS °ü·Ã ÇÔ¼ö
+	// GAS ï¿½ï¿½ï¿½ï¿½ ï¿½Ô¼ï¿½
 	void ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass) const;
 
 private:
-	// GAS ÃÊ±âÈ­
+	// GAS ï¿½Ê±ï¿½È­
 	void InitAbilityActorInfo();
 
-	// ¹° ¸Þ½Ã ÃÊ±â ½ºÄÉÀÏ ÀúÀå
+	// ï¿½ï¿½ ï¿½Þ½ï¿½ ï¿½Ê±ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	FVector InitialWaterMeshScale;
 	FVector InitialWaterMeshLocation;
 

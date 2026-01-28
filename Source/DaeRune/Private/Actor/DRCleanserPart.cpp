@@ -10,22 +10,25 @@
 #include "Player/DRPlayerController.h"
 #include "Components/WidgetComponent.h"
 #include "Sound/DRSoundManager.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/DRSoundDataAsset.h"
+#include "DRAssetManager.h"
 
 ADRCleanserPart::ADRCleanserPart()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
 
-	// ·çÆ® ÄÄÆ÷³ÍÆ®·Î ºÎÇ° ¸Ş½Ã »ı¼º
+	// ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½Ç° ï¿½Ş½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	PartMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PartMesh"));
 	RootComponent = PartMesh;
 
-	// Äİ¸®Àü ¼³Á¤
+	// ï¿½İ¸ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	PartMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	PartMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
-	PartMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block); // ¶óÀÎÆ®·¹ÀÌ½Ì¿ë
+	PartMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block); // ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½Ì¿ï¿½
 
-	// °¨Áö ¹üÀ§ Sphere »ı¼º
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Sphere ï¿½ï¿½ï¿½ï¿½
 	DetectionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("DetectionSphere"));
 	DetectionSphere->SetupAttachment(RootComponent);
 	DetectionSphere->SetSphereRadius(DetectionRadius);
@@ -34,7 +37,7 @@ ADRCleanserPart::ADRCleanserPart()
 	DetectionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	DetectionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-	// UI À§Á¬ »ı¼º
+	// UI ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	InteractionWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidget"));
 	InteractionWidget->SetupAttachment(RootComponent);
 	InteractionWidget->SetRelativeLocation(FVector(0.0f, 0.0f, 100.0f));
@@ -43,7 +46,7 @@ ADRCleanserPart::ADRCleanserPart()
 	InteractionWidget->SetVisibility(false);
 	InteractionWidget->SetOwnerNoSee(false);
 
-	// ÃÊ±â »óÅÂ
+	// ï¿½Ê±ï¿½ ï¿½ï¿½ï¿½ï¿½
 	bIsCarried = false;
 	CarryingCharacter = nullptr;
 }
@@ -57,30 +60,30 @@ void ADRCleanserPart::PickupPart(ADRCharacter* Character)
 {
 	if (!HasAuthority() || !Character) return;
 
-	// ÀÌ¹Ì µé·ÁÀÖÀ¸¸é ¹«½Ã
+	// ï¿½Ì¹ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (bIsCarried) return;
 
-	// »óÅÂ ¾÷µ¥ÀÌÆ®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	bIsCarried = true;
 	CarryingCharacter = Character;
 
-	// Ä³¸¯ÅÍ ¸Ş½Ã °¡Á®¿À±â
+	// Ä³ï¿½ï¿½ï¿½ï¿½ ï¿½Ş½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	USkeletalMeshComponent* CharacterMesh = Character->GetMesh();
 	if (!CharacterMesh) return;
 
-	// Äİ¸®Àü ºñÈ°¼ºÈ­ (µé°í ÀÖ´Â µ¿¾È Ãæµ¹ ¹æÁö)
+	// ï¿½İ¸ï¿½ï¿½ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­ (ï¿½ï¿½ï¿½ ï¿½Ö´ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½æµ¹ ï¿½ï¿½ï¿½ï¿½)
 	PartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	DetectionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	// UI ¼û±è
+	// UI ï¿½ï¿½ï¿½ï¿½
 	InteractionWidget->SetVisibility(false);
 
-	// Ä³¸¯ÅÍ ¼ÒÄÏ¿¡ ºÎÂø
+	// Ä³ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ï¿ï¿½ ï¿½ï¿½ï¿½ï¿½
 	AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
 
 	MulticastPlayPickupSound();
 
-	// Ä³¸¯ÅÍ¿¡°Ô ÅÂ±× ºÎÂø
+	// Ä³ï¿½ï¿½ï¿½Í¿ï¿½ï¿½ï¿½ ï¿½Â±ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(CarryingCharacter->GetAbilitySystemComponent());
 	if (DRASC)
 	{
@@ -92,37 +95,37 @@ void ADRCleanserPart::InstallPart()
 {
 	if (!HasAuthority()) return;
 
-	// Ä³¸¯ÅÍ¿¡°Ô ÅÂ±× Á¦°Å
+	// Ä³ï¿½ï¿½ï¿½Í¿ï¿½ï¿½ï¿½ ï¿½Â±ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(CarryingCharacter->GetAbilitySystemComponent());
 	if (DRASC)
 	{
 		DRASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
 	}
 	
-	// ¾×ÅÍ ÆÄ±«
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ä±ï¿½
 	Destroy();
 }
 
 void ADRCleanserPart::DropFromCarrier()
 {
-	// ¼­¹ö¿¡¼­¸¸ ½ÇÇà
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (!HasAuthority()) return;
 
-	// Ä³¸¯ÅÍ¿¡¼­ ºĞ¸®
+	// Ä³ï¿½ï¿½ï¿½Í¿ï¿½ï¿½ï¿½ ï¿½Ğ¸ï¿½
 	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 
-	// ³»ºÎ »óÅÂ ÃÊ±âÈ­
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­
 	bIsCarried = false;
 	CarryingCharacter = nullptr;
 
 	SetActorRotation(FRotator::ZeroRotator);
 
-	// ¸Ş½Ã Äİ¸®Àü ÀçÈ°¼ºÈ­
+	// ï¿½Ş½ï¿½ ï¿½İ¸ï¿½ï¿½ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­
 	PartMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	PartMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
 	PartMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
-	// °¨Áö ¹üÀ§ ÀçÈ°¼ºÈ­
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­
 	DetectionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	DetectionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	DetectionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
@@ -130,21 +133,25 @@ void ADRCleanserPart::DropFromCarrier()
 
 void ADRCleanserPart::MulticastPlayPickupSound_Implementation()
 {
-	if (UGameInstance* GI = GetGameInstance())
+	// Actorì˜ Worldë¥¼ ì§ì ‘ ì‚¬ìš©í•´ì„œ ì‚¬ìš´ë“œ ì¬ìƒ (í´ë¼ì´ì–¸íŠ¸ì—ì„œ í™•ì‹¤íˆ ë™ì‘)
+	if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
 	{
-		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+		if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
 		{
-			SM->PlayPartPickupSound(GetActorLocation());
+			if (SoundData->PartPickupSound)
+			{
+				UGameplayStatics::PlaySoundAtLocation(this, SoundData->PartPickupSound, GetActorLocation());
+			}
 		}
 	}
 }
 
 void ADRCleanserPart::MulticastShowInteractionUI_Implementation(ADRPlayerController* PlayerController, bool bShow)
 {
-	// ¸ğµç Å¬¶óÀÌ¾ğÆ®¿¡¼­ ½ÇÇàµÊ
+	// ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½
 	if (!PlayerController) return;
 
-	// ÇØ´ç ÇÃ·¹ÀÌ¾îÀÇ ·ÎÄÃ ÄÁÆ®·Ñ·¯¿¡¼­¸¸ UI Ç¥½Ã/¼û±è
+	// ï¿½Ø´ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ®ï¿½Ñ·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ UI Ç¥ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½
 	if (PlayerController->IsLocalController())
 	{
 		InteractionWidget->SetVisibility(bShow);
@@ -169,19 +176,19 @@ void ADRCleanserPart::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 
 void ADRCleanserPart::OnDetectionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	// ÀÌ¹Ì µé·ÁÀÖÀ¸¸é ¹«½Ã
+	// ï¿½Ì¹ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (bIsCarried) return;
 
 	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
 	if (!Character) return;
 
-	// ÀÌ¹Ì ºÎÇ°À» µé°í ÀÖÀ¸¸é ¹«½Ã
+	// ï¿½Ì¹ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (Character->IsCarryingPart()) return;
 
 	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
 	if (!PC) return;
 
-	// ·ÎÄÃ ÄÁÆ®·Ñ·¯¿¡¼­¸¸ ¶óÀÎÆ®·¹ÀÌ½Ì È°¼ºÈ­
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ®ï¿½Ñ·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½ È°ï¿½ï¿½È­
 	if (PC->IsLocalController())
 	{
 		PC->SetPartDetectionEnabled(true, this);
@@ -196,7 +203,7 @@ void ADRCleanserPart::OnDetectionSphereEndOverlap(UPrimitiveComponent* Overlappe
 	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
 	if (!PC) return;
 
-	// ·ÎÄÃ ÄÁÆ®·Ñ·¯¿¡¼­¸¸ ¶óÀÎÆ®·¹ÀÌ½Ì ºñÈ°¼ºÈ­
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ®ï¿½Ñ·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­
 	if (PC->IsLocalController())
 	{
 		PC->SetPartDetectionEnabled(false, this);
@@ -205,37 +212,37 @@ void ADRCleanserPart::OnDetectionSphereEndOverlap(UPrimitiveComponent* Overlappe
 
 void ADRCleanserPart::OnRep_bIsCarried()
 {
-	// ºÎÇ°À» ÁÖ¿ï ¶§ Å¬¶óÀÌ¾ğÆ®¿¡¼­ ½Ã°¢Àû ¾÷µ¥ÀÌÆ®
+	// ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½Ö¿ï¿½ ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	if (bIsCarried && CarryingCharacter)
 	{
-		// Ä³¸¯ÅÍ ¸Ş½Ã °¡Á®¿À±â
+		// Ä³ï¿½ï¿½ï¿½ï¿½ ï¿½Ş½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		USkeletalMeshComponent* CharacterMesh = CarryingCharacter->GetMesh();
 		if (!CharacterMesh) return;
 
-		// Äİ¸®Àü ºñÈ°¼ºÈ­
+		// ï¿½İ¸ï¿½ï¿½ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­
 		PartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		DetectionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-		// UI ¼û±è
+		// UI ï¿½ï¿½ï¿½ï¿½
 		InteractionWidget->SetVisibility(false);
 
-		// Ä³¸¯ÅÍ ¼ÒÄÏ¿¡ ºÎÂø
+		// Ä³ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ï¿ï¿½ ï¿½ï¿½ï¿½ï¿½
 		AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
 	}
-	// ºÎÇ°À» ¶³¾îÆ®¸± ¶§
+	// ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½
 	else
 	{
-		// Ä³¸¯ÅÍ¿¡¼­ ºĞ¸®
+		// Ä³ï¿½ï¿½ï¿½Í¿ï¿½ï¿½ï¿½ ï¿½Ğ¸ï¿½
 		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 
 		SetActorRotation(FRotator::ZeroRotator);
 
-		// ¸Ş½Ã Äİ¸®Àü ÀçÈ°¼ºÈ­
+		// ï¿½Ş½ï¿½ ï¿½İ¸ï¿½ï¿½ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­
 		PartMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		PartMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
 		PartMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
-		// °¨Áö ¹üÀ§ ÀçÈ°¼ºÈ­
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­
 		DetectionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 		DetectionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 		DetectionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);

@@ -8,7 +8,6 @@
 #include "EngineUtils.h"
 #include "MultiplayerSessionsSubsystem.h"
 #include "Player/DRPlayerController.h"
-#include "Sound/DRSoundManager.h"
 
 ADRStageGameMode::ADRStageGameMode()
 {
@@ -31,12 +30,10 @@ void ADRStageGameMode::TriggerGameOver()
 		CurrentPhase->OnPhaseEnd();
 	}
 
-	if (UGameInstance* GI = GetGameInstance())
+	// Multicast RPC로 모든 클라이언트에서 사운드 재생
+	if (ADRStageGameState* StageGameState = GetGameState<ADRStageGameState>())
 	{
-		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
-		{
-			SM->PlayGameOverSound();
-		}
+		StageGameState->Multicast_PlayGameOverSound();
 	}
 
 	// 모든 플레이어에게 게임 오버 알림 (단일 순회)
@@ -66,12 +63,10 @@ void ADRStageGameMode::TriggerGameClear()
 		CurrentPhase->OnPhaseEnd();
 	}
 
-	if (UGameInstance* GI = GetGameInstance())
+	// Multicast RPC로 모든 클라이언트에서 사운드 재생
+	if (ADRStageGameState* StageGameState = GetGameState<ADRStageGameState>())
 	{
-		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
-		{
-			SM->PlayGameClearSound();
-		}
+		StageGameState->Multicast_PlayGameClearSound();
 	}
 
 	// 모든 플레이어에게 게임 클리어 알림 (단일 순회)
@@ -220,10 +215,20 @@ void ADRStageGameMode::InitializePhaseSystem()
 		}
 	}
 
-	// ù ��° ������� ����
+	// 첫 번째 페이즈 시작 (클라이언트 초기화 대기를 위한 딜레이)
 	if (PhaseInstances.Num() > 0)
 	{
-		StartPhase(0);
+		// 클라이언트가 SeamlessTravel 후 오디오/UI 시스템을 초기화할 시간을 줌
+		FTimerHandle PhaseStartTimer;
+		GetWorldTimerManager().SetTimer(
+			PhaseStartTimer,
+			[this]()
+			{
+				StartPhase(0);
+			},
+			1.0f,  // 1초 딜레이
+			false
+		);
 	}
 }
 

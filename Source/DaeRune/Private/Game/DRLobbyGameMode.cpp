@@ -21,27 +21,37 @@ void ADRLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 	// 스테이지에서 돌아온 플레이어의 상태 복원
 	if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(NewPlayer))
 	{
-		// 관전 모드 강제 종료
-		DRPC->ClientStopSpectating();
-
-		// 입력 모드는 PlayerController::ReceivedPlayer()에서 RestoreDefaultInputMode()로 처리됨
-
-		// 플레이어 상태 플래그 복원
-		if (APawn* ControlledPawn = DRPC->GetPawn())
-		{
-			// Movement ������Ʈ ��Ȱ��ȭ
-			if (UCharacterMovementComponent* MovementComp = Cast<UCharacterMovementComponent>(ControlledPawn->GetMovementComponent()))
+		// 클라이언트의 Pawn이 준비될 때까지 약간의 딜레이 후 상태 복원
+		FTimerHandle RestoreTimerHandle;
+		GetWorldTimerManager().SetTimer(
+			RestoreTimerHandle,
+			[DRPC]()
 			{
-				MovementComp->SetMovementMode(MOVE_Walking);
-				MovementComp->SetComponentTickEnabled(true);
-			}
+				if (!IsValid(DRPC)) return;
 
-			// ĸ�� �ݸ��� ��Ȱ��ȭ
-			if (UCapsuleComponent* CapsuleComp = Cast<UCapsuleComponent>(ControlledPawn->GetRootComponent()))
-			{
-				CapsuleComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-			}
-		}
+				// 관전 모드 강제 종료 및 입력 복원
+				DRPC->ClientStopSpectating();
+
+				// 플레이어 상태 플래그 복원
+				if (APawn* ControlledPawn = DRPC->GetPawn())
+				{
+					// Movement 컴포넌트 활성화
+					if (UCharacterMovementComponent* MovementComp = Cast<UCharacterMovementComponent>(ControlledPawn->GetMovementComponent()))
+					{
+						MovementComp->SetMovementMode(MOVE_Walking);
+						MovementComp->SetComponentTickEnabled(true);
+					}
+
+					// 캡슐 콜리전 활성화
+					if (UCapsuleComponent* CapsuleComp = Cast<UCapsuleComponent>(ControlledPawn->GetRootComponent()))
+					{
+						CapsuleComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+					}
+				}
+			},
+			0.5f,
+			false
+		);
 	}
 
 	if (GameState)
@@ -69,6 +79,52 @@ void ADRLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 				);
 			}
 		}
+	}
+}
+
+void ADRLobbyGameMode::HandleSeamlessTravelPlayer(AController*& C)
+{
+	Super::HandleSeamlessTravelPlayer(C);
+
+	UE_LOG(LogTemp, Log, TEXT("HandleSeamlessTravelPlayer called for %s"), *C->GetName());
+
+	// SeamlessTravel로 돌아온 플레이어의 상태 복원
+	if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(C))
+	{
+		// Pawn이 준비될 때까지 딜레이 후 상태 복원
+		FTimerHandle RestoreTimerHandle;
+		GetWorldTimerManager().SetTimer(
+			RestoreTimerHandle,
+			[DRPC]()
+			{
+				if (!IsValid(DRPC)) return;
+
+				UE_LOG(LogTemp, Log, TEXT("HandleSeamlessTravelPlayer - Restoring player state, Pawn: %s"),
+					DRPC->GetPawn() ? *DRPC->GetPawn()->GetName() : TEXT("NULL"));
+
+				// 관전 모드 강제 종료 및 입력 복원
+				DRPC->ClientStopSpectating();
+
+				// 플레이어 상태 플래그 복원
+				if (APawn* ControlledPawn = DRPC->GetPawn())
+				{
+					// Movement 컴포넌트 활성화
+					if (UCharacterMovementComponent* MovementComp = Cast<UCharacterMovementComponent>(ControlledPawn->GetMovementComponent()))
+					{
+						MovementComp->SetMovementMode(MOVE_Walking);
+						MovementComp->SetComponentTickEnabled(true);
+					}
+
+					// 캡슐 콜리전 활성화
+					if (UCapsuleComponent* CapsuleComp = Cast<UCapsuleComponent>(ControlledPawn->GetRootComponent()))
+					{
+						CapsuleComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+					}
+				}
+			},
+			0.5f,
+			false
+		);
 	}
 }
 

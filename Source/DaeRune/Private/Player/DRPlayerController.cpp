@@ -23,6 +23,7 @@
 #include "Game/DRSettingsManager.h"
 #include "Game/DRGameUserSettings.h"
 #include "Sound/DRSoundManager.h"
+#include "Actor/DRBGMActor.h"
 #include "Kismet/GameplayStatics.h"
 
 ADRPlayerController::ADRPlayerController()
@@ -273,11 +274,12 @@ void ADRPlayerController::ClientStopSpectating_Implementation()
 {
 	if (!IsLocalController()) return;
 
-	if (!bIsSpectating) return;
-    
+	UE_LOG(LogTemp, Log, TEXT("ClientStopSpectating_Implementation - Pawn: %s"), GetPawn() ? *GetPawn()->GetName() : TEXT("NULL"));
+
+	// 관전 상태 강제 초기화 (bIsSpectating 여부와 상관없이)
 	bIsSpectating = false;
 	CurrentSpectatedPlayerIndex = 0;
-    
+
 	// 델리게이트 해제
 	if (CurrentSpectatedCharacter.IsValid())
 	{
@@ -287,11 +289,39 @@ void ADRPlayerController::ClientStopSpectating_Implementation()
 		}
 	}
 	CurrentSpectatedCharacter.Reset();
-    
-	// 자기 자신으로 ViewTarget 복원
-	if (GetPawn())
+
+	// ViewTarget 복원
+	if (APawn* MyPawn = GetPawn())
 	{
-		SetViewTarget(GetPawn());
+		SetViewTarget(MyPawn);
+		RestoreDefaultInputMode();
+	}
+	else
+	{
+		// Pawn이 아직 없으면 딜레이 후 재시도
+		UE_LOG(LogTemp, Warning, TEXT("ClientStopSpectating - No Pawn yet, retrying in 0.5s"));
+
+		if (UWorld* World = GetWorld())
+		{
+			FTimerHandle RetryTimer;
+			World->GetTimerManager().SetTimer(
+				RetryTimer,
+				[WeakThis = TWeakObjectPtr<ADRPlayerController>(this)]()
+				{
+					if (ADRPlayerController* PC = WeakThis.Get())
+					{
+						if (APawn* MyPawn = PC->GetPawn())
+						{
+							PC->SetViewTarget(MyPawn);
+							UE_LOG(LogTemp, Log, TEXT("ClientStopSpectating - Pawn found on retry: %s"), *MyPawn->GetName());
+						}
+						PC->RestoreDefaultInputMode();
+					}
+				},
+				0.5f,
+				false
+			);
+		}
 	}
 }
 
@@ -349,15 +379,19 @@ void ADRPlayerController::SpectatePreviousPlayer()
 void ADRPlayerController::ClientStopAllAudio_Implementation()
 {
 	// BGM 정지
-	if (UGameInstance* GI = GetGameInstance())
+	TArray<AActor*> BGMActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ADRBGMActor::StaticClass(), BGMActors);
+	for (AActor* Actor : BGMActors)
 	{
-		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+		if (ADRBGMActor* BGMActor = Cast<ADRBGMActor>(Actor))
 		{
-			SM->StopBGM(0.0f);
+			BGMActor->StopBGM(0.0f);
 		}
 	}
 
 	// VOIP 관련 SynthComponent 정리 (SeamlessTravel 전 필수)
+	// DestroyComponent() 직접 호출 시 렌더 씬에서 AudioComponent가 해제되지 않아 크래시 발생
+	// 안전한 정리 순서: Deactivate -> UnregisterComponent
 	TArray<AActor*> AllActors;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), AllActors);
 
@@ -372,7 +406,14 @@ void ADRPlayerController::ClientStopAllAudio_Implementation()
 		{
 			if (Comp && Comp->GetClass()->GetName().Contains(TEXT("VoipListenerSynthComponent")))
 			{
-				Comp->DestroyComponent();
+				// 1. 먼저 비활성화
+				Comp->Deactivate();
+
+				// 2. 씬에서 등록 해제
+				if (Comp->IsRegistered())
+				{
+					Comp->UnregisterComponent();
+				}
 			}
 		}
 	}
@@ -537,34 +578,43 @@ void ADRPlayerController::OnLevelEntered()
 	SettingsWidget = nullptr;
 	bIsSettingsMenuOpen = false;
 
+	// 관전 상태 초기화
 	bIsSpectating = false;
 	CurrentSpectatedCharacter = nullptr;
+
+	// ViewTarget 즉시 복원 (잘못된 타겟 참조 방지)
+	if (APawn* MyPawn = GetPawn())
+	{
+		SetViewTarget(MyPawn);
+	}
+	else
+	{
+		// Pawn이 아직 없으면 자기 자신으로 설정 후 딜레이 재시도
+		SetViewTarget(this);
+
+		FTimerHandle ViewTargetRetryTimer;
+		World->GetTimerManager().SetTimer(
+			ViewTargetRetryTimer,
+			[WeakThis = TWeakObjectPtr<ADRPlayerController>(this)]()
+			{
+				if (ADRPlayerController* PC = WeakThis.Get())
+				{
+					if (APawn* MyPawn = PC->GetPawn())
+					{
+						PC->SetViewTarget(MyPawn);
+						UE_LOG(LogTemp, Log, TEXT("ViewTarget restored to Pawn after delay"));
+					}
+				}
+			},
+			0.5f,
+			false
+		);
+	}
 
 	// 레벨에 맞는 기본 입력 모드로 복원
 	RestoreDefaultInputMode();
 
-	// 레벨에 따라 BGM 재생
-	if (UGameInstance* GI = GetGameInstance())
-	{
-		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
-		{
-			if (IsInGameLevel())
-			{
-				UE_LOG(LogTemp, Log, TEXT("OnLevelEntered: Playing Stage BGM"));
-				SM->PlayStageBGM();
-			}
-			else if (IsInLobby())
-			{
-				UE_LOG(LogTemp, Log, TEXT("OnLevelEntered: Playing Lobby BGM"));
-				SM->PlayLobbyBGM();
-			}
-			else if (IsInMainMenu())
-			{
-				UE_LOG(LogTemp, Log, TEXT("OnLevelEntered: Playing MainMenu BGM"));
-				SM->PlayMainMenuBGM();
-			}
-		}
-	}
+	// BGM은 레벨에 배치된 DRBGMActor가 담당
 }
 
 void ADRPlayerController::HandleToggleSettings()
@@ -590,12 +640,21 @@ void ADRPlayerController::HandleSpectatePrevious()
 
 void ADRPlayerController::SetSpectateTarget(ACharacter* NewTarget)
 {
-	// 서버에 요청
+	// 클라이언트: 서버에 요청 + 로컬에서 ViewTarget 설정
 	if (!HasAuthority())
 	{
 		ServerSetSpectateTarget(NewTarget);
+
+		// 클라이언트에서도 ViewTarget과 캐릭터 캐시 설정
+		CurrentSpectatedCharacter = NewTarget;
+		if (NewTarget)
+		{
+			SetViewTarget(NewTarget);
+		}
 		return;
 	}
+
+	// 서버: 전체 로직 실행
 
 	// 이전 대상의 사망 델리게이트 해제
 	if (CurrentSpectatedCharacter.IsValid())
@@ -615,7 +674,7 @@ void ADRPlayerController::SetSpectateTarget(ACharacter* NewTarget)
 
 		// UI 업데이트
 		ClientUpdateSpectatorUI(NewTarget);
-        
+
 		// 새 대상의 사망 델리게이트 바인딩
 		if (ADRCharacterBase* DRTarget = Cast<ADRCharacterBase>(NewTarget))
 		{

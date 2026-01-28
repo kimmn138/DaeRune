@@ -128,13 +128,14 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 	}
 
 	// GameState 페이즈 목표 델리게이트 바인딩
+	// 딜레이를 최소화하여 Phase 알림을 놓치지 않도록 함
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().SetTimer(
 			PhaseBindingDelayTimer,
 			this,
 			&UOverlayWidgetController::BindPhaseObjectiveDelegate,
-			1.0f,  // 1.0초 대기
+			0.1f,  // 0.1초 대기 (GameState 복제 대기)
 			false  // 한 번만 실행
 		);
 	}
@@ -146,7 +147,7 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 			PhaseAlarmBindingDelayTimer,
 			this,
 			&UOverlayWidgetController::BindPhaseAlarmDelegate,
-			1.0f,  // 1.0초 대기
+			0.1f,  // 0.1초 대기 (GameState 복제 대기)
 			false  // 한 번만 실행
 		);
 	}
@@ -245,9 +246,14 @@ void UOverlayWidgetController::BindPhaseAlarmDelegate()
 	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
 	if (!DRGameState) return;
 
+	// 싱글톤 WidgetController이므로 이전 게임의 상태를 초기화
+	CachedPhaseNumber = -1;
+	CachedWavePhaseNumber = -1;
+	bPhaseAlarmShown = false;
+
 	DRGameState->OnPhaseChangedDelegate.AddDynamic(this, &UOverlayWidgetController::OnPhaseChanged);
 
-	// 현재 페이즈 즉시 호
+	// 현재 페이즈 즉시 표시
 	int32 CurrentPhase = DRGameState->GetCurrentPhaseIndex();
 	if (CurrentPhase >= 0)
 	{
@@ -259,25 +265,26 @@ void UOverlayWidgetController::CheckAndBindWaveTimer()
 {
 	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
 	if (!DRGameState) return;
-	
+
 	const int32 CurrentPhase = DRGameState->GetCurrentPhaseIndex();
-	
+
 	// Phase 3일 때만 바인딩 (인덱스 2)
+	// CachedPhaseNumber가 아닌 별도의 CachedWavePhaseNumber 사용 (Phase 알람과 분리)
 	if (CurrentPhase == 2)
 	{
 		// 이미 바인딩되었는지 체크
-		if (CachedPhaseNumber != 2)
+		if (CachedWavePhaseNumber != 2)
 		{
-			CachedPhaseNumber = 2;
+			CachedWavePhaseNumber = 2;
 			BindWaveTimerDelegate();
 		}
 	}
 	else
 	{
 		// Phase 3가 아니면 캐시 초기화
-		if (CachedPhaseNumber == 2)
+		if (CachedWavePhaseNumber == 2)
 		{
-			CachedPhaseNumber = -1;
+			CachedWavePhaseNumber = -1;
 		}
 	}
 }

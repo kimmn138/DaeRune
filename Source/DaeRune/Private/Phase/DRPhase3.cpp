@@ -12,7 +12,6 @@
 #include "AbilitySystem/DRCleanserSiteAttributeSet.h"
 #include "Actor/DRPoisonGasActor.h"
 #include "Character/DRCharacter.h"
-#include "Sound/DRSoundManager.h"
 
 UDRPhase3::UDRPhase3()
 {
@@ -183,13 +182,8 @@ void UDRPhase3::StartNextWave()
 				int32 InitialPlayerCount = GameState->GetInitialPlayerCount();
 				if (InitialPlayerCount == 0) return;
 
-				if (UGameInstance* GI = World->GetGameInstance())
-				{
-					if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
-					{
-						SM->PlayWaveStartSound();
-					}
-				}
+				// Multicast RPC로 모든 클라이언트에서 사운드 재생
+				GameState->Multicast_PlayWaveStartSound();
 
 				TotalSpawnCount = FMath::CeilToInt(CurrentWave.BaseMonstersPerPlayer * InitialPlayerCount * Modifier.MonsterCountMultiplier);
 

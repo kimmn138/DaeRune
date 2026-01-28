@@ -13,35 +13,38 @@
 #include "Character/DRCharacter.h"
 #include "Sound/DRSoundManager.h"
 #include "Components/AudioComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/DRSoundDataAsset.h"
+#include "DRAssetManager.h"
 
 ADRCleanserSite::ADRCleanserSite()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
 
-	// ·çÆ® ÄÄÆ÷³ÍÆ® »ı¼º
+	// ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 	RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootComponent"));
 	SetRootComponent(RootSceneComponent);
 
-	// Å¬·»Àú ¸Ş½Ã »ı¼º
+	// Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½Ş½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	CleanserMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CleanserMesh"));
 	CleanserMesh->SetupAttachment(RootComponent);
 	CleanserMesh->SetVisibility(false);
 	CleanserMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	CleanserMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 
-	// Å¬·»Àú ¹° ¸Ş½Ã »ı¼º
+	// Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ş½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	WaterMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WaterMesh"));
 	WaterMesh->SetupAttachment(CleanserMesh);
 	WaterMesh->SetVisibility(false);
 	WaterMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	WaterMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 
-	// ¹° ¸Ş½Ã ÃÊ±â ½ºÄÉÀÏ ¹× À§Ä¡ ÀúÀå
+	// ï¿½ï¿½ ï¿½Ş½ï¿½ ï¿½Ê±ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½
 	InitialWaterMeshScale = FVector(1.0f, 1.0f, 1.0f);
 	InitialWaterMeshLocation = FVector::ZeroVector;
 
-	// »óÈ£ÀÛ¿ë ¹Ú½º »ı¼º
+	// ï¿½ï¿½È£ï¿½Û¿ï¿½ ï¿½Ú½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	InteractionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractionBox"));
 	InteractionBox->SetupAttachment(RootComponent);
 	InteractionBox->SetBoxExtent(FVector(200.0f, 200.0f, 100.0f));
@@ -49,7 +52,7 @@ ADRCleanserSite::ADRCleanserSite()
 	InteractionBox->SetCollisionResponseToAllChannels(ECR_Ignore);
 	InteractionBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-	// UI À§Á¬ »ı¼º
+	// UI ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	InteractionWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidget"));
 	InteractionWidget->SetupAttachment(RootComponent);
 	InteractionWidget->SetRelativeLocation(FVector(0.0f, 0.0f, 150.0f));
@@ -58,14 +61,14 @@ ADRCleanserSite::ADRCleanserSite()
 	InteractionWidget->SetVisibility(false);
 	InteractionWidget->SetOwnerNoSee(false);
 
-	// GAS ÄÄÆ÷³ÍÆ® »ı¼º
+	// GAS ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetIsReplicated(true);
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
 
 	AttributeSet = CreateDefaultSubobject<UDRCleanserSiteAttributeSet>(TEXT("AttributeSet"));
 
-	// ÃÊ±â »óÅÂ
+	// ï¿½Ê±ï¿½ ï¿½ï¿½ï¿½ï¿½
 	CurrentState = ECleanserSiteState::Inactive;
 	bHealthEnabled = false;
 	InstalledPartsCount = 0;
@@ -87,22 +90,39 @@ UAbilitySystemComponent* ADRCleanserSite::GetAbilitySystemComponent() const
 
 void ADRCleanserSite::MulticastPlayInstallSound_Implementation(bool bIsComplete)
 {
-	if (UGameInstance* GI = GetGameInstance())
+	// Actorì˜ Worldë¥¼ ì§ì ‘ ì‚¬ìš©í•´ì„œ ì‚¬ìš´ë“œ ì¬ìƒ (í´ë¼ì´ì–¸íŠ¸ì—ì„œ í™•ì‹¤íˆ ë™ì‘)
+	if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
 	{
-		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+		if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
 		{
-			SM->PlayPartInstallSound(GetActorLocation(), bIsComplete);
+			USoundBase* SoundToPlay = bIsComplete ? SoundData->PartInstallCompleteSound : SoundData->PartInstallSound;
+			if (SoundToPlay)
+			{
+				UGameplayStatics::PlaySoundAtLocation(this, SoundToPlay, GetActorLocation());
+			}
 		}
 	}
 }
 
 void ADRCleanserSite::MulticastStartOperatingSound_Implementation()
 {
-	if (UGameInstance* GI = GetGameInstance())
+	// Actorì˜ Worldë¥¼ ì§ì ‘ ì‚¬ìš©í•´ì„œ ì‚¬ìš´ë“œ ì¬ìƒ (í´ë¼ì´ì–¸íŠ¸ì—ì„œ í™•ì‹¤íˆ ë™ì‘)
+	if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
 	{
-		if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+		if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
 		{
-			OperatingSoundComponent = SM->StartCleanserOperatingSound(GetActorLocation());
+			if (SoundData->CleanserOperatingSound)
+			{
+				OperatingSoundComponent = UGameplayStatics::SpawnSoundAtLocation(
+					this,
+					SoundData->CleanserOperatingSound,
+					GetActorLocation(),
+					FRotator::ZeroRotator,
+					1.0f, 1.0f, 0.0f,
+					nullptr, nullptr,
+					false
+				);
+			}
 		}
 	}
 }
@@ -140,7 +160,7 @@ void ADRCleanserSite::SetPartsCollected()
 
 	CurrentState = ECleanserSiteState::PartsCollected;
 
-	// ¸Ş½Ã ±³Ã¼
+	// ï¿½Ş½ï¿½ ï¿½ï¿½Ã¼
 	if (CleanserMesh && CleanserMesh_AfterParts)
 	{
 		CleanserMesh->SetStaticMesh(CleanserMesh_AfterParts);
@@ -156,31 +176,31 @@ void ADRCleanserSite::InstallPart(ADRCharacter* Character)
 {
 	if (!HasAuthority() || !Character) return;
 
-	// Phase2°¡ ¾Æ´Ï¸é ¹«½Ã
+	// Phase2ï¿½ï¿½ ï¿½Æ´Ï¸ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (CurrentState != ECleanserSiteState::Active) return;
 
-	// ÀÌ¹Ì ºÎÇ°ÀÌ ´Ù ¼³Ä¡µÇ¾úÀ¸¸é ¹«½Ã
+	// ï¿½Ì¹ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½Ç¾ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (InstalledPartsCount >= RequiredPartsCount) return;
 
-	// Ä³¸¯ÅÍ°¡ ºÎÇ°À» µé°í ÀÖ´ÂÁö È®ÀÎ
+	// Ä³ï¿½ï¿½ï¿½Í°ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½Ö´ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (!Character->IsCarryingPart()) return;
 
-	// ºÎÇ° ¼³Ä¡ Ã³¸®
+	// ï¿½ï¿½Ç° ï¿½ï¿½Ä¡ Ã³ï¿½ï¿½
 	Character->InstallCarriedPart();
 
-	// ¼³Ä¡ °³¼ö Áõ°¡
+	// ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	InstalledPartsCount++;
 
 	bool bIsComplete = (InstalledPartsCount >= RequiredPartsCount);
 	MulticastPlayInstallSound(bIsComplete);
 
-	// UI ¾÷µ¥ÀÌÆ®
+	// UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UpdateInteractionUI();
 
-	// µ¨¸®°ÔÀÌÆ® ºê·ÎµåÄ³½ºÆ®
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½Îµï¿½Ä³ï¿½ï¿½Æ®
 	OnPartInstalled.Broadcast(this);
 
-	// ¸ğµç ºÎÇ°ÀÌ ¼³Ä¡µÇ¸é »óÅÂ º¯°æ
+	// ï¿½ï¿½ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½Ç¸ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (InstalledPartsCount >= RequiredPartsCount)
 	{
 		SetPartsCollected();
@@ -201,13 +221,13 @@ FVector ADRCleanserSite::GetClosestSurfacePoint(const FVector& FromLocation) con
     
 	FVector ClosestPoint;
     
-	// ½ÇÁ¦ Äİ¸®Àü ÇüÅÂ¿¡¼­ °¡Àå °¡±î¿î Á¡ °è»ê
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½İ¸ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Â¿ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½
 	if (CleanserMesh->GetClosestPointOnCollision(FromLocation, ClosestPoint))
 	{
 		return ClosestPoint;
 	}
     
-	// ½ÇÆĞÇÏ¸é ¾×ÅÍ À§Ä¡ ¹İÈ¯
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Ï¸ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½È¯
 	return GetActorLocation();
 }
 
@@ -215,20 +235,20 @@ void ADRCleanserSite::UpdateWaterMeshScale(float HealthRatio)
 {
 	if (!WaterMesh) return;
 
-	// Ã¼·Â ºñÀ²À» 0~1 »çÀÌ·Î Á¦ÇÑ
+	// Ã¼ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 0~1 ï¿½ï¿½ï¿½Ì·ï¿½ ï¿½ï¿½ï¿½ï¿½
 	HealthRatio = FMath::Clamp(HealthRatio, 0.0f, 1.0f);
 
-	// »õ ½ºÄÉÀÏ °è»ê
+	// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 	FVector NewScale = InitialWaterMeshScale;
 	NewScale.Z = InitialWaterMeshScale.Z * HealthRatio;
 
-	// »õ À§Ä¡ °è»ê
+	// ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½
 	const float ScaleChange = InitialWaterMeshScale.Z - NewScale.Z;
 	const float LocationOffset = ScaleChange * 250.0f;
 	FVector NewLocation = InitialWaterMeshLocation;
 	NewLocation.Z = InitialWaterMeshLocation.Z + LocationOffset;
 
-	// Àû¿ë
+	// ï¿½ï¿½ï¿½ï¿½
 	WaterMesh->SetRelativeScale3D(NewScale);
 	WaterMesh->SetRelativeLocation(NewLocation);
 }
@@ -248,7 +268,7 @@ void ADRCleanserSite::BeginPlay()
 		InitialWaterMeshLocation = WaterMesh->GetRelativeLocation();
 	}
 
-	// ¿À¹ö·¦ ÀÌº¥Æ® ¹ÙÀÎµù
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìºï¿½Æ® ï¿½ï¿½ï¿½Îµï¿½
 	InteractionBox->OnComponentBeginOverlap.AddDynamic(this, &ADRCleanserSite::OnBoxBeginOverlap);
 	InteractionBox->OnComponentEndOverlap.AddDynamic(this, &ADRCleanserSite::OnBoxEndOverlap);
 
@@ -260,28 +280,28 @@ void ADRCleanserSite::BeginPlay()
 
 void ADRCleanserSite::OnBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	// Phase2°¡ ¾Æ´Ï¸é ¹«½Ã
+	// Phase2ï¿½ï¿½ ï¿½Æ´Ï¸ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (CurrentState != ECleanserSiteState::Active) return;
 
-	// ÀÌ¹Ì ºÎÇ°ÀÌ ´Ù ¼³Ä¡µÇ¾úÀ¸¸é ¹«½Ã
+	// ï¿½Ì¹ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½Ç¾ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (InstalledPartsCount >= RequiredPartsCount) return;
 
 	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
 	if (!Character) return;
 
-	// ÇÃ·¹ÀÌ¾î°¡ ºÎÇ°À» µé°í ÀÖ´ÂÁö È®ÀÎ
+	// ï¿½Ã·ï¿½ï¿½Ì¾î°¡ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½Ö´ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (!Character->IsCarryingPart()) return;
 
 	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
 	if (!PC) return;
 
-	// ·ÎÄÃ ÄÁÆ®·Ñ·¯¿¡¼­¸¸ Ã³¸®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ®ï¿½Ñ·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 	if (PC->IsLocalController())
 	{
-		// PlayerController¿¡ ÇöÀç »çÀÌÆ® ¼³Á¤
+		// PlayerControllerï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 		PC->CurrentOverlappedSite = this;
 		
-		// UI Ç¥½Ã
+		// UI Ç¥ï¿½ï¿½
 		InteractionWidget->SetVisibility(true);
 	}
 }
@@ -294,20 +314,20 @@ void ADRCleanserSite::OnBoxEndOverlap(UPrimitiveComponent* OverlappedComponent, 
 	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
 	if (!PC) return;
 
-	// ·ÎÄÃ ÄÁÆ®·Ñ·¯¿¡¼­¸¸ Ã³¸®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ®ï¿½Ñ·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 	if (PC->IsLocalController())
 	{
-		// PlayerControllerÀÇ »çÀÌÆ® ÂüÁ¶ Á¦°Å
+		// PlayerControllerï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		PC->CurrentOverlappedSite = nullptr;
 		
-		// UI ¼û±è
+		// UI ï¿½ï¿½ï¿½ï¿½
 		InteractionWidget->SetVisibility(false);
 	}
 }
 
 void ADRCleanserSite::UpdateInteractionUI() const
 {
-	// ºÎÇ°ÀÌ ´Ù ¼³Ä¡µÇ¾úÀ¸¸é UI ¼û±è
+	// ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½Ç¾ï¿½ï¿½ï¿½ï¿½ï¿½ UI ï¿½ï¿½ï¿½ï¿½
 	if (InstalledPartsCount >= RequiredPartsCount)
 	{
 		InteractionWidget->SetVisibility(false);
@@ -316,14 +336,14 @@ void ADRCleanserSite::UpdateInteractionUI() const
 
 void ADRCleanserSite::OnRep_CurrentState()
 {
-	// Å¬¶óÀÌ¾ğÆ®¿¡¼­ »óÅÂ º¯°æ ½Ã ¸Ş½Ã ¾÷µ¥ÀÌÆ®
+	// Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ş½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UpdateMeshByState();
 }
 
 void ADRCleanserSite::OnRep_InstalledPartsCount()
 {
-	// Å¬¶óÀÌ¾ğÆ®¿¡¼­ ½Ã°¢Àû ¾÷µ¥ÀÌÆ®
-	// ¿¹: ºÎÇ° °³¼ö¿¡ µû¶ó ¸Ş½Ã³ª ÀÌÆåÆ® º¯°æ
+	// Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
+	// ï¿½ï¿½: ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ş½Ã³ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 }
 
 void ADRCleanserSite::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass) const
@@ -331,18 +351,18 @@ void ADRCleanserSite::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEff
 	check(IsValid(GetAbilitySystemComponent()));
 	check(GameplayEffectClass);
 	
-	// ÄÁÅØ½ºÆ® »ı¼º ¹× ¼Ò½º ¼³Á¤
+	// ï¿½ï¿½ï¿½Ø½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ò½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	FGameplayEffectContextHandle ContextHandle = GetAbilitySystemComponent()->MakeEffectContext();
 	ContextHandle.AddSourceObject(this);
 	
-	// ½ºÆå »ı¼º ¹× Àû¿ë (·¹º§ 1·Î °íÁ¤)
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ 1ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
 	const FGameplayEffectSpecHandle SpecHandle = GetAbilitySystemComponent()->MakeOutgoingSpec(GameplayEffectClass, 1.0f, ContextHandle);
 	GetAbilitySystemComponent()->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), GetAbilitySystemComponent());
 }
 
 void ADRCleanserSite::InitializeDefaultAttributes() const
 {
-	// ±âº» Ã¼·Â ¼Ó¼º ÃÊ±âÈ­
+	// ï¿½âº» Ã¼ï¿½ï¿½ ï¿½Ó¼ï¿½ ï¿½Ê±ï¿½È­
 	ApplyEffectToSelf(DefaultPrimaryAttributes);
 	ApplyEffectToSelf(DefaultVitalAttributes);
 }
@@ -364,7 +384,7 @@ void ADRCleanserSite::UpdateMeshByState()
 	case ECleanserSiteState::PartsCollected:
 	case ECleanserSiteState::Operational:
 	case ECleanserSiteState::Completed:
-		// ºÎÇ° ¼³Ä¡ ÈÄ ¸Ş½Ã·Î ±³Ã¼
+		// ï¿½ï¿½Ç° ï¿½ï¿½Ä¡ ï¿½ï¿½ ï¿½Ş½Ã·ï¿½ ï¿½ï¿½Ã¼
 		if (CleanserMesh && CleanserMesh_AfterParts)
 		{
 			CleanserMesh->SetStaticMesh(CleanserMesh_AfterParts);

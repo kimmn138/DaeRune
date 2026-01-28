@@ -6,7 +6,6 @@
 #include "Game/DRStageGameState.h"
 #include "Actor/DRCleanserSite.h"
 #include "Interaction/CombatInterface.h"
-#include "Sound/DRSoundManager.h"
 
 void UDRPhaseBase::Initialize(ADRStageGameMode* InGameMode, ADRStageGameState* InGameState)
 {
@@ -24,16 +23,8 @@ void UDRPhaseBase::OnPhaseStart()
 
 	bIsPhaseActive = true;
 
-	if (UWorld* World = GameMode->GetWorld())
-	{
-		if (UGameInstance* GI = World->GetGameInstance())
-		{
-			if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
-			{
-				SM->PlayPhaseStartSound();
-			}
-		}
-	}
+	// Multicast RPC로 모든 클라이언트에서 사운드 재생
+	GameState->Multicast_PlayPhaseStartSound();
 }
 
 void UDRPhaseBase::OnPhaseEnd()
