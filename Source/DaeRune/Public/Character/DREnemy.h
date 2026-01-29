@@ -47,8 +47,21 @@ class DAERUNE_API ADREnemy : public ADRCharacterBase, public IEnemyInterface
 	
 public:
 	ADREnemy();
+	virtual void Tick(float DeltaTime) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	// AI 컨트롤러에 의해 소유될 때 실행
 	virtual void PossessedBy(AController* NewController) override;
+
+	// 디버그용 - 회전 값 로깅 활성화
+	UPROPERTY(EditAnywhere, Category = "Debug")
+	bool bDebugRotation = false;
+
+	// 서버에서 복제되는 목표 회전 (SetFocus의 ControlRotation 대체)
+	UPROPERTY(ReplicatedUsing = OnRep_TargetRotation)
+	FRotator ReplicatedTargetRotation;
+
+	UFUNCTION()
+	void OnRep_TargetRotation();
 
 	/** Combat Interface */
 	virtual int32 GetPlayerLevel_Implementation() override;

@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "Character/DREnemy.h"
@@ -18,29 +18,36 @@
 #include "Engine/OverlapResult.h"
 #include "Components/CapsuleComponent.h"
 #include "DRAbilityTypes.h"
+#include "Net/UnrealNetwork.h"
 
 ADREnemy::ADREnemy()
 {
-	PrimaryActorTick.bCanEverTick = false;
-	PrimaryActorTick.bStartWithTickEnabled = false;
+	PrimaryActorTick.bCanEverTick = true;  // 디버그용 활성화
+	PrimaryActorTick.bStartWithTickEnabled = true;
 
 	// 메시 가시성 충돌 설정
 	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
 	NetPriority = 3.0f;
-	NetUpdateFrequency = 10.0f;
+	NetUpdateFrequency = 100.0f;  // 높은 업데이트 빈도로 부드러운 회전
+	MinNetUpdateFrequency = 30.0f;  // 최소 업데이트 빈도
 
 	// GAS 컴포넌트 초기화 - 리슨서버용 최소 리플리케이션
 	AbilitySystemComponent = CreateDefaultSubobject<UDRAbilitySystemComponent>("AbilitySystemComponent");
 	AbilitySystemComponent->SetIsReplicated(true);
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
 
-	// AI 회전 설정 - 컨트롤러 기반 부드러운 회전
+	// AI 회전 설정 - 직접 회전 제어 (CharacterMovement 회전 비활성화)
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationRoll = false;
 	bUseControllerRotationYaw = false;
-	GetCharacterMovement()->bOrientRotationToMovement = true;
-	GetCharacterMovement()->RotationRate = FRotator(0.f, 400.f, 0.f);
+	GetCharacterMovement()->bOrientRotationToMovement = false;
+	GetCharacterMovement()->bUseControllerDesiredRotation = false;  // 회전은 직접 처리
+	GetCharacterMovement()->RotationRate = FRotator(0.f, 500.f, 0.f);
+
+	// 클라이언트 네트워크 스무딩 설정 (위치만)
+	GetCharacterMovement()->NetworkSimulatedSmoothLocationTime = 0.1f;
+	GetCharacterMovement()->NetworkSmoothingMode = ENetworkSmoothingMode::Exponential;
 
 	// 적 전용 어트리뷰트셋
 	AttributeSet = CreateDefaultSubobject<UDREnemyAttributeSet>("AttributeSet");
@@ -53,6 +60,51 @@ ADREnemy::ADREnemy()
 	PartMeshComponent->SetIsReplicated(true);
 
 	BaseWalkSpeed = 250.f;
+}
+
+void ADREnemy::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (HasAuthority())
+	{
+		// 서버: ControlRotation(SetFocus)을 향해 직접 회전 + 복제용 저장
+		FRotator CurrentControlRot = GetControlRotation();
+		FRotator CurrentActorRot = GetActorRotation();
+
+		// 부드럽게 회전 (CharacterMovement 대신 직접 처리)
+		FRotator NewRotation = FMath::RInterpTo(CurrentActorRot, CurrentControlRot, DeltaTime, 10.0f);
+		SetActorRotation(FRotator(0.f, NewRotation.Yaw, 0.f));
+
+		// 복제용 저장
+		ReplicatedTargetRotation = CurrentControlRot;
+	}
+	else if (GetLocalRole() == ROLE_SimulatedProxy)
+	{
+		// 클라이언트: ReplicatedTargetRotation을 향해 직접 회전
+		FRotator CurrentActorRot = GetActorRotation();
+		FRotator NewRotation = FMath::RInterpTo(CurrentActorRot, ReplicatedTargetRotation, DeltaTime, 10.0f);
+		SetActorRotation(FRotator(0.f, NewRotation.Yaw, 0.f));
+	}
+
+	if (bDebugRotation)
+	{
+		FRotator ActorRot = GetActorRotation();
+		FString RoleStr = HasAuthority() ? TEXT("Server") : TEXT("Client");
+		UE_LOG(LogTemp, Warning, TEXT("[%s] Actor Yaw: %.1f | Target Yaw: %.1f"), *RoleStr, ActorRot.Yaw, ReplicatedTargetRotation.Yaw);
+	}
+}
+
+void ADREnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ADREnemy, ReplicatedTargetRotation);
+}
+
+void ADREnemy::OnRep_TargetRotation()
+{
+	// Tick에서 보간 처리 - 여기서는 아무것도 안 함
 }
 
 void ADREnemy::PossessedBy(AController* NewController)
@@ -260,7 +312,7 @@ void ADREnemy::TriggerEnrage()
 void ADREnemy::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
 	// GAS 초기화
 	InitAbilityActorInfo();
 	// 서버에서만 시작 어빌리티 부여
