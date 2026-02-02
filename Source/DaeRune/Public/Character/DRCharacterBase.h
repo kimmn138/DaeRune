@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 #pragma once
 
@@ -106,7 +106,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	FName TailSocketName;
 
-	// ���� ������
+	// 사망 상태
 	bool bDead = false;
 
 	// ���� �±� �ݹ�

@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 #pragma once
 
@@ -52,17 +52,6 @@ public:
 	// AI 컨트롤러에 의해 소유될 때 실행
 	virtual void PossessedBy(AController* NewController) override;
 
-	// 디버그용 - 회전 값 로깅 활성화
-	UPROPERTY(EditAnywhere, Category = "Debug")
-	bool bDebugRotation = false;
-
-	// 서버에서 복제되는 목표 회전 (SetFocus의 ControlRotation 대체)
-	UPROPERTY(ReplicatedUsing = OnRep_TargetRotation)
-	FRotator ReplicatedTargetRotation;
-
-	UFUNCTION()
-	void OnRep_TargetRotation();
-
 	/** Combat Interface */
 	virtual int32 GetPlayerLevel_Implementation() override;
 	virtual void Die(const FVector& DeathImpulse) override;
@@ -93,6 +82,10 @@ public:
 	// 히트 리액션 상태 플래그
 	UPROPERTY(BlueprintReadOnly, Category = "Combat")
 	bool bHitReacting = false;
+
+	// 어그로 상태
+	UPROPERTY(BlueprintReadWrite, Replicated, Category = "Combat")
+	bool bIsAggroed = false;
 
 	// 히트 리액션 중 이동 속도
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
@@ -233,4 +226,11 @@ private:
 	FTimerHandle StunImmunityTimerHandle;
 
 	bool bPartDropped = false;
+
+	// 클라이언트 회전 보간용 (서버에서 복제)
+	UPROPERTY(ReplicatedUsing = OnRep_TargetRotation)
+	FRotator ReplicatedTargetRotation;
+
+	UFUNCTION()
+	void OnRep_TargetRotation();
 };

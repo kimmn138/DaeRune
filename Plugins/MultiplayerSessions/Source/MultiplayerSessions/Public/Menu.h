@@ -21,7 +21,7 @@ class MULTIPLAYERSESSIONS_API UMenu : public UUserWidget
 	
 public:
 	UFUNCTION(BlueprintCallable)
-	void MenuSetup(int32 NumberOfPublicConnections = 4, FString LobbyPath = FString(TEXT("/Game/Maps/LobbyMap")));
+	void MenuSetup(int32 NumberOfPublicConnections = 4, const FString& LobbyPath = TEXT("/Game/Maps/LobbyMap"));
 
 protected:
 	virtual bool Initialize() override;
@@ -56,11 +56,12 @@ private:
 	void MenuTearDown();
 
 	// The subsystem designed to handle all online session functionality
+	UPROPERTY()
 	UMultiplayerSessionsSubsystem* MultiplayerSessionsSubsystem;
 
 	int32 NumPublicConnections{4};
 	FString PathToLobby{TEXT("")};
 
-	// Á¶ÀÎÇÏ·Á´Â ¹æ ÄÚµå ÀúÀå
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Ï·ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½
 	FString PendingJoinRoomCode;
 };

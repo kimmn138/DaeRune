@@ -930,7 +930,7 @@ void UDRPhase3::GrantEliteBossTag()
 
 	for (const TObjectPtr<ADRCleanserSite>& Site : CleanserSites)
 	{
-		if (!Site || !IsValid(Site)) return;
+		if (!Site || !IsValid(Site)) continue;
 
 		if (UAbilitySystemComponent* ASC = Site->GetAbilitySystemComponent())
 		{
@@ -973,7 +973,7 @@ void UDRPhase3::RemoveEliteBossTag()
 
 	for (const TObjectPtr<ADRCleanserSite>& Site : CleanserSites)
 	{
-		if (!Site || !IsValid(Site)) return;
+		if (!Site || !IsValid(Site)) continue;
 
 		if (UAbilitySystemComponent* ASC = Site->GetAbilitySystemComponent())
 		{

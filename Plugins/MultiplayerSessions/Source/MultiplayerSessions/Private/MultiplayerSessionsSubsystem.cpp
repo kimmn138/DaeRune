@@ -33,7 +33,7 @@ void UMultiplayerSessionsSubsystem::Initialize(FSubsystemCollectionBase& Collect
 			GEngine->OnNetworkFailure().AddUObject(this, &UMultiplayerSessionsSubsystem::HandleNetworkFailure);
 		}
 
-		// ½ºÆÀ ÃÊ´ë ¸®½º³Ê µî·Ï
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½Ê´ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 		if (SessionInterface.IsValid())
 		{
 			SessionUserInviteAcceptedDelegateHandle = SessionInterface->AddOnSessionUserInviteAcceptedDelegate_Handle(SessionUserInviteAcceptedDelegate);
@@ -62,7 +62,7 @@ void UMultiplayerSessionsSubsystem::CreateSessionWithRoomCode(int32 NumPublicCon
 		return;
 	}
 
-	// ±âÁ¸ ¼¼¼Ç ÀÖÀ¸¸é ¸ÕÀú »èÁ¦
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	auto ExistingSession = SessionInterface->GetNamedSession(NAME_GameSession);
 	if (ExistingSession != nullptr)
 	{
@@ -72,7 +72,7 @@ void UMultiplayerSessionsSubsystem::CreateSessionWithRoomCode(int32 NumPublicCon
 		return;
 	}
 
-	// ¹æ ÄÚµå »ý¼ºÇÏ°í Áßº¹ Ã¼Å© ½ÃÀÛ
+	// ï¿½ï¿½ ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï°ï¿½ ï¿½ßºï¿½ Ã¼Å© ï¿½ï¿½ï¿½ï¿½
 	bIsCreatingWithRoomCode = true;
 	PendingRoomCode = GenerateRoomCode();
 	LastNumPublicConnections = NumPublicConnections;
@@ -90,14 +90,14 @@ void UMultiplayerSessionsSubsystem::FindSessionByRoomCode(const FString& RoomCod
 
 	SearchingRoomCode = RoomCode;
 
-	// ¹æ ÄÚµå·Î ¼¼¼Ç °Ë»ö
+	// ï¿½ï¿½ ï¿½Úµï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ë»ï¿½
 	FindSessionsCompleteDelegateHandle = SessionInterface->AddOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegate);
 
 	LastSessionSearch = MakeShareable(new FOnlineSessionSearch());
 	LastSessionSearch->MaxSearchResults = 100;
 	LastSessionSearch->bIsLanQuery = IOnlineSubsystem::Get()->GetSubsystemName() == "NULL" ? true : false;
 
-	// ¹æ ÄÚµå·Î ÇÊÅÍ¸µ
+	// ï¿½ï¿½ ï¿½Úµï¿½ï¿½ ï¿½ï¿½ï¿½Í¸ï¿½
 	LastSessionSearch->QuerySettings.Set(FName("RoomCode"), RoomCode, EOnlineComparisonOp::Equals);
 	LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
 
@@ -157,13 +157,13 @@ void UMultiplayerSessionsSubsystem::UpdateSessionJoinability(bool bAllowJoin)
 	FNamedOnlineSession* ExistingSession = SessionInterface->GetNamedSession(NAME_GameSession);
 	if (!ExistingSession) return;
 
-	// ¼¼¼Ç ¼³Á¤ ¾÷µ¥ÀÌÆ®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	ExistingSession->SessionSettings.bAllowJoinInProgress = bAllowJoin;
 
-	// µ¨¸®°ÔÀÌÆ® µî·Ï
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½
 	UpdateSessionCompleteDelegateHandle = SessionInterface->AddOnUpdateSessionCompleteDelegate_Handle(UpdateSessionCompleteDelegate);
 
-	// ¼¼¼Ç ¾÷µ¥ÀÌÆ® ½ÇÇà
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 	if (!SessionInterface->UpdateSession(NAME_GameSession, ExistingSession->SessionSettings))
 	{
 		SessionInterface->ClearOnUpdateSessionCompleteDelegate_Handle(UpdateSessionCompleteDelegateHandle);
@@ -250,33 +250,33 @@ void UMultiplayerSessionsSubsystem::OnFindSessionsComplete(bool bWasSuccessful)
 		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegateHandle);
 	}
 
-	// ¹æ ÄÚµå Áßº¹ Ã¼Å© ÁßÀÌ¾ú´Ù¸é
+	// ï¿½ï¿½ ï¿½Úµï¿½ ï¿½ßºï¿½ Ã¼Å© ï¿½ï¿½ï¿½Ì¾ï¿½ï¿½Ù¸ï¿½
 	if (bIsCreatingWithRoomCode)
 	{
 		bIsCreatingWithRoomCode = false;
 
 		if (LastSessionSearch.IsValid() && LastSessionSearch->SearchResults.Num() > 0)
 		{
-			// ÀÌ¹Ì Á¸ÀçÇÏ´Â ¹æ ÄÚµå¸é »õ·Î »ý¼º
+			// ï¿½Ì¹ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ ï¿½ï¿½ ï¿½Úµï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 			PendingRoomCode = GenerateRoomCode();
 			ValidateAndCreateSessionWithCode();
 		}
 		else
 		{
-			// Áßº¹ ¾øÀ¸¸é ÀÌ ÄÚµå·Î ¼¼¼Ç »ý¼º
+			// ï¿½ßºï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Úµï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 			CurrentRoomCode = PendingRoomCode;
 			CreateSessionInternal(LastNumPublicConnections);
 		}
 		return;
 	}
 
-	// ¹æ Âü°¡¸¦ À§ÇÑ °Ë»öÀÌ¾ú´Ù¸é
+	// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ë»ï¿½ï¿½Ì¾ï¿½ï¿½Ù¸ï¿½
 	if (!SearchingRoomCode.IsEmpty())
 	{
 		SearchingRoomCode.Empty();
 	}
 
-	// °Ë»ö °á°ú ºê·ÎµåÄ³½ºÆ®
+	// ï¿½Ë»ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½Îµï¿½Ä³ï¿½ï¿½Æ®
 	if (LastSessionSearch.IsValid())
 	{
 		MultiplayerOnFindSessionsComplete.Broadcast(LastSessionSearch->SearchResults, bWasSuccessful);
@@ -300,7 +300,7 @@ void UMultiplayerSessionsSubsystem::OnJoinSessionComplete(FName SessionName, EOn
 
 	if (Result == EOnJoinSessionCompleteResult::Success)
 	{
-		// ¼¼¼Ç Á¤º¸ °¡Á®¿À±â
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		if (SessionInterface.IsValid())
 		{
 			FNamedOnlineSession* Session = SessionInterface->GetNamedSession(NAME_GameSession);
@@ -313,7 +313,7 @@ void UMultiplayerSessionsSubsystem::OnJoinSessionComplete(FName SessionName, EOn
 				{
 					CurrentRoomCode = ExtractedRoomCode;
 
-					// µ¨¸®°ÔÀÌÆ® ºê·ÎµåÄ³½ºÆ®! ÀÌÁ¦ GameState°¡ ¹ÞÀ» ¼ö ÀÖÀ½
+					// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½Îµï¿½Ä³ï¿½ï¿½Æ®! ï¿½ï¿½ï¿½ï¿½ GameStateï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 					MultiplayerOnRoomCodeGenerated.Broadcast(CurrentRoomCode);
 				}
 			}
@@ -357,20 +357,20 @@ void UMultiplayerSessionsSubsystem::OnSessionUserInviteAccepted(const bool bWasS
 
 	if (!bWasSuccessful) return;
 
-	// ÀÌ¹Ì ÃÊ´ë°¡ ´ë±â ÁßÀÌ°Å³ª Join ½ÃÀÛµÊ
+	// ï¿½Ì¹ï¿½ ï¿½Ê´ë°¡ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ì°Å³ï¿½ Join ï¿½ï¿½ï¿½Ûµï¿½
 	if (bInvitePending || bInviteJoinStarted) return;
 
-	// ÃÊ´ë Á¤º¸ ÀúÀå
+	// ï¿½Ê´ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	bInvitePending = true;
 	CachedInviteResult = MakeShared<FOnlineSessionSearchResult>(InviteResult);
 
-	// JoinÀ» ½ÃµµÇÏµÇ, ¼º°ø Á¶°Ç ¸¸Á· ½Ã¿¡¸¸ ÁøÇàµÊ
+	// Joinï¿½ï¿½ ï¿½Ãµï¿½ï¿½Ïµï¿½, ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã¿ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½
 	TryProcessPendingInvite();
 }
 
 void UMultiplayerSessionsSubsystem::HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver, ENetworkFailure::Type FailureType, const FString& ErrorString)
 {
-	// ¿¬°áÀÌ ²÷±â¸é º¸ÀÌ½º Ã¤ÆÃµµ ÁßÁö
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ì½ï¿½ Ã¤ï¿½Ãµï¿½ ï¿½ï¿½ï¿½ï¿½
 	StopVoiceChat();
 
 	SessionInterface->DestroySession(NAME_GameSession);
@@ -379,7 +379,7 @@ void UMultiplayerSessionsSubsystem::HandleNetworkFailure(UWorld* World, UNetDriv
 	{
 		if (World && World->GetFirstPlayerController())
 		{
-			// NOTE: crash ¹ß»ýÀ¸·Î ÀÎÇØ ¸í½ÃÀû Travel ÁÖ¼®Ã³¸®. (±âº» ·¹º§·Î ÀÌµ¿ÇÏ´Ï±î ±×³É ³ÀµÎÀÚ)
+			// NOTE: crash ï¿½ß»ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Travel ï¿½Ö¼ï¿½Ã³ï¿½ï¿½. (ï¿½âº» ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½ï¿½Ï´Ï±ï¿½ ï¿½×³ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
 			// World->GetFirstPlayerController()->ClientTravel(TEXT("/Game/VoiceChat/MainMenu"), TRAVEL_Absolute);
 		}
 	}
@@ -387,12 +387,11 @@ void UMultiplayerSessionsSubsystem::HandleNetworkFailure(UWorld* World, UNetDriv
 
 FString UMultiplayerSessionsSubsystem::GenerateRoomCode()
 {
-	// A~Z, 0~9 ¹®ÀÚ Ç®
 	const FString CharacterPool = TEXT("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
 	FString RoomCode;
+	RoomCode.Reserve(ROOM_CODE_LENGTH);
 
-	// 8±ÛÀÚ ·£´ý »ý¼º
-	for (int32 i = 0; i < 8; i++)
+	for (int32 i = 0; i < ROOM_CODE_LENGTH; i++)
 	{
 		int32 RandomIndex = FMath::RandRange(0, CharacterPool.Len() - 1);
 		RoomCode.AppendChar(CharacterPool[RandomIndex]);
@@ -446,7 +445,7 @@ void UMultiplayerSessionsSubsystem::CreateSessionInternal(int32 NumPublicConnect
 	LastSessionSettings->bUseLobbiesIfAvailable = true;
 	LastSessionSettings->BuildUniqueId = 1;
 
-	// ¹æ ÄÚµå¸¦ ¼¼¼Ç ¼³Á¤¿¡ Ãß°¡
+	// ï¿½ï¿½ ï¿½Úµå¸¦ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ß°ï¿½
 	LastSessionSettings->Set(FName("RoomCode"), CurrentRoomCode, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
 	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();

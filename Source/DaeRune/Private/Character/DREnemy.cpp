@@ -22,15 +22,15 @@
 
 ADREnemy::ADREnemy()
 {
-	PrimaryActorTick.bCanEverTick = true;  // 디버그용 활성화
+	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = true;
 
 	// 메시 가시성 충돌 설정
 	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
 	NetPriority = 3.0f;
-	NetUpdateFrequency = 100.0f;  // 높은 업데이트 빈도로 부드러운 회전
-	MinNetUpdateFrequency = 30.0f;  // 최소 업데이트 빈도
+	NetUpdateFrequency = 30.0f;
+	MinNetUpdateFrequency = 15.0f;
 
 	// GAS 컴포넌트 초기화 - 리슨서버용 최소 리플리케이션
 	AbilitySystemComponent = CreateDefaultSubobject<UDRAbilitySystemComponent>("AbilitySystemComponent");
@@ -71,12 +71,8 @@ void ADREnemy::Tick(float DeltaTime)
 		// 서버: ControlRotation(SetFocus)을 향해 직접 회전 + 복제용 저장
 		FRotator CurrentControlRot = GetControlRotation();
 		FRotator CurrentActorRot = GetActorRotation();
-
-		// 부드럽게 회전 (CharacterMovement 대신 직접 처리)
 		FRotator NewRotation = FMath::RInterpTo(CurrentActorRot, CurrentControlRot, DeltaTime, 10.0f);
 		SetActorRotation(FRotator(0.f, NewRotation.Yaw, 0.f));
-
-		// 복제용 저장
 		ReplicatedTargetRotation = CurrentControlRot;
 	}
 	else if (GetLocalRole() == ROLE_SimulatedProxy)
@@ -86,13 +82,6 @@ void ADREnemy::Tick(float DeltaTime)
 		FRotator NewRotation = FMath::RInterpTo(CurrentActorRot, ReplicatedTargetRotation, DeltaTime, 10.0f);
 		SetActorRotation(FRotator(0.f, NewRotation.Yaw, 0.f));
 	}
-
-	if (bDebugRotation)
-	{
-		FRotator ActorRot = GetActorRotation();
-		FString RoleStr = HasAuthority() ? TEXT("Server") : TEXT("Client");
-		UE_LOG(LogTemp, Warning, TEXT("[%s] Actor Yaw: %.1f | Target Yaw: %.1f"), *RoleStr, ActorRot.Yaw, ReplicatedTargetRotation.Yaw);
-	}
 }
 
 void ADREnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -100,6 +89,7 @@ void ADREnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ADREnemy, ReplicatedTargetRotation);
+	DOREPLIFETIME(ADREnemy, bIsAggroed);
 }
 
 void ADREnemy::OnRep_TargetRotation()

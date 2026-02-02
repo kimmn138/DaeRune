@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "Character/DRCharacterBase.h"
@@ -49,7 +49,7 @@ void ADRCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	// ����� ���µ��� ��� Ŭ���̾�Ʈ�� ����ȭ
+	// 디버프 상태들을 모든 클라이언트에 동기화
 	DOREPLIFETIME(ADRCharacterBase, bIsStunned);
 	DOREPLIFETIME(ADRCharacterBase, bIsBurned);
 	DOREPLIFETIME(ADRCharacterBase, bIsBeingShocked);
@@ -81,7 +81,7 @@ UAnimMontage* ADRCharacterBase::GetHitReactMontage_Implementation()
 
 void ADRCharacterBase::Die(const FVector& DeathImpulse)
 {
-	// �÷��̾� ĳ������ ��� Ư�� ó��
+	// 플레이어 캐릭터의 경우 특별 처리
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		// ���� �������� Ȯ��
@@ -163,7 +163,7 @@ FOnDeathSignature& ADRCharacterBase::GetOnDeathDelegate()
 
 void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathImpulse)
 {
-	// �ߺ� ��� ����
+	// 중복 사망 방지
 	if (bDead) return;
 
 	bDead = true;

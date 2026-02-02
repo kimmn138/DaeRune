@@ -14,11 +14,14 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FMultiplayerOnFindSessionsComplete, const T
 DECLARE_MULTICAST_DELEGATE_OneParam(FMultiplayerOnJoinSessionComplete, EOnJoinSessionCompleteResult::Type Result);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnDestroySessionComplete, bool, bWasSuccessful);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnStartSessionComplete, bool, bWasSuccessful);
-// ¹æ ÄÚµå »ý¼º ¿Ï·á µ¨¸®°ÔÀÌÆ®
+// ï¿½ï¿½ ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnRoomCodeGenerated, const FString&, RoomCode);
 
+// Room code configuration
+static constexpr int32 ROOM_CODE_LENGTH = 8;
+
 /**
- * 
+ *
  */
 UCLASS()
 class MULTIPLAYERSESSIONS_API UMultiplayerSessionsSubsystem : public UGameInstanceSubsystem
@@ -52,7 +55,7 @@ public:
 	void StopVoiceChat();
 
 	UFUNCTION(BlueprintCallable, Category = "Multiplayer Sessions")
-	FString GetCurrentRoomCode() const { return CurrentRoomCode; }
+	const FString& GetCurrentRoomCode() const { return CurrentRoomCode; }
 
 	// Our own custom delegates for the Menu class to bind callbacks to
 	FMultiplayerOnCreateSessionComplete MultiplayerOnCreateSessionComplete;
@@ -81,13 +84,13 @@ private:
 	TSharedPtr<FOnlineSessionSettings> LastSessionSettings;
 	TSharedPtr<FOnlineSessionSearch> LastSessionSearch;
 
-	// ¹æ ÄÚµå °ü·Ã º¯¼öµé
+	// ï¿½ï¿½ ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	FString CurrentRoomCode;
 	FString PendingRoomCode;
 	FString SearchingRoomCode;
 	bool bIsCreatingWithRoomCode{false};
 
-	// ¹æ ÄÚµå »ý¼º ÇÔ¼ö
+	// ï¿½ï¿½ ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ô¼ï¿½
 	FString GenerateRoomCode();
 	void ValidateAndCreateSessionWithCode();
 	void CreateSessionInternal(int32 NumPublicConnections);
@@ -112,14 +115,14 @@ private:
 	bool bCreateSessionOnDestroy{false};
 	int32 LastNumPublicConnections;
 
-	// ÃÊ´ë°¡ ÀúÀåµÇ¾î ÀÖ´Â »óÅÂ
+	// ï¿½Ê´ë°¡ ï¿½ï¿½ï¿½ï¿½Ç¾ï¿½ ï¿½Ö´ï¿½ ï¿½ï¿½ï¿½ï¿½
 	bool bInvitePending = false;
-	// JoinSessionÀ» ÀÌ¹Ì ½ÃÀÛ
+	// JoinSessionï¿½ï¿½ ï¿½Ì¹ï¿½ ï¿½ï¿½ï¿½ï¿½
 	bool bInviteJoinStarted = false;
 
-	// ÃÊ´ë Á¤º¸ Ä³½Ì
+	// ï¿½Ê´ï¿½ ï¿½ï¿½ï¿½ï¿½ Ä³ï¿½ï¿½
 	TSharedPtr<FOnlineSessionSearchResult> CachedInviteResult;
 
-	// ¾ÈÀüÇÑ Join ½Ãµµ ÇÔ¼ö
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Join ï¿½Ãµï¿½ ï¿½Ô¼ï¿½
 	void TryProcessPendingInvite();
 };
