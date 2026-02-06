@@ -3,20 +3,22 @@
 
 #include "Player/DRPlayerState.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystem/DRPlayerAttributeSet.h"
+#include "AbilitySystem/Data/GameBalanceConfig.h"
 #include "Net/UnrealNetwork.h"
 #include "DRGameplayTags.h"
 
 ADRPlayerState::ADRPlayerState()
 {
-    // GAS ÄÄÆ÷³ÍÆ® »ý¼º ¹× ¼³Á¤
+    // GAS ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	AbilitySystemComponent = CreateDefaultSubobject<UDRAbilitySystemComponent>("AbilitySystemComponent");
 	AbilitySystemComponent->SetIsReplicated(true);
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
 
 	AttributeSet = CreateDefaultSubobject<UDRPlayerAttributeSet>("AttributeSet");
 	
-    // ³ôÀº ¾÷µ¥ÀÌÆ® ºóµµ·Î ½Ç½Ã°£ µ¿±âÈ­
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½óµµ·ï¿½ ï¿½Ç½Ã°ï¿½ ï¿½ï¿½ï¿½ï¿½È­
 	NetUpdateFrequency = 100.f;
 }
 
@@ -29,7 +31,7 @@ void ADRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-    // ÀüÅõ ¹× ºÎÆÐ »óÅÂ ¸®ÇÃ¸®ÄÉÀÌ¼Ç
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ã¸ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½
     DOREPLIFETIME(ADRPlayerState, bIsInCombat);
     DOREPLIFETIME(ADRPlayerState, bIsCorrupted);
 }
@@ -38,16 +40,22 @@ void ADRPlayerState::BeginPlay()
 {
     Super::BeginPlay();
 
-    // ¼­¹ö¿¡¼­¸¸ Ã¼·Â º¯°æ ÄÝ¹é µî·Ï
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ã¼ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ý¹ï¿½ ï¿½ï¿½ï¿½
     if (HasAuthority())
     {
-        // Ã¼·Â È¸º¹ ½ºÆå ¹Ì¸® Ä³½Ì
+        // GameBalanceConfigì—ì„œ ë°¸ëŸ°ìŠ¤ ê°’ ì ìš©
+        if (const UGameBalanceConfig* BalanceConfig = UDRAbilitySystemLibrary::GetGameBalanceConfig(this))
+        {
+            CombatExitDelay = BalanceConfig->PlayerCombat.CombatExitDelay;
+        }
+
+        // Ã¼ï¿½ï¿½ È¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ì¸ï¿½ Ä³ï¿½ï¿½
         InitializeHealthRegenSpec();
 
-        // °ÔÀÓ ½ÃÀÛ ½Ã Á¤»ó »óÅÂÀÌ¹Ç·Î Ã¼·Â È¸º¹ Ã¼Å©
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì¹Ç·ï¿½ Ã¼ï¿½ï¿½ È¸ï¿½ï¿½ Ã¼Å©
         CheckAndStartHealthRegen();
 
-        // Ã¼·Â º¯°æ °¨Áö ÄÝ¹é µî·Ï
+        // Ã¼ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ý¹ï¿½ ï¿½ï¿½ï¿½
         if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
         {
             AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
@@ -62,7 +70,7 @@ void ADRPlayerState::OnHealthChanged(const FOnAttributeChangeData& Data)
 
     if (bIsCorrupted || bIsInCombat) return;
 
-    // Ã¼·ÂÀÌ º¯°æµÉ ¶§¸¶´Ù È¸º¹ »óÅÂ ÀçÆò°¡
+    // Ã¼ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     CheckHealthRegenStatus();
 }
 
@@ -70,7 +78,7 @@ void ADRPlayerState::CheckHealthRegenStatus()
 {
     if (!HasAuthority() || bIsCorrupted || bIsInCombat) return;
 
-    // PlayerAttributeSet¿¡¼­ ÄÁÅ×ÀÌ³Ê »óÅÂ È®ÀÎ
+    // PlayerAttributeSetï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
     const UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSet);
     if (!PlayerAS) return;
 
@@ -79,12 +87,12 @@ void ADRPlayerState::CheckHealthRegenStatus()
     const float ContainerHealth = PlayerAS->GetContainerHealth();
     const float ContainerMax = (ContainerIndex + 1) * ContainerHealth;
 
-    // ÇöÀç ÄÁÅ×ÀÌ³Ê°¡ °¡µæ Ã¡´ÂÁö È®ÀÎ
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì³Ê°ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã¡ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
     const bool bIsContainerFull = FMath::IsNearlyEqual(CurrentHealth, ContainerMax, 0.1f);
 
     if (bIsContainerFull)
     {
-        // ÄÁÅ×ÀÌ³Ê°¡ °¡µæ Â÷¸é Ã¼·Â È¸º¹ ÁßÁö
+        // ï¿½ï¿½ï¿½ï¿½ï¿½Ì³Ê°ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã¼ï¿½ï¿½ È¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (HealthRegenEffectHandle.IsValid())
         {
             StopHealthRegen();
@@ -92,7 +100,7 @@ void ADRPlayerState::CheckHealthRegenStatus()
     }
     else
     {
-        // ÄÁÅ×ÀÌ³Ê°¡ °¡µæ Â÷Áö ¾Ê¾ÒÀ¸¸é Ã¼·Â È¸º¹ ½ÃÀÛ
+        // ï¿½ï¿½ï¿½ï¿½ï¿½Ì³Ê°ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½ï¿½ Ã¼ï¿½ï¿½ È¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (!HealthRegenEffectHandle.IsValid())
         {
             StartHealthRegen();
@@ -106,7 +114,7 @@ void ADRPlayerState::EnterCombat()
 
     if (bIsInCombat)
     {
-        // ÀÌ¹Ì ÀüÅõ ÁßÀÌ¸é Å¸ÀÌ¸Ó¸¸ ¸®¼Â
+        // ï¿½Ì¹ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ì¸ï¿½ Å¸ï¿½Ì¸Ó¸ï¿½ ï¿½ï¿½ï¿½ï¿½
         GetWorld()->GetTimerManager().SetTimer(
             CombatTimerHandle,
             this,
@@ -117,12 +125,18 @@ void ADRPlayerState::EnterCombat()
         return;
     }
 
-    // ÀüÅõ »óÅÂ ÁøÀÔ
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     bIsInCombat = true;
+
+    // GAS íƒœê·¸ ì¶”ê°€
+    if (AbilitySystemComponent)
+    {
+        AbilitySystemComponent->AddLooseGameplayTag(FDRGameplayTags::Get().State_InCombat);
+    }
 
     StopHealthRegen();
 
-    // ÀüÅõ Á¾·á Å¸ÀÌ¸Ó ¼³Á¤
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Å¸ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½
     GetWorld()->GetTimerManager().SetTimer(
         CombatTimerHandle,
         this,
@@ -131,7 +145,7 @@ void ADRPlayerState::EnterCombat()
         false
     );
 
-    // Å¬¶óÀÌ¾ðÆ®¿¡ ¾Ë¸²
+    // Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ ï¿½Ë¸ï¿½
     OnCombatStateChanged.Broadcast(true);
 }
 
@@ -139,7 +153,7 @@ void ADRPlayerState::CheckCombatExit()
 {
     if (!HasAuthority()) return;
 
-    // Å¸ÀÌ¸Ó ¸¸·á ½Ã ÀüÅõ Á¾·á
+    // Å¸ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     ExitCombat();
 }
 
@@ -147,20 +161,26 @@ void ADRPlayerState::ExitCombat()
 {
     if (!HasAuthority() || !bIsInCombat) return;
 
-    // ÀüÅõ »óÅÂ ÇØÁ¦
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     bIsInCombat = false;
     GetWorld()->GetTimerManager().ClearTimer(CombatTimerHandle);
 
-    // Å¬¶óÀÌ¾ðÆ® ¾Ë¸²
+    // GAS íƒœê·¸ ì œê±°
+    if (AbilitySystemComponent)
+    {
+        AbilitySystemComponent->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_InCombat);
+    }
+
+    // Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ® ï¿½Ë¸ï¿½
     OnCombatStateChanged.Broadcast(false);
 
-    // Ã¼·Â È¸º¹ Àç°³ Ã¼Å©
+    // Ã¼ï¿½ï¿½ È¸ï¿½ï¿½ ï¿½ç°³ Ã¼Å©
     CheckAndStartHealthRegen();
 }
 
 int32 ADRPlayerState::GetCurrentContainerIndex() const
 {
-    // PlayerAttributeSetÀÇ ÄÁÅ×ÀÌ³Ê ½Ã½ºÅÛ ¿¬µ¿
+    // PlayerAttributeSetï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½Ã½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (const UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSet))
     {
         return PlayerAS->GetCurrentContainerIndex();
@@ -178,10 +198,10 @@ void ADRPlayerState::SetCorruptedState(bool bNewCorrupted)
 
     if (bIsCorrupted)
     {
-        // ºÎÆÐ »óÅÂ ÁøÀÔ
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         StopHealthRegen();
 
-        // ºÎÆÐ ÅÂ±× Ãß°¡
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½Â±ï¿½ ï¿½ß°ï¿½
         if (AbilitySystemComponent)
         {
             AbilitySystemComponent->AddLooseGameplayTag(FDRGameplayTags::Get().State_Corrupt);
@@ -189,17 +209,17 @@ void ADRPlayerState::SetCorruptedState(bool bNewCorrupted)
     }
     else
     {
-        // ºÎÆÐ »óÅÂ ÇØÁ¦
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         CheckAndStartHealthRegen();
 
-        // ºÎÆÐ ÅÂ±× Á¦°Å
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½Â±ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (AbilitySystemComponent)
         {
             AbilitySystemComponent->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Corrupt);
         }
     }
 
-    // Å¬¶óÀÌ¾ðÆ® ¾Ë¸²
+    // Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ® ï¿½Ë¸ï¿½
     OnCorruptedStateChanged.Broadcast(bIsCorrupted);
 }
 
@@ -207,7 +227,7 @@ void ADRPlayerState::CheckAndStartHealthRegen()
 {
     if (!HasAuthority() || bIsCorrupted) return;
 
-    // ÇöÀç Ã¼·Â »óÅÂ¸¦ È®ÀÎÇÑ ÈÄ È¸º¹ ½ÃÀÛ ¿©ºÎ °áÁ¤
+    // ï¿½ï¿½ï¿½ï¿½ Ã¼ï¿½ï¿½ ï¿½ï¿½ï¿½Â¸ï¿½ È®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ È¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     CheckHealthRegenStatus();
 }
 
@@ -218,13 +238,26 @@ bool ADRPlayerState::IsPlayerCorrupted() const
 
 void ADRPlayerState::OnRep_IsInCombat()
 {
-    // Å¬¶óÀÌ¾ðÆ®¿¡¼­ ÀüÅõ »óÅÂ º¯°æ ¾Ë¸²
+    // í´ë¼ì´ì–¸íŠ¸ì—ì„œ GAS íƒœê·¸ ë™ê¸°í™”
+    if (AbilitySystemComponent)
+    {
+        if (bIsInCombat)
+        {
+            AbilitySystemComponent->AddLooseGameplayTag(FDRGameplayTags::Get().State_InCombat);
+        }
+        else
+        {
+            AbilitySystemComponent->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_InCombat);
+        }
+    }
+
+    // Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ë¸ï¿½
     OnCombatStateChanged.Broadcast(bIsInCombat);
 }
 
 void ADRPlayerState::OnRep_IsCorrupted()
 {
-    // Å¬¶óÀÌ¾ðÆ®¿¡¼­ ºÎÆÐ ÅÂ±× µ¿±âÈ­
+    // Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Â±ï¿½ ï¿½ï¿½ï¿½ï¿½È­
     if (AbilitySystemComponent)
     {
         if (bIsCorrupted)
@@ -237,7 +270,7 @@ void ADRPlayerState::OnRep_IsCorrupted()
         }
     }
 
-    // Å¬¶óÀÌ¾ðÆ® ¾Ë¸²
+    // Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ® ï¿½Ë¸ï¿½
     OnCorruptedStateChanged.Broadcast(bIsCorrupted);
 }
 
@@ -245,17 +278,17 @@ void ADRPlayerState::StartHealthRegen()
 {
     if (!HasAuthority() || bIsCorrupted) return;
 
-    // ÀÌ¹Ì ½ÇÇà ÁßÀÌ¸é ¹«½Ã
+    // ï¿½Ì¹ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (HealthRegenEffectHandle.IsValid()) return;
 
-    // Ä³½ÃµÈ ½ºÆå °ËÁõ
+    // Ä³ï¿½Ãµï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (!CachedHealthRegenSpec.IsValid())
     {
         InitializeHealthRegenSpec();
         if (!CachedHealthRegenSpec.IsValid()) return;
     }
 
-    // Ã¼·Â È¸º¹ È¿°ú Àû¿ë
+    // Ã¼ï¿½ï¿½ È¸ï¿½ï¿½ È¿ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     HealthRegenEffectHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*CachedHealthRegenSpec.Data.Get());
 }
 
@@ -263,7 +296,7 @@ void ADRPlayerState::StopHealthRegen()
 {
     if (!HasAuthority()) return;
 
-    // È°¼ºÈ­µÈ Ã¼·Â È¸º¹ È¿°ú Á¦°Å
+    // È°ï¿½ï¿½È­ï¿½ï¿½ Ã¼ï¿½ï¿½ È¸ï¿½ï¿½ È¿ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (HealthRegenEffectHandle.IsValid())
     {
         AbilitySystemComponent->RemoveActiveGameplayEffect(HealthRegenEffectHandle);
@@ -275,7 +308,7 @@ void ADRPlayerState::InitializeHealthRegenSpec()
 {
     if (!HealthRegenEffectClass || !AbilitySystemComponent) return;
 
-    // ¼º´É ÃÖÀûÈ­¸¦ À§ÇÑ GameplayEffect ½ºÆå »çÀü Ä³½Ì
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½È­ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ GameplayEffect ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ä³ï¿½ï¿½
     FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
     EffectContext.AddSourceObject(this);
     CachedHealthRegenSpec = AbilitySystemComponent->MakeOutgoingSpec(HealthRegenEffectClass, 1.f, EffectContext);

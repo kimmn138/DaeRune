@@ -179,10 +179,20 @@ public:
 	void ClientCloseSettingsMenu();
 	
 	// ========== ġƮ/����� ��� ==========
-    	
+
     // �׽�Ʈ�� ������ ��ŵ (��������Ʈ���� ȣ��)
     UFUNCTION(BlueprintCallable, Category = "Cheat|Phase")
     void CheatSkipToNextPhase();
+
+	// ========== 카메라 피치 제한 ==========
+
+	// 위로 바라볼 수 있는 최대 각도 (양수, 기본값 89도)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.0", ClampMax = "89.9"))
+	float ViewPitchMax = 89.0f;
+
+	// 아래로 바라볼 수 있는 최대 각도 (양수로 입력, 내부적으로 음수 변환됨, 기본값 89도)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.0", ClampMax = "89.9"))
+	float ViewPitchMin = 89.0f;
 
 protected:
 	virtual void BeginPlay() override;

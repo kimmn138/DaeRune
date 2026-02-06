@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Phase/DRPhaseBase.h"
+#include "Phase/DRPhase3DataTypes.h"
 #include "DRPhase3.generated.h"
 
 class ADRPoisonGasActor;
@@ -189,7 +190,13 @@ protected:
 	// ========== 웨이브 레벨 시스템 ==========
 
 	// 웨이브 레벨에 따른 수정자 가져오기
-	FWaveLevelModifier GetWaveLevelModifier(int32 WaveNumber) const;
+	FWaveLevelModifier GetWaveLevelModifier(int32 WaveLevel) const;
+
+	// DataTable에서 웨이브 데이터 가져오기 (없으면 기본값)
+	FWaveData GetWaveData(int32 WaveNumber) const;
+
+	// GameBalanceConfig에서 Phase3 설정 로드
+	void LoadPhase3ConfigFromBalanceConfig();
 
 	// ========== 클렌저 사이트 ==========
 
@@ -241,17 +248,41 @@ protected:
 	// 유독 가스 제거
 	void RemoveToxicGas();
 
-	// 48개의 모든 스폰 포인트 정보 (에디터에서 설정)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|Config")
+	// ========== 독가스 그리드 설정 (새 방식) ==========
+
+	// 그리드 기반 자동 생성 사용 여부
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|PoisonGas")
+	bool bUseGridBasedSpawnPoints = true;
+
+	// 그리드 설정 (bUseGridBasedSpawnPoints = true일 때 사용)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|PoisonGas", meta = (EditCondition = "bUseGridBasedSpawnPoints"))
+	FPoisonGasGridConfig PoisonGasGridConfig;
+
+	// ========== 수동 설정 (레거시 방식) ==========
+
+	// 수동 스폰 포인트 (bUseGridBasedSpawnPoints = false일 때 사용)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|PoisonGas|Legacy", meta = (EditCondition = "!bUseGridBasedSpawnPoints"))
+	TArray<FPoisonGasSpawnPointData> ManualSpawnPoints;
+
+	// ========== 런타임 데이터 ==========
+
+	// 자동 생성된 스폰 포인트 (런타임)
 	TArray<FPoisonGasSpawnPointData> AllPoisonGasSpawnPoints;
 
-	// 독가스 스폰 주기
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|Config")
+	// 독가스 스폰 주기 (GameBalanceConfig에서 로드)
 	float PoisonGasSpawnInterval = 10.0f;
 
 	// 스폰 포인트를 찾을 태그 이름
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|Config")
 	FName SpawnPointTag = "Phase3SpawnPoint";
+
+	// ========== 그리드 헬퍼 함수 ==========
+
+	// 그리드 기반 스폰 포인트 생성
+	void GenerateGridSpawnPoints();
+
+	// 클렌저에서 가장 가까운 N개 포인트를 CleanserLinked로 설정
+	void AssignCleanserLinkedPoints();
 
 private:
 	// 엘리트 보스 태그 부여
@@ -260,30 +291,40 @@ private:
 	// 엘리트 보스 태그 삭제
 	void RemoveEliteBossTag();
 	
-	// ========== 설정 데이터 ==========
+	// ========== 설정 데이터 (DataTable 기반) ==========
 
-	// 웨이브 데이터 테이블
-	UPROPERTY(EditDefaultsOnly, Category = "Phase3|Config")
+	// 웨이브 데이터 DataTable (RowName: "Wave1" ~ "Wave5")
+	UPROPERTY(EditDefaultsOnly, Category = "Phase3|Config|DataTable")
+	TObjectPtr<UDataTable> WaveDataTable;
+
+	// 웨이브 레벨 수정자 DataTable (RowName: "Level1" ~ "Level5")
+	UPROPERTY(EditDefaultsOnly, Category = "Phase3|Config|DataTable")
+	TObjectPtr<UDataTable> WaveLevelModifierTable;
+
+	// ========== Fallback 설정 (DataTable 미설정 시 사용) ==========
+
+	// 웨이브 데이터 배열 (DataTable 미사용 시)
+	UPROPERTY(EditDefaultsOnly, Category = "Phase3|Config|Fallback")
 	TArray<FWaveData> WaveDataArray;
 
-	// 웨이브 레벨별 수정자
-	UPROPERTY(EditDefaultsOnly, Category = "Phase3|Config")
+	// 웨이브 레벨별 수정자 (DataTable 미사용 시)
+	UPROPERTY(EditDefaultsOnly, Category = "Phase3|Config|Fallback")
 	TMap<int32, FWaveLevelModifier> WaveLevelModifiers;
-	
-	// 최대 몬스터 수 (이 이상이면 게임 오버)
-	UPROPERTY(EditDefaultsOnly, Category = "Phase3|Config")
+
+	// ========== 런타임 설정 (GameBalanceConfig에서 로드) ==========
+
+	// 최대 몬스터 수 (GameBalanceConfig.Phase3에서 로드)
 	int32 MaxMonsterCount = 100;
 
-	// 방어 시간 (초)
-	UPROPERTY(EditDefaultsOnly, Category = "Phase3|Config")
-	float DefenseDuration = 300.0f; // 5분
+	// 방어 시간 (GameBalanceConfig.Phase3에서 로드)
+	float DefenseDuration = 300.0f;
 
-	// 몬스터 스폰 거리 설정
-	UPROPERTY(EditDefaultsOnly, Category = "Phase3|Config")
-	float SpawnDistanceMin = 500.0f; // 5유닛
+	// 몬스터 스폰 거리 설정 (GameBalanceConfig.Phase3에서 로드)
+	float SpawnDistanceMin = 500.0f;
+	float SpawnDistanceMax = 2000.0f;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Phase3|Config")
-	float SpawnDistanceMax = 2000.0f; // 20유닛
+	// 레벨 4+ 광폭화 체력 비율 (GameBalanceConfig.Phase3에서 로드)
+	float HighLevelEnrageThreshold = 0.25f;
 
 	// ========== 몬스터 클래스 ==========
 

@@ -8,6 +8,7 @@
 
 class UAbilityInfo;
 class UCharacterClassInfo;
+class UGameBalanceConfig;
 class ADRDetectionManager;
 
 /**
@@ -28,6 +29,10 @@ public:
 	// �����Ƽ ���� ������ ����
 	UPROPERTY(EditDefaultsOnly, Category = "Ability Info")
 	TObjectPtr<UAbilityInfo> AbilityInfo;
+
+	// 게임 밸런스 설정 DataAsset
+	UPROPERTY(EditDefaultsOnly, Category = "Game Balance")
+	TObjectPtr<UGameBalanceConfig> GameBalanceConfig;
 
 	// �÷��̾ ������� �� ȣ��
 	void OnPlayerDied(APlayerState* DeadPlayer);

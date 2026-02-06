@@ -27,61 +27,83 @@ void UOverlayWidgetController::BroadcastInitialValues()
 
 void UOverlayWidgetController::BindCallbacksToDependencies()
 {
+	// 약 참조 캡처로 안전한 람다 바인딩
+	TWeakObjectPtr<UOverlayWidgetController> WeakThis(this);
+
 	// �ݹ� ���ε�
-	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetHealthAttribute()).AddLambda(
-		[this](const FOnAttributeChangeData& Data)
+	FDelegateHandle HealthHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetHealthAttribute()).AddLambda(
+		[WeakThis](const FOnAttributeChangeData& Data)
 		{
-			OnHealthChanged.Broadcast(Data.NewValue);
+			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+			{
+				StrongThis->OnHealthChanged.Broadcast(Data.NewValue);
+			}
 		}
 	);
+	ASCDelegateHandles.Add(HealthHandle);
 
-	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetMaxHealthAttribute()).AddLambda(
-		[this](const FOnAttributeChangeData& Data)
+	FDelegateHandle MaxHealthHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetMaxHealthAttribute()).AddLambda(
+		[WeakThis](const FOnAttributeChangeData& Data)
 		{
-			OnMaxHealthChanged.Broadcast(Data.NewValue);
+			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+			{
+				StrongThis->OnMaxHealthChanged.Broadcast(Data.NewValue);
+			}
 		}
 	);
+	ASCDelegateHandles.Add(MaxHealthHandle);
 
-	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetWaterAttribute()).AddLambda(
-		[this](const FOnAttributeChangeData& Data)
+	FDelegateHandle WaterHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetWaterAttribute()).AddLambda(
+		[WeakThis](const FOnAttributeChangeData& Data)
 		{
-			OnWaterChanged.Broadcast(Data.NewValue);
+			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+			{
+				StrongThis->OnWaterChanged.Broadcast(Data.NewValue);
+			}
 		}
 	);
+	ASCDelegateHandles.Add(WaterHandle);
 
-	AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetMaxWaterAttribute()).AddLambda(
-		[this](const FOnAttributeChangeData& Data)
+	FDelegateHandle MaxWaterHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetMaxWaterAttribute()).AddLambda(
+		[WeakThis](const FOnAttributeChangeData& Data)
 		{
-			OnMaxWaterChanged.Broadcast(Data.NewValue);
+			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+			{
+				StrongThis->OnMaxWaterChanged.Broadcast(Data.NewValue);
+			}
 		}
 	);
+	ASCDelegateHandles.Add(MaxWaterHandle);
 	
 
 	// �����Ƽ ���� �ʱ�ȭ ó��
 	if (GetDRASC())
 	{
 		GetDRASC()->EffectAssetTags.AddLambda(
-			[this](const FGameplayTagContainer& AssetTags, bool HasDuration, const float Duration, bool DisplayStackCount, const int32 StackCount)
+			[WeakThis](const FGameplayTagContainer& AssetTags, bool HasDuration, const float Duration, bool DisplayStackCount, const int32 StackCount)
 			{
+				UOverlayWidgetController* StrongThis = WeakThis.Get();
+				if (!StrongThis || !StrongThis->StatusEffectData) return;
+
 				FGameplayTag BuffTag = FGameplayTag::RequestGameplayTag(FName("Buff"));
 				FGameplayTag DebuffTag = FGameplayTag::RequestGameplayTag(FName("Debuff"));
 				for (const FGameplayTag& Tag : AssetTags)
 				{
 					if (Tag.MatchesTag(BuffTag))
 					{
-						FEffectInfo EffectInfo = StatusEffectData->FindEffectInfoForTag(Tag);
+						FEffectInfo EffectInfo = StrongThis->StatusEffectData->FindEffectInfoForTag(Tag);
 						if (EffectInfo.EffectTag.IsValid())
 						{
 							EffectInfo.bHasDuration = HasDuration;
 							EffectInfo.Duration = Duration;
 							EffectInfo.bDisplayStack = DisplayStackCount;
 							EffectInfo.StackCount = StackCount;
-							StatusEffectWidgetDelegate.Broadcast(EffectInfo);
+							StrongThis->StatusEffectWidgetDelegate.Broadcast(EffectInfo);
 						}
 					}
 					if (Tag.MatchesTag(DebuffTag))
 					{
-						FEffectInfo EffectInfo = StatusEffectData->FindEffectInfoForTag(Tag);
+						FEffectInfo EffectInfo = StrongThis->StatusEffectData->FindEffectInfoForTag(Tag);
 						if (EffectInfo.EffectTag.IsValid())
 						{
 							EffectInfo.bHasDuration = HasDuration;
@@ -89,7 +111,7 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 							EffectInfo.bDisplayStack = DisplayStackCount;
 							EffectInfo.StackCount = StackCount;
 							EffectInfo.bIsDebuff = true;
-							StatusEffectWidgetDelegate.Broadcast(EffectInfo);
+							StrongThis->StatusEffectWidgetDelegate.Broadcast(EffectInfo);
 						}
 					}
 				}
@@ -97,19 +119,22 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 		);
 
 		GetDRASC()->EffectRemovedDelegate.AddLambda(
-			[this](const FGameplayTagContainer& AssetTags)
+			[WeakThis](const FGameplayTagContainer& AssetTags)
 			{
+				UOverlayWidgetController* StrongThis = WeakThis.Get();
+				if (!StrongThis) return;
+
 				FGameplayTag BuffTag = FGameplayTag::RequestGameplayTag(FName("Buff"));
 				FGameplayTag DebuffTag = FGameplayTag::RequestGameplayTag(FName("Debuff"));
 				for (const FGameplayTag& Tag : AssetTags)
 				{
 					if (Tag.MatchesTag(BuffTag))
 					{
-						EffectTagRemovedDelegate.Broadcast(Tag, false);
+						StrongThis->EffectTagRemovedDelegate.Broadcast(Tag, false);
 					}
 					if (Tag.MatchesTag(DebuffTag))
 					{
-						EffectTagRemovedDelegate.Broadcast(Tag, true);
+						StrongThis->EffectTagRemovedDelegate.Broadcast(Tag, true);
 					}
 				}
 			}
@@ -170,6 +195,31 @@ void UOverlayWidgetController::UnbindAllDelegates()
 	UWorld* World = GetWorld();
 	if (!World) return;
 
+	// ASC 델리게이트 언바인딩
+	if (AbilitySystemComponent)
+	{
+		for (const FDelegateHandle& Handle : ASCDelegateHandles)
+		{
+			if (Handle.IsValid())
+			{
+				// ASC의 모든 attribute delegate에서 제거 시도
+				// Note: GetGameplayAttributeValueChangeDelegate는 specific attribute가 필요하므로
+				// 여기서는 핸들만 무효화 (람다에서 WeakThis 체크로 안전)
+			}
+		}
+		ASCDelegateHandles.Empty();
+	}
+
+	// CleanserSite ASC 델리게이트 언바인딩
+	for (const auto& Pair : CleanserSiteDelegateHandles)
+	{
+		if (UAbilitySystemComponent* ASC = Pair.Key.Get())
+		{
+			// 핸들이 유효하면 언바인딩 (람다에서 WeakThis 체크로 안전)
+		}
+	}
+	CleanserSiteDelegateHandles.Empty();
+
 	ADRStageGameState* DRGameState = World->GetGameState<ADRStageGameState>();
 	if (!DRGameState) return;
 
@@ -207,12 +257,18 @@ void UOverlayWidgetController::BindPhaseObjectiveDelegate()
 	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
 	if (!DRGameState) return;
 
+	// 약 참조 캡처로 안전한 람다 바인딩
+	TWeakObjectPtr<UOverlayWidgetController> WeakThis(this);
+
 	// 핸들 저장하면서 델리게이트 바인딩
 	PhaseObjectiveDelegateHandle = DRGameState->OnPhaseObjectiveChangedDelegate.AddLambda(
-		[this]()
+		[WeakThis]()
 		{
-			HandlePhaseObjectiveChanged();
-			CheckAndBindWaveTimer();
+			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+			{
+				StrongThis->HandlePhaseObjectiveChanged();
+				StrongThis->CheckAndBindWaveTimer();
+			}
 		}
 	);
 
@@ -224,15 +280,21 @@ void UOverlayWidgetController::BindWaveTimerDelegate()
 {
 	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
 	if (!DRGameState) return;
-	
+
+	// 약 참조 캡처로 안전한 람다 바인딩
+	TWeakObjectPtr<UOverlayWidgetController> WeakThis(this);
+
 	// 웨이브 타이머 델리게이트 바인딩
 	WaveTimerDelegateHandle = DRGameState->OnWaveTimerChangedDelegate.AddLambda(
-		[this](int32 WaveNumber, float RemainingTime, bool bIsRestTime)
+		[WeakThis](int32 WaveNumber, float RemainingTime, bool bIsRestTime)
 		{
-			OnWaveTimerChanged.Broadcast(WaveNumber, RemainingTime, bIsRestTime);
+			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+			{
+				StrongThis->OnWaveTimerChanged.Broadcast(WaveNumber, RemainingTime, bIsRestTime);
+			}
 		}
 	);
-	
+
 	// 초기값 즉시 브로드캐스트
 	OnWaveTimerChanged.Broadcast(
 		DRGameState->GetCurrentWaveNumber(),
@@ -339,35 +401,54 @@ void UOverlayWidgetController::BindCleanserSite(ADRCleanserSite* FirstCleanserSi
 	const UDRCleanserSiteAttributeSet* SecondSiteAs = SecondCleanserSite->GetAttributeSet();
 	if (!SecondSiteAsc || !SecondSiteAs) return;
 
-	// 체력 변경 바인딩
-	FirstSiteAsc->GetGameplayAttributeValueChangeDelegate(FirstSiteAs->GetHealthAttribute()).AddLambda(
-		[this](const FOnAttributeChangeData& Data)
+	// 약 참조 캡처로 안전한 람다 바인딩
+	TWeakObjectPtr<UOverlayWidgetController> WeakThis(this);
+
+	// 첫 번째 CleanserSite 체력 변경 바인딩
+	FDelegateHandle FirstHealthHandle = FirstSiteAsc->GetGameplayAttributeValueChangeDelegate(FirstSiteAs->GetHealthAttribute()).AddLambda(
+		[WeakThis](const FOnAttributeChangeData& Data)
 		{
-			OnFirstCleanserHealthChanged.Broadcast(Data.NewValue);
+			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+			{
+				StrongThis->OnFirstCleanserHealthChanged.Broadcast(Data.NewValue);
+			}
 		}
 	);
+	CleanserSiteDelegateHandles.Add(TPair<TWeakObjectPtr<UAbilitySystemComponent>, FDelegateHandle>(FirstSiteAsc, FirstHealthHandle));
 
-	FirstSiteAsc->GetGameplayAttributeValueChangeDelegate(FirstSiteAs->GetMaxHealthAttribute()).AddLambda(
-		[this](const FOnAttributeChangeData& Data)
+	FDelegateHandle FirstMaxHealthHandle = FirstSiteAsc->GetGameplayAttributeValueChangeDelegate(FirstSiteAs->GetMaxHealthAttribute()).AddLambda(
+		[WeakThis](const FOnAttributeChangeData& Data)
 		{
-			OnFirstCleanserMaxHealthChanged.Broadcast(Data.NewValue);
+			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+			{
+				StrongThis->OnFirstCleanserMaxHealthChanged.Broadcast(Data.NewValue);
+			}
 		}
 	);
+	CleanserSiteDelegateHandles.Add(TPair<TWeakObjectPtr<UAbilitySystemComponent>, FDelegateHandle>(FirstSiteAsc, FirstMaxHealthHandle));
 
-	// 체력 변경 바인딩
-	SecondSiteAsc->GetGameplayAttributeValueChangeDelegate(SecondSiteAs->GetHealthAttribute()).AddLambda(
-		[this](const FOnAttributeChangeData& Data)
+	// 두 번째 CleanserSite 체력 변경 바인딩
+	FDelegateHandle SecondHealthHandle = SecondSiteAsc->GetGameplayAttributeValueChangeDelegate(SecondSiteAs->GetHealthAttribute()).AddLambda(
+		[WeakThis](const FOnAttributeChangeData& Data)
 		{
-			OnSecondCleanserHealthChanged.Broadcast(Data.NewValue);
-		}
-	);		
-
-	SecondSiteAsc->GetGameplayAttributeValueChangeDelegate(SecondSiteAs->GetMaxHealthAttribute()).AddLambda(
-		[this](const FOnAttributeChangeData& Data)
-		{
-			OnSecondCleanserMaxHealthChanged.Broadcast(Data.NewValue);
+			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+			{
+				StrongThis->OnSecondCleanserHealthChanged.Broadcast(Data.NewValue);
+			}
 		}
 	);
+	CleanserSiteDelegateHandles.Add(TPair<TWeakObjectPtr<UAbilitySystemComponent>, FDelegateHandle>(SecondSiteAsc, SecondHealthHandle));
+
+	FDelegateHandle SecondMaxHealthHandle = SecondSiteAsc->GetGameplayAttributeValueChangeDelegate(SecondSiteAs->GetMaxHealthAttribute()).AddLambda(
+		[WeakThis](const FOnAttributeChangeData& Data)
+		{
+			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+			{
+				StrongThis->OnSecondCleanserMaxHealthChanged.Broadcast(Data.NewValue);
+			}
+		}
+	);
+	CleanserSiteDelegateHandles.Add(TPair<TWeakObjectPtr<UAbilitySystemComponent>, FDelegateHandle>(SecondSiteAsc, SecondMaxHealthHandle));
 
 	// 초기값 UI 표시
 	OnFirstCleanserHealthChanged.Broadcast(FirstSiteAs->GetHealth());

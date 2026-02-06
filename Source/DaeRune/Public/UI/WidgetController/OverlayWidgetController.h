@@ -135,6 +135,10 @@ private:
 	// ��������Ʈ �ڵ� ����� ����
 	FDelegateHandle PhaseObjectiveDelegateHandle;
 	FDelegateHandle WaveTimerDelegateHandle;
+
+	// ASC 델리게이트 핸들 (안전한 정리를 위해)
+	TArray<FDelegateHandle> ASCDelegateHandles;
+	TArray<TPair<TWeakObjectPtr<UAbilitySystemComponent>, FDelegateHandle>> CleanserSiteDelegateHandles;
 	
 	// Phase 알람용 캐시 (Phase 변경 시 알람 표시 여부 판단)
 	int32 CachedPhaseNumber = -1;

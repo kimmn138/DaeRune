@@ -5,6 +5,7 @@
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystem/DREnemyAttributeSet.h"
+#include "AbilitySystem/Data/GameBalanceConfig.h"
 #include "Components/WidgetComponent.h"
 #include "UI/Widget/DRUserWidget.h"
 #include "DRGameplayTags.h"
@@ -182,6 +183,20 @@ void ADREnemy::HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount
 	bHitReacting = NewCount > 0;
 	GetCharacterMovement()->MaxWalkSpeed = bHitReacting ? HitReactingMoveSpeed : GetMoveSpeed();
 
+	// GAS 상태 태그 관리
+	if (AbilitySystemComponent)
+	{
+		const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+		if (bHitReacting)
+		{
+			AbilitySystemComponent->AddLooseGameplayTag(GameplayTags.State_HitReacting);
+		}
+		else
+		{
+			AbilitySystemComponent->RemoveLooseGameplayTag(GameplayTags.State_HitReacting);
+		}
+	}
+
 	// AI 블랙보드 상태 업데이트
 	if (DRAIController && DRAIController->GetBlackboardComponent())
 	{
@@ -276,6 +291,12 @@ void ADREnemy::TriggerEnrage()
 
 	bIsEnraged = true;
 
+	// GAS 상태 태그 추가
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->AddLooseGameplayTag(FDRGameplayTags::Get().State_Enraged);
+	}
+
 	// 블랙보드에 광폭화 상태 설정
 	if (ADRAIController* AIController = Cast<ADRAIController>(GetController()))
 	{
@@ -302,6 +323,31 @@ void ADREnemy::TriggerEnrage()
 void ADREnemy::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// GameBalanceConfig에서 밸런스 값 적용 (서버에서만)
+	if (HasAuthority())
+	{
+		if (const UGameBalanceConfig* BalanceConfig = UDRAbilitySystemLibrary::GetGameBalanceConfig(this))
+		{
+			// 적 전투 설정
+			HitReactingMoveSpeed = BalanceConfig->EnemyCombat.HitReactingMoveSpeed;
+			LifeSpan = BalanceConfig->EnemyCombat.LifeSpan;
+			PartDropForce = BalanceConfig->EnemyCombat.PartDropForce;
+
+			// 광폭화 설정
+			EnrageHealthThreshold = BalanceConfig->EnemyEnrage.EnrageHealthThreshold;
+			EnrageAttackSpeedMultiplier = BalanceConfig->EnemyEnrage.EnrageAttackSpeedMultiplier;
+
+			// 벽 스턴 설정
+			MinSpeedForStun = BalanceConfig->WallStun.MinSpeedForStun;
+			WallStunDuration = BalanceConfig->WallStun.WallStunDuration;
+			StunImmunityDuration = BalanceConfig->WallStun.StunImmunityDuration;
+
+			// 물 시스템 설정
+			WaterReductionPerAttack = BalanceConfig->GetWaterReductionAmount();
+			WaterExplosionRadius = BalanceConfig->WaterSystem.WaterExplosionRadius;
+		}
+	}
 
 	// GAS 초기화
 	InitAbilityActorInfo();

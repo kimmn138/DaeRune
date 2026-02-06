@@ -9,7 +9,7 @@ FDRGameplayTags FDRGameplayTags::GameplayTags;
 void FDRGameplayTags::InitializeNativeGameplayTags()
 {
 	/*
-	 * ¸®¼Ò½º ºñ¿ë
+	 * ï¿½ï¿½ï¿½Ò½ï¿½ ï¿½ï¿½ï¿½
 	 */
 
 	GameplayTags.Cost_Water = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -18,7 +18,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ±âº» ¼Ó¼º
+	 * ï¿½âº» ï¿½Ó¼ï¿½
 	 */
 
 	GameplayTags.Attributes_Primary_MaxHealth = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -37,7 +37,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ÀÔ·Â ÅÂ±×
+	 * ï¿½Ô·ï¿½ ï¿½Â±ï¿½
 	 */
 
 	GameplayTags.InputTag_LMB = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -61,26 +61,50 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ÇÃ·¹ÀÌ¾î »óÅÂ
+	 * í”Œë ˆì´ì–´ ìƒíƒœ
 	 */
 
 	GameplayTags.State_Corrupt = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("State.Corrupt"),
-		FString("State Tag for Player In Corrupt")
+		FString("Player is corrupted (water depleted)")
 	);
 
 	GameplayTags.State_Carrying = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("State.Carrying"),
-		FString("State Tag for Player In Carrying Part")
+		FString("Player is carrying a part")
+	);
+
+	GameplayTags.State_InCombat = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.InCombat"),
+		FString("Player is in combat (recently took damage)")
+	);
+
+	/*
+	 * ì  ìƒíƒœ
+	 */
+
+	GameplayTags.State_Enraged = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.Enraged"),
+		FString("Enemy is enraged (low health, increased aggression)")
+	);
+
+	GameplayTags.State_Aggroed = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.Aggroed"),
+		FString("Enemy has aggro on a target")
+	);
+
+	GameplayTags.State_HitReacting = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.HitReacting"),
+		FString("Enemy is in hit reaction state")
 	);
 
 	GameplayTags.Enemy_Detected = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Enemy.Detected"),
-		FString("State Tag for Enemy In Detected")
+		FString("Enemy has been detected by player")
 	);
 
 	/*
-	 * ±âº» µ¥¹ÌÁö, Å¸ÀÔ º° µ¥¹ÌÁö
+	 * ï¿½âº» ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½, Å¸ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	 */
 
 	GameplayTags.Damage = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -114,7 +138,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ±âº» Èú
+	 * ï¿½âº» ï¿½ï¿½
 	 */
 
 	GameplayTags.Heal = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -123,7 +147,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * µğ¹öÇÁ È¿°ú
+	 * ï¿½ï¿½ï¿½ï¿½ï¿½ È¿ï¿½ï¿½
 	 */
 
 	GameplayTags.Buff_Elite = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -132,7 +156,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 	
 	/*
-	 * µğ¹öÇÁ È¿°ú
+	 * ï¿½ï¿½ï¿½ï¿½ï¿½ È¿ï¿½ï¿½
 	 */
 
 	GameplayTags.Debuff_Arcane = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -166,7 +190,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * µğ¹öÇÁ °è»ê¿ë ÅÂ±×
+	 * ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Â±ï¿½
 	 */
 
 	GameplayTags.Debuff_Chance = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -185,7 +209,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * µ¥¹ÌÁö Å¸ÀÔ ¹è¿­
+	 * ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Å¸ï¿½ï¿½ ï¿½è¿­
 	 */
 
 	GameplayTags.DamageTypeTags.Add(GameplayTags.Damage_Arcane);
@@ -195,7 +219,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.DamageTypeTags.Add(GameplayTags.Damage_Bite);
 
 	/*
-	 * µ¥¹ÌÁö Å¸ÀÔ, µğ¹öÇÁ ¸ÅÇÎ
+	 * ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Å¸ï¿½ï¿½, ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	 */
 
 	GameplayTags.DamageTypesToDebuffs.Add(GameplayTags.Damage_Arcane, GameplayTags.Debuff_Arcane);
@@ -205,7 +229,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.DamageTypesToDebuffs.Add(GameplayTags.Damage_Bite, GameplayTags.Debuff_Bleed);
 
 	/*
-	 * Å¸°İ ¹İÀÀ ÀÌÆåÆ®
+	 * Å¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®
 	 */
 
 	GameplayTags.Effects_HitReact = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -214,7 +238,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ¹° ½Ã½ºÅÛ (SetByCaller ¹æ½Ä)
+	 * ï¿½ï¿½ ï¿½Ã½ï¿½ï¿½ï¿½ (SetByCaller ï¿½ï¿½ï¿½)
 	 */
 
 	GameplayTags.Water_SetByCaller_Reduction = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -228,7 +252,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ¾îºô¸®Æ¼ ºĞ·ù
+	 * ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ ï¿½Ğ·ï¿½
 	 */
 
 	GameplayTags.Abilities_Attack = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -252,7 +276,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ±¸Ã¼Àû ¾îºô¸®Æ¼ 
+	 * ï¿½ï¿½Ã¼ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ 
 	 */
 
 	GameplayTags.Abilities_Fire_FireBolt = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -281,7 +305,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * Å¸°İ ¹İÀÀ
+	 * Å¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	 */
 
 	GameplayTags.Abilities_HitReact = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -290,7 +314,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ¾îºô¸®Æ¼ Å¸ÀÔ ºĞ·ù
+	 * ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ Å¸ï¿½ï¿½ ï¿½Ğ·ï¿½
 	 */
 
 	GameplayTags.Abilities_Type_None = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -309,7 +333,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ¾îºô¸®Æ¼ Äğ´Ù¿î
+	 * ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ ï¿½ï¿½Ù¿ï¿½
 	 */
 
 	GameplayTags.Cooldown_Fire_FireBolt = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -318,7 +342,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * °ø°İ À§Ä¡ ¼ÒÄÏ
+	 * ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½
 	 */
 
 	GameplayTags.CombatSocket_Weapon = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -342,7 +366,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * °ø°İ ¸ùÅ¸ÁÖ
+	 * ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Å¸ï¿½ï¿½
 	 */
 
 	GameplayTags.Montage_Attack_1 = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -366,7 +390,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ÀÔ·Â ºí·Ï
+	 * ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ï¿½
 	 */
 
 	GameplayTags.Player_Block_InputHeld = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -385,7 +409,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * GameplayCue - »ç¿îµå
+	 * GameplayCue - ï¿½ï¿½ï¿½ï¿½
 	 */
 
 	GameplayTags.GameplayCue_Player_Damage = UGameplayTagsManager::Get().AddNativeGameplayTag(

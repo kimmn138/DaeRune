@@ -9,6 +9,7 @@
 
 class UAbilityInfo;
 class UAbilitySystemComponent;
+class UGameBalanceConfig;
 class UOverlayWidgetController;
 struct FWidgetControllerParams;
 
@@ -38,6 +39,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|CharacterClassDefaults")
 	static UAbilityInfo* GetAbilityInfo(const UObject* WorldContextObject);
+
+	// 게임 밸런스 설정 DataAsset 반환
+	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|GameBalance")
+	static UGameBalanceConfig* GetGameBalanceConfig(const UObject* WorldContextObject);
 
 	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayEffects")
 	static bool IsSuccessfulDebuff(const FGameplayEffectContextHandle& EffectContextHandle);

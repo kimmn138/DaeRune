@@ -3,6 +3,7 @@
 
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystem/Data/GameBalanceConfig.h"
 #include "DRAbilityTypes.h"
 #include "DRGameplayTags.h"
 #include "Actor/DRCleanserSite.h"
@@ -101,6 +102,13 @@ UAbilityInfo* UDRAbilitySystemLibrary::GetAbilityInfo(const UObject* WorldContex
 	const ADRGameModeBase* DRGameMode = Cast<ADRGameModeBase>(UGameplayStatics::GetGameMode(WorldContextObject));
 	if (DRGameMode == nullptr) return nullptr;
 	return DRGameMode->AbilityInfo;
+}
+
+UGameBalanceConfig* UDRAbilitySystemLibrary::GetGameBalanceConfig(const UObject* WorldContextObject)
+{
+	const ADRGameModeBase* DRGameMode = Cast<ADRGameModeBase>(UGameplayStatics::GetGameMode(WorldContextObject));
+	if (DRGameMode == nullptr) return nullptr;
+	return DRGameMode->GameBalanceConfig;
 }
 
 bool UDRAbilitySystemLibrary::IsSuccessfulDebuff(const FGameplayEffectContextHandle& EffectContextHandle)

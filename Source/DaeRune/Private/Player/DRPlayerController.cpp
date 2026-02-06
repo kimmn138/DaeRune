@@ -450,6 +450,13 @@ void ADRPlayerController::BeginPlay()
 	// �÷��̾�� TeamId 0
 	SetGenericTeamId(FGenericTeamId(0));
 
+	// 카메라 피치 제한 설정
+	if (PlayerCameraManager)
+	{
+		PlayerCameraManager->ViewPitchMin = -ViewPitchMin;  // 아래 (음수)
+		PlayerCameraManager->ViewPitchMax = ViewPitchMax;   // 위 (양수)
+	}
+
 	// 로컬 플레이어만 오디오 설정 적용
 	if (IsLocalController())
 	{

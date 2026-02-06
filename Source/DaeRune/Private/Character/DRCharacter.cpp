@@ -6,6 +6,8 @@
 #include "AbilitySystemComponent.h"
 #include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
+#include "AbilitySystem/Data/GameBalanceConfig.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
@@ -347,6 +349,17 @@ void ADRCharacter::InitAbilityActorInfo()
 
 	AbilitySystemComponent = ASC;
 	AttributeSet = DRPlayerState->GetAttributeSet();
+
+	// GameBalanceConfig에서 밸런스 값 적용 (서버에서만)
+	if (HasAuthority())
+	{
+		if (const UGameBalanceConfig* BalanceConfig = UDRAbilitySystemLibrary::GetGameBalanceConfig(this))
+		{
+			NumContainers = BalanceConfig->PlayerContainer.NumContainers;
+			ContainerHealth = BalanceConfig->PlayerContainer.ContainerHealth;
+			PartDropCooldown = BalanceConfig->PlayerCombat.PartDropCooldown;
+		}
+	}
 
 	// �÷��̾� AttributeSet�� �����̳� ���� ����
 	if (UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSet))

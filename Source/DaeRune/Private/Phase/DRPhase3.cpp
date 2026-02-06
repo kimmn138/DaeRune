@@ -9,7 +9,9 @@
 #include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
 #include "NavigationSystem.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystem/DRCleanserSiteAttributeSet.h"
+#include "AbilitySystem/Data/GameBalanceConfig.h"
 #include "Actor/DRPoisonGasActor.h"
 #include "Character/DRCharacter.h"
 
@@ -28,9 +30,12 @@ UDRPhase3::UDRPhase3()
 void UDRPhase3::OnPhaseStart()
 {
 	Super::OnPhaseStart();
-	
+
 	if (!GameMode || !GameState) return;
-	
+
+	// GameBalanceConfig에서 Phase3 설정 로드
+	LoadPhase3ConfigFromBalanceConfig();
+
 	// 목표 설정
 	SetupPhaseObjective(3);
 	
@@ -162,11 +167,10 @@ void UDRPhase3::StartNextWave()
 	TotalSpawnCount = 0;
 	CurrentSpawnTick = 0;
 	
-	// 웨이브 데이터 가져오기
-	if (WaveDataArray.IsValidIndex(CurrentWaveNumber - 1))
+	// 웨이브 데이터 가져오기 (DataTable 또는 Fallback)
 	{
-		const FWaveData& CurrentWave = WaveDataArray[CurrentWaveNumber - 1];
-		const FWaveLevelModifier& Modifier = GetWaveLevelModifier(CurrentWaveLevel);
+		const FWaveData CurrentWave = GetWaveData(CurrentWaveNumber);
+		const FWaveLevelModifier Modifier = GetWaveLevelModifier(CurrentWaveLevel);
 		
 		// 스폰 간격 계산
 		float ActualSpawnInterval = CurrentWave.BaseSpawnInterval * Modifier.SpawnIntervalMultiplier;
@@ -282,7 +286,7 @@ void UDRPhase3::StartRestTime()
 	}
 
 	// 휴식 시간 초기화
-	const FWaveData& CurrentWave = WaveDataArray[CurrentWaveNumber - 1];
+	const FWaveData CurrentWave = GetWaveData(CurrentWaveNumber);
 	RestTimeRemaining = CurrentWave.RestDuration;
 
 	// GameState에 휴식 시작 알림
@@ -295,40 +299,37 @@ void UDRPhase3::StartRestTime()
 	CurrentWaveState = EWaveState::Rest;
 	
 	// 휴식 시간 후 다음 웨이브 시작
-	if (WaveDataArray.IsValidIndex(CurrentWaveNumber - 1))
+	if (GameMode)
 	{
-		if (GameMode)
+		if (const UWorld* World = GameMode->GetWorld())
 		{
-			if (const UWorld* World = GameMode->GetWorld())
-			{
-				// TWeakObjectPtr로 안전한 캡처
-				TWeakObjectPtr<UDRPhase3> WeakThis(this);
-				World->GetTimerManager().SetTimer(
-					WaveTimerUpdateHandle,
-					[WeakThis]()
+			// TWeakObjectPtr로 안전한 캡처
+			TWeakObjectPtr<UDRPhase3> WeakThis(this);
+			World->GetTimerManager().SetTimer(
+				WaveTimerUpdateHandle,
+				[WeakThis]()
+				{
+					if (UDRPhase3* StrongThis = WeakThis.Get())
 					{
-						if (UDRPhase3* StrongThis = WeakThis.Get())
+						StrongThis->RestTimeRemaining = FMath::Max(0.0f, StrongThis->RestTimeRemaining - 1.0f);
+						if (StrongThis->GameState)
 						{
-							StrongThis->RestTimeRemaining = FMath::Max(0.0f, StrongThis->RestTimeRemaining - 1.0f);
-							if (StrongThis->GameState)
-							{
-								StrongThis->GameState->SetWaveRemainingTime(StrongThis->RestTimeRemaining);
-							}
+							StrongThis->GameState->SetWaveRemainingTime(StrongThis->RestTimeRemaining);
 						}
-					},
-					1.0f,
-					true,
-					0.0f
-				);
+					}
+				},
+				1.0f,
+				true,
+				0.0f
+			);
 
-				World->GetTimerManager().SetTimer(
-					WaveTimerHandle,
-					this,
-					&UDRPhase3::EndRestTime,
-					CurrentWave.RestDuration,
-					false
-				);
-			}
+			World->GetTimerManager().SetTimer(
+				WaveTimerHandle,
+				this,
+				&UDRPhase3::EndRestTime,
+				CurrentWave.RestDuration,
+				false
+			);
 		}
 	}
 }
@@ -342,11 +343,9 @@ void UDRPhase3::EndRestTime()
 void UDRPhase3::ProcessWaveSpawn()
 {
 	if (!GameMode) return;
-	
-	if (!WaveDataArray.IsValidIndex(CurrentWaveNumber - 1)) return;
-	
-	const FWaveData& CurrentWave = WaveDataArray[CurrentWaveNumber - 1];
-	const FWaveLevelModifier& Modifier = GetWaveLevelModifier(CurrentWaveLevel);
+
+	const FWaveData CurrentWave = GetWaveData(CurrentWaveNumber);
+	const FWaveLevelModifier Modifier = GetWaveLevelModifier(CurrentWaveLevel);
 
 	int32 CurrentPlayerCounts = 0;
 
@@ -395,11 +394,8 @@ void UDRPhase3::SpawnMonstersAroundPlayers(const TArray<ADRCharacter*>& PlayerCh
 	if (!World) return;
 	
 	if (!NormalMonsterClass) return;
-	
+
 	if (PlayerCharacters.Num() == 0) return;
-	
-	// 웨이브 데이터 가져오기
-	if (!WaveDataArray.IsValidIndex(CurrentWaveNumber - 1)) return;
 
 	int32 TotalSpawnAttempts = 0;
 	int32 SuccessfulSpawns = 0;
@@ -437,7 +433,7 @@ void UDRPhase3::SpawnMonstersAroundPlayers(const TArray<ADRCharacter*>& PlayerCh
 				SpawnedEnemy->bIsPhase3Enemy = true;
 				if (CurrentWaveLevel >= 4)
 				{
-					SpawnedEnemy->EnrageHealthThreshold = 0.25f;
+					SpawnedEnemy->EnrageHealthThreshold = HighLevelEnrageThreshold;
 				}
 				
 				// FinishSpawning으로 BeginPlay 실행
@@ -553,7 +549,7 @@ void UDRPhase3::SpawnEliteMonster(const FVector& SpawnLocation)
 		SpawnedEnemy->bIsPhase3Enemy = true;
 		if (CurrentWaveLevel >= 4)
 		{
-			SpawnedEnemy->EnrageHealthThreshold = 0.25f;
+			SpawnedEnemy->EnrageHealthThreshold = HighLevelEnrageThreshold;
 		}
 		
 		// FinishSpawning
@@ -582,14 +578,78 @@ FWaveLevelModifier UDRPhase3::GetWaveLevelModifier(int32 WaveLevel) const
 {
 	// 웨이브 레벨은 1~5로 제한
 	int32 ClampedLevel = FMath::Clamp(WaveLevel, 1, 5);
-	
+
+	// DataTable에서 먼저 조회 시도
+	if (WaveLevelModifierTable)
+	{
+		FString RowName = FString::Printf(TEXT("Level%d"), ClampedLevel);
+		if (const FWaveLevelModifierRow* Row = WaveLevelModifierTable->FindRow<FWaveLevelModifierRow>(FName(*RowName), TEXT("")))
+		{
+			// DataTable Row를 FWaveLevelModifier로 변환
+			FWaveLevelModifier Modifier;
+			Modifier.MonsterCountMultiplier = Row->MonsterCountMultiplier;
+			Modifier.SpawnIntervalMultiplier = Row->SpawnIntervalMultiplier;
+			Modifier.RushMonsterSpawnChance = Row->RushMonsterSpawnChance;
+			Modifier.StealthMonsterSpawnChance = Row->StealthMonsterSpawnChance;
+			Modifier.bSpawnToxicGas = Row->bSpawnToxicGas;
+			Modifier.bSpawnEliteBoss = Row->bSpawnEliteBoss;
+			return Modifier;
+		}
+	}
+
+	// Fallback: 기존 TMap에서 조회
 	if (const FWaveLevelModifier* Modifier = WaveLevelModifiers.Find(ClampedLevel))
 	{
 		return *Modifier;
 	}
-	
+
 	// 기본값 반환
 	return FWaveLevelModifier();
+}
+
+FWaveData UDRPhase3::GetWaveData(int32 WaveNumber) const
+{
+	// 웨이브 번호는 1~5로 제한
+	int32 ClampedWave = FMath::Clamp(WaveNumber, 1, 5);
+
+	// DataTable에서 먼저 조회 시도
+	if (WaveDataTable)
+	{
+		FString RowName = FString::Printf(TEXT("Wave%d"), ClampedWave);
+		if (const FWaveDataRow* Row = WaveDataTable->FindRow<FWaveDataRow>(FName(*RowName), TEXT("")))
+		{
+			// DataTable Row를 FWaveData로 변환
+			FWaveData WaveData;
+			WaveData.PlayDuration = Row->PlayDuration;
+			WaveData.RestDuration = Row->RestDuration;
+			WaveData.BaseSpawnInterval = Row->BaseSpawnInterval;
+			WaveData.BaseMonstersPerPlayer = Row->BaseMonstersPerPlayer;
+			return WaveData;
+		}
+	}
+
+	// Fallback: 기존 TArray에서 조회
+	int32 ArrayIndex = ClampedWave - 1;
+	if (WaveDataArray.IsValidIndex(ArrayIndex))
+	{
+		return WaveDataArray[ArrayIndex];
+	}
+
+	// 기본값 반환
+	return FWaveData();
+}
+
+void UDRPhase3::LoadPhase3ConfigFromBalanceConfig()
+{
+	if (const UGameBalanceConfig* BalanceConfig = UDRAbilitySystemLibrary::GetGameBalanceConfig(GameMode))
+	{
+		MaxMonsterCount = BalanceConfig->Phase3.MaxMonsterCount;
+		DefenseDuration = BalanceConfig->Phase3.DefenseDuration;
+		SpawnDistanceMin = BalanceConfig->Phase3.SpawnDistanceMin;
+		SpawnDistanceMax = BalanceConfig->Phase3.SpawnDistanceMax;
+		PoisonGasSpawnInterval = BalanceConfig->Phase3.PoisonGasSpawnInterval;
+		HighLevelEnrageThreshold = BalanceConfig->Phase3.HighLevelEnrageThreshold;
+	}
 }
 
 void UDRPhase3::IncreaseWaveLevel(int32 Amount)
@@ -646,6 +706,18 @@ void UDRPhase3::InitializeActiveSpawnPoints()
 	ActiveSpawnPointIndices.Empty();
 	ActiveBlueSpawnPointIndices.Empty();
 
+	// 그리드 기반 스폰 포인트 생성 또는 수동 설정 사용
+	if (bUseGridBasedSpawnPoints)
+	{
+		GenerateGridSpawnPoints();
+		AssignCleanserLinkedPoints();
+	}
+	else
+	{
+		// 레거시: 수동 설정 사용
+		AllPoisonGasSpawnPoints = ManualSpawnPoints;
+	}
+
 	// ActiveCleanserSites는 Phase1에서 설정된 2개의 활성 클렌저
 	if (ActiveCleanserSites.Num() == 0) return;
 
@@ -658,7 +730,7 @@ void UDRPhase3::InitializeActiveSpawnPoints()
 			FName CleanserID = CleanserSite->GetCleanserID();
 			if (CleanserID != NAME_None)
 			{
-			     ActiveCleanserIDs.Add(CleanserID);
+				ActiveCleanserIDs.Add(CleanserID);
 			}
 		}
 	}
@@ -670,17 +742,89 @@ void UDRPhase3::InitializeActiveSpawnPoints()
 
 		if (Point.SpawnType == EPoisonGasSpawnPointType::Normal)
 		{
-			// 초록색 포인트는 항상 활성화 (36개)
+			// Normal 포인트는 항상 활성화
 			ActiveSpawnPointIndices.Add(i);
 		}
 		else if (Point.SpawnType == EPoisonGasSpawnPointType::CleanserLinked)
 		{
-			// 파란색 포인트는 연결된 클렌저가 활성화되어 있는지 확인
+			// CleanserLinked 포인트는 연결된 클렌저가 활성화되어 있는지 확인
+			// 그리드 모드에서는 LinkedCleanserTag가 자동 설정됨
 			if (Point.LinkedCleanserTag != NAME_None && ActiveCleanserIDs.Contains(Point.LinkedCleanserTag))
 			{
 				ActiveSpawnPointIndices.Add(i);
 				ActiveBlueSpawnPointIndices.Add(i);
 			}
+		}
+	}
+}
+
+void UDRPhase3::GenerateGridSpawnPoints()
+{
+	AllPoisonGasSpawnPoints.Empty();
+	AllPoisonGasSpawnPoints.Reserve(PoisonGasGridConfig.GetTotalCount());
+
+	// 그리드 좌표 생성 (8x6 = 48개)
+	for (int32 y = 0; y < PoisonGasGridConfig.CountY; ++y)
+	{
+		for (int32 x = 0; x < PoisonGasGridConfig.CountX; ++x)
+		{
+			FPoisonGasSpawnPointData PointData;
+			PointData.Location = PoisonGasGridConfig.GridOrigin + FVector(
+				x * PoisonGasGridConfig.SpacingX,
+				y * PoisonGasGridConfig.SpacingY,
+				0.0f
+			);
+			PointData.SpawnType = EPoisonGasSpawnPointType::Normal;
+			PointData.LinkedCleanserTag = NAME_None;
+
+			AllPoisonGasSpawnPoints.Add(PointData);
+		}
+	}
+}
+
+void UDRPhase3::AssignCleanserLinkedPoints()
+{
+	if (ActiveCleanserSites.Num() == 0 || AllPoisonGasSpawnPoints.Num() == 0) return;
+
+	const int32 PointsPerCleanser = PoisonGasGridConfig.LinkedPointsPerCleanser;
+
+	// 각 활성 클렌저에 대해 가장 가까운 N개 포인트를 CleanserLinked로 설정
+	for (const TObjectPtr<ADRCleanserSite>& CleanserSite : ActiveCleanserSites)
+	{
+		if (!CleanserSite) continue;
+
+		FVector CleanserLocation = CleanserSite->GetActorLocation();
+		FName CleanserID = CleanserSite->GetCleanserID();
+
+		// 거리순으로 정렬할 인덱스-거리 쌍 배열
+		TArray<TPair<int32, float>> IndexDistancePairs;
+		IndexDistancePairs.Reserve(AllPoisonGasSpawnPoints.Num());
+
+		for (int32 i = 0; i < AllPoisonGasSpawnPoints.Num(); ++i)
+		{
+			// 이미 다른 클렌저에 연결된 포인트는 제외
+			if (AllPoisonGasSpawnPoints[i].SpawnType == EPoisonGasSpawnPointType::CleanserLinked)
+			{
+				continue;
+			}
+
+			float Distance = FVector::Dist2D(CleanserLocation, AllPoisonGasSpawnPoints[i].Location);
+			IndexDistancePairs.Add(TPair<int32, float>(i, Distance));
+		}
+
+		// 거리순 정렬
+		IndexDistancePairs.Sort([](const TPair<int32, float>& A, const TPair<int32, float>& B)
+		{
+			return A.Value < B.Value;
+		});
+
+		// 가장 가까운 N개를 CleanserLinked로 설정
+		int32 AssignedCount = FMath::Min(PointsPerCleanser, IndexDistancePairs.Num());
+		for (int32 i = 0; i < AssignedCount; ++i)
+		{
+			int32 PointIndex = IndexDistancePairs[i].Key;
+			AllPoisonGasSpawnPoints[PointIndex].SpawnType = EPoisonGasSpawnPointType::CleanserLinked;
+			AllPoisonGasSpawnPoints[PointIndex].LinkedCleanserTag = CleanserID;
 		}
 	}
 }

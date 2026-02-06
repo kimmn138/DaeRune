@@ -71,6 +71,12 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 
 					// 어그로 상태 설정 (AnimBP용)
 					Enemy->bIsAggroed = true;
+
+					// GAS 상태 태그 추가
+					if (UAbilitySystemComponent* EnemyASC = Enemy->GetAbilitySystemComponent())
+					{
+						EnemyASC->AddLooseGameplayTag(FDRGameplayTags::Get().State_Aggroed);
+					}
 				}
 				BB->SetValueAsObject("AttackingPlayer", Props.SourceAvatarActor);
 
