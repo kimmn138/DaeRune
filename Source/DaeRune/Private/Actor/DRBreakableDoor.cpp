@@ -214,7 +214,13 @@ void ADRBreakableDoor::PlayBreakEffects()
 	// 사운드 재생
 	if (BreakSound)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, BreakSound, EnemySpawnOffsets[1]);
+		FVector SoundLocation = GetActorLocation();
+		if (EnemySpawnOffsets.IsValidIndex(1))
+		{
+			SoundLocation += GetActorRotation().RotateVector(EnemySpawnOffsets[1]);
+		}
+
+		UGameplayStatics::PlaySoundAtLocation(this, BreakSound, SoundLocation);
 	}
 
 	// 파티클 이펙트

@@ -581,7 +581,7 @@ void ADREnemy::GrantWaterToPlayers()
 		{
 			if (ADRCharacter* Player = Cast<ADRCharacter>(Result.GetActor()))
 			{
-				PlayersToGrant.Add(Player);
+				PlayersToGrant.AddUnique(Player);
 			}
 		}
 	}

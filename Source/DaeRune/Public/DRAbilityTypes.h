@@ -1,11 +1,11 @@
-#pragma once
+ï»¿#pragma once
 
 #include "GameplayEffectTypes.h"
 #include "DRAbilityTypes.generated.h"
 
 class UGameplayEffect;
 
-// µ¥¹ÌÁö ÀÌÆåÆ® Àû¿ë¿¡ »ç¿ëµÇ´Â ±¸Á¶Ã¼
+// ë°ë¯¸ì§€ ì´í™íŠ¸ ì ìš©ì— ì‚¬ìš©ë˜ëŠ” êµ¬ì¡°ì²´
 USTRUCT(BlueprintType)
 struct FDamageEffectParams
 {
@@ -59,7 +59,7 @@ struct FDamageEffectParams
 	FVector KnockbackForce = FVector::ZeroVector;
 };
 
-// DaeRune Àü¿ë È®ÀåµÈ GameplayEffectContext
+// DaeRune ì „ìš© í™•ì¥ëœ GameplayEffectContext
 USTRUCT(BlueprintType)
 struct FDRGameplayEffectContext : public FGameplayEffectContext
 {
@@ -80,14 +80,14 @@ public:
 	void SetDeathImpulse(const FVector& InImpulse) { DeathImpulse = InImpulse; }
 	void SetKnockbackForce(const FVector& InForce) { KnockbackForce = InForce; }
 
-	// ¾ğ¸®¾ó Á÷·ÄÈ­ ½Ã½ºÅÛ ¿¬µ¿
+	// ì–¸ë¦¬ì–¼ ì§ë ¬í™” ì‹œìŠ¤í…œ ì—°ë™
 	/** Returns the actual struct used for serialization, subclasses must override this! */
 	virtual UScriptStruct* GetScriptStruct() const override
 	{
 		return StaticStruct();
 	}
 
-	// ÄÁÅØ½ºÆ® ±íÀº º¹»ç
+	// ì»¨í…ìŠ¤íŠ¸ ê¹Šì€ ë³µì‚¬
 	/** Creates a copy of this context, used to duplicate for later modifications */
 	virtual FGameplayEffectContext* Duplicate() const override
 	{
@@ -101,7 +101,7 @@ public:
 		return NewContext;
 	}
 
-	// ³×Æ®¿öÅ© Á÷·ÄÈ­
+	// ë„¤íŠ¸ì›Œí¬ ì§ë ¬í™”
 	/** Custom serialization, subclasses must override this */
 	virtual bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess) override;
 
@@ -123,7 +123,7 @@ public:
 	FVector KnockbackForce = FVector::ZeroVector;
 };
 
-// ³×Æ®¿öÅ© Á÷·ÄÈ­ ¹× º¹»ç ¿¬»ê Áö¿øÀ» À§ÇÑ Æ¯¼º Á¤ÀÇ
+// ë„¤íŠ¸ì›Œí¬ ì§ë ¬í™” ë° ë³µì‚¬ ì—°ì‚° ì§€ì›ì„ ìœ„í•œ íŠ¹ì„± ì •ì˜
 template<>
 struct TStructOpsTypeTraits<FDRGameplayEffectContext> : public TStructOpsTypeTraitsBase2<FDRGameplayEffectContext>
 {
