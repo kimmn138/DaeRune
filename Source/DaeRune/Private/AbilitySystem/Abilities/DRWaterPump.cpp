@@ -130,6 +130,7 @@ AActor* UDRWaterPump::FindClosestTargetInBeam(const FVector& WeaponSocketLocatio
     );
 
     // 디버그 시각화
+
 #if ENABLE_DRAW_DEBUG
     if (bShowDebugVisualization)
     {
@@ -324,6 +325,8 @@ FGameplayAbilityTargetDataHandle UDRWaterPump::MakeTargetDataHandleFromActors(AA
 
 void UDRWaterPump::StartBeamEffect()
 {
+    UE_LOG(LogTemp, Warning, TEXT("StartBeamEffect called"));
+
     if (!WaterCannonEffect) return;
 
     ADRCharacter* Character = Cast<ADRCharacter>(GetAvatarActorFromActorInfo());
@@ -375,15 +378,44 @@ void UDRWaterPump::StartBeamEffect()
 
 void UDRWaterPump::UpdateBeamEndpoint()
 {
+    ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+    if (!OwnerCharacter || !OwnerCharacter->Implements<UCombatInterface>())
+    {
+        return;
+    }
+
+    // 1. 현재 무기 소켓 위치
+    const FVector WeaponSocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(
+        OwnerCharacter,
+        FDRGameplayTags::Get().CombatSocket_RightHand
+    );
+
+    // 2. 현재 빔 끝점은 PerformWaterPumpTick()에서 이미 CachedBeamEndPoint로 갱신됨
+    //    그걸 기준으로 방향/회전 계산
+    FVector BeamDir = CachedBeamEndPoint - WeaponSocketLocation;
+    if (!BeamDir.IsNearlyZero())
+    {
+        BeamDir.Normalize();
+    }
+    const FRotator BeamRotation = BeamDir.Rotation();
+
+    // 3. 나이아가라 컴포넌트 트랜스폼 업데이트
     if (FirstPersonBeam)
     {
+        FirstPersonBeam->SetWorldLocation(WeaponSocketLocation);
+        FirstPersonBeam->SetWorldRotation(BeamRotation);
         FirstPersonBeam->SetVectorParameter(FName("HitEffectPosition"), CachedBeamEndPoint);
     }
 
     if (ThirdPersonBeam)
     {
+        ThirdPersonBeam->SetWorldLocation(WeaponSocketLocation);
+        ThirdPersonBeam->SetWorldRotation(BeamRotation);
         ThirdPersonBeam->SetVectorParameter(FName("HitEffectPosition"), CachedBeamEndPoint);
     }
+
+    // 필요하면 BP 이벤트도 여기서 호출
+    OnBeamEndPointUpdated(CachedBeamEndPoint);
 }
 
 void UDRWaterPump::StopBeamEffect()
