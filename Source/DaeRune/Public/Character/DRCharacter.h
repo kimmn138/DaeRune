@@ -9,6 +9,8 @@
 
 class UWidgetComponent;
 class ADRCleanserPart;
+class UNiagaraComponent;
+class UNiagaraSystem;
 
 /**
  * �÷��̾� ĳ���� Ŭ����
@@ -79,6 +81,27 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Death")
 	void PlayDeathCameraAnimation();
 
+	// ========== WaterPump 3P 빔 (리플리케이트 상태) ==========
+
+	// 물대포 활성화 상태 (서버에서 설정, RepNotify로 비소유 클라이언트에서 3P 빔 관리)
+	UPROPERTY(ReplicatedUsing=OnRep_WaterPumpActive, BlueprintReadOnly, Category = "Effects")
+	bool bWaterPumpActive = false;
+
+	// 물대포 빔 끝점 (서버에서 0.1초마다 갱신, 비소유 클라이언트에서 3P 빔 위치 업데이트용)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Effects")
+	FVector WaterPumpBeamEndPoint = FVector::ZeroVector;
+
+	// Niagara 에셋 (블루프린트 기본값에서 설정 - WaterPump 어빌리티의 WaterCannonEffect와 동일 에셋 지정)
+	UPROPERTY(EditDefaultsOnly, Category = "Effects")
+	TObjectPtr<UNiagaraSystem> WaterPumpEffectAsset;
+
+	// 3P 빔 부착 소켓 이름 (WaterPump 어빌리티의 MuzzleSocketName과 동일하게 설정)
+	UPROPERTY(EditDefaultsOnly, Category = "Effects")
+	FName WaterPumpMuzzleSocket = FName("TestRightHand");
+
+	UFUNCTION()
+	void OnRep_WaterPumpActive();
+
 	// ========== 1��Ī/3��Ī �޽� �ý��� ==========
 
 	// 1��Ī �޽�
@@ -122,6 +145,21 @@ protected:
 	virtual float GetMoveSpeed() override;
 
 private:
+	// ========== WaterPump 3P 빔 (내부) ==========
+
+	// 비소유 클라이언트에서 관리하는 3P Niagara 빔 컴포넌트
+	UPROPERTY()
+	TObjectPtr<UNiagaraComponent> WaterPumpThirdPersonBeam;
+
+	// 3P 빔 업데이트 타이머
+	FTimerHandle WaterPumpBeamUpdateTimer;
+
+	// 3P 빔 보간용 현재 표시 위치
+	FVector WaterPumpBeamDisplayEndPoint = FVector::ZeroVector;
+
+	// 3P 빔 위치 업데이트 함수 (타이머 콜백)
+	void UpdateWaterPumpThirdPersonBeam();
+
 	// GAS 초기화
 	virtual void InitAbilityActorInfo() override;
 

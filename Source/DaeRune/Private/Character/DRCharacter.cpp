@@ -12,6 +12,7 @@
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
 #include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 #include "AbilitySystem/Debuff/DebuffNiagaraComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -78,6 +79,10 @@ void ADRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 
 	DOREPLIFETIME(ADRCharacter, bIsCarryingPart);
 	DOREPLIFETIME(ADRCharacter, CarriedPart);
+
+	// WaterPump 3P 빔 리플리케이트
+	DOREPLIFETIME(ADRCharacter, bWaterPumpActive);
+	DOREPLIFETIME_CONDITION(ADRCharacter, WaterPumpBeamEndPoint, COND_SkipOwner);
 }
 
 void ADRCharacter::PossessedBy(AController* NewController)
@@ -294,9 +299,111 @@ void ADRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(PlayerStateRegisterTimerHandle);
+		World->GetTimerManager().ClearTimer(WaterPumpBeamUpdateTimer);
+	}
+
+	// 3P 빔 정리
+	if (WaterPumpThirdPersonBeam)
+	{
+		WaterPumpThirdPersonBeam->DeactivateImmediate();
+		WaterPumpThirdPersonBeam->DestroyComponent();
+		WaterPumpThirdPersonBeam = nullptr;
 	}
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void ADRCharacter::OnRep_WaterPumpActive()
+{
+	// 소유 클라이언트는 WaterPump 어빌리티에서 1P 빔을 직접 관리
+	// 이 함수는 비소유 클라이언트(+ 리슨 서버 호스트의 수동 호출)에서만 3P 빔을 관리
+	if (IsLocallyControlled()) return;
+
+	if (bWaterPumpActive)
+	{
+		// 3P Niagara 빔 생성
+		USkeletalMeshComponent* ThirdPersonMesh = GetMesh();
+		if (WaterPumpEffectAsset && ThirdPersonMesh
+			&& ThirdPersonMesh->DoesSocketExist(WaterPumpMuzzleSocket))
+		{
+			WaterPumpThirdPersonBeam = UNiagaraFunctionLibrary::SpawnSystemAttached(
+				WaterPumpEffectAsset,
+				ThirdPersonMesh,
+				WaterPumpMuzzleSocket,
+				FVector::ZeroVector,
+				FRotator::ZeroRotator,
+				EAttachLocation::SnapToTarget,
+				false
+			);
+
+			if (WaterPumpThirdPersonBeam)
+			{
+				WaterPumpThirdPersonBeam->SetOwnerNoSee(true);
+				WaterPumpThirdPersonBeam->SetVectorParameter(
+					FName("HitEffectPosition"), WaterPumpBeamEndPoint);
+			}
+		}
+
+		// 보간 위치 초기화
+		WaterPumpBeamDisplayEndPoint = WaterPumpBeamEndPoint;
+
+		// 3P 빔 위치 업데이트 타이머 시작 (30fps)
+		GetWorldTimerManager().SetTimer(
+			WaterPumpBeamUpdateTimer,
+			this,
+			&ADRCharacter::UpdateWaterPumpThirdPersonBeam,
+			0.033f,
+			true
+		);
+	}
+	else
+	{
+		// 3P Niagara 빔 파괴
+		GetWorldTimerManager().ClearTimer(WaterPumpBeamUpdateTimer);
+
+		if (WaterPumpThirdPersonBeam)
+		{
+			WaterPumpThirdPersonBeam->DeactivateImmediate();
+			WaterPumpThirdPersonBeam->DestroyComponent();
+			WaterPumpThirdPersonBeam = nullptr;
+		}
+
+		WaterPumpBeamDisplayEndPoint = FVector::ZeroVector;
+	}
+}
+
+void ADRCharacter::UpdateWaterPumpThirdPersonBeam()
+{
+	if (!WaterPumpThirdPersonBeam) return;
+	if (WaterPumpBeamEndPoint.IsNearlyZero()) return;
+
+	USkeletalMeshComponent* ThirdPersonMesh = GetMesh();
+	if (!ThirdPersonMesh) return;
+
+	// 소켓 위치 획득
+	const FVector SocketLocation = ThirdPersonMesh->GetSocketLocation(WaterPumpMuzzleSocket);
+
+	// 클라이언트 측 보간 (서버 0.1초 갱신을 30fps로 부드럽게)
+	const float InterpSpeed = 15.0f;
+	WaterPumpBeamDisplayEndPoint = FMath::VInterpTo(
+		WaterPumpBeamDisplayEndPoint,
+		WaterPumpBeamEndPoint,
+		0.033f,
+		InterpSpeed
+	);
+
+	// 빔 방향 계산
+	FVector BeamDir = WaterPumpBeamDisplayEndPoint - SocketLocation;
+	if (BeamDir.IsNearlyZero()) return;
+	BeamDir.Normalize();
+
+	const FRotator BeamRotation = BeamDir.Rotation();
+
+	// Niagara 업데이트
+	WaterPumpThirdPersonBeam->SetWorldLocation(SocketLocation);
+	WaterPumpThirdPersonBeam->SetWorldRotation(BeamRotation);
+	WaterPumpThirdPersonBeam->SetVectorParameter(
+		FName("HitEffectPosition"), WaterPumpBeamDisplayEndPoint);
 }
 
 void ADRCharacter::OnRep_bIsCarryingPart()

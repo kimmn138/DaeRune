@@ -17,11 +17,11 @@ class DAERUNE_API UDRWaterPump : public UDRDamageGameplayAbility
 	GENERATED_BODY()
 
 public:
-    // 1. ¹«±â ¼ÒÄÏ¿¡¼­ ¿¡ÀÓ ¹æÇâÀ¸·Î ·¹ÀÌÆ®·¹ÀÌ½Ì
+    // 1. ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ï¿ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½Ì½ï¿½
     UFUNCTION(BlueprintCallable, Category = "Water Pump")
     FVector CalculateWaterBeamEndPoint(const FVector& WeaponSocketLocation, bool& bHitObstacle, FHitResult& OutHitResult);
 
-    // 2. ¹°´ëÆ÷ °æ·Î »óÀÇ ¸ğµç Àû Ã£±â (BoxOverlap)
+    // 2. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ Ã£ï¿½ï¿½ (BoxOverlap)
     UFUNCTION(BlueprintCallable, Category = "Water Pump")
     AActor* FindClosestTargetInBeam(const FVector& WeaponSocketLocation, const FVector& BeamEndPoint);
 
@@ -34,7 +34,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Water Pump")
     void PerformWaterPumpTick();
 
-    // ÇöÀç Å¸°Ù °ü¸®
+    // ï¿½ï¿½ï¿½ï¿½ Å¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     UFUNCTION(BlueprintPure, Category = "Water Pump")
     AActor* GetCurrentTarget() const { return CurrentTarget.Get(); }
 
@@ -47,7 +47,7 @@ public:
     UFUNCTION(BlueprintPure, Category = "Water Pump")
     FVector GetBeamEndPoint() const { return CachedBeamEndPoint; }
 
-    // ºí·çÇÁ¸°Æ® ÀÌº¥Æ® (Çì´õ¿¡ Ãß°¡)
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½Ìºï¿½Æ® (ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ß°ï¿½)
     UFUNCTION(BlueprintImplementableEvent, Category = "Water Pump")
     void OnTargetChanged(AActor* OldTarget, AActor* NewTarget);
 
@@ -65,66 +65,63 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category = "Effects")
     TObjectPtr<UNiagaraSystem> WaterCannonEffect;
 
-    // ¹ß»ç ¼ÒÄÏ ÀÌ¸§
+    // ï¿½ß»ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ì¸ï¿½
     UPROPERTY(EditDefaultsOnly, Category = "Effects")
     FName MuzzleSocketName = FName("TestRightHand");
 
-    // »ı¼ºµÈ Niagara Component
+    // 1P Niagara Component (3PëŠ” DRCharacterì—ì„œ ë¦¬í”Œë¦¬ì¼€ì´íŠ¸ ìƒíƒœë¡œ ê´€ë¦¬)
     UPROPERTY()
     TObjectPtr<UNiagaraComponent> FirstPersonBeam;
 
-    UPROPERTY()
-    TObjectPtr<UNiagaraComponent> ThirdPersonBeam;
-
-    // Å¸ÀÌ¸Ó
+    // Å¸ï¿½Ì¸ï¿½
     FTimerHandle BeamUpdateTimer;
 
-    // ÇÔ¼öµé
+    // ï¿½Ô¼ï¿½ï¿½ï¿½
     void StartBeamEffect();
     void UpdateBeamEndpoint();
     void StopBeamEffect();
 
-    // ¹«±â »çÁ¤°Å¸®
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Å¸ï¿½
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Pump")
     float WeaponRange = 1000.f;
 
-    // ¹°´ëÆ÷ Æø
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Pump")
     float BeamWidth = 25.f;
 
-    // ¹°´ëÆ÷ ³ôÀÌ
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Pump")
     float BeamHeight = 25.f;
 
-    // Tick °£°İ (0.1ÃÊ)
+    // Tick ï¿½ï¿½ï¿½ï¿½ (0.1ï¿½ï¿½)
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Pump")
     float TickInterval = 0.1f;
 
-    // µ¥¹ÌÁö Àû¿ë °£°İ (1ÃÊ = 10 ticks)
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (1ï¿½ï¿½ = 10 ticks)
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Pump")
     int32 DamageApplicationInterval = 10;
 
-    // µğ¹ö±× ½Ã°¢È­ È°¼ºÈ­
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½È­ È°ï¿½ï¿½È­
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Pump")
     bool bShowDebugVisualization = false;
 
-    // ÇöÀç Å¸°Ù°ú ÀÌÀü Å¸°Ù ÃßÀû
+    // ï¿½ï¿½ï¿½ï¿½ Å¸ï¿½Ù°ï¿½ ï¿½ï¿½ï¿½ï¿½ Å¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     UPROPERTY(BlueprintReadOnly, Category = "Water Pump")
     TWeakObjectPtr<AActor> CurrentTarget;
 
     UPROPERTY(BlueprintReadOnly, Category = "Water Pump")
     TWeakObjectPtr<AActor> PreviousTarget;
 
-    // Ä³½ÃµÈ ¹°´ëÆ÷ ³¡Á¡ (ºí·çÇÁ¸°Æ®¿¡¼­ ÀÌÆåÆ® À§Ä¡·Î »ç¿ë)
+    // Ä³ï¿½Ãµï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½ï¿½)
     UPROPERTY(BlueprintReadOnly, Category = "Water Pump")
     FVector CachedBeamEndPoint;
 
 private:
     FTimerHandle WaterPumpTimerHandle;
     
-    // ´ÜÀÏ Ä«¿îÅÍ
+    // ï¿½ï¿½ï¿½ï¿½ Ä«ï¿½ï¿½ï¿½ï¿½
     int32 DamageTickCounter = 0;
 
-    // Ä«¸Ş¶ó ¿¡ÀÓ ¹æÇâ °è»ê
+    // Ä«ï¿½Ş¶ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
     bool GetAimDirection(FVector& OutAimStart, FVector& OutAimDirection) const;
 };
