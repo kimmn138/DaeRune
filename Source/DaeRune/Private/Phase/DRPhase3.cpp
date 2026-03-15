@@ -790,15 +790,7 @@ void UDRPhase3::InitializeActiveSpawnPoints()
 	ActiveSpawnPointIndices.Empty();
 	ActiveBlueSpawnPointIndices.Empty();
 
-	if (bUseGridBasedSpawnPoints)
-	{
-		GenerateGridSpawnPoints();
-		AssignCleanserLinkedPoints();
-	}
-	else
-	{
-		AllPoisonGasSpawnPoints = ManualSpawnPoints;
-	}
+	FindPoisonGasSpawnPoints();
 
 	if (ActiveCleanserSites.Num() == 0) return;
 
@@ -834,71 +826,64 @@ void UDRPhase3::InitializeActiveSpawnPoints()
 	}
 }
 
-// 설정된 그리드 기반으로 독가스 스폰 포인트를 생성합니다.
-void UDRPhase3::GenerateGridSpawnPoints()
+// 레벨에 배치된 마커 액터를 태그로 탐색하여 독가스 스폰 포인트를 구성합니다.
+void UDRPhase3::FindPoisonGasSpawnPoints()
 {
 	AllPoisonGasSpawnPoints.Empty();
-	AllPoisonGasSpawnPoints.Reserve(PoisonGasGridConfig.GetTotalCount());
 
-	for (int32 y = 0; y < PoisonGasGridConfig.CountY; ++y)
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// 활성 클렌저 ID 수집
+	TSet<FName> ActiveCleanserIDs;
+	for (const TObjectPtr<ADRCleanserSite>& Site : ActiveCleanserSites)
 	{
-		for (int32 x = 0; x < PoisonGasGridConfig.CountX; ++x)
+		if (Site)
 		{
-			FPoisonGasSpawnPointData PointData;
-			PointData.Location = PoisonGasGridConfig.GridOrigin + FVector(
-				x * PoisonGasGridConfig.SpacingX,
-				y * PoisonGasGridConfig.SpacingY,
-				0.0f
-			);
-			PointData.SpawnType = EPoisonGasSpawnPointType::Normal;
-			PointData.LinkedCleanserTag = NAME_None;
-
-			AllPoisonGasSpawnPoints.Add(PointData);
-		}
-	}
-}
-
-// 클렌저와 가까운 포인트를 CleanserLinked로 지정합니다.
-void UDRPhase3::AssignCleanserLinkedPoints()
-{
-	if (ActiveCleanserSites.Num() == 0 || AllPoisonGasSpawnPoints.Num() == 0) return;
-
-	const int32 PointsPerCleanser = PoisonGasGridConfig.LinkedPointsPerCleanser;
-
-	for (const TObjectPtr<ADRCleanserSite>& CleanserSite : ActiveCleanserSites)
-	{
-		if (!CleanserSite) continue;
-
-		FVector CleanserLocation = CleanserSite->GetActorLocation();
-		FName CleanserID = CleanserSite->GetCleanserID();
-
-		TArray<TPair<int32, float>> IndexDistancePairs;
-		IndexDistancePairs.Reserve(AllPoisonGasSpawnPoints.Num());
-
-		for (int32 i = 0; i < AllPoisonGasSpawnPoints.Num(); ++i)
-		{
-			if (AllPoisonGasSpawnPoints[i].SpawnType == EPoisonGasSpawnPointType::CleanserLinked)
+			const FName CleanserID = Site->GetCleanserID();
+			if (CleanserID != NAME_None)
 			{
-				continue;
+				ActiveCleanserIDs.Add(CleanserID);
 			}
-
-			float Distance = FVector::Dist2D(CleanserLocation, AllPoisonGasSpawnPoints[i].Location);
-			IndexDistancePairs.Add(TPair<int32, float>(i, Distance));
-		}
-
-		IndexDistancePairs.Sort([](const TPair<int32, float>& A, const TPair<int32, float>& B)
-		{
-			return A.Value < B.Value;
-		});
-
-		int32 AssignedCount = FMath::Min(PointsPerCleanser, IndexDistancePairs.Num());
-		for (int32 i = 0; i < AssignedCount; ++i)
-		{
-			int32 PointIndex = IndexDistancePairs[i].Key;
-			AllPoisonGasSpawnPoints[PointIndex].SpawnType = EPoisonGasSpawnPointType::CleanserLinked;
-			AllPoisonGasSpawnPoints[PointIndex].LinkedCleanserTag = CleanserID;
 		}
 	}
+
+	const FString CleanserTagPrefixStr = PoisonGasCleanserTagPrefix.ToString();
+
+	// 태그로 마커 액터 탐색
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!Actor || !Actor->ActorHasTag(PoisonGasSpawnPointTag)) continue;
+
+		FPoisonGasSpawnPointData PointData;
+		PointData.Location = Actor->GetActorLocation();
+		PointData.SpawnType = EPoisonGasSpawnPointType::Normal;
+		PointData.LinkedCleanserTag = NAME_None;
+
+		// CleanserLinked 판별: "PoisonGas_CleanserA" 같은 태그가 있는지 확인
+		for (const FName& Tag : Actor->Tags)
+		{
+			const FString TagStr = Tag.ToString();
+			if (TagStr.StartsWith(CleanserTagPrefixStr))
+			{
+				const FString CleanserIDStr = TagStr.RightChop(CleanserTagPrefixStr.Len());
+				const FName CleanserIDName = FName(*CleanserIDStr);
+
+				if (ActiveCleanserIDs.Contains(CleanserIDName))
+				{
+					PointData.SpawnType = EPoisonGasSpawnPointType::CleanserLinked;
+					PointData.LinkedCleanserTag = CleanserIDName;
+				}
+				break;
+			}
+		}
+
+		AllPoisonGasSpawnPoints.Add(PointData);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Phase3: Found %d poison gas spawn points via tag '%s'"),
+		AllPoisonGasSpawnPoints.Num(), *PoisonGasSpawnPointTag.ToString());
 }
 
 // 클렌저가 파괴되면 즉시 게임오버를 처리합니다.
@@ -1034,7 +1019,7 @@ void UDRPhase3::SpawnToxicGas()
 		&UDRPhase3::SpawnPoisonGasActor,
 		PoisonGasSpawnInterval,  // 반복 스폰 주기
 		true,   // 반복 실행
-		3.0f    // 첫 스폰 지연 시간
+		0.0f    // 첫 스폰 지연 시간 (경고 페이즈가 3초 지연을 대신함)
 	);
 }
 
@@ -1068,7 +1053,7 @@ void UDRPhase3::SpawnPoisonGasActor()
 
 		if (PoisonGas)
 		{
-			PoisonGas->SetLifeSpan(7.0f);
+			PoisonGas->SetLifeSpan(10.0f);  // 경고 3초 + 활성 7초
 
 			ToxicGasActors.Add(PoisonGas);
 		}

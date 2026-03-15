@@ -51,35 +51,6 @@ struct FWaveLevelModifierRow : public FTableRowBase
 };
 
 /**
- * Poison gas spawn grid config.
- */
-USTRUCT(BlueprintType)
-struct FPoisonGasGridConfig
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grid")
-	FVector GridOrigin = FVector::ZeroVector;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grid", meta = (ClampMin = "100.0"))
-	float SpacingX = 500.0f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grid", meta = (ClampMin = "100.0"))
-	float SpacingY = 500.0f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grid", meta = (ClampMin = "1", ClampMax = "20"))
-	int32 CountX = 8;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grid", meta = (ClampMin = "1", ClampMax = "20"))
-	int32 CountY = 6;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grid", meta = (ClampMin = "1", ClampMax = "8"))
-	int32 LinkedPointsPerCleanser = 4;
-
-	int32 GetTotalCount() const { return CountX * CountY; }
-};
-
-/**
  * Global Phase3 config loaded from GameBalanceConfig.
  */
 USTRUCT(BlueprintType)

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(\"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" DaeRune.sln /t:DaeRune /p:Configuration=\"Development Editor\" /p:Platform=Win64 /v:minimal)",
+      "Bash(\"C:\\\\Program Files \\(x86\\)\\\\Epic Games\\\\Launcher\\\\Engine\\\\Binaries\\\\Win64\\\\UnrealVersionSelector-Win64-Shipping.exe\" /projectfiles \"C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject\")",
+      "Bash(cd:*)",
+      "Bash(\"/c/Program Files/Epic Games/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRune Win64 Development -Project=\"/c/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -WaitMutex)",
+      "Bash(powershell -Command:*)",
+      "Bash(pwsh -Command \"& ''C:\\\\Program Files\\\\Epic Games\\\\UE_5.5\\\\Engine\\\\Build\\\\BatchFiles\\\\Build.bat'' DaeRune Win64 Development ''C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject'' -waitmutex\")",
+      "Bash(\"C:\\\\Program Files\\\\Epic Games\\\\UE_5.5\\\\Engine\\\\Build\\\\BatchFiles\\\\Build.bat\" DaeRune Win64 Development \"C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject\" -waitmutex)",
+      "WebSearch",
+      "WebFetch(domain:dev.epicgames.com)"
+    ]
+  }
+}

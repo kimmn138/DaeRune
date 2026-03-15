@@ -155,14 +155,13 @@ protected:
 	void SpawnPoisonGasActor();
 	void RemoveToxicGas();
 
+	// 독가스 스폰 위치 마커 액터의 태그
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|PoisonGas")
-	bool bUseGridBasedSpawnPoints = true;
+	FName PoisonGasSpawnPointTag = "PoisonGasSpawnPoint";
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|PoisonGas", meta = (EditCondition = "bUseGridBasedSpawnPoints"))
-	FPoisonGasGridConfig PoisonGasGridConfig;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|PoisonGas|Legacy", meta = (EditCondition = "!bUseGridBasedSpawnPoints"))
-	TArray<FPoisonGasSpawnPointData> ManualSpawnPoints;
+	// CleanserLinked 판별용 태그 접두사 (예: "PoisonGas_" + CleanserID)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|PoisonGas")
+	FName PoisonGasCleanserTagPrefix = "PoisonGas_";
 
 	TArray<FPoisonGasSpawnPointData> AllPoisonGasSpawnPoints;
 
@@ -176,8 +175,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|Spawn")
 	FName EnemySpawnPointTag = "Phase3EnemySpawnPoint";
 
-	void GenerateGridSpawnPoints();
-	void AssignCleanserLinkedPoints();
+	void FindPoisonGasSpawnPoints();
 
 private:
 	void GrantEliteBossTag();
