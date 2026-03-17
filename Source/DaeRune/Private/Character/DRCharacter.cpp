@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "Character/DRCharacter.h"
@@ -418,9 +418,9 @@ void ADRCharacter::OnRep_CarriedPart()
 
 void ADRCharacter::InitializeMoveSpeedBinding()
 {
-	if (!AbilitySystemComponent || !AttributeSet) return;
+	if (!AbilitySystemComponent || !AttributeSets) return;
 
-	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
+	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets))
 	{
 		// 이동 속도 변경 델리게이트 바인딩
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMoveSpeedAttribute()).AddUObject(this, &ADRCharacter::OnMoveSpeedChanged);
@@ -432,7 +432,7 @@ void ADRCharacter::InitializeMoveSpeedBinding()
 
 float ADRCharacter::GetMoveSpeed()
 {
-	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
+	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets))
 	{
 		return DRAS->GetMoveSpeed();
 	}
@@ -455,7 +455,7 @@ void ADRCharacter::InitAbilityActorInfo()
 	Cast<UDRAbilitySystemComponent>(ASC)->AbilityActorInfoSet();
 
 	AbilitySystemComponent = ASC;
-	AttributeSet = DRPlayerState->GetAttributeSet();
+	AttributeSets = DRPlayerState->GetAttributeSet();
 
 	// GameBalanceConfig에서 밸런스 값 적용 (서버에서만)
 	if (HasAuthority())
@@ -469,7 +469,7 @@ void ADRCharacter::InitAbilityActorInfo()
 	}
 
 	// �÷��̾� AttributeSet�� �����̳� ���� ����
-	if (UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSet))
+	if (UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSets))
 	{
 		PlayerAS->SetContainerInfo(NumContainers, ContainerHealth);
 	}
@@ -488,7 +488,7 @@ void ADRCharacter::InitAbilityActorInfo()
 	{
 		if (ADRHUD* DRHUD = Cast<ADRHUD>(DRPlayerController->GetHUD()))
 		{
-			DRHUD->InitOverlay(DRPlayerController, DRPlayerState, AbilitySystemComponent, AttributeSet);
+			DRHUD->InitOverlay(DRPlayerController, DRPlayerState, AbilitySystemComponent, AttributeSets);
 		}
 	}
 

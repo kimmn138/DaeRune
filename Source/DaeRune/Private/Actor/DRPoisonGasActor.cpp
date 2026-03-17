@@ -17,7 +17,8 @@ ADRPoisonGasActor::ADRPoisonGasActor()
 	InfiniteEffectApplicationPolicy = EEffectApplicationPolicy::ApplyOnOverlap;
 	InfiniteEffectRemovalPolicy = EEffectRemovalPolicy::RemoveOnEndOverlap;
 
-	bApplyEffectsToEnemies = true;
+	bApplyEffectsToEnemies = false;
+	bReplicates = true;
 
 	// DecalComponent 생성
 	GroundDecal = CreateDefaultSubobject<UDecalComponent>("GroundDecal");

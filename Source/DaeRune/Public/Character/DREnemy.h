@@ -9,7 +9,7 @@
 #include "DREnemy.generated.h"
 
 class UBlackboardComponent;
-class UWidgetComponent;
+class UDRBillboardWidgetComponent;
 class UBehaviorTree;
 class ADRAIController;
 
@@ -208,6 +208,9 @@ protected:
 
 	// Death Ability 활성화
 	void ActivateDeathAbilities();
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	TObjectPtr<UDRBillboardWidgetComponent> HealthBar;
 
 private:
 	// 물 보상 감소 처리

@@ -580,7 +580,6 @@ void UDRPhase3::SpawnEliteMonster(const FVector& SpawnLocation)
 	}
 }
 
-
 // 웨이브 레벨 기준 스폰 설정/특수 옵션을 조회합니다.
 FWaveLevelModifier UDRPhase3::GetWaveLevelModifier(int32 WaveLevel) const
 {

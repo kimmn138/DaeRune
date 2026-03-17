@@ -10,7 +10,11 @@
       "Bash(pwsh -Command \"& ''C:\\\\Program Files\\\\Epic Games\\\\UE_5.5\\\\Engine\\\\Build\\\\BatchFiles\\\\Build.bat'' DaeRune Win64 Development ''C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject'' -waitmutex\")",
       "Bash(\"C:\\\\Program Files\\\\Epic Games\\\\UE_5.5\\\\Engine\\\\Build\\\\BatchFiles\\\\Build.bat\" DaeRune Win64 Development \"C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject\" -waitmutex)",
       "WebSearch",
-      "WebFetch(domain:dev.epicgames.com)"
+      "WebFetch(domain:dev.epicgames.com)",
+      "Bash(echo:*)",
+      "WebFetch(domain:forums.unrealengine.com)",
+      "WebFetch(domain:gdtactics.com)",
+      "WebFetch(domain:tomlooman.com)"
     ]
   }
 }

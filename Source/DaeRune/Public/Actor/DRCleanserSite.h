@@ -1,10 +1,11 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "AbilitySystemInterface.h"
+#include "UI/WidgetController/OverlayWidgetController.h"
 #include "DRCleanserSite.generated.h"
 
 class UGameplayEffect;
@@ -13,6 +14,7 @@ class UDRCleanserSiteAttributeSet;
 class UStaticMeshComponent;
 class UBoxComponent;
 class UWidgetComponent;
+class UDRBillboardWidgetComponent;
 class ADRPlayerController;
 struct FOnAttributeChangeData;
 
@@ -54,6 +56,13 @@ public:
 	// AbilitySystemInterface
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	UDRCleanserSiteAttributeSet* GetAttributeSet() const { return AttributeSet; }
+
+	// 체력 변화 이벤트 델리게이트
+	UPROPERTY(BlueprintAssignable)
+	FOnAttributeChangedSignature OnHealthChanged;
+
+	UPROPERTY(BlueprintAssignable)
+	FOnAttributeChangedSignature OnMaxHealthChanged;
 
 	UFUNCTION(BlueprintPure, Category = "Cleanser Site")
 	FName GetCleanserID() const { return CleanserID; }
@@ -220,6 +229,9 @@ protected:
 
 	// GAS ���� �Լ�
 	void ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass) const;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	TObjectPtr<UDRBillboardWidgetComponent> HealthBar;
 
 private:
 	// GAS �ʱ�ȭ

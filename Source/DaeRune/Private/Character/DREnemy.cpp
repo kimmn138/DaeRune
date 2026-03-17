@@ -6,7 +6,7 @@
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystem/DREnemyAttributeSet.h"
 #include "AbilitySystem/Data/GameBalanceConfig.h"
-#include "Components/WidgetComponent.h"
+#include "UI/Widget/DRBillboardWidgetComponent.h"
 #include "UI/Widget/DRUserWidget.h"
 #include "DRGameplayTags.h"
 #include "AI/DRAIController.h"
@@ -51,7 +51,7 @@ ADREnemy::ADREnemy()
 	GetCharacterMovement()->NetworkSmoothingMode = ENetworkSmoothingMode::Exponential;
 
 	// 적 전용 어트리뷰트셋
-	AttributeSet = CreateDefaultSubobject<UDREnemyAttributeSet>("AttributeSet");
+	AttributeSets = CreateDefaultSubobject<UDREnemyAttributeSet>("EnemyAttributeSet");
 
 	// 부품 메시 컴포넌트 생성 (선택적)
 	PartMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>("PartMesh");
@@ -60,12 +60,18 @@ ADREnemy::ADREnemy()
 	PartMeshComponent->SetVisibility(false); // 기본적으로 숨김
 	PartMeshComponent->SetIsReplicated(true);
 
+	HealthBar = CreateDefaultSubobject<UDRBillboardWidgetComponent>("HealthBar");
+	HealthBar->SetupAttachment(GetRootComponent());
+
 	BaseWalkSpeed = 250.f;
 }
 
 void ADREnemy::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	// 사망 상태에서는 회전 처리하지 않음
+	if (bDead) return;
 
 	if (HasAuthority())
 	{
@@ -139,7 +145,15 @@ void ADREnemy::Die(const FVector& DeathImpulse)
 	// 사망 처리 - 일정 시간 후 소멸
 	SetLifeSpan(LifeSpan);
 	// AI 상태 업데이트
-	if (DRAIController) DRAIController->GetBlackboardComponent()->SetValueAsBool(DRBlackboardKeys::Dead, true);
+	if (DRAIController)
+	{
+		DRAIController->GetBlackboardComponent()->SetValueAsBool(DRBlackboardKeys::Dead, true);
+		// AI Focus 해제 - 사망 후 플레이어 방향 추적 중지
+		DRAIController->ClearFocus(EAIFocusPriority::Gameplay);
+	}
+
+	// 사망 후 Tick 비활성화 - 불필요한 회전 처리 차단
+	SetActorTickEnabled(false);
 
 	// 사망시 플레이어들에게 물 보상 지급
 	if (HasAuthority())
@@ -223,7 +237,7 @@ void ADREnemy::ReduceWaterReward()
 	if (!HasAuthority() || !WaterReductionEffectClass) return;
 
 	// 현재 물이 없으면 감소시키지 않음
-	const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet);
+	const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets);
 	if (!DRAS || DRAS->GetWater() <= 0.f) return;
 
 	// 헬퍼 함수로 간소화된 GE 생성 및 적용
@@ -364,9 +378,16 @@ void ADREnemy::BeginPlay()
 		}
 	}
 
-	// 어트리뷰트 변화 이벤트 바인딩
-	if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
+	if (UDRUserWidget* DRUserWidget = Cast<UDRUserWidget>(HealthBar->GetUserWidgetObject()))
 	{
+		DRUserWidget->SetWidgetController(this);
+		UE_LOG(LogTemp, Log, TEXT("1"));
+	}
+
+	// 어트리뷰트 변화 이벤트 바인딩
+	if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets))
+	{
+		UE_LOG(LogTemp, Log, TEXT("2"));
 		// 체력 변화 델리게이트 바인딩
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetHealthAttribute()).AddLambda(
 			[this](const FOnAttributeChangeData& Data)
@@ -459,7 +480,7 @@ void ADREnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 
 float ADREnemy::GetMoveSpeed()
 {
-	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
+	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets))
 	{
 		return DRAS->GetMoveSpeed();
 	}
@@ -503,7 +524,7 @@ void ADREnemy::ApplyWallStun()
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 
 	// AttributeSet에서 GE 클래스 가져오기
-	UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet);
+	UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets);
 	if (!DRAS) return;
 
 	TSubclassOf<UGameplayEffect>* StunEffectClass = DRAS->DebuffEffectMap.Find(GameplayTags.Debuff_Stun);
@@ -543,7 +564,7 @@ void ADREnemy::GrantWaterToPlayers()
 {
 	if (!HasAuthority() || !WaterGrantEffectClass) return;
 
-	const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet);
+	const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets);
 	if (!DRAS) return;
 
 	const float CurrentWater = DRAS->GetWater();

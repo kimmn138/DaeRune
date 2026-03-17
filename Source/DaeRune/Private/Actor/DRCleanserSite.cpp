@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "Actor/DRCleanserSite.h"
@@ -9,6 +9,7 @@
 #include "GameplayEffectTypes.h"
 #include "Components/BoxComponent.h"
 #include "Components/WidgetComponent.h"
+#include "UI/Widget/DRBillboardWidgetComponent.h"
 #include "Player/DRPlayerController.h"
 #include "Character/DRCharacter.h"
 #include "Sound/DRSoundManager.h"
@@ -16,6 +17,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Sound/DRSoundDataAsset.h"
 #include "DRAssetManager.h"
+#include "UI/Widget/DRUserWidget.h"
 
 ADRCleanserSite::ADRCleanserSite()
 {
@@ -67,6 +69,9 @@ ADRCleanserSite::ADRCleanserSite()
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
 
 	AttributeSet = CreateDefaultSubobject<UDRCleanserSiteAttributeSet>(TEXT("AttributeSet"));
+
+	HealthBar = CreateDefaultSubobject<UDRBillboardWidgetComponent>("HealthBar");
+	HealthBar->SetupAttachment(GetRootComponent());
 
 	// �ʱ� ����
 	CurrentState = ECleanserSiteState::Inactive;
@@ -275,6 +280,33 @@ void ADRCleanserSite::BeginPlay()
 	if (!HasAuthority())
 	{
 		UpdateMeshByState();
+	}
+
+	if (UDRUserWidget* DRUserWidget = Cast<UDRUserWidget>(HealthBar->GetUserWidgetObject()))
+	{
+		DRUserWidget->SetWidgetController(this);
+	}
+
+	// 어트리뷰트 변화 이벤트 바인딩
+	if (const UDRCleanserSiteAttributeSet* DRCSAS = Cast<UDRCleanserSiteAttributeSet>(AttributeSet))
+	{
+		// 체력 변화 델리게이트 바인딩
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRCSAS->GetHealthAttribute()).AddLambda(
+			[this](const FOnAttributeChangeData& Data)
+			{
+				OnHealthChanged.Broadcast(Data.NewValue);
+			}
+		);
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRCSAS->GetMaxHealthAttribute()).AddLambda(
+			[this](const FOnAttributeChangeData& Data)
+			{
+				OnMaxHealthChanged.Broadcast(Data.NewValue);
+			}
+		);
+
+		// 초기값 브로드캐스트
+		OnHealthChanged.Broadcast(DRCSAS->GetHealth());
+		OnMaxHealthChanged.Broadcast(DRCSAS->GetMaxHealth());
 	}
 }
 
