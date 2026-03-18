@@ -64,22 +64,16 @@ protected:
 
 	// Decal 설정
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-	TObjectPtr<UMaterialInterface> DecalBaseMaterial;
+	TObjectPtr<UMaterialInterface> WarningDecalMaterial;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-	FLinearColor WarningColor = FLinearColor(1.0f, 0.8f, 0.0f, 0.6f);
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-	FLinearColor ActiveColor = FLinearColor(0.5f, 0.0f, 0.8f, 0.8f);
+	TObjectPtr<UMaterialInterface> ActiveDecalMaterial;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
 	float DecalRadius = 312.5f;
 
 	// 내부 상태
 	EPoisonGasPhase CurrentPhase = EPoisonGasPhase::Warning;
-
-	UPROPERTY()
-	TObjectPtr<UMaterialInstanceDynamic> DecalMID;
 
 	FTimerHandle PhaseTransitionTimerHandle;
 

@@ -5,7 +5,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Actor/DRCleanserSite.h"
-#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EngineUtils.h"
@@ -34,12 +34,10 @@ void ADRPoisonGasActor::BeginPlay()
 	// Decal 크기 동기화
 	GroundDecal->DecalSize = FVector(300.0f, DecalRadius, DecalRadius);
 
-	// Dynamic Material 생성 → 경고 색상(노란색)
-	if (DecalBaseMaterial)
+	// 경고 머티리얼 설정
+	if (WarningDecalMaterial)
 	{
-		DecalMID = UMaterialInstanceDynamic::Create(DecalBaseMaterial, this);
-		GroundDecal->SetDecalMaterial(DecalMID);
-		DecalMID->SetVectorParameterValue("Color", WarningColor);
+		GroundDecal->SetDecalMaterial(WarningDecalMaterial);
 	}
 
 	// 3초 후 Active로 전환
@@ -94,9 +92,10 @@ void ADRPoisonGasActor::TransitionToActive()
 {
 	CurrentPhase = EPoisonGasPhase::Active;
 
-	if (DecalMID)
+	// 활성화 머티리얼로 교체
+	if (ActiveDecalMaterial)
 	{
-		DecalMID->SetVectorParameterValue("Color", ActiveColor);
+		GroundDecal->SetDecalMaterial(ActiveDecalMaterial);
 	}
 
 	// 타이머가 이미 돌고 있으므로, 다음 CheckNearbyTargets()에서 자동 감지됨
