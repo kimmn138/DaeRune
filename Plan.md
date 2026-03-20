@@ -1,368 +1,276 @@
-# DRPoisonGasActor 데칼 머티리얼 교체 방식 구현 계획
+# WaterPump 애니메이션 걷기 블렌드 안 되는 문제 수정 계획
 
-## 현재 구현 분석
+## 문제 정의
 
-### 현재 방식 (단일 데칼 + MID 색상 변경)
+- 방안 A(ABP State Machine)로 `AM_InHoseBlast`가 모든 클라이언트에서 보이게 됨 ✅
+- **하지만**: 물대포를 쏘면서 이동할 때 **다리가 고정된 채로 미끄러지듯 움직임**
+- 원인: State Machine에서 `WaterPump_Loop` 상태가 **풀바디(Full Body)**로 `AM_InHoseBlast`를 재생하므로, 로코모션(걷기/달리기) 애니메이션이 완전히 덮어써짐
 
-**데칼 컴포넌트**: `GroundDecal` 1개 사용
-- 생성자에서 `UDecalComponent` 1개 생성
-- `DecalBaseMaterial`로부터 `UMaterialInstanceDynamic`(MID) 생성
-- MID의 `"Color"` 파라미터를 통해 색상 전환
+---
 
-**색상 전환 흐름**:
-1. `BeginPlay()`: MID 생성 → `WarningColor` (노란색 `1.0, 0.8, 0.0, 0.6`) 설정
-2. 3초 타이머 (`PhaseTransitionTimerHandle`) → `TransitionToActive()` 호출
-3. `TransitionToActive()`: MID의 `"Color"`를 `ActiveColor` (보라색 `0.5, 0.0, 0.8, 0.8`)로 변경
+## 원인 분석
 
-**관련 프로퍼티** (`DRPoisonGasActor.h`):
-```cpp
-// 데칼 컴포넌트 (1개)
-UPROPERTY(VisibleAnywhere)
-TObjectPtr<UDecalComponent> GroundDecal;
+### 현재 ABP 구조 (추정)
 
-// 머티리얼 (1개 - MID의 베이스)
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-TObjectPtr<UMaterialInterface> DecalBaseMaterial;
+```
+AnimGraph:
+    [State Machine]
+        ├─ Idle/Locomotion 상태: BS_Walk (Blend Space) → 속도에 따라 Idle/Walk 블렌드
+        ├─ WaterPump_Loop 상태: DEF_InHoseBlast (풀바디 루프) ← ★ 문제
+        └─ ... 기타 상태들
+    → Output Pose
+```
 
-// 색상 (MID에서 동적 변경용)
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-FLinearColor WarningColor = FLinearColor(1.0f, 0.8f, 0.0f, 0.6f);
+`WaterPump_Loop` 상태에 진입하면 `DEF_InHoseBlast`가 **전신**을 제어한다.
+상체(호스 들기 포즈)와 하체(다리 걷기)가 분리되어 있지 않으므로, 이동 중에도 다리가 InHoseBlast 포즈 그대로 고정된다.
 
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-FLinearColor ActiveColor = FLinearColor(0.5f, 0.0f, 0.8f, 0.8f);
+### 해결 원리
 
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-float DecalRadius = 312.5f;
+**Layered Blend per Bone**: 특정 본(Bone)을 기준으로 상체와 하체의 애니메이션 소스를 분리한다.
 
-// 런타임 MID
-UPROPERTY()
-TObjectPtr<UMaterialInstanceDynamic> DecalMID;
+```
+Base Layer (전신):  Locomotion (BS_Walk) → 다리가 걷기 애니메이션 재생
+Upper Layer (상체): DEF_InHoseBlast      → 상체만 호스 들기 포즈
+
+→ Layered Blend per Bone (Spine 본 기준)
+→ 결과: 상체는 물대포, 하체는 걷기
 ```
 
 ---
 
-## 변경 목표
+## 해결 방안
 
-**단일 데칼 + MID 색상 변경** → **단일 데칼 + 머티리얼 교체**로 전환
+### ABP_GardenRobot AnimGraph 재구성
 
-- 데칼 컴포넌트는 `GroundDecal` 1개를 그대로 유지
-- 경고/활성화 각각 별도의 머티리얼을 에디터에서 할당
-- 3초 경과 시 `SetDecalMaterial()`로 머티리얼 자체를 교체
-- MID 생성 및 런타임 색상 변경 로직 제거
+현재 State Machine 방식에서, **Layered Blend per Bone** 노드를 추가하여 상체/하체를 분리한다.
 
----
+#### 목표 AnimGraph 구조
 
-## 상세 구현 계획
-
-### 1단계: 헤더 파일 수정 (`DRPoisonGasActor.h`)
-
-#### 1-1. 데칼 컴포넌트 — 변경 없음
-
-`GroundDecal`은 그대로 유지합니다. 이름도 변경하지 않습니다.
-
-```cpp
-// 변경 없음 - 그대로 유지
-UPROPERTY(VisibleAnywhere)
-TObjectPtr<UDecalComponent> GroundDecal;
 ```
-
-#### 1-2. 머티리얼 프로퍼티 변경
-
-**제거할 프로퍼티 (4개)**:
-```cpp
-// 1. 기존 단일 베이스 머티리얼 → 경고/활성화 2개로 대체
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-TObjectPtr<UMaterialInterface> DecalBaseMaterial;
-
-// 2. 경고 색상 → 머티리얼 자체 색상 사용하므로 불필요
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-FLinearColor WarningColor = FLinearColor(1.0f, 0.8f, 0.0f, 0.6f);
-
-// 3. 활성화 색상 → 머티리얼 자체 색상 사용하므로 불필요
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-FLinearColor ActiveColor = FLinearColor(0.5f, 0.0f, 0.8f, 0.8f);
-
-// 4. MID → 동적 머티리얼 인스턴스 생성 자체가 불필요
-UPROPERTY()
-TObjectPtr<UMaterialInstanceDynamic> DecalMID;
-```
-
-**추가할 프로퍼티 (2개)**:
-```cpp
-// 경고 단계 머티리얼 (에디터에서 할당, 3초 동안 표시)
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-TObjectPtr<UMaterialInterface> WarningDecalMaterial;
-
-// 활성화 단계 머티리얼 (에디터에서 할당, 3초 후 교체)
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-TObjectPtr<UMaterialInterface> ActiveDecalMaterial;
-```
-
-#### 1-3. DecalRadius — 변경 없음
-
-```cpp
-// 변경 없음 - 그대로 유지
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-float DecalRadius = 312.5f;
-```
-
-#### 1-4. 최종 헤더 Visual 프로퍼티 모습
-
-변경 전:
-```cpp
-UPROPERTY(VisibleAnywhere)
-TObjectPtr<UDecalComponent> GroundDecal;
-
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-TObjectPtr<UMaterialInterface> DecalBaseMaterial;
-
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-FLinearColor WarningColor = FLinearColor(1.0f, 0.8f, 0.0f, 0.6f);
-
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-FLinearColor ActiveColor = FLinearColor(0.5f, 0.0f, 0.8f, 0.8f);
-
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-float DecalRadius = 312.5f;
-
-UPROPERTY()
-TObjectPtr<UMaterialInstanceDynamic> DecalMID;
-```
-
-변경 후:
-```cpp
-UPROPERTY(VisibleAnywhere)
-TObjectPtr<UDecalComponent> GroundDecal;
-
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-TObjectPtr<UMaterialInterface> WarningDecalMaterial;
-
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-TObjectPtr<UMaterialInterface> ActiveDecalMaterial;
-
-UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-float DecalRadius = 312.5f;
+[기존 State Machine / Locomotion 출력]  ──→  Base Pose (전신 로코모션)
+                                                │
+                                                ▼
+                                        ┌─────────────────────┐
+                                        │ Layered Blend       │
+                                        │   per Bone          │
+                                        │                     │
+                                        │ Base: Locomotion    │  ← 하체 (다리 걷기)
+                                        │ Blend: WaterPump    │  ← 상체 (호스 포즈)
+                                        │ Bone: "spine_01"    │  ← 블렌드 시작 본
+                                        │ Alpha: 0.0 or 1.0   │  ← bIsInWaterPump로 제어
+                                        └─────────────────────┘
+                                                │
+                                                ▼
+                                          Output Pose
 ```
 
 ---
 
-### 2단계: 생성자 수정 (`DRPoisonGasActor.cpp` - 생성자)
+## 상세 구현 단계
 
-생성자의 `GroundDecal` 생성 코드는 **완전히 그대로 유지**합니다.
+### 단계 1: GardenRobot 스켈레톤의 Spine 본 이름 확인
 
-```cpp
-// 변경 없음 - 그대로 유지 (24-27줄 부근)
-GroundDecal = CreateDefaultSubobject<UDecalComponent>("GroundDecal");
-GroundDecal->SetupAttachment(GetRootComponent());
-GroundDecal->SetRelativeRotation(FRotator(-90.0f, 0.0f, 0.0f));
-GroundDecal->DecalSize = FVector(300.0f, 312.5f, 312.5f);
+ABP에서 Layered Blend per Bone을 설정하려면 **블렌드 시작 본(Branch Filter Bone)**의 정확한 이름이 필요하다.
+
+1. `Content/DaeRuneAssets/Characters/GardenRobot/TP/Player1-Rig_Ani-3_1_Skeleton.uasset` 열기
+2. 본 계층 구조에서 **척추(Spine) 본** 이름 확인
+   - 일반적인 이름: `spine_01`, `spine_02`, `Spine`, `Spine1` 등
+   - GardenRobot이 커스텀 리그라면 다를 수 있음
+3. 상체와 하체를 나누는 적절한 본 선택
+   - 보통 `spine_01` 또는 `spine_02`가 적당 (골반 위, 상체 시작점)
+   - 이 본과 그 하위 모든 자식 본(팔, 머리 등)이 상체 레이어로 블렌드됨
+   - 이 본의 부모 본(골반, 다리 등)은 Base Layer(로코모션)를 유지
+
+### 단계 2: ABP_GardenRobot AnimGraph 수정
+
+#### 2-1. State Machine에서 WaterPump_Loop 상태 제거 (또는 유지하되 변경)
+
+기존에 State Machine 안에 만든 `WaterPump_Loop` 상태를 **State Machine 밖으로** 빼야 한다. Layered Blend per Bone은 State Machine 외부에서 두 개의 포즈를 합성하는 노드이기 때문이다.
+
+**방법 A: State Machine을 Base 포즈로만 사용 (권장)**
+
+```
+AnimGraph:
+
+[State Machine (Locomotion 전용)]
+    ├─ Idle/Locomotion: BS_Walk
+    ├─ Jump_Start / Jump_Loop / Jump_Land
+    └─ (WaterPump 상태 제거)
+    → Locomotion Pose
+
+[WaterPump Animation]
+    Play DEF_InHoseBlast (루프)
+    → WaterPump Pose
+
+[Layered Blend per Bone]
+    Base Pose: Locomotion Pose
+    Blend Poses 0: WaterPump Pose
+    Branch Filter: "spine_01" (또는 해당 본 이름)
+    Blend Weight 0: bIsInWaterPump ? 1.0 : 0.0
+    → Output Pose
 ```
 
-생성자에서는 아무것도 수정할 필요가 없습니다.
+**방법 B: State Machine 내 상태는 유지하되 풀바디가 아닌 참조용으로만 사용**
+
+더 복잡하고 이점이 적으므로 방법 A를 권장.
+
+#### 2-2. Layered Blend per Bone 노드 설정
+
+ABP_GardenRobot의 AnimGraph에서:
+
+1. **노드 추가**: 우클릭 → "Layered blend per bone" 검색 → 추가
+2. **Base Pose 연결**: State Machine(Locomotion)의 출력을 `Base Pose` 핀에 연결
+3. **Blend Poses 추가**: "Add Blend Pin" 버튼으로 Blend Pose 슬롯 1개 추가
+4. **Blend Pose 0 연결**: `DEF_InHoseBlast` 애니메이션 시퀀스 (루프 재생) 노드를 연결
+5. **Blend Weights 0 연결**: `bIsInWaterPump` 변수를 Float로 변환(Bool to Float 또는 Select) 후 연결
+   - `true` → 1.0 (상체 WaterPump 포즈)
+   - `false` → 0.0 (상체도 Locomotion)
+6. **노드 디테일 패널에서 Branch Filter 설정**:
+   - `Layer Setup` 배열에서 `Branch Filters` 추가
+   - `Bone Name`: 확인한 Spine 본 이름 (예: `spine_01`)
+   - `Blend Depth`: 0 (이 본부터 모든 자식 본에 블렌드 적용)
+   - `Mesh Space Rotation Blend`: 체크 (월드 공간 회전 블렌드로 더 자연스러운 결과)
+
+#### 2-3. 블렌드 알파 부드럽게 전환 (선택사항)
+
+급격한 전환을 피하려면 `FInterp To` 또는 `Blend Weights`에 보간을 적용:
+
+```
+Event Blueprint Update Animation:
+    bIsInWaterPump (bool) → Select (True: 1.0, False: 0.0) → FInterp To (Speed: 10.0)
+    → Set WaterPumpBlendAlpha (float 변수)
+```
+
+그리고 Layered Blend per Bone의 `Blend Weights 0`에 `WaterPumpBlendAlpha` 연결.
+
+이렇게 하면 물대포 시작/종료 시 약 0.1~0.2초에 걸쳐 부드럽게 상체 포즈가 전환된다.
+
+### 단계 3: DEF_InHoseBlast 애니메이션 확인
+
+`Content/DaeRuneAssets/Characters/GardenRobot/TP/DEF_InHoseBlast.uasset`:
+
+1. **루프 설정 확인**: 애니메이션 에셋을 열어 `Loop` 체크 여부 확인. 체크되어 있지 않으면 활성화
+2. **루트 모션 비활성화**: Root Motion이 켜져 있으면 이동과 충돌할 수 있으므로 비활성화 확인
+3. **Additive 여부**: 이 애니메이션이 Additive가 아닌 일반(Normal) 애니메이션인지 확인. Layered Blend per Bone은 둘 다 지원하지만, 일반 애니메이션이면 `Blend Mode`를 `Blend` 그대로 사용
+
+### 단계 4: GA_WaterPump 블루프린트 정리 확인
+
+이전 수정에서 이미 처리했어야 할 것들:
+- `Play Montage(GetMesh, AM_InHoseBlast)` 노드가 제거되었는지 확인
+- `Montage Stop(AM_InHoseBlast)` 노드가 제거되었는지 확인
+- ABP의 `bIsInWaterPump` 구동은 `bWaterPumpActive` 리플리케이트 변수로 이루어짐
 
 ---
 
-### 3단계: BeginPlay 수정 (`DRPoisonGasActor.cpp` - BeginPlay)
+## 최종 AnimGraph 구조 다이어그램
 
-#### 3-1. 기존 MID 생성/색상 설정 코드 제거
-
-```cpp
-// 제거할 코드 (34-43줄 부근)
-GroundDecal->DecalSize = FVector(300.0f, DecalRadius, DecalRadius);
-
-if (DecalBaseMaterial)
-{
-    DecalMID = UMaterialInstanceDynamic::Create(DecalBaseMaterial, this);
-    GroundDecal->SetDecalMaterial(DecalMID);
-    DecalMID->SetVectorParameterValue("Color", WarningColor);
-}
 ```
-
-#### 3-2. 새 초기화 코드 추가
-
-```cpp
-// DecalRadius 적용 (기존과 동일)
-GroundDecal->DecalSize = FVector(300.0f, DecalRadius, DecalRadius);
-
-// 경고 머티리얼을 초기 머티리얼로 설정
-if (WarningDecalMaterial)
-{
-    GroundDecal->SetDecalMaterial(WarningDecalMaterial);
-}
+┌─────────────────────────────────────────────────────────────┐
+│                    ABP_GardenRobot AnimGraph                │
+│                                                             │
+│  ┌──────────────────────┐                                   │
+│  │   State Machine      │                                   │
+│  │   (Locomotion)       │                                   │
+│  │                      │                                   │
+│  │  ┌────────────────┐  │                                   │
+│  │  │ Idle/Walk      │  │    ┌──────────────────────┐       │
+│  │  │ (BS_Walk)      │  │    │  DEF_InHoseBlast     │       │
+│  │  └────────────────┘  │    │  (Loop = true)       │       │
+│  │  ┌────────────────┐  │    └──────────┬───────────┘       │
+│  │  │ Jump_Start     │  │               │                   │
+│  │  └────────────────┘  │               │ WaterPump Pose    │
+│  │  ┌────────────────┐  │               │                   │
+│  │  │ Jump_Loop      │  │               │                   │
+│  │  └────────────────┘  │               │                   │
+│  │  ┌────────────────┐  │               │                   │
+│  │  │ Jump_Land      │  │               │                   │
+│  │  └────────────────┘  │               │                   │
+│  └──────────┬───────────┘               │                   │
+│             │                           │                   │
+│             │ Base Pose                 │ Blend Pose 0      │
+│             │                           │                   │
+│             ▼                           ▼                   │
+│  ┌──────────────────────────────────────────────┐           │
+│  │         Layered Blend per Bone               │           │
+│  │                                              │           │
+│  │  Branch Filter: "spine_01"                   │           │
+│  │  Blend Weight: WaterPumpBlendAlpha           │           │
+│  │  Mesh Space Rotation Blend: true             │           │
+│  │                                              │           │
+│  │  결과:                                       │           │
+│  │    spine_01 이하 (상체): WaterPump Pose      │           │
+│  │    spine_01 이상 (하체): Locomotion Pose     │           │
+│  └──────────────────┬───────────────────────────┘           │
+│                     │                                       │
+│                     ▼                                       │
+│              [Output Pose]                                  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
-
-**핵심 차이점**:
-- 기존: `UMaterialInstanceDynamic::Create()` → MID 생성 → `SetVectorParameterValue("Color", WarningColor)`
-- 변경: `WarningDecalMaterial`을 직접 `SetDecalMaterial()`로 설정 (MID 불필요)
-- `DecalRadius` 적용 로직은 동일하게 유지
 
 ---
 
-### 4단계: TransitionToActive 수정 (`DRPoisonGasActor.cpp`)
+## EventGraph 수정
 
-#### 4-1. 기존 MID 색상 변경 코드
-
-```cpp
-// 기존 코드 (93-104줄 부근)
-void ADRPoisonGasActor::TransitionToActive()
-{
-    CurrentPhase = EPoisonGasPhase::Active;
-
-    if (DecalMID)
-    {
-        DecalMID->SetVectorParameterValue("Color", ActiveColor);
-    }
-}
+```
+Event Blueprint Update Animation
+│
+├─ Try Get Pawn Owner
+│   └─ Cast To ADRCharacter (또는 BP_GardenRobot)
+│       ├─ Get bWaterPumpActive → Set bIsInWaterPump
+│       │
+│       └─ bIsInWaterPump → Select(True: 1.0, False: 0.0)
+│           └─ FInterp To(Current: WaterPumpBlendAlpha, Target: 위 결과, Speed: 10.0, DeltaTime)
+│               └─ Set WaterPumpBlendAlpha
+│
+├─ (기존 Speed, IsFalling 등 로코모션 변수 업데이트 로직 유지)
+│
+└─ (기존 bIsStunned, bIsBurned 등 디버프 변수 업데이트 로직 유지)
 ```
 
-#### 4-2. 머티리얼 교체 코드로 변경
-
-```cpp
-void ADRPoisonGasActor::TransitionToActive()
-{
-    CurrentPhase = EPoisonGasPhase::Active;
-
-    // 경고 머티리얼 → 활성화 머티리얼로 교체
-    if (ActiveDecalMaterial)
-    {
-        GroundDecal->SetDecalMaterial(ActiveDecalMaterial);
-    }
-}
-```
-
-**핵심 변경**:
-- 기존: `DecalMID->SetVectorParameterValue("Color", ActiveColor)` — MID의 Color 파라미터 변경
-- 변경: `GroundDecal->SetDecalMaterial(ActiveDecalMaterial)` — 머티리얼 자체를 교체
-- 동일한 `GroundDecal` 컴포넌트에 다른 머티리얼을 끼워넣는 방식
-
----
-
-### 5단계: 기타 코드에서 제거된 프로퍼티 참조 확인
-
-제거되는 프로퍼티: `DecalBaseMaterial`, `WarningColor`, `ActiveColor`, `DecalMID`
-
-| 위치 | 참조 | 처리 |
+**ABP 변수 추가**:
+| 변수 | 타입 | 용도 |
 |------|------|------|
-| 생성자 | 참조 없음 | 수정 불필요 |
-| BeginPlay | `DecalBaseMaterial`, `DecalMID`, `WarningColor` | 3단계에서 대체 |
-| TransitionToActive | `DecalMID`, `ActiveColor` | 4단계에서 대체 |
-| EndPlay | 참조 없음 (타이머 정리만) | 수정 불필요 |
-
-`GroundDecal`은 유지되므로 해당 참조는 모두 정상 동작합니다.
+| `bIsInWaterPump` | Bool | `bWaterPumpActive` 복사 (State Machine 전환 조건에도 사용 가능) |
+| `WaterPumpBlendAlpha` | Float | Layered Blend per Bone의 Blend Weight (0.0~1.0 보간) |
 
 ---
 
-### 6단계: 블루프린트 업데이트 (`BP_PosionGas`)
+## 수정 후 예상 결과
 
-#### 6-1. 사라지는 프로퍼티
+```
+[물대포 쏘면서 정지]
+    상체: DEF_InHoseBlast (호스 들기 포즈) ✅
+    하체: BS_Walk의 Idle 포즈 (속도 0) ✅
 
-블루프린트 에디터의 디테일 패널에서 다음 프로퍼티가 사라집니다:
-- `DecalBaseMaterial` — 삭제됨
-- `WarningColor` — 삭제됨
-- `ActiveColor` — 삭제됨
+[물대포 쏘면서 이동]
+    상체: DEF_InHoseBlast (호스 들기 포즈) ✅
+    하체: BS_Walk의 Walk 애니메이션 (속도에 따라 블렌드) ✅  ← 이 부분이 해결됨
 
-#### 6-2. 새로 나타나는 프로퍼티
-
-"Poison Gas | Visual" 카테고리에 새 프로퍼티가 나타납니다:
-- **`WarningDecalMaterial`** — 여기에 경고용 머티리얼 인스턴스 할당
-- **`ActiveDecalMaterial`** — 여기에 활성화용 머티리얼 인스턴스 할당
-
-#### 6-3. 머티리얼 할당 예시
-
-1. **WarningDecalMaterial** 슬롯:
-   - `MI_PoisonGasWarningDecal` 할당 (경고 색상/패턴이 적용된 머티리얼 인스턴스)
-
-2. **ActiveDecalMaterial** 슬롯:
-   - `MI_PoisonGasDecal` 할당 (기존 활성화 색상/패턴이 적용된 머티리얼 인스턴스)
-
-#### 6-4. 유지되는 것들
-
-- `GroundDecal` 컴포넌트 — 이름/위치/회전 모두 그대로
-- `DecalRadius` — 그대로 유지
-- 기타 Effects, Detection 카테고리 프로퍼티 — 변경 없음
+[물대포 중단]
+    WaterPumpBlendAlpha가 1.0 → 0.0으로 보간 (약 0.1초)
+    상체: Locomotion으로 자연스럽게 복귀 ✅
+    하체: 변화 없음 (계속 Locomotion) ✅
+```
 
 ---
 
-### 7단계: 머티리얼 에셋 준비 (에디터에서 수동 작업)
+## 테스트 체크리스트
 
-현재 존재하는 독가스 머티리얼:
-- `Content/Blueprints/Actor/Area/Material/M_PoisonGasDecal.uasset` (베이스 머티리얼)
-- `Content/Blueprints/Actor/Area/Material/MI_PoisonGasDecal.uasset` (머티리얼 인스턴스)
-
-#### 필요한 작업
-
-**기존 머티리얼 인스턴스 활용 + 경고용 새로 생성** (권장):
-
-1. **`MI_PoisonGasDecal`** → `ActiveDecalMaterial`로 사용 (기존 것 그대로 활용)
-2. **`MI_PoisonGasWarningDecal`** 새로 생성 → `WarningDecalMaterial`로 사용
-   - `M_PoisonGasDecal`에서 파생된 새 머티리얼 인스턴스 생성
-   - 색상 파라미터를 경고색(노란색/주황색 등)으로 설정
-   - 저장 경로: `Content/Blueprints/Actor/Area/Material/MI_PoisonGasWarningDecal`
-
-> **참고**: 전기장 머티리얼이 이미 동일한 2개 패턴으로 존재합니다:
-> - `M_ElectricFieldDecal` / `MI_ElectricFieldDecal` (활성화용)
-> - `M_ElectricFieldWarningDecal` / `MI_ElectricFieldWarningDecal` (경고용)
->
-> 독가스도 이 패턴을 따르면 프로젝트 내 일관성이 유지됩니다.
-
----
-
-## 수정 대상 파일 요약
-
-| 파일 | 변경 내용 | 작업 방식 |
-|------|----------|----------|
-| `Source/DaeRune/Public/Actor/DRPoisonGasActor.h` | `DecalBaseMaterial`/`WarningColor`/`ActiveColor`/`DecalMID` 제거, `WarningDecalMaterial`/`ActiveDecalMaterial` 추가 | C++ 코드 수정 |
-| `Source/DaeRune/Private/Actor/DRPoisonGasActor.cpp` | BeginPlay과 TransitionToActive만 수정 (생성자 변경 없음) | C++ 코드 수정 |
-| `Content/Blueprints/Actor/Area/BP_PosionGas.uasset` | 새 프로퍼티에 머티리얼 할당 | 에디터에서 수동 |
-| `Content/Blueprints/Actor/Area/Material/` | 경고용 머티리얼 인스턴스 `MI_PoisonGasWarningDecal` 생성 | 에디터에서 수동 |
-
----
-
-## 변경 전후 비교
-
-### 프로퍼티 매핑
-
-| 기존 | 변경 후 | 비고 |
-|------|---------|------|
-| `GroundDecal` (UDecalComponent) | `GroundDecal` (UDecalComponent) | **변경 없음** |
-| `DecalBaseMaterial` (UMaterialInterface) | `WarningDecalMaterial` + `ActiveDecalMaterial` (UMaterialInterface x2) | 1개 → 2개 |
-| `WarningColor` (FLinearColor) | 제거 | 머티리얼 자체 색상 사용 |
-| `ActiveColor` (FLinearColor) | 제거 | 머티리얼 자체 색상 사용 |
-| `DecalMID` (UMaterialInstanceDynamic) | 제거 | MID 생성 불필요 |
-| `DecalRadius` (float) | `DecalRadius` (float) | **변경 없음** |
-
-### 동작 흐름 비교
-
-**기존**:
-```
-Spawn
-  → 생성자: GroundDecal 컴포넌트 생성
-  → BeginPlay: MID 생성, WarningColor 설정, GroundDecal에 MID 할당
-  → [3초 대기]
-  → TransitionToActive: MID의 "Color" 파라미터를 ActiveColor로 변경
-```
-
-**변경 후**:
-```
-Spawn
-  → 생성자: GroundDecal 컴포넌트 생성 (변경 없음)
-  → BeginPlay: GroundDecal에 WarningDecalMaterial 할당
-  → [3초 대기]
-  → TransitionToActive: GroundDecal에 ActiveDecalMaterial 할당 (머티리얼 교체)
-```
+- [ ] 물대포 쏘면서 정지 → 상체 호스 포즈 + 하체 Idle
+- [ ] 물대포 쏘면서 전진 → 상체 호스 포즈 + 하체 걷기
+- [ ] 물대포 쏘면서 좌우/후진 → 상체 호스 포즈 + 하체 방향별 걷기
+- [ ] 물대포 시작 시 → 상체가 부드럽게 호스 포즈로 전환
+- [ ] 물대포 중단 시 → 상체가 부드럽게 Idle로 복귀
+- [ ] 서버에서 보이는 모습과 클라이언트에서 보이는 모습 일치
+- [ ] 물대포 중 점프 → 하체가 점프 애니메이션, 상체는 호스 유지 (또는 원하는 동작)
+- [ ] 히트리액트/스턴 등 다른 상태와 충돌 없는지 확인
 
 ---
 
 ## 주의사항
 
-1. **리플리케이션**: `SetDecalMaterial()`은 로컬 호출이지만, `TransitionToActive()`가 타이머로 서버/클라이언트 모두에서 독립적으로 실행되므로 문제 없습니다. 기존 MID 색상 변경과 동일한 패턴입니다.
-
-2. **`DREffectActor` 부모 클래스**: 데칼 관련 코드가 없으므로 수정 불필요합니다.
-
-3. **다른 EffectActor 서브클래스에 영향 없음**: 이 변경은 `DRPoisonGasActor`에만 국한됩니다.
-
-4. **기존 블루프린트 설정값**: `DecalBaseMaterial`, `WarningColor`, `ActiveColor` 프로퍼티가 삭제되므로 블루프린트에서 기존에 설정했던 값들이 사라집니다. 컴파일 전에 기존 블루프린트의 설정값을 메모해 두세요.
-
-5. **타이머 로직 변경 없음**: `PhaseTransitionTimerHandle` (3초 일회성), `EffectCheckTimerHandle` (0.2초 주기, 3초 초기 딜레이) 타이머는 완전히 그대로 유지됩니다.
-
-6. **`#include` 변경 없음**: `UDecalComponent`, `UMaterialInterface`는 이미 포함되어 있고, `UMaterialInstanceDynamic` 헤더 제거도 불필요합니다 (다른 곳에서 사용할 수 있으므로).
+- **Spine 본 이름**: 반드시 GardenRobot 스켈레톤에서 실제 본 이름을 확인해야 함. 잘못된 이름이면 블렌드가 적용되지 않음
+- **AimOffset 연동**: GardenRobot에 `AO_Garden.uasset` (Aim Offset)이 있음. WaterPump 상체 포즈와 Aim Offset이 충돌할 수 있으므로, WaterPump 활성 시 Aim Offset 적용을 고려해야 할 수 있음
+- **Mesh Space Rotation Blend**: 이 옵션을 켜면 상체 회전이 월드 기준으로 블렌드되어 이동 방향에 관계없이 상체가 안정적으로 보임. 끄면 로컬 본 공간에서 블렌드되어 부자연스러울 수 있음
+- **기존 몽타주 슬롯**: 히트리액트(AM_HitReact)나 공격 몽타주가 FullBody 슬롯을 사용한다면, Layered Blend per Bone 이후에 Slot 노드를 배치하여 몽타주가 최종 포즈를 덮어쓸 수 있도록 해야 함

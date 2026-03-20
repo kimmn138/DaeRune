@@ -218,6 +218,20 @@ void UDRWaterPump::StartWaterPumpLoop()
         // 3P 빔 리플리케이트 상태 활성화
         if (ADRCharacter* DRChar = Cast<ADRCharacter>(OwnerCharacter))
         {
+            // 활성화 전에 초기 끝지점 계산 (비소유 클라이언트에서 유효한 끝지점으로 3P 빔 생성)
+            if (OwnerCharacter->Implements<UCombatInterface>())
+            {
+                FVector WeaponSocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(
+                    OwnerCharacter,
+                    FDRGameplayTags::Get().CombatSocket_RightHand
+                );
+
+                bool bHitObstacle = false;
+                FHitResult HitResult;
+                DRChar->WaterPumpBeamEndPoint = CalculateWaterBeamEndPoint(
+                    WeaponSocketLocation, bHitObstacle, HitResult);
+            }
+
             DRChar->bWaterPumpActive = true;
 
             // 리슨 서버에서는 OnRep이 자동 호출되지 않으므로 수동 호출
@@ -231,7 +245,25 @@ void UDRWaterPump::StartWaterPumpLoop()
     // ══ CLIENT: 1P 빔 전용 ══
     if (OwnerCharacter->IsLocallyControlled())
     {
+        // VFX 생성 전에 초기 끝지점 계산 (유효한 HitEffectPosition으로 빔 생성)
+        if (ADRCharacter* DRChar = Cast<ADRCharacter>(OwnerCharacter))
+        {
+            if (DRChar->FirstPersonMesh)
+            {
+                const FVector WeaponSocketLocation =
+                    DRChar->FirstPersonMesh->GetSocketLocation(MuzzleSocketName);
+
+                bool bHitObstacle = false;
+                FHitResult HitResult;
+                CachedBeamEndPoint = CalculateWaterBeamEndPoint(
+                    WeaponSocketLocation, bHitObstacle, HitResult);
+            }
+        }
+
         StartBeamEffect();
+
+        // 즉시 한 번 업데이트하여 회전/위치 보정 (33ms 갭 제거)
+        UpdateBeamEndpoint();
 
         World->GetTimerManager().SetTimer(
             BeamUpdateTimer,

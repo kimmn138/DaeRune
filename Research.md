@@ -1,225 +1,192 @@
-# 독가스 데칼 클라이언트 비가시 문제 분석
+# WaterPump VFX 90도 꺾임 현상 원인 분석 (v2 - 수정됨)
 
-## 1. 문제 현상
+## 현상 요약
 
-- **서버**: 독가스 데칼(GroundDecal)이 정상적으로 표시됨
-- **클라이언트**: 독가스 데칼이 전혀 보이지 않음
-
----
-
-## 2. 관련 클래스 구조
-
-```
-AActor
-└── ADREffectActor          (Source/DaeRune/Public/Actor/DREffectActor.h)
-    └── ADRPoisonGasActor   (Source/DaeRune/Public/Actor/DRPoisonGasActor.h)
-```
-
-- **ADREffectActor**: GameplayEffect를 적용하는 범용 액터. `AActor`를 직접 상속.
-- **ADRPoisonGasActor**: 독가스 전용 액터. `UDecalComponent`로 바닥 시각 효과 표시, 2단계(Warning→Active) 색상 전환, 주기적 범위 체크로 GE 적용/제거.
+물대포(WaterPump) 스킬 발동 시:
+- **1인칭(1P)과 3인칭(3P) 모두**에서 문제 발생
+- 호스를 드는 모션 **전체 과정**에서 VFX가 아래로 90도 꺾여 있음 (33ms 순간이 아님)
+- 호스를 완전히 들고 물대포를 쏘기 시작하는 시점부터 올바른 방향으로 전환
+- **핵심 추정 원인**: 빔의 끝지점(HitEffectPosition)이 유효하지 않은 상태에서 VFX가 생성됨
 
 ---
 
-## 3. 근본 원인 분석
+## 전체 실행 흐름
 
-### 3.1 핵심 문제: 액터 리플리케이션 미설정
+### Blueprint (GA_WaterPump)
 
-**`ADREffectActor` 생성자** (`DREffectActor.cpp:9-15`):
+```
+Event ActivateAbility
+→ Sequence
+    → Then 0:
+        [로컬] Play Montage: AM_FP_HoseBlast (1P 메시 - 호스 들기)
+        [전체] PlayMontageAndWait: AM_HoseBlast (3P 메시 - 호스 들기)
+        WaitGameplayEvent: Event.Montage.WaterPump
+            → Event Received:
+                ① SetInWaterLoop(true)
+                ② ApplyGE: GE_WaterPump_SlowSelf
+                ③ StartWaterPumpLoop()          ← VFX 생성 시점
+                ④ Play Montage: AM_InHoseBlast  (3P 루프 애니메이션)
+                ⑤ SetTimer: Cost
+    → Then 1:
+        WaitInputRelease → StopWaterPumpLoop() → EndAbility
+```
+
+### C++ (StartWaterPumpLoop → StartBeamEffect)
+
+#### StartWaterPumpLoop() [DRWaterPump.cpp:182]
 ```cpp
-ADREffectActor::ADREffectActor()
+CachedBeamEndPoint = FVector::ZeroVector;  // ★ (0,0,0)으로 초기화
+
+// SERVER 분기
+if (HasAuthority())
 {
-    PrimaryActorTick.bCanEverTick = false;
-    SetRootComponent(CreateDefaultSubobject<USceneComponent>("SceneRoot"));
+    // GameplayCue 추가 (3P 비소유 클라이언트용)
+    ASC->AddGameplayCue(GameplayCue_Skill_WaterPump, FGameplayCueParameters());
+
+    // PerformWaterPumpTick 타이머 (0.1초 간격, 최초 0.0초 딜레이)
+    // → 이 안에서 WaterPumpBeamEndPoint를 갱신함
+    SetTimer(PerformWaterPumpTick, 0.1초, looping, InitialDelay=0.0);
+
+    // ★★ 문제: bWaterPumpActive = true를 설정하기 전에
+    // ★★ WaterPumpBeamEndPoint가 아직 갱신되지 않았음
+    DRChar->bWaterPumpActive = true;        // → OnRep 트리거
+    DRChar->OnRep_WaterPumpActive();        // 리슨서버 수동 호출
+}
+
+// CLIENT 분기 (소유 클라이언트)
+if (IsLocallyControlled())
+{
+    StartBeamEffect();                       // ★ CachedBeamEndPoint = (0,0,0) 상태
+    SetTimer(UpdateBeamEndpoint, 0.033초);   // 보정은 33ms 후
 }
 ```
 
-**`ADRPoisonGasActor` 생성자** (`DRPoisonGasActor.cpp:15-27`):
+#### StartBeamEffect() [DRWaterPump.cpp:370]
 ```cpp
-ADRPoisonGasActor::ADRPoisonGasActor()
-{
-    InfiniteEffectApplicationPolicy = EEffectApplicationPolicy::ApplyOnOverlap;
-    InfiniteEffectRemovalPolicy = EEffectRemovalPolicy::RemoveOnEndOverlap;
-    bApplyEffectsToEnemies = true;
+FirstPersonBeam = SpawnSystemAttached(
+    WaterCannonEffect, FPMesh, MuzzleSocketName,
+    FVector::ZeroVector,            // 위치 오프셋 없음
+    FRotator::ZeroRotator,          // ★ 회전 = 소켓 기본 회전 상속
+    EAttachLocation::SnapToTarget,  // 소켓 트랜스폼 스냅
+    false
+);
 
-    GroundDecal = CreateDefaultSubobject<UDecalComponent>("GroundDecal");
-    GroundDecal->SetupAttachment(GetRootComponent());
-    GroundDecal->SetRelativeRotation(FRotator(-90.0f, 0.0f, 0.0f));
-    GroundDecal->DecalSize = FVector(300.0f, 312.5f, 312.5f);
-}
+// ★★ 핵심 문제: HitEffectPosition = (0,0,0) → 유효하지 않은 끝지점
+FirstPersonBeam->SetVectorParameter(
+    FName("HitEffectPosition"), CachedBeamEndPoint);  // = FVector::ZeroVector
 ```
 
-**두 생성자 모두 `bReplicates = true`를 설정하지 않는다.**
-
-Unreal Engine에서 서버가 `SpawnActor`를 호출해도 `bReplicates = true`가 아닌 액터는 **서버에만 존재**하고 클라이언트에는 리플리케이트되지 않는다. 따라서 클라이언트 월드에는 `ADRPoisonGasActor` 인스턴스 자체가 없으므로, `UDecalComponent`도 존재하지 않아 데칼이 보이지 않는 것이다.
-
-### 3.2 스폰 경로: 서버 전용 실행
-
-독가스 액터 스폰 경로:
-```
-UDRPhase3::SpawnToxicGas()                    // 서버의 GameMode에서 호출
-  → 타이머로 UDRPhase3::SpawnPoisonGasActor() 반복 실행
-    → World->SpawnActor<ADRPoisonGasActor>()  // 서버에서만 스폰
-```
-
-`UDRPhase3`는 `ADRStageGameMode`의 하위 시스템이고, GameMode는 **서버에만 존재**한다. 따라서:
-
-1. `SpawnPoisonGasActor()`는 서버에서만 실행됨 (`DRPhase3.cpp:1026-1060`)
-2. `SpawnActor` 호출 시 `bReplicates = false`인 액터이므로 클라이언트에 리플리케이트되지 않음
-3. 결과적으로 클라이언트 월드에는 독가스 액터가 존재하지 않음
-
-### 3.3 데칼 색상 전환도 서버에서만 동작
-
+#### OnRep_WaterPumpActive() [DRCharacter.cpp:316] (3P 빔)
 ```cpp
-void ADRPoisonGasActor::TransitionToActive()   // DRPoisonGasActor.cpp:92-103
-{
-    CurrentPhase = EPoisonGasPhase::Active;
-    if (DecalMID)
-    {
-        DecalMID->SetVectorParameterValue("Color", ActiveColor);
-    }
-}
+WaterPumpThirdPersonBeam = SpawnSystemAttached(
+    WaterPumpEffectAsset, ThirdPersonMesh, WaterPumpMuzzleSocket,
+    FVector::ZeroVector, FRotator::ZeroRotator,
+    EAttachLocation::SnapToTarget, false
+);
+
+// ★★ 핵심 문제: WaterPumpBeamEndPoint = (0,0,0) → 유효하지 않은 끝지점
+// (서버의 PerformWaterPumpTick이 아직 실행되지 않았거나, 리플리케이션 미도착)
+WaterPumpThirdPersonBeam->SetVectorParameter(
+    FName("HitEffectPosition"), WaterPumpBeamEndPoint);
 ```
-
-- `CurrentPhase`가 `UPROPERTY(Replicated)`도 아니고, `DecalMID` 색상 변경은 로컬 호출임
-- 하지만 이건 부차적 문제 — 액터 자체가 클라이언트에 없으므로 의미 없음
-
-### 3.4 BeginPlay의 서버 전용 타이머
-
-```cpp
-void ADRPoisonGasActor::BeginPlay()            // DRPoisonGasActor.cpp:29-63
-{
-    Super::BeginPlay();
-
-    // Decal 크기 동기화, Dynamic Material 생성
-    GroundDecal->DecalSize = FVector(300.0f, DecalRadius, DecalRadius);
-    if (DecalBaseMaterial)
-    {
-        DecalMID = UMaterialInstanceDynamic::Create(DecalBaseMaterial, this);
-        GroundDecal->SetDecalMaterial(DecalMID);
-        DecalMID->SetVectorParameterValue("Color", WarningColor);
-    }
-
-    // 3초 후 Active로 전환 (로컬 타이머)
-    GetWorldTimerManager().SetTimer(
-        PhaseTransitionTimerHandle, this,
-        &ADRPoisonGasActor::TransitionToActive,
-        3.0f, false
-    );
-
-    // 효과 판정 타이머 (서버에서만)
-    if (HasAuthority())
-    {
-        GetWorldTimerManager().SetTimer(
-            EffectCheckTimerHandle, this,
-            &ADRPoisonGasActor::CheckNearbyTargets,
-            EffectCheckInterval,
-            true, 3.0f
-        );
-    }
-}
-```
-
-- Decal Material 생성과 Phase 전환 타이머는 `HasAuthority()` 체크 없이 실행되므로, **만약 액터가 리플리케이트된다면** 클라이언트에서도 시각 효과가 동작할 것임
-- 효과 판정(`CheckNearbyTargets`)은 올바르게 `HasAuthority()` 체크가 되어 있어, 서버에서만 GE를 적용함
-- 즉, **비주얼 로직은 클라이언트에서 동작하도록 이미 설계되어 있지만**, 액터 리플리케이션이 빠져있어 무용지물인 상태
 
 ---
 
-## 4. 영향 범위
+## 근본 원인 분석
 
-| 항목 | 서버 | 클라이언트 |
-|------|------|-----------|
-| 독가스 액터 존재 | O | X (리플리케이트 안 됨) |
-| 바닥 데칼 표시 | O | X (액터 자체가 없음) |
-| Warning→Active 색상 전환 | O | X |
-| 독가스 데미지/슬로우 GE 적용 | O (서버 권한) | GE는 ASC 리플리케이션으로 전달됨 |
-| Overlap 카운트 관리 | O (서버 전용) | X |
+### 핵심 원인: 유효한 끝지점 없이 VFX가 생성됨
 
-**참고**: GE(GameplayEffect) 적용 자체는 서버에서 ASC를 통해 이루어지므로, 데미지/슬로우 효과는 클라이언트 캐릭터에게도 정상 적용된다. 문제는 **시각적 표시(데칼)**만 누락되는 것이다.
+Niagara 시스템은 `HitEffectPosition` 파라미터를 빔의 **끝지점(목표 위치)**으로 사용한다.
+VFX가 생성되는 시점에서 이 값이 `(0,0,0)` (월드 원점)이면:
 
----
+- **빔이 소켓 위치 → 월드 원점(0,0,0) 방향**으로 향함
+- 캐릭터가 월드 원점보다 위에 있으면 → **아래로 90도 꺾여 보임**
+- Niagara 시스템이 내부적으로 빔 방향을 `(소켓위치 → HitEffectPosition)` 벡터로 결정하기 때문
 
-## 5. 해결 방안
+### 왜 "33ms 후 보정"이 아니라 "호스 들기 전체 과정"에서 보이는가?
 
-### 방안 A: `bReplicates = true` 설정 (권장)
+#### 1P 빔의 경우:
+- `StartBeamEffect()` 직후 `UpdateBeamEndpoint()` 타이머가 0.033초 간격으로 시작됨
+- `UpdateBeamEndpoint()`가 `SetWorldRotation()`과 `SetVectorParameter("HitEffectPosition", 올바른값)`으로 보정
+- **하지만**: Niagara 컴포넌트는 `SnapToTarget`으로 소켓에 부착된 상태. 매 프레임 소켓 트랜스폼에 스냅되면서 `SetWorldRotation()`으로 설정한 회전이 다음 프레임에 소켓 회전으로 덮어써질 수 있음
+- 또는: Niagara 시스템 내부에서 `HitEffectPosition`이 파티클 스폰 시점의 값으로 캐시되어, 이미 방출된 파티클은 계속 잘못된 방향으로 이동
 
-`ADRPoisonGasActor` 생성자에 리플리케이션을 활성화한다:
+#### 3P 빔의 경우:
+- `bWaterPumpActive = true` 설정 시점에서 `WaterPumpBeamEndPoint`는 아직 `(0,0,0)`
+- `PerformWaterPumpTick()`의 InitialDelay가 0.0이지만, 타이머 콜백은 같은 프레임 또는 다음 틱에서 실행
+- `bWaterPumpActive` RepNotify가 먼저 도달하고, `WaterPumpBeamEndPoint` 리플리케이션은 아직 안 옴
+- 결과: 3P 빔도 `HitEffectPosition = (0,0,0)`으로 생성됨
 
-```cpp
-ADRPoisonGasActor::ADRPoisonGasActor()
-{
-    bReplicates = true;   // ← 추가: 서버에서 스폰 시 클라이언트에도 리플리케이트
-    // ... 기존 코드 ...
-}
+### 시간축 다이어그램 (수정본)
+
+```
+[AM_FP_HoseBlast / AM_HoseBlast 시작] ─── 호스 들기 애니메이션 시작
+    │
+    │  (애니메이션 재생 중...)
+    │
+    ▼
+[AnimNotify: Event.Montage.WaterPump 발화] ─── 호스가 아직 중간 자세
+    │
+    ├─ CachedBeamEndPoint = (0,0,0)
+    │
+    ├─ [SERVER]
+    │   ├─ PerformWaterPumpTick 타이머 시작 (InitialDelay=0.0)
+    │   │   └─ 하지만 타이머 콜백은 아직 실행 안 됨 (같은 프레임 내 or 다음 틱)
+    │   │
+    │   ├─ bWaterPumpActive = true                    ← WaterPumpBeamEndPoint는 아직 (0,0,0)
+    │   └─ OnRep_WaterPumpActive() 수동 호출 (리슨서버)
+    │       └─ 3P 빔 생성: HitEffectPosition = (0,0,0)  ★★ 3P 문제 발생
+    │
+    └─ [CLIENT - 로컬]
+        ├─ StartBeamEffect()
+        │   └─ 1P 빔 생성: HitEffectPosition = (0,0,0)  ★★ 1P 문제 발생
+        │
+        │   ★★ 이 시점: 1P/3P 모두 VFX가 월드 원점(아래)을 향함 ★★
+        │
+        └─ UpdateBeamEndpoint 타이머 시작 (33ms 간격)
+            │
+            │ ← 33ms 후 첫 보정
+            │   하지만 Niagara가 SnapToTarget 부착 상태이고
+            │   이미 방출된 파티클은 보정 불가
+            │
+            ▼
+    (호스 들기 애니메이션 완료 → AM_InHoseBlast 루프 시작)
+            │
+            ▼
+    [여러 차례 UpdateBeamEndpoint 실행 후]
+        └─ 비로소 VFX가 올바른 방향으로 안정화
+
+    ★ 호스 들기 전체 과정(수백ms)에서 VFX가 아래로 꺾여 보임
 ```
 
-**장점**:
-- 가장 간단한 수정
-- 액터가 클라이언트에 리플리케이트되면 `BeginPlay()`가 클라이언트에서도 실행됨
-- DecalComponent, Dynamic Material, 색상 전환 타이머가 자연스럽게 동작
-- GE 판정 로직은 이미 `HasAuthority()` 체크가 있으므로 서버에서만 실행됨
+### 3P 빔 리플리케이션 타이밍 상세
 
-**고려사항**:
-- `CurrentPhase`를 `UPROPERTY(ReplicatedUsing=OnRep_CurrentPhase)`로 변경하면, 액터 리플리케이트 후 Warning→Active 전환도 정확히 동기화 가능
-- 단, 현재 타이머 기반 전환(3초)이 `BeginPlay`에서 시작되므로, 클라이언트가 액터 생성 직후 `BeginPlay`를 실행하면 거의 동시에 타이머가 돌아 큰 차이 없음
-- `SetLifeSpan(10.0f)`은 리플리케이트되는 함수이므로 클라이언트에서도 수명이 동기화됨
-
-### 방안 B: `CurrentPhase` 리플리케이션 추가 (선택적 보강)
-
-만약 정확한 페이즈 동기화가 필요하다면:
-
-```cpp
-// 헤더
-UPROPERTY(ReplicatedUsing = OnRep_CurrentPhase)
-EPoisonGasPhase CurrentPhase = EPoisonGasPhase::Warning;
-
-UFUNCTION()
-void OnRep_CurrentPhase();
-
-// 구현
-void ADRPoisonGasActor::OnRep_CurrentPhase()
-{
-    if (CurrentPhase == EPoisonGasPhase::Active && DecalMID)
-    {
-        DecalMID->SetVectorParameterValue("Color", ActiveColor);
-    }
-}
-
-void ADRPoisonGasActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-    DOREPLIFETIME(ADRPoisonGasActor, CurrentPhase);
-}
+```
+서버 StartWaterPumpLoop():
+    ├─ PerformWaterPumpTick 타이머 등록 (InitialDelay=0.0)
+    │   └─ 이 시점에서는 아직 콜백 미실행
+    │       WaterPumpBeamEndPoint = (0,0,0) 그대로
+    │
+    ├─ bWaterPumpActive = true
+    │   └─ RepNotify 큐에 등록됨
+    │
+    └─ 이후 프레임:
+        ├─ PerformWaterPumpTick() 첫 실행 → WaterPumpBeamEndPoint 갱신
+        └─ bWaterPumpActive RepNotify가 클라이언트에 도착
+            └─ 이때 WaterPumpBeamEndPoint도 리플리케이트되었을 수 있지만
+               ★ 같은 리플리케이션 번들에 포함되지 않을 수 있음
+               ★ 특히 bWaterPumpActive가 먼저 도착하면 3P 빔은 (0,0,0)으로 생성
 ```
 
-**장점**:
-- 클라이언트 접속이 늦거나, 액터 생성과 리플리케이션 사이 시간 차이가 있을 때도 정확한 색상 표시
-- 네트워크 지연으로 인한 색상 불일치 방지
-
-### 방안 C: Multicast RPC로 비주얼 스폰 (대안)
-
-액터 리플리케이션 대신, 서버에서 Multicast RPC를 통해 클라이언트에게 데칼을 직접 스폰하는 방식. 그러나 이 방법은 불필요하게 복잡하고, `bReplicates`로 충분히 해결 가능하므로 비권장.
-
 ---
 
-## 6. 결론
+## 결론 (수정본)
 
-**근본 원인**: `ADRPoisonGasActor`(및 부모 `ADREffectActor`)의 생성자에 `bReplicates = true`가 없어서, 서버에서 스폰된 독가스 액터가 클라이언트에 리플리케이트되지 않는다. 클라이언트 월드에 액터가 존재하지 않으므로 `UDecalComponent`도 없고, 데칼이 보이지 않는다.
-
-**권장 수정**: `ADRPoisonGasActor` 생성자에 `bReplicates = true` 한 줄 추가. 비주얼 로직(DecalComponent, Dynamic Material, 타이머 기반 색상 전환)은 이미 클라이언트에서 동작하도록 설계되어 있으므로, 리플리케이션만 활성화하면 즉시 해결된다.
-
----
-
-## 7. 관련 파일 목록
-
-| 파일 | 역할 |
+| 항목 | 설명 |
 |------|------|
-| `Source/DaeRune/Public/Actor/DRPoisonGasActor.h` | 독가스 액터 헤더 (DecalComponent, 페이즈, 타이머 정의) |
-| `Source/DaeRune/Private/Actor/DRPoisonGasActor.cpp` | 독가스 액터 구현 (BeginPlay, 색상 전환, 범위 체크) |
-| `Source/DaeRune/Public/Actor/DREffectActor.h` | 부모 클래스 헤더 (GE 적용 정책 정의) |
-| `Source/DaeRune/Private/Actor/DREffectActor.cpp` | 부모 클래스 구현 (GE 적용/제거 로직) |
-| `Source/DaeRune/Private/Phase/DRPhase3.cpp:1026-1060` | 독가스 스폰 로직 (서버 GameMode에서 실행) |
-| `Content/Blueprints/Actor/Area/BP_PosionGas.uasset` | 독가스 블루프린트 (머티리얼/GE 클래스 설정) |
-| `Content/Blueprints/Actor/Area/Material/M_PoisonGasDecal.uasset` | 데칼 베이스 머티리얼 |
-| `Content/Blueprints/Actor/Area/GE_PoisonDamage.uasset` | 독가스 데미지 GE |
-| `Content/Blueprints/Actor/Area/GE_PoisonSlow.uasset` | 독가스 슬로우 GE |
+| **핵심 원인** | VFX 생성 시점에 `HitEffectPosition`이 `(0,0,0)` (유효한 끝지점 없음) |
+| **1P 빔** | `CachedBeamEndPoint = FVector::ZeroVector` 상태에서 `StartBeamEffect()` 호출 |
+| **3P 빔** | `WaterPumpBeamEndPoint`가 아직 서버에서 계산되기 전에 `bWaterPumpActive = true`가 설정됨 |
+| **지속 시간** | 33ms가 아닌 호스 들기 애니메이션 전체 시간 (Niagara 파티클 캐시 + SnapToTarget 부착) |
+| **방향** | 소켓 위치에서 월드 원점(0,0,0)을 향하므로 대부분의 경우 아래로 꺾여 보임 |
+| **해결 방향** | VFX 생성 전에 유효한 끝지점을 먼저 계산하여 설정해야 함 |

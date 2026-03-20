@@ -355,6 +355,9 @@ void ADRCharacter::OnRep_WaterPumpActive()
 			0.033f,
 			true
 		);
+
+		// 즉시 한 번 업데이트하여 초기 회전/위치 보정 (33ms 갭 제거)
+		UpdateWaterPumpThirdPersonBeam();
 	}
 	else
 	{
