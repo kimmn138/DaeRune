@@ -1,276 +1,335 @@
-# WaterPump 애니메이션 걷기 블렌드 안 되는 문제 수정 계획
+# Plan: PoisonGas 웨이브 경고 UI 구현
 
-## 문제 정의
+## 개요
 
-- 방안 A(ABP State Machine)로 `AM_InHoseBlast`가 모든 클라이언트에서 보이게 됨 ✅
-- **하지만**: 물대포를 쏘면서 이동할 때 **다리가 고정된 채로 미끄러지듯 움직임**
-- 원인: State Machine에서 `WaterPump_Loop` 상태가 **풀바디(Full Body)**로 `AM_InHoseBlast`를 재생하므로, 로코모션(걷기/달리기) 애니메이션이 완전히 덮어써짐
+Research.md의 **방안 1 (Replicated 변수)** 기반. 기존 `bIsWaveRestTime` / `OnPhaseAlarm` 패턴을 그대로 따라 구현한다.
 
 ---
 
-## 원인 분석
+## Step 1: DRStageGameState.h 수정
 
-### 현재 ABP 구조 (추정)
+### 1-1. 델리게이트 선언 추가
 
-```
-AnimGraph:
-    [State Machine]
-        ├─ Idle/Locomotion 상태: BS_Walk (Blend Space) → 속도에 따라 Idle/Walk 블렌드
-        ├─ WaterPump_Loop 상태: DEF_InHoseBlast (풀바디 루프) ← ★ 문제
-        └─ ... 기타 상태들
-    → Output Pose
+**위치**: 17줄 (`DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnWaveTimerChanged, ...)`) 바로 아래
+
+```cpp
+// 독가스 경고 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnToxicGasWarningSignature, bool, bIsToxicGasWave);
 ```
 
-`WaterPump_Loop` 상태에 진입하면 `DEF_InHoseBlast`가 **전신**을 제어한다.
-상체(호스 들기 포즈)와 하체(다리 걷기)가 분리되어 있지 않으므로, 이동 중에도 다리가 InHoseBlast 포즈 그대로 고정된다.
+### 1-2. public 섹션에 세터/게터/델리게이트 추가
 
-### 해결 원리
+**위치**: `SetIsWaveRestTime()` 선언 (118줄) 바로 아래
 
-**Layered Blend per Bone**: 특정 본(Bone)을 기준으로 상체와 하체의 애니메이션 소스를 분리한다.
+```cpp
+// 독가스 웨이브 여부
+void SetIsToxicGasWave(bool bIsToxicGas);
 
+UFUNCTION(BlueprintCallable, Category = "Phase|Defense")
+bool IsToxicGasWave() const { return bIsToxicGasWave; }
+
+// 독가스 경고 델리게이트 (모든 클라이언트에서 UI 바인딩용)
+UPROPERTY(BlueprintAssignable, Category = "Phase|Warning")
+FOnToxicGasWarningSignature OnToxicGasWarningDelegate;
 ```
-Base Layer (전신):  Locomotion (BS_Walk) → 다리가 걷기 애니메이션 재생
-Upper Layer (상체): DEF_InHoseBlast      → 상체만 호스 들기 포즈
 
-→ Layered Blend per Bone (Spine 본 기준)
-→ 결과: 상체는 물대포, 하체는 걷기
+### 1-3. protected 섹션에 RepNotify 선언 추가
+
+**위치**: `OnRep_IsWaveRestTime()` 선언 (180-181줄) 바로 아래
+
+```cpp
+UFUNCTION()
+void OnRep_IsToxicGasWave();
 ```
 
----
+### 1-4. private 섹션에 Replicated 변수 추가
 
-## 해결 방안
+**위치**: `bIsWaveRestTime` (231-232줄) 바로 아래
 
-### ABP_GardenRobot AnimGraph 재구성
-
-현재 State Machine 방식에서, **Layered Blend per Bone** 노드를 추가하여 상체/하체를 분리한다.
-
-#### 목표 AnimGraph 구조
-
-```
-[기존 State Machine / Locomotion 출력]  ──→  Base Pose (전신 로코모션)
-                                                │
-                                                ▼
-                                        ┌─────────────────────┐
-                                        │ Layered Blend       │
-                                        │   per Bone          │
-                                        │                     │
-                                        │ Base: Locomotion    │  ← 하체 (다리 걷기)
-                                        │ Blend: WaterPump    │  ← 상체 (호스 포즈)
-                                        │ Bone: "spine_01"    │  ← 블렌드 시작 본
-                                        │ Alpha: 0.0 or 1.0   │  ← bIsInWaterPump로 제어
-                                        └─────────────────────┘
-                                                │
-                                                ▼
-                                          Output Pose
+```cpp
+UPROPERTY(ReplicatedUsing = OnRep_IsToxicGasWave)
+bool bIsToxicGasWave = false;
 ```
 
 ---
 
-## 상세 구현 단계
+## Step 2: DRStageGameState.cpp 수정
 
-### 단계 1: GardenRobot 스켈레톤의 Spine 본 이름 확인
+### 2-1. 생성자에 초기값 추가
 
-ABP에서 Layered Blend per Bone을 설정하려면 **블렌드 시작 본(Branch Filter Bone)**의 정확한 이름이 필요하다.
+**위치**: `bIsWaveRestTime = false;` (34줄) 바로 아래
 
-1. `Content/DaeRuneAssets/Characters/GardenRobot/TP/Player1-Rig_Ani-3_1_Skeleton.uasset` 열기
-2. 본 계층 구조에서 **척추(Spine) 본** 이름 확인
-   - 일반적인 이름: `spine_01`, `spine_02`, `Spine`, `Spine1` 등
-   - GardenRobot이 커스텀 리그라면 다를 수 있음
-3. 상체와 하체를 나누는 적절한 본 선택
-   - 보통 `spine_01` 또는 `spine_02`가 적당 (골반 위, 상체 시작점)
-   - 이 본과 그 하위 모든 자식 본(팔, 머리 등)이 상체 레이어로 블렌드됨
-   - 이 본의 부모 본(골반, 다리 등)은 Base Layer(로코모션)를 유지
-
-### 단계 2: ABP_GardenRobot AnimGraph 수정
-
-#### 2-1. State Machine에서 WaterPump_Loop 상태 제거 (또는 유지하되 변경)
-
-기존에 State Machine 안에 만든 `WaterPump_Loop` 상태를 **State Machine 밖으로** 빼야 한다. Layered Blend per Bone은 State Machine 외부에서 두 개의 포즈를 합성하는 노드이기 때문이다.
-
-**방법 A: State Machine을 Base 포즈로만 사용 (권장)**
-
-```
-AnimGraph:
-
-[State Machine (Locomotion 전용)]
-    ├─ Idle/Locomotion: BS_Walk
-    ├─ Jump_Start / Jump_Loop / Jump_Land
-    └─ (WaterPump 상태 제거)
-    → Locomotion Pose
-
-[WaterPump Animation]
-    Play DEF_InHoseBlast (루프)
-    → WaterPump Pose
-
-[Layered Blend per Bone]
-    Base Pose: Locomotion Pose
-    Blend Poses 0: WaterPump Pose
-    Branch Filter: "spine_01" (또는 해당 본 이름)
-    Blend Weight 0: bIsInWaterPump ? 1.0 : 0.0
-    → Output Pose
+```cpp
+bIsToxicGasWave = false;
 ```
 
-**방법 B: State Machine 내 상태는 유지하되 풀바디가 아닌 참조용으로만 사용**
+### 2-2. GetLifetimeReplicatedProps에 등록
 
-더 복잡하고 이점이 적으므로 방법 A를 권장.
+**위치**: `DOREPLIFETIME(ADRStageGameState, bIsWaveRestTime);` (67줄) 바로 아래
 
-#### 2-2. Layered Blend per Bone 노드 설정
-
-ABP_GardenRobot의 AnimGraph에서:
-
-1. **노드 추가**: 우클릭 → "Layered blend per bone" 검색 → 추가
-2. **Base Pose 연결**: State Machine(Locomotion)의 출력을 `Base Pose` 핀에 연결
-3. **Blend Poses 추가**: "Add Blend Pin" 버튼으로 Blend Pose 슬롯 1개 추가
-4. **Blend Pose 0 연결**: `DEF_InHoseBlast` 애니메이션 시퀀스 (루프 재생) 노드를 연결
-5. **Blend Weights 0 연결**: `bIsInWaterPump` 변수를 Float로 변환(Bool to Float 또는 Select) 후 연결
-   - `true` → 1.0 (상체 WaterPump 포즈)
-   - `false` → 0.0 (상체도 Locomotion)
-6. **노드 디테일 패널에서 Branch Filter 설정**:
-   - `Layer Setup` 배열에서 `Branch Filters` 추가
-   - `Bone Name`: 확인한 Spine 본 이름 (예: `spine_01`)
-   - `Blend Depth`: 0 (이 본부터 모든 자식 본에 블렌드 적용)
-   - `Mesh Space Rotation Blend`: 체크 (월드 공간 회전 블렌드로 더 자연스러운 결과)
-
-#### 2-3. 블렌드 알파 부드럽게 전환 (선택사항)
-
-급격한 전환을 피하려면 `FInterp To` 또는 `Blend Weights`에 보간을 적용:
-
-```
-Event Blueprint Update Animation:
-    bIsInWaterPump (bool) → Select (True: 1.0, False: 0.0) → FInterp To (Speed: 10.0)
-    → Set WaterPumpBlendAlpha (float 변수)
+```cpp
+DOREPLIFETIME(ADRStageGameState, bIsToxicGasWave);
 ```
 
-그리고 Layered Blend per Bone의 `Blend Weights 0`에 `WaterPumpBlendAlpha` 연결.
+### 2-3. 세터 구현 추가
 
-이렇게 하면 물대포 시작/종료 시 약 0.1~0.2초에 걸쳐 부드럽게 상체 포즈가 전환된다.
+**위치**: `SetIsWaveRestTime()` 구현 (183-191줄) 바로 아래
 
-### 단계 3: DEF_InHoseBlast 애니메이션 확인
-
-`Content/DaeRuneAssets/Characters/GardenRobot/TP/DEF_InHoseBlast.uasset`:
-
-1. **루프 설정 확인**: 애니메이션 에셋을 열어 `Loop` 체크 여부 확인. 체크되어 있지 않으면 활성화
-2. **루트 모션 비활성화**: Root Motion이 켜져 있으면 이동과 충돌할 수 있으므로 비활성화 확인
-3. **Additive 여부**: 이 애니메이션이 Additive가 아닌 일반(Normal) 애니메이션인지 확인. Layered Blend per Bone은 둘 다 지원하지만, 일반 애니메이션이면 `Blend Mode`를 `Blend` 그대로 사용
-
-### 단계 4: GA_WaterPump 블루프린트 정리 확인
-
-이전 수정에서 이미 처리했어야 할 것들:
-- `Play Montage(GetMesh, AM_InHoseBlast)` 노드가 제거되었는지 확인
-- `Montage Stop(AM_InHoseBlast)` 노드가 제거되었는지 확인
-- ABP의 `bIsInWaterPump` 구동은 `bWaterPumpActive` 리플리케이트 변수로 이루어짐
-
----
-
-## 최종 AnimGraph 구조 다이어그램
-
+```cpp
+void ADRStageGameState::SetIsToxicGasWave(bool bIsToxicGas)
+{
+    if (HasAuthority())
+    {
+        bIsToxicGasWave = bIsToxicGas;
+        // 서버에서 즉시 브로드캐스트 (리슨 서버 플레이어용)
+        OnToxicGasWarningDelegate.Broadcast(bIsToxicGas);
+    }
+}
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    ABP_GardenRobot AnimGraph                │
-│                                                             │
-│  ┌──────────────────────┐                                   │
-│  │   State Machine      │                                   │
-│  │   (Locomotion)       │                                   │
-│  │                      │                                   │
-│  │  ┌────────────────┐  │                                   │
-│  │  │ Idle/Walk      │  │    ┌──────────────────────┐       │
-│  │  │ (BS_Walk)      │  │    │  DEF_InHoseBlast     │       │
-│  │  └────────────────┘  │    │  (Loop = true)       │       │
-│  │  ┌────────────────┐  │    └──────────┬───────────┘       │
-│  │  │ Jump_Start     │  │               │                   │
-│  │  └────────────────┘  │               │ WaterPump Pose    │
-│  │  ┌────────────────┐  │               │                   │
-│  │  │ Jump_Loop      │  │               │                   │
-│  │  └────────────────┘  │               │                   │
-│  │  ┌────────────────┐  │               │                   │
-│  │  │ Jump_Land      │  │               │                   │
-│  │  └────────────────┘  │               │                   │
-│  └──────────┬───────────┘               │                   │
-│             │                           │                   │
-│             │ Base Pose                 │ Blend Pose 0      │
-│             │                           │                   │
-│             ▼                           ▼                   │
-│  ┌──────────────────────────────────────────────┐           │
-│  │         Layered Blend per Bone               │           │
-│  │                                              │           │
-│  │  Branch Filter: "spine_01"                   │           │
-│  │  Blend Weight: WaterPumpBlendAlpha           │           │
-│  │  Mesh Space Rotation Blend: true             │           │
-│  │                                              │           │
-│  │  결과:                                       │           │
-│  │    spine_01 이하 (상체): WaterPump Pose      │           │
-│  │    spine_01 이상 (하체): Locomotion Pose     │           │
-│  └──────────────────┬───────────────────────────┘           │
-│                     │                                       │
-│                     ▼                                       │
-│              [Output Pose]                                  │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+
+### 2-4. RepNotify 구현 추가
+
+**위치**: `OnRep_IsWaveRestTime()` 구현 (245-249줄) 바로 아래
+
+```cpp
+void ADRStageGameState::OnRep_IsToxicGasWave()
+{
+    // 클라이언트에서 복제 후 브로드캐스트
+    OnToxicGasWarningDelegate.Broadcast(bIsToxicGasWave);
+}
 ```
 
 ---
 
-## EventGraph 수정
+## Step 3: DRPhase3.cpp 수정
 
-```
-Event Blueprint Update Animation
-│
-├─ Try Get Pawn Owner
-│   └─ Cast To ADRCharacter (또는 BP_GardenRobot)
-│       ├─ Get bWaterPumpActive → Set bIsInWaterPump
-│       │
-│       └─ bIsInWaterPump → Select(True: 1.0, False: 0.0)
-│           └─ FInterp To(Current: WaterPumpBlendAlpha, Target: 위 결과, Speed: 10.0, DeltaTime)
-│               └─ Set WaterPumpBlendAlpha
-│
-├─ (기존 Speed, IsFalling 등 로코모션 변수 업데이트 로직 유지)
-│
-└─ (기존 bIsStunned, bIsBurned 등 디버프 변수 업데이트 로직 유지)
+### 3-1. StartNextWave()에서 독가스 웨이브 플래그 설정
+
+**위치**: 기존 `if (Modifier.bSpawnToxicGas)` (228줄) **바로 앞**에 삽입
+
+```cpp
+// 독가스 웨이브 경고 UI (모든 클라이언트에 복제)
+if (GameState)
+{
+    GameState->SetIsToxicGasWave(Modifier.bSpawnToxicGas);
+}
 ```
 
-**ABP 변수 추가**:
-| 변수 | 타입 | 용도 |
-|------|------|------|
-| `bIsInWaterPump` | Bool | `bWaterPumpActive` 복사 (State Machine 전환 조건에도 사용 가능) |
-| `WaterPumpBlendAlpha` | Float | Layered Blend per Bone의 Blend Weight (0.0~1.0 보간) |
+**이유**: `bSpawnToxicGas`가 true든 false든 매 웨이브마다 항상 호출. true이면 경고 표시, false이면 경고 해제. 이렇게 해야 이전 웨이브가 독가스였고 현재 웨이브가 아닐 때 경고가 자동으로 사라진다.
+
+### 3-2. EndCurrentWave()에서 독가스 플래그 리셋
+
+**위치**: `StartRestTime();` 호출 (264줄) **바로 앞**에 삽입
+
+```cpp
+// 웨이브 종료 시 독가스 플래그 리셋 (연속 독가스 웨이브에서 RepNotify 재발동 보장)
+if (GameState)
+{
+    GameState->SetIsToxicGasWave(false);
+}
+```
+
+**이유**: 연속으로 `bSpawnToxicGas = true`인 웨이브가 올 때, RepNotify는 값이 변경될 때만 호출된다. `EndCurrentWave()`에서 false로 리셋하면 → 다음 웨이브 `StartNextWave()`에서 true로 설정 → 값이 false→true로 변경되므로 RepNotify 정상 발동.
 
 ---
 
-## 수정 후 예상 결과
+## Step 4: OverlayWidgetController.h 수정
 
+### 4-1. 델리게이트 타입 선언 추가
+
+**위치**: `FOnPhaseAlarmSignature` 선언 (47줄) 바로 아래
+
+```cpp
+// 독가스 경고 UI 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnToxicGasWarningUISignature, bool, bIsToxicGasWave);
 ```
-[물대포 쏘면서 정지]
-    상체: DEF_InHoseBlast (호스 들기 포즈) ✅
-    하체: BS_Walk의 Idle 포즈 (속도 0) ✅
 
-[물대포 쏘면서 이동]
-    상체: DEF_InHoseBlast (호스 들기 포즈) ✅
-    하체: BS_Walk의 Walk 애니메이션 (속도에 따라 블렌드) ✅  ← 이 부분이 해결됨
+### 4-2. public BlueprintAssignable 델리게이트 추가
 
-[물대포 중단]
-    WaterPumpBlendAlpha가 1.0 → 0.0으로 보간 (약 0.1초)
-    상체: Locomotion으로 자연스럽게 복귀 ✅
-    하체: 변화 없음 (계속 Locomotion) ✅
+**위치**: `OnPhaseAlarm` 선언 (115-116줄) 바로 아래
+
+```cpp
+// 독가스 경고 UI 델리게이트 (Blueprint에서 바인딩하여 경고 위젯 표시/숨김)
+UPROPERTY(BlueprintAssignable, Category = "Phase|Warning")
+FOnToxicGasWarningUISignature OnToxicGasWarning;
+```
+
+### 4-3. private 섹션에 바인딩 함수 및 콜백 선언 추가
+
+**위치**: `BindPhaseAlarmDelegate()` 선언 (122줄) 바로 아래
+
+```cpp
+void BindToxicGasWarningDelegate();
+
+UFUNCTION()
+void OnToxicGasWarningReceived(bool bIsToxicGasWave);
+```
+
+### 4-4. private 섹션에 타이머 핸들 추가
+
+**위치**: `PhaseAlarmBindingDelayTimer` 선언 (133줄) 바로 아래
+
+```cpp
+FTimerHandle ToxicGasWarningBindingDelayTimer;
 ```
 
 ---
 
-## 테스트 체크리스트
+## Step 5: OverlayWidgetController.cpp 수정
 
-- [ ] 물대포 쏘면서 정지 → 상체 호스 포즈 + 하체 Idle
-- [ ] 물대포 쏘면서 전진 → 상체 호스 포즈 + 하체 걷기
-- [ ] 물대포 쏘면서 좌우/후진 → 상체 호스 포즈 + 하체 방향별 걷기
-- [ ] 물대포 시작 시 → 상체가 부드럽게 호스 포즈로 전환
-- [ ] 물대포 중단 시 → 상체가 부드럽게 Idle로 복귀
-- [ ] 서버에서 보이는 모습과 클라이언트에서 보이는 모습 일치
-- [ ] 물대포 중 점프 → 하체가 점프 애니메이션, 상체는 호스 유지 (또는 원하는 동작)
-- [ ] 히트리액트/스턴 등 다른 상태와 충돌 없는지 확인
+### 5-1. BindCallbacksToDependencies()에 독가스 바인딩 호출 추가
+
+**위치**: `BindPhaseAlarmDelegate` 타이머 블록 (168-178줄) 바로 아래
+
+```cpp
+// 독가스 경고 델리게이트 바인딩
+if (UWorld* World = GetWorld())
+{
+    World->GetTimerManager().SetTimer(
+        ToxicGasWarningBindingDelayTimer,
+        this,
+        &UOverlayWidgetController::BindToxicGasWarningDelegate,
+        0.1f,  // 0.1초 대기 (GameState 복제 대기)
+        false  // 한 번만 실행
+    );
+}
+```
+
+**이유**: 기존 Phase 알람/목표 바인딩과 동일한 0.1초 딜레이 패턴. GameState가 클라이언트에 아직 복제되지 않았을 수 있으므로.
+
+### 5-2. BindToxicGasWarningDelegate() 구현 추가
+
+**위치**: `BindPhaseAlarmDelegate()` 구현 (306-324줄) 바로 아래
+
+```cpp
+void UOverlayWidgetController::BindToxicGasWarningDelegate()
+{
+    ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
+    if (!DRGameState) return;
+
+    // Dynamic Delegate 바인딩
+    DRGameState->OnToxicGasWarningDelegate.AddDynamic(this, &UOverlayWidgetController::OnToxicGasWarningReceived);
+
+    // 현재 상태 즉시 확인 (이미 독가스 웨이브 진행 중일 수 있음 - late joiner)
+    if (DRGameState->IsToxicGasWave())
+    {
+        OnToxicGasWarning.Broadcast(true);
+    }
+}
+```
+
+### 5-3. OnToxicGasWarningReceived() 콜백 구현 추가
+
+**위치**: `BindToxicGasWarningDelegate()` 바로 아래
+
+```cpp
+void UOverlayWidgetController::OnToxicGasWarningReceived(bool bIsToxicGasWave)
+{
+    OnToxicGasWarning.Broadcast(bIsToxicGasWave);
+}
+```
+
+### 5-4. UnbindAllDelegates()에 독가스 델리게이트 정리 추가
+
+**위치**: `OnPhaseChangedDelegate.RemoveDynamic(...)` 호출 (240줄) 바로 아래
+
+```cpp
+DRGameState->OnToxicGasWarningDelegate.RemoveDynamic(this, &UOverlayWidgetController::OnToxicGasWarningReceived);
+```
 
 ---
 
-## 주의사항
+## Step 6: Blueprint Widget 경고 UI 구현 (에디터 작업)
 
-- **Spine 본 이름**: 반드시 GardenRobot 스켈레톤에서 실제 본 이름을 확인해야 함. 잘못된 이름이면 블렌드가 적용되지 않음
-- **AimOffset 연동**: GardenRobot에 `AO_Garden.uasset` (Aim Offset)이 있음. WaterPump 상체 포즈와 Aim Offset이 충돌할 수 있으므로, WaterPump 활성 시 Aim Offset 적용을 고려해야 할 수 있음
-- **Mesh Space Rotation Blend**: 이 옵션을 켜면 상체 회전이 월드 기준으로 블렌드되어 이동 방향에 관계없이 상체가 안정적으로 보임. 끄면 로컬 본 공간에서 블렌드되어 부자연스러울 수 있음
-- **기존 몽타주 슬롯**: 히트리액트(AM_HitReact)나 공격 몽타주가 FullBody 슬롯을 사용한다면, Layered Blend per Bone 이후에 Slot 노드를 배치하여 몽타주가 최종 포즈를 덮어쓸 수 있도록 해야 함
+> 이 단계는 Unreal Editor에서 수행. C++ 코드 변경 아님.
+
+### 6-1. 기존 Overlay Widget Blueprint에서 바인딩
+
+**파일**: `Content/Blueprints/UI/` 내 오버레이 위젯 블루프린트
+
+1. WidgetController의 `OnToxicGasWarning` 이벤트에 바인딩
+2. `bIsToxicGasWave = true` 수신 시 → 경고 위젯 Visible + 페이드인 애니메이션 재생
+3. `bIsToxicGasWave = false` 수신 시 → 경고 위젯 Hidden (또는 무시, 자동 페이드아웃에 맡김)
+
+### 6-2. 경고 위젯 UI 구성
+
+- **위치**: 화면 상단 중앙
+- **구성**: 아이콘 + 텍스트 ("Toxic Gas Warning" 등)
+- **애니메이션**: 페이드인(0.3초) → 유지(3초) → 페이드아웃(0.5초)
+- **선택사항**: 경고 사운드 동시 재생
+
+---
+
+## 구현 순서 요약
+
+```
+Step 1: DRStageGameState.h    → 변수/델리게이트/세터/RepNotify 선언
+Step 2: DRStageGameState.cpp  → 초기화/복제등록/세터/RepNotify 구현
+Step 3: DRPhase3.cpp          → StartNextWave()에서 플래그 설정, EndCurrentWave()에서 리셋
+Step 4: OverlayWidgetController.h  → UI 델리게이트/바인딩함수/콜백 선언
+Step 5: OverlayWidgetController.cpp → 바인딩/콜백/정리 구현
+Step 6: Blueprint Widget      → 경고 UI 위젯 제작 (에디터 작업)
+```
+
+---
+
+## 수정 파일별 변경량 예상
+
+| 파일 | 추가 줄 수 | 수정 줄 수 | 난이도 |
+|------|-----------|-----------|--------|
+| `Source/DaeRune/Public/Game/DRStageGameState.h` | ~12줄 | 0 | 낮음 |
+| `Source/DaeRune/Private/Game/DRStageGameState.cpp` | ~18줄 | 0 | 낮음 |
+| `Source/DaeRune/Private/Phase/DRPhase3.cpp` | ~10줄 | 0 | 낮음 |
+| `Source/DaeRune/Public/UI/WidgetController/OverlayWidgetController.h` | ~10줄 | 0 | 낮음 |
+| `Source/DaeRune/Private/UI/WidgetController/OverlayWidgetController.cpp` | ~35줄 | 0 | 중간 |
+| **총합** | **~85줄** | **0** | - |
+
+모든 변경은 **추가(Add)만** 있고 기존 코드를 수정/삭제하는 부분은 없다.
+
+---
+
+## 데이터 흐름 (전체)
+
+```
+[서버] UDRPhase3::StartNextWave()
+  │
+  │  FWaveLevelModifier Modifier = GetWaveLevelModifier(CurrentWaveLevel);
+  │
+  ├─ GameState->SetIsToxicGasWave(Modifier.bSpawnToxicGas)     ← Step 3-1
+  │     │
+  │     ├─ bIsToxicGasWave = value  (Replicated)                ← Step 1-4, 2-2
+  │     │
+  │     ├─ OnToxicGasWarningDelegate.Broadcast(value)           ← Step 2-3 (서버 즉시)
+  │     │     │
+  │     │     └─ [서버] OverlayWidgetController::OnToxicGasWarningReceived()  ← Step 5-3
+  │     │           └─ OnToxicGasWarning.Broadcast(value)        ← Step 4-2
+  │     │                 └─ [Blueprint Widget] 경고 표시/숨김     ← Step 6
+  │     │
+  │     └─ [네트워크 복제] → OnRep_IsToxicGasWave()              ← Step 2-4
+  │           └─ OnToxicGasWarningDelegate.Broadcast(value)
+  │                 └─ [클라이언트] 동일 경로로 Widget 업데이트
+  │
+  ├─ if (Modifier.bSpawnToxicGas) → SpawnToxicGas()             (기존 로직)
+  │
+  └─ ... (나머지 기존 웨이브 로직)
+
+[서버] UDRPhase3::EndCurrentWave()
+  │
+  ├─ GameState->SetIsToxicGasWave(false)                        ← Step 3-2
+  │     └─ (연속 독가스 웨이브에서 RepNotify 재발동 보장)
+  │
+  └─ StartRestTime()                                             (기존 로직)
+```
+
+---
+
+## 검증 체크리스트
+
+- [ ] 독가스 웨이브 시작 → 서버/클라이언트 모두 경고 UI 표시되는지
+- [ ] 비독가스 웨이브 시작 → 경고 UI가 표시되지 않는지
+- [ ] 독가스 웨이브 → 독가스 웨이브 (연속) → 두 번째도 경고가 다시 표시되는지
+- [ ] 독가스 웨이브 → 비독가스 웨이브 → 경고가 사라지는지
+- [ ] 중간에 플레이어가 조인 → 현재 독가스 웨이브이면 경고가 보이는지
+- [ ] 관전 모드 전환 → WidgetController 재생성 후 경고가 정상 동작하는지
+- [ ] 게임 오버/클리어 → Phase3 종료 시 경고가 정리되는지
+- [ ] 경고 UI 애니메이션이 자연스러운지 (페이드인/아웃)

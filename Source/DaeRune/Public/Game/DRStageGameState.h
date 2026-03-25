@@ -15,6 +15,8 @@ DECLARE_MULTICAST_DELEGATE(FOnPhaseObjectiveChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPhaseChangedSignature, int32, NewPhaseIndex);
 // ���̺� Ÿ�̸� ���� ������Ʈ ��������Ʈ
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnWaveTimerChanged, int32 /*WaveNumber*/, float /*RemainingTime*/, bool /*bIsRestTime*/);
+// 독가스 경고 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnToxicGasWarningSignature, bool, bIsToxicGasWave);
 
 // ������ ���� ������
 UENUM(BlueprintType)
@@ -116,7 +118,17 @@ public:
     // ���̺� Ÿ�̸� ������Ʈ
     void SetWaveRemainingTime(float Time);
     void SetIsWaveRestTime(bool bIsRest);
-    
+
+    // 독가스 웨이브 여부
+    void SetIsToxicGasWave(bool bIsToxicGas);
+
+    UFUNCTION(BlueprintCallable, Category = "Phase|Defense")
+    bool IsToxicGasWave() const { return bIsToxicGasWave; }
+
+    // 독가스 경고 델리게이트 (모든 클라이언트에서 UI 바인딩용)
+    UPROPERTY(BlueprintAssignable, Category = "Phase|Warning")
+    FOnToxicGasWarningSignature OnToxicGasWarningDelegate;
+
     // ���̺� Ÿ�̸� ��������Ʈ
     FOnWaveTimerChanged OnWaveTimerChangedDelegate;
 
@@ -180,6 +192,9 @@ protected:
     UFUNCTION()
     void OnRep_IsWaveRestTime();
 
+    UFUNCTION()
+    void OnRep_IsToxicGasWave();
+
 private:
     UPROPERTY()
     TArray<ADRCleanserSite*> CleanserSites;
@@ -230,6 +245,9 @@ private:
 
     UPROPERTY(ReplicatedUsing = OnRep_IsWaveRestTime)
     bool bIsWaveRestTime;
+
+    UPROPERTY(ReplicatedUsing = OnRep_IsToxicGasWave)
+    bool bIsToxicGasWave = false;
 
     // ========== Phase 4: ���� ==========
     UPROPERTY(Replicated)

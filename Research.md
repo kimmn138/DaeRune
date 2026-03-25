@@ -1,192 +1,163 @@
-# WaterPump VFX 90도 꺾임 현상 원인 분석 (v2 - 수정됨)
+# Research: PoisonGas가 쉬는 시간에도 스폰되는 문제 점검
 
-## 현상 요약
+## 1. 결론
 
-물대포(WaterPump) 스킬 발동 시:
-- **1인칭(1P)과 3인칭(3P) 모두**에서 문제 발생
-- 호스를 드는 모션 **전체 과정**에서 VFX가 아래로 90도 꺾여 있음 (33ms 순간이 아님)
-- 호스를 완전히 들고 물대포를 쏘기 시작하는 시점부터 올바른 방향으로 전환
-- **핵심 추정 원인**: 빔의 끝지점(HitEffectPosition)이 유효하지 않은 상태에서 VFX가 생성됨
+**쉬는 시간에 새로운 PoisonGas가 스폰되지는 않지만, 이전 웨이브에서 스폰된 PoisonGas가 쉬는 시간까지 살아남아 있을 수 있다.**
 
 ---
 
-## 전체 실행 흐름
+## 2. 상세 분석
 
-### Blueprint (GA_WaterPump)
+### 2.1 PoisonGasSpawnTimerHandle 정리 여부
 
-```
-Event ActivateAbility
-→ Sequence
-    → Then 0:
-        [로컬] Play Montage: AM_FP_HoseBlast (1P 메시 - 호스 들기)
-        [전체] PlayMontageAndWait: AM_HoseBlast (3P 메시 - 호스 들기)
-        WaitGameplayEvent: Event.Montage.WaterPump
-            → Event Received:
-                ① SetInWaterLoop(true)
-                ② ApplyGE: GE_WaterPump_SlowSelf
-                ③ StartWaterPumpLoop()          ← VFX 생성 시점
-                ④ Play Montage: AM_InHoseBlast  (3P 루프 애니메이션)
-                ⑤ SetTimer: Cost
-    → Then 1:
-        WaitInputRelease → StopWaterPumpLoop() → EndAbility
-```
+`EndCurrentWave()` (DRPhase3.cpp:255-273)에서:
 
-### C++ (StartWaterPumpLoop → StartBeamEffect)
-
-#### StartWaterPumpLoop() [DRWaterPump.cpp:182]
 ```cpp
-CachedBeamEndPoint = FVector::ZeroVector;  // ★ (0,0,0)으로 초기화
-
-// SERVER 분기
-if (HasAuthority())
+void UDRPhase3::EndCurrentWave()
 {
-    // GameplayCue 추가 (3P 비소유 클라이언트용)
-    ASC->AddGameplayCue(GameplayCue_Skill_WaterPump, FGameplayCueParameters());
+    if (!GameMode) return;
 
-    // PerformWaterPumpTick 타이머 (0.1초 간격, 최초 0.0초 딜레이)
-    // → 이 안에서 WaterPumpBeamEndPoint를 갱신함
-    SetTimer(PerformWaterPumpTick, 0.1초, looping, InitialDelay=0.0);
-
-    // ★★ 문제: bWaterPumpActive = true를 설정하기 전에
-    // ★★ WaterPumpBeamEndPoint가 아직 갱신되지 않았음
-    DRChar->bWaterPumpActive = true;        // → OnRep 트리거
-    DRChar->OnRep_WaterPumpActive();        // 리슨서버 수동 호출
-}
-
-// CLIENT 분기 (소유 클라이언트)
-if (IsLocallyControlled())
-{
-    StartBeamEffect();                       // ★ CachedBeamEndPoint = (0,0,0) 상태
-    SetTimer(UpdateBeamEndpoint, 0.033초);   // 보정은 33ms 후
+    if (UWorld* World = GameMode->GetWorld())
+    {
+        World->GetTimerManager().ClearTimer(SpawnTimerHandle);
+        World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);  // ★ 반복 스폰 타이머 해제
+    }
+    // ...
+    StartRestTime();
 }
 ```
 
-#### StartBeamEffect() [DRWaterPump.cpp:370]
+**`PoisonGasSpawnTimerHandle`은 웨이브 종료 시 정상적으로 Clear된다.**
+→ 쉬는 시간에 **새로운 PoisonGas 스폰은 발생하지 않음** (반복 타이머가 해제되었으므로).
+
+### 2.2 이미 스폰된 PoisonGas 액터의 생존 문제
+
+`SpawnPoisonGasActor()` (DRPhase3.cpp:1034-1068)에서:
+
 ```cpp
-FirstPersonBeam = SpawnSystemAttached(
-    WaterCannonEffect, FPMesh, MuzzleSocketName,
-    FVector::ZeroVector,            // 위치 오프셋 없음
-    FRotator::ZeroRotator,          // ★ 회전 = 소켓 기본 회전 상속
-    EAttachLocation::SnapToTarget,  // 소켓 트랜스폼 스냅
-    false
-);
-
-// ★★ 핵심 문제: HitEffectPosition = (0,0,0) → 유효하지 않은 끝지점
-FirstPersonBeam->SetVectorParameter(
-    FName("HitEffectPosition"), CachedBeamEndPoint);  // = FVector::ZeroVector
+PoisonGas->SetLifeSpan(10.0f);  // 경고 3초 + 활성 7초
 ```
 
-#### OnRep_WaterPumpActive() [DRCharacter.cpp:316] (3P 빔)
+`SpawnToxicGas()` (DRPhase3.cpp:1011-1031)에서:
+
 ```cpp
-WaterPumpThirdPersonBeam = SpawnSystemAttached(
-    WaterPumpEffectAsset, ThirdPersonMesh, WaterPumpMuzzleSocket,
-    FVector::ZeroVector, FRotator::ZeroRotator,
-    EAttachLocation::SnapToTarget, false
+World->GetTimerManager().SetTimer(
+    PoisonGasSpawnTimerHandle,
+    this,
+    &UDRPhase3::SpawnPoisonGasActor,
+    PoisonGasSpawnInterval,  // 기본값 10초
+    true,   // 반복 실행
+    0.0f    // 첫 스폰 즉시
 );
-
-// ★★ 핵심 문제: WaterPumpBeamEndPoint = (0,0,0) → 유효하지 않은 끝지점
-// (서버의 PerformWaterPumpTick이 아직 실행되지 않았거나, 리플리케이션 미도착)
-WaterPumpThirdPersonBeam->SetVectorParameter(
-    FName("HitEffectPosition"), WaterPumpBeamEndPoint);
 ```
 
----
+**타이밍 분석**:
+- PoisonGas는 매 `PoisonGasSpawnInterval`(10초)마다 스폰됨
+- 각 PoisonGas 액터의 수명(LifeSpan)은 10초
+- 웨이브 PlayDuration은 기본 50초
 
-## 근본 원인 분석
-
-### 핵심 원인: 유효한 끝지점 없이 VFX가 생성됨
-
-Niagara 시스템은 `HitEffectPosition` 파라미터를 빔의 **끝지점(목표 위치)**으로 사용한다.
-VFX가 생성되는 시점에서 이 값이 `(0,0,0)` (월드 원점)이면:
-
-- **빔이 소켓 위치 → 월드 원점(0,0,0) 방향**으로 향함
-- 캐릭터가 월드 원점보다 위에 있으면 → **아래로 90도 꺾여 보임**
-- Niagara 시스템이 내부적으로 빔 방향을 `(소켓위치 → HitEffectPosition)` 벡터로 결정하기 때문
-
-### 왜 "33ms 후 보정"이 아니라 "호스 들기 전체 과정"에서 보이는가?
-
-#### 1P 빔의 경우:
-- `StartBeamEffect()` 직후 `UpdateBeamEndpoint()` 타이머가 0.033초 간격으로 시작됨
-- `UpdateBeamEndpoint()`가 `SetWorldRotation()`과 `SetVectorParameter("HitEffectPosition", 올바른값)`으로 보정
-- **하지만**: Niagara 컴포넌트는 `SnapToTarget`으로 소켓에 부착된 상태. 매 프레임 소켓 트랜스폼에 스냅되면서 `SetWorldRotation()`으로 설정한 회전이 다음 프레임에 소켓 회전으로 덮어써질 수 있음
-- 또는: Niagara 시스템 내부에서 `HitEffectPosition`이 파티클 스폰 시점의 값으로 캐시되어, 이미 방출된 파티클은 계속 잘못된 방향으로 이동
-
-#### 3P 빔의 경우:
-- `bWaterPumpActive = true` 설정 시점에서 `WaterPumpBeamEndPoint`는 아직 `(0,0,0)`
-- `PerformWaterPumpTick()`의 InitialDelay가 0.0이지만, 타이머 콜백은 같은 프레임 또는 다음 틱에서 실행
-- `bWaterPumpActive` RepNotify가 먼저 도달하고, `WaterPumpBeamEndPoint` 리플리케이션은 아직 안 옴
-- 결과: 3P 빔도 `HitEffectPosition = (0,0,0)`으로 생성됨
-
-### 시간축 다이어그램 (수정본)
-
+**최악의 경우 시나리오**:
 ```
-[AM_FP_HoseBlast / AM_HoseBlast 시작] ─── 호스 들기 애니메이션 시작
-    │
-    │  (애니메이션 재생 중...)
-    │
-    ▼
-[AnimNotify: Event.Montage.WaterPump 발화] ─── 호스가 아직 중간 자세
-    │
-    ├─ CachedBeamEndPoint = (0,0,0)
-    │
-    ├─ [SERVER]
-    │   ├─ PerformWaterPumpTick 타이머 시작 (InitialDelay=0.0)
-    │   │   └─ 하지만 타이머 콜백은 아직 실행 안 됨 (같은 프레임 내 or 다음 틱)
-    │   │
-    │   ├─ bWaterPumpActive = true                    ← WaterPumpBeamEndPoint는 아직 (0,0,0)
-    │   └─ OnRep_WaterPumpActive() 수동 호출 (리슨서버)
-    │       └─ 3P 빔 생성: HitEffectPosition = (0,0,0)  ★★ 3P 문제 발생
-    │
-    └─ [CLIENT - 로컬]
-        ├─ StartBeamEffect()
-        │   └─ 1P 빔 생성: HitEffectPosition = (0,0,0)  ★★ 1P 문제 발생
-        │
-        │   ★★ 이 시점: 1P/3P 모두 VFX가 월드 원점(아래)을 향함 ★★
-        │
-        └─ UpdateBeamEndpoint 타이머 시작 (33ms 간격)
-            │
-            │ ← 33ms 후 첫 보정
-            │   하지만 Niagara가 SnapToTarget 부착 상태이고
-            │   이미 방출된 파티클은 보정 불가
-            │
-            ▼
-    (호스 들기 애니메이션 완료 → AM_InHoseBlast 루프 시작)
-            │
-            ▼
-    [여러 차례 UpdateBeamEndpoint 실행 후]
-        └─ 비로소 VFX가 올바른 방향으로 안정화
-
-    ★ 호스 들기 전체 과정(수백ms)에서 VFX가 아래로 꺾여 보임
+웨이브 시작: 0초
+  ├─ 0초: PoisonGas 배치 #1 스폰 (수명 0~10초)
+  ├─ 10초: PoisonGas 배치 #2 스폰 (수명 10~20초)
+  ├─ 20초: PoisonGas 배치 #3 스폰 (수명 20~30초)
+  ├─ 30초: PoisonGas 배치 #4 스폰 (수명 30~40초)
+  ├─ 40초: PoisonGas 배치 #5 스폰 (수명 40~50초)  ★
+웨이브 종료: 50초
+  ├─ PoisonGasSpawnTimerHandle Clear (새 스폰 중단)
+  ├─ 하지만 배치 #5는 아직 수명 남음 (40~50초 → 50초에 Destroy)
+쉬는 시간 시작: 50초
 ```
 
-### 3P 빔 리플리케이션 타이밍 상세
+위 경우 배치 #5의 마지막 스폰 타이밍이 웨이브 종료 직전이면, LifeSpan 10초 중 일부가 쉬는 시간에 겹칠 수 있다.
 
+**구체적인 겹침 계산**:
+- 마지막 스폰이 웨이브 종료 `X초 전`에 발생했다면
+- 쉬는 시간에 `10 - X초` 동안 PoisonGas가 남아있음
+- 예: 마지막 스폰이 종료 2초 전 → 쉬는 시간에 8초 동안 PoisonGas 활성
+
+### 2.3 EndCurrentWave()에서 기존 PoisonGas 파괴 여부
+
+`EndCurrentWave()`는 `PoisonGasSpawnTimerHandle`만 Clear하고, **이미 스폰된 PoisonGas 액터들은 파괴하지 않는다.**
+
+반면 `RemoveToxicGas()` (DRPhase3.cpp:1071-1093)는 타이머 Clear + 모든 기존 액터 Destroy를 모두 수행한다:
+
+```cpp
+void UDRPhase3::RemoveToxicGas()
+{
+    // 타이머 해제
+    if (PoisonGasSpawnTimerHandle.IsValid())
+    {
+        World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
+    }
+
+    // 모든 기존 가스 액터 즉시 파괴
+    for (TWeakObjectPtr<AActor> GasActor : ToxicGasActors)
+    {
+        if (GasActor.IsValid())
+        {
+            GasActor->Destroy();
+        }
+    }
+
+    ToxicGasActors.Empty();
+}
 ```
-서버 StartWaterPumpLoop():
-    ├─ PerformWaterPumpTick 타이머 등록 (InitialDelay=0.0)
-    │   └─ 이 시점에서는 아직 콜백 미실행
-    │       WaterPumpBeamEndPoint = (0,0,0) 그대로
-    │
-    ├─ bWaterPumpActive = true
-    │   └─ RepNotify 큐에 등록됨
-    │
-    └─ 이후 프레임:
-        ├─ PerformWaterPumpTick() 첫 실행 → WaterPumpBeamEndPoint 갱신
-        └─ bWaterPumpActive RepNotify가 클라이언트에 도착
-            └─ 이때 WaterPumpBeamEndPoint도 리플리케이트되었을 수 있지만
-               ★ 같은 리플리케이션 번들에 포함되지 않을 수 있음
-               ★ 특히 bWaterPumpActive가 먼저 도착하면 3P 빔은 (0,0,0)으로 생성
-```
 
----
+**하지만 `RemoveToxicGas()`는 `EndCurrentWave()`에서 호출되지 않는다.** `RemoveToxicGas()`가 호출되는 곳은:
+- `OnPhaseEnd()` (DRPhase3.cpp:105) — Phase 3 전체 종료 시에만
 
-## 결론 (수정본)
+### 2.4 문제 요약
 
-| 항목 | 설명 |
+| 항목 | 상태 |
 |------|------|
-| **핵심 원인** | VFX 생성 시점에 `HitEffectPosition`이 `(0,0,0)` (유효한 끝지점 없음) |
-| **1P 빔** | `CachedBeamEndPoint = FVector::ZeroVector` 상태에서 `StartBeamEffect()` 호출 |
-| **3P 빔** | `WaterPumpBeamEndPoint`가 아직 서버에서 계산되기 전에 `bWaterPumpActive = true`가 설정됨 |
-| **지속 시간** | 33ms가 아닌 호스 들기 애니메이션 전체 시간 (Niagara 파티클 캐시 + SnapToTarget 부착) |
-| **방향** | 소켓 위치에서 월드 원점(0,0,0)을 향하므로 대부분의 경우 아래로 꺾여 보임 |
-| **해결 방향** | VFX 생성 전에 유효한 끝지점을 먼저 계산하여 설정해야 함 |
+| 쉬는 시간에 새 PoisonGas 스폰 | X (타이머 Clear됨) |
+| 쉬는 시간에 이전 PoisonGas 생존 | **O (LifeSpan이 남아있으면 활성 상태 유지)** |
+| EndCurrentWave()에서 기존 액터 파괴 | **X (타이머만 Clear, 액터는 남음)** |
+
+---
+
+## 3. 해결 방법
+
+`EndCurrentWave()`에서 `PoisonGasSpawnTimerHandle` Clear 대신 `RemoveToxicGas()`를 호출하면 된다. `RemoveToxicGas()`는 이미 타이머 Clear + 기존 액터 파괴를 모두 수행하므로 기존 `ClearTimer` 코드를 대체할 수 있다.
+
+### 현재 코드 (DRPhase3.cpp:255-273)
+
+```cpp
+void UDRPhase3::EndCurrentWave()
+{
+    if (!GameMode) return;
+
+    if (UWorld* World = GameMode->GetWorld())
+    {
+        World->GetTimerManager().ClearTimer(SpawnTimerHandle);
+        World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);  // 타이머만 해제
+    }
+
+    // ...
+}
+```
+
+### 수정 방향
+
+```cpp
+void UDRPhase3::EndCurrentWave()
+{
+    if (!GameMode) return;
+
+    if (UWorld* World = GameMode->GetWorld())
+    {
+        World->GetTimerManager().ClearTimer(SpawnTimerHandle);
+    }
+
+    RemoveToxicGas();  // 타이머 해제 + 기존 액터 전부 파괴
+
+    // ...
+}
+```
+
+이렇게 하면:
+1. `PoisonGasSpawnTimerHandle` Clear는 `RemoveToxicGas()` 내부에서 처리
+2. `ToxicGasActors` 배열의 모든 기존 PoisonGas 액터가 즉시 Destroy
+3. 쉬는 시간에 PoisonGas가 남아있는 문제 해결

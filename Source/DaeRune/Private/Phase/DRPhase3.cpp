@@ -225,6 +225,12 @@ void UDRPhase3::StartNextWave()
 		}
 	}
 
+	// 독가스 웨이브 경고 UI (모든 클라이언트에 복제)
+	if (GameState)
+	{
+		GameState->SetIsToxicGasWave(Modifier.bSpawnToxicGas);
+	}
+
 	if (Modifier.bSpawnToxicGas)
 	{
 		SpawnToxicGas();
@@ -256,11 +262,13 @@ void UDRPhase3::EndCurrentWave()
 		World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
 	}
 
+	// 웨이브 종료 시 독가스 플래그 리셋 (연속 독가스 웨이브에서 RepNotify 재발동 보장)
 	if (GameState)
 	{
+		GameState->SetIsToxicGasWave(false);
 		GameState->UpdatePhaseObjectiveProgress(CurrentWaveNumber);
 	}
-	
+
 	StartRestTime();
 }
 

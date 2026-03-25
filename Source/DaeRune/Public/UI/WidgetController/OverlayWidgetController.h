@@ -45,6 +45,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FEffectTagRemovedSignature, FGamepl
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWaveTimerChangedSignature, int32, WaveNumber, float, RemainingTime, bool, bIsRestTime);
 // ���̺� �˸� ��������Ʈ
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPhaseAlarmSignature, const FText&, PhaseText);
+// 독가스 경고 UI 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnToxicGasWarningUISignature, bool, bIsToxicGasWave);
 
 /**
  * ���� ���� UI �������̸� �����ϴ� ��Ʈ�ѷ�
@@ -115,14 +117,21 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Alarm")
 	FOnPhaseAlarmSignature OnPhaseAlarm;
 
+	// 독가스 경고 UI 델리게이트 (Blueprint에서 바인딩하여 경고 위젯 표시/숨김)
+	UPROPERTY(BlueprintAssignable, Category = "Phase|Warning")
+	FOnToxicGasWarningUISignature OnToxicGasWarning;
+
 private:
 	void HandlePhaseObjectiveChanged();
 	void BindPhaseObjectiveDelegate();
 	void BindWaveTimerDelegate();
 	void BindPhaseAlarmDelegate();
+	void BindToxicGasWarningDelegate();
 	void CheckAndBindWaveTimer();
 	UFUNCTION()
 	void OnPhaseChanged(int32 NewPhaseIndex);
+	UFUNCTION()
+	void OnToxicGasWarningReceived(bool bIsToxicGasWave);
 	
 	// Ŭ���� ����Ʈ ASC/AttributeSet ���ε� �Լ�
 	UFUNCTION()
@@ -131,6 +140,7 @@ private:
 	FTimerHandle PhaseBindingDelayTimer;
 	FTimerHandle WaveTimerBindingDelayTimer;
 	FTimerHandle PhaseAlarmBindingDelayTimer;
+	FTimerHandle ToxicGasWarningBindingDelayTimer;
 
 	// ��������Ʈ �ڵ� ����� ����
 	FDelegateHandle PhaseObjectiveDelegateHandle;

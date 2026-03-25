@@ -5,6 +5,8 @@
 #include "CoreMinimal.h"
 #include "Actor/DREffectActor.h"
 #include "Components/DecalComponent.h"
+#include "Components/SphereComponent.h"
+#include "NiagaraComponent.h"
 #include "DRPoisonGasActor.generated.h"
 
 UENUM(BlueprintType)
@@ -41,6 +43,7 @@ protected:
 
 	void TransitionToActive();
 	void RemoveAllPoisonEffects();
+	FVector FindGroundLocation() const;
 
 	// 두 번째 Infinite Effect (슬로우용)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Effects")
@@ -67,10 +70,15 @@ protected:
 	TObjectPtr<UMaterialInterface> WarningDecalMaterial;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
-	TObjectPtr<UMaterialInterface> ActiveDecalMaterial;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
 	float DecalRadius = 312.5f;
+
+	// 활성화 나이아가라 시스템 에셋 (블루프린트에서 할당)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Visual")
+	TObjectPtr<UNiagaraSystem> ActiveNiagaraSystem;
+
+	// 나이아가라 컴포넌트
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UNiagaraComponent> ActiveNiagaraComponent;
 
 	// 내부 상태
 	EPoisonGasPhase CurrentPhase = EPoisonGasPhase::Warning;
@@ -80,22 +88,23 @@ protected:
 	// 이 가스 액터가 현재 GE를 적용 중인 타겟
 	TSet<TWeakObjectPtr<AActor>> ActiveEffectTargets;
 
-	// ===== 주기적 체크 시스템 =====
+	// ===== 구체 오버랩 탐지 시스템 =====
 
-	// 주기적 효과 체크 타이머
-	FTimerHandle EffectCheckTimerHandle;
+	// 효과 적용 구체 콜리전
+	UPROPERTY(VisibleAnywhere, Category = "Poison Gas|Detection")
+	TObjectPtr<USphereComponent> EffectSphere;
 
-	// 체크 주기 (초)
+	// 구체 콜리전 반지름
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Detection")
-	float EffectCheckInterval = 0.2f;
+	float EffectSphereRadius = 312.5f;
 
-	// 효과 판정 반지름 (DecalRadius와 동일하게 설정)
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Poison Gas|Detection")
-	float EffectRadius = 312.5f;
+	// 오버랩 델리게이트 시그니처에 맞는 래퍼
+	UFUNCTION()
+	void OnEffectSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
+		bool bFromSweep, const FHitResult& SweepResult);
 
-	// 타이머 콜백: 주변 대상 탐색 및 효과 적용/제거
-	void CheckNearbyTargets();
-
-	// 대상이 효과 범위 안에 있는지 판정
-	bool IsTargetInEffectZone(AActor* Target) const;
+	UFUNCTION()
+	void OnEffectSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 };

@@ -32,6 +32,7 @@ ADRStageGameState::ADRStageGameState()
     CleanserHealth = 1000.0f;
     WaveRemainingTime = 0.0f;
     bIsWaveRestTime = false;
+    bIsToxicGasWave = false;
 
     // Phase 4
     BossHealth = 1000.0f;
@@ -65,6 +66,7 @@ void ADRStageGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ADRStageGameState, CleanserHealth);
     DOREPLIFETIME(ADRStageGameState, WaveRemainingTime);
     DOREPLIFETIME(ADRStageGameState, bIsWaveRestTime);
+    DOREPLIFETIME(ADRStageGameState, bIsToxicGasWave);
 
     // Phase 4
     DOREPLIFETIME(ADRStageGameState, BossHealth);
@@ -190,6 +192,16 @@ void ADRStageGameState::SetIsWaveRestTime(bool bIsRest)
     }
 }
 
+void ADRStageGameState::SetIsToxicGasWave(bool bIsToxicGas)
+{
+    if (HasAuthority())
+    {
+        bIsToxicGasWave = bIsToxicGas;
+        // 서버에서 즉시 브로드캐스트 (리슨 서버 플레이어용)
+        OnToxicGasWarningDelegate.Broadcast(bIsToxicGas);
+    }
+}
+
 void ADRStageGameState::SetBossHealth(float Health)
 {
     if (HasAuthority())
@@ -246,6 +258,12 @@ void ADRStageGameState::OnRep_IsWaveRestTime()
 {
     // 클라이언트에서 Replicated 변수 변경 시 델리게이트 브로드캐스트
     OnWaveTimerChangedDelegate.Broadcast(CurrentWaveNumber, WaveRemainingTime, bIsWaveRestTime);
+}
+
+void ADRStageGameState::OnRep_IsToxicGasWave()
+{
+    // 클라이언트에서 복제 후 브로드캐스트
+    OnToxicGasWarningDelegate.Broadcast(bIsToxicGasWave);
 }
 
 void ADRStageGameState::Multicast_PlayPhaseStartSound_Implementation()

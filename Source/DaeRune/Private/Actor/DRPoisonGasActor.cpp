@@ -6,9 +6,6 @@
 #include "AbilitySystemComponent.h"
 #include "Actor/DRCleanserSite.h"
 #include "Materials/MaterialInterface.h"
-#include "GameFramework/Character.h"
-#include "GameFramework/CharacterMovementComponent.h"
-#include "EngineUtils.h"
 
 TMap<TWeakObjectPtr<AActor>, int32> ADRPoisonGasActor::OverlapCountMap;
 
@@ -25,6 +22,20 @@ ADRPoisonGasActor::ADRPoisonGasActor()
 	GroundDecal->SetupAttachment(GetRootComponent());
 	GroundDecal->SetRelativeRotation(FRotator(-90.0f, 0.0f, 0.0f));
 	GroundDecal->DecalSize = FVector(300.0f, 312.5f, 312.5f);
+
+	// NiagaraComponent 생성
+	ActiveNiagaraComponent = CreateDefaultSubobject<UNiagaraComponent>("ActiveNiagaraEffect");
+	ActiveNiagaraComponent->SetupAttachment(GetRootComponent());
+	ActiveNiagaraComponent->bAutoActivate = false;
+
+	// SphereComponent 생성 (Warning 중 비활성)
+	EffectSphere = CreateDefaultSubobject<USphereComponent>("EffectSphere");
+	EffectSphere->SetupAttachment(GetRootComponent());
+	EffectSphere->SetSphereRadius(312.5f);
+	EffectSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	EffectSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+	EffectSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	EffectSphere->SetGenerateOverlapEvents(true);
 }
 
 void ADRPoisonGasActor::BeginPlay()
@@ -40,6 +51,22 @@ void ADRPoisonGasActor::BeginPlay()
 		GroundDecal->SetDecalMaterial(WarningDecalMaterial);
 	}
 
+	// 나이아가라 에셋 할당 및 초기 비활성화
+	if (ActiveNiagaraSystem)
+	{
+		ActiveNiagaraComponent->SetAsset(ActiveNiagaraSystem);
+	}
+	ActiveNiagaraComponent->Deactivate();
+
+	// 구체 반지름 동기화
+	EffectSphere->SetSphereRadius(EffectSphereRadius);
+
+	// 오버랩 델리게이트 바인딩
+	EffectSphere->OnComponentBeginOverlap.AddDynamic(
+		this, &ADRPoisonGasActor::OnEffectSphereBeginOverlap);
+	EffectSphere->OnComponentEndOverlap.AddDynamic(
+		this, &ADRPoisonGasActor::OnEffectSphereEndOverlap);
+
 	// 3초 후 Active로 전환
 	CurrentPhase = EPoisonGasPhase::Warning;
 	GetWorldTimerManager().SetTimer(
@@ -47,18 +74,6 @@ void ADRPoisonGasActor::BeginPlay()
 		&ADRPoisonGasActor::TransitionToActive,
 		3.0f, false
 	);
-
-	// 효과 판정 타이머 시작 (서버에서만)
-	if (HasAuthority())
-	{
-		GetWorldTimerManager().SetTimer(
-			EffectCheckTimerHandle, this,
-			&ADRPoisonGasActor::CheckNearbyTargets,
-			EffectCheckInterval,
-			true,    // 반복
-			3.0f     // 첫 실행 지연 = 경고 시간과 동일
-		);
-	}
 }
 
 void ADRPoisonGasActor::ApplySlowEffectToTarget(AActor* TargetActor)
@@ -92,18 +107,28 @@ void ADRPoisonGasActor::TransitionToActive()
 {
 	CurrentPhase = EPoisonGasPhase::Active;
 
-	// 활성화 머티리얼로 교체
-	if (ActiveDecalMaterial)
+	// 경고 데칼 숨기기
+	GroundDecal->SetVisibility(false);
+
+	const FVector GroundPos = FindGroundLocation();
+
+	// 나이아가라 구체 활성화
+	if (ActiveNiagaraComponent && ActiveNiagaraSystem)
 	{
-		GroundDecal->SetDecalMaterial(ActiveDecalMaterial);
+		ActiveNiagaraComponent->SetWorldLocation(GroundPos);
+		ActiveNiagaraComponent->Activate(true);
 	}
 
-	// 타이머가 이미 돌고 있으므로, 다음 CheckNearbyTargets()에서 자동 감지됨
-	// (첫 실행 지연 3.0초 = 경고 시간이므로, Active 전환 직후에 체크 시작)
+	// 효과 구체 콜리전 활성화 (같은 위치)
+	EffectSphere->SetWorldLocation(GroundPos);
+	EffectSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 }
 
 void ADRPoisonGasActor::OnPoisonGasOverlap(AActor* TargetActor)
 {
+	// 서버에서만 GE 적용
+	if (!HasAuthority()) return;
+
 	// 적 필터링
 	if (TargetActor->ActorHasTag(FName("Enemy")) && !bApplyEffectsToEnemies) return;
 
@@ -132,6 +157,9 @@ void ADRPoisonGasActor::OnPoisonGasOverlap(AActor* TargetActor)
 
 void ADRPoisonGasActor::OnPoisonGasEndOverlap(AActor* TargetActor)
 {
+	// 서버에서만 GE 제거
+	if (!HasAuthority()) return;
+
 	// 적 필터링
 	if (TargetActor->ActorHasTag(FName("Enemy")) && !bApplyEffectsToEnemies) return;
 
@@ -187,7 +215,12 @@ void ADRPoisonGasActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	RemoveAllPoisonEffects();
 	GetWorldTimerManager().ClearTimer(PhaseTransitionTimerHandle);
-	GetWorldTimerManager().ClearTimer(EffectCheckTimerHandle);
+
+	if (ActiveNiagaraComponent)
+	{
+		ActiveNiagaraComponent->Deactivate();
+	}
+
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -208,146 +241,40 @@ void ADRPoisonGasActor::RemoveAllPoisonEffects()
 	ActiveEffectTargets.Empty();
 }
 
-bool ADRPoisonGasActor::IsTargetInEffectZone(AActor* Target) const
+void ADRPoisonGasActor::OnEffectSphereBeginOverlap(
+	UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
+	bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (!Target || !IsValid(Target)) return false;
-
-	// 1. 2D 거리 체크 (XY 평면에서 원형 범위)
-	const FVector GasLocation = GetActorLocation();
-	const FVector TargetLocation = Target->GetActorLocation();
-	const float Distance2D = FVector::Dist2D(GasLocation, TargetLocation);
-
-	if (Distance2D > EffectRadius)
+	if (OtherActor)
 	{
-		return false;
+		OnPoisonGasOverlap(OtherActor);
 	}
-
-	// 2. 착지 여부 체크 (점프 중이면 효과 미적용)
-	if (const ACharacter* Character = Cast<ACharacter>(Target))
-	{
-		if (const UCharacterMovementComponent* MovementComp = Character->GetCharacterMovement())
-		{
-			if (!MovementComp->IsMovingOnGround())
-			{
-				return false;  // 점프 중 → 효과 미적용
-			}
-		}
-	}
-
-	return true;
 }
 
-void ADRPoisonGasActor::CheckNearbyTargets()
+void ADRPoisonGasActor::OnEffectSphereEndOverlap(
+	UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	// 서버에서만 실행
-	if (!HasAuthority()) return;
-
-	// 경고 페이즈면 효과 미적용
-	if (CurrentPhase != EPoisonGasPhase::Active) return;
-
-	UWorld* World = GetWorld();
-	if (!World) return;
-
-	// 현재 프레임에 효과 범위 안에 있는 대상 수집
-	TSet<TWeakObjectPtr<AActor>> CurrentFrameTargets;
-
-	// 모든 Character를 순회 (플레이어 + 적)
-	for (TActorIterator<ACharacter> It(World); It; ++It)
+	if (OtherActor)
 	{
-		ACharacter* Character = *It;
-		if (!Character || !IsValid(Character)) continue;
+		OnPoisonGasEndOverlap(OtherActor);
+	}
+}
 
-		// 적 필터링 (기존 로직과 동일)
-		if (Character->ActorHasTag(FName("Enemy")) && !bApplyEffectsToEnemies) continue;
+FVector ADRPoisonGasActor::FindGroundLocation() const
+{
+	const FVector Start = GetActorLocation();
+	const FVector End = Start - FVector(0.f, 0.f, 1000.f);
 
-		// 클렌저사이트 필터링
-		if (Cast<ADRCleanserSite>(Character)) continue;
+	FHitResult HitResult;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
 
-		// 효과 범위 판정
-		if (IsTargetInEffectZone(Character))
-		{
-			CurrentFrameTargets.Add(Character);
-		}
+	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_WorldStatic, Params))
+	{
+		return HitResult.ImpactPoint;
 	}
 
-	// --- 신규 진입: 이번 프레임에 있는데 이전에 없었던 대상 → 효과 적용 ---
-	for (const TWeakObjectPtr<AActor>& TargetPtr : CurrentFrameTargets)
-	{
-		if (!ActiveEffectTargets.Contains(TargetPtr))
-		{
-			AActor* Target = TargetPtr.Get();
-			if (Target)
-			{
-				// 기존 OnPoisonGasOverlap의 효과 적용 로직 재사용
-				int32& Count = OverlapCountMap.FindOrAdd(Target);
-				Count++;
-				if (Count == 1)
-				{
-					OnOverlap(Target);                // 부모 ADREffectActor의 GE 적용
-					ApplySlowEffectToTarget(Target);  // 슬로우 GE 적용
-				}
-				ActiveEffectTargets.Add(Target);
-			}
-		}
-	}
-
-	// --- 이탈: 이전에 있었는데 이번 프레임에 없는 대상 → 효과 제거 ---
-	TArray<TWeakObjectPtr<AActor>> TargetsToRemove;
-	for (const TWeakObjectPtr<AActor>& TargetPtr : ActiveEffectTargets)
-	{
-		if (!CurrentFrameTargets.Contains(TargetPtr))
-		{
-			TargetsToRemove.Add(TargetPtr);
-		}
-	}
-
-	for (const TWeakObjectPtr<AActor>& TargetPtr : TargetsToRemove)
-	{
-		AActor* Target = TargetPtr.Get();
-		if (Target)
-		{
-			// 기존 OnPoisonGasEndOverlap의 효과 제거 로직 재사용
-			ActiveEffectTargets.Remove(Target);
-
-			int32* CountPtr = OverlapCountMap.Find(Target);
-			if (CountPtr)
-			{
-				(*CountPtr)--;
-				if (*CountPtr <= 0)
-				{
-					OnEndOverlap(Target);              // 부모 ADREffectActor의 GE 제거
-
-					// 슬로우 GE 제거
-					if (SlowEffectRemovalPolicy == EEffectRemovalPolicy::RemoveOnEndOverlap)
-					{
-						UAbilitySystemComponent* TargetASC =
-							UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
-						if (IsValid(TargetASC))
-						{
-							TArray<FActiveGameplayEffectHandle> HandlesToRemove;
-							for (const auto& HandlePair : SlowEffectHandles)
-							{
-								if (TargetASC == HandlePair.Value)
-								{
-									TargetASC->RemoveActiveGameplayEffect(HandlePair.Key, 1);
-									HandlesToRemove.Add(HandlePair.Key);
-								}
-							}
-							for (const auto& Handle : HandlesToRemove)
-							{
-								SlowEffectHandles.FindAndRemoveChecked(Handle);
-							}
-						}
-					}
-
-					OverlapCountMap.Remove(Target);
-				}
-			}
-		}
-		else
-		{
-			// 이미 파괴된 액터 → 추적에서 제거만
-			ActiveEffectTargets.Remove(TargetPtr);
-		}
-	}
+	return Start;
 }

@@ -176,6 +176,18 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 			false  // 한 번만 실행
 		);
 	}
+
+	// 독가스 경고 델리게이트 바인딩
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			ToxicGasWarningBindingDelayTimer,
+			this,
+			&UOverlayWidgetController::BindToxicGasWarningDelegate,
+			0.1f,  // 0.1초 대기 (GameState 복제 대기)
+			false  // 한 번만 실행
+		);
+	}
 }
 
 void UOverlayWidgetController::BindCallbacksCleanserSiteToDependencies()
@@ -238,6 +250,7 @@ void UOverlayWidgetController::UnbindAllDelegates()
 	}
 
 	DRGameState->OnPhaseChangedDelegate.RemoveDynamic(this, &UOverlayWidgetController::OnPhaseChanged);
+	DRGameState->OnToxicGasWarningDelegate.RemoveDynamic(this, &UOverlayWidgetController::OnToxicGasWarningReceived);
 }
 
 void UOverlayWidgetController::HandlePhaseObjectiveChanged()
@@ -321,6 +334,25 @@ void UOverlayWidgetController::BindPhaseAlarmDelegate()
 	{
 		OnPhaseChanged(CurrentPhase);
 	}
+}
+
+void UOverlayWidgetController::BindToxicGasWarningDelegate()
+{
+	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
+	if (!DRGameState) return;
+
+	DRGameState->OnToxicGasWarningDelegate.AddDynamic(this, &UOverlayWidgetController::OnToxicGasWarningReceived);
+
+	// 현재 상태 즉시 확인 (이미 독가스 웨이브 진행 중일 수 있음 - late joiner)
+	if (DRGameState->IsToxicGasWave())
+	{
+		OnToxicGasWarning.Broadcast(true);
+	}
+}
+
+void UOverlayWidgetController::OnToxicGasWarningReceived(bool bIsToxicGasWave)
+{
+	OnToxicGasWarning.Broadcast(bIsToxicGasWave);
 }
 
 void UOverlayWidgetController::CheckAndBindWaveTimer()
