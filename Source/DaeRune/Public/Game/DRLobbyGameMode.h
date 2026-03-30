@@ -20,6 +20,9 @@ public:
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 	virtual void Logout(AController* Exiting) override;
 
+	// SeamlessTravelë¡œ ëŒì•„ì˜¨ í”Œë ˆì´ì–´ ì²˜ë¦¬
+	virtual void HandleSeamlessTravelPlayer(AController*& C) override;
+
 	UFUNCTION(BlueprintCallable, Category = "Lobby")
 	void TravelToStage(const FString& StageMapName, class ADRPlayerController* Requester);
 
@@ -27,10 +30,10 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void HandleWipeout() override;
 
-	// ¼¼¼Ç µµÁß Âü°¡ Çã¿ë
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 	void AllowJoinInProgress();
 
-	// ·Îºñ Àç½ÃÀÛ
+	// ï¿½Îºï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½
 	void RestartLobby();
 
 private:

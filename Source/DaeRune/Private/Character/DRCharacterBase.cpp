@@ -1,4 +1,4 @@
-// Copyright DaeRune
+ï»¿// Copyright DaeRune
 
 
 #include "Character/DRCharacterBase.h"
@@ -14,30 +14,31 @@
 #include "Game/DRGameModeBase.h" 
 #include "Player/DRPlayerController.h"
 #include "Character/DRCharacter.h"
+#include "Components/AudioComponent.h"
 
 ADRCharacterBase::ADRCharacterBase()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get(); 
 
-	// È­»ó µğ¹öÇÁ ³ªÀÌ¾Æ°¡¶ó ÄÄÆ÷³ÍÆ® »ı¼º
+	// È­ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ì¾Æ°ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 	BurnDebuffComponent = CreateDefaultSubobject<UDebuffNiagaraComponent>("BurnDebuffComponent");
 	BurnDebuffComponent->SetupAttachment(GetRootComponent());
 	BurnDebuffComponent->DebuffTag = GameplayTags.Debuff_Burn;
 
-	// ½ºÅÏ µğ¹öÇÁ ³ªÀÌ¾Æ°¡¶ó ÄÄÆ÷³ÍÆ® »ı¼º
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ì¾Æ°ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 	StunDebuffComponent = CreateDefaultSubobject<UDebuffNiagaraComponent>("StunDebuffComponent");
 	StunDebuffComponent->SetupAttachment(GetRootComponent());
 	StunDebuffComponent->DebuffTag = GameplayTags.Debuff_Stun;
 
-	// Ä«¸Ş¶ó Ãæµ¹ ¹«½Ã ¼³Á¤
+	// Ä«ï¿½Ş¶ï¿½ ï¿½æµ¹ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	GetCapsuleComponent()->SetGenerateOverlapEvents(false);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Projectile, ECR_Overlap);
 	GetMesh()->SetGenerateOverlapEvents(false);
 
-	// ¹«±â ÄÄÆ÷³ÍÆ® »ı¼º ¹× ¼ÒÄÏ ºÎÂø
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	Weapon = CreateDefaultSubobject<USkeletalMeshComponent>("Weapon");
 	Weapon->SetupAttachment(GetMesh(), FName("WeaponHandSocket"));
 	Weapon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -48,7 +49,7 @@ void ADRCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	// µğ¹öÇÁ »óÅÂµéÀ» ¸ğµç Å¬¶óÀÌ¾ğÆ®¿¡ µ¿±âÈ­
+	// ë””ë²„í”„ ìƒíƒœë“¤ì„ ëª¨ë“  í´ë¼ì´ì–¸íŠ¸ì— ë™ê¸°í™”
 	DOREPLIFETIME(ADRCharacterBase, bIsStunned);
 	DOREPLIFETIME(ADRCharacterBase, bIsBurned);
 	DOREPLIFETIME(ADRCharacterBase, bIsBeingShocked);
@@ -61,36 +62,36 @@ UAbilitySystemComponent* ADRCharacterBase::GetAbilitySystemComponent() const
 
 UAnimMontage* ADRCharacterBase::GetHitReactMontage_Implementation()
 {
-	// ¹è¿­ÀÌ ºñ¾îÀÖÀ¸¸é nullptr ¹İÈ¯
+	// ï¿½è¿­ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ nullptr ï¿½ï¿½È¯
 	if (HitReactMontages.Num() == 0)
 	{
 		return nullptr;
 	}
 
-	// ¹è¿­¿¡ ÇÏ³ª¸¸ ÀÖÀ¸¸é ±×°ÍÀ» ¹İÈ¯
+	// ï¿½è¿­ï¿½ï¿½ ï¿½Ï³ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½×°ï¿½ï¿½ï¿½ ï¿½ï¿½È¯
 	if (HitReactMontages.Num() == 1)
 	{
 		return HitReactMontages[0];
 	}
 
-	// ¿©·¯ °³ ÀÖÀ¸¸é ·£´ıÀ¸·Î ¼±ÅÃ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	const int32 RandomIndex = FMath::RandRange(0, HitReactMontages.Num() - 1);
 	return HitReactMontages[RandomIndex];
 }
 
 void ADRCharacterBase::Die(const FVector& DeathImpulse)
 {
-	// ÇÃ·¹ÀÌ¾î Ä³¸¯ÅÍÀÎ °æ¿ì Æ¯º° Ã³¸®
+	// í”Œë ˆì´ì–´ ìºë¦­í„°ì˜ ê²½ìš° íŠ¹ë³„ ì²˜ë¦¬
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
-		// ºÎÆĞ »óÅÂÀÎÁö È®ÀÎ
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 		if (AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Corrupt))
 		{
-			// ºÎÆĞ »óÅÂ¿¡¼­ Á×À¸¸é ÁøÂ¥ »ç¸Á
+			// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Â¿ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Â¥ ï¿½ï¿½ï¿½
 			Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
 			MulticastHandleDeath(DeathImpulse);
 
-			// ÇÃ·¹ÀÌ¾î°¡ ºÎÇ°À» µé°í ÀÖÀ¸¸é ¶³¾î¶ß¸®±â
+			// ï¿½Ã·ï¿½ï¿½Ì¾î°¡ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ß¸ï¿½ï¿½ï¿½
 			if (ADRCharacter* DRCharacter = Cast<ADRCharacter>(this))
 			{
 				if (DRCharacter->IsCarryingPart())
@@ -99,7 +100,7 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 				}
 			}
 
-			// GameMode¿¡ ÇÃ·¹ÀÌ¾î »ç¸Á ¾Ë¸² (Àü¸ê Ã¼Å©)
+			// GameModeï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½ï¿½ï¿½ ï¿½Ë¸ï¿½ (ï¿½ï¿½ï¿½ï¿½ Ã¼Å©)
 			if (ADRGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRGameModeBase>())
 			{
 				APlayerState* PS = GetPlayerState();
@@ -109,13 +110,13 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 				}
 			}
 
-			// °üÀü ½ÃÀÛ
+			// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
 			{
-				// À½¼º Ã¤³ÎÀ» Á×Àº »óÅÂ·Î ¾÷µ¥ÀÌÆ®
+				// ï¿½ï¿½ï¿½ï¿½ Ã¤ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Â·ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 				DRPC->UpdateVoiceChannelForDeathState(true);
 
-				// µô·¹ÀÌ ÈÄ °üÀü ¸ğµå ÀüÈ¯
+				// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½È¯
 				FTimerHandle SpectatorTimerHandle;
 				GetWorld()->GetTimerManager().SetTimer(
 					SpectatorTimerHandle,
@@ -131,7 +132,7 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 				);
 			}
 
-			// Ä³¸¯ÅÍ ¾×ÅÍ ÆÄ±«
+			// Ä³ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ä±ï¿½
 			FTimerHandle DestroyTimerHandle;
 			GetWorld()->GetTimerManager().SetTimer(
 			   DestroyTimerHandle,
@@ -149,7 +150,7 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 	}
 	else
 	{
-		// AI³ª ´Ù¸¥ Ä³¸¯ÅÍ´Â Á¤»óÀûÀ¸·Î »ç¸Á Ã³¸®
+		// AIï¿½ï¿½ ï¿½Ù¸ï¿½ Ä³ï¿½ï¿½ï¿½Í´ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 		Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
 		MulticastHandleDeath(DeathImpulse);
 	}
@@ -162,12 +163,12 @@ FOnDeathSignature& ADRCharacterBase::GetOnDeathDelegate()
 
 void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathImpulse)
 {
-	// Áßº¹ »ç¸Á ¹æÁö
+	// ì¤‘ë³µ ì‚¬ë§ ë°©ì§€
 	if (bDead) return;
 
 	bDead = true;
 
-	// Á×À½ Ä«¸Ş¶ó ¿¬Ãâ
+	// ï¿½ï¿½ï¿½ï¿½ Ä«ï¿½Ş¶ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (ADRCharacter* PlayerCharacter = Cast<ADRCharacter>(this))
 	{
 		PlayerCharacter->PlayDeathCameraAnimation();
@@ -183,7 +184,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 			);
 		}
 
-		// 1ÀÎÄª ¸Ş½¬ ¼û±â°í 3ÀÎÄª ¸Ş½¬ º¸ÀÌ°Ô
+		// 1ï¿½ï¿½Äª ï¿½Ş½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ 3ï¿½ï¿½Äª ï¿½Ş½ï¿½ ï¿½ï¿½ï¿½Ì°ï¿½
 		if (PlayerCharacter->IsLocallyControlled())
 		{
 			if (PlayerCharacter->FirstPersonMesh)
@@ -201,16 +202,30 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 		}
 	}
 
-	// Ä¸½¶ Ãæµ¹ ºñÈ°¼ºÈ­
+	// Ä¸ï¿½ï¿½ ï¿½æµ¹ ï¿½ï¿½È°ï¿½ï¿½È­
 	if (GetCapsuleComponent())
 	{
 		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 
-	// Dissolve È¿°ú ½ÃÀÛ
+	if (UCharacterMovementComponent* CharMoveComp = GetCharacterMovement())
+	{
+		CharMoveComp->StopMovementImmediately();
+		CharMoveComp->DisableMovement();
+		CharMoveComp->SetComponentTickEnabled(false);
+	}
+
+	// ï¿½Ş½Ã¸ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->SetSimulatePhysics(false);
+		MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	}
+
+	// Dissolve È¿ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	Dissolve();
 
-	// µğ¹öÇÁ ÄÄÆ÷³ÍÆ® ºñÈ°¼ºÈ­
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½È°ï¿½ï¿½È­
 	if (BurnDebuffComponent)
 	{
 		BurnDebuffComponent->Deactivate();
@@ -220,7 +235,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 		StunDebuffComponent->Deactivate();
 	}
 
-	// »ç¸Á ÀÌº¥Æ® ºê·ÎµåÄ³½ºÆ®
+	// ï¿½ï¿½ï¿½ ï¿½Ìºï¿½Æ® ï¿½ï¿½Îµï¿½Ä³ï¿½ï¿½Æ®
 	OnDeathDelegate.Broadcast(this);
 
 	if (UWorld* World = GetWorld())
@@ -238,7 +253,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 void ADRCharacterBase::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 {
 	bIsStunned = NewCount > 0;
-	GetCharacterMovement()->MaxWalkSpeed = bIsStunned ? 0.f : GetMoveSpeed();
+	GetCharacterMovement()->MaxWalkSpeed = bIsStunned ? StunnedMoveSpeed : GetMoveSpeed();
 }
 
 void ADRCharacterBase::OnRep_Stunned()
@@ -254,9 +269,27 @@ void ADRCharacterBase::BeginPlay()
 	Super::BeginPlay();
 }
 
+void ADRCharacterBase::Destroyed()
+{
+	// ï¿½ï¿½ï¿½ AudioComponent ï¿½ï¿½ï¿½ï¿½ï¿½Ï°ï¿½ ï¿½ï¿½ï¿½ï¿½
+	TArray<UAudioComponent*> AudioComps;
+	GetComponents<UAudioComponent>(AudioComps);
+
+	for (UAudioComponent* AudioComp : AudioComps)
+	{
+		if (AudioComp && AudioComp->IsPlaying())
+		{
+			// ï¿½ï¿½ï¿½Ìµï¿½ ï¿½Æ¿ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Îµå·´ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+			AudioComp->FadeOut(0.1f, 0.0f);
+		}
+	}
+
+	Super::Destroyed();
+}
+
 FVector ADRCharacterBase::GetCombatSocketLocation_Implementation(const FGameplayTag& MontageTag)
 {
-	// ÀüÅõ ¼ÒÄÏ À§Ä¡ ¹İÈ¯
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½È¯
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 	if (MontageTag.MatchesTagExact(GameplayTags.CombatSocket_Weapon) && IsValid(Weapon))
 	{
@@ -352,10 +385,10 @@ void ADRCharacterBase::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEf
 {
 	check(IsValid(GetAbilitySystemComponent()));
 	check(GameplayEffectClass);
-	// ÄÁÅØ½ºÆ® »ı¼º ¹× ¼Ò½º ¼³Á¤
+	// ï¿½ï¿½ï¿½Ø½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ò½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	FGameplayEffectContextHandle ContextHandle = GetAbilitySystemComponent()->MakeEffectContext();
 	ContextHandle.AddSourceObject(this);
-	// ½ºÆå »ı¼º ¹× Àû¿ë
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	const FGameplayEffectSpecHandle SpecHandle = GetAbilitySystemComponent()->MakeOutgoingSpec(GameplayEffectClass, Level, ContextHandle);
 	GetAbilitySystemComponent()->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), GetAbilitySystemComponent());
 }
@@ -371,7 +404,7 @@ void ADRCharacterBase::AddCharacterAbilities()
 	UDRAbilitySystemComponent* DRASC = CastChecked<UDRAbilitySystemComponent>(AbilitySystemComponent);
 	if (!HasAuthority()) return;
 
-	// ¾×Æ¼ºê ¾îºô¸®Æ¼¿Í ÆĞ½Ãºê ¾îºô¸®Æ¼ Ãß°¡
+	// ï¿½ï¿½Æ¼ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ï¿½ï¿½ ï¿½Ğ½Ãºï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ ï¿½ß°ï¿½
 	DRASC->AddCharacterAbilities(StartupAbilities);
 	DRASC->AddCharacterPassiveAbilities(StartupPassiveAbilities);
 }
@@ -388,14 +421,14 @@ float ADRCharacterBase::GetMoveSpeed()
 
 void ADRCharacterBase::Dissolve()
 {
-	// Ä³¸¯ÅÍ ¸Ş½Ã Dissolve
+	// Ä³ï¿½ï¿½ï¿½ï¿½ ï¿½Ş½ï¿½ Dissolve
 	if (IsValid(DissolveMaterialInstance))
 	{
 		UMaterialInstanceDynamic* DynamicMatInst = UMaterialInstanceDynamic::Create(DissolveMaterialInstance, this);
 		GetMesh()->SetMaterial(0, DynamicMatInst);
 		StartDissolveTimeline(DynamicMatInst);
 	}
-	// ¹«±â Dissolve
+	// ï¿½ï¿½ï¿½ï¿½ Dissolve
 	if (IsValid(WeaponDissolveMaterialInstance))
 	{
 		UMaterialInstanceDynamic* DynamicMatInst = UMaterialInstanceDynamic::Create(WeaponDissolveMaterialInstance, this);

@@ -21,15 +21,15 @@ void ADRGameModeBase::OnPlayerDied(APlayerState* DeadPlayer)
 
 	if (!DeadPlayer) return;
 
-	// ÀÌ¹Ì Àü¸ê Ã³¸® ÁßÀÌ¸é ¹«½Ã
+	// ï¿½Ì¹ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½ ï¿½ï¿½ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (bIsWipeoutInProgress) return;
 
-	// Àü¸ê Ã¼Å©
+	// ï¿½ï¿½ï¿½ï¿½ Ã¼Å©
 	if (CheckTeamWipeout())
 	{
 		bIsWipeoutInProgress = true;
 
-		// ¸ðµç ÇÃ·¹ÀÌ¾î¿¡°Ô °ÔÀÓ ¿À¹ö UI Ç¥½Ã
+		// ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾î¿¡ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ UI Ç¥ï¿½ï¿½
 		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 		{
 			if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
@@ -38,7 +38,7 @@ void ADRGameModeBase::OnPlayerDied(APlayerState* DeadPlayer)
 			}
 		}
 
-		// ÀÏÁ¤ ½Ã°£ ÈÄ Àü¸ê Ã³¸®
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 		GetWorldTimerManager().SetTimer(
 			WipeoutTimerHandle,
 			this,
@@ -59,18 +59,18 @@ bool ADRGameModeBase::CheckTeamWipeout()
 	int32 AlivePlayerCount = 0;
 	int32 TotalPlayerCount = 0;
 
-	// ¸ðµç PlayerState ¼øÈ¸	
+	// ï¿½ï¿½ï¿½ PlayerState ï¿½ï¿½È¸	
 	for (APlayerState* PlayerState : GameStateBase->PlayerArray)
 	{
 		if (!PlayerState) continue;
 
 		TotalPlayerCount++;
 
-		// Character °¡Á®¿À±â
+		// Character ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		ADRCharacterBase* Character = Cast<ADRCharacterBase>(PlayerState->GetPawn());
 		if (!Character) continue;
 
-		// CombatInterface·Î Á×À½ Ã¼Å©
+		// CombatInterfaceï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã¼Å©
 		if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(Character))
 		{
 			if (!CombatInterface->Execute_IsDead(Character)) 
@@ -80,7 +80,7 @@ bool ADRGameModeBase::CheckTeamWipeout()
 		}
 	}
 
-	// ÇÃ·¹ÀÌ¾î°¡ 1¸í ÀÌ»ó ÀÖ°í, »ýÁ¸ÀÚ°¡ 0¸íÀÌ¸é Àü¸ê
+	// ï¿½Ã·ï¿½ï¿½Ì¾î°¡ 1ï¿½ï¿½ ï¿½Ì»ï¿½ ï¿½Ö°ï¿½, ï¿½ï¿½ï¿½ï¿½ï¿½Ú°ï¿½ 0ï¿½ï¿½ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½
 	return (TotalPlayerCount > 0) && (AlivePlayerCount == 0);
 }
 
@@ -88,7 +88,7 @@ void ADRGameModeBase::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Å½Áö ¸Å´ÏÀú ½ºÆù
+	// Å½ï¿½ï¿½ ï¿½Å´ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	SpawnDetectionManager();
 }
 
@@ -96,13 +96,28 @@ void ADRGameModeBase::HandleWipeout()
 {
 	if (!HasAuthority()) return;
 
-	// ÇÃ·¡±× ¸®¼Â
+	// í”Œëž˜ê·¸ ë¦¬ì…‹
 	bIsWipeoutInProgress = false;
+}
+
+void ADRGameModeBase::PrepareForTravel()
+{
+	if (!HasAuthority()) return;
+
+	// ëª¨ë“  í´ë¼ì´ì–¸íŠ¸ì—ê²Œ ì„¤ì •ì°½ ë‹«ê¸° ë° ì˜¤ë””ì˜¤ ì •ë¦¬ ìš”ì²­
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
+		{
+			PC->ClientCloseSettingsMenu();
+			PC->ClientStopAllAudio();
+		}
+	}
 }
 
 void ADRGameModeBase::SpawnDetectionManager()
 {
-	// ¼­¹ö¿¡¼­¸¸ ½ºÆù
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (!HasAuthority()) return;
 
 	if (!DetectionManagerClass) return;

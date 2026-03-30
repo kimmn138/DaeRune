@@ -8,7 +8,7 @@
 #include "OnlineSessionSettings.h"
 #include "OnlineSubsystem.h"
 
-void UMenu::MenuSetup(int32 NumberOfPublicConnections, FString LobbyPath)
+void UMenu::MenuSetup(int32 NumberOfPublicConnections, const FString& LobbyPath)
 {
 	PathToLobby = FString::Printf(TEXT("%s?listen"), *LobbyPath);
 	NumPublicConnections = NumberOfPublicConnections;
@@ -116,17 +116,17 @@ void UMenu::OnFindSessions(const TArray<FOnlineSessionSearchResult>& SessionResu
 		return;
 	}
 
-	// ¹æ ÄÚµå·Î¸¸ ¸ÅÄ¡¸ÞÀÌÅ·
+	// ï¿½ï¿½ ï¿½Úµï¿½Î¸ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ï¿½ï¿½Å·
 	bool bFoundRoom = false;
 
 	if (bWasSuccessful && SessionResults.Num() > 0)
 	{
-		for (auto Result : SessionResults)
+		for (const auto& Result : SessionResults)
 		{
 			FString FoundRoomCode;
 			Result.Session.SessionSettings.Get(FName("RoomCode"), FoundRoomCode);
 
-			// ÀÔ·ÂÇÑ ¹æ ÄÚµå¿Í ÀÏÄ¡ÇÏ´ÂÁö È®ÀÎ
+			// ï¿½Ô·ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Úµï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½Ï´ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 			if (FoundRoomCode == PendingJoinRoomCode)
 			{
 				if (GEngine)
@@ -138,9 +138,11 @@ void UMenu::OnFindSessions(const TArray<FOnlineSessionSearchResult>& SessionResu
 						FString::Printf(TEXT("[Menu] MATCH! Joining session with code: %s"), *FoundRoomCode)
 					);
 				}
-				Result.Session.SessionSettings.bUseLobbiesIfAvailable = true;
-				Result.Session.SessionSettings.bUsesPresence = true;
-				MultiplayerSessionsSubsystem->JoinSession(Result);
+				// const ì°¸ì¡°ì´ë¯€ë¡œ ë³µì‚¬ë³¸ ìƒì„± í›„ ìˆ˜ì •
+				FOnlineSessionSearchResult ModifiableResult = Result;
+				ModifiableResult.Session.SessionSettings.bUseLobbiesIfAvailable = true;
+				ModifiableResult.Session.SessionSettings.bUsesPresence = true;
+				MultiplayerSessionsSubsystem->JoinSession(ModifiableResult);
 				bFoundRoom = true;
 				return;
 			}
@@ -230,8 +232,7 @@ void UMenu::JoinButtonClicked()
 
 	FString InputRoomCode = RoomCodeInputBox->GetText().ToString().ToUpper();
 
-	// 8±ÛÀÚ Ã¼Å©
-	if (InputRoomCode.Len() != 8)
+	if (InputRoomCode.Len() != ROOM_CODE_LENGTH)
 	{
 		if (GEngine)
 		{
@@ -245,7 +246,7 @@ void UMenu::JoinButtonClicked()
 		return;
 	}
 
-	// ¾ËÆÄºª°ú ¼ýÀÚ¸¸ Çã¿ë
+	// ï¿½ï¿½ï¿½Äºï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ú¸ï¿½ ï¿½ï¿½ï¿½
 	for (TCHAR Char : InputRoomCode)
 	{
 		if (!FChar::IsAlnum(Char))

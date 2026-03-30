@@ -8,7 +8,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
-#include "Navigation/NavLinkProxy.h"
+#include "NavModifierComponent.h"
+#include "NavAreas/NavArea_Null.h"
+#include "NavAreas/NavArea_Default.h"
 
 ADRBreakableDoor::ADRBreakableDoor()
 {
@@ -19,6 +21,11 @@ ADRBreakableDoor::ADRBreakableDoor()
 	// Root Component
 	RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootSceneComponent"));
 	SetRootComponent(RootSceneComponent);
+
+	// NavModifier Component 생성
+	NavModifierComponent = CreateDefaultSubobject<UNavModifierComponent>(TEXT("NavModifierComponent"));
+	// 초기에는 NavArea_Null로 설정
+	NavModifierComponent->SetAreaClass(UNavArea_Null::StaticClass());
 }
 
 void ADRBreakableDoor::BeginPlay()
@@ -88,12 +95,11 @@ void ADRBreakableDoor::ExecuteBreak()
 {
 	bIsBroken = true;
 
-	// Nav Link 활성화
-	if (NavLinkProxy)
+	// NavModifier 영역을 지나갈 수 있게 변경
+	if (NavModifierComponent)
 	{
-		NavLinkProxy->SetActorEnableCollision(true);
-		// Smart Link라면 활성화
-		NavLinkProxy->SetSmartLinkEnabled(true);
+		// NavArea_Default로 변경하여 AI가 지나갈 수 있게 함
+		NavModifierComponent->SetAreaClass(UNavArea_Default::StaticClass());
 	}
 
 	// 서버에서 파괴 효과 실행
@@ -208,7 +214,13 @@ void ADRBreakableDoor::PlayBreakEffects()
 	// 사운드 재생
 	if (BreakSound)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, BreakSound, EnemySpawnOffsets[1]);
+		FVector SoundLocation = GetActorLocation();
+		if (EnemySpawnOffsets.IsValidIndex(1))
+		{
+			SoundLocation += GetActorRotation().RotateVector(EnemySpawnOffsets[1]);
+		}
+
+		UGameplayStatics::PlaySoundAtLocation(this, BreakSound, SoundLocation);
 	}
 
 	// 파티클 이펙트
@@ -282,16 +294,6 @@ void ADRBreakableDoor::SpawnEnemies()
 
 		if (SpawnedEnemy)
 		{
-			// 각 적마다 약간 다른 방향
-			FVector RandomOffset = FVector(
-				FMath::FRandRange(-0.1f, 0.1f),
-				FMath::FRandRange(-0.1f, 0.1f),
-				0.0f
-			);
-
-			FVector FinalLaunchDirection = (LaunchDirection + RandomOffset).GetSafeNormal();
-			FVector FinalLaunchVelocity = FinalLaunchDirection * EnemyLaunchStrength;
-
 			// 적을 BreakDirection 방향으로 밀어주기
 			SpawnedEnemy->LaunchCharacter(LaunchVelocity, true, true);
 		}

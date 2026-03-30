@@ -9,6 +9,7 @@
 
 class UAbilityInfo;
 class UAbilitySystemComponent;
+class UGameBalanceConfig;
 class UOverlayWidgetController;
 struct FWidgetControllerParams;
 
@@ -38,6 +39,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|CharacterClassDefaults")
 	static UAbilityInfo* GetAbilityInfo(const UObject* WorldContextObject);
+
+	// 게임 밸런스 설정 DataAsset 반환
+	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|GameBalance")
+	static UGameBalanceConfig* GetGameBalanceConfig(const UObject* WorldContextObject);
 
 	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayEffects")
 	static bool IsSuccessfulDebuff(const FGameplayEffectContextHandle& EffectContextHandle);
@@ -96,7 +101,53 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayMechanics")
 	static TArray<FVector> EvenlyRotatedVectors(const FVector& Forward, const FVector& Axis, float Spread, int32 NumVectors);
 
-	// �� �浹 üũ ��ƿ��Ƽ �Լ�
+	// 벽 충돌 체크 유틸리티 함수
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|Combat")
 	static bool CheckActorWallCollision(AActor* Target, float CheckDistance = 50.f);
+
+	// ========== GameplayEffect 생성 헬퍼 함수 ==========
+
+	/**
+	 * GameplayEffectSpec을 생성하고 적용합니다.
+	 * @param ASC - AbilitySystemComponent
+	 * @param EffectClass - 적용할 GameplayEffect 클래스
+	 * @param SourceObject - 소스 객체 (보통 this)
+	 * @param Level - 이펙트 레벨 (기본값 1.0)
+	 * @return 생성된 SpecHandle (SetByCaller 등 추가 설정용)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|GameplayEffects")
+	static FGameplayEffectSpecHandle CreateAndApplyEffectSpec(
+		UAbilitySystemComponent* ASC,
+		TSubclassOf<UGameplayEffect> EffectClass,
+		AActor* SourceObject,
+		float Level = 1.f);
+
+	/**
+	 * GameplayEffectSpec만 생성합니다 (적용 전 추가 설정 필요 시).
+	 * @param ASC - AbilitySystemComponent
+	 * @param EffectClass - GameplayEffect 클래스
+	 * @param SourceObject - 소스 객체
+	 * @param Level - 이펙트 레벨 (기본값 1.0)
+	 * @return 생성된 SpecHandle
+	 */
+	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|GameplayEffects")
+	static FGameplayEffectSpecHandle CreateEffectSpec(
+		UAbilitySystemComponent* ASC,
+		TSubclassOf<UGameplayEffect> EffectClass,
+		AActor* SourceObject,
+		float Level = 1.f);
+
+	/**
+	 * GameplayEffectSpec에 SetByCaller 값을 설정하고 적용합니다.
+	 * @param ASC - 타겟 AbilitySystemComponent
+	 * @param SpecHandle - 적용할 SpecHandle
+	 * @param Tag - SetByCaller 태그
+	 * @param Magnitude - 설정할 값
+	 */
+	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|GameplayEffects")
+	static void ApplyEffectSpecWithSetByCaller(
+		UAbilitySystemComponent* ASC,
+		FGameplayEffectSpecHandle& SpecHandle,
+		const FGameplayTag& Tag,
+		float Magnitude);
 };

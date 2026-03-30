@@ -1,4 +1,4 @@
-// Copyright DaeRune
+ï»¿// Copyright DaeRune
 
 
 #include "AbilitySystem/DREnemyAttributeSet.h"
@@ -28,7 +28,7 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			);
 		}
 
-		// µ¥¹ÌÁö°¡ ¹ß»ýÇÏ¸é ÀüÅõ »óÅÂ ÁøÀÔ
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ß»ï¿½ï¿½Ï¸ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		NotifyEnterCombat(Props);
 
 		if (ADREnemy* Enemy = Cast<ADREnemy>(Props.TargetAvatarActor))
@@ -56,15 +56,27 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			{
 				UBlackboardComponent* BB = AIController->GetBlackboardComponent();
 
-				// FirstAttacker°¡ ¾ø´Â °æ¿ì¿¡¸¸ ¼³Á¤
-				if (!BB->GetValueAsBool("HasFirstAttacker"))
+				// FirstAttackerê°€ ì—†ê³ , ë¶€í’ˆì„ ë“¤ê³  ë„ë§ì¹˜ëŠ” ì ì´ ì•„ë‹Œ ê²½ìš°ì—ë§Œ ì„¤ì •
+				if (!BB->GetValueAsBool("HasFirstAttacker") && !Enemy->bCarriesPart)
 				{
-					// Ã¹ °ø°ÝÀÚ ¼³Á¤
+					// ì²« ê³µê²©ìž ì„¤ì •
 					BB->SetValueAsObject("FirstAttacker", Props.SourceAvatarActor);
 					BB->SetValueAsBool("HasFirstAttacker", true);
 
-					// ÇöÀç Å¸°Ùµµ Ã¹ °ø°ÝÀÚ·Î ¼³Á¤
+					// ì¶”ì  íƒ€ê²Ÿë„ ì²« ê³µê²©ìžë¡œ ì„¤ì •
 					BB->SetValueAsObject("TargetToFollow", Props.SourceAvatarActor);
+
+					// ì²« ê³µê²©ìžë¥¼ í–¥í•´ SetFocus
+					AIController->SetFocus(Props.SourceAvatarActor);
+
+					// ì–´ê·¸ë¡œ ìƒíƒœ ì„¤ì • (AnimBPìš©)
+					Enemy->bIsAggroed = true;
+
+					// GAS ìƒíƒœ íƒœê·¸ ì¶”ê°€
+					if (UAbilitySystemComponent* EnemyASC = Enemy->GetAbilitySystemComponent())
+					{
+						EnemyASC->AddLooseGameplayTag(FDRGameplayTags::Get().State_Aggroed);
+					}
 				}
 				BB->SetValueAsObject("AttackingPlayer", Props.SourceAvatarActor);
 
@@ -106,12 +118,12 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			{
 				Props.TargetCharacter->LaunchCharacter(KnockbackForce, true, true);
 
-				// ³Ë¹é »óÅÂ ¼³Á¤ Ãß°¡
+				// ï¿½Ë¹ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ß°ï¿½
 				if (ADREnemy* Enemy = Cast<ADREnemy>(Props.TargetCharacter))
 				{
 					Enemy->SetKnockbackState(true);
 
-					// ³Ë¹é Á¾·á Å¸ÀÌ¸Ó (¾ÈÀüÀåÄ¡)
+					// ï¿½Ë¹ï¿½ ï¿½ï¿½ï¿½ï¿½ Å¸ï¿½Ì¸ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¡)
 					FTimerHandle KnockbackEndTimer;
 					Props.TargetCharacter->GetWorld()->GetTimerManager().SetTimer(
 						KnockbackEndTimer,
@@ -122,7 +134,7 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 								Enemy->SetKnockbackState(false);
 							}
 						},
-						1.5f, // ÃÖ´ë 1.5ÃÊ ÈÄ ÀÚµ¿ ÇØÁ¦
+						1.5f, // ï¿½Ö´ï¿½ 1.5ï¿½ï¿½ ï¿½ï¿½ ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½
 						false
 					);
 				}

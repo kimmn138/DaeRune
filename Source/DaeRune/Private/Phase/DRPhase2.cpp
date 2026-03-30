@@ -15,42 +15,46 @@ void UDRPhase2::OnPhaseStart()
 
 	if (!GameMode || !GameState) return;
 
-	// ¸ñÇ¥ ¼³Á¤
+	// ï¿½ï¿½Ç¥ ï¿½ï¿½ï¿½ï¿½
 	SetupPhaseObjective(2);
 
-	// GameState Phase2 ÃÊ±âÈ­
+	// GameState Phase2 ï¿½Ê±ï¿½È­
 	GameState->SetCollectedParts(0);
 	GameState->SetCleanserActivated(false);
 
-	// Phase1¿¡¼­ ¼±ÅÃµÈ È°¼º Å¬·»Àú »çÀÌÆ® °¡Á®¿À±â
+	// Phase1ì—ì„œ ì„ íƒëœ í™œì„± í´ë Œì € ì‚¬ì´íŠ¸ ê°€ì ¸ì˜¤ê¸°
 	const TArray<TObjectPtr<ADRCleanserSite>>& ActiveSites = GetActiveCleanserSites();
 
-	// Å¬·»Àú »çÀÌÆ® À¯È¿¼º °ËÁõ
-	if (ActiveSites.Num() != 2) return;
+	// í´ë Œì € ì‚¬ì´íŠ¸ ìœ íš¨ì„± ê²€ì‚¬
+	if (ActiveSites.Num() != 2)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Phase2: ActiveCleanserSitesê°€ 2ê°œê°€ ì•„ë‹™ë‹ˆë‹¤! í˜„ì¬: %dê°œ"), ActiveSites.Num());
+		return;
+	}
 
-	// ¿Ï·áµÈ »çÀÌÆ® ÃßÀû ÃÊ±âÈ­
+	// ï¿½Ï·ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­
 	CompletedSites.Empty();
 
-	// °¢ Å¬·»Àú »çÀÌÆ®ÀÇ ºÎÇ° ¼³Ä¡ µ¨¸®°ÔÀÌÆ® ±¸µ¶
+	// ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½Ç° ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 	for (ADRCleanserSite* Site : ActiveSites)
 	{
 		if (Site)
 		{
-			// ºÎÇ° ¼³Ä¡ ÀÌº¥Æ® ±¸µ¶
+			// ï¿½ï¿½Ç° ï¿½ï¿½Ä¡ ï¿½Ìºï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 			Site->OnPartInstalled.AddDynamic(this, &UDRPhase2::OnPartInstalled);
 		}
 	}
 
-	// ½ºÆù Æ÷ÀÎÆ® Ã£±â
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® Ã£ï¿½ï¿½
 	FindEnemySpawnPoints();
 
-	// ºÎÇ°À» µé°í µµ¸ÁÄ¡´Â Àû ½ºÆù
+	// ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	SpawnPartCarryingEnemies();
 }
 
 void UDRPhase2::OnPhaseEnd()
 {
-	// Å¬·»Àú »çÀÌÆ® µ¨¸®°ÔÀÌÆ® ±¸µ¶ ÇØÁ¦
+	// Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	const TArray<TObjectPtr<ADRCleanserSite>>& ActiveSites = GetActiveCleanserSites();
 	for (ADRCleanserSite* Site : ActiveSites)
 	{
@@ -60,10 +64,10 @@ void UDRPhase2::OnPhaseEnd()
 		}
 	}
 
-	// ¿Ï·á ÃßÀû ÃÊ±âÈ­
+	// ï¿½Ï·ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­
 	CompletedSites.Empty();
 
-	// ½ºÆù Æ÷ÀÎÆ® ÃÊ±âÈ­
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½Ê±ï¿½È­
 	EnemySpawnPoints.Empty();
 
 	Super::OnPhaseEnd();
@@ -78,7 +82,7 @@ void UDRPhase2::FindEnemySpawnPoints()
 
 	EnemySpawnPoints.Empty();
 
-	// ÅÂ±×·Î ·¹º§¿¡¼­ ½ºÆù Æ÷ÀÎÆ® Ã£±â
+	// ï¿½Â±×·ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® Ã£ï¿½ï¿½
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Actor = *It;
@@ -93,13 +97,26 @@ void UDRPhase2::SpawnPartCarryingEnemies()
 {
 	if (!GameMode) return;
 
-	// Àû Å¬·¡½º À¯È¿¼º °ËÁõ
-	if (!PartCarryingEnemyClass) return;
+	// ì  í´ë˜ìŠ¤ ìœ íš¨ì„± ê²€ì‚¬
+	if (!PartCarryingEnemyClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Phase2: PartCarryingEnemyClassê°€ ì„¤ì •ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤!"));
+		return;
+	}
 
-	// ½ºÆù Æ÷ÀÎÆ® À¯È¿¼º °ËÁõ
-	if (EnemySpawnPoints.Num() != 4) return;
+	// ìŠ¤í° í¬ì¸íŠ¸ ìœ íš¨ì„± ê²€ì‚¬
+	if (EnemySpawnPoints.Num() < 1)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Phase2: ìŠ¤í° í¬ì¸íŠ¸ë¥¼ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤! SpawnPointTag: %s"), *SpawnPointTag.ToString());
+		return;
+	}
 
-	// °¢ ½ºÆù Æ÷ÀÎÆ®¿¡ Àû ½ºÆù
+	if (EnemySpawnPoints.Num() != 4)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Phase2: ìŠ¤í° í¬ì¸íŠ¸ê°€ 4ê°œê°€ ì•„ë‹™ë‹ˆë‹¤. í˜„ì¬: %dê°œ"), EnemySpawnPoints.Num());
+	}
+
+	// ê° ìŠ¤í° í¬ì¸íŠ¸ì— ì  ìƒì„±
 	for (AActor* SpawnPoint : EnemySpawnPoints)
 	{
 		if (!SpawnPoint) continue;
@@ -107,13 +124,13 @@ void UDRPhase2::SpawnPartCarryingEnemies()
 		ADREnemy* SpawnedEnemy = SpawnEnemyAtLocation(SpawnPoint);
 		if (SpawnedEnemy)
 		{
-			// µ¨¸®°ÔÀÌÆ® ¹ÙÀÎµù
+			// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½Îµï¿½
 			if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(SpawnedEnemy))
 			{
 				CombatInterface->GetOnDeathDelegate().AddDynamic(this, &UDRPhaseBase::OnEnemyDeath);
 			}
 			
-			// ½ºÆùµÈ Àû ÃßÀû (OnPhaseEnd¿¡¼­ ³²Àº Àû Á¤¸®¿ë)
+			// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (OnPhaseEndï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
 			SpawnedEnemies.Add(SpawnedEnemy);
 		}
 	}
@@ -126,15 +143,15 @@ ADREnemy* UDRPhase2::SpawnEnemyAtLocation(AActor* SpawnPoint)
 	UWorld* World = GameMode->GetWorld();
 	if (!World) return nullptr;
 
-	// ½ºÆù Æ÷ÀÎÆ®ÀÇ À§Ä¡¿Í È¸Àü °¡Á®¿À±â
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ È¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	FVector Location = SpawnPoint->GetActorLocation();
 	FRotator Rotation = SpawnPoint->GetActorRotation();
 
-	// ½ºÆù ÆÄ¶ó¹ÌÅÍ ¼³Á¤
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ä¶ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	// Àû ½ºÆù
+	// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	ADREnemy* SpawnedEnemy = World->SpawnActor<ADREnemy>(
 		PartCarryingEnemyClass,
 		Location,
@@ -149,7 +166,7 @@ void UDRPhase2::OnPartInstalled(ADRCleanserSite* Site)
 {
 	if (!Site || !GameState) return;
 
-	// GameState ¾÷µ¥ÀÌÆ®: ¼³Ä¡µÈ ºÎÇ° °³¼ö Áõ°¡
+	// GameState ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®: ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	int32 TotalInstalledParts = 0;
 	const TArray<TObjectPtr<ADRCleanserSite>>& ActiveSites = GetActiveCleanserSites();
 	for (ADRCleanserSite* ActiveSite : ActiveSites)
@@ -162,32 +179,32 @@ void UDRPhase2::OnPartInstalled(ADRCleanserSite* Site)
 	GameState->SetCollectedParts(TotalInstalledParts);
 	GameState->UpdatePhaseObjectiveProgress(TotalInstalledParts);
 
-	// ÇØ´ç »çÀÌÆ®ÀÇ ºÎÇ° ¼³Ä¡°¡ ¿Ï·áµÇ¾ú´ÂÁö È®ÀÎ
+	// ï¿½Ø´ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½Ç° ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½Ï·ï¿½Ç¾ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (Site->IsPartInstallationComplete())
 	{
-		// ¿Ï·áµÈ »çÀÌÆ®·Î ÃßÀû
+		// ï¿½Ï·ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		CompletedSites.Add(Site);
 	}
 
-	// ÆäÀÌÁî ¿Ï·á Á¶°Ç Ã¼Å©
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã¼Å©
 	CheckPhaseCompletion();
 }
 
 void UDRPhase2::CheckPhaseCompletion()
 {
-	// ¸ğµç Å¬·»Àú »çÀÌÆ®¿¡ ºÎÇ°ÀÌ 2°³¾¿ ¼³Ä¡µÇ¾ú´ÂÁö È®ÀÎ
+	// ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ 2ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½Ç¾ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	const TArray<TObjectPtr<ADRCleanserSite>>& ActiveSites = GetActiveCleanserSites();
 
-	// È°¼º »çÀÌÆ®°¡ 2°³ÀÎÁö È®ÀÎ
+	// È°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ 2ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (ActiveSites.Num() != 2) return;
 
-	// ¿Ï·áµÈ »çÀÌÆ®°¡ 2°³ÀÎÁö È®ÀÎ
+	// ï¿½Ï·ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ 2ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (CompletedSites.Num() == 2)
 	{
-		// Å¬·»Àú È°¼ºÈ­ »óÅÂ·Î º¯°æ
+		// Å¬ï¿½ï¿½ï¿½ï¿½ È°ï¿½ï¿½È­ ï¿½ï¿½ï¿½Â·ï¿½ ï¿½ï¿½ï¿½ï¿½
 		GameState->SetCleanserActivated(true);
 
-		// Phase2 ¿Ï·á
+		// Phase2 ï¿½Ï·ï¿½
 		if (GameMode)
 		{
 			GameMode->ValidatePhaseCompletion();

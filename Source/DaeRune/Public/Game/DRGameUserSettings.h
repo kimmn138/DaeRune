@@ -34,6 +34,9 @@ public:
     UPROPERTY(Config, BlueprintReadWrite, Category = "Settings|Audio")
     float SFXVolume = 1.0f;
 
+    UPROPERTY(Config, BlueprintReadWrite, Category = "Settings|Audio")
+    float VoiceVolume = 1.0f;
+
     UPROPERTY(Config, BlueprintReadWrite, Category = "Settings|Gameplay")
     float MouseSensitivity = 1.0f;
 };

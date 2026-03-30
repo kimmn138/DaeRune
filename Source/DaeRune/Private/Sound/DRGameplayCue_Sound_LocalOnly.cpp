@@ -6,32 +6,38 @@
 
 bool UDRGameplayCue_Sound_LocalOnly::OnExecute_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) const
 {
-	if (!Sound || !MyTarget) return false;
+	if (!Sound) return false;
+	if (!IsValid(MyTarget)) return false;
 
-	// ·ÎÄÃ ÇÃ·¹ÀÌ¾î Ã¼Å©
+	// ë¡œì»¬ í”Œë ˆì´ì–´ë§Œ ì¬ìƒ
 	APawn* Pawn = Cast<APawn>(MyTarget);
-	if (!Pawn) return false;
+	if (!Pawn || !Pawn->IsLocallyControlled()) return false;
 
-	// ·ÎÄÃ ÄÁÆ®·Ñ·¯°¡ ¾Æ´Ï¸é Àç»ı ¾È ÇÔ
-	if (!Pawn->IsLocallyControlled()) return false;
+	// ìœ„ì¹˜ ê²°ì •
+	FVector Location = FVector::ZeroVector;
 
+	if (!Parameters.Location.IsZero())
+	{
+		Location = Parameters.Location;
+	}
+	else if (!MyTarget->IsPendingKillPending())
+	{
+		Location = MyTarget->GetActorLocation();
+	}
+	else if (bIs3DSound)
+	{
+		// 3D ì‚¬ìš´ë“œì¸ë° ìœ„ì¹˜ë¥¼ ì•Œ ìˆ˜ ì—†ìœ¼ë©´ ìŠ¤í‚µ
+		return false;
+	}
+
+	// MyTargetì„ WorldContextObjectë¡œ ì‚¬ìš©í•´ì„œ ì˜¬ë°”ë¥¸ Worldì—ì„œ ì‚¬ìš´ë“œ ì¬ìƒ
 	if (bIs3DSound)
 	{
-		FVector Location = MyTarget->GetActorLocation();
-		if (!Parameters.Location.IsZero())
-		{
-			Location = Parameters.Location;
-		}
-
-		UGameplayStatics::PlaySoundAtLocation(
-			MyTarget->GetWorld(),
-			Sound,
-			Location
-		);
+		UGameplayStatics::PlaySoundAtLocation(MyTarget, Sound, Location);
 	}
 	else
 	{
-		UGameplayStatics::PlaySound2D(MyTarget->GetWorld(), Sound);
+		UGameplayStatics::PlaySound2D(MyTarget, Sound);
 	}
 
 	return false;

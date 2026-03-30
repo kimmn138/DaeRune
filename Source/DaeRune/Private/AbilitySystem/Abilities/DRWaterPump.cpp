@@ -1,18 +1,19 @@
-// Copyright DaeRune
+ï»¿// Copyright DaeRune
 
 
 #include "AbilitySystem/Abilities/DRWaterPump.h"
 #include "Camera/CameraComponent.h"
-#include "Character/DRCharacterBase.h"
 #include "DaeRune/DaeRune.h"
 #include "DRGameplayTags.h"
-#include "GameFramework/Character.h"
+#include "Character/DRCharacter.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Interaction/CombatInterface.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/OverlapResult.h"
 #include "AbilitySystemComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraComponent.h"
 
 FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLocation, bool& bHitObstacle, FHitResult& OutHitResult)
 {
@@ -23,10 +24,10 @@ FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLoca
         return WeaponSocketLocation + FVector::ForwardVector * WeaponRange;
     }
 
-    // Ä«¸Ş¶ó¿¡¼­ ÃÖ´ë »çÁ¤°Å¸®±îÁöÀÇ ¸ñÇ¥ ÁöÁ¡
+    // Ä«ï¿½Ş¶ó¿¡¼ï¿½ ï¿½Ö´ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Å¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç¥ ï¿½ï¿½ï¿½ï¿½
     FVector CameraTargetPoint = AimStart + (AimDirection * WeaponRange);
 
-    // ¹«±â ¼ÒÄÏ¿¡¼­ ¸ñÇ¥ ÁöÁ¡À¸·Î LineTrace
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ï¿ï¿½ï¿½ï¿½ ï¿½ï¿½Ç¥ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ LineTrace
     ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
     
     FCollisionQueryParams QueryParams;
@@ -34,28 +35,28 @@ FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLoca
     QueryParams.bTraceComplex = false;
     QueryParams.bReturnPhysicalMaterial = false;
 
-    // LineTrace ½ÇÇà
+    // LineTrace ï¿½ï¿½ï¿½ï¿½
     bHitObstacle = GetWorld()->LineTraceSingleByChannel(
         OutHitResult,
         WeaponSocketLocation,
         CameraTargetPoint,
-        ECC_Pawn, // º®/Àå¾Ö¹° °¨Áö¿ë Ã¤³Î
+        ECC_Pawn, // ï¿½ï¿½/ï¿½ï¿½Ö¹ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ã¤ï¿½ï¿½
         QueryParams
     );
 
     FVector BeamEndPoint;
     if (bHitObstacle)
     {
-        // Áß°£¿¡ Àå¾Ö¹° ÀÖÀ¸¸é ±× ÁöÁ¡±îÁö¸¸
+        // ï¿½ß°ï¿½ï¿½ï¿½ ï¿½ï¿½Ö¹ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         BeamEndPoint = OutHitResult.ImpactPoint;
     }
     else
     {
-        // Àå¾Ö¹° ¾øÀ¸¸é ÃÖ´ë °Å¸®±îÁö
+        // ï¿½ï¿½Ö¹ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ö´ï¿½ ï¿½Å¸ï¿½ï¿½ï¿½ï¿½ï¿½
         BeamEndPoint = CameraTargetPoint;
     }
 
-    // µğ¹ö±× ½Ã°¢È­
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½È­
 #if ENABLE_DRAW_DEBUG
     if (bShowDebugVisualization)
     {
@@ -96,29 +97,29 @@ AActor* UDRWaterPump::FindClosestTargetInBeam(const FVector& WeaponSocketLocatio
     ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
     if (!OwnerCharacter) return nullptr;
 
-    // ¹°´ëÆ÷ ¹æÇâ°ú ±æÀÌ °è»ê
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
     FVector BeamDirection = (BeamEndPoint - WeaponSocketLocation).GetSafeNormal();
     float BeamLength = FVector::Distance(WeaponSocketLocation, BeamEndPoint);
 
-    // ¹Ú½º Áß½ÉÁ¡ (¹«±â ¼ÒÄÏ°ú ³¡Á¡ÀÇ Áß°£)
+    // ï¿½Ú½ï¿½ ï¿½ß½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ï°ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ß°ï¿½)
     FVector BoxCenter = WeaponSocketLocation + (BeamDirection * BeamLength * 0.5f);
 
-    // ¹Ú½º Å©±â (Á¼°í ±ä ÇüÅÂ)
+    // ï¿½Ú½ï¿½ Å©ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
     FVector BoxHalfExtent(BeamLength * 0.5f, BeamWidth * 0.5f, BeamHeight * 0.5f);
 
-    // È¸Àü °è»ê (¹°´ëÆ÷ ¹æÇâÀ¸·Î)
+    // È¸ï¿½ï¿½ ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
     FRotator BoxRotation = BeamDirection.Rotation();
     FQuat BoxQuat = BoxRotation.Quaternion();
 
-    // Overlap °á°ú ÀúÀå
+    // Overlap ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     TArray<FOverlapResult> OverlapResults;
 
-    // Ãæµ¹ Äõ¸® ÆÄ¶ó¹ÌÅÍ
+    // ï¿½æµ¹ ï¿½ï¿½ï¿½ï¿½ ï¿½Ä¶ï¿½ï¿½ï¿½ï¿½
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(OwnerCharacter);
     QueryParams.bTraceComplex = false;
 
-    // BoxOverlapMulti ½ÇÇà
+    // BoxOverlapMulti ï¿½ï¿½ï¿½ï¿½
     bool bHasOverlaps = GetWorld()->OverlapMultiByChannel(
         OverlapResults,
         BoxCenter,
@@ -128,7 +129,8 @@ AActor* UDRWaterPump::FindClosestTargetInBeam(const FVector& WeaponSocketLocatio
         QueryParams
     );
 
-    // µğ¹ö±× ½Ã°¢È­
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½È­
+
 #if ENABLE_DRAW_DEBUG
     if (bShowDebugVisualization)
     {
@@ -149,7 +151,7 @@ AActor* UDRWaterPump::FindClosestTargetInBeam(const FVector& WeaponSocketLocatio
 
     if (!bHasOverlaps) return nullptr;
 
-    // °¡Àå °¡±î¿î Àû Ã£±â
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ Ã£ï¿½ï¿½
     AActor* ClosestTarget = nullptr;
     float ClosestDistanceSq = FLT_MAX;
 
@@ -161,10 +163,10 @@ AActor* UDRWaterPump::FindClosestTargetInBeam(const FVector& WeaponSocketLocatio
         // CombatInterface Ã¼Å©
         if (!OverlappedActor->Implements<UCombatInterface>()) continue;
 
-        // Á×Àº Àû Á¦¿Ü
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (ICombatInterface::Execute_IsDead(OverlappedActor)) continue;
 
-        // °Å¸® °è»ê
+        // ï¿½Å¸ï¿½ ï¿½ï¿½ï¿½
         float DistanceSq = FVector::DistSquared(WeaponSocketLocation, OverlappedActor->GetActorLocation());
 
         if (DistanceSq < ClosestDistanceSq)
@@ -179,14 +181,22 @@ AActor* UDRWaterPump::FindClosestTargetInBeam(const FVector& WeaponSocketLocatio
 
 void UDRWaterPump::StartWaterPumpLoop()
 {
-    if (UWorld* World = GetWorld())
-    {
-        // ÃÊ±âÈ­
-        DamageTickCounter = 0;
-        CurrentTarget = nullptr;
-        PreviousTarget = nullptr;
-        CachedBeamEndPoint = FVector::ZeroVector;
+    UWorld* World = GetWorld();
+    if (!World) return;
 
+    ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+    if (!OwnerCharacter) return;
+
+    // ê³µí†µ ì´ˆê¸°í™”
+    DamageTickCounter = 0;
+    CurrentTarget = nullptr;
+    PreviousTarget = nullptr;
+    CachedBeamEndPoint = FVector::ZeroVector;
+
+    // â•â• SERVER: ê²Œì„ ë¡œì§ (ë°ë¯¸ì§€ í‹± + GameplayCue) â•â•
+    if (OwnerCharacter->HasAuthority())
+    {
+        // GameplayCueëŠ” ì„œë²„ì—ì„œë§Œ ê´€ë¦¬ â†’ ASCê°€ ìë™ìœ¼ë¡œ í´ë¼ì´ì–¸íŠ¸ì— ë¦¬í”Œë¦¬ì¼€ì´íŠ¸
         if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
         {
             ASC->AddGameplayCue(
@@ -195,21 +205,85 @@ void UDRWaterPump::StartWaterPumpLoop()
             );
         }
 
-        // Å¸ÀÌ¸Ó ½ÃÀÛ
+        // ì„œë²„ ì „ìš© ë°ë¯¸ì§€ í‹± íƒ€ì´ë¨¸ (íƒ€ê²Ÿ ê°ì§€ + ë°ë¯¸ì§€ ì ìš©)
         World->GetTimerManager().SetTimer(
             WaterPumpTimerHandle,
             this,
             &UDRWaterPump::PerformWaterPumpTick,
             TickInterval,
-            true, // Looping
-            0.0f  // Áï½Ã ½ÃÀÛ
+            true,
+            0.0f
+        );
+
+        // 3P ë¹” ë¦¬í”Œë¦¬ì¼€ì´íŠ¸ ìƒíƒœ í™œì„±í™”
+        if (ADRCharacter* DRChar = Cast<ADRCharacter>(OwnerCharacter))
+        {
+            // í™œì„±í™” ì „ì— ì´ˆê¸° ëì§€ì  ê³„ì‚° (ë¹„ì†Œìœ  í´ë¼ì´ì–¸íŠ¸ì—ì„œ ìœ íš¨í•œ ëì§€ì ìœ¼ë¡œ 3P ë¹” ìƒì„±)
+            if (OwnerCharacter->Implements<UCombatInterface>())
+            {
+                FVector WeaponSocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(
+                    OwnerCharacter,
+                    FDRGameplayTags::Get().CombatSocket_RightHand
+                );
+
+                bool bHitObstacle = false;
+                FHitResult HitResult;
+                DRChar->WaterPumpBeamEndPoint = CalculateWaterBeamEndPoint(
+                    WeaponSocketLocation, bHitObstacle, HitResult);
+            }
+
+            DRChar->bWaterPumpActive = true;
+
+            // ë¦¬ìŠ¨ ì„œë²„ì—ì„œëŠ” OnRepì´ ìë™ í˜¸ì¶œë˜ì§€ ì•Šìœ¼ë¯€ë¡œ ìˆ˜ë™ í˜¸ì¶œ
+            if (World->GetNetMode() != NM_DedicatedServer)
+            {
+                DRChar->OnRep_WaterPumpActive();
+            }
+        }
+    }
+
+    // â•â• CLIENT: 1P ë¹” ì „ìš© â•â•
+    if (OwnerCharacter->IsLocallyControlled())
+    {
+        // VFX ìƒì„± ì „ì— ì´ˆê¸° ëì§€ì  ê³„ì‚° (ìœ íš¨í•œ HitEffectPositionìœ¼ë¡œ ë¹” ìƒì„±)
+        if (ADRCharacter* DRChar = Cast<ADRCharacter>(OwnerCharacter))
+        {
+            if (DRChar->FirstPersonMesh)
+            {
+                const FVector WeaponSocketLocation =
+                    DRChar->FirstPersonMesh->GetSocketLocation(MuzzleSocketName);
+
+                bool bHitObstacle = false;
+                FHitResult HitResult;
+                CachedBeamEndPoint = CalculateWaterBeamEndPoint(
+                    WeaponSocketLocation, bHitObstacle, HitResult);
+            }
+        }
+
+        StartBeamEffect();
+
+        // ì¦‰ì‹œ í•œ ë²ˆ ì—…ë°ì´íŠ¸í•˜ì—¬ íšŒì „/ìœ„ì¹˜ ë³´ì • (33ms ê°­ ì œê±°)
+        UpdateBeamEndpoint();
+
+        World->GetTimerManager().SetTimer(
+            BeamUpdateTimer,
+            this,
+            &UDRWaterPump::UpdateBeamEndpoint,
+            0.033f,
+            true
         );
     }
 }
 
 void UDRWaterPump::StopWaterPumpLoop()
 {
-    if (UWorld* World = GetWorld())
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+
+    // â•â• SERVER ì •ë¦¬ â•â•
+    if (OwnerCharacter && OwnerCharacter->HasAuthority())
     {
         World->GetTimerManager().ClearTimer(WaterPumpTimerHandle);
 
@@ -220,17 +294,35 @@ void UDRWaterPump::StopWaterPumpLoop()
             );
         }
 
-        // Á¤¸®
         DamageTickCounter = 0;
         CurrentTarget = nullptr;
         PreviousTarget = nullptr;
+
+        // 3P ë¹” ë¦¬í”Œë¦¬ì¼€ì´íŠ¸ ìƒíƒœ ë¹„í™œì„±í™”
+        if (ADRCharacter* DRChar = Cast<ADRCharacter>(OwnerCharacter))
+        {
+            DRChar->bWaterPumpActive = false;
+            DRChar->WaterPumpBeamEndPoint = FVector::ZeroVector;
+
+            if (World->GetNetMode() != NM_DedicatedServer)
+            {
+                DRChar->OnRep_WaterPumpActive();
+            }
+        }
+    }
+
+    // â•â• CLIENT ì •ë¦¬ (1P ë¹” ì „ìš©) â•â•
+    if (!OwnerCharacter || OwnerCharacter->IsLocallyControlled())
+    {
+        World->GetTimerManager().ClearTimer(BeamUpdateTimer);
+        StopBeamEffect();
         CachedBeamEndPoint = FVector::ZeroVector;
     }
 }
 
 void UDRWaterPump::PerformWaterPumpTick()
 {
-    // ¹«±â ¼ÒÄÏ À§Ä¡ °¡Á®¿À±â
+    // ì´ í•¨ìˆ˜ëŠ” ì„œë²„ì—ì„œë§Œ í˜¸ì¶œë¨ (HasAuthority íƒ€ì´ë¨¸ì— ì˜í•´)
     ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
     if (!OwnerCharacter || !OwnerCharacter->Implements<UCombatInterface>()) return;
 
@@ -239,47 +331,49 @@ void UDRWaterPump::PerformWaterPumpTick()
         FDRGameplayTags::Get().CombatSocket_RightHand
     );
 
-    // 1´Ü°è: LineTrace·Î ¹°´ëÆ÷ ³¡Á¡ °è»ê
+    // ì„œë²„ì—ì„œ ë¹” ëì  ê³„ì‚° (ë¦¬í”Œë¦¬ì¼€ì´íŠ¸ëœ ControlRotation ì‚¬ìš©)
     bool bHitObstacle = false;
     FHitResult HitResult;
     FVector BeamEndPoint = CalculateWaterBeamEndPoint(WeaponSocketLocation, bHitObstacle, HitResult);
 
-    // ³¡Á¡ Ä³½Ã (ºí·çÇÁ¸°Æ®¿¡¼­ ÀÌÆåÆ® À§Ä¡·Î »ç¿ë)
-    CachedBeamEndPoint = BeamEndPoint;
-    OnBeamEndPointUpdated(BeamEndPoint);
+    // ìºë¦­í„°ì˜ ë¦¬í”Œë¦¬ì¼€ì´íŠ¸ ë¹” ëì  ê°±ì‹  (ë¹„ì†Œìœ  í´ë¼ì´ì–¸íŠ¸ì—ì„œ 3P ë¹” ìœ„ì¹˜ ì—…ë°ì´íŠ¸ì— ì‚¬ìš©)
+    if (ADRCharacter* DRChar = Cast<ADRCharacter>(OwnerCharacter))
+    {
+        DRChar->WaterPumpBeamEndPoint = BeamEndPoint;
+    }
 
-    // 2´Ü°è: BoxOverlapÀ¸·Î °¡Àå °¡±î¿î Àû 1¸í Ã£±â
+    // BoxOverlapìœ¼ë¡œ íƒ€ê²Ÿ ê°ì§€
     AActor* NewTarget = FindClosestTargetInBeam(WeaponSocketLocation, BeamEndPoint);
 
-    // 3´Ü°è: Å¸°Ù º¯°æ Ã¼Å©
+    // Å¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã¼Å©
     if (NewTarget)
     {
-        // »õ·Î¿î Å¸°ÙÀÎÁö È®ÀÎ
+        // ï¿½ï¿½ï¿½Î¿ï¿½ Å¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
         if (CurrentTarget != NewTarget)
         {
             PreviousTarget = CurrentTarget;
             CurrentTarget = NewTarget;
-            DamageTickCounter = 0; // »õ Å¸°ÙÀÌ¸é Ä«¿îÅÍ ¸®¼Â
+            DamageTickCounter = 0; // ï¿½ï¿½ Å¸ï¿½ï¿½ï¿½Ì¸ï¿½ Ä«ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 
-            // ºí·çÇÁ¸°Æ® ÀÌº¥Æ®
+            // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½Ìºï¿½Æ®
             OnTargetChanged(PreviousTarget.Get(), CurrentTarget.Get());
         }
 
-        // Æ½ Ä«¿îÅÍ Áõ°¡
+        // Æ½ Ä«ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         DamageTickCounter++;
         
-        // µ¥¹ÌÁö Àû¿ë ½ÃÁ¡ Ã¼Å© (1ÃÊ¸¶´Ù)
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã¼Å© (1ï¿½Ê¸ï¿½ï¿½ï¿½)
         if (DamageTickCounter >= DamageApplicationInterval)
         {
-            DamageTickCounter = 0; // Ä«¿îÅÍ ¸®¼Â
+            DamageTickCounter = 0; // Ä«ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 
-            // ºí·çÇÁ¸°Æ®¿¡¼­ È¿°ú Àû¿ë
+            // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ È¿ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
             OnDamageTickReached(CurrentTarget.Get());
         }
     }
     else
     {
-        // Å¸°ÙÀ» ÀÒÀ½
+        // Å¸ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (CurrentTarget.IsValid())
         {
             PreviousTarget = CurrentTarget;
@@ -305,6 +399,107 @@ FGameplayAbilityTargetDataHandle UDRWaterPump::MakeTargetDataHandleFromActors(AA
     return TargetDataHandle;
 }
 
+void UDRWaterPump::StartBeamEffect()
+{
+    UE_LOG(LogTemp, Warning, TEXT("StartBeamEffect called"));
+
+    if (!WaterCannonEffect)
+    {
+        UE_LOG(LogTemp, Error, TEXT("StartBeamEffect: WaterCannonEffect is NULL!"));
+        return;
+    }
+
+    ADRCharacter* Character = Cast<ADRCharacter>(GetAvatarActorFromActorInfo());
+    if (!Character)
+    {
+        UE_LOG(LogTemp, Error, TEXT("StartBeamEffect: Character cast failed!"));
+        return;
+    }
+
+    USkeletalMeshComponent* FPMesh = Character->FirstPersonMesh;
+    if (!FPMesh)
+    {
+        UE_LOG(LogTemp, Error, TEXT("StartBeamEffect: FirstPersonMesh is NULL!"));
+        return;
+    }
+
+    if (!FPMesh->DoesSocketExist(MuzzleSocketName))
+    {
+        UE_LOG(LogTemp, Error, TEXT("StartBeamEffect: Socket '%s' does not exist on FPMesh!"),
+            *MuzzleSocketName.ToString());
+        return;
+    }
+
+    // 1P ë¹”ë§Œ ìƒì„± (IsLocallyControlled ë¶„ê¸°ì—ì„œ ì†Œìœ  í´ë¼ì´ì–¸íŠ¸ì—ì„œë§Œ í˜¸ì¶œë¨)
+    // 3P ë¹”ì€ DRCharacter::OnRep_WaterPumpActive()ì—ì„œ ê´€ë¦¬
+    FirstPersonBeam = UNiagaraFunctionLibrary::SpawnSystemAttached(
+        WaterCannonEffect,
+        FPMesh,
+        MuzzleSocketName,
+        FVector::ZeroVector,
+        FRotator::ZeroRotator,
+        EAttachLocation::SnapToTarget,
+        false
+    );
+
+    if (FirstPersonBeam)
+    {
+        FirstPersonBeam->SetOnlyOwnerSee(true);
+        FirstPersonBeam->SetVectorParameter(FName("HitEffectPosition"), CachedBeamEndPoint);
+        UE_LOG(LogTemp, Warning, TEXT("StartBeamEffect: 1P beam created successfully"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("StartBeamEffect: SpawnSystemAttached returned null!"));
+    }
+}
+
+void UDRWaterPump::UpdateBeamEndpoint()
+{
+    // ì´ í•¨ìˆ˜ëŠ” í´ë¼ì´ì–¸íŠ¸ì—ì„œë§Œ í˜¸ì¶œë¨ (IsLocallyControlled íƒ€ì´ë¨¸ì— ì˜í•´)
+    ADRCharacter* DRCharacter = Cast<ADRCharacter>(GetAvatarActorFromActorInfo());
+    if (!DRCharacter) return;
+
+    // 1P ë©”ì‹œ ì†Œì¼“ì—ì„œ ì§ì ‘ ìœ„ì¹˜ë¥¼ ê°€ì ¸ì˜´ (3P ë©”ì‹œê°€ ì•„ë‹Œ 1P ë©”ì‹œ ì‚¬ìš©)
+    USkeletalMeshComponent* FPMesh = DRCharacter->FirstPersonMesh;
+    if (!FPMesh) return;
+
+    const FVector WeaponSocketLocation = FPMesh->GetSocketLocation(MuzzleSocketName);
+
+    // ë¡œì»¬ ì¹´ë©”ë¼ë¡œ ë¹” ëì  ê³„ì‚° (1P ì†Œì¼“ ìœ„ì¹˜ë¥¼ íŠ¸ë ˆì´ìŠ¤ ì‹œì‘ì ìœ¼ë¡œ ì‚¬ìš©)
+    bool bHitObstacle = false;
+    FHitResult HitResult;
+    CachedBeamEndPoint = CalculateWaterBeamEndPoint(WeaponSocketLocation, bHitObstacle, HitResult);
+
+    // Niagara ë°©í–¥/íšŒì „ ê³„ì‚°
+    FVector BeamDir = CachedBeamEndPoint - WeaponSocketLocation;
+    if (!BeamDir.IsNearlyZero())
+    {
+        BeamDir.Normalize();
+    }
+    const FRotator BeamRotation = BeamDir.Rotation();
+
+    // 1P Niagara ì»´í¬ë„ŒíŠ¸ë§Œ ì—…ë°ì´íŠ¸ (3PëŠ” DRCharacter::UpdateWaterPumpThirdPersonBeamì—ì„œ ê´€ë¦¬)
+    if (FirstPersonBeam)
+    {
+        FirstPersonBeam->SetWorldLocation(WeaponSocketLocation);
+        FirstPersonBeam->SetWorldRotation(BeamRotation);
+        FirstPersonBeam->SetVectorParameter(FName("HitEffectPosition"), CachedBeamEndPoint);
+    }
+
+    OnBeamEndPointUpdated(CachedBeamEndPoint);
+}
+
+void UDRWaterPump::StopBeamEffect()
+{
+    if (FirstPersonBeam)
+    {
+        FirstPersonBeam->DeactivateImmediate();
+        FirstPersonBeam->DestroyComponent();
+        FirstPersonBeam = nullptr;
+    }
+}
+
 bool UDRWaterPump::GetAimDirection(FVector& OutAimStart, FVector& OutAimDirection) const
 {
     ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
@@ -313,7 +508,7 @@ bool UDRWaterPump::GetAimDirection(FVector& OutAimStart, FVector& OutAimDirectio
     APlayerController* PC = Cast<APlayerController>(OwnerCharacter->GetController());
     if (!PC) return false;
 
-    // Ä«¸Ş¶ó À§Ä¡¿Í ¹æÇâ ±¸ÇÏ±â
+    // Ä«ï¿½Ş¶ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ï±ï¿½
     FVector CameraLocation;
     FRotator CameraRotation;
     PC->GetPlayerViewPoint(CameraLocation, CameraRotation);

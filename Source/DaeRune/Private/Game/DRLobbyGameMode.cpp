@@ -6,6 +6,8 @@
 #include "GameFramework/PlayerState.h"
 #include "Player/DRPlayerController.h"
 #include "MultiplayerSessionsSubsystem.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Components/CapsuleComponent.h"
 
 ADRLobbyGameMode::ADRLobbyGameMode()
 {
@@ -15,6 +17,42 @@ ADRLobbyGameMode::ADRLobbyGameMode()
 void ADRLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
+
+	// ìŠ¤í…Œì´ì§€ì—ì„œ ëŒì•„ì˜¨ í”Œë ˆì´ì–´ì˜ ìƒíƒœ ë³µì›
+	if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(NewPlayer))
+	{
+		// í´ë¼ì´ì–¸íŠ¸ì˜ Pawnì´ ì¤€ë¹„ë  ë•Œê¹Œì§€ ì•½ê°„ì˜ ë”œë ˆì´ í›„ ìƒíƒœ ë³µì›
+		FTimerHandle RestoreTimerHandle;
+		GetWorldTimerManager().SetTimer(
+			RestoreTimerHandle,
+			[DRPC]()
+			{
+				if (!IsValid(DRPC)) return;
+
+				// ê´€ì „ ëª¨ë“œ ê°•ì œ ì¢…ë£Œ ë° ì…ë ¥ ë³µì›
+				DRPC->ClientStopSpectating();
+
+				// í”Œë ˆì´ì–´ ìƒíƒœ í”Œë˜ê·¸ ë³µì›
+				if (APawn* ControlledPawn = DRPC->GetPawn())
+				{
+					// Movement ì»´í¬ë„ŒíŠ¸ í™œì„±í™”
+					if (UCharacterMovementComponent* MovementComp = Cast<UCharacterMovementComponent>(ControlledPawn->GetMovementComponent()))
+					{
+						MovementComp->SetMovementMode(MOVE_Walking);
+						MovementComp->SetComponentTickEnabled(true);
+					}
+
+					// ìº¡ìŠ ì½œë¦¬ì „ í™œì„±í™”
+					if (UCapsuleComponent* CapsuleComp = Cast<UCapsuleComponent>(ControlledPawn->GetRootComponent()))
+					{
+						CapsuleComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+					}
+				}
+			},
+			0.5f,
+			false
+		);
+	}
 
 	if (GameState)
 	{
@@ -41,6 +79,52 @@ void ADRLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 				);
 			}
 		}
+	}
+}
+
+void ADRLobbyGameMode::HandleSeamlessTravelPlayer(AController*& C)
+{
+	Super::HandleSeamlessTravelPlayer(C);
+
+	UE_LOG(LogTemp, Log, TEXT("HandleSeamlessTravelPlayer called for %s"), *C->GetName());
+
+	// SeamlessTravelë¡œ ëŒì•„ì˜¨ í”Œë ˆì´ì–´ì˜ ìƒíƒœ ë³µì›
+	if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(C))
+	{
+		// Pawnì´ ì¤€ë¹„ë  ë•Œê¹Œì§€ ë”œë ˆì´ í›„ ìƒíƒœ ë³µì›
+		FTimerHandle RestoreTimerHandle;
+		GetWorldTimerManager().SetTimer(
+			RestoreTimerHandle,
+			[DRPC]()
+			{
+				if (!IsValid(DRPC)) return;
+
+				UE_LOG(LogTemp, Log, TEXT("HandleSeamlessTravelPlayer - Restoring player state, Pawn: %s"),
+					DRPC->GetPawn() ? *DRPC->GetPawn()->GetName() : TEXT("NULL"));
+
+				// ê´€ì „ ëª¨ë“œ ê°•ì œ ì¢…ë£Œ ë° ì…ë ¥ ë³µì›
+				DRPC->ClientStopSpectating();
+
+				// í”Œë ˆì´ì–´ ìƒíƒœ í”Œë˜ê·¸ ë³µì›
+				if (APawn* ControlledPawn = DRPC->GetPawn())
+				{
+					// Movement ì»´í¬ë„ŒíŠ¸ í™œì„±í™”
+					if (UCharacterMovementComponent* MovementComp = Cast<UCharacterMovementComponent>(ControlledPawn->GetMovementComponent()))
+					{
+						MovementComp->SetMovementMode(MOVE_Walking);
+						MovementComp->SetComponentTickEnabled(true);
+					}
+
+					// ìº¡ìŠ ì½œë¦¬ì „ í™œì„±í™”
+					if (UCapsuleComponent* CapsuleComp = Cast<UCapsuleComponent>(ControlledPawn->GetRootComponent()))
+					{
+						CapsuleComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+					}
+				}
+			},
+			0.5f,
+			false
+		);
 	}
 }
 
@@ -71,13 +155,13 @@ void ADRLobbyGameMode::Logout(AController* Exiting)
 
 void ADRLobbyGameMode::TravelToStage(const FString& StageMapName, ADRPlayerController* Requester)
 {
-	// ¼­¹ö Ã¼Å©
+	// ï¿½ï¿½ï¿½ï¿½ Ã¼Å©
 	if (!HasAuthority()) return;
 
-	// È£½ºÆ® ±ÇÇÑ Ã¼Å©
+	// È£ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ Ã¼Å©
 	if (!Requester || !Requester->IsLocalController()) return;
 
-	// ¸Ê ÀÌ¸§ À¯È¿¼º
+	// ï¿½ï¿½ ï¿½Ì¸ï¿½ ï¿½ï¿½È¿ï¿½ï¿½
 	if (StageMapName.IsEmpty()) return;
 
 	ExecuteTravel(StageMapName);
@@ -87,7 +171,7 @@ void ADRLobbyGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// ·Îºñ´Â µµÁß Âü°¡ Çã¿ë!
+	// ï¿½Îºï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½!
 	AllowJoinInProgress();
 }
 
@@ -95,7 +179,7 @@ void ADRLobbyGameMode::HandleWipeout()
 {
 	if (!HasAuthority()) return;
 
-	// TODO: Àü¸ê UI Ç¥½Ã (·Îºñ´Â °¡º­¿î UI)
+	// TODO: ï¿½ï¿½ï¿½ï¿½ UI Ç¥ï¿½ï¿½ (ï¿½Îºï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ UI)
 
 	RestartLobby();
 }
@@ -110,7 +194,7 @@ void ADRLobbyGameMode::AllowJoinInProgress()
 	UMultiplayerSessionsSubsystem* SessionsSubsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>();
 	if (SessionsSubsystem)
 	{
-		// ·Îºñ¿¡¼­´Â µµÁß Âü°¡ Çã¿ë!
+		// ï¿½Îºñ¿¡¼ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½!
 		SessionsSubsystem->UpdateSessionJoinability(true);
 
 		if (GEngine)
@@ -130,17 +214,17 @@ void ADRLobbyGameMode::RestartLobby()
 	{
 		FString CurrentMapName = World->GetMapName();
 
-		// PIE(Play In Editor) ÇÁ¸®ÇÈ½º Á¦°Å
-		// PIE¿¡¼­´Â "UEDPIE_0_MapName" Çü½ÄÀ¸·Î ³ª¿È
+		// PIE(Play In Editor) ï¿½ï¿½ï¿½ï¿½ï¿½È½ï¿½ ï¿½ï¿½ï¿½ï¿½
+		// PIEï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ "UEDPIE_0_MapName" ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		CurrentMapName.RemoveFromStart(World->StreamingLevelsPrefix);
 
 		bUseSeamlessTravel = true;
 
-		// °°Àº ¸Ê Àç½ÃÀÛ
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½
 		World->ServerTravel(CurrentMapName + TEXT("?listen"));
 	}
 
-	// ÇÃ·¡±× ¸®¼Â
+	// ï¿½Ã·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	bIsWipeoutInProgress = false;
 }
 
@@ -148,18 +232,21 @@ void ADRLobbyGameMode::ExecuteTravel(const FString& StageMapName)
 {
 	if (!HasAuthority()) return;
 
+	// ë§µ ì „í™˜ ì „ ì •ë¦¬ ì‘ì—… (ë¶€ëª¨ í´ë˜ìŠ¤ì˜ ê³µí†µ í•¨ìˆ˜ ì‚¬ìš©)
+	PrepareForTravel();
+
 	UWorld* World = GetWorld();
 	if (World)
 	{
 		bUseSeamlessTravel = true;
-		// URL ±¸¼º
+		// URL êµ¬ì„±
 		FString TravelURL = StageMapName;
 		if (!TravelURL.Contains(TEXT("?")))
 		{
 			TravelURL += TEXT("?listen");
 		}
 
-		// ¸Ê ÀÌµ¿
+		// ë§µ ì´ë™
 		World->ServerTravel(TravelURL);
 	}
 }

@@ -53,8 +53,11 @@ void ADRProjectile::BeginPlay()
 void ADRProjectile::OnHit()
 {
 	// 충돌 시 이펙트 및 사운드 재생
-	UGameplayStatics::PlaySoundAtLocation(this, ImpactSound, GetActorLocation(), FRotator::ZeroRotator); 
-	UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, ImpactEffect, GetActorLocation());
+	if (UWorld* World = GetWorld())
+	{
+		UGameplayStatics::PlaySoundAtLocation(World, ImpactSound, GetActorLocation(), FRotator::ZeroRotator);
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactEffect, GetActorLocation());
+	}
 	// 반복 사운드 정리
 	if (LoopingSoundComponent)
 	{

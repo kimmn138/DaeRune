@@ -53,9 +53,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USceneComponent> RootSceneComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<UBillboardComponent> EditorBillboard;
-
 	// 미리 배치된 적 참조
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SpawnGroup|PrePlaced")
 	TArray<TSoftObjectPtr<ADREnemy>> PrePlacedEnemies;

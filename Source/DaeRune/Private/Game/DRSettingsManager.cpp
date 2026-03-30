@@ -7,24 +7,69 @@
 #include "Sound/SoundClass.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Character/DRCharacter.h"
+#include "EngineUtils.h"
+#include "Components/AudioComponent.h"
 
-// ø°º¬ ∞Ê∑Œ ¡§¿«
-const TCHAR* UDRSettingsManager::SOUND_MIX_PATH = TEXT("/Game/Audio/SM_GameMix.SM_GameMix");
-const TCHAR* UDRSettingsManager::SC_MASTER_PATH = TEXT("/Game/Audio/SoundClasses/SC_Master.SC_Master");
-const TCHAR* UDRSettingsManager::SC_BGM_PATH = TEXT("/Game/Audio/SoundClasses/SC_BGM.SC_BGM");
-const TCHAR* UDRSettingsManager::SC_SFX_PATH = TEXT("/Game/Audio/SoundClasses/SC_SFX.SC_SFX");
+// ÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩ
 
 void UDRSettingsManager::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
 
+    if (!GameSoundMix)
+    {
+        GameSoundMix = LoadObject<USoundMix>(nullptr, TEXT("/Game/Blueprints/Audio/SoundMix/SM_GameMix.SM_GameMix"));
+    }
+    if (!MasterSoundClass)
+    {
+        MasterSoundClass = LoadObject<USoundClass>(nullptr, TEXT("/Game/Blueprints/Audio/SoundClasses/SC_Master.SC_Master"));
+    }
+    if (!BGMSoundClass)
+    {
+        BGMSoundClass = LoadObject<USoundClass>(nullptr, TEXT("/Game/Blueprints/Audio/SoundClasses/SC_BGM.SC_BGM"));
+    }
+    if (!SFXSoundClass)
+    {
+        SFXSoundClass = LoadObject<USoundClass>(nullptr, TEXT("/Game/Blueprints/Audio/SoundClasses/SC_SFX.SC_SFX"));
+    }
+    if (!VoiceSoundClass)
+    {
+        VoiceSoundClass = LoadObject<USoundClass>(nullptr, TEXT("/Game/Blueprints/Audio/SoundClasses/SC_Voice.SC_Voice"));
+    }
+
+    // Î°úÎìú Ïã§Ìå® Ïãú Í≤ΩÍ≥† Î°úÍ∑∏
+    if (!GameSoundMix)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DRSettingsManager: Failed to load GameSoundMix from /Game/Blueprints/Audio/SoundMix/SM_GameMix"));
+    }
+    if (!MasterSoundClass)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DRSettingsManager: Failed to load MasterSoundClass from /Game/Blueprints/Audio/SoundClasses/SC_Master"));
+    }
+    if (!BGMSoundClass)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DRSettingsManager: Failed to load BGMSoundClass from /Game/Blueprints/Audio/SoundClasses/SC_BGM"));
+    }
+    if (!SFXSoundClass)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DRSettingsManager: Failed to load SFXSoundClass from /Game/Blueprints/Audio/SoundClasses/SC_SFX"));
+    }
+    if (!VoiceSoundClass)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DRSettingsManager: Failed to load VoiceSoundClass from /Game/Blueprints/Audio/SoundClasses/SC_Voice"));
+    }
+
     if (UDRGameUserSettings* Settings = GetSettings())
     {
-        // ø£¡¯ ±‚∫ª º≥¡§ ¿˚øÎ
+        // Í∏∞Î≥∏ ÏÑ§Ï†ï Ï†ÅÏö©
         Settings->ApplySettings(false);
 
-        // ƒøΩ∫≈“ º≥¡§ ¿˚øÎ
+        // Ïª§Ïä§ÌÖÄ ÏÑ§Ï†ï Ï†ÅÏö©
         Settings->ApplyCustomSettings();
+
+        // Ï†ÄÏû•Îêú Scalability ÏÑ§Ï†ï Ï†ÅÏö©
+        ApplyGraphicsQualitySettings();
     }
 }
 
@@ -43,21 +88,24 @@ void UDRSettingsManager::ApplyAndSaveAllSettings()
     UDRGameUserSettings* Settings = GetSettings();
     if (!Settings) return;
 
-    // ƒøΩ∫≈“ º≥¡§ ¿Ø»øº∫ ∞À¡ı
+    // Ïª§Ïä§ÌÖÄ ÏÑ§Ï†ï Ïú†Ìö®ÏÑ± Í≤ÄÏÇ¨
     Settings->ApplyCustomSettings();
 
-    // «ÿªÛµµ/√¢∏µÂ ¿˚øÎ
+    // Ìï¥ÏÉÅÎèÑ/Ï∞ΩÎ™®Îìú Ï†ÅÏö©
     Settings->ApplyResolutionSettings(false);
     Settings->ApplyNonResolutionSettings();
     Settings->ConfirmVideoMode();
 
-    // ø¿µø¿ ¿˚øÎ
+    // Í∑∏ÎûòÌîΩ ÌíàÏßà Ï†ÅÏö©
+    ApplyGraphicsQualitySettings();
+
+    // Ïò§ÎîîÏò§ Ï†ÅÏö©
     ApplyAudioSettings();
 
-    // ¿˙¿Â
+    // Ï†ÄÏû•
     Settings->SaveSettings();
 
-    // µ®∏Æ∞‘¿Ã∆Æ ∫Í∑ŒµÂƒ≥Ω∫∆Æ
+    // Îç∏Î¶¨Í≤åÏù¥Ìä∏ Î∏åÎ°úÎìúÏ∫êÏä§Ìä∏
     OnSettingsApplied.Broadcast();
 }
 
@@ -114,30 +162,27 @@ void UDRSettingsManager::ApplySoundMixToWorld(UWorld* World)
     UDRGameUserSettings* Settings = GetSettings();
     if (!Settings) return;
 
-    // SoundMix ∑ŒµÂ
-    USoundMix* GameSoundMix = LoadObject<USoundMix>(nullptr, SOUND_MIX_PATH);
     if (!GameSoundMix) return;
 
-    // SoundClass ∑ŒµÂ
-    USoundClass* MasterClass = LoadObject<USoundClass>(nullptr, SC_MASTER_PATH);
-    USoundClass* BGMClass = LoadObject<USoundClass>(nullptr, SC_BGM_PATH);
-    USoundClass* SFXClass = LoadObject<USoundClass>(nullptr, SC_SFX_PATH);
-
-    // SoundMix »∞º∫»≠
+    // SoundMix »∞ÔøΩÔøΩ»≠
     UGameplayStatics::PushSoundMixModifier(World, GameSoundMix);
 
-    // ∞¢ ≈¨∑°Ω∫ ∫º∑˝ º≥¡§
-    if (MasterClass)
+    // ÔøΩÔøΩ ≈¨ÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩ ÔøΩÔøΩÔøΩÔøΩ
+    if (MasterSoundClass)
     {
-        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, MasterClass, Settings->MasterVolume, 1.0f, 0.0f, true);
+        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, MasterSoundClass, Settings->MasterVolume, 1.0f, 0.0f, true);
     }
-    if (BGMClass)
+    if (BGMSoundClass)
     {
-        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, BGMClass, Settings->BGMVolume, 1.0f, 0.0f, false);
+        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, BGMSoundClass, Settings->BGMVolume, 1.0f, 0.0f, false);
     }
-    if (SFXClass)
+    if (SFXSoundClass)
     {
-        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, SFXClass, Settings->SFXVolume, 1.0f, 0.0f, false);
+        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, SFXSoundClass, Settings->SFXVolume, 1.0f, 0.0f, false);
+    }
+    if (VoiceSoundClass)
+    {
+        UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, VoiceSoundClass, Settings->VoiceVolume, 1.0f, 0.0f, false);
     }
 }
 
@@ -162,6 +207,14 @@ void UDRSettingsManager::SetSFXVolume(float NewVolume)
     if (UDRGameUserSettings* Settings = GetSettings())
     {
         Settings->SFXVolume = FMath::Clamp(NewVolume, 0.0f, 1.0f);
+    }
+}
+
+void UDRSettingsManager::SetVoiceVolume(float NewVolume)
+{
+    if (UDRGameUserSettings* Settings = GetSettings())
+    {
+        Settings->VoiceVolume = FMath::Clamp(NewVolume, 0.0f, 2.0f);
     }
 }
 
@@ -203,7 +256,7 @@ TArray<FIntPoint> UDRSettingsManager::GetSupportedResolutions() const
     TArray<FIntPoint> Resolutions;
     UKismetSystemLibrary::GetSupportedFullscreenResolutions(Resolutions);
 
-    // √÷º“ «ÿªÛµµ « ≈Õ∏µ
+    // ÏµúÏÜå Ìï¥ÏÉÅÎèÑ ÌïÑÌÑ∞ÎßÅ
     TArray<FIntPoint> FilteredResolutions;
     for (const FIntPoint& Res : Resolutions)
     {
@@ -214,4 +267,23 @@ TArray<FIntPoint> UDRSettingsManager::GetSupportedResolutions() const
     }
 
     return FilteredResolutions;
+}
+
+void UDRSettingsManager::SetGraphicsQuality(int32 QualityLevel)
+{
+    if (UDRGameUserSettings* Settings = GetSettings())
+    {
+        // 0: Low, 1: Medium, 2: High, 3: Epic, 4: Cinematic
+        QualityLevel = FMath::Clamp(QualityLevel, 0, 4);
+        Settings->SetOverallScalabilityLevel(QualityLevel);
+    }
+}
+
+void UDRSettingsManager::ApplyGraphicsQualitySettings()
+{
+    if (UDRGameUserSettings* Settings = GetSettings())
+    {
+        // Scalability ÏÑ§Ï†ï Ï†ÅÏö©
+        Settings->ApplyNonResolutionSettings();
+    }
 }

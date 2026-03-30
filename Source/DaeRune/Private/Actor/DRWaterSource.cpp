@@ -9,6 +9,9 @@
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "Sound/DRSoundManager.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/DRSoundDataAsset.h"
+#include "DRAssetManager.h"
 
 ADRWaterSource::ADRWaterSource()
 {
@@ -24,11 +27,15 @@ void ADRWaterSource::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 
 void ADRWaterSource::MulticastPlayWaterGainSound_Implementation()
 {
-    if (UGameInstance* GI = GetGameInstance())
+    // Actorì˜ Worldë¥¼ ì§ì ‘ ì‚¬ìš©í•´ì„œ ì‚¬ìš´ë“œ ì¬ìƒ (í´ë¼ì´ì–¸íŠ¸ì—ì„œ í™•ì‹¤íˆ ë™ì‘)
+    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
     {
-        if (UDRSoundManager* SM = GI->GetSubsystem<UDRSoundManager>())
+        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
         {
-            SM->PlayWaterGainSound(GetActorLocation());
+            if (SoundData->WaterGainSound)
+            {
+                UGameplayStatics::PlaySoundAtLocation(this, SoundData->WaterGainSound, GetActorLocation());
+            }
         }
     }
 }
@@ -38,7 +45,7 @@ void ADRWaterSource::OnOverlap(AActor* TargetActor)
     if (!HasAuthority()) return;
     if (!bIsAvailable) return;
 
-    // ÇÃ·¹ÀÌ¾î¸é ¹° Ã¤¿ì±â ½Ãµµ
+    // ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ï¿½ ï¿½ï¿½ Ã¤ï¿½ï¿½ï¿½ ï¿½Ãµï¿½
     if (ADRCharacter* PlayerCharacter = Cast<ADRCharacter>(TargetActor))
     {
         FillPlayerWater(PlayerCharacter);
@@ -47,7 +54,7 @@ void ADRWaterSource::OnOverlap(AActor* TargetActor)
 
 void ADRWaterSource::OnEndOverlap(AActor* TargetActor)
 {
-    // ºí·çÇÁ¸°Æ®¿¡¼­ ÇÊ¿ä½Ã ¿À¹ö¶óÀÌµå
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¿ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ìµï¿½
 }
 
 void ADRWaterSource::FillPlayerWater(AActor* TargetActor)
@@ -66,13 +73,13 @@ void ADRWaterSource::FillPlayerWater(AActor* TargetActor)
     );
     if (!TargetAS) return;
 
-    // ÀÌ¹Ì ¹°ÀÌ °¡µæ Â÷ÀÖÀ¸¸é ¹«½Ã
+    // ï¿½Ì¹ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (FMath::IsNearlyEqual(TargetAS->GetWater(), TargetAS->GetMaxWater()))
     {
         return;
     }
 
-    // ¹° Ã¤¿ì±â È¿°ú Àû¿ë
+    // ï¿½ï¿½ Ã¤ï¿½ï¿½ï¿½ È¿ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (WaterFillEffectClass)
     {
         FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
@@ -90,11 +97,11 @@ void ADRWaterSource::FillPlayerWater(AActor* TargetActor)
 
             MulticastPlayWaterGainSound();
 
-            // »ç¿ëµÊ ¾Ë¸²
+            // ï¿½ï¿½ï¿½ï¿½ ï¿½Ë¸ï¿½
             SetWaterSourceAvailable(false);
             StartRechargeTimer();
 
-            // ºí·çÇÁ¸°Æ® ÀÌº¥Æ® È£Ãâ
+            // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½Ìºï¿½Æ® È£ï¿½ï¿½
             OnWaterSourceUsed(PlayerCharacter);
         }
     }
@@ -107,7 +114,7 @@ void ADRWaterSource::SetWaterSourceAvailable(bool bNewAvailable)
     if (bIsAvailable != bNewAvailable)
     {
         bIsAvailable = bNewAvailable;
-        OnRep_bIsAvailable(); // ¼­¹ö¿¡¼­µµ È£Ãâ
+        OnRep_bIsAvailable(); // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È£ï¿½ï¿½
     }
 }
 
@@ -130,12 +137,12 @@ void ADRWaterSource::OnSourceRecharged()
 
     SetWaterSourceAvailable(true);
 
-    // ºí·çÇÁ¸°Æ® ÀÌº¥Æ® È£Ãâ
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½Ìºï¿½Æ® È£ï¿½ï¿½
     OnWaterSourceRecharged();
 }
 
 void ADRWaterSource::OnRep_bIsAvailable()
 {
-    // ºí·çÇÁ¸°Æ® ÀÌº¥Æ® È£Ãâ
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½Ìºï¿½Æ® È£ï¿½ï¿½
     OnAvailabilityChanged(bIsAvailable);
 }

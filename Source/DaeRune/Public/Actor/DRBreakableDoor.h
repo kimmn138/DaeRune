@@ -10,7 +10,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDoorBroken);
 
 class ADREnemy;
 class UNiagaraSystem;
-class ANavLinkProxy;
+class UNavModifierComponent;
 
 UCLASS()
 class DAERUNE_API ADRBreakableDoor : public AActor
@@ -42,9 +42,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USceneComponent> RootSceneComponent;
 
-	// 문이 부서지면 활성화할 Nav Link
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Navigation")
-	TObjectPtr<ANavLinkProxy> NavLinkProxy;
+	// 문이 NavMesh를 막는 컴포넌트
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UNavModifierComponent> NavModifierComponent;
 
 	// 물리 설정
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Physics")

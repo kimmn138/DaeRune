@@ -22,6 +22,9 @@
 #include "UI/Widget/DRSettingsWidget.h"
 #include "Game/DRSettingsManager.h"
 #include "Game/DRGameUserSettings.h"
+#include "Sound/DRSoundManager.h"
+#include "Actor/DRBGMActor.h"
+#include "Kismet/GameplayStatics.h"
 
 ADRPlayerController::ADRPlayerController()
 {
@@ -270,10 +273,13 @@ void ADRPlayerController::ClientStartSpectating_Implementation()
 void ADRPlayerController::ClientStopSpectating_Implementation()
 {
 	if (!IsLocalController()) return;
-    
+
+	UE_LOG(LogTemp, Log, TEXT("ClientStopSpectating_Implementation - Pawn: %s"), GetPawn() ? *GetPawn()->GetName() : TEXT("NULL"));
+
+	// 관전 상태 강제 초기화 (bIsSpectating 여부와 상관없이)
 	bIsSpectating = false;
 	CurrentSpectatedPlayerIndex = 0;
-    
+
 	// 델리게이트 해제
 	if (CurrentSpectatedCharacter.IsValid())
 	{
@@ -283,11 +289,39 @@ void ADRPlayerController::ClientStopSpectating_Implementation()
 		}
 	}
 	CurrentSpectatedCharacter.Reset();
-    
-	// 자기 자신으로 ViewTarget 복원
-	if (GetPawn())
+
+	// ViewTarget 복원
+	if (APawn* MyPawn = GetPawn())
 	{
-		SetViewTarget(GetPawn());
+		SetViewTarget(MyPawn);
+		RestoreDefaultInputMode();
+	}
+	else
+	{
+		// Pawn이 아직 없으면 딜레이 후 재시도
+		UE_LOG(LogTemp, Warning, TEXT("ClientStopSpectating - No Pawn yet, retrying in 0.5s"));
+
+		if (UWorld* World = GetWorld())
+		{
+			FTimerHandle RetryTimer;
+			World->GetTimerManager().SetTimer(
+				RetryTimer,
+				[WeakThis = TWeakObjectPtr<ADRPlayerController>(this)]()
+				{
+					if (ADRPlayerController* PC = WeakThis.Get())
+					{
+						if (APawn* MyPawn = PC->GetPawn())
+						{
+							PC->SetViewTarget(MyPawn);
+							UE_LOG(LogTemp, Log, TEXT("ClientStopSpectating - Pawn found on retry: %s"), *MyPawn->GetName());
+						}
+						PC->RestoreDefaultInputMode();
+					}
+				},
+				0.5f,
+				false
+			);
+		}
 	}
 }
 
@@ -342,6 +376,49 @@ void ADRPlayerController::SpectatePreviousPlayer()
 	SetSpectateTarget(AliveCharacters[CurrentSpectatedPlayerIndex]);
 }
 
+void ADRPlayerController::ClientStopAllAudio_Implementation()
+{
+	// BGM 정지
+	TArray<AActor*> BGMActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ADRBGMActor::StaticClass(), BGMActors);
+	for (AActor* Actor : BGMActors)
+	{
+		if (ADRBGMActor* BGMActor = Cast<ADRBGMActor>(Actor))
+		{
+			BGMActor->StopBGM(0.0f);
+		}
+	}
+
+	// VOIP 관련 SynthComponent 정리 (SeamlessTravel 전 필수)
+	// DestroyComponent() 직접 호출 시 렌더 씬에서 AudioComponent가 해제되지 않아 크래시 발생
+	// 안전한 정리 순서: Deactivate -> UnregisterComponent
+	TArray<AActor*> AllActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), AllActors);
+
+	for (AActor* Actor : AllActors)
+	{
+		if (!Actor) continue;
+
+		TArray<UActorComponent*> AllComps;
+		Actor->GetComponents<UActorComponent>(AllComps);
+
+		for (UActorComponent* Comp : AllComps)
+		{
+			if (Comp && Comp->GetClass()->GetName().Contains(TEXT("VoipListenerSynthComponent")))
+			{
+				// 1. 먼저 비활성화
+				Comp->Deactivate();
+
+				// 2. 씬에서 등록 해제
+				if (Comp->IsRegistered())
+				{
+					Comp->UnregisterComponent();
+				}
+			}
+		}
+	}
+}
+
 void ADRPlayerController::CheatSkipToNextPhase()
 {
 // 개발 빌드에서만 동작하도록 체크
@@ -373,6 +450,13 @@ void ADRPlayerController::BeginPlay()
 	// �÷��̾�� TeamId 0
 	SetGenericTeamId(FGenericTeamId(0));
 
+	// 카메라 피치 제한 설정
+	if (PlayerCameraManager)
+	{
+		PlayerCameraManager->ViewPitchMin = -ViewPitchMin;  // 아래 (음수)
+		PlayerCameraManager->ViewPitchMax = ViewPitchMax;   // 위 (양수)
+	}
+
 	// 로컬 플레이어만 오디오 설정 적용
 	if (IsLocalController())
 	{
@@ -384,22 +468,9 @@ void ADRPlayerController::BeginPlay()
 				Manager->ApplyAudioSettings();
 			}
 		}
-
-		// 현재 레벨이 메인메뉴인지 체크
-		UWorld* World = GetWorld();
-		if (World)
-		{
-			FString CurrentLevelName = World->GetMapName();
-			CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
-
-			// 메인메뉴면 UI 입력 모드로 설정
-			if (CurrentLevelName.Contains(TEXT("MainMenu")))
-			{
-				SetInputMode(FInputModeUIOnly());
-				SetShowMouseCursor(true);
-			}
-		}
 	}
+
+	RestoreDefaultInputMode();
 }
 
 void ADRPlayerController::PlayerTick(float DeltaTime)
@@ -462,6 +533,97 @@ void ADRPlayerController::SetupInputComponent()
 	DRInputComponent->BindAbilityActions(InputConfig, this, &ThisClass::AbilityInputTagPressed, &ThisClass::AbilityInputTagReleased, &ThisClass::AbilityInputTagHeld);
 }
 
+void ADRPlayerController::ReceivedPlayer()
+{
+	Super::ReceivedPlayer();
+
+	// 로컬 컨트롤러만 처리
+	if (!IsLocalController()) return;
+
+	UE_LOG(LogTemp, Log, TEXT("ADRPlayerController::ReceivedPlayer called"));
+
+	// 레벨 진입 시 공통 초기화 수행
+	OnLevelEntered();
+}
+
+void ADRPlayerController::PostSeamlessTravel()
+{
+	Super::PostSeamlessTravel();
+
+	// 로컬 컨트롤러만 처리
+	if (!IsLocalController()) return;
+
+	UE_LOG(LogTemp, Log, TEXT("ADRPlayerController::PostSeamlessTravel called"));
+
+	// SeamlessTravel 후 레벨 진입 시 공통 초기화 수행
+	OnLevelEntered();
+}
+
+void ADRPlayerController::OnLevelEntered()
+{
+	UE_LOG(LogTemp, Log, TEXT("ADRPlayerController::OnLevelEntered called - Level: %s"), *GetWorld()->GetMapName());
+
+	// 현재 레벨 확인
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// 게임오버 UI가 남아있으면 제거
+	if (CurrentResultWidget)
+	{
+		CurrentResultWidget->RemoveFromParent();
+		CurrentResultWidget = nullptr;
+	}
+
+	// 설정 위젯 초기화 (레벨 이동 시 무효화된 포인터 정리)
+	if (IsValid(SettingsWidget))
+	{
+		if (SettingsWidget->IsInViewport())
+		{
+			SettingsWidget->RemoveFromParent();
+		}
+	}
+	SettingsWidget = nullptr;
+	bIsSettingsMenuOpen = false;
+
+	// 관전 상태 초기화
+	bIsSpectating = false;
+	CurrentSpectatedCharacter = nullptr;
+
+	// ViewTarget 즉시 복원 (잘못된 타겟 참조 방지)
+	if (APawn* MyPawn = GetPawn())
+	{
+		SetViewTarget(MyPawn);
+	}
+	else
+	{
+		// Pawn이 아직 없으면 자기 자신으로 설정 후 딜레이 재시도
+		SetViewTarget(this);
+
+		FTimerHandle ViewTargetRetryTimer;
+		World->GetTimerManager().SetTimer(
+			ViewTargetRetryTimer,
+			[WeakThis = TWeakObjectPtr<ADRPlayerController>(this)]()
+			{
+				if (ADRPlayerController* PC = WeakThis.Get())
+				{
+					if (APawn* MyPawn = PC->GetPawn())
+					{
+						PC->SetViewTarget(MyPawn);
+						UE_LOG(LogTemp, Log, TEXT("ViewTarget restored to Pawn after delay"));
+					}
+				}
+			},
+			0.5f,
+			false
+		);
+	}
+
+	// 레벨에 맞는 기본 입력 모드로 복원
+	RestoreDefaultInputMode();
+
+	// BGM은 레벨에 배치된 DRBGMActor가 담당
+}
+
 void ADRPlayerController::HandleToggleSettings()
 {
 	ToggleSettingsMenu();
@@ -485,12 +647,21 @@ void ADRPlayerController::HandleSpectatePrevious()
 
 void ADRPlayerController::SetSpectateTarget(ACharacter* NewTarget)
 {
-	// 서버에 요청
+	// 클라이언트: 서버에 요청 + 로컬에서 ViewTarget 설정
 	if (!HasAuthority())
 	{
 		ServerSetSpectateTarget(NewTarget);
+
+		// 클라이언트에서도 ViewTarget과 캐릭터 캐시 설정
+		CurrentSpectatedCharacter = NewTarget;
+		if (NewTarget)
+		{
+			SetViewTarget(NewTarget);
+		}
 		return;
 	}
+
+	// 서버: 전체 로직 실행
 
 	// 이전 대상의 사망 델리게이트 해제
 	if (CurrentSpectatedCharacter.IsValid())
@@ -510,7 +681,7 @@ void ADRPlayerController::SetSpectateTarget(ACharacter* NewTarget)
 
 		// UI 업데이트
 		ClientUpdateSpectatorUI(NewTarget);
-        
+
 		// 새 대상의 사망 델리게이트 바인딩
 		if (ADRCharacterBase* DRTarget = Cast<ADRCharacterBase>(NewTarget))
 		{
@@ -699,18 +870,32 @@ void ADRPlayerController::OpenSettingsMenu()
 	// 이미 열려있으면 무시
 	if (bIsSettingsMenuOpen) return;
 
-	// 위젯이 없으면 생성
-	if (!SettingsWidget && SettingsWidgetClass)
+	// 위젯이 없거나 무효화되었거나 현재 뷰포트에 없으면 새로 생성
+	// (SeamlessTravel 후 이전 월드의 위젯이 남아있을 수 있음)
+	bool bNeedNewWidget = !IsValid(SettingsWidget) || !SettingsWidget->IsInViewport();
+
+	if (bNeedNewWidget)
 	{
-		SettingsWidget = CreateWidget<UDRSettingsWidget>(this, SettingsWidgetClass);
+		// 기존 위젯 정리
 		if (SettingsWidget)
 		{
-			SettingsWidget->AddToViewport(100); // 높은 Z-Order로 다른 UI 위에 표시
-			SettingsWidget->SetVisibility(ESlateVisibility::Collapsed); // 처음엔 숨김
+			SettingsWidget->RemoveFromParent();
+			SettingsWidget = nullptr;
+		}
+
+		// 새 위젯 생성
+		if (SettingsWidgetClass)
+		{
+			SettingsWidget = CreateWidget<UDRSettingsWidget>(this, SettingsWidgetClass);
+			if (SettingsWidget)
+			{
+				SettingsWidget->AddToViewport(100); // 높은 Z-Order로 다른 UI 위에 표시
+				SettingsWidget->SetVisibility(ESlateVisibility::Collapsed); // 처음엔 숨김
+			}
 		}
 	}
 
-	if (SettingsWidget)
+	if (IsValid(SettingsWidget))
 	{
 		SettingsWidget->OpenSettings();
 		bIsSettingsMenuOpen = true;
@@ -729,32 +914,69 @@ void ADRPlayerController::CloseSettingsMenu()
 	// 이미 닫혀있으면 무시
 	if (!bIsSettingsMenuOpen) return;
 
-	if (SettingsWidget)
+	if (IsValid(SettingsWidget))
 	{
 		SettingsWidget->CloseSettings();
-		bIsSettingsMenuOpen = false;
-
-		// 현재 레벨이 메인메뉴인지 체크
-		UWorld* World = GetWorld();
-		if (World)
-		{
-			FString CurrentLevelName = World->GetMapName();
-			CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
-
-			// 메인메뉴면 UI 모드 유지
-			if (CurrentLevelName.Contains(TEXT("MainMenu")))
-			{
-				SetInputMode(FInputModeUIOnly());
-				SetShowMouseCursor(true);
-			}
-			else
-			{
-				// 게임 레벨이면 게임 모드로
-				SetInputMode(FInputModeGameOnly());
-				SetShowMouseCursor(false);
-			}
-		}
 	}
+
+	bIsSettingsMenuOpen = false;
+	RestoreDefaultInputMode();
+}
+
+void ADRPlayerController::ClientCloseSettingsMenu_Implementation()
+{
+	CloseSettingsMenu();
+}
+
+void ADRPlayerController::RestoreDefaultInputMode()
+{
+	if (!IsLocalController()) return;
+
+	if (IsInMainMenu())
+	{
+		// 메인메뉴: UI 모드
+		SetInputMode(FInputModeUIOnly());
+		SetShowMouseCursor(true);
+	}
+	else
+	{
+		// 로비, 스테이지: 게임 모드
+		SetInputMode(FInputModeGameOnly());
+		SetShowMouseCursor(false);
+	}
+}
+
+bool ADRPlayerController::IsInMainMenu() const
+{
+	UWorld* World = GetWorld();
+	if (!World) return false;
+
+	FString CurrentLevelName = World->GetMapName();
+	CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+	return CurrentLevelName.Contains(TEXT("MainMenu"));
+}
+
+bool ADRPlayerController::IsInLobby() const
+{
+	UWorld* World = GetWorld();
+	if (!World) return false;
+
+	FString CurrentLevelName = World->GetMapName();
+	CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+	return CurrentLevelName.Contains(TEXT("Lobby"));
+}
+
+bool ADRPlayerController::IsInGameLevel() const
+{
+	UWorld* World = GetWorld();
+	if (!World) return false;
+
+	FString CurrentLevelName = World->GetMapName();
+	CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+	return CurrentLevelName.Contains(TEXT("Stage1"));
 }
 
 void ADRPlayerController::Client_ShowGameOverUI_Implementation()
@@ -771,14 +993,6 @@ void ADRPlayerController::Client_ShowGameOverUI_Implementation()
 	{
 		// 뷰포트에 추가
 		CurrentResultWidget->AddToViewport(100);
-
-		// 입력 모드를 UI로 변경
-		FInputModeUIOnly InputMode;
-		InputMode.SetWidgetToFocus(CurrentResultWidget->TakeWidget());
-		SetInputMode(InputMode);
-
-		// 마우스 커서 표시
-		bShowMouseCursor = true;
 	}
 }
 
@@ -796,14 +1010,6 @@ void ADRPlayerController::Client_ShowGameClearUI_Implementation()
 	{
 		// 뷰포트에 추가
 		CurrentResultWidget->AddToViewport(100);
-
-		// 입력 모드를 UI로 변경
-		FInputModeUIOnly InputMode;
-		InputMode.SetWidgetToFocus(CurrentResultWidget->TakeWidget());
-		SetInputMode(InputMode);
-
-		// 마우스 커서 표시
-		bShowMouseCursor = true;
 	}
 }
 

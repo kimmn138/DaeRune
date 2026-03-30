@@ -1,4 +1,4 @@
-// Copyright DaeRune
+ï»¿// Copyright DaeRune
 
 
 #include "Character/DRCharacter.h"
@@ -6,10 +6,13 @@
 #include "AbilitySystemComponent.h"
 #include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
+#include "AbilitySystem/Data/GameBalanceConfig.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
 #include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 #include "AbilitySystem/Debuff/DebuffNiagaraComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -18,16 +21,19 @@
 #include "Actor/DRCleanserPart.h"
 #include "Net/UnrealNetwork.h"
 #include "Components/PointLightComponent.h"
+#include "Game/DRGameUserSettings.h"
+#include "UObject/UObjectIterator.h"
+#include "Components/SynthComponent.h"
 
 ADRCharacter::ADRCharacter()
 {
-	// ÀÌµ¿ ¹æÇâÀ¸·Î È¸Àü ¼³Á¤
+	// ï¿½Ìµï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 400.f, 0.f);
 	GetCharacterMovement()->bConstrainToPlane = true;
 	GetCharacterMovement()->bSnapToPlaneAtStart = true;
 
-	// Ä«¸Ş¶ó ºÕ ¼³Á¤
+	// Ä«ï¿½Ş¶ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(GetCapsuleComponent());
 	CameraBoom->SetRelativeLocation(FVector(30.f, 0.f, 50.f));
@@ -35,12 +41,12 @@ ADRCharacter::ADRCharacter()
 	CameraBoom->bUsePawnControlRotation = true;
 	CameraBoom->bDoCollisionTest = false;
 
-	// µû¶ó´Ù´Ï´Â Ä«¸Ş¶ó ¼³Á¤
+	// ï¿½ï¿½ï¿½ï¿½Ù´Ï´ï¿½ Ä«ï¿½Ş¶ï¿½ ï¿½ï¿½ï¿½ï¿½
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
-	// 1ÀÎÄª ¸Ş½¬ ¼³Á¤
+	// 1ï¿½ï¿½Äª ï¿½Ş½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	FirstPersonMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonMesh"));
 	FirstPersonMesh->SetupAttachment(FollowCamera); 
 	FirstPersonMesh->SetOnlyOwnerSee(true); 
@@ -48,21 +54,21 @@ ADRCharacter::ADRCharacter()
 	FirstPersonMesh->CastShadow = false;
 	FirstPersonMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	// 3ÀÎÄª ¸Ş½¬ ¼³Á¤
+	// 3ì¸ì¹­ ë©”ì‹œ ì„¤ì •
 	GetMesh()->SetOwnerNoSee(true);
 
-	// VOIPTalker ÄÄÆ÷³ÍÆ® »ı¼º
-	VOIPTalkerComponent = CreateDefaultSubobject<UVOIPTalker>(TEXT("VOIPTalker"));
+	// VOIPTalker ì»´í¬ë„ŒíŠ¸ ìƒì„±
+	VOIPTalkerComponent = CreateDefaultSubobject<UDRVOIPTalker>(TEXT("VOIPTalker"));
 
-	// ÄÁÆ®·Ñ·¯ È¸Àü ¼³Á¤
+	// ì»¨íŠ¸ë¡¤ëŸ¬ íšŒì „ ì„¤ì •
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationRoll = false;
 	bUseControllerRotationYaw = true;
 
-	// ±âº» Ä³¸¯ÅÍ Å¬·¡½º´Â ¿¤¸®¸àÅ»¸®½ºÆ®
+	// ï¿½âº» Ä³ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å»ï¿½ï¿½ï¿½ï¿½Æ®
 	CharacterClass = ECharacterClass::Elementalist;
 
-	// ºÎÇ° ½Ã½ºÅÛ ÃÊ±âÈ­
+	// ï¿½ï¿½Ç° ï¿½Ã½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­
 	bIsCarryingPart = false;
 	CarriedPart = nullptr;
 }
@@ -73,35 +79,29 @@ void ADRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 
 	DOREPLIFETIME(ADRCharacter, bIsCarryingPart);
 	DOREPLIFETIME(ADRCharacter, CarriedPart);
+
+	// WaterPump 3P ë¹” ë¦¬í”Œë¦¬ì¼€ì´íŠ¸
+	DOREPLIFETIME(ADRCharacter, bWaterPumpActive);
+	DOREPLIFETIME_CONDITION(ADRCharacter, WaterPumpBeamEndPoint, COND_SkipOwner);
 }
 
 void ADRCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 
-	// ¼­¹ö¿¡¼­ GAS ÃÊ±âÈ­ ¹× ¾îºô¸®Æ¼ ºÎ¿©
+	// ì„œë²„ì—ì„œ GAS ì´ˆê¸°í™” ë° ì–´ë¹Œë¦¬í‹° ë¶€ì—¬
 	InitAbilityActorInfo();
 	AddCharacterAbilities();
-
-	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
-	{
-		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMoveSpeedAttribute()).AddUObject(this, &ADRCharacter::OnMoveSpeedChanged);
-		GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
-	}
+	InitializeMoveSpeedBinding();
 }
 
 void ADRCharacter::OnRep_PlayerState()
 {
 	Super::OnRep_PlayerState();
 
-	// Å¬¶óÀÌ¾ğÆ®¿¡¼­ GAS ÃÊ±âÈ­
+	// í´ë¼ì´ì–¸íŠ¸ì—ì„œ GAS ì´ˆê¸°í™”
 	InitAbilityActorInfo();
-
-	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
-	{
-		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMoveSpeedAttribute()).AddUObject(this, &ADRCharacter::OnMoveSpeedChanged);
-		GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
-	}
+	InitializeMoveSpeedBinding();
 }
 
 void ADRCharacter::OnRep_Stunned()
@@ -109,20 +109,20 @@ void ADRCharacter::OnRep_Stunned()
 	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(AbilitySystemComponent))
 	{
 		const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
-		// ÀÔ·Â Â÷´Ü ÅÂ±×µé ¼³Á¤
+		// ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Â±×µï¿½ ï¿½ï¿½ï¿½ï¿½
 		FGameplayTagContainer BlockedTags;
 		BlockedTags.AddTag(GameplayTags.Player_Block_InputHeld);
 		BlockedTags.AddTag(GameplayTags.Player_Block_InputPressed);
 		BlockedTags.AddTag(GameplayTags.Player_Block_InputReleased);
 		if (bIsStunned)
 		{
-			// ½ºÅÏ ½ÃÀÛ: ÀÔ·Â Â÷´Ü + ½ºÅÏ ÀÌÆåÆ® È°¼ºÈ­
+			// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½: ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ï¿½ + ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® È°ï¿½ï¿½È­
 			DRASC->AddLooseGameplayTags(BlockedTags);
 			StunDebuffComponent->Activate();
 		}
 		else
 		{
-			// ½ºÅÏ Á¾·á: ÀÔ·Â º¹±¸ + ½ºÅÏ ÀÌÆåÆ® ºñÈ°¼ºÈ­
+			// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½: ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ï¿½ + ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½È°ï¿½ï¿½È­
 			DRASC->RemoveLooseGameplayTags(BlockedTags);
 			StunDebuffComponent->Deactivate();
 		}
@@ -145,17 +145,17 @@ bool ADRCharacter::PickupPart(ADRCleanserPart* Part)
 {
 	if (!HasAuthority() || !Part || bIsCarryingPart) return false;
 
-	// ºÎÇ° È¹µæ Ã³¸®
+	// ï¿½ï¿½Ç° È¹ï¿½ï¿½ Ã³ï¿½ï¿½
 	Part->PickupPart(this);
 
-	// »óÅÂ ¾÷µ¥ÀÌÆ®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	bIsCarryingPart = true;
 	CarriedPart = Part;
 
-	// È¹µæ ½Ã°£ ±â·Ï
+	// È¹ï¿½ï¿½ ï¿½Ã°ï¿½ ï¿½ï¿½ï¿½
 	LastPartPickupTime = GetWorld()->GetTimeSeconds();
 
-	// PlayerController¿¡°Ô UI Ç¥½Ã ¿äÃ»
+	// PlayerControllerï¿½ï¿½ï¿½ï¿½ UI Ç¥ï¿½ï¿½ ï¿½ï¿½Ã»
 	if (ADRPlayerController* PC = Cast<ADRPlayerController>(GetController()))
 	{
 		PC->ClientShowPartPickupUI();
@@ -168,37 +168,37 @@ void ADRCharacter::InstallCarriedPart()
 {
 	if (!HasAuthority() || !bIsCarryingPart || !CarriedPart) return;
 
-	// ºÎÇ° ¼³Ä¡ Ã³¸®
+	// ï¿½ï¿½Ç° ï¿½ï¿½Ä¡ Ã³ï¿½ï¿½
 	CarriedPart->InstallPart();
 
-	// »óÅÂ ÃÊ±âÈ­
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­
 	bIsCarryingPart = false;
 	CarriedPart = nullptr;
 }
 
 void ADRCharacter::DropCarriedPart()
 {
-	// ¼­¹ö¿¡¼­¸¸ ½ÇÇà
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (!HasAuthority()) return;
 
-	// ºÎÇ°À» µé°í ÀÖÁö ¾ÊÀ¸¸é ¹«½Ã
+	// ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (!bIsCarryingPart || !CarriedPart) return;
 
-	// Äğ´Ù¿î Ã¼Å©
+	// ï¿½ï¿½Ù¿ï¿½ Ã¼Å©
 	const float CurrentTime = GetWorld()->GetTimeSeconds();
 	const float TimeSincePickup = CurrentTime - LastPartPickupTime;
 	if (TimeSincePickup < PartDropCooldown) return;
 
-	// State_Carrying ÅÂ±× Á¦°Å
+	// State_Carrying ï¿½Â±ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(GetAbilitySystemComponent()))
 	{
 		DRASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
 	}
 
-	// ºÎÇ°¿¡°Ô ¶³¾îÁö¶ó°í ¿äÃ»
+	// ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã»
 	CarriedPart->DropFromCarrier();
 
-	// Ä³¸¯ÅÍ »óÅÂ¸¸ ÃÊ±âÈ­
+	// Ä³ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Â¸ï¿½ ï¿½Ê±ï¿½È­
 	bIsCarryingPart = false;
 	CarriedPart = nullptr;
 }
@@ -207,7 +207,7 @@ void ADRCharacter::TryRegisterVoiceTalker()
 {
 	if (APlayerState* PS = GetPlayerState())
 	{
-		GetWorld()->GetTimerManager().ClearTimer(PlayerStateRegisterTimerHanlde);
+		GetWorld()->GetTimerManager().ClearTimer(PlayerStateRegisterTimerHandle);
 		RegisterVoiceTalker();
 	}
 }
@@ -220,7 +220,7 @@ void ADRCharacter::RegisterVoiceTalker()
 		{
 			VOIPTalkerComponent->RegisterWithPlayerState(PS);
 
-			// °Å¸® °¨¼è ºñÈ°¼ºÈ­
+			// ê±°ë¦¬ ê°ì‡  ë¹„í™œì„±í™” (ì „ì—­ ìŒì„±)
 			VOIPTalkerComponent->Settings.ComponentToAttachTo = nullptr;
 			VOIPTalkerComponent->Settings.AttenuationSettings = nullptr;
 			VOIPTalkerComponent->Settings.SourceEffectChain = nullptr;
@@ -230,12 +230,12 @@ void ADRCharacter::RegisterVoiceTalker()
 
 void ADRCharacter::UpdateMeshVisibility()
 {
-	// ·ÎÄÃ ÇÃ·¹ÀÌ¾îÀÎÁö È®ÀÎ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	const bool bIsLocalPlayer = IsLocallyControlled();
 
 	if (bIsLocalPlayer)
 	{
-		// ·ÎÄÃ ÇÃ·¹ÀÌ¾î: 1ÀÎÄª ¸Ş½¬ º¸ÀÓ, 3ÀÎÄª ¸Ş½¬ ¼û±è
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½: 1ï¿½ï¿½Äª ï¿½Ş½ï¿½ ï¿½ï¿½ï¿½ï¿½, 3ï¿½ï¿½Äª ï¿½Ş½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		if (FirstPersonMesh)
 		{
 			FirstPersonMesh->SetVisibility(true);
@@ -248,7 +248,7 @@ void ADRCharacter::UpdateMeshVisibility()
 	}
 	else
 	{
-		// ´Ù¸¥ ÇÃ·¹ÀÌ¾î: 3ÀÎÄª ¸Ş½¬ º¸ÀÓ, 1ÀÎÄª ¸Ş½¬ ¼û±è
+		// ï¿½Ù¸ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½: 3ï¿½ï¿½Äª ï¿½Ş½ï¿½ ï¿½ï¿½ï¿½ï¿½, 1ï¿½ï¿½Äª ï¿½Ş½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		if (FirstPersonMesh)
 		{
 			FirstPersonMesh->SetVisibility(false);
@@ -265,13 +265,13 @@ void ADRCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// ¸Ş½¬ °¡½Ã¼º ¾÷µ¥ÀÌÆ®
+	// ï¿½Ş½ï¿½ ï¿½ï¿½ï¿½Ã¼ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UpdateMeshVisibility();
 
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().SetTimer(
-			PlayerStateRegisterTimerHanlde,
+			PlayerStateRegisterTimerHandle,
 			this,
 			&ADRCharacter::TryRegisterVoiceTalker,
 			0.2f,
@@ -279,7 +279,7 @@ void ADRCharacter::BeginPlay()
 		);
 	}
 
-	// 1ÀÎÄª ½ÃÁ¡ ¹à°Ô ÇÏ´Â ¶óÀÌÆ® Ãß°¡
+	// 1ï¿½ï¿½Äª ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½Ï´ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ß°ï¿½
 	if (IsLocallyControlled())
 	{
 		UPointLightComponent* Light = NewObject<UPointLightComponent>(this);
@@ -295,45 +295,157 @@ void ADRCharacter::BeginPlay()
 
 void ADRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	// VOIPTalker Á¤¸®
-	if (VOIPTalkerComponent)
+	// íƒ€ì´ë¨¸ ì •ë¦¬ (ë©”ëª¨ë¦¬ ëˆ„ìˆ˜ ë°©ì§€)
+	if (UWorld* World = GetWorld())
 	{
-		// ¿Àµğ¿À ½ºÆ®¸² Áï½Ã ÁßÁö
-		if (VOIPTalkerComponent->IsActive())
-		{
-			VOIPTalkerComponent->Deactivate();
-		}
+		World->GetTimerManager().ClearTimer(PlayerStateRegisterTimerHandle);
+		World->GetTimerManager().ClearTimer(WaterPumpBeamUpdateTimer);
+	}
 
-		// ÄÄÆ÷³ÍÆ® ¸í½ÃÀû ÆÄ±«
-		VOIPTalkerComponent->DestroyComponent();
+	// 3P ë¹” ì •ë¦¬
+	if (WaterPumpThirdPersonBeam)
+	{
+		WaterPumpThirdPersonBeam->DeactivateImmediate();
+		WaterPumpThirdPersonBeam->DestroyComponent();
+		WaterPumpThirdPersonBeam = nullptr;
 	}
 
 	Super::EndPlay(EndPlayReason);
 }
 
+void ADRCharacter::OnRep_WaterPumpActive()
+{
+	// ì†Œìœ  í´ë¼ì´ì–¸íŠ¸ëŠ” WaterPump ì–´ë¹Œë¦¬í‹°ì—ì„œ 1P ë¹”ì„ ì§ì ‘ ê´€ë¦¬
+	// ì´ í•¨ìˆ˜ëŠ” ë¹„ì†Œìœ  í´ë¼ì´ì–¸íŠ¸(+ ë¦¬ìŠ¨ ì„œë²„ í˜¸ìŠ¤íŠ¸ì˜ ìˆ˜ë™ í˜¸ì¶œ)ì—ì„œë§Œ 3P ë¹”ì„ ê´€ë¦¬
+	if (IsLocallyControlled()) return;
+
+	if (bWaterPumpActive)
+	{
+		// 3P Niagara ë¹” ìƒì„±
+		USkeletalMeshComponent* ThirdPersonMesh = GetMesh();
+		if (WaterPumpEffectAsset && ThirdPersonMesh
+			&& ThirdPersonMesh->DoesSocketExist(WaterPumpMuzzleSocket))
+		{
+			WaterPumpThirdPersonBeam = UNiagaraFunctionLibrary::SpawnSystemAttached(
+				WaterPumpEffectAsset,
+				ThirdPersonMesh,
+				WaterPumpMuzzleSocket,
+				FVector::ZeroVector,
+				FRotator::ZeroRotator,
+				EAttachLocation::SnapToTarget,
+				false
+			);
+
+			if (WaterPumpThirdPersonBeam)
+			{
+				WaterPumpThirdPersonBeam->SetOwnerNoSee(true);
+				WaterPumpThirdPersonBeam->SetVectorParameter(
+					FName("HitEffectPosition"), WaterPumpBeamEndPoint);
+			}
+		}
+
+		// ë³´ê°„ ìœ„ì¹˜ ì´ˆê¸°í™”
+		WaterPumpBeamDisplayEndPoint = WaterPumpBeamEndPoint;
+
+		// 3P ë¹” ìœ„ì¹˜ ì—…ë°ì´íŠ¸ íƒ€ì´ë¨¸ ì‹œì‘ (30fps)
+		GetWorldTimerManager().SetTimer(
+			WaterPumpBeamUpdateTimer,
+			this,
+			&ADRCharacter::UpdateWaterPumpThirdPersonBeam,
+			0.033f,
+			true
+		);
+
+		// ì¦‰ì‹œ í•œ ë²ˆ ì—…ë°ì´íŠ¸í•˜ì—¬ ì´ˆê¸° íšŒì „/ìœ„ì¹˜ ë³´ì • (33ms ê°­ ì œê±°)
+		UpdateWaterPumpThirdPersonBeam();
+	}
+	else
+	{
+		// 3P Niagara ë¹” íŒŒê´´
+		GetWorldTimerManager().ClearTimer(WaterPumpBeamUpdateTimer);
+
+		if (WaterPumpThirdPersonBeam)
+		{
+			WaterPumpThirdPersonBeam->DeactivateImmediate();
+			WaterPumpThirdPersonBeam->DestroyComponent();
+			WaterPumpThirdPersonBeam = nullptr;
+		}
+
+		WaterPumpBeamDisplayEndPoint = FVector::ZeroVector;
+	}
+}
+
+void ADRCharacter::UpdateWaterPumpThirdPersonBeam()
+{
+	if (!WaterPumpThirdPersonBeam) return;
+	if (WaterPumpBeamEndPoint.IsNearlyZero()) return;
+
+	USkeletalMeshComponent* ThirdPersonMesh = GetMesh();
+	if (!ThirdPersonMesh) return;
+
+	// ì†Œì¼“ ìœ„ì¹˜ íšë“
+	const FVector SocketLocation = ThirdPersonMesh->GetSocketLocation(WaterPumpMuzzleSocket);
+
+	// í´ë¼ì´ì–¸íŠ¸ ì¸¡ ë³´ê°„ (ì„œë²„ 0.1ì´ˆ ê°±ì‹ ì„ 30fpsë¡œ ë¶€ë“œëŸ½ê²Œ)
+	const float InterpSpeed = 15.0f;
+	WaterPumpBeamDisplayEndPoint = FMath::VInterpTo(
+		WaterPumpBeamDisplayEndPoint,
+		WaterPumpBeamEndPoint,
+		0.033f,
+		InterpSpeed
+	);
+
+	// ë¹” ë°©í–¥ ê³„ì‚°
+	FVector BeamDir = WaterPumpBeamDisplayEndPoint - SocketLocation;
+	if (BeamDir.IsNearlyZero()) return;
+	BeamDir.Normalize();
+
+	const FRotator BeamRotation = BeamDir.Rotation();
+
+	// Niagara ì—…ë°ì´íŠ¸
+	WaterPumpThirdPersonBeam->SetWorldLocation(SocketLocation);
+	WaterPumpThirdPersonBeam->SetWorldRotation(BeamRotation);
+	WaterPumpThirdPersonBeam->SetVectorParameter(
+		FName("HitEffectPosition"), WaterPumpBeamDisplayEndPoint);
+}
+
 void ADRCharacter::OnRep_bIsCarryingPart()
 {
-	// Å¬¶óÀÌ¾ğÆ® ½Ã°¢Àû È¿°ú
+	// Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ® ï¿½Ã°ï¿½ï¿½ï¿½ È¿ï¿½ï¿½
 }
 
 void ADRCharacter::OnRep_CarriedPart()
 {
-	// Å¬¶óÀÌ¾ğÆ® ½Ã°¢Àû È¿°ú
+	// Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ® ï¿½Ã°ï¿½ï¿½ï¿½ È¿ï¿½ï¿½
+}
+
+void ADRCharacter::InitializeMoveSpeedBinding()
+{
+	if (!AbilitySystemComponent || !AttributeSets) return;
+
+	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets))
+	{
+		// ì´ë™ ì†ë„ ë³€ê²½ ë¸ë¦¬ê²Œì´íŠ¸ ë°”ì¸ë”©
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMoveSpeedAttribute()).AddUObject(this, &ADRCharacter::OnMoveSpeedChanged);
+
+		// ì´ˆê¸° ì´ë™ ì†ë„ ì„¤ì •
+		GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
+	}
 }
 
 float ADRCharacter::GetMoveSpeed()
 {
-	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSet))
+	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets))
 	{
 		return DRAS->GetMoveSpeed();
 	}
-	
+
 	return Super::GetMoveSpeed();
 }
 
 void ADRCharacter::InitAbilityActorInfo()
 {
-	// PlayerState À¯È¿¼º °Ë»ç
+	// PlayerState ï¿½ï¿½È¿ï¿½ï¿½ ï¿½Ë»ï¿½
 	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
 	if (!DRPlayerState) return;
 
@@ -341,37 +453,48 @@ void ADRCharacter::InitAbilityActorInfo()
 	UAbilitySystemComponent* ASC = DRPlayerState->GetAbilitySystemComponent();
 	if (!ASC) return;
 
-	// GAS ÄÄÆ÷³ÍÆ®µéÀ» PlayerState¿¡¼­ °¡Á®¿Í ÃÊ±âÈ­
+	// GAS ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ PlayerStateï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­
 	ASC->InitAbilityActorInfo(DRPlayerState, this);
 	Cast<UDRAbilitySystemComponent>(ASC)->AbilityActorInfoSet();
 
 	AbilitySystemComponent = ASC;
-	AttributeSet = DRPlayerState->GetAttributeSet();
+	AttributeSets = DRPlayerState->GetAttributeSet();
 
-	// ÇÃ·¹ÀÌ¾î AttributeSet¿¡ ÄÁÅ×ÀÌ³Ê Á¤º¸ ¼³Á¤
-	if (UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSet))
+	// GameBalanceConfigì—ì„œ ë°¸ëŸ°ìŠ¤ ê°’ ì ìš© (ì„œë²„ì—ì„œë§Œ)
+	if (HasAuthority())
+	{
+		if (const UGameBalanceConfig* BalanceConfig = UDRAbilitySystemLibrary::GetGameBalanceConfig(this))
+		{
+			NumContainers = BalanceConfig->PlayerContainer.NumContainers;
+			ContainerHealth = BalanceConfig->PlayerContainer.ContainerHealth;
+			PartDropCooldown = BalanceConfig->PlayerCombat.PartDropCooldown;
+		}
+	}
+
+	// ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ AttributeSetï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+	if (UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSets))
 	{
 		PlayerAS->SetContainerInfo(NumContainers, ContainerHealth);
 	}
 
-	// ASC µî·Ï ¿Ï·á ÀÌº¥Æ® ºê·ÎµåÄ³½ºÆ®
+	// ASC ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½ ï¿½Ìºï¿½Æ® ï¿½ï¿½Îµï¿½Ä³ï¿½ï¿½Æ®
 	OnAscRegistered.Broadcast(AbilitySystemComponent);
 
-	// GAS ÅÂ±× ¹ÙÀÎµù
+	// GAS ï¿½Â±ï¿½ ï¿½ï¿½ï¿½Îµï¿½
 	AbilitySystemComponent->RegisterGameplayTagEvent(
 		FDRGameplayTags::Get().Debuff_Stun,
 		EGameplayTagEventType::NewOrRemoved
 	).AddUObject(this, &ADRCharacter::StunTagChanged);
 
-	// ÇÃ·¹ÀÌ¾î ÄÁÆ®·Ñ·¯¿¡ HUD ÃÊ±âÈ­ ¿äÃ»
+	// ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½ï¿½Æ®ï¿½Ñ·ï¿½ï¿½ï¿½ HUD ï¿½Ê±ï¿½È­ ï¿½ï¿½Ã»
 	if (ADRPlayerController* DRPlayerController = Cast<ADRPlayerController>(GetController()))
 	{
 		if (ADRHUD* DRHUD = Cast<ADRHUD>(DRPlayerController->GetHUD()))
 		{
-			DRHUD->InitOverlay(DRPlayerController, DRPlayerState, AbilitySystemComponent, AttributeSet);
+			DRHUD->InitOverlay(DRPlayerController, DRPlayerState, AbilitySystemComponent, AttributeSets);
 		}
 	}
 
-	// ±âº» ¼Ó¼º ÃÊ±âÈ­
+	// ï¿½âº» ï¿½Ó¼ï¿½ ï¿½Ê±ï¿½È­
 	InitializeDefaultAttributes();
 }

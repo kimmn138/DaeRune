@@ -19,6 +19,14 @@ void UDRCleanserSiteAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimePro
 void UDRCleanserSiteAttributeSet::OnRep_Health(const FGameplayAttributeData& OldHealth) const
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRCleanserSiteAttributeSet, Health, OldHealth);
+
+	// 클라이언트에서도 체력 변화에 따라 물 메쉬 업데이트
+	if (ADRCleanserSite* CleanserSite = Cast<ADRCleanserSite>(GetOwningActor()))
+	{
+		// 체력 비율 계산
+		const float HealthRatio = GetMaxHealth() > 0.0f ? GetHealth() / GetMaxHealth() : 0.0f;
+		CleanserSite->UpdateWaterMeshScale(HealthRatio);
+	}
 }
 
 void UDRCleanserSiteAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth) const

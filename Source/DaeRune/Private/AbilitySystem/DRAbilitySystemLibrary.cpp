@@ -3,6 +3,7 @@
 
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystem/Data/GameBalanceConfig.h"
 #include "DRAbilityTypes.h"
 #include "DRGameplayTags.h"
 #include "Actor/DRCleanserSite.h"
@@ -49,20 +50,15 @@ UOverlayWidgetController* UDRAbilitySystemLibrary::GetOverlayWidgetController(co
 }
 
 void UDRAbilitySystemLibrary::InitializeDefaultAttributes(const UObject* WorldContextObject, ECharacterClass CharacterClass, float Level, UAbilitySystemComponent* ASC)
-{AActor* AvatarActor = ASC->GetAvatarActor();
+{
+	AActor* AvatarActor = ASC->GetAvatarActor();
 
 	UCharacterClassInfo* CharacterClassInfo = GetCharacterClassInfo(WorldContextObject);
 	FCharacterClassDefaultInfo ClassDefaultInfo = CharacterClassInfo->GetClassDefaultInfo(CharacterClass);
 
-	FGameplayEffectContextHandle PrimaryAttributesContextHandle = ASC->MakeEffectContext();
-	PrimaryAttributesContextHandle.AddSourceObject(AvatarActor);
-	const FGameplayEffectSpecHandle PrimaryAttributesSpecHandle = ASC->MakeOutgoingSpec(ClassDefaultInfo.PrimaryAttributes, Level, PrimaryAttributesContextHandle);
-	ASC->ApplyGameplayEffectSpecToSelf(*PrimaryAttributesSpecHandle.Data.Get());
-
-	FGameplayEffectContextHandle VitalAttributesContextHandle = ASC->MakeEffectContext();
-	VitalAttributesContextHandle.AddSourceObject(AvatarActor);
-	const FGameplayEffectSpecHandle VitalAttributesSpecHandle = ASC->MakeOutgoingSpec(ClassDefaultInfo.VitalAttributes, Level, VitalAttributesContextHandle);
-	ASC->ApplyGameplayEffectSpecToSelf(*VitalAttributesSpecHandle.Data.Get());
+	// Ìó¨Ìçº Ìï®ÏàòÎ°ú Í∞ÑÏÜåÌôî
+	CreateAndApplyEffectSpec(ASC, ClassDefaultInfo.PrimaryAttributes, AvatarActor, Level);
+	CreateAndApplyEffectSpec(ASC, ClassDefaultInfo.VitalAttributes, AvatarActor, Level);
 }
 
 void UDRAbilitySystemLibrary::GiveStartupAbilities(const UObject* WorldContextObject, UAbilitySystemComponent* ASC, ECharacterClass CharacterClass)
@@ -106,6 +102,13 @@ UAbilityInfo* UDRAbilitySystemLibrary::GetAbilityInfo(const UObject* WorldContex
 	const ADRGameModeBase* DRGameMode = Cast<ADRGameModeBase>(UGameplayStatics::GetGameMode(WorldContextObject));
 	if (DRGameMode == nullptr) return nullptr;
 	return DRGameMode->AbilityInfo;
+}
+
+UGameBalanceConfig* UDRAbilitySystemLibrary::GetGameBalanceConfig(const UObject* WorldContextObject)
+{
+	const ADRGameModeBase* DRGameMode = Cast<ADRGameModeBase>(UGameplayStatics::GetGameMode(WorldContextObject));
+	if (DRGameMode == nullptr) return nullptr;
+	return DRGameMode->GameBalanceConfig;
 }
 
 bool UDRAbilitySystemLibrary::IsSuccessfulDebuff(const FGameplayEffectContextHandle& EffectContextHandle)
@@ -368,7 +371,7 @@ bool UDRAbilitySystemLibrary::CheckActorWallCollision(AActor* Target, float Chec
 		return false;
 	}
 
-	// ≥ÀπÈ πÊ«‚ ∞ËªÍ (≈∏∞Ÿ¿« «ˆ¿Á º”µµ πÊ«‚)
+	// ÎÑâÎ∞± Î∞©Ìñ• Í≥ÑÏÇ∞ (ÌÉÄÍ≤üÏùò ÌòÑÏû¨ ÏÜçÎèÑ ÏÇ¨Ïö©)
 	FVector Velocity = FVector::ZeroVector;
 	if (ACharacter* Character = Cast<ACharacter>(Target))
 	{
@@ -380,7 +383,7 @@ bool UDRAbilitySystemLibrary::CheckActorWallCollision(AActor* Target, float Chec
 		return false;
 	}
 
-	// ∫Æ √º≈©∏¶ ¿ß«— ∆Æ∑π¿ÃΩ∫
+	// Î≤Ω Ï≤¥ÌÅ¨Î•º ÏúÑÌïú Ìä∏Î†àÏù¥Ïä§
 	FVector StartLocation = Target->GetActorLocation();
 	FVector EndLocation = StartLocation + (Velocity.GetSafeNormal() * CheckDistance);
 
@@ -402,4 +405,55 @@ bool UDRAbilitySystemLibrary::CheckActorWallCollision(AActor* Target, float Chec
 	}
 
 	return false;
+}
+
+FGameplayEffectSpecHandle UDRAbilitySystemLibrary::CreateAndApplyEffectSpec(
+	UAbilitySystemComponent* ASC,
+	TSubclassOf<UGameplayEffect> EffectClass,
+	AActor* SourceObject,
+	float Level)
+{
+	FGameplayEffectSpecHandle SpecHandle = CreateEffectSpec(ASC, EffectClass, SourceObject, Level);
+
+	if (SpecHandle.IsValid())
+	{
+		ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+	}
+
+	return SpecHandle;
+}
+
+FGameplayEffectSpecHandle UDRAbilitySystemLibrary::CreateEffectSpec(
+	UAbilitySystemComponent* ASC,
+	TSubclassOf<UGameplayEffect> EffectClass,
+	AActor* SourceObject,
+	float Level)
+{
+	if (!ASC || !EffectClass)
+	{
+		return FGameplayEffectSpecHandle();
+	}
+
+	FGameplayEffectContextHandle ContextHandle = ASC->MakeEffectContext();
+	if (SourceObject)
+	{
+		ContextHandle.AddSourceObject(SourceObject);
+	}
+
+	return ASC->MakeOutgoingSpec(EffectClass, Level, ContextHandle);
+}
+
+void UDRAbilitySystemLibrary::ApplyEffectSpecWithSetByCaller(
+	UAbilitySystemComponent* ASC,
+	FGameplayEffectSpecHandle& SpecHandle,
+	const FGameplayTag& Tag,
+	float Magnitude)
+{
+	if (!ASC || !SpecHandle.IsValid())
+	{
+		return;
+	}
+
+	SpecHandle.Data.Get()->SetSetByCallerMagnitude(Tag, Magnitude);
+	ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 }

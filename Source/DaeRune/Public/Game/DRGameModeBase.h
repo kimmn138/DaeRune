@@ -8,10 +8,11 @@
 
 class UAbilityInfo;
 class UCharacterClassInfo;
+class UGameBalanceConfig;
 class ADRDetectionManager;
 
 /**
- * DaeRune ±âº» °ÔÀÓ ¸ðµå Å¬·¡½º
+ * DaeRune ï¿½âº» ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½
  */
 UCLASS()
 class DAERUNE_API ADRGameModeBase : public AGameMode
@@ -21,43 +22,51 @@ class DAERUNE_API ADRGameModeBase : public AGameMode
 public:
 	ADRGameModeBase();
 
-	// Ä³¸¯ÅÍ Å¬·¡½ºº° ±âº» ¼³Á¤
+	// Ä³ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½âº» ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditDefaultsOnly, Category = "Character Class Defaults")
 	TObjectPtr<UCharacterClassInfo> CharacterClassInfo;
 
-	// ¾îºô¸®Æ¼ Á¤º¸ µ¥ÀÌÅÍ ¿¡¼Â
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditDefaultsOnly, Category = "Ability Info")
 	TObjectPtr<UAbilityInfo> AbilityInfo;
 
-	// ÇÃ·¹ÀÌ¾î°¡ »ç¸ÁÇßÀ» ¶§ È£Ãâ
+	// ê²Œìž„ ë°¸ëŸ°ìŠ¤ ì„¤ì • DataAsset
+	UPROPERTY(EditDefaultsOnly, Category = "Game Balance")
+	TObjectPtr<UGameBalanceConfig> GameBalanceConfig;
+
+	// ï¿½Ã·ï¿½ï¿½Ì¾î°¡ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ È£ï¿½ï¿½
 	void OnPlayerDied(APlayerState* DeadPlayer);
 
-	// ÆÀ Àü¸ê Ã¼Å©
+	// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã¼Å©
 	virtual bool CheckTeamWipeout();
 	
 protected:
 	virtual void BeginPlay() override;
-	// Àü¸ê ½Ã Ã³¸®
+
+	// ì „ë©¸ ì‹œ ì²˜ë¦¬
 	virtual void HandleWipeout();
 
-	// Àü¸ê ÈÄ Ã³¸® ½ÃÀÛ±îÁö ´ë±â ½Ã°£
+	// ë§µ ì „í™˜ ì „ ì •ë¦¬ ìž‘ì—… (ì„¤ì •ì°½ ë‹«ê¸°, ì˜¤ë””ì˜¤ ì •ë¦¬)
+	virtual void PrepareForTravel();
+
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ Ã³ï¿½ï¿½ ï¿½ï¿½ï¿½Û±ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GameMode|Config")
 	float WipeoutDelayTime = 3.0f;
 
-	// Àü¸ê Ã³¸® Å¸ÀÌ¸Ó ÇÚµé
+	// ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½ Å¸ï¿½Ì¸ï¿½ ï¿½Úµï¿½
 	FTimerHandle WipeoutTimerHandle;
 
-	// Àü¸ê Ã³¸® ÁßÀÎÁö ¿©ºÎ
+	// ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	bool bIsWipeoutInProgress = false;
 
-	// Å½Áö ¸Å´ÏÀú Å¬·¡½º
+	// Å½ï¿½ï¿½ ï¿½Å´ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditDefaultsOnly, Category = "Detection")
 	TSubclassOf<ADRDetectionManager> DetectionManagerClass;
 
-	// ½ºÆùµÈ Å½Áö ¸Å´ÏÀú ÀÎ½ºÅÏ½º
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Å½ï¿½ï¿½ ï¿½Å´ï¿½ï¿½ï¿½ ï¿½Î½ï¿½ï¿½Ï½ï¿½
 	UPROPERTY()
 	TObjectPtr<ADRDetectionManager> DetectionManager;
 
-	// Å½Áö ¸Å´ÏÀú ½ºÆù
+	// Å½ï¿½ï¿½ ï¿½Å´ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	void SpawnDetectionManager();
 };

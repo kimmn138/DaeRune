@@ -63,8 +63,8 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UBoxComponent> TriggerVolume;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<UAudioComponent> DoorAudioComponent;
+	/*UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UAudioComponent> DoorAudioComponent;*/
 
 	// 에디터 설정 변수
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Settings")

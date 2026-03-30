@@ -38,7 +38,19 @@ public:
 	static FGameplayTag GetAbilityTagFromSpec(const FGameplayAbilitySpec& AbilitySpec);
 	static FGameplayTag GetInputTagFromSpec(const FGameplayAbilitySpec& AbilitySpec);
 
+	// 캐시된 InputTag로 AbilitySpec 조회 (O(1) lookup)
+	FGameplayAbilitySpec* FindAbilitySpecByInputTag(const FGameplayTag& InputTag);
+
 protected:
+	// InputTag → AbilitySpecHandle 캐시 (성능 최적화)
+	UPROPERTY()
+	TMap<FGameplayTag, FGameplayAbilitySpecHandle> InputTagToAbilityMap;
+
+	// 캐시 갱신
+	void RebuildInputTagCache();
+	void AddToInputTagCache(const FGameplayAbilitySpec& AbilitySpec);
+	void RemoveFromInputTagCache(const FGameplayTag& InputTag);
+
 	virtual void OnRep_ActivateAbilities() override;
 
 	UFUNCTION(Client, Reliable)

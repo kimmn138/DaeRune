@@ -13,7 +13,7 @@ class UTextBlock;
 class UComboBoxString;
 
 /**
- * ¼³Á¤ ¸Þ´º À§Á¬ÀÇ º£ÀÌ½º Å¬·¡½º
+ * ï¿½ï¿½ï¿½ï¿½ ï¿½Þ´ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ì½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½
  */
 UCLASS()
 class DAERUNE_API UDRSettingsWidget : public UUserWidget
@@ -21,11 +21,11 @@ class DAERUNE_API UDRSettingsWidget : public UUserWidget
 	GENERATED_BODY()
 	
 public:
-    // ¼³Á¤ ¸Þ´º ÃÊ±âÈ­
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½Þ´ï¿½ ï¿½Ê±ï¿½È­
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void InitializeSettings();
 
-    // ¼³Á¤ ¸Þ´º ¿­±â/´Ý±â
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½Þ´ï¿½ ï¿½ï¿½ï¿½ï¿½/ï¿½Ý±ï¿½
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void OpenSettings();
 
@@ -36,7 +36,7 @@ protected:
     virtual void NativeConstruct() override;
     virtual void NativeDestruct() override;
 
-    // ========== ÅÇ ¹öÆ°µé ==========
+    // ========== ï¿½ï¿½ ï¿½ï¿½Æ°ï¿½ï¿½ ==========
 
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UButton> Button_Sound;
@@ -47,12 +47,12 @@ protected:
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UButton> Button_Controls;
 
-    // ========== ÆÐ³Î ÀüÈ¯±â ==========
+    // ========== ï¿½Ð³ï¿½ ï¿½ï¿½È¯ï¿½ï¿½ ==========
 
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UWidgetSwitcher> SettingsSwitcher;
 
-    // ========== ÇÏ´Ü ¹öÆ°µé ==========
+    // ========== ï¿½Ï´ï¿½ ï¿½ï¿½Æ°ï¿½ï¿½ ==========
 
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UButton> Button_Apply;
@@ -66,7 +66,7 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional))
     TObjectPtr<UButton> Button_QuitGame;
 
-    // ========== »ç¿îµå ¼³Á¤ ==========
+    // ========== ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ==========
 
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<USlider> Slider_MasterVolume;
@@ -92,7 +92,7 @@ protected:
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UTextBlock> Text_VoiceVolume;
 
-    // ========== ±×·¡ÇÈ ¼³Á¤ ==========
+    // ========== ê·¸ëž˜í”½ ì„¤ì • ==========
 
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UComboBoxString> ComboBox_Resolution;
@@ -100,7 +100,10 @@ protected:
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UComboBoxString> ComboBox_WindowMode;
 
-    // ========== Á¶ÀÛ ¼³Á¤ ==========
+    UPROPERTY(meta = (BindWidget))
+    TObjectPtr<UComboBoxString> ComboBox_GraphicsQuality;
+
+    // ========== ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ==========
 
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<USlider> Slider_MouseSensitivity;
@@ -108,7 +111,7 @@ protected:
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UTextBlock> Text_MouseSensitivity;
 
-    // ========== ÅÇ ¹öÆ° ÄÝ¹é ==========
+    // ========== ï¿½ï¿½ ï¿½ï¿½Æ° ï¿½Ý¹ï¿½ ==========
 
     UFUNCTION()
     void OnSoundTabClicked();
@@ -119,7 +122,7 @@ protected:
     UFUNCTION()
     void OnControlsTabClicked();
 
-    // ========== ÇÏ´Ü ¹öÆ° ÄÝ¹é ==========
+    // ========== ï¿½Ï´ï¿½ ï¿½ï¿½Æ° ï¿½Ý¹ï¿½ ==========
 
     UFUNCTION()
     void OnApplyClicked();
@@ -133,7 +136,7 @@ protected:
     UFUNCTION()
     void OnQuitGameClicked();
 
-    // ========== ½½¶óÀÌ´õ ÄÝ¹é ==========
+    // ========== ï¿½ï¿½ï¿½ï¿½ï¿½Ì´ï¿½ ï¿½Ý¹ï¿½ ==========
 
     UFUNCTION()
     void OnMasterVolumeChanged(float Value);
@@ -150,7 +153,7 @@ protected:
     UFUNCTION()
     void OnMouseSensitivityChanged(float Value);
 
-    // ========== ÄÞº¸¹Ú½º ÄÝ¹é ==========
+    // ========== ï¿½Þºï¿½ï¿½Ú½ï¿½ ï¿½Ý¹ï¿½ ==========
 
     UFUNCTION()
     void OnResolutionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
@@ -158,28 +161,34 @@ protected:
     UFUNCTION()
     void OnWindowModeChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
 
-    // ========== µÚ·Î°¡±â ÀÌº¥Æ® ==========
+    UFUNCTION()
+    void OnGraphicsQualityChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+    // ========== ï¿½Ú·Î°ï¿½ï¿½ï¿½ ï¿½Ìºï¿½Æ® ==========
 
     UFUNCTION(BlueprintImplementableEvent, Category = "Settings")
     void OnSettingsClosed();
 
 private:
-    // UI¿¡ ÇöÀç ¼³Á¤°ª ·Îµå
+    // UIï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Îµï¿½
     void LoadCurrentSettings();
 
-    // ÇØ»óµµ ¸ñ·Ï Ã¤¿ì±â
+    // ï¿½Ø»ï¿½ ï¿½ï¿½ï¿½ Ã¤ï¿½ï¿½ï¿½
     void PopulateResolutionOptions();
 
-    // Ã¢¸ðµå ¸ñ·Ï Ã¤¿ì±â
+    // ì°½ëª¨ë“œ ì˜µì…˜ ì±„ìš°ê¸°
     void PopulateWindowModeOptions();
 
-    // ½½¶óÀÌ´õ °ªÀ» ÆÛ¼¾Æ® ÅØ½ºÆ®·Î º¯È¯
+    // ê·¸ëž˜í”½ í’ˆì§ˆ ì˜µì…˜ ì±„ìš°ê¸°
+    void PopulateGraphicsQualityOptions();
+
+    // ï¿½ï¿½ï¿½ï¿½ï¿½Ì´ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Û¼ï¿½Æ® ï¿½Ø½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½È¯
     FText GetPercentText(float Value) const;
 
-    // ½½¶óÀÌ´õ °ªÀ» °¨µµ ÅØ½ºÆ®·Î º¯È¯ (0.1 ~ 5.0)
+    // ï¿½ï¿½ï¿½ï¿½ï¿½Ì´ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ø½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½È¯ (0.1 ~ 5.0)
     FText GetSensitivityText(float Value) const;
 
-    // ÀÓ½Ã ÀúÀå º¯¼öµé
+    // ìž„ì‹œ ì„¤ì • ì €ìž¥ìš©
     float PendingMasterVolume;
     float PendingBGMVolume;
     float PendingSFXVolume;
@@ -187,7 +196,8 @@ private:
     float PendingMouseSensitivity;
     FIntPoint PendingResolution;
     EWindowMode::Type PendingWindowMode;
+    int32 PendingGraphicsQuality;
 
-    // Áö¿ø ÇØ»óµµ ¸ñ·Ï
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½Ø»ï¿½ ï¿½ï¿½ï¿½
     TArray<FIntPoint> SupportedResolutions;
 };

@@ -9,14 +9,16 @@
 
 class ADRDoorManager;
 
-// ÆäÀÌÁî ¸ñÇ¥ ¾÷µ¥ÀÌÆ® µ¨¸®°ÔÀÌÆ®
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç¥ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 DECLARE_MULTICAST_DELEGATE(FOnPhaseObjectiveChanged);
-// Phase º¯°æ µ¨¸®°ÔÀÌÆ®
+// Phase ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPhaseChangedSignature, int32, NewPhaseIndex);
-// ¿şÀÌºê Å¸ÀÌ¸Ó Á¤º¸ ¾÷µ¥ÀÌÆ® µ¨¸®°ÔÀÌÆ®
+// ï¿½ï¿½ï¿½Ìºï¿½ Å¸ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnWaveTimerChanged, int32 /*WaveNumber*/, float /*RemainingTime*/, bool /*bIsRestTime*/);
+// ë…ê°€ìŠ¤ ê²½ê³  ë¸ë¦¬ê²Œì´íŠ¸
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnToxicGasWarningSignature, bool, bIsToxicGasWave);
 
-// ÆäÀÌÁî »óÅÂ ¿­°ÅÇü
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 UENUM(BlueprintType)
 enum class EPhaseState : uint8
 {
@@ -44,14 +46,14 @@ public:
     void SetCleanserSites(TArray<ADRCleanserSite*> InCleanserSites) { CleanserSites = InCleanserSites; }
     void SetInitialPlayerCount(float NewInitialPlayerCount) { InitialPlayerCount = NewInitialPlayerCount; }
 
-    // DoorManager µî·Ï
+    // DoorManager ï¿½ï¿½ï¿½
     UFUNCTION(BlueprintCallable, Category = "Stage")
     void RegisterDoorManager(ADRDoorManager* InDoorManager);
 
     UFUNCTION(BlueprintPure, Category = "Stage")
     ADRDoorManager* GetDoorManager() const { return DoorManager; }
 
-    // ========== »óÅÂ ¸®ÇÃ¸®ÄÉÀÌ¼Ç ==========
+    // ========== ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ã¸ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ ==========
     UFUNCTION(BlueprintCallable, Category = "Phase")
     int32 GetCurrentPhaseIndex() const { return CurrentPhaseIndex; }
 
@@ -61,31 +63,31 @@ public:
     void SetCurrentPhaseIndex(int32 NewIndex);
     void SetCurrentPhaseState(EPhaseState NewState);
 
-    // ========== Phase 1: Å¬·»Àú È®º¸ ==========
+    // ========== Phase 1: Å¬ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½ ==========
     UFUNCTION(BlueprintCallable, Category = "Phase|Cleanser")
     bool IsCleanserAreaSecured() const { return bCleanserAreaSecured; }
 
     UFUNCTION(BlueprintCallable, Category = "Phase|Cleanser")
     int32 GetRemainingEnemiesInArea() const { return RemainingEnemiesInArea; }
 
-    // Áö¿ªÀ» ¿ÏÀüÈ÷ È®º¸ÇßÀ» ¶§
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½
     void SetCleanserAreaSecured(bool bSecured);
-    // ÀûÀ» Ã³Ä¡ÇÒ ¶§¸¶´Ù È£Ãâ (³²Àº Àû ¼ö)
+    // ï¿½ï¿½ï¿½ï¿½ Ã³Ä¡ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È£ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½)
     void SetRemainingEnemiesInArea(int32 Count);
 
-    // ========== Phase 2: ºÎÇ° È¸¼ö ==========
+    // ========== Phase 2: ï¿½ï¿½Ç° È¸ï¿½ï¿½ ==========
     UFUNCTION(BlueprintCallable, Category = "Phase|Parts")
     int32 GetCollectedParts() const { return CollectedParts; }
 
     UFUNCTION(BlueprintCallable, Category = "Phase|Parts")
     bool IsCleanserActivated() const { return bCleanserActivated; }
 
-    // ºÎÇ°À» È¹µæÇÒ ¶§¸¶´Ù È£Ãâ (È¹µæÇÑ °¹¼ö)
+    // ï¿½ï¿½Ç°ï¿½ï¿½ È¹ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È£ï¿½ï¿½ (È¹ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
     void SetCollectedParts(int32 Count);
-    // Å¬·»Àú¸¦ È°¼ºÈ­ÇßÀ» ¶§
+    // Å¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È°ï¿½ï¿½È­ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½
     void SetCleanserActivated(bool bActivated);
 
-    // ========== Phase 3: ¹æ¾î ==========
+    // ========== Phase 3: ï¿½ï¿½ï¿½ ==========
     UFUNCTION(BlueprintCallable, Category = "Phase|Defense")
     int32 GetCurrentWaveNumber() const { return CurrentWaveNumber; }
 
@@ -104,30 +106,40 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Phase|Defense")
     bool IsWaveRestTime() const { return bIsWaveRestTime; }
 
-    // »õ ¿şÀÌºê ½ÃÀÛ ½Ã (ÇöÀç ¿şÀÌºê ¹øÈ£)
+    // ï¿½ï¿½ ï¿½ï¿½ï¿½Ìºï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ìºï¿½ ï¿½ï¿½È£)
     void SetCurrentWaveNumber(int32 WaveNumber);
-    // »õ ¿şÀÌºê ·¹º§ ½Ã (ÇöÀç ¿şÀÌºê ·¹º§)
+    // ï¿½ï¿½ ï¿½ï¿½ï¿½Ìºï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ìºï¿½ ï¿½ï¿½ï¿½ï¿½)
     void SetCurrentWaveLevel(int32 WaveLevel);
-    // ÃÑ ¿şÀÌºê ¼ö
+    // ï¿½ï¿½ ï¿½ï¿½ï¿½Ìºï¿½ ï¿½ï¿½
     void SetTotalWaves(int32 Total);
-    // Å¬·»Àú°¡ µ¥¹ÌÁö ¹ŞÀ» ¶§ (Å¬·»Àú ³²Àº Ã¼·Â)
+    // Å¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ (Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã¼ï¿½ï¿½)
     void SetCleanserHealth(float Health);
     
-    // ¿şÀÌºê Å¸ÀÌ¸Ó ¾÷µ¥ÀÌÆ®
+    // ï¿½ï¿½ï¿½Ìºï¿½ Å¸ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
     void SetWaveRemainingTime(float Time);
     void SetIsWaveRestTime(bool bIsRest);
-    
-    // ¿şÀÌºê Å¸ÀÌ¸Ó µ¨¸®°ÔÀÌÆ®
+
+    // ë…ê°€ìŠ¤ ì›¨ì´ë¸Œ ì—¬ë¶€
+    void SetIsToxicGasWave(bool bIsToxicGas);
+
+    UFUNCTION(BlueprintCallable, Category = "Phase|Defense")
+    bool IsToxicGasWave() const { return bIsToxicGasWave; }
+
+    // ë…ê°€ìŠ¤ ê²½ê³  ë¸ë¦¬ê²Œì´íŠ¸ (ëª¨ë“  í´ë¼ì´ì–¸íŠ¸ì—ì„œ UI ë°”ì¸ë”©ìš©)
+    UPROPERTY(BlueprintAssignable, Category = "Phase|Warning")
+    FOnToxicGasWarningSignature OnToxicGasWarningDelegate;
+
+    // ï¿½ï¿½ï¿½Ìºï¿½ Å¸ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
     FOnWaveTimerChanged OnWaveTimerChangedDelegate;
 
-    // ========== Phase 4: º¸½º ==========
+    // ========== Phase 4: ï¿½ï¿½ï¿½ï¿½ ==========
     UFUNCTION(BlueprintCallable, Category = "Phase|Boss")
     float GetBossHealth() const { return BossHealth; }
 
-    // º¸½º°¡ µ¥¹ÌÁö ¹ŞÀ» ¶§ (ÇöÀç º¸½º Ã¼·Â)
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã¼ï¿½ï¿½)
     void SetBossHealth(float Health);
 
-    // Phase ¸ñÇ¥ UI °ü·Ã
+    // Phase ï¿½ï¿½Ç¥ UI ï¿½ï¿½ï¿½ï¿½
     FOnPhaseObjectiveChanged OnPhaseObjectiveChangedDelegate;
 
     UPROPERTY(BlueprintAssignable, Category = "Phase")
@@ -135,15 +147,33 @@ public:
     
     void SetPhaseObjective(const FPhaseObjectiveData& ObjectiveData);
     void UpdatePhaseObjectiveProgress(int32 NewCount);
-    
+
     FPhaseObjectiveData GetCurrentPhaseObjective() const { return CurrentPhaseObjective; }
     int32 GetCurrentObjectiveProgress() const { return CurrentObjectiveProgress; }
 
     UPROPERTY(ReplicatedUsing = OnRep_CurrentPhaseObjective)
     FPhaseObjectiveData CurrentPhaseObjective;
 
+    // ========== ì‚¬ìš´ë“œ (Multicast RPC) ==========
+
+    // í˜ì´ì¦ˆ ì‹œì‘ ì‚¬ìš´ë“œ (ëª¨ë“  í´ë¼ì´ì–¸íŠ¸ì—ì„œ ì¬ìƒ)
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_PlayPhaseStartSound();
+
+    // ì›¨ì´ë¸Œ ì‹œì‘ ì‚¬ìš´ë“œ (ëª¨ë“  í´ë¼ì´ì–¸íŠ¸ì—ì„œ ì¬ìƒ)
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_PlayWaveStartSound();
+
+    // ê²Œì„ í´ë¦¬ì–´ ì‚¬ìš´ë“œ (ëª¨ë“  í´ë¼ì´ì–¸íŠ¸ì—ì„œ ì¬ìƒ)
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_PlayGameClearSound();
+
+    // ê²Œì„ ì˜¤ë²„ ì‚¬ìš´ë“œ (ëª¨ë“  í´ë¼ì´ì–¸íŠ¸ì—ì„œ ì¬ìƒ)
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_PlayGameOverSound();
+
 protected:
-    // ========== ¸®ÇÃ¸®ÄÉÀÌ¼Ç Äİ¹é ==========
+    // ========== ï¿½ï¿½ï¿½Ã¸ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ ï¿½İ¹ï¿½ ==========
     UFUNCTION()
     void OnRep_CurrentPhaseIndex();
 
@@ -162,6 +192,9 @@ protected:
     UFUNCTION()
     void OnRep_IsWaveRestTime();
 
+    UFUNCTION()
+    void OnRep_IsToxicGasWave();
+
 private:
     UPROPERTY()
     TArray<ADRCleanserSite*> CleanserSites;
@@ -169,32 +202,32 @@ private:
     UPROPERTY()
     TObjectPtr<ADRDoorManager> DoorManager;
 
-    // Phase1 ½ÃÀÛ ½ÃÁ¡ÀÇ ÇÃ·¹ÀÌ¾î ¼ö
+    // Phase1 ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½ï¿½
     UPROPERTY()
     int32 InitialPlayerCount;
     
-    // ========== »óÅÂ ¸®ÇÃ¸®ÄÉÀÌ¼Ç º¯¼öµé ==========
+    // ========== ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ã¸ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ==========
     UPROPERTY(ReplicatedUsing = OnRep_CurrentPhaseIndex)
     int32 CurrentPhaseIndex;
 
     UPROPERTY(ReplicatedUsing = OnRep_CurrentPhaseState)
     EPhaseState CurrentPhaseState;
 
-    // ========== Phase 1: Å¬·»Àú È®º¸ ==========
+    // ========== Phase 1: Å¬ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½ ==========
     UPROPERTY(Replicated)
     bool bCleanserAreaSecured;
 
     UPROPERTY(Replicated)
     int32 RemainingEnemiesInArea;
 
-    // ========== Phase 2: ºÎÇ° È¸¼ö ==========
+    // ========== Phase 2: ï¿½ï¿½Ç° È¸ï¿½ï¿½ ==========
     UPROPERTY(Replicated)
     int32 CollectedParts;
 
     UPROPERTY(Replicated)
     bool bCleanserActivated;
 
-    // ========== Phase 3: ¹æ¾î ==========
+    // ========== Phase 3: ï¿½ï¿½ï¿½ ==========
     UPROPERTY(Replicated)
     int32 CurrentWaveNumber;
 
@@ -213,11 +246,14 @@ private:
     UPROPERTY(ReplicatedUsing = OnRep_IsWaveRestTime)
     bool bIsWaveRestTime;
 
-    // ========== Phase 4: º¸½º ==========
+    UPROPERTY(ReplicatedUsing = OnRep_IsToxicGasWave)
+    bool bIsToxicGasWave = false;
+
+    // ========== Phase 4: ï¿½ï¿½ï¿½ï¿½ ==========
     UPROPERTY(Replicated)
     float BossHealth;
 
-    // ========== UI ¾÷µ¥ÀÌÆ® ==========
+    // ========== UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ==========
     UPROPERTY(ReplicatedUsing = OnRep_CurrentObjectiveProgress)
     int32 CurrentObjectiveProgress = 0;
 };

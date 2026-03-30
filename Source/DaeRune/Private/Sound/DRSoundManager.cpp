@@ -6,41 +6,64 @@
 #include "Components/AudioComponent.h"
 #include "Sound/SoundBase.h"
 #include "Sound/DRSoundDataAsset.h"
+#include "Game/DRGameInstance.h"
+#include "DRAssetManager.h"
+#include "Engine/Engine.h"
 
 void UDRSoundManager::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	SoundData = LoadObject<UDRSoundDataAsset>(nullptr, SOUND_DATA_PATH);
+	// AssetManager에서 로드된 SoundData 가져오기
+	if (UAssetManager* AssetManager = UAssetManager::GetIfInitialized())
+	{
+		if (UDRAssetManager* DRAssetManager = Cast<UDRAssetManager>(AssetManager))
+		{
+			SoundData = DRAssetManager->GetSoundDataAsset();
+		}
+	}
+
+	// AssetManager에서 못 가져왔으면 직접 로드 시도
+	if (!SoundData)
+	{
+		static const TCHAR* SoundDataPath = TEXT("/Game/Blueprints/Sound/Data/DA_SoundData.DA_SoundData");
+		SoundData = LoadObject<UDRSoundDataAsset>(nullptr, SoundDataPath);
+	}
+
+	// 마지막으로 GameInstance에서 시도 (에디터 폴백)
+	if (!SoundData)
+	{
+		if (UGameInstance* GI = GetGameInstance())
+		{
+			if (UDRGameInstance* DRGI = Cast<UDRGameInstance>(GI))
+			{
+				SoundData = DRGI->SoundDataAsset;
+			}
+		}
+	}
 
 	if (!SoundData)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("DRSoundManager: DA_SoundData not found at %s"), SOUND_DATA_PATH);
+		UE_LOG(LogTemp, Error, TEXT("DRSoundManager: SoundDataAsset is null! Sound effects will not play."));
 	}
-}
-
-void UDRSoundManager::Deinitialize()
-{
-	if (CurrentBGMComponent)
-	{
-		CurrentBGMComponent->Stop();
-		CurrentBGMComponent = nullptr;
-	}
-
-	if (PreviousBGMComponent)
-	{
-		PreviousBGMComponent->Stop();
-		PreviousBGMComponent = nullptr;
-	}
-
-	Super::Deinitialize();
 }
 
 void UDRSoundManager::PlaySound2D(USoundBase* Sound)
 {
 	if (!Sound) return;
 
-	if (UWorld* World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr)
+	UWorld* World = nullptr;
+	if (GEngine)
+	{
+		World = GEngine->GetCurrentPlayWorld();
+	}
+
+	if (!World && GetGameInstance())
+	{
+		World = GetGameInstance()->GetWorld();
+	}
+
+	if (World)
 	{
 		UGameplayStatics::PlaySound2D(World, Sound);
 	}
@@ -90,7 +113,18 @@ void UDRSoundManager::PlaySoundAtLocation(USoundBase* Sound, const FVector& Loca
 {
 	if (!Sound) return;
 
-	if (UWorld* World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr)
+	UWorld* World = nullptr;
+	if (GEngine)
+	{
+		World = GEngine->GetCurrentPlayWorld();
+	}
+
+	if (!World && GetGameInstance())
+	{
+		World = GetGameInstance()->GetWorld();
+	}
+
+	if (World)
 	{
 		UGameplayStatics::PlaySoundAtLocation(World, Sound, Location);
 	}
@@ -140,11 +174,21 @@ void UDRSoundManager::PlayWaterGainSound(const FVector& Location)
 
 UAudioComponent* UDRSoundManager::StartCleanserOperatingSound(const FVector& Location)
 {
-	if(!SoundData) return nullptr;
+	if (!SoundData) return nullptr;
 
 	if (!SoundData->CleanserOperatingSound) return nullptr;
 
-	UWorld* World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
+	UWorld* World = nullptr;
+	if (GEngine)
+	{
+		World = GEngine->GetCurrentPlayWorld();
+	}
+
+	if (!World && GetGameInstance())
+	{
+		World = GetGameInstance()->GetWorld();
+	}
+
 	if (!World) return nullptr;
 
 	return UGameplayStatics::SpawnSoundAtLocation(
@@ -154,62 +198,6 @@ UAudioComponent* UDRSoundManager::StartCleanserOperatingSound(const FVector& Loc
 		FRotator::ZeroRotator,
 		1.0f, 1.0f, 0.0f,
 		nullptr, nullptr,
-		false  
+		false
 	);
-}
-
-void UDRSoundManager::PlayBGM(USoundBase* NewBGM, float FadeInDuration)
-{
-	if (!NewBGM) return;
-
-	if (CurrentBGMComponent && CurrentBGMComponent->IsPlaying())
-	{
-		CurrentBGMComponent->FadeOut(FadeInDuration, 0.0f);
-	}
-
-	CurrentBGMComponent = CreateBGMComponent(NewBGM);
-	if (CurrentBGMComponent)
-	{
-		CurrentBGMComponent->FadeIn(FadeInDuration);
-	}
-}
-
-void UDRSoundManager::StopBGM(float FadeOutDuration)
-{
-	if (CurrentBGMComponent && CurrentBGMComponent->IsPlaying())
-	{
-		CurrentBGMComponent->FadeOut(FadeOutDuration, 0.0f);
-	}
-}
-
-void UDRSoundManager::CrossfadeBGM(USoundBase* NewBGM, float CrossfadeDuration)
-{
-	if (!NewBGM) return;
-
-	if (PreviousBGMComponent)
-	{
-		PreviousBGMComponent->Stop();
-	}
-	PreviousBGMComponent = CurrentBGMComponent;
-
-	if (PreviousBGMComponent && PreviousBGMComponent->IsPlaying())
-	{
-		PreviousBGMComponent->FadeOut(CrossfadeDuration, 0.0f);
-	}
-
-	CurrentBGMComponent = CreateBGMComponent(NewBGM);
-	if (CurrentBGMComponent)
-	{
-		CurrentBGMComponent->FadeIn(CrossfadeDuration);
-	}
-}
-
-UAudioComponent* UDRSoundManager::CreateBGMComponent(USoundBase* Sound)
-{
-	if (!Sound) return nullptr;
-
-	UWorld* World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
-	if (!World) return nullptr;
-
-	return UGameplayStatics::SpawnSound2D(World, Sound, 1.0f, 1.0f, 0.0f, nullptr, false, false);
 }

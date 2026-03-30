@@ -7,36 +7,38 @@
 
 UDRGameplayCue_Sound::UDRGameplayCue_Sound()
 {
-	// Static Cue´Â ÀÎ½ºÅÏ½º »ı¼º ¾È ÇÔ
+	// Static Cueï¿½ï¿½ ï¿½Î½ï¿½ï¿½Ï½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½
 	IsOverride = true;
 }
 
 bool UDRGameplayCue_Sound::OnExecute_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) const
 {
-	if (!Sound || !MyTarget) return false;
+    if (!Sound) return false;
+    if (!IsValid(MyTarget)) return false;
 
-	if (bIs3DSound)
-	{
-		// 3D »ç¿îµå: Å¸°Ù À§Ä¡¿¡¼­ Àç»ı
-		FVector Location = MyTarget->GetActorLocation();
+    FVector Location = FVector::ZeroVector;
+    if (!Parameters.Location.IsZero())
+    {
+        Location = Parameters.Location;
+    }
+    else if (!MyTarget->IsPendingKillPending())
+    {
+        Location = MyTarget->GetActorLocation();
+    }
+    else
+    {
+        return false;
+    }
 
-		// Parameters¿¡ À§Ä¡ Á¤º¸°¡ ÀÖÀ¸¸é »ç¿ë
-		if (!Parameters.Location.IsZero())
-		{
-			Location = Parameters.Location;
-		}
+    // MyTargetì„ WorldContextObjectë¡œ ì‚¬ìš©í•´ì„œ ì˜¬ë°”ë¥¸ Worldì—ì„œ ì‚¬ìš´ë“œ ì¬ìƒ
+    if (bIs3DSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(MyTarget, Sound, Location);
+    }
+    else
+    {
+        UGameplayStatics::PlaySound2D(MyTarget, Sound);
+    }
 
-		UGameplayStatics::PlaySoundAtLocation(
-			MyTarget->GetWorld(),
-			Sound,
-			Location
-		);
-	}
-	else
-	{
-		// 2D »ç¿îµå: Àü¿ª Àç»ı
-		UGameplayStatics::PlaySound2D(MyTarget->GetWorld(), Sound);
-	}
-
-	return false;
+    return false;
 }

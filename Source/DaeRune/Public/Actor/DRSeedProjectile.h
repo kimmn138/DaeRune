@@ -78,6 +78,10 @@ private:
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon|Heal")
     TSubclassOf<UGameplayEffect> HealEffectClass;
 
+    // 폭발 나이아가라 이펙트
+    UPROPERTY(EditDefaultsOnly, Category = "SeedCannon|Effects")
+    TObjectPtr<UNiagaraSystem> ExplosionEffect;
+
     // 폭발 중복 실행 방지 플래그
     bool bHasExploded = false;
 };

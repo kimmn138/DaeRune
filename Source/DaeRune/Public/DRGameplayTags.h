@@ -8,7 +8,7 @@
 /**
  * DRGameplayTags
  *
- * ÇÁ·ÎÁ§Æ® Àü¿ª¿¡¼­ »ç¿ëµÇ´Â GameplayTagµéÀ» Áß¾Ó °ü¸®ÇÏ´Â ½Ì±ÛÅæ Å¬·¡½º
+ * ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ç´ï¿½ GameplayTagï¿½ï¿½ï¿½ï¿½ ï¿½ß¾ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ ï¿½Ì±ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½
  */
 
 struct FDRGameplayTags
@@ -17,26 +17,32 @@ public:
 	static const FDRGameplayTags& Get() { return GameplayTags; }
 	static void InitializeNativeGameplayTags();
 
-	// ¸®¼Ò½º ºñ¿ë
+	// ï¿½ï¿½ï¿½Ò½ï¿½ ï¿½ï¿½ï¿½
 	FGameplayTag Cost_Water;
 
-	// ±âº» ¼Ó¼º
+	// ï¿½âº» ï¿½Ó¼ï¿½
 	FGameplayTag Attributes_Primary_MaxHealth;
 	FGameplayTag Attributes_Primary_MaxWater;
 	FGameplayTag Attributes_Primary_MoveSpeed;
 
-	// ÀÔ·Â ÅÂ±×
+	// ï¿½Ô·ï¿½ ï¿½Â±ï¿½
 	FGameplayTag InputTag_LMB;
 	FGameplayTag InputTag_RMB;
 	FGameplayTag InputTag_Q;
 	FGameplayTag InputTag_E;
 
-	// ÇÃ·¹ÀÌ¾î »óÅÂ
+	// í”Œë ˆì´ì–´ ìƒíƒœ
 	FGameplayTag State_Corrupt;
 	FGameplayTag State_Carrying;
+	FGameplayTag State_InCombat;
+
+	// ì  ìƒíƒœ
+	FGameplayTag State_Enraged;
+	FGameplayTag State_Aggroed;
+	FGameplayTag State_HitReacting;
 	FGameplayTag Enemy_Detected;
 
-	// ±âº» µ¥¹ÌÁö, Å¸ÀÔ º° µ¥¹ÌÁö
+	// ï¿½âº» ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½, Å¸ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	FGameplayTag Damage;
 	FGameplayTag Damage_Fire;
 	FGameplayTag Damage_Lightning;
@@ -44,13 +50,13 @@ public:
 	FGameplayTag Damage_Physical;
 	FGameplayTag Damage_Bite;
 
-	// ±âº» Èú
+	// ï¿½âº» ï¿½ï¿½
 	FGameplayTag Heal;
 
-	// ¹öÇÁ È¿°ú
+	// ï¿½ï¿½ï¿½ï¿½ È¿ï¿½ï¿½
 	FGameplayTag Buff_Elite;
 	
-	// µğ¹öÇÁ È¿°ú
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ È¿ï¿½ï¿½
 	FGameplayTag Debuff_Burn; 
 	FGameplayTag Debuff_Stun;
 	FGameplayTag Debuff_Arcane;
@@ -58,65 +64,65 @@ public:
 	FGameplayTag Debuff_Bleed;
 	FGameplayTag Debuff_Elite;
 
-	// µğ¹öÇÁ °è»ê¿ë ÅÂ±×
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Â±ï¿½
 	FGameplayTag Debuff_Chance; 
 	FGameplayTag Debuff_Damage;
 	FGameplayTag Debuff_Duration;
 
-	// Å¸°İ ¹İÀÀ ÀÌÆåÆ®
+	// Å¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®
 	FGameplayTag Effects_HitReact;
 
-	// ¹° ½Ã½ºÅÛ (SetByCaller ¹æ½Ä)
+	// ï¿½ï¿½ ï¿½Ã½ï¿½ï¿½ï¿½ (SetByCaller ï¿½ï¿½ï¿½)
 	FGameplayTag Water_SetByCaller_Reduction;
 	FGameplayTag Water_SetByCaller_Grant;
 
-	// ¾îºô¸®Æ¼ ºĞ·ù
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ ï¿½Ğ·ï¿½
 	FGameplayTag Abilities_Attack;
 	FGameplayTag Abilities_Death;
 	FGameplayTag Abilities_Summon;
 	FGameplayTag Abilities_Skill1;
 
-	// ±¸Ã¼Àû ¾îºô¸®Æ¼ 
+	// ï¿½ï¿½Ã¼ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ 
 	FGameplayTag Abilities_Fire_FireBolt;
 	FGameplayTag Abilities_Lightning_Electrocute;
 	FGameplayTag Abilities_GardenRobot_ClawSwipe;
 	FGameplayTag Abilities_GardenRobot_WaterPump;
 	FGameplayTag Abilities_GardenRobot_SeedCannon;
 
-	// Å¸°İ ¹İÀÀ
+	// Å¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	FGameplayTag Abilities_HitReact;
 
-	// ¾îºô¸®Æ¼ Å¸ÀÔ ºĞ·ù
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ Å¸ï¿½ï¿½ ï¿½Ğ·ï¿½
 	FGameplayTag Abilities_Type_Offensive;
 	FGameplayTag Abilities_Type_Passive;
 	FGameplayTag Abilities_Type_None;
 
-	// ¾îºô¸®Æ¼ ÄğÅ¸ÀÓ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Æ¼ ï¿½ï¿½Å¸ï¿½ï¿½
 	FGameplayTag Cooldown_Fire_FireBolt;
 
-	// °ø°İ À§Ä¡ ¼ÒÄÏ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½
 	FGameplayTag CombatSocket_Weapon;
 	FGameplayTag CombatSocket_RightHand;
 	FGameplayTag CombatSocket_LeftHand;
 	FGameplayTag CombatSocket_Tail;
 
-	// °ø°İ ¸ùÅ¸ÁÖ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Å¸ï¿½ï¿½
 	FGameplayTag Montage_Attack_1;
 	FGameplayTag Montage_Attack_2;
 	FGameplayTag Montage_Attack_3;
 	FGameplayTag Montage_Attack_4;
 
-	// µ¥¹ÌÁö Å¸ÀÔ ¹è¿­
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Å¸ï¿½ï¿½ ï¿½è¿­
 	TArray<FGameplayTag> DamageTypeTags;
-	// µ¥¹ÌÁö Å¸ÀÔ, µğ¹öÇÁ ¸ÅÇÎ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Å¸ï¿½ï¿½, ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	TMap<FGameplayTag, FGameplayTag> DamageTypesToDebuffs;
 
-	// ÀÔ·Â ºí·Ï
+	// ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½ï¿½
 	FGameplayTag Player_Block_InputPressed; 
 	FGameplayTag Player_Block_InputHeld;
 	FGameplayTag Player_Block_InputReleased;
 
-	// »ç¿îµå
+	// ï¿½ï¿½ï¿½ï¿½
 	FGameplayTag GameplayCue_Player_Damage;
 	FGameplayTag GameplayCue_Player_Death;
 	FGameplayTag GameplayCue_Player_LowHealth;
@@ -124,6 +130,7 @@ public:
 	FGameplayTag GameplayCue_Enemy_Damage;
 	FGameplayTag GameplayCue_Cleanser_Damage;
 	FGameplayTag GameplayCue_Skill_WaterPump;
+	FGameplayTag GameplayCue_Skill_ClawSwipe;
 
 private:
 	static FDRGameplayTags GameplayTags;
