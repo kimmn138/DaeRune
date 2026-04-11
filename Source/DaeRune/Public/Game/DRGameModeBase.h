@@ -8,6 +8,7 @@
 
 class UAbilityInfo;
 class UCharacterClassInfo;
+class UPlayerCharacterClassInfo;
 class UGameBalanceConfig;
 class ADRDetectionManager;
 
@@ -22,9 +23,13 @@ class DAERUNE_API ADRGameModeBase : public AGameMode
 public:
 	ADRGameModeBase();
 
-	// ĳ���� Ŭ������ �⺻ ����
+	// 적 전용 CharacterClassInfo
 	UPROPERTY(EditDefaultsOnly, Category = "Character Class Defaults")
-	TObjectPtr<UCharacterClassInfo> CharacterClassInfo;
+	TObjectPtr<UCharacterClassInfo> EnemyCharacterClassInfo;
+
+	// 플레이어 전용 CharacterClassInfo
+	UPROPERTY(EditDefaultsOnly, Category = "Character Class Defaults")
+	TObjectPtr<UPlayerCharacterClassInfo> PlayerCharacterClassInfo;
 
 	// �����Ƽ ���� ������ ����
 	UPROPERTY(EditDefaultsOnly, Category = "Ability Info")

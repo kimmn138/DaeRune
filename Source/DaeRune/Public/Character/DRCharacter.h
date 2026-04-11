@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Character/DRCharacterBase.h"
+#include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "Voice/DRVOIPTalker.h"
 #include "DRCharacter.generated.h"
 
@@ -23,6 +24,11 @@ class DAERUNE_API ADRCharacter : public ADRCharacterBase
 public:
 	ADRCharacter();
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	// 플레이어 캐릭터 클래스 (EPlayerCharacterClass)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category = "Character Class Defaults")
+	EPlayerCharacterClass PlayerCharacterClass = EPlayerCharacterClass::GardenRobot;
+
 	// �������� ��Ʈ�ѷ��� ���ǵ� �� ȣ�� (������ GAS �ʱ�ȭ)
 	virtual void PossessedBy(AController* NewController) override;
 	// PlayerState ���ø����̼� �� ȣ�� (Ŭ���̾�Ʈ�� GAS �ʱ�ȭ)
@@ -111,9 +117,24 @@ public:
 	// �޽� ���ü� ������Ʈ
 	void UpdateMeshVisibility();
 
+	// 대기실 메시 가시성 전환 (고정 카메라에서 3P 메시를 보여주기 위해)
+	void SetWaitingRoomVisibility(bool bInWaitingRoom);
+
+	// 오버헤드 닉네임 위젯 가시성 제어 (WaitingRoom에서는 숨김, FreeRoam부터 표시)
+	void SetOverheadWidgetVisibility(bool bVisible);
+
+	// ========== 대기실 슬롯 텔레포트 ==========
+
+	/** 서버에서 호출 → 모든 클라이언트(+서버)에서 즉시 위치 설정 (CMC 우회) */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastTeleportToSlot(FVector Location, FRotator Rotation);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	// UPlayerCharacterClassInfo 기반 어트리뷰트 초기화
+	virtual void InitializeDefaultAttributes() const override;
 
 	// ========== ��ǰ ���� ==========
 

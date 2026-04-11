@@ -22,6 +22,9 @@ class DAERUNE_API ADRStageGameMode : public ADRGameModeBase
 public:
 	ADRStageGameMode();
 
+	// 플레이어별 DefaultPawnClass 결정
+	virtual UClass* GetDefaultPawnClassForController_Implementation(AController* InController) override;
+
 	// ������ �Ϸ� ������ �����ߴ��� Ȯ��
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	bool ValidatePhaseCompletion();

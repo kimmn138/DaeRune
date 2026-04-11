@@ -19,7 +19,7 @@ Phase 5: 킥(Kick) 시스템 ─────────────────
     ↓
 Phase 6: Power On 전환 (카메라 연출 + 상태 전환) ──── [핵심 전환]
     ↓
-Phase 7: 캐릭터 메시 교체 (클래스 선택 → 외형 변경) ─── [비주얼 피드백]
+Phase 7: 캐릭터 BP 교체 (클래스 선택 → 외형/능력 변경) ── [비주얼 피드백]
     ↓
 Phase 8: 메인 메뉴 리뉴얼 ──────────────────────── [독립 - Phase 1 이후 언제든]
     ↓
@@ -517,36 +517,86 @@ void ADRCharacter::PossessedBy(AController* NewController)
 }
 ```
 
-##### 2.0.5.6 FCharacterClassDefaultInfo 구조체 확장
+##### 2.0.5.6 FCharacterClassDefaultInfo 구조체 — 변경 없음 (런타임 메시 교체 대신 BP 교체 방식 채택)
 
-`CharacterClassInfo.h`의 `FCharacterClassDefaultInfo`에 메시/애님 필드 추가 (플레이어 데이터 에셋 `UPlayerCharacterClassInfo`에서만 설정, 적 에셋에서는 비워둠):
+`FCharacterClassDefaultInfo`에 `CharacterMesh`/`AnimClass` 필드를 추가하지 **않는다.**
 
+**이유: 런타임 `SetSkeletalMesh()` 방식의 한계**
+
+현재 `ADRCharacter`의 컴포넌트 구조를 분석한 결과:
+
+```
+CapsuleComponent (Root)
+├── CameraBoom (SetupAttachment: CapsuleComponent)
+│   ├── SetRelativeLocation(30, 0, 50)
+│   └── FollowCamera (SetupAttachment: CameraBoom Socket)
+│       └── FirstPersonMesh (SetupAttachment: FollowCamera) ← 1인칭 전용, OnlyOwnerSee
+└── GetMesh() ← 3인칭 전용, OwnerNoSee
+    └── Weapon (WeaponHandSocket에 부착)
+```
+
+`SetSkeletalMesh()`으로 런타임 메시 교체 시 다음 문제가 발생한다:
+
+| 문제 | 설명 |
+|------|------|
+| **1인칭 메시 미교체** | `FirstPersonMesh`는 `GetMesh()`와 별도 컴포넌트. `GetMesh()->SetSkeletalMesh()`을 호출해도 **1인칭 메시는 그대로** |
+| **카메라 위치 부정합** | `CameraBoom` 오프셋(30, 0, 50)이 캐릭터별로 다를 수 있음. 메시 비율이 다르면 카메라가 머리를 관통하거나 공중에 뜸 |
+| **소켓 호환성** | 새 스켈레톤에 `WeaponHandSocket` 등 기존 소켓이 없으면 무기 부착이 깨짐 |
+| **AnimClass 재초기화** | `SetAnimInstanceClass()` 후 재초기화 타이밍 이슈 가능 |
+
+**따라서 `FCharacterClassDefaultInfo`에는 메시/애님 필드를 추가하지 않고, 대신 `UPlayerCharacterClassInfo`에 캐릭터 BP 클래스 참조를 둔다.**
+
+`UPlayerCharacterClassInfo` 클래스에 추가할 필드:
 ```cpp
-USTRUCT(BlueprintType)
-struct FCharacterClassDefaultInfo
+UCLASS()
+class DAERUNE_API UPlayerCharacterClassInfo : public UDataAsset
 {
     GENERATED_BODY()
 
-    // 기존 필드 (적/플레이어 공통)
-    UPROPERTY(EditDefaultsOnly, Category = "Class Defaults")
-    TSubclassOf<UGameplayEffect> PrimaryAttributes;
+public:
+    UPROPERTY(EditDefaultsOnly, Category = "Character Class Defaults")
+    TMap<EPlayerCharacterClass, FCharacterClassDefaultInfo> CharacterClassInformation;
 
-    UPROPERTY(EditDefaultsOnly, Category = "Class Defaults")
-    TSubclassOf<UGameplayEffect> VitalAttributes;
+    UPROPERTY(EditDefaultsOnly, Category = "Common Class Defaults")
+    TArray<TSubclassOf<UGameplayAbility>> CommonAbilities;
 
-    UPROPERTY(EditDefaultsOnly, Category = "Class Defaults")
-    TArray<TSubclassOf<UGameplayAbility>> StartupAbilities;
+    // ★ 클래스별 캐릭터 BP 매핑 (외형은 BP에서 전부 설정)
+    UPROPERTY(EditDefaultsOnly, Category = "Character Blueprint")
+    TMap<EPlayerCharacterClass, TSubclassOf<ADRCharacter>> CharacterBPClasses;
 
-    UPROPERTY(EditDefaultsOnly, Category = "Class Defaults")
-    TArray<TSubclassOf<UGameplayAbility>> DeathAbilities;
-
-    // ★ 새 필드 (플레이어 에셋에서만 설정, 적 에셋에서는 비워둠)
-    UPROPERTY(EditDefaultsOnly, Category = "Visual")
-    TSoftObjectPtr<USkeletalMesh> CharacterMesh;
-
-    UPROPERTY(EditDefaultsOnly, Category = "Visual")
-    TSubclassOf<UAnimInstance> AnimClass;
+    FCharacterClassDefaultInfo GetClassDefaultInfo(EPlayerCharacterClass CharacterClass);
 };
+```
+
+**BP 교체 방식 (Phase 7에서 구현):**
+- `BP_DRCharacter_GardenRobot`, `BP_DRCharacter_VendingMachineRobot` 각각의 BP에서 **1인칭 메시, 3인칭 메시, 카메라 오프셋, 애니메이션을 개별 설정**
+- 클래스 변경 시 **기존 폰을 Destroy하고 새 BP의 폰을 Spawn → Possess**
+- 각 BP는 `ADRCharacter`를 상속하므로 C++ 코드는 동일하게 동작
+
+```
+┌─────────────────────────────────────────────────┐
+│  UPlayerCharacterClassInfo (데이터 에셋)          │
+│  ├── CharacterClassInformation (TMap)            │
+│  │   ├── GardenRobot → { GE, Abilities }        │
+│  │   └── VendingMachineRobot → { GE, Abilities }│
+│  └── CharacterBPClasses (TMap)                   │
+│      ├── GardenRobot → BP_DRCharacter_Garden     │
+│      └── VendingMachineRobot → BP_DRCharacter_VM │
+└─────────────────────────────────────────────────┘
+
+BP_DRCharacter_GardenRobot (ADRCharacter 상속)
+├── GetMesh() → GardenRobot 3인칭 SkeletalMesh
+├── FirstPersonMesh → GardenRobot 1인칭 SkeletalMesh
+├── CameraBoom → GardenRobot 전용 오프셋
+├── AnimClass → GardenRobot 전용 AnimBP
+└── Weapon 소켓 → GardenRobot 스켈레톤 기준
+
+BP_DRCharacter_VendingMachineRobot (ADRCharacter 상속)
+├── GetMesh() → VM 3인칭 SkeletalMesh
+├── FirstPersonMesh → VM 1인칭 SkeletalMesh
+├── CameraBoom → VM 전용 오프셋
+├── AnimClass → VM 전용 AnimBP
+└── Weapon 소켓 → VM 스켈레톤 기준
 ```
 
 ##### 2.0.5.7 블루프린트/에디터 작업
@@ -555,9 +605,11 @@ struct FCharacterClassDefaultInfo
 |------|------|
 | `DA_CharacterClassInfo` → `DA_EnemyCharacterClassInfo` 이름 변경 | 기존 적 데이터 유지, 이름만 변경. 타입: `UCharacterClassInfo` |
 | `DA_PlayerCharacterClassInfo` 신규 생성 | **`UPlayerCharacterClassInfo` 타입**의 새 데이터 에셋 |
+| `BP_DRCharacter_GardenRobot` 신규 생성 | `ADRCharacter` 상속. GardenRobot용 1인칭/3인칭 메시, 카메라 오프셋, AnimBP 설정 |
+| `BP_DRCharacter_VendingMachineRobot` 신규 생성 | `ADRCharacter` 상속. VendingMachineRobot용 1인칭/3인칭 메시, 카메라 오프셋, AnimBP 설정 |
 | `BP_DRStageGameMode`에서 두 에셋 설정 | `EnemyCharacterClassInfo` = DA_EnemyCharacterClassInfo, `PlayerCharacterClassInfo` = DA_PlayerCharacterClassInfo |
-| `BP_DRLobbyGameMode`에서 두 에셋 설정 | 동일하게 양쪽 모두 설정 (로비에서도 대기실 메시 교체에 PlayerCharacterClassInfo 필요) |
-| `DA_PlayerCharacterClassInfo` 내용 채우기 | **GardenRobot**, **VendingMachineRobot** 엔트리별 PrimaryAttributes GE, VitalAttributes GE, StartupAbilities, CharacterMesh, AnimClass 설정 |
+| `BP_DRLobbyGameMode`에서 두 에셋 설정 | 동일하게 양쪽 모두 설정 (로비에서도 대기실 BP 교체에 PlayerCharacterClassInfo 필요) |
+| `DA_PlayerCharacterClassInfo` 내용 채우기 | **GardenRobot**, **VendingMachineRobot** 엔트리별 PrimaryAttributes GE, VitalAttributes GE, StartupAbilities 설정 + `CharacterBPClasses`에 각 클래스별 BP 매핑 |
 
 ##### 2.0.5.8 영향 범위 요약
 
@@ -596,20 +648,25 @@ struct FCharacterClassDefaultInfo
 │  ├── InitializeDefaultAttributes() → InitializePlayerDefaultAttributes│
 │  └── PossessedBy() → GivePlayerStartupAbilities(PlayerCharacterClass)│
 │                                                                       │
-│  FCharacterClassDefaultInfo (구조체 확장)                               │
-│  └── + CharacterMesh, + AnimClass (플레이어 에셋에서만 사용)            │
+│  FCharacterClassDefaultInfo (구조체 변경 없음)                           │
+│  └── GE + 어빌리티만 관리, 외형은 BP에서 설정                          │
+│                                                                       │
+│  UPlayerCharacterClassInfo (신규 클래스)                                │
+│  ├── TMap<EPlayerCharacterClass, FCharacterClassDefaultInfo> (GE/어빌) │
+│  └── TMap<EPlayerCharacterClass, TSubclassOf<ADRCharacter>> (BP 매핑) │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
 ##### 2.0.5.9 구현 시점
 
 - **Phase 2 (현재):** PlayerState에 `SelectedPlayerClass` (`EPlayerCharacterClass`) 추가 (데이터 레이어만)
-- **Phase 7 (캐릭터 메시 교체 시):** 위의 CharacterClassInfo 분리 + 플레이어 초기화 경로 변경을 함께 진행
-  - CharacterClassInfo.h에 `EPlayerCharacterClass` 열거형 + `UPlayerCharacterClassInfo` 클래스 추가
+- **Phase 7 (캐릭터 BP 교체 시):** 위의 CharacterClassInfo 분리 + 플레이어 초기화 경로 변경 + BP 교체 시스템을 함께 진행
+  - CharacterClassInfo.h에 `EPlayerCharacterClass` 열거형 + `UPlayerCharacterClassInfo` 클래스 추가 (`CharacterBPClasses` TMap 포함)
   - DRGameModeBase.h 수정 (EnemyCharacterClassInfo + PlayerCharacterClassInfo)
   - DRAbilitySystemLibrary 확장 (새 함수 3개, `EPlayerCharacterClass` + `UPlayerCharacterClassInfo*` 사용)
-  - FCharacterClassDefaultInfo 확장 (CharacterMesh, AnimClass)
   - ADRCharacter에 `PlayerCharacterClass` 멤버 추가, 오버라이드 (InitializeDefaultAttributes, PossessedBy)
+  - 클래스별 캐릭터 BP 생성 (BP_DRCharacter_GardenRobot, BP_DRCharacter_VendingMachineRobot)
+  - 클래스 변경 시 폰 Destroy → 새 BP 폰 Spawn → Possess 로직 구현
   - 블루프린트/에디터 작업 (데이터 에셋 2개 설정: DA_EnemyCharacterClassInfo + DA_PlayerCharacterClassInfo)
 
 ---
@@ -773,8 +830,9 @@ Phase 2에서는 `SelectedCharacterClass`를 PlayerState에 저장하고 리플�
 1. `ADRCharacter::InitializeDefaultAttributes()`를 오버라이드하여 `UDRAbilitySystemLibrary::InitializePlayerDefaultAttributes(this, PlayerCharacterClass, Level, ASC)`를 사용하도록 변경 (`EPlayerCharacterClass` 타입)
 2. `ADRCharacter::PossessedBy()`에서 `AddCharacterAbilities()` 대신 `UDRAbilitySystemLibrary::GivePlayerStartupAbilities(this, ASC, PlayerCharacterClass)`를 사용하도록 변경 (`EPlayerCharacterClass` 타입)
 3. `ADRCharacter::InitAbilityActorInfo()` 시작 시 `PlayerCharacterClass = DRPlayerState->GetSelectedPlayerClass()`로 설정
-4. `UPlayerCharacterClassInfo` 데이터 에셋에 GardenRobot/VendingMachineRobot별 CharacterMesh, AnimClass 추가
-5. 기존 `BP_DRCharacter`의 `DefaultPrimaryAttributes`, `DefaultVitalAttributes`, `StartupAbilities`는 폴백(fallback)으로 유지하되, `UPlayerCharacterClassInfo` 경로가 우선하도록 변경
+4. `UPlayerCharacterClassInfo`의 `CharacterBPClasses` TMap에 GardenRobot/VendingMachineRobot별 캐릭터 BP 클래스 매핑
+5. 클래스 변경 시 **기존 폰 Destroy → 새 클래스 BP 폰 Spawn → Possess** 로직 구현 (외형은 BP에서 완전 관리)
+6. 클래스별 캐릭터 BP 생성: `BP_DRCharacter_GardenRobot`, `BP_DRCharacter_VendingMachineRobot` (각각 1인칭/3인칭 메시, 카메라 오프셋, AnimBP 개별 설정)
 
 ### 검증 방법
 PIE 2인 플레이. 콘솔 또는 블루프린트에서 `RequestChangeClass(true)` 호출. 두 클라이언트 모두에서 PlayerState의 `SelectedCharacterClass` 값이 변경되었는지 확인.
@@ -784,9 +842,43 @@ PIE 2인 플레이. 콘솔 또는 블루프린트에서 `RequestChangeClass(true
 ## Phase 3: 대기실 카메라 + 플레이어 배치
 
 ### 목표
-로비 맵에 대기실 전용 고정 카메라를 배치하고, 플레이어 캐릭터들을 일렬로 정렬하는 시스템 구축.
+로비 맵에 대기실 전용 고정 카메라를 배치하고, 플레이어 캐릭터들을 지정된 슬롯 위치에 정렬하는 시스템 구축.
 
-### 3.1 새 파일 생성: `ADRWaitingRoomCameraActor`
+---
+
+### 3.0 설계 결정: 플레이어 슬롯 위치를 어디에 정의할 것인가
+
+#### 3.0.1 후보 비교
+
+| 방식 | 설명 | 장점 | 단점 |
+|------|------|------|------|
+| **A. 카메라 액터에 슬롯 포함** (기존 Plan) | `ADRWaitingRoomCameraActor`에 `TArray<FTransform> PlayerSlotTransforms` | 하나의 액터로 관리 간단 | **카메라와 플레이어 배치가 결합** — 카메라 책임이 아닌 데이터를 들고 있음. 카메라 교체/추가 시 슬롯 데이터도 따라감 |
+| **B. GameMode에 슬롯 배열** (유저 제안) | `ADRLobbyGameMode`에 `TArray<FTransform>` EditDefaultsOnly | 개념적으로 가장 정확 (GameMode가 플레이어 관리 담당) | GameMode는 레벨에 배치되지 않으므로 **에디터에서 슬롯 위치를 시각적으로 확인/조정 불가** — 좌표를 수동 입력해야 함 |
+| **C. 개별 슬롯 마커 액터** (CleanserSite 패턴) | `ATargetPoint`에 "WaitingRoomSlot" 태그, 레벨에 4개 배치. GameMode가 태그로 탐색 후 이름순 정렬 | **기존 코드베이스 패턴과 동일** (CleanserSite 탐색 = `TActorIterator` + `ActorHasTag`). 레벨에서 드래그로 위치 조정 가능. 카메라와 완전 분리 | 레벨에 액터 4개 추가 (사소함) |
+
+#### 3.0.2 결정: **방식 C (개별 슬롯 마커 액터)** 채택
+
+**이유:**
+1. **기존 패턴 일관성** — `DRStageGameMode`가 `TActorIterator<ADRCleanserSite>` + `ActorHasTag("CleanserSite")`로 사이트를 탐색하는 것과 동일한 패턴. 코드베이스 전반에서 일관된 "레벨에 액터 배치 → GameMode가 탐색" 방식.
+2. **관심사 분리** — 카메라 액터는 카메라 전용, 슬롯 위치는 GameMode가 관리. 플레이어 배치 로직은 오롯이 GameMode의 책임.
+3. **시각적 편집** — 에디터에서 각 슬롯 마커를 드래그하여 위치 조정 가능. 에디터 뷰포트에서 플레이어가 서 있을 위치를 직접 눈으로 확인 가능.
+4. **유연성** — 슬롯 개수를 늘리거나 줄이려면 액터를 추가/삭제하면 됨. 코드 변경 불필요.
+
+#### 3.0.3 기존 PlayerStart 처리
+
+현재 로비 맵에 배치된 `APlayerStart` 액터의 처리:
+
+- **기존 PlayerStart 유지** — UE5 GameMode의 기본 스폰 시스템이 `PlayerStart`를 필요로 함. 플레이어는 먼저 `PlayerStart` 위치에 스폰된 후, 0.5초 딜레이로 슬롯 위치로 텔레포트됨.
+- **PlayerStart 위치 조정** — 슬롯 마커 근처 (카메라에 안 보이는 곳)에 하나 배치하면 충분. 여러 개 둘 필요 없음.
+- **FreeRoam 전환 시** — `PowerOn()` 후에는 슬롯 텔레포트 없이 자유 이동이므로 PlayerStart 위치는 무관.
+
+**정리:** 로비 맵의 기존 PlayerStart를 **1개만 남기고** (스폰용), 나머지는 삭제. 슬롯 마커로 플레이어 위치를 제어.
+
+---
+
+### 3.1 카메라 액터: `ADRWaitingRoomCameraActor` (카메라 전용)
+
+카메라 액터는 **고정 카메라 시점만 담당**. 슬롯 위치 데이터를 포함하지 않음.
 
 **경로:** `Source/DaeRune/Public/Actor/DRWaitingRoomCameraActor.h`
 
@@ -814,15 +906,6 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
     TObjectPtr<UCameraComponent> CameraComponent;
 
-    // 최대 4명의 플레이어 슬롯 위치 (호스트=0, 이후 참가순)
-    // LobbyMap 에디터에서 직접 설정
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Waiting Room")
-    TArray<FTransform> PlayerSlotTransforms;
-
-    // 슬롯 인덱스에 해당하는 Transform 반환
-    UFUNCTION(BlueprintCallable, Category = "Waiting Room")
-    FTransform GetSlotTransform(int32 SlotIndex) const;
-
     // 카메라가 바라보는 방향으로 캐릭터가 회전해야 할 Rotation 반환
     UFUNCTION(BlueprintCallable, Category = "Waiting Room")
     FRotator GetCharacterFacingRotation() const;
@@ -841,25 +924,6 @@ ADRWaitingRoomCameraActor::ADRWaitingRoomCameraActor()
 
     CameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("WaitingRoomCamera"));
     RootComponent = CameraComponent;
-
-    // 기본 4슬롯 초기화 (에디터에서 조정)
-    PlayerSlotTransforms.SetNum(4);
-}
-
-FTransform ADRWaitingRoomCameraActor::GetSlotTransform(int32 SlotIndex) const
-{
-    if (PlayerSlotTransforms.IsValidIndex(SlotIndex))
-    {
-        return PlayerSlotTransforms[SlotIndex];
-    }
-
-    // 범위 초과 시 마지막 유효 슬롯 반환
-    if (PlayerSlotTransforms.Num() > 0)
-    {
-        return PlayerSlotTransforms.Last();
-    }
-
-    return FTransform::Identity;
 }
 
 FRotator ADRWaitingRoomCameraActor::GetCharacterFacingRotation() const
@@ -873,7 +937,31 @@ FRotator ADRWaitingRoomCameraActor::GetCharacterFacingRotation() const
 }
 ```
 
-### 3.2 ADRLobbyGameMode에 카메라 참조 + 슬롯 관리 추가
+**변경 사항 (기존 Phase 3 구현과의 차이):**
+- `PlayerSlotTransforms` TArray 제거
+- `GetSlotTransform()` 제거
+- `GetCharacterFacingRotation()`만 유지
+
+---
+
+### 3.2 슬롯 마커: `ATargetPoint` + "WaitingRoomSlot" 태그
+
+**새 C++ 클래스 불필요.** UE5 기본 `ATargetPoint`를 그대로 사용하고, 에디터에서 액터 태그를 설정한다.
+
+**레벨 배치 (LobbyMap):**
+- `ATargetPoint` 4개를 레벨에 배치
+- 각 액터에 태그 `"WaitingRoomSlot"` 추가 (Details → Tags)
+- 각 액터 이름을 `WaitingRoomSlot_0`, `WaitingRoomSlot_1`, `WaitingRoomSlot_2`, `WaitingRoomSlot_3` 으로 지정 (정렬용)
+- 위치: 카메라가 바라보는 영역에 일렬로 배치 (간격 약 150~200 유닛)
+- 회전: 무관 (캐릭터 회전은 카메라 기준으로 자동 계산)
+
+**이름 정렬 규칙:**
+- `GetName()` 기준 알파벳 정렬 → `_0` < `_1` < `_2` < `_3`
+- 호스트(슬롯 0) = 가장 왼쪽, 이후 참가순으로 오른쪽
+
+---
+
+### 3.3 ADRLobbyGameMode에 슬롯 탐색 + 배치 로직 추가
 
 **파일:** `Source/DaeRune/Public/Game/DRLobbyGameMode.h`
 
@@ -886,52 +974,73 @@ protected:
     UPROPERTY()
     TObjectPtr<ADRWaitingRoomCameraActor> WaitingRoomCamera;
 
+    // 슬롯 마커 액터 배열 (이름순 정렬)
+    UPROPERTY()
+    TArray<TObjectPtr<AActor>> WaitingRoomSlots;
+
     // 플레이어 → 슬롯 인덱스 매핑
     TMap<AController*, int32> PlayerSlotMap;
 
     // 다음 사용 가능한 슬롯 인덱스
     int32 NextAvailableSlot = 0;
 
+    // 대기실 카메라 및 슬롯 마커 탐색
+    void FindWaitingRoomActors();
+
     // 플레이어를 슬롯에 배치
     void AssignPlayerToSlot(AController* Player);
 
-    // 모든 플레이어 재배치 (킥 후 빈 자리 정리)
+    // 모든 플레이어 재배치 (킥/퇴장 후 빈 자리 정리)
     void RepositionAllPlayers();
 
     // 플레이어 폰을 슬롯 위치로 텔레포트 + 이동 비활성화
     void PositionPawnAtSlot(APawn* Pawn, int32 SlotIndex);
-
-    // 대기실 카메라 탐색
-    void FindWaitingRoomCamera();
 ```
 
 **파일:** `Source/DaeRune/Private/Game/DRLobbyGameMode.cpp`
 
 ```cpp
 #include "Actor/DRWaitingRoomCameraActor.h"
+#include "Engine/TargetPoint.h"
 #include "EngineUtils.h"  // TActorIterator
 
 void ADRLobbyGameMode::BeginPlay()
 {
     Super::BeginPlay();
 
-    FindWaitingRoomCamera();
+    FindWaitingRoomActors();
     AllowJoinInProgress();
 }
 
-void ADRLobbyGameMode::FindWaitingRoomCamera()
+void ADRLobbyGameMode::FindWaitingRoomActors()
 {
-    // CleanserSite 탐색과 동일한 패턴 (DRStageGameMode::BeginPlay에서 사용)
+    // 카메라 탐색 (TActorIterator, 프로젝트 기존 패턴)
     for (TActorIterator<ADRWaitingRoomCameraActor> It(GetWorld()); It; ++It)
     {
         WaitingRoomCamera = *It;
         break; // 하나만 필요
     }
+
+    // 슬롯 마커 탐색 (CleanserSite 탐색과 동일한 패턴: TActorIterator + ActorHasTag)
+    static const FName WaitingRoomSlotTag = TEXT("WaitingRoomSlot");
+    for (TActorIterator<ATargetPoint> It(GetWorld()); It; ++It)
+    {
+        if (It->ActorHasTag(WaitingRoomSlotTag))
+        {
+            WaitingRoomSlots.Add(*It);
+        }
+    }
+
+    // 이름순 정렬 (WaitingRoomSlot_0 < WaitingRoomSlot_1 < ...)
+    WaitingRoomSlots.Sort([](const TObjectPtr<AActor>& A, const TObjectPtr<AActor>& B)
+    {
+        return A->GetName() < B->GetName();
+    });
 }
 
 void ADRLobbyGameMode::AssignPlayerToSlot(AController* Player)
 {
-    if (!WaitingRoomCamera) return;
+    if (WaitingRoomSlots.Num() == 0) return;
 
     int32 SlotIndex = NextAvailableSlot++;
     PlayerSlotMap.Add(Player, SlotIndex);
@@ -944,14 +1053,21 @@ void ADRLobbyGameMode::AssignPlayerToSlot(AController* Player)
 
 void ADRLobbyGameMode::PositionPawnAtSlot(APawn* Pawn, int32 SlotIndex)
 {
-    if (!WaitingRoomCamera || !Pawn) return;
+    if (WaitingRoomSlots.Num() == 0 || !Pawn) return;
 
-    FTransform SlotTransform = WaitingRoomCamera->GetSlotTransform(SlotIndex);
-    FRotator FacingRotation = WaitingRoomCamera->GetCharacterFacingRotation();
+    // 유효 범위 클램프
+    int32 ClampedIndex = FMath::Clamp(SlotIndex, 0, WaitingRoomSlots.Num() - 1);
+    AActor* SlotActor = WaitingRoomSlots[ClampedIndex];
+    if (!SlotActor) return;
 
     // 텔레포트
-    Pawn->SetActorLocation(SlotTransform.GetLocation());
-    Pawn->SetActorRotation(FacingRotation);
+    Pawn->SetActorLocation(SlotActor->GetActorLocation());
+
+    // 카메라를 향하도록 회전
+    if (WaitingRoomCamera)
+    {
+        Pawn->SetActorRotation(WaitingRoomCamera->GetCharacterFacingRotation());
+    }
 
     // 이동 비활성화
     if (UCharacterMovementComponent* MovementComp =
@@ -963,7 +1079,7 @@ void ADRLobbyGameMode::PositionPawnAtSlot(APawn* Pawn, int32 SlotIndex)
 
 void ADRLobbyGameMode::RepositionAllPlayers()
 {
-    if (!WaitingRoomCamera) return;
+    if (WaitingRoomSlots.Num() == 0) return;
 
     // 기존 매핑 수집 (호스트 우선)
     TArray<AController*> OrderedPlayers;
@@ -993,7 +1109,9 @@ void ADRLobbyGameMode::RepositionAllPlayers()
 }
 ```
 
-### 3.3 PostLogin / HandleSeamlessTravelPlayer에서 슬롯 배치
+---
+
+### 3.4 PostLogin / HandleSeamlessTravelPlayer에서 슬롯 배치
 
 **기존 `PostLogin` 수정:**
 ```cpp
@@ -1028,7 +1146,7 @@ void ADRLobbyGameMode::PostLogin(APlayerController* NewPlayer)
         else
         {
             // 기존 복원 로직 (FreeRoam 상태)
-            // ... (기존 코드 유지)
+            // ... (기존 코드 유지: ClientStopSpectating, Movement/Capsule 복원)
         }
     }
     // ... (기존 디버그 메시지 코드 유지)
@@ -1037,7 +1155,31 @@ void ADRLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 
 **기존 `HandleSeamlessTravelPlayer` 수정:** 동일 패턴으로 `AssignPlayerToSlot` + `ClientSetWaitingRoomView` 호출.
 
-### 3.4 ADRPlayerController에 카메라 설정 Client RPC 추가
+**기존 `Logout` 수정:**
+```cpp
+void ADRLobbyGameMode::Logout(AController* Exiting)
+{
+    // 슬롯 매핑에서 제거
+    if (PlayerSlotMap.Contains(Exiting))
+    {
+        PlayerSlotMap.Remove(Exiting);
+
+        // 대기실 상태면 남은 플레이어 재배치
+        ADRLobbyGameState* LGS = GetGameState<ADRLobbyGameState>();
+        if (LGS && LGS->GetLobbyState() == ELobbyState::WaitingRoom)
+        {
+            RepositionAllPlayers();
+        }
+    }
+
+    Super::Logout(Exiting);
+    // ... (기존 디버그 메시지 코드 유지)
+}
+```
+
+---
+
+### 3.5 ADRPlayerController에 카메라 설정 Client RPC 추가
 
 **파일:** `Source/DaeRune/Public/Player/DRPlayerController.h`
 
@@ -1057,6 +1199,8 @@ public:
 **파일:** `Source/DaeRune/Private/Player/DRPlayerController.cpp`
 
 ```cpp
+#include "Actor/DRWaitingRoomCameraActor.h"
+
 void ADRPlayerController::ClientSetWaitingRoomView_Implementation(
     ADRWaitingRoomCameraActor* CameraActor)
 {
@@ -1069,9 +1213,24 @@ void ADRPlayerController::ClientSetWaitingRoomView_Implementation(
     SetInputMode(FInputModeUIOnly());
     SetShowMouseCursor(true);
 }
+
+void ADRPlayerController::ClientStartCameraTransitionToCharacter_Implementation()
+{
+    // 캐릭터로 부드럽게 전환
+    if (APawn* MyPawn = GetPawn())
+    {
+        SetViewTargetWithBlend(MyPawn, 1.5f);
+    }
+
+    // 게임 입력 모드로 전환
+    SetInputMode(FInputModeGameOnly());
+    SetShowMouseCursor(false);
+}
 ```
 
-### 3.5 RestoreDefaultInputMode 수정
+---
+
+### 3.6 RestoreDefaultInputMode 수정
 
 **기존 코드:**
 ```cpp
@@ -1115,15 +1274,39 @@ void ADRPlayerController::RestoreDefaultInputMode()
 }
 ```
 
-### 3.6 레벨에 배치할 블루프린트
+---
 
-**블루프린트 에셋:** `Content/Blueprints/Actor/BP_WaitingRoomCamera.uasset`
-- `ADRWaitingRoomCameraActor` 기반
-- `PlayerSlotTransforms` 4개를 에디터에서 설정 (호스트 왼쪽, 나머지 오른쪽 일렬)
-- `LobbyMap.umap`에 하나 배치
+### 3.7 에디터/블루프린트 작업
+
+| 작업 | 설명 |
+|------|------|
+| **BP_WaitingRoomCamera 생성** | `ADRWaitingRoomCameraActor` 기반 블루프린트 (경로: `Content/Blueprints/Actor/`). LobbyMap에 하나 배치. 캐릭터들이 서 있는 영역을 정면에서 바라보는 위치/각도로 설정 |
+| **WaitingRoomSlot 마커 4개 배치** | LobbyMap에 `ATargetPoint` 4개 배치. 각각 이름: `WaitingRoomSlot_0`, `WaitingRoomSlot_1`, `WaitingRoomSlot_2`, `WaitingRoomSlot_3`. 각각 태그: `WaitingRoomSlot`. 카메라가 바라보는 영역에 좌→우 일렬 배치 (간격 약 150~200 유닛) |
+| **기존 PlayerStart 정리** | LobbyMap에서 기존 PlayerStart를 **1개만 남기고** 나머지 삭제. 남은 1개는 슬롯 마커 근처 (카메라에 안 보이는 위치)에 배치 |
+
+---
+
+### 3.8 코드 변경 영향 요약 (기존 Phase 3 구현과의 차이)
+
+현재 코드에 이미 Phase 3가 부분적으로 구현되어 있다. 새 Plan으로 변경이 필요한 부분:
+
+| 파일 | 현재 상태 | 변경 필요 사항 |
+|------|----------|---------------|
+| `DRWaitingRoomCameraActor.h` | `PlayerSlotTransforms` TArray + `GetSlotTransform()` 포함 | **제거**: `PlayerSlotTransforms`, `GetSlotTransform()`. 카메라 전용으로 축소 |
+| `DRWaitingRoomCameraActor.cpp` | 생성자에서 `PlayerSlotTransforms.SetNum(4)`, `GetSlotTransform()` 구현 | **제거**: 위 코드 삭제 |
+| `DRLobbyGameMode.h` | `WaitingRoomCamera` 참조만 있음. `FindWaitingRoomCamera()` | **추가**: `WaitingRoomSlots` TArray, `FindWaitingRoomActors()` 통합. **변경**: `FindWaitingRoomCamera()` → `FindWaitingRoomActors()` |
+| `DRLobbyGameMode.cpp` | `PositionPawnAtSlot()`이 `WaitingRoomCamera->GetSlotTransform()` 사용 | **변경**: `WaitingRoomSlots[SlotIndex]->GetActorLocation()` 사용. `FindWaitingRoomCamera()` → `FindWaitingRoomActors()`로 통합 (카메라 + 슬롯 마커 동시 탐색) |
+| `DRPlayerController.h/cpp` | `ClientSetWaitingRoomView`, `ClientStartCameraTransitionToCharacter`, `RestoreDefaultInputMode` | **변경 없음** — 이미 구현된 코드 그대로 유지 |
+
+---
 
 ### 검증 방법
-PIE 2인 플레이. 로비 진입 시 두 플레이어 모두 고정 카메라 시점으로 전환. 캐릭터들이 지정된 슬롯 위치에 일렬 배치. 마우스 커서 표시, 캐릭터 이동 불가.
+PIE 2인 플레이:
+1. 로비 진입 시 두 플레이어 모두 고정 카메라 시점으로 전환되는지 확인
+2. 캐릭터들이 `WaitingRoomSlot_0`, `WaitingRoomSlot_1` 위치에 배치되는지 확인
+3. 마우스 커서가 표시되고 캐릭터 이동이 불가한지 확인
+4. 한 플레이어가 나가면 남은 플레이어가 재배치되는지 확인
+5. 에디터에서 슬롯 마커를 이동하면 다음 테스트에서 캐릭터 위치가 변경되는지 확인
 
 ---
 
@@ -1368,17 +1551,18 @@ void ADRPlayerController::OnLobbyStateChangedForUI(ELobbyState NewState)
 
 `UDRWaitingRoomWidget`을 상속받아 제작. 블루프린트에서 구현할 내용:
 
-**레이아웃:**
+**설계 원칙:** UMG는 화면 위에 얹히는 정보 UI만 담당한다. 대기방의 배경, 슬롯 구조물, 플레이어 캐릭터는 월드에 실제 메시로 배치되어 있으며, UI를 통해 보인다.
+
+**레이아웃 (투명 오버레이):**
 ```
-┌─────────────────────────────────────┐
-│  Room Code: A3K9BX7M               │  ← 상단
-│                                     │
-│  [Kick]    [Kick]    [Kick]         │  ← 호스트에게만 보임
-│  Player1  Player2   Player3         │
-│  ◀ GardenRobot ▶  ◀ VendingMachine ▶│  ← 자기것만 인터랙티브
-│                                     │
-│         [ Power On ]                │  ← 호스트에게만 보임
-└─────────────────────────────────────┘
+┌─ 3D 월드 배경 (대기실 + 캐릭터들이 보임) ─┐
+│                                            │
+│  [Kick]           [Kick]                   │  ← 호스트에게만, 캐릭터 머리 위
+│  Player1          Player2                  │  ← 캐릭터 머리 위 이름
+│  ◀ Elementalist ▶ ◀ Warrior ▶              │  ← 캐릭터 발 아래, 자기것만 인터랙티브
+│                                            │
+│              [ Power On ]                  │  ← 하단 중앙, 호스트에게만
+└────────────────────────────────────────────┘
 ```
 
 - `RefreshPlayerSlots` 이벤트 구현: `FWaitingRoomPlayerInfo` 배열 받아 슬롯 UI 업데이트
@@ -1387,8 +1571,571 @@ void ADRPlayerController::OnLobbyStateChangedForUI(ELobbyState NewState)
 - Kick 버튼 클릭 → `GetOwningPlayer()→ServerRequestKickPlayer(SlotInfo.OwningPlayerState)`
 - Power On 클릭 → `GetOwningPlayer()→ServerRequestPowerOn()`
 
+### 4.7 WBP_WaitingRoom 블루프린트 위젯 상세 제작 가이드
+
+> **UMG 프로퍼티 용어 정리**
+> - 위젯 자체의 프로퍼티: Details 패널에서 위젯을 선택했을 때 보이는 것 (예: TextBlock의 `Text`, `Font`)
+> - **슬롯(Slot) 프로퍼티**: 부모 컨테이너가 자식에게 부여하는 레이아웃 속성. 위젯을 선택하면 Details 패널 **최상단**의 `Slot` 섹션에 표시됨.
+>   - Canvas Panel의 자식 → `Anchors`, `Offset Left/Top/Right/Bottom`, `Alignment`, `Size To Content`
+>   - Vertical/Horizontal Box의 자식 → `Padding`, `Size (Auto/Fill)`, `Horizontal/Vertical Alignment`
+>   - Overlay의 자식 → `Padding`, `Horizontal/Vertical Alignment`
+> - 위젯에 고정 크기를 지정하려면 → **SizeBox**로 감싸서 `Width Override`, `Height Override` 사용
+
+> **중요 전제**: 이 가이드는 대기방의 배경, 슬롯 구조물, 플레이어 캐릭터가 모두 월드에 실제 스태틱 메시 / 스켈레탈 메시로 배치되어 있다는 전제로 작성한다.
+> 즉, **UMG는 화면 위에 얹히는 정보 UI만 담당**한다.
+> 플레이어 이름은 캐릭터 머리 위, Kick 버튼은 그 위, 캐릭터 선택 UI(`◀ 클래스명 ▶`)는 캐릭터 아래에 보이도록 만든다.
+> P1 / P2 / P3 / P4 같은 위치 표시는 위젯이 아니라 배경 메시 또는 월드 데칼/텍스트로 처리하는 것을 권장한다.
+
+---
+
+#### 4.7.1 위젯 생성: WBP_PlayerSlot (서브위젯, 먼저 생성)
+
+1. 에디터에서 `Content/Blueprints/UI/` 폴더 열기
+2. 우클릭 → **User Interface → Widget Blueprint**
+3. 부모 클래스: **UserWidget** (기본값 그대로)
+4. 이름: `WBP_PlayerSlot`
+
+---
+
+#### 4.7.2 WBP_PlayerSlot 디자이너 탭: 위젯 트리
+
+아래 순서대로 위젯을 배치한다. 들여쓰기는 부모-자식 관계를 나타냄.
+가운데 영역은 비워 둔다 — 실제 캐릭터 메시가 이 영역 뒤에서 보이게 된다.
+
+```
+[SizeBox_Root]  ◀ 루트 위젯: SizeBox
+│   Details → Child Layout:
+│     Width Override: 220  (체크박스 ON, 값 220)
+│     Height Override: 320 (체크박스 ON, 값 320)
+│   ※ 이 위젯의 가운데 영역은 비워 둔다. 실제 캐릭터 메시가 이 영역에 보이게 된다.
+│
+└── [Canvas_SlotRoot] Canvas Panel
+    │
+    ├── [VBox_HeadUI] VerticalBox
+    │   │ Slot (Canvas Panel Slot):
+    │   │   Anchors: Top Center (프리셋에서 상단 가운데 선택)
+    │   │   Alignment: (0.5, 0.0)
+    │   │   Position X: 110, Y: 0
+    │   │   Size To Content: true
+    │   │
+    │   ├── [Btn_Kick] Button
+    │   │   │ Slot (Vertical Box Slot):
+    │   │   │   Size: Auto
+    │   │   │   Horizontal Alignment: Center
+    │   │   │   Padding: (0, 0, 0, 2)
+    │   │   │ Details:
+    │   │   │   Visibility: Collapsed
+    │   │   │   Style → Normal:  Image = None, Tint = (0.60, 0.10, 0.10, 0.95)
+    │   │   │   Style → Hovered: Image = None, Tint = (0.85, 0.18, 0.18, 1.00)
+    │   │   │   Style → Pressed: Image = None, Tint = (0.40, 0.05, 0.05, 1.00)
+    │   │   │
+    │   │   └── [Txt_Kick] TextBlock
+    │   │         Details:
+    │   │           Text: "Kick"
+    │   │           Font: Font Family = Roboto, Typeface = Bold, Size = 12
+    │   │           Color and Opacity: (1, 1, 1, 1) 흰색
+    │   │           Justification: Center
+    │   │
+    │   └── [Txt_PlayerName] TextBlock
+    │         Slot (VBox Slot): Size=Auto, H-Align=Center
+    │         Details:
+    │           Text: "Player"
+    │           Font: Roboto, Bold, Size=16
+    │           Color and Opacity: (1, 1, 1, 1)
+    │           Shadow Offset: (1, 1)
+    │           Shadow Color and Opacity: (0, 0, 0, 0.8)
+    │           Justification: Center
+    │
+    └── [HBox_ClassSelect] HorizontalBox
+        │ Slot (Canvas Panel Slot):
+        │   Anchors: Bottom Center (프리셋에서 하단 가운데 선택)
+        │   Alignment: (0.5, 1.0)
+        │   Position X: 110, Y: 320
+        │   Size To Content: true
+        │
+        ├── [Btn_PrevClass] Button
+        │   │ Slot (Horizontal Box Slot): Size=Auto, V-Align=Center
+        │   │ Details:
+        │   │   Visibility: Collapsed
+        │   │   Style → Normal:  Tint=(0.12, 0.12, 0.12, 0.85)
+        │   │   Style → Hovered: Tint=(0.22, 0.22, 0.22, 1.00)
+        │   │   Style → Pressed: Tint=(0.08, 0.08, 0.08, 1.00)
+        │   │
+        │   └── [Txt_PrevArrow] TextBlock
+        │         Details:
+        │           Text: "◀"
+        │           Font: Roboto, Bold, Size=18
+        │           Color and Opacity: (1, 1, 1, 1)
+        │
+        ├── [SizeBox_ClassName] SizeBox
+        │   │ Slot (Horizontal Box Slot): Size=Auto, V-Align=Center, Padding=(10,0,10,0)
+        │   │ Details:
+        │   │   Min Desired Width: 체크박스 ON, 값 120
+        │   │
+        │   └── [Txt_ClassName] TextBlock
+        │         Details:
+        │           Text: "Elementalist"
+        │           Font: Roboto, Bold, Size=15
+        │           Color and Opacity: (1, 1, 1, 1)
+        │           Shadow Offset: (1, 1)
+        │           Shadow Color and Opacity: (0, 0, 0, 0.8)
+        │           Justification: Center
+        │
+        └── [Btn_NextClass] Button
+            │ Slot (Horizontal Box Slot): Size=Auto, V-Align=Center
+            │ Details:
+            │   Visibility: Collapsed
+            │   Style: (Btn_PrevClass와 동일)
+            │
+            └── [Txt_NextArrow] TextBlock
+                  Details:
+                    Text: "▶"
+                    Font: Roboto, Bold, Size=18
+                    Color and Opacity: (1, 1, 1, 1)
+```
+
+**IsVariable 체크할 위젯들** (Details 패널에서 위젯 이름 옆 눈 아이콘 클릭):
+- `Btn_Kick`, `Txt_PlayerName`, `Txt_ClassName`, `Btn_PrevClass`, `Btn_NextClass`
+
+---
+
+#### 4.7.3 WBP_PlayerSlot 변수
+
+이벤트 그래프 좌측 My Blueprint 패널 → Variables 섹션에서 추가:
+
+| 변수명 | 타입 | Instance Editable | 기본값 | 용도 |
+|--------|------|:-:|--------|------|
+| `SlotIndex` | Integer | ✓ | 0 | 이 슬롯의 인덱스 (0~3) |
+| `bIsOccupied` | Boolean | ✗ | false | 플레이어가 배정되었는지 |
+| `CachedPlayerState` | Player State (Object Reference) | ✗ | None | Kick 시 식별용 캐시 |
+
+---
+
+#### 4.7.4 WBP_PlayerSlot 이벤트 그래프
+
+##### (A) Custom Event: UpdateSlot
+
+이벤트 그래프에서 우클릭 → **Add Custom Event** → 이름: `UpdateSlot`
+
+**입력 파라미터 추가** (Details 패널 → Inputs):
+- `Info` : 타입 = `Waiting Room Player Info` (구조체)
+- `bShowKick` : 타입 = `Boolean`
+- `bIsMySlot` : 타입 = `Boolean`
+
+```
+[UpdateSlot] (Info, bShowKick, bIsMySlot)
+│
+├── Set Visibility (Self) = Visible   ← 이 슬롯에 플레이어가 들어오면 다시 표시
+├── SET bIsOccupied = true
+├── SET CachedPlayerState = [Break WaitingRoomPlayerInfo → OwningPlayerState]
+│
+├── Txt_PlayerName → Set Text
+│     Text = [Break WaitingRoomPlayerInfo → PlayerName]
+│
+├── Txt_ClassName → Set Text
+│     Text = [SELECT on SelectedClass]
+│            Elementalist → "Elementalist"
+│            Warrior      → "Warrior"
+│            Ranger       → "Ranger"
+│     ※ 방법: Break WaitingRoomPlayerInfo → SelectedClass 핀을
+│       Select 노드 (Enum)의 Index에 연결.
+│       각 옵션에 문자열을 직접 입력한다.
+│
+├── Btn_Kick → Set Visibility
+│     분기: [bShowKick] AND [NOT bIsMySlot]
+│     → True: ESlateVisibility::Visible
+│     → False: ESlateVisibility::Collapsed
+│     ※ 호스트 화면에서만 다른 플레이어 머리 위 Kick 버튼이 보이게 된다.
+│
+├── Btn_PrevClass → Set Visibility
+│     [bIsMySlot] ? Visible : Collapsed
+│
+├── Btn_NextClass → Set Visibility
+│     [bIsMySlot] ? Visible : Collapsed
+│
+├── Txt_PlayerName → Set Color and Opacity
+│     [bIsMySlot]
+│     → True:  (1.0, 1.0, 1.0, 1.0)
+│     → False: (0.86, 0.86, 0.86, 1.0)
+│
+└── Txt_ClassName → Set Color and Opacity
+      [bIsMySlot]
+      → True:  (1.0, 0.95, 0.75, 1.0)  ← 자기 슬롯은 살짝 강조
+      → False: (1.0, 1.0, 1.0, 1.0)
+      ※ 기존처럼 큰 프레임을 두르지 않고, 텍스트 강조만 준다.
+```
+
+##### (B) Custom Event: ClearSlot
+
+이벤트 그래프에서 우클릭 → **Add Custom Event** → 이름: `ClearSlot` (입력 파라미터 없음)
+
+```
+[ClearSlot]
+│
+├── SET bIsOccupied = false
+├── SET CachedPlayerState = None  ← 빈 Object Reference 할당 (핀 우클릭 → Clear)
+│
+├── Txt_PlayerName → Set Text("")
+├── Txt_ClassName → Set Text("")
+│
+├── Btn_Kick → Set Visibility(Collapsed)
+├── Btn_PrevClass → Set Visibility(Collapsed)
+├── Btn_NextClass → Set Visibility(Collapsed)
+│
+└── Set Visibility (Self) = Collapsed
+      ※ 빈 슬롯은 아예 숨긴다. 빈 자리는 월드의 구조물만 남고,
+        플레이어 UI는 표시되지 않는다.
+```
+
+##### (C) Btn_Kick → OnClicked 이벤트
+
+디자이너에서 `Btn_Kick` 선택 → Details → Events → On Clicked 옆 **+** 클릭
+
+```
+[On Clicked (Btn_Kick)]
+│
+├── Is Valid (CachedPlayerState) → Is Not Valid 핀 → Return
+│
+├── Get Owning Player → Cast to DRPlayerController
+│
+└── [Cast 성공] → Server Request Kick Player (Target=CastResult, TargetPlayerState=CachedPlayerState)
+```
+
+##### (D) Btn_PrevClass → OnClicked 이벤트
+
+디자이너에서 `Btn_PrevClass` 선택 → Details → Events → On Clicked 옆 **+** 클릭
+
+```
+[On Clicked (Btn_PrevClass)]
+│
+└── Get Owning Player → Cast to DRPlayerController
+    └── [Cast 성공] → Request Change Class (Target=CastResult, bNext=false)
+```
+
+##### (E) Btn_NextClass → OnClicked 이벤트
+
+```
+[On Clicked (Btn_NextClass)]
+│
+└── Get Owning Player → Cast to DRPlayerController
+    └── [Cast 성공] → Request Change Class (Target=CastResult, bNext=true)
+```
+
+> **주의**: `RequestChangeClass`는 내부적으로 `ServerRequestChangeClass` Server RPC를 호출하므로
+> 블루프린트에서 직접 `ServerRequestChangeClass`를 호출하지 않아도 됨.
+> 캐릭터 순환 순서: `→ Elementalist → Warrior → Ranger → Elementalist → ...`
+
+---
+
+#### 4.7.5 위젯 생성: WBP_WaitingRoom (메인 위젯)
+
+1. `Content/Blueprints/UI/` 폴더에서 우클릭 → **User Interface → Widget Blueprint**
+2. 부모 클래스: **DRWaitingRoomWidget** 검색 후 선택
+3. 이름: `WBP_WaitingRoom`
+
+---
+
+#### 4.7.6 WBP_WaitingRoom 디자이너 탭: 위젯 트리
+
+Canvas Panel 루트에 PlayerSlot들을 **절대 좌표**로 배치한다.
+각 슬롯의 Position은 대기실 카메라 구도에서 캐릭터가 서 있는 위치에 맞게 직접 조정한다.
+
+```
+[CanvasPanel] (루트, 자동 생성됨)
+│
+├── [PlayerSlot_0] WBP_PlayerSlot     ◀ IsVariable 체크
+│   │ Slot (Canvas Panel Slot):
+│   │   Anchors: Center (프리셋에서 정가운데 선택)
+│   │   Alignment: (0.5, 0.5)
+│   │   Position: (-360, -40)
+│   │   Auto Size: true (Size To Content 체크)
+│   │   ZOrder: 5
+│   │   ※ 1920x1080 기준 예시. 왼쪽 첫 번째 캐릭터 위/아래에 오도록 조정.
+│
+├── [PlayerSlot_1] WBP_PlayerSlot     ◀ IsVariable 체크
+│   │ Slot (Canvas Panel Slot):
+│   │   Anchors: Center
+│   │   Alignment: (0.5, 0.5)
+│   │   Position: (-120, -30)
+│   │   Auto Size: true
+│   │   ZOrder: 5
+│
+├── [PlayerSlot_2] WBP_PlayerSlot     ◀ IsVariable 체크
+│   │ Slot (Canvas Panel Slot):
+│   │   Anchors: Center
+│   │   Alignment: (0.5, 0.5)
+│   │   Position: (120, -30)
+│   │   Auto Size: true
+│   │   ZOrder: 5
+│
+├── [PlayerSlot_3] WBP_PlayerSlot     ◀ IsVariable 체크
+│   │ Slot (Canvas Panel Slot):
+│   │   Anchors: Center
+│   │   Alignment: (0.5, 0.5)
+│   │   Position: (360, -40)
+│   │   Auto Size: true
+│   │   ZOrder: 5
+│
+└── [SizeBox_PowerOn] SizeBox
+    │ Slot (Canvas Panel Slot):
+    │   Anchors: Bottom Center (프리셋에서 하단 가운데 선택)
+    │   Alignment: (0.5, 1.0)
+    │   Position: (0, -28)
+    │   Auto Size: false
+    │   Size X: 260
+    │   Size Y: 56
+    │   ZOrder: 10
+    │
+    └── [Btn_PowerOn] Button          ◀ IsVariable 체크
+        │ Details:
+        │   Visibility: Collapsed  ← 기본. 호스트만 Visible로 변경됨
+        │   Style → Normal:  Image = None, Tint = (0.10, 0.10, 0.10, 0.85)
+        │   Style → Hovered: Image = None, Tint = (0.18, 0.18, 0.18, 0.95)
+        │   Style → Pressed: Image = None, Tint = (0.05, 0.05, 0.05, 1.00)
+        │
+        └── [Txt_PowerOn] TextBlock
+              Details:
+                Text: "Power On"
+                Font: Roboto, Bold, Size=28
+                Color and Opacity: (1, 1, 1, 1)
+                Shadow Offset: (1, 1)
+                Shadow Color and Opacity: (0, 0, 0, 0.35)
+                Justification: Center
+```
+
+**IsVariable 체크 요약** (이벤트 그래프에서 참조해야 하는 위젯들):
+
+| 위젯 이름 | 타입 | 용도 |
+|-----------|------|------|
+| `Btn_PowerOn` | Button | 가시성 제어 + OnClicked 이벤트 |
+| `PlayerSlot_0` | WBP_PlayerSlot | 슬롯 0 참조 |
+| `PlayerSlot_1` | WBP_PlayerSlot | 슬롯 1 참조 |
+| `PlayerSlot_2` | WBP_PlayerSlot | 슬롯 2 참조 |
+| `PlayerSlot_3` | WBP_PlayerSlot | 슬롯 3 참조 |
+
+---
+
+#### 4.7.7 WBP_WaitingRoom 변수
+
+이벤트 그래프 → My Blueprint → Variables에서 추가:
+
+| 변수명 | 타입 | 기본값 | 용도 |
+|--------|------|--------|------|
+| `bCachedIsHost` | Boolean | false | SetIsHost에서 저장, RefreshPlayerSlots에서 사용 |
+| `CachedPlayerCount` | Integer | 0 | 플레이어 수 변경 감지용 (폴링) |
+| `PlayerSlots` | Array of WBP_PlayerSlot | — | 4개 슬롯 참조 배열 (Construct에서 초기화) |
+
+---
+
+#### 4.7.8 WBP_WaitingRoom 이벤트 그래프
+
+##### (A) Event Construct
+
+```
+[Event Construct]
+│
+│ ── 1단계: PlayerSlots 배열 초기화 ──
+│
+├── Make Array (WBP_PlayerSlot)
+│     [0]=PlayerSlot_0, [1]=PlayerSlot_1, [2]=PlayerSlot_2, [3]=PlayerSlot_3
+│     → SET PlayerSlots
+│
+│ ── 2단계: 시작 시 모든 슬롯 숨김 ──
+│
+├── For Each Loop (PlayerSlots)
+│     └── Clear Slot
+│
+│ ── 3단계: 클래스 변경 델리게이트 구독 ──
+│
+├── Get World → Get Game State → Get Player Array
+│     → For Each Loop
+│       → Cast to DRPlayerState
+│       → [Cast 성공] → 핀 드래그 → "Assign On Player Class Changed"
+│           → [OnAnyPlayerClassChanged] (Custom Event 자동 생성됨)
+│               └── Get Owning Player → Get Player Controller
+│                   → Cast to DRPlayerController
+│                   → Refresh Waiting Room UI
+│
+│ ── 4단계: 플레이어 수 변경 감지 타이머 ──
+│
+└── Set Timer by Function Name
+      Function Name: "PollPlayerCount"
+      Time: 1.0
+      Looping: true
+```
+
+##### (B) Custom Event: PollPlayerCount
+
+```
+[PollPlayerCount]
+│
+├── Get World → Get Game State → Get Player Array → Num
+│
+├── [결과] ≠ CachedPlayerCount ?
+│     Branch:
+│     │
+│     ├── True:
+│     │   ├── SET CachedPlayerCount = [Num 결과]
+│     │   └── Get Owning Player → Get Player Controller
+│     │       → Cast to DRPlayerController
+│     │       → Refresh Waiting Room UI
+│     │
+│     └── False: (아무것도 안 함)
+```
+
+##### (C) Event RefreshPlayerSlots (C++에서 호출되는 BlueprintImplementableEvent)
+
+이벤트 그래프에서 우클릭 → "RefreshPlayerSlots" 검색하면 오버라이드 가능한 이벤트로 나타남.
+
+```
+[Event Refresh Player Slots] (Input: PlayerInfos - Array of WaitingRoomPlayerInfo)
+│
+│ ── 1단계: 채워진 슬롯 갱신 ──
+│
+├── For Each Loop (PlayerInfos)
+│   │  Array Index 핀 사용
+│   │
+│   ├── Array Index < PlayerSlots.Num (Length) ? Branch
+│   │     False → 무시 (4명 초과 방지)
+│   │
+│   └── True →
+│       PlayerSlots → Get (Array Index)
+│       → Update Slot (
+│             Info = Array Element,
+│             bShowKick = bCachedIsHost,
+│             bIsMySlot = [Break WaitingRoomPlayerInfo → bIsLocalPlayer]
+│         )
+│
+│ ── 2단계: 비어있는 슬롯 정리 ──
+│
+├── PlayerInfos → Num (Length) → 저장 (Local Variable: FilledCount)
+│
+├── For Loop (Integer)
+│     First Index = FilledCount
+│     Last Index = 3
+│     │
+│     └── PlayerSlots → Get (Index)
+│         → Clear Slot
+│
+│ ── 완료 ──
+│
+└── (실행 완료)
+      ※ 중요: PlayerInfos 배열은 항상 왼쪽부터 빈자리 없이 정렬된 상태로 전달된다고 가정한다.
+        따라서 Kick 이후 Array Index 기준으로 다시 뿌려 주기만 해도
+        남은 플레이어들이 자동으로 왼쪽으로 당겨진 배치처럼 보이게 된다.
+```
+
+##### (D) Event SetIsHost (C++ BlueprintImplementableEvent)
+
+```
+[Event Set Is Host] (Input: bIsHost - Boolean)
+│
+├── SET bCachedIsHost = bIsHost
+│
+├── Btn_PowerOn → Set Visibility
+│     [bIsHost] ?
+│     → True: ESlateVisibility::Visible
+│     → False: ESlateVisibility::Collapsed
+│
+└── Get Owning Player → Cast to DRPlayerController
+    └── [Cast 성공] → Refresh Waiting Room UI
+      ※ 호스트 여부가 바뀌면 Kick 버튼 표시 여부도 다시 계산해야 하므로 한 번 더 갱신한다.
+```
+
+##### (E) Event OnLobbyStateChanged (C++ BlueprintImplementableEvent)
+
+```
+[Event On Lobby State Changed] (Input: NewState - ELobbyState)
+│
+└── Switch on ELobbyState (NewState):
+    │
+    ├── WaitingRoom: (아무것도 안 함)
+    │
+    ├── Transitioning:
+    │   └── Btn_PowerOn → Set Is Enabled (false)
+    │
+    └── FreeRoam: (C++ DestroyWaitingRoomUI()가 처리하므로 도달 안 함)
+```
+
+##### (F) Btn_PowerOn → OnClicked
+
+디자이너에서 `Btn_PowerOn` 선택 → Details → Events → On Clicked 옆 **+** 클릭
+
+```
+[On Clicked (Btn_PowerOn)]
+│
+├── Btn_PowerOn → Set Is Enabled (false)   ← 중복 클릭 방지
+│
+└── Get Owning Player → Cast to DRPlayerController
+    └── [Cast 성공] → Server Request Power On
+```
+
+---
+
+#### 4.7.9 스타일/비주얼 참고
+
+| 요소 | 에디터 설정 위치 | 값 |
+|------|-----------------|-----|
+| 전체 배경 | 없음 (3D 대기실 장면이 배경) | — |
+| 플레이어 슬롯 프레임 | 사용하지 않음 | 투명 UI만 유지 |
+| 빈 슬롯 표시 | ClearSlot 이벤트에서 `Self Collapsed` | 빈 자리는 구조물/배경만 보임 |
+| 자기 슬롯 강조 | Txt_ClassName 색상 동적 변경 | (1.0, 0.95, 0.75, 1.0) |
+| Kick 버튼 | Btn_Kick → Style → Normal/Hovered/Pressed → Tint | 작은 빨간 계열 버튼 |
+| 플레이어 이름 | Txt_PlayerName → Font | Roboto Bold 16, 흰색 + 그림자 |
+| 클래스 이름 | Txt_ClassName → Font | Roboto Bold 15, 흰색 |
+| Power On 버튼 | Btn_PowerOn → Style | 짙은 회색 반투명 버튼 |
+| Power On 텍스트 | Txt_PowerOn → Font | Roboto Bold 28 |
+| 슬롯 위치 | 각 PlayerSlot의 Canvas Slot → Position | 카메라 구도에 맞게 직접 조정 |
+
+---
+
+#### 4.7.10 BP_DRPlayerController에 위젯 클래스 설정
+
+1. Content Browser에서 `BP_DRPlayerController` 더블클릭하여 열기
+2. 상단 툴바의 **Class Defaults** 버튼 클릭
+3. Details 패널에서 **UI|Lobby** 카테고리 검색
+4. `Waiting Room Widget Class` 드롭다운 → **WBP_WaitingRoom** 선택
+5. **Compile** → **Save**
+
+---
+
+#### 4.7.11 체크리스트
+
+**WBP_PlayerSlot:**
+- [ ] SizeBox_Root 생성 (Width=220, Height=320)
+- [ ] Canvas_SlotRoot 생성
+- [ ] Btn_Kick: 기본 Collapsed, 작은 빨간 스타일, OnClicked 이벤트 연결
+- [ ] Txt_PlayerName: 머리 위 표시용 텍스트 설정
+- [ ] Btn_PrevClass, Btn_NextClass: 기본 Collapsed, OnClicked → RequestChangeClass
+- [ ] Txt_ClassName: Elementalist / Warrior / Ranger 표시
+- [ ] Custom Event `UpdateSlot` 구현 (3개 파라미터)
+- [ ] Custom Event `ClearSlot` 구현
+
+**WBP_WaitingRoom:**
+- [ ] Canvas 루트에 4개 PlayerSlot 배치, 각각 IsVariable 체크
+- [ ] 각 PlayerSlot Canvas Position을 대기실 카메라 구도에 맞게 조정
+- [ ] Btn_PowerOn: 하단 중앙 배치, 기본 Collapsed
+- [ ] Event Construct: PlayerSlots 배열 초기화 + 초기 Clear + 델리게이트 바인딩 + 타이머
+- [ ] Event RefreshPlayerSlots: For Each로 슬롯 갱신 + 빈 슬롯 Clear
+- [ ] Event SetIsHost: bCachedIsHost 저장 + PowerOn 가시성 + UI 재갱신
+- [ ] Event OnLobbyStateChanged: Transitioning 시 PowerOn 비활성화
+- [ ] Btn_PowerOn OnClicked: ServerRequestPowerOn 호출
+- [ ] PollPlayerCount: 1초 타이머로 인원수 변경 감지
+
+**에디터 설정:**
+- [ ] BP_DRPlayerController → WaitingRoomWidgetClass = WBP_WaitingRoom
+- [ ] PIE 2인 테스트: 호스트/클라이언트 양쪽 UI 확인
+- [ ] 호스트 화면에서만 다른 플레이어 위 Kick 버튼 표시 확인
+- [ ] 일반 플레이어 화면에서는 Kick 버튼이 전혀 보이지 않는지 확인
+- [ ] 자신의 슬롯에서만 ◀ / ▶ 버튼이 표시되고 클릭 가능한지 확인
+- [ ] 클래스 변경 시 Elementalist → Warrior → Ranger 순환 확인
+- [ ] Kick 실행 후 남은 플레이어 UI가 왼쪽부터 재배치되는지 확인
+- [ ] Power On 버튼이 호스트에게만 보이는지 확인
+
 ### 검증 방법
-PIE 2인 플레이. 대기실 UI 표시. 호스트에게만 Kick/PowerOn 버튼 보임. 화살표로 클래스 변경 시 UI 텍스트 갱신.
+PIE 2인 또는 3인 플레이. 대기실 UI 표시. 호스트에게만 Kick / Power On 버튼 보임.
+각 플레이어는 자기 슬롯에서만 캐릭터를 변경할 수 있어야 하며, 다른 플레이어 슬롯의 클래스명은 읽기 전용이어야 한다.
+Kick 실행 시 대상 플레이어는 메인 메뉴로 이동하고, 남은 플레이어들의 슬롯 UI가 빈 자리 없이 왼쪽으로 정렬되어야 한다.
 
 ---
 
@@ -1600,90 +2347,116 @@ PIE 2인 플레이. 대기실에서 호스트가 Power On. 카메라가 1.5초�
 
 ---
 
-## Phase 7: 캐릭터 메시 교체 (클래스 선택 → 외형 변경)
+## Phase 7: 캐릭터 BP 교체 (클래스 선택 → 외형/능력 변경)
 
 ### 목표
-대기실에서 클래스를 변경하면 캐릭터의 외형(SkeletalMesh)이 즉시 바뀌고, 게임 시작 시 선택한 클래스의 어트리뷰트/어빌리티가 적용된다.
+대기실에서 클래스를 변경하면 **캐릭터 BP 자체가 교체**되어 외형이 즉시 바뀌고, 게임 시작 시 선택한 클래스의 어트리뷰트/어빌리티가 적용된다.
 
-### 7.1 CharacterClassInfo에 메시 참조 추가
+### ⚠️ 7.0 런타임 메시 교체 vs BP 교체 — 설계 결정
 
-**파일:** `Source/DaeRune/Public/AbilitySystem/Data/CharacterClassInfo.h`
+**런타임 `SetSkeletalMesh()` 방식을 채택하지 않는 이유:**
 
-`FCharacterClassDefaultInfo`에 추가:
-```cpp
-    // 캐릭터 클래스별 SkeletalMesh
-    UPROPERTY(EditDefaultsOnly, Category = "Class Defaults")
-    TSoftObjectPtr<USkeletalMesh> CharacterMesh;
-
-    // 캐릭터 클래스별 AnimBlueprint (옵션)
-    UPROPERTY(EditDefaultsOnly, Category = "Class Defaults")
-    TSubclassOf<UAnimInstance> AnimClass;
+`ADRCharacter`의 컴포넌트 구조:
+```
+CapsuleComponent (Root)
+├── CameraBoom (오프셋: 30, 0, 50)
+│   └── FollowCamera
+│       └── FirstPersonMesh (OnlyOwnerSee, 1인칭 전용)
+└── GetMesh() (OwnerNoSee, 3인칭 전용)
+    └── Weapon (소켓 부착)
 ```
 
-**에디터 작업:** `UPlayerCharacterClassInfo` 데이터 에셋 (`DA_PlayerCharacterClassInfo`)에서 GardenRobot/VendingMachineRobot별 메시/애님 설정.
+| 문제 | 설명 |
+|------|------|
+| 1인칭 메시 미교체 | `FirstPersonMesh`는 별도 컴포넌트. `GetMesh()->SetSkeletalMesh()`으로 3인칭만 바뀌고 **1인칭은 그대로** |
+| 카메라 위치 부정합 | CameraBoom 오프셋이 캐릭터 체형에 따라 달라야 함. 런타임에 조정하면 에디터 미리보기 불가 |
+| 소켓 호환성 | 새 스켈레톤에 기존 소켓(WeaponHandSocket 등)이 없으면 무기 부착 깨짐 |
 
-### 7.2 ADRCharacter에 메시 교체 함수 추가
+**채택 방식: 클래스별 별도 캐릭터 BP**
 
-**파일:** `Source/DaeRune/Public/Character/DRCharacter.h`
+각 클래스마다 `ADRCharacter`를 상속하는 BP를 만들어 **1인칭/3인칭 메시, 카메라 오프셋, AnimBP, 소켓**을 에디터에서 개별 설정. 클래스 변경 시 기존 폰을 Destroy하고 새 BP 폰을 Spawn → Possess.
+
+```
+BP_DRCharacter_GardenRobot (ADRCharacter 상속)
+├── GetMesh() → GardenRobot 3인칭 SkeletalMesh
+├── FirstPersonMesh → GardenRobot 1인칭 SkeletalMesh
+├── CameraBoom → GardenRobot 전용 오프셋
+├── AnimClass → GardenRobot 전용 AnimBP
+└── Weapon 소켓 → GardenRobot 스켈레톤 기준
+
+BP_DRCharacter_VendingMachineRobot (ADRCharacter 상속)
+├── GetMesh() → VM 3인칭 SkeletalMesh
+├── FirstPersonMesh → VM 1인칭 SkeletalMesh
+├── CameraBoom → VM 전용 오프셋
+├── AnimClass → VM 전용 AnimBP
+└── Weapon 소켓 → VM 스켈레톤 기준
+```
+
+### 7.1 ADRLobbyGameMode에 폰 교체 함수 추가
+
+**파일:** `Source/DaeRune/Public/Game/DRLobbyGameMode.h`
 
 ```cpp
 public:
-    // 캐릭터 클래스에 따른 메시 교체
-    UFUNCTION(BlueprintCallable, Category = "Character Selection")
-    void UpdateCharacterAppearance(EPlayerCharacterClass NewClass);
+    // 플레이어 클래스 변경 시 폰 교체 (서버 전용)
+    void RespawnPlayerWithClass(ADRPlayerController* PC, EPlayerCharacterClass NewClass);
 ```
 
-**파일:** `Source/DaeRune/Private/Character/DRCharacter.cpp`
+**파일:** `Source/DaeRune/Private/Game/DRLobbyGameMode.cpp`
 
 ```cpp
-void ADRCharacter::UpdateCharacterAppearance(EPlayerCharacterClass NewClass)
+void ADRLobbyGameMode::RespawnPlayerWithClass(ADRPlayerController* PC, EPlayerCharacterClass NewClass)
 {
-    // PlayerCharacterClassInfo 데이터 에셋 가져오기 (반환 타입: UPlayerCharacterClassInfo*)
-    UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this);
-    if (!ClassInfo) return;
+    if (!HasAuthority() || !PC) return;
 
-    FCharacterClassDefaultInfo ClassDefault = ClassInfo->GetClassDefaultInfo(NewClass);
+    // 1. PlayerCharacterClassInfo에서 해당 클래스의 BP 가져오기
+    if (!PlayerCharacterClassInfo) return;
+    TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(NewClass);
+    if (!BPClassPtr || !*BPClassPtr) return;
 
-    // 메시 교체
-    if (!ClassDefault.CharacterMesh.IsNull())
+    // 2. 현재 폰의 위치/회전 저장
+    APawn* OldPawn = PC->GetPawn();
+    FTransform SpawnTransform = OldPawn ? OldPawn->GetActorTransform() : FTransform::Identity;
+
+    // 3. 기존 폰 제거
+    if (OldPawn)
     {
-        USkeletalMesh* LoadedMesh = ClassDefault.CharacterMesh.LoadSynchronous();
-        if (LoadedMesh)
-        {
-            GetMesh()->SetSkeletalMesh(LoadedMesh);
-        }
+        PC->UnPossess();
+        OldPawn->Destroy();
     }
 
-    // AnimBlueprint 교체
-    if (ClassDefault.AnimClass)
+    // 4. 새 BP 폰 스폰
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+    ADRCharacter* NewPawn = GetWorld()->SpawnActor<ADRCharacter>(*BPClassPtr, SpawnTransform, SpawnParams);
+    if (!NewPawn) return;
+
+    // 5. Possess (이 안에서 InitAbilityActorInfo → InitializeDefaultAttributes → PossessedBy 체인 실행)
+    PC->Possess(NewPawn);
+
+    // 6. 대기실 상태면 이동 비활성화 + 슬롯 위치 재설정
+    ADRLobbyGameState* LGS = GetGameState<ADRLobbyGameState>();
+    if (LGS && LGS->GetLobbyState() == ELobbyState::WaitingRoom)
     {
-        GetMesh()->SetAnimInstanceClass(ClassDefault.AnimClass);
+        int32* SlotIndex = PlayerSlotMap.Find(PC);
+        if (SlotIndex)
+        {
+            PositionPawnAtSlot(NewPawn, *SlotIndex);
+        }
+
+        // 고정 카메라 재설정
+        if (WaitingRoomCamera)
+        {
+            PC->ClientSetWaitingRoomView(WaitingRoomCamera);
+        }
     }
 }
 ```
 
-### 7.3 OnRep_SelectedPlayerClass에서 메시 교체 트리거
+### 7.2 SetSelectedPlayerClass에서 폰 교체 트리거
 
 **파일:** `Source/DaeRune/Private/Player/DRPlayerState.cpp`
 
-`OnRep_SelectedPlayerClass` 수정:
-```cpp
-void ADRPlayerState::OnRep_SelectedPlayerClass()
-{
-    OnPlayerClassChanged.Broadcast(this, SelectedPlayerClass);
-
-    // 폰의 외형 업데이트
-    if (APawn* Pawn = GetPawn())
-    {
-        if (ADRCharacter* Character = Cast<ADRCharacter>(Pawn))
-        {
-            Character->UpdateCharacterAppearance(SelectedPlayerClass);
-        }
-    }
-}
-```
-
-`SetSelectedPlayerClass`에도 동일 로직 추가 (서버에서 직접 호출 시):
 ```cpp
 void ADRPlayerState::SetSelectedPlayerClass(EPlayerCharacterClass NewClass)
 {
@@ -1693,22 +2466,47 @@ void ADRPlayerState::SetSelectedPlayerClass(EPlayerCharacterClass NewClass)
     SelectedPlayerClass = NewClass;
     OnPlayerClassChanged.Broadcast(this, SelectedPlayerClass);
 
-    // 서버에서도 폰 외형 업데이트
-    if (APawn* Pawn = GetPawn())
+    // ★ 로비 대기실에서만 폰 교체 실행
+    ADRLobbyGameMode* LobbyGM = GetWorld()->GetAuthGameMode<ADRLobbyGameMode>();
+    if (LobbyGM)
     {
-        if (ADRCharacter* Character = Cast<ADRCharacter>(Pawn))
+        // PlayerState → 소유 PlayerController 찾기
+        APlayerController* PC = Cast<APlayerController>(GetOwner());
+        if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
         {
-            Character->UpdateCharacterAppearance(SelectedPlayerClass);
+            LobbyGM->RespawnPlayerWithClass(DRPC, NewClass);
         }
     }
 }
 ```
 
-### 7.4 플레이어 초기화 경로를 CharacterClassInfo 기반으로 리팩터링
+**`OnRep_SelectedPlayerClass`는 외형 교체를 트리거하지 않는다** — 폰 교체는 서버 권한 작업이므로 `SetSelectedPlayerClass`에서 직접 처리. 클라이언트에서는 새로운 폰이 리플리케이트되어 자동으로 보인다.
 
-**⚠️ Phase 2.0의 분석에 따라, 플레이어가 CharacterClassInfo를 사용하도록 변경해야 한다.**
+```cpp
+void ADRPlayerState::OnRep_SelectedPlayerClass()
+{
+    // 클라이언트에서는 델리게이트 브로드캐스트만 (UI 갱신용)
+    OnPlayerClassChanged.Broadcast(this, SelectedPlayerClass);
+}
+```
 
-현재 플레이어의 `InitializeDefaultAttributes()`는 BP에 직접 설정된 GE를 사용하므로 `CharacterClass`를 바꿔도 어트리뷰트에 영향이 없다. 이를 적과 동일한 CharacterClassInfo 경로로 변경한다.
+### 7.3 ADRCharacter에 PlayerCharacterClass 멤버 추가
+
+**파일:** `Source/DaeRune/Public/Character/DRCharacter.h`
+
+```cpp
+public:
+    // 플레이어 캐릭터 클래스 (EPlayerCharacterClass)
+    // BP별로 에디터에서 설정하거나, InitAbilityActorInfo에서 PlayerState에서 읽어옴
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category = "Character Class Defaults")
+    EPlayerCharacterClass PlayerCharacterClass = EPlayerCharacterClass::GardenRobot;
+```
+
+### 7.4 플레이어 초기화 경로를 UPlayerCharacterClassInfo 기반으로 리팩터링
+
+**⚠️ Phase 2.0의 분석에 따라, 플레이어가 UPlayerCharacterClassInfo를 사용하도록 변경해야 한다.**
+
+현재 플레이어의 `InitializeDefaultAttributes()`는 BP에 직접 설정된 GE를 사용하므로 `CharacterClass`를 바꿔도 어트리뷰트에 영향이 없다. 이를 `UPlayerCharacterClassInfo` 경로로 변경한다.
 
 #### 7.4.1 ADRCharacter::InitializeDefaultAttributes() 오버라이드 추가
 
@@ -1724,7 +2522,6 @@ protected:
 ```cpp
 void ADRCharacter::InitializeDefaultAttributes() const
 {
-    // PlayerState에서 선택한 클래스 정보 사용
     // UPlayerCharacterClassInfo 데이터 에셋 기반 초기화 (EPlayerCharacterClass 타입)
     UDRAbilitySystemLibrary::InitializePlayerDefaultAttributes(this, PlayerCharacterClass, Level, AbilitySystemComponent);
 }
@@ -1745,12 +2542,12 @@ void ADRCharacter::InitAbilityActorInfo()
 
     // ... 기존 HUD 초기화 코드 유지 ...
 
-    // 기본 어트리뷰트 초기화 (이제 CharacterClassInfo 기반으로 동작)
+    // 기본 어트리뷰트 초기화 (UPlayerCharacterClassInfo 기반으로 동작)
     InitializeDefaultAttributes();
 }
 ```
 
-#### 7.4.3 ADRCharacter::PossessedBy() 수정 - 어빌리티도 CharacterClassInfo 사용
+#### 7.4.3 ADRCharacter::PossessedBy() 수정 - 어빌리티도 UPlayerCharacterClassInfo 사용
 
 ```cpp
 void ADRCharacter::PossessedBy(AController* NewController)
@@ -1770,21 +2567,104 @@ void ADRCharacter::PossessedBy(AController* NewController)
 }
 ```
 
-#### 7.4.4 UPlayerCharacterClassInfo 데이터 에셋 업데이트 (에디터 작업)
+#### 7.4.4 ADRCharacter 생성자 수정
 
-`DA_PlayerCharacterClassInfo` (`UPlayerCharacterClassInfo` 타입) 데이터 에셋에 플레이어용 데이터를 설정한다:
+기존 `CharacterClass = ECharacterClass::Elementalist;` 라인을 **삭제**한다. 플레이어는 더 이상 `ECharacterClass`를 사용하지 않는다.
+
+```cpp
+ADRCharacter::ADRCharacter()
+{
+    // ... 기존 코드 유지 ...
+
+    // CharacterClass = ECharacterClass::Elementalist;  ← ★ 삭제
+    // 플레이어는 EPlayerCharacterClass PlayerCharacterClass를 사용
+    // 기본값은 헤더에서 EPlayerCharacterClass::GardenRobot으로 설정됨
+
+    // ... 기존 코드 유지 ...
+}
+```
+
+#### 7.4.5 UPlayerCharacterClassInfo 데이터 에셋 업데이트 (에디터 작업)
+
+`DA_PlayerCharacterClassInfo` (`UPlayerCharacterClassInfo` 타입) 데이터 에셋에 설정할 내용:
+
+**CharacterClassInformation (TMap<EPlayerCharacterClass, FCharacterClassDefaultInfo>):**
 
 | EPlayerCharacterClass | 설정 내용 |
 |----------------------|-----------|
-| GardenRobot | 플레이어용 PrimaryAttributes GE, VitalAttributes GE, StartupAbilities, CharacterMesh, AnimClass |
-| VendingMachineRobot | 플레이어용 PrimaryAttributes GE, VitalAttributes GE, StartupAbilities, CharacterMesh, AnimClass |
+| GardenRobot | PrimaryAttributes GE, VitalAttributes GE, StartupAbilities |
+| VendingMachineRobot | PrimaryAttributes GE, VitalAttributes GE, StartupAbilities |
 
-열거형 분리(`ECharacterClass` vs `EPlayerCharacterClass`)로 적/플레이어 간 키 충돌 문제는 완전히 해결되었다. 적 데이터 에셋(`DA_EnemyCharacterClassInfo`)과 플레이어 데이터 에셋(`DA_PlayerCharacterClassInfo`)은 서로 다른 C++ 클래스 타입이므로 독립적이다.
+**CharacterBPClasses (TMap<EPlayerCharacterClass, TSubclassOf<ADRCharacter>>):**
 
-**중요:** `PlayerCharacterClass`는 `ADRCharacter`의 멤버이며, 기존 `ADRCharacterBase::CharacterClass`는 적 전용으로 유지된다.
+| EPlayerCharacterClass | BP 클래스 |
+|----------------------|-----------|
+| GardenRobot | `BP_DRCharacter_GardenRobot` |
+| VendingMachineRobot | `BP_DRCharacter_VendingMachineRobot` |
+
+#### 7.4.6 캐릭터 BP 생성 (에디터 작업)
+
+| BP 이름 | 설정 내용 |
+|---------|-----------|
+| `BP_DRCharacter_GardenRobot` | ADRCharacter 상속. GardenRobot 3인칭 메시, 1인칭 메시, CameraBoom 오프셋, AnimBP, 무기 소켓 위치 설정 |
+| `BP_DRCharacter_VendingMachineRobot` | ADRCharacter 상속. VendingMachineRobot 3인칭 메시, 1인칭 메시, CameraBoom 오프셋, AnimBP, 무기 소켓 위치 설정 |
+
+**각 BP에서 설정할 항목:**
+- `GetMesh()` → 해당 클래스의 3인칭 SkeletalMesh + AnimBP
+- `FirstPersonMesh` → 해당 클래스의 1인칭 SkeletalMesh + AnimBP
+- `CameraBoom` → 해당 클래스 체형에 맞는 `SetRelativeLocation` 값
+- 무기 부착 소켓 이름은 스켈레톤 기준
+
+**중요:** `PlayerCharacterClass`는 `ADRCharacter`의 멤버이며, 기존 `ADRCharacterBase::CharacterClass`는 적 전용으로 유지된다. 각 BP의 `DefaultPrimaryAttributes`/`DefaultVitalAttributes`/`StartupAbilities` BP 프로퍼티는 더 이상 사용되지 않고 `UPlayerCharacterClassInfo` 경로가 우선한다.
+
+### 7.5 ADRStageGameMode에서 DefaultPawnClass 동적 결정
+
+스테이지 진입 시에도 선택한 클래스의 BP를 스폰해야 한다.
+
+**파일:** `Source/DaeRune/Public/Game/DRStageGameMode.h`
+
+```cpp
+public:
+    // 플레이어별 DefaultPawnClass 결정
+    virtual UClass* GetDefaultPawnClassForController_Implementation(AController* InController) override;
+```
+
+**파일:** `Source/DaeRune/Private/Game/DRStageGameMode.cpp`
+
+```cpp
+UClass* ADRStageGameMode::GetDefaultPawnClassForController_Implementation(AController* InController)
+{
+    if (APlayerController* PC = Cast<APlayerController>(InController))
+    {
+        if (ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
+        {
+            EPlayerCharacterClass SelectedClass = PS->GetSelectedPlayerClass();
+
+            // PlayerCharacterClassInfo에서 BP 클래스 조회
+            if (PlayerCharacterClassInfo)
+            {
+                TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(SelectedClass);
+                if (BPClassPtr && *BPClassPtr)
+                {
+                    return *BPClassPtr;
+                }
+            }
+        }
+    }
+
+    // 폴백: 기존 DefaultPawnClass
+    return Super::GetDefaultPawnClassForController_Implementation(InController);
+}
+```
+
+**ADRLobbyGameMode에도 동일 오버라이드 추가** — 로비 첫 진입 시에도 선택된 클래스 BP를 스폰.
 
 ### 검증 방법
-PIE 2인 플레이. 대기실에서 화살표로 클래스 변경 → 캐릭터 메시가 즉시 변경됨 (양 클라이언트 모두). Power On 후 스테이지 진입 → 선택한 클래스의 어빌리티가 부여됨.
+PIE 2인 플레이.
+1. 대기실에서 화살표로 클래스 변경 → **캐릭터가 새 BP로 교체됨** (양 클라이언트 모두에서 외형 변경 확인)
+2. 교체 후 카메라, 1인칭 메시, 3인칭 메시 모두 정상 동작 확인
+3. Power On 후 스테이지 진입 → 선택한 클래스의 어빌리티가 부여됨
+4. 스테이지에서도 선택한 클래스 BP로 스폰되는지 확인
 
 ---
 
@@ -2011,18 +2891,19 @@ Seamless Travel에서 PlayerController와 PlayerState가 보존되므로, `Selec
 | `Source/DaeRune/Private/Actor/DRWaitingRoomCameraActor.cpp` | 구현 |
 | `Source/DaeRune/Public/UI/Widget/DRWaitingRoomWidget.h` | 대기실 UI 베이스 클래스 |
 
-### 수정하는 파일 (11개)
+### 수정하는 파일 (12개)
 
 | 파일 | 주요 변경 |
 |------|-----------|
 | `DRLobbyGameState.h/.cpp` | +ELobbyState, +OnLobbyStateChanged, +SetLobbyState/OnRep |
-| `DRLobbyGameMode.h/.cpp` | +PowerOn, +KickPlayer, +BlockJoinInProgress, +슬롯관리, +카메라탐색, PostLogin/HandleSeamlessTravel 수정 |
-| `DRPlayerState.h/.cpp` | +SelectedPlayerClass (EPlayerCharacterClass), +OnRep_SelectedPlayerClass, +FOnPlayerClassChanged 델리게이트 |
+| `DRLobbyGameMode.h/.cpp` | +PowerOn, +KickPlayer, +BlockJoinInProgress, +슬롯관리, +카메라탐색, +RespawnPlayerWithClass (BP 교체), +GetDefaultPawnClassForController 오버라이드, PostLogin/HandleSeamlessTravel 수정 |
+| `DRPlayerState.h/.cpp` | +SelectedPlayerClass (EPlayerCharacterClass), +OnRep_SelectedPlayerClass, +FOnPlayerClassChanged 델리게이트, SetSelectedPlayerClass에서 폰 교체 트리거 |
 | `DRPlayerController.h/.cpp` | +ServerRPC(ChangeClass/PowerOn/Kick), +ClientRPC(WaitingRoomView/CameraTransition/Kicked), +UI관리, RestoreDefaultInputMode 수정, OnLevelEntered 수정 |
-| `DRCharacter.h/.cpp` | +PlayerCharacterClass 멤버 (EPlayerCharacterClass), +UpdateCharacterAppearance(EPlayerCharacterClass), InitializeDefaultAttributes 오버라이드, PossessedBy 수정 |
-| `CharacterClassInfo.h` | +EPlayerCharacterClass 열거형, +UPlayerCharacterClassInfo 클래스, +CharacterMesh/AnimClass in FCharacterClassDefaultInfo |
+| `DRCharacter.h/.cpp` | +PlayerCharacterClass 멤버 (EPlayerCharacterClass), InitializeDefaultAttributes 오버라이드, PossessedBy 수정, 생성자에서 CharacterClass=Elementalist 삭제 |
+| `CharacterClassInfo.h/.cpp` | +EPlayerCharacterClass 열거형, +UPlayerCharacterClassInfo 클래스 (CharacterBPClasses TMap 포함). FCharacterClassDefaultInfo 변경 없음 |
 | `DRGameModeBase.h` | CharacterClassInfo → EnemyCharacterClassInfo (UCharacterClassInfo*) + PlayerCharacterClassInfo (UPlayerCharacterClassInfo*) |
 | `DRAbilitySystemLibrary.h/.cpp` | GetCharacterClassInfo→EnemyCharacterClassInfo 리다이렉트, +GetPlayerCharacterClassInfo (UPlayerCharacterClassInfo*), +InitializePlayerDefaultAttributes (EPlayerCharacterClass), +GivePlayerStartupAbilities (EPlayerCharacterClass) |
+| `DRStageGameMode.h/.cpp` | +GetDefaultPawnClassForController 오버라이드 (선택한 클래스 BP 스폰) |
 | `DRMainMenuGameMode.h/.cpp` | +BeginPlay (카메라 설정), +HasCompletedTutorial |
 
 ### 블루프린트 에셋 (에디터 작업)
@@ -2031,6 +2912,8 @@ Seamless Travel에서 PlayerController와 PlayerState가 보존되므로, `Selec
 |------|------|
 | `BP_WaitingRoomCamera` | ADRWaitingRoomCameraActor 블루프린트, LobbyMap에 배치 |
 | `WBP_WaitingRoom` | 대기실 UI 위젯 (UDRWaitingRoomWidget 상속) |
+| `BP_DRCharacter_GardenRobot` | ADRCharacter 상속. GardenRobot 1인칭/3인칭 메시, 카메라 오프셋, AnimBP 설정 |
+| `BP_DRCharacter_VendingMachineRobot` | ADRCharacter 상속. VendingMachineRobot 1인칭/3인칭 메시, 카메라 오프셋, AnimBP 설정 |
 
 ### 맵 변경 (에디터 작업)
 
@@ -2044,7 +2927,7 @@ Seamless Travel에서 PlayerController와 PlayerState가 보존되므로, `Selec
 | 에셋 | 변경 |
 |------|------|
 | `DA_EnemyCharacterClassInfo` | 기존 DA_CharacterClassInfo 이름 변경, 타입 UCharacterClassInfo |
-| `DA_PlayerCharacterClassInfo` | 신규, 타입 UPlayerCharacterClassInfo, GardenRobot + VendingMachineRobot 엔트리 |
+| `DA_PlayerCharacterClassInfo` | 신규, 타입 UPlayerCharacterClassInfo. CharacterClassInformation: GardenRobot/VendingMachineRobot별 GE/어빌리티. CharacterBPClasses: 각 클래스별 캐릭터 BP 매핑 |
 | `BP_DRStageGameMode` | EnemyCharacterClassInfo + PlayerCharacterClassInfo 양쪽 설정 |
 | `BP_DRLobbyGameMode` | EnemyCharacterClassInfo + PlayerCharacterClassInfo 양쪽 설정 |
 | `BP_DRPlayerController` | WaitingRoomWidgetClass 설정 |

@@ -6,19 +6,22 @@
 #include "AbilitySystemInterface.h"
 #include "GameFramework/PlayerState.h"
 #include "GameplayEffectTypes.h"
+#include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "DRPlayerState.generated.h"
 
 class UAbilitySystemComponent;
 class UAttributeSet;
 class UGameplayEffect;
 
-// ÀüÅõ »óÅÂ º¯°æ ¾Ë¸² µ¨¸®°ÔÀÌÆ®
+// ì „íˆ¬ ìƒíƒœ ë³€ê²½ ì•Œë¦¼ ë¸ë¦¬ê²Œì´íŠ¸
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCombatStateChangedSignature, bool, bIsInCombat);
-// ºÎÆĞ »óÅÂ º¯°æ ¾Ë¸² µ¨¸®°ÔÀÌÆ®
+// ì˜¤ì—¼ ìƒíƒœ ë³€ê²½ ì•Œë¦¼ ë¸ë¦¬ê²Œì´íŠ¸
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCorruptedStateChangedSignature, bool, bIsCorrupted);
+// ìºë¦­í„° í´ë˜ìŠ¤ ë³€ê²½ ì•Œë¦¼ ë¸ë¦¬ê²Œì´íŠ¸
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnPlayerClassChanged, ADRPlayerState*, PlayerState, EPlayerCharacterClass, NewClass);
 
 /**
- * DaeRune ÇÃ·¹ÀÌ¾îÀÇ °ÔÀÓ »óÅÂ °ü¸® Å¬·¡½º
+ * DaeRune ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½
  */
 UCLASS()
 class DAERUNE_API ADRPlayerState : public APlayerState, public IAbilitySystemInterface
@@ -27,65 +30,96 @@ class DAERUNE_API ADRPlayerState : public APlayerState, public IAbilitySystemInt
 	
 public:
 	ADRPlayerState();
-	// GAS ÀÎÅÍÆäÀÌ½º ±¸Çö
+	// GAS ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ì½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	UAttributeSet* GetAttributeSet() const { return AttributeSet; }
 
-	// ³×Æ®¿öÅ© ¸®ÇÃ¸®ÄÉÀÌ¼Ç ¼³Á¤
+	// ï¿½ï¿½Æ®ï¿½ï¿½Å© ï¿½ï¿½ï¿½Ã¸ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ ï¿½ï¿½ï¿½ï¿½
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// ÀüÅõ ½Ã½ºÅÛ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ã½ï¿½ï¿½ï¿½
 	void EnterCombat();
 	void ExitCombat();
 	bool IsInCombat() const { return bIsInCombat; }
 
-	// ÄÁÅ×ÀÌ³Ê ½Ã½ºÅÛ ¿¬µ¿
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½Ã½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	int32 GetCurrentContainerIndex() const;
 
-	// UI ¹× °ÔÀÓÇÃ·¹ÀÌ ¾Ë¸² µ¨¸®°ÔÀÌÆ®
+	// UI ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ã·ï¿½ï¿½ï¿½ ï¿½Ë¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY(BlueprintAssignable)
 	FOnCombatStateChangedSignature OnCombatStateChanged;
 
 	UPROPERTY(BlueprintAssignable)
 	FOnCorruptedStateChangedSignature OnCorruptedStateChanged;
 
-	// ºÎÆĞ »óÅÂ ½Ã½ºÅÛ
+	// ì˜¤ì—¼ ìƒíƒœ ì‹œìŠ¤í…œ
 	void SetCorruptedState(bool bNewCorrupted);
 	bool IsPlayerCorrupted() const;
+
+	// ========== ëŒ€ê¸°ì‹¤ ìŠ¬ë¡¯ ==========
+
+	UFUNCTION(BlueprintCallable, Category = "Lobby")
+	int32 GetWaitingRoomSlotIndex() const { return WaitingRoomSlotIndex; }
+
+	void SetWaitingRoomSlotIndex(int32 NewIndex);
+
+	// ========== ìºë¦­í„° í´ë˜ìŠ¤ ì„ íƒ ==========
+
+	UFUNCTION(BlueprintCallable, Category = "Character Selection")
+	EPlayerCharacterClass GetSelectedPlayerClass() const { return SelectedPlayerClass; }
+
+	void SetSelectedPlayerClass(EPlayerCharacterClass NewClass);
+
+	UPROPERTY(BlueprintAssignable, Category = "Character Selection")
+	FOnPlayerClassChanged OnPlayerClassChanged;
 
 protected:
 	virtual void BeginPlay() override;
 
-	// GAS ÄÄÆ÷³ÍÆ®µé
+	// GAS ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Abilities")
 	TObjectPtr<UAttributeSet> AttributeSet;
 
-	// ³×Æ®¿öÅ© µ¿±âÈ­ º¯¼öµé
+	// ï¿½ï¿½Æ®ï¿½ï¿½Å© ï¿½ï¿½ï¿½ï¿½È­ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(ReplicatedUsing = OnRep_IsInCombat)
 	bool bIsInCombat = false;
 
 	UPROPERTY(ReplicatedUsing = OnRep_IsCorrupted)
 	bool bIsCorrupted = false;
 
-	// ¸®ÇÃ¸®ÄÉÀÌ¼Ç Äİ¹é
+	// ëŒ€ê¸°ì‹¤ ìŠ¬ë¡¯ ì¸ë±ìŠ¤
+	UPROPERTY(ReplicatedUsing = OnRep_WaitingRoomSlotIndex, BlueprintReadOnly, Category = "Lobby")
+	int32 WaitingRoomSlotIndex = -1;
+
+	// ìºë¦­í„° í´ë˜ìŠ¤ ì„ íƒ
+	UPROPERTY(ReplicatedUsing = OnRep_SelectedPlayerClass, BlueprintReadOnly, Category = "Character Selection")
+	EPlayerCharacterClass SelectedPlayerClass = EPlayerCharacterClass::GardenRobot;
+
+	// ë¦¬í”Œë¦¬ì¼€ì´ì…˜ ì½œë°±
 	UFUNCTION()
 	void OnRep_IsInCombat();
 
 	UFUNCTION()
 	void OnRep_IsCorrupted();
 
+	UFUNCTION()
+	void OnRep_WaitingRoomSlotIndex();
+
+	UFUNCTION()
+	void OnRep_SelectedPlayerClass();
+
 private:
-	// ÀüÅõ »óÅÂ Å¸ÀÌ¸Ó °ü¸®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Å¸ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½
 	FTimerHandle CombatTimerHandle;
 
-	// ÀüÅõ Á¾·á ´ë±â ½Ã°£
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½
 	UPROPERTY(EditDefaultsOnly, Category = "Combat")
 	float CombatExitDelay = 10.0f;
 
-	// Ã¼·Â È¸º¹ ½Ã½ºÅÛ
+	// Ã¼ï¿½ï¿½ È¸ï¿½ï¿½ ï¿½Ã½ï¿½ï¿½ï¿½
 	UPROPERTY(EditDefaultsOnly, Category = "Gameplay Effects")
 	TSubclassOf<UGameplayEffect> HealthRegenEffectClass;
 
@@ -97,10 +131,10 @@ private:
 	void CheckAndStartHealthRegen();
 	void CheckHealthRegenStatus();
 
-	// Ã¼·Â º¯°æ °¨Áö
+	// Ã¼ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	void OnHealthChanged(const FOnAttributeChangeData& Data);
 
-	// ÃÖÀûÈ­¸¦ À§ÇÑ Ä³½Ì
+	// ï¿½ï¿½ï¿½ï¿½È­ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ä³ï¿½ï¿½
 	FGameplayEffectSpecHandle CachedHealthRegenSpec;
 	void InitializeHealthRegenSpec();
 };

@@ -7,3 +7,8 @@ FCharacterClassDefaultInfo UCharacterClassInfo::GetClassDefaultInfo(ECharacterCl
 {
 	return CharacterClassInformation.FindChecked(CharacterClass);
 }
+
+FCharacterClassDefaultInfo UPlayerCharacterClassInfo::GetClassDefaultInfo(EPlayerCharacterClass CharacterClass)
+{
+	return CharacterClassInformation.FindChecked(CharacterClass);
+}

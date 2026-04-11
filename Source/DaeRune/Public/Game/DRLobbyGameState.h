@@ -4,9 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "Game/DRGameStateBase.h"
+#include "Game/DRLobbyTypes.h"
 #include "DRLobbyGameState.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRoomCodeGenerated, const FString&, RoomCode);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLobbyStateChanged, ELobbyState, NewState);
 
 /**
  * �κ� ���� GameState
@@ -32,11 +34,27 @@ public:
 
 	void SetRoomCode(const FString& NewRoomCode);
 
-	// ��������Ʈ
+	// 로비 상태 조회
+	UFUNCTION(BlueprintCallable, Category = "Lobby|State")
+	ELobbyState GetLobbyState() const { return LobbyState; }
+
+	// 로비 상태 설정 (서버 전용)
+	void SetLobbyState(ELobbyState NewState);
+
+	// 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "Lobby")
 	FOnRoomCodeGenerated OnRoomCodeGenerated;
 
+	UPROPERTY(BlueprintAssignable, Category = "Lobby")
+	FOnLobbyStateChanged OnLobbyStateChanged;
+
 protected:
+	// 로비 상태
+	UPROPERTY(ReplicatedUsing = OnRep_LobbyState, BlueprintReadOnly, Category = "Lobby")
+	ELobbyState LobbyState = ELobbyState::WaitingRoom;
+
+	UFUNCTION()
+	void OnRep_LobbyState();
 	// �� �ڵ�
 	UPROPERTY(ReplicatedUsing = OnRep_RoomCode, BlueprintReadOnly, Category = "Lobby")
 	FString RoomCode;

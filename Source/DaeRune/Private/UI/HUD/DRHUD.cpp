@@ -7,10 +7,10 @@
 
 UOverlayWidgetController* ADRHUD::GetOverlayWidgetController(const FWidgetControllerParams& WCParams)
 {
-	// ½Ì±ÛÅæ ÆĞÅÏ: ÇÑ ¹ø¸¸ »ı¼ºÇÏ°í Àç»ç¿ë
+	// ï¿½Ì±ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½: ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï°ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (OverlayWidgetController == nullptr)
 	{
-		// ÄÁÆ®·Ñ·¯ »ı¼º ¹× ÃÊ±âÈ­
+		// ï¿½ï¿½Æ®ï¿½Ñ·ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ê±ï¿½È­
 		OverlayWidgetController = NewObject<UOverlayWidgetController>(this, OverlayWidgetControllerClass);
 		OverlayWidgetController->SetWidgetControllerParams(WCParams);
 		OverlayWidgetController->BindCallbacksToDependencies();
@@ -20,29 +20,37 @@ UOverlayWidgetController* ADRHUD::GetOverlayWidgetController(const FWidgetContro
 
 void ADRHUD::InitOverlay(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS)
 {
-	// ºí·çÇÁ¸°Æ® Å¬·¡½º ¼³Á¤ È®ÀÎ
+	// ì´ë¯¸ ì˜¤ë²„ë ˆì´ê°€ ì¡´ì¬í•˜ë©´ ë¦¬í„´ (ì¤‘ë³µ ìƒì„± ë°©ì§€)
+	if (OverlayWidget)
+	{
+		return;
+	}
+
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	checkf(OverlayWidgetClass, TEXT("Overlay Widget Class uninitialized, please fill out BP_DRHUD"));
 	checkf(OverlayWidgetControllerClass, TEXT("Overlay Widget Controller Class uninitialized, please fill out BP_DRHUD"));
 
-	// À§Á¬ »ı¼º
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UUserWidget* Widget = CreateWidget<UUserWidget>(GetWorld(), OverlayWidgetClass);
 	OverlayWidget = Cast<UDRUserWidget>(Widget);
 
-	// WidgetController ÆÄ¶ó¹ÌÅÍ ±¸¼º
+	// WidgetController ï¿½Ä¶ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	const FWidgetControllerParams WidgetControllerParams(PC, PS, ASC, AS);
 	UOverlayWidgetController* WidgetController = GetOverlayWidgetController(WidgetControllerParams);
 
-	// À§Á¬°ú ÄÁÆ®·Ñ·¯ ¿¬°á
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ®ï¿½Ñ·ï¿½ ï¿½ï¿½ï¿½ï¿½
 	OverlayWidget->SetWidgetController(WidgetController);
-	// ÃÊ±â °ªµéÀ» UI¿¡ ºê·ÎµåÄ³½ºÆ®
+	// ï¿½Ê±ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ UIï¿½ï¿½ ï¿½ï¿½Îµï¿½Ä³ï¿½ï¿½Æ®
 	WidgetController->BroadcastInitialValues();
-	// È­¸é¿¡ À§Á¬ Ãß°¡
+	// ì–´ë¹Œë¦¬í‹° ì•„ì´ì½˜ ê°±ì‹  (ìœ„ì ¯ ì»¨íŠ¸ë¡¤ëŸ¬ í• ë‹¹ í›„ í˜¸ì¶œí•˜ì—¬ ì†Œì‹¤ ë°©ì§€)
+	WidgetController->BroadcastAbilityInfo();
+	// È­ï¿½é¿¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ß°ï¿½
 	Widget->AddToViewport();
 }
 
 void ADRHUD::UpdateOverlayForSpectating(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS)
 {
-	// ±âÁ¸ WidgetController ÆÄ±«
+	// ï¿½ï¿½ï¿½ï¿½ WidgetController ï¿½Ä±ï¿½
 	if (OverlayWidgetController)
 	{
 		OverlayWidgetController->UnbindAllDelegates();
@@ -51,15 +59,31 @@ void ADRHUD::UpdateOverlayForSpectating(APlayerController* PC, APlayerState* PS,
 		OverlayWidgetController = nullptr;
 	}
 
-	// »õ·Î¿î ÆÄ¶ó¹ÌÅÍ·Î WidgetController »ı¼º
+	// ï¿½ï¿½ï¿½Î¿ï¿½ ï¿½Ä¶ï¿½ï¿½ï¿½Í·ï¿½ WidgetController ï¿½ï¿½ï¿½ï¿½
 	const FWidgetControllerParams WidgetControllerParams(PC, PS, ASC, AS);
 	UOverlayWidgetController* WidgetController = GetOverlayWidgetController(WidgetControllerParams);
 
-	// ±âÁ¸ À§Á¬¿¡ »õ ÄÁÆ®·Ñ·¯ ¿¬°á
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½Æ®ï¿½Ñ·ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (OverlayWidget)
 	{
 		OverlayWidget->SetWidgetController(WidgetController);
 		WidgetController->BroadcastInitialValues();
 		WidgetController->BroadcastAbilityInfo();
+	}
+}
+
+void ADRHUD::RemoveOverlay()
+{
+	if (OverlayWidget)
+	{
+		OverlayWidget->RemoveFromParent();
+		OverlayWidget = nullptr;
+	}
+
+	if (OverlayWidgetController)
+	{
+		OverlayWidgetController->UnbindAllDelegates();
+		OverlayWidgetController->ConditionalBeginDestroy();
+		OverlayWidgetController = nullptr;
 	}
 }

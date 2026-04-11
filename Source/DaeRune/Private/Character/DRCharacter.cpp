@@ -24,6 +24,8 @@
 #include "Game/DRGameUserSettings.h"
 #include "UObject/UObjectIterator.h"
 #include "Components/SynthComponent.h"
+#include "Components/WidgetComponent.h"
+#include "Game/DRLobbyGameState.h"
 
 ADRCharacter::ADRCharacter()
 {
@@ -65,10 +67,7 @@ ADRCharacter::ADRCharacter()
 	bUseControllerRotationRoll = false;
 	bUseControllerRotationYaw = true;
 
-	// �⺻ ĳ���� Ŭ������ ������Ż����Ʈ
-	CharacterClass = ECharacterClass::Elementalist;
-
-	// ��ǰ �ý��� �ʱ�ȭ
+	// 부품 시스템 초기화
 	bIsCarryingPart = false;
 	CarriedPart = nullptr;
 }
@@ -79,6 +78,7 @@ void ADRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 
 	DOREPLIFETIME(ADRCharacter, bIsCarryingPart);
 	DOREPLIFETIME(ADRCharacter, CarriedPart);
+	DOREPLIFETIME(ADRCharacter, PlayerCharacterClass);
 
 	// WaterPump 3P 빔 리플리케이트
 	DOREPLIFETIME(ADRCharacter, bWaterPumpActive);
@@ -89,10 +89,25 @@ void ADRCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 
-	// 서버에서 GAS 초기화 및 어빌리티 부여
+	// 서버에서 GAS 초기화 및 어트리뷰트 적용
 	InitAbilityActorInfo();
-	AddCharacterAbilities();
+
+	// UPlayerCharacterClassInfo 기반으로 어빌리티 부여
+	if (HasAuthority())
+	{
+		UDRAbilitySystemLibrary::GivePlayerStartupAbilities(this, AbilitySystemComponent, PlayerCharacterClass);
+	}
+
 	InitializeMoveSpeedBinding();
+
+	// 대기실 상태이면 카메라 자동 관리 비활성화 (Possess로 인한 ViewTarget 자동 전환 방지)
+	if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(NewController))
+	{
+		if (DRPC->bIsInWaitingRoom)
+		{
+			DRPC->bAutoManageActiveCameraTarget = false;
+		}
+	}
 }
 
 void ADRCharacter::OnRep_PlayerState()
@@ -261,6 +276,71 @@ void ADRCharacter::UpdateMeshVisibility()
 	}
 }
 
+void ADRCharacter::SetWaitingRoomVisibility(bool bInWaitingRoom)
+{
+	if (bInWaitingRoom)
+	{
+		// 1P 메시 숨기기 (고정 카메라에서 불필요)
+		if (FirstPersonMesh)
+		{
+			FirstPersonMesh->SetVisibility(false);
+		}
+
+		// 3P 메시 보이기 (자기 자신도 3인칭으로 보여야 함)
+		GetMesh()->SetVisibility(true);
+		GetMesh()->SetOwnerNoSee(false);
+
+		if (Weapon)
+		{
+			Weapon->SetVisibility(true);
+			Weapon->SetOwnerNoSee(false);
+		}
+
+		// 대기실에서는 오버헤드 닉네임 숨김 (WBP_PlayerSlot UI에서 표시)
+		SetOverheadWidgetVisibility(false);
+	}
+	else
+	{
+		// 일반 FPS 모드 복원
+		UpdateMeshVisibility();
+		GetMesh()->SetOwnerNoSee(true);
+		if (Weapon)
+		{
+			Weapon->SetOwnerNoSee(true);
+		}
+
+		// FreeRoam부터 오버헤드 닉네임 표시 복원
+		SetOverheadWidgetVisibility(true);
+	}
+}
+
+void ADRCharacter::SetOverheadWidgetVisibility(bool bVisible)
+{
+	// 블루프린트에서 추가된 WidgetComponent를 검색하여 가시성 제어
+	TArray<UWidgetComponent*> WidgetComponents;
+	GetComponents<UWidgetComponent>(WidgetComponents);
+
+	for (UWidgetComponent* WidgetComp : WidgetComponents)
+	{
+		if (WidgetComp)
+		{
+			WidgetComp->SetVisibility(bVisible);
+		}
+	}
+}
+
+void ADRCharacter::MulticastTeleportToSlot_Implementation(FVector Location, FRotator Rotation)
+{
+	// CMC와 무관하게 모든 네트워크 엔드포인트에서 직접 위치/회전 설정
+	SetActorLocationAndRotation(Location, Rotation, false, nullptr, ETeleportType::ResetPhysics);
+
+	// 잔여 velocity 초기화
+	if (UCharacterMovementComponent* CMC = GetCharacterMovement())
+	{
+		CMC->StopMovementImmediately();
+	}
+}
+
 void ADRCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -290,6 +370,17 @@ void ADRCharacter::BeginPlay()
 		Light->SetCastShadows(false);
 		Light->SetMobility(EComponentMobility::Movable);
 		Light->RegisterComponent();
+	}
+
+	// 대기실이면 오버헤드 닉네임 위젯 숨김
+	if (UWorld* World = GetWorld())
+	{
+		ADRLobbyGameState* LGS = World->GetGameState<ADRLobbyGameState>();
+		if (LGS && (LGS->GetLobbyState() == ELobbyState::WaitingRoom
+				 || LGS->GetLobbyState() == ELobbyState::Transitioning))
+		{
+			SetOverheadWidgetVisibility(false);
+		}
 	}
 }
 
@@ -419,14 +510,23 @@ void ADRCharacter::OnRep_CarriedPart()
 	// Ŭ���̾�Ʈ �ð��� ȿ��
 }
 
+void ADRCharacter::InitializeDefaultAttributes() const
+{
+	// UPlayerCharacterClassInfo 데이터 에셋 기반 초기화 (EPlayerCharacterClass 타입)
+	UDRAbilitySystemLibrary::InitializePlayerDefaultAttributes(this, PlayerCharacterClass, Level, AbilitySystemComponent);
+}
+
 void ADRCharacter::InitializeMoveSpeedBinding()
 {
 	if (!AbilitySystemComponent || !AttributeSets) return;
 
 	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets))
 	{
-		// 이동 속도 변경 델리게이트 바인딩
-		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMoveSpeedAttribute()).AddUObject(this, &ADRCharacter::OnMoveSpeedChanged);
+		// 기존 바인딩 제거 후 재등록 (중복 방지 — 클래스 변경 시 같은 ASC에 다시 바인딩되므로)
+		FOnGameplayAttributeValueChange& MoveSpeedDelegate =
+			AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetMoveSpeedAttribute());
+		MoveSpeedDelegate.RemoveAll(this);
+		MoveSpeedDelegate.AddUObject(this, &ADRCharacter::OnMoveSpeedChanged);
 
 		// 초기 이동 속도 설정
 		GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
@@ -460,6 +560,9 @@ void ADRCharacter::InitAbilityActorInfo()
 	AbilitySystemComponent = ASC;
 	AttributeSets = DRPlayerState->GetAttributeSet();
 
+	// PlayerState의 선택된 클래스를 PlayerCharacterClass에 반영
+	PlayerCharacterClass = DRPlayerState->GetSelectedPlayerClass();
+
 	// GameBalanceConfig에서 밸런스 값 적용 (서버에서만)
 	if (HasAuthority())
 	{
@@ -489,9 +592,13 @@ void ADRCharacter::InitAbilityActorInfo()
 	// �÷��̾� ��Ʈ�ѷ��� HUD �ʱ�ȭ ��û
 	if (ADRPlayerController* DRPlayerController = Cast<ADRPlayerController>(GetController()))
 	{
-		if (ADRHUD* DRHUD = Cast<ADRHUD>(DRPlayerController->GetHUD()))
+		// 대기실이면 HUD 오버레이 초기화 스킵 (FreeRoam 진입 시 별도 호출)
+		if (!DRPlayerController->bIsInWaitingRoom)
 		{
-			DRHUD->InitOverlay(DRPlayerController, DRPlayerState, AbilitySystemComponent, AttributeSets);
+			if (ADRHUD* DRHUD = Cast<ADRHUD>(DRPlayerController->GetHUD()))
+			{
+				DRHUD->InitOverlay(DRPlayerController, DRPlayerState, AbilitySystemComponent, AttributeSets);
+			}
 		}
 	}
 

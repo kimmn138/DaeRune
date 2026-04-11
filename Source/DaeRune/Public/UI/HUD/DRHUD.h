@@ -13,7 +13,7 @@ class UDRUserWidget;
 struct FWidgetControllerParams;
 
 /**
- * DaeRune ╦чюн HUD е╛╥║╫╨
+ * DaeRune О©╫О©╫О©╫О©╫ HUD е╛О©╫О©╫О©╫О©╫
  */
 UCLASS()
 class DAERUNE_API ADRHUD : public AHUD
@@ -21,34 +21,37 @@ class DAERUNE_API ADRHUD : public AHUD
 	GENERATED_BODY()
 	
 public:
-	// OverlayWidgetController а╒╠ыюз (╫л╠шеФ фпео)
+	// OverlayWidgetController О©╫О©╫О©╫О©╫О©╫О©╫ (О©╫л╠О©╫О©╫О©╫ О©╫О©╫О©╫О©╫)
 	UOverlayWidgetController* GetOverlayWidgetController(const FWidgetControllerParams& WCParams);
 
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	UDRUserWidget* GetOverlayWidget() const { return OverlayWidget; }
 
-	// ©ю╧Ж╥╧юл UI цй╠Бх╜
+	// О©╫О©╫О©╫О©╫О©╫О©╫О©╫О©╫ UI О©╫й╠О©╫х╜
 	void InitOverlay(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS);
 
-	// ╟ЭюЭ©К ©ю╧Ж╥╧юл ╬В╣╔юлф╝
+	// О©╫О©╫О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫О©╫О©╫ф╝
 	void UpdateOverlayForSpectating(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS);
+
+	// Л≤╓К╡└К═┬Л²╢ Л═°Й╠╟ (К▄─Й╦╟Л▀╓ Л═└М≥≤ Л▀° Л·≤К╙╩ Л┐²Л└╠К░° Л≤╓К╡└К═┬Л²╢ Л═∙К╕╛Л ╘)
+	void RemoveOverlay();
 
 protected:
 
 private:
-	// ╦чюн ©ю╧Ж╥╧юл ю╖а╛ юн╫╨ео╫╨
+	// О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫ О©╫н╫О©╫О©╫о╫О©╫
 	UPROPERTY()
 	TObjectPtr<UDRUserWidget>  OverlayWidget;
 
-	// ╨М╥Гга╦╟ф╝©║╪╜ ╪Ёа╓гр ©ю╧Ж╥╧юл ю╖а╛ е╛╥║╫╨
+	// О©╫О©╫О©╫О©╫О©╫О©╫О©╫О©╫ф╝О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫ е╛О©╫О©╫О©╫О©╫
 	UPROPERTY(EditAnywhere)
 	TSubclassOf<UDRUserWidget> OverlayWidgetClass;
 
-	// ©ю╧Ж╥╧юл ю╖а╛ даф╝╥я╥╞ юн╫╨ео╫╨
+	// О©╫О©╫О©╫О©╫О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫ О©╫О©╫ф╝О©╫я╥О©╫ О©╫н╫О©╫О©╫о╫О©╫
 	UPROPERTY()
 	TObjectPtr<UOverlayWidgetController> OverlayWidgetController;
 
-	// ╨М╥Гга╦╟ф╝©║╪╜ ╪Ёа╓гр ю╖а╛ даф╝╥я╥╞ е╛╥║╫╨
+	// О©╫О©╫О©╫О©╫О©╫О©╫О©╫О©╫ф╝О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫ О©╫О©╫ф╝О©╫я╥О©╫ е╛О©╫О©╫О©╫О©╫
 	UPROPERTY(EditAnywhere)
 	TSubclassOf<UOverlayWidgetController> OverlayWidgetControllerClass;
 };

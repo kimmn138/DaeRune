@@ -30,6 +30,9 @@ public:
 	void AddCharacterPassiveAbilities(const TArray<TSubclassOf<UGameplayAbility>>& StartupPassiveAbilities);
 	bool bStartupAbilitiesGiven = false;
 
+	// InputTag 캐시 초기화 (ClearAllAbilities 후 호출)
+	void ClearInputTagCache() { InputTagToAbilityMap.Empty(); }
+
 	void AbilityInputTagPressed(const FGameplayTag& InputTag);
 	void AbilityInputTagHeld(const FGameplayTag& InputTag);
 	void AbilityInputTagReleased(const FGameplayTag& InputTag);
