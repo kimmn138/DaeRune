@@ -17,7 +17,10 @@
       "WebFetch(domain:tomlooman.com)",
       "Bash(\"C:/Program Files/Epic Games/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRune Win64 Development \"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -WaitMutex)",
       "Bash(\"C:/Program Files/Epic Games/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRune Win64 Development \"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -waitmutex)",
-      "Bash(\"/c/Program Files/Epic Games/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development \"/c/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -waitmutex)"
+      "Bash(\"/c/Program Files/Epic Games/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development \"/c/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -waitmutex)",
+      "Bash(cat:*)",
+      "Bash(xxd:*)",
+      "Bash(\"/c/Program Files/Epic Games/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development -Project=\"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -WaitMutex -FromMsBuild)"
     ]
   }
 }

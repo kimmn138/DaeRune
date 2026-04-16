@@ -26,6 +26,7 @@
 #include "Components/SynthComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Game/DRLobbyGameState.h"
+#include "Game/DRTutorialGameMode.h"
 
 ADRCharacter::ADRCharacter()
 {
@@ -34,6 +35,9 @@ ADRCharacter::ADRCharacter()
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 400.f, 0.f);
 	GetCharacterMovement()->bConstrainToPlane = true;
 	GetCharacterMovement()->bSnapToPlaneAtStart = true;
+
+	// Pawn 간 겹침 시 밀어내기 속도 제한 (튕김 방지)
+	GetCharacterMovement()->MaxDepenetrationWithPawn = 10.f;
 
 	// ī�޶� �� ����
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
@@ -93,9 +97,14 @@ void ADRCharacter::PossessedBy(AController* NewController)
 	InitAbilityActorInfo();
 
 	// UPlayerCharacterClassInfo 기반으로 어빌리티 부여
+	// 튜토리얼 모드에서는 자동 부여를 건너뛴다 (튜토리얼 매니저가 목표별로 순차 부여)
 	if (HasAuthority())
 	{
-		UDRAbilitySystemLibrary::GivePlayerStartupAbilities(this, AbilitySystemComponent, PlayerCharacterClass);
+		const bool bIsTutorial = GetWorld() && Cast<ADRTutorialGameMode>(GetWorld()->GetAuthGameMode()) != nullptr;
+		if (!bIsTutorial)
+		{
+			UDRAbilitySystemLibrary::GivePlayerStartupAbilities(this, AbilitySystemComponent, PlayerCharacterClass);
+		}
 	}
 
 	InitializeMoveSpeedBinding();

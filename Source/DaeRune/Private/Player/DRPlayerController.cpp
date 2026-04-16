@@ -1006,6 +1006,12 @@ void ADRPlayerController::RestoreDefaultInputMode()
 		SetInputMode(FInputModeUIOnly());
 		SetShowMouseCursor(true);
 	}
+	else if (IsInTutorial())
+	{
+		// 튜토리얼: 게임 모드
+		SetInputMode(FInputModeGameOnly());
+		SetShowMouseCursor(false);
+	}
 	else if (IsInLobby())
 	{
 		// 로비 상태에 따라 분기
@@ -1061,6 +1067,17 @@ bool ADRPlayerController::IsInGameLevel() const
 	CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
 
 	return CurrentLevelName.Contains(TEXT("Stage1"));
+}
+
+bool ADRPlayerController::IsInTutorial() const
+{
+	UWorld* World = GetWorld();
+	if (!World) return false;
+
+	FString CurrentLevelName = World->GetMapName();
+	CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+	return CurrentLevelName.Contains(TEXT("Tutorial"));
 }
 
 void ADRPlayerController::Client_ShowGameOverUI_Implementation()

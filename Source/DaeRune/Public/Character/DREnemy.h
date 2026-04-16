@@ -12,6 +12,7 @@ class UBlackboardComponent;
 class UDRBillboardWidgetComponent;
 class UBehaviorTree;
 class ADRAIController;
+class UShapeComponent;
 
 // Blackboard 키 상수 (하드코딩 방지)
 namespace DRBlackboardKeys
@@ -98,6 +99,16 @@ public:
 	// 넉백 상태 설정/해제
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	void SetKnockbackState(bool bInKnockback);
+
+	// ===== 튜토리얼 더미 시스템 =====
+
+	// 튜토리얼 샌드백 모드 (움직이지 않음, 공격 안 함, 무적)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial")
+	bool bIsTutorialDummy = false;
+
+	// 튜토리얼 매니저 참조 (데미지 적중 보고용)
+	UPROPERTY(BlueprintReadWrite, Category = "Tutorial")
+	TWeakObjectPtr<AActor> TutorialManagerRef;
 
 	// ===== 부품 시스템 추가 =====
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Part System")
@@ -212,7 +223,20 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TObjectPtr<UDRBillboardWidgetComponent> HealthBar;
 
+	// ===== 히트박스 시스템 =====
+
+	// BP에서 "Hitbox" 태그를 달아 추가한 커스텀 히트박스 컴포넌트 목록
+	// BeginPlay에서 자동 수집됨. 비어있으면 기본 CapsuleComponent로 히트 판정
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|Hitbox")
+	TArray<TObjectPtr<UShapeComponent>> HitboxComponents;
+
+	// 커스텀 히트박스 사용 여부 (HitboxComponents가 있으면 true)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|Hitbox")
+	bool bUseCustomHitbox = false;
+
 private:
+	// "Hitbox" 태그가 달린 컴포넌트를 자동 수집하고 콜리전을 설정
+	void SetupHitboxComponents();
 	// 물 보상 감소 처리
 	void ReduceWaterReward();
 	// 플레이어들에게 물 지급

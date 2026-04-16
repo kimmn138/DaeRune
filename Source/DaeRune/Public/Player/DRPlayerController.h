@@ -167,6 +167,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	bool IsInGameLevel() const;
 
+	// 현재 레벨이 튜토리얼인지 확인
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	bool IsInTutorial() const;
+
 	// 레벨 진입 시 공통 초기화 (ReceivedPlayer, PostSeamlessTravel에서 호출)
 	void OnLevelEntered();
 

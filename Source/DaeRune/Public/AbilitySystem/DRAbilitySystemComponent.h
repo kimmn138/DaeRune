@@ -44,15 +44,17 @@ public:
 	// 캐시된 InputTag로 AbilitySpec 조회 (O(1) lookup)
 	FGameplayAbilitySpec* FindAbilitySpecByInputTag(const FGameplayTag& InputTag);
 
+	// 캐시 갱신 (TutorialManager 등 외부에서 어빌리티 동적 부여 시 사용)
+	void AddToInputTagCache(const FGameplayAbilitySpec& AbilitySpec);
+	void RemoveFromInputTagCache(const FGameplayTag& InputTag);
+
 protected:
 	// InputTag → AbilitySpecHandle 캐시 (성능 최적화)
 	UPROPERTY()
 	TMap<FGameplayTag, FGameplayAbilitySpecHandle> InputTagToAbilityMap;
 
-	// 캐시 갱신
+	// 전체 캐시 재구축
 	void RebuildInputTagCache();
-	void AddToInputTagCache(const FGameplayAbilitySpec& AbilitySpec);
-	void RemoveFromInputTagCache(const FGameplayTag& InputTag);
 
 	virtual void OnRep_ActivateAbilities() override;
 
