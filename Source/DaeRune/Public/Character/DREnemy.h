@@ -36,6 +36,10 @@ namespace DRBlackboardKeys
 	inline const FName FirstAttacker = TEXT("FirstAttacker");
 	inline const FName HasFirstAttacker = TEXT("HasFirstAttacker");
 	inline const FName TargetToFollow = TEXT("TargetToFollow");
+
+	// DragonFly 전용
+	inline const FName IsLockedDown = TEXT("IsLockedDown");
+	inline const FName BasicAttackCount = TEXT("BasicAttackCount");
 }
 
 /**

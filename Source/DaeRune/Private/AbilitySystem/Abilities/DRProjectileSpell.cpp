@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "AbilitySystem/Abilities/DRProjectileSpell.h"

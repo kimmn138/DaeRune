@@ -40,6 +40,7 @@ public:
 	FGameplayTag State_Enraged;
 	FGameplayTag State_Aggroed;
 	FGameplayTag State_HitReacting;
+	FGameplayTag State_LockedDown;
 	FGameplayTag Enemy_Detected;
 
 	// �⺻ ������, Ÿ�� �� ������
@@ -71,6 +72,7 @@ public:
 
 	// Ÿ�� ���� ����Ʈ
 	FGameplayTag Effects_HitReact;
+	FGameplayTag Effects_CannotAttack;
 
 	// �� �ý��� (SetByCaller ���)
 	FGameplayTag Water_SetByCaller_Reduction;
