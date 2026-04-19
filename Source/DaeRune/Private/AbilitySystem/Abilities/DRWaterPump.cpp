@@ -471,8 +471,12 @@ void UDRWaterPump::UpdateBeamEndpoint()
     FHitResult HitResult;
     CachedBeamEndPoint = CalculateWaterBeamEndPoint(WeaponSocketLocation, bHitObstacle, HitResult);
 
-    // Niagara 방향/회전 계산
-    FVector BeamDir = CachedBeamEndPoint - WeaponSocketLocation;
+    // 방향 벡터 및 길이 계산
+    FVector BeamVector = CachedBeamEndPoint - WeaponSocketLocation;
+    float BeamLength = BeamVector.Size();
+
+    FVector BeamDir = BeamVector;
+
     if (!BeamDir.IsNearlyZero())
     {
         BeamDir.Normalize();
@@ -480,15 +484,33 @@ void UDRWaterPump::UpdateBeamEndpoint()
     const FRotator BeamRotation = BeamDir.Rotation();
 
     // 1P Niagara 컴포넌트만 업데이트 (3P는 DRCharacter::UpdateWaterPumpThirdPersonBeam에서 관리)
+
+    float NormalizedLength = BeamLength / WeaponRange;
+
+    // 물 맞는 효과 위치 0~1000 사이로 조절
+    float XValue = FMath::Clamp(NormalizedLength * 1000.0f, 0.0f, 1000.0f);
+
+    // 물대포 이펙트 길이 0~5 사이로 조절
+    float ZScale = FMath::Clamp(NormalizedLength * 5.0f, 0.0f, 5.0f);
+
     if (FirstPersonBeam)
     {
         FirstPersonBeam->SetWorldLocation(WeaponSocketLocation);
         FirstPersonBeam->SetWorldRotation(BeamRotation);
-        FirstPersonBeam->SetVectorParameter(FName("HitEffectPosition"), CachedBeamEndPoint);
+        FirstPersonBeam->SetVectorParameter(
+            FName("WaterCannonScale"),
+            FVector(0.2f, 0.2f, ZScale)
+
+        );
+        FirstPersonBeam->SetVectorParameter(
+            FName("HitEffectPosition"),
+            FVector(XValue, 0.0f, 0.0f)
+        );
     }
 
     OnBeamEndPointUpdated(CachedBeamEndPoint);
 }
+
 
 void UDRWaterPump::StopBeamEffect()
 {
