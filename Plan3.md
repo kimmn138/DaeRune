@@ -73,13 +73,18 @@ ADRArmadilloEnemy
 
 1. BT에서 스킬 조건 확인 (타겟=플레이어, 쿨타임 10초)
    ↓
-2. 폼 전환: Basic → Ball (FormChange 애니메이션)
+2. ★ 타겟 선택 (폼 전환 전에 먼저 수행):
+   - 자신으로부터 3000 거리 내 플레이어 수집
+   - LineTrace로 각 플레이어와 사이에 벽 차단 여부 확인 (ECC_WorldStatic)
+   - 조건 만족 플레이어가 없으면 → 스킬 취소 (GA 즉시 EndAbility)
+   - 폼 전환 없이 기본 폼 유지, 쿨타임 미적용 (재시도 가능)
    ↓
-3. 타겟 선택: 3000 거리 내 + 벽 없는 랜덤 플레이어 1명
-   - LineTrace로 벽 차단 여부 확인
-   - 조건 만족 플레이어 없으면 스킬 취소 → 기본 폼 복귀
+3. 조건 만족 플레이어 중 랜덤 1명 선택
+   - 타겟팅 시점의 플레이어 위치 저장 (고정 목표점)
    ↓
-4. 타겟팅 시점의 플레이어 위치 저장 (고정 목표점)
+4. 폼 전환: Basic → Ball (FormChange 애니메이션)
+   - BasicForm에서 FormChange_BasicToBall 몽타주 재생
+   - 애니메이션 완료 시 AnimNotify → FinishFormChange() → 메시 교체
    ↓
 5. 일직선 돌진 시작
    - 방향: 아르마딜로 → 저장된 목표점
@@ -106,6 +111,8 @@ ADRArmadilloEnemy
 7. 스킬 쿨타임 10초 시작
 ```
 
+**핵심 변경점**: 타겟 유효성 검사를 폼 전환 **이전**에 수행한다. 이렇게 하면 유효한 타겟이 없을 때 불필요한 폼 전환 애니메이션이 재생되지 않고, 기본 폼을 유지한 채 즉시 다른 행동(근접 공격, 추적 등)으로 전환할 수 있다.
+
 ---
 
 ## 제작 순서
@@ -128,7 +135,38 @@ ADRArmadilloEnemy
 class USphereComponent;
 
 /**
+ * 롤링 충돌 결과 데이터 — C++에서 충돌 감지 후 GA(Blueprint)에 전달
+ * GA가 이 데이터를 받아 데미지/스턴 등 효과를 직접 처리한다.
+ */
+USTRUCT(BlueprintType)
+struct FRollImpactResult
+{
+    GENERATED_BODY()
+
+    /** 충돌 지점 (효과 범위의 중심) */
+    UPROPERTY(BlueprintReadOnly)
+    FVector ImpactLocation = FVector::ZeroVector;
+
+    /** 충돌 범위(반지름 50) 내 액터 목록 (자기 자신 제외) */
+    UPROPERTY(BlueprintReadOnly)
+    TArray<AActor*> HitActors;
+
+    /** 범위 내에 플레이어 또는 다른 적이 있었는지 (false = 지형지물만 충돌) */
+    UPROPERTY(BlueprintReadOnly)
+    bool bHitPlayerOrEnemy = false;
+};
+
+/** 롤링 충돌 발생 시 GA에 알리는 델리게이트 */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRollImpact, const FRollImpactResult&, ImpactResult);
+
+/** 롤링이 충돌 없이 목표점에 도달했을 때 GA에 알리는 델리게이트 */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnRollReachedTarget);
+
+/**
  * 아르마딜로 적: 기본 폼(걷기/근접공격)과 볼 폼(구르기/돌진 스킬) 전환
+ *
+ * C++은 폼 전환, 돌진 이동, 충돌 감지만 담당한다.
+ * 데미지/스턴 등 효과 적용은 GA Blueprint(DRDamageGameplayAbility)에서 처리한다.
  */
 UCLASS()
 class DAERUNE_API ADRArmadilloEnemy : public ADREnemy
@@ -174,6 +212,16 @@ public:
     /** 유효한 돌진 타겟 찾기: 3000 내 벽 없는 랜덤 플레이어 */
     UFUNCTION(BlueprintCallable, Category = "Armadillo|Roll")
     AActor* FindRollTarget() const;
+
+    // ===== 롤링 충돌 이벤트 (GA가 바인딩) =====
+
+    /** 충돌 발생 시 브로드캐스트 — GA가 이 이벤트를 받아 데미지/스턴 처리 */
+    UPROPERTY(BlueprintAssignable, Category = "Armadillo|Roll")
+    FOnRollImpact OnRollImpact;
+
+    /** 충돌 없이 목표점 도달 시 브로드캐스트 — GA가 폼 복귀 처리 */
+    UPROPERTY(BlueprintAssignable, Category = "Armadillo|Roll")
+    FOnRollReachedTarget OnRollReachedTarget;
 
     // ===== 볼 폼 메시 참조 =====
 
@@ -253,34 +301,6 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
     float RollTargetSearchRange = 3000.f;
 
-    /** 돌진 데미지 */
-    UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
-    float RollDamage = 50.f;
-
-    /** 클렌저 사이트 데미지 배율 */
-    UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
-    float CleanserDamageMultiplier = 1.5f;
-
-    /** 플레이어 스턴 지속시간 (초) */
-    UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
-    float PlayerStunDuration = 1.0f;
-
-    /** 지형 충돌 시 본인 스턴 지속시간 (초) */
-    UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
-    float SelfStunDuration = 1.5f;
-
-    /** 스킬 쿨타임 (초) */
-    UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
-    float RollSkillCooldown = 10.f;
-
-    /** 스턴 GE 클래스 (플레이어/본인에게 적용) */
-    UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
-    TSubclassOf<UGameplayEffect> RollStunEffectClass;
-
-    /** 롤링 데미지 GE 클래스 */
-    UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
-    TSubclassOf<UGameplayEffect> RollDamageEffectClass;
-
 private:
     /** 돌진 중 Tick 처리 (이동 + 충돌 감지) */
     void TickRollCharge(float DeltaTime);
@@ -288,13 +308,23 @@ private:
     /** 전방 충돌 감지 (SphereTrace) */
     bool DetectRollCollision(FHitResult& OutHit) const;
 
-    /** 충돌 시 효과 적용 */
-    void ApplyRollImpact(const FVector& ImpactLocation);
+    /**
+     * 충돌 시 범위 내 액터를 수집하여 FRollImpactResult를 구성하고
+     * OnRollImpact 델리게이트를 브로드캐스트한다.
+     * ※ 데미지/스턴 적용은 하지 않음 — GA가 델리게이트를 받아 처리
+     */
+    void BroadcastRollImpact(const FVector& ImpactLocation);
 
     /** 메시 가시성 업데이트 */
     void UpdateMeshVisibility();
 };
 ```
+
+**이전 설계와의 차이점**:
+- `RollDamage`, `CleanserDamageMultiplier`, `PlayerStunDuration`, `SelfStunDuration`, `RollSkillCooldown`, `RollStunEffectClass`, `RollDamageEffectClass` 프로퍼티 **제거** — 이 값들은 GA Blueprint의 `DRDamageGameplayAbility` 프로퍼티(`Damage`, `DamageEffectClass` 등)로 설정
+- `ApplyRollImpact()` → `BroadcastRollImpact()`로 변경 — 데미지를 직접 적용하지 않고 충돌 결과만 델리게이트로 전달
+- `FRollImpactResult` 구조체 추가 — 충돌 위치, 범위 내 액터 목록, 플레이어/적 존재 여부를 GA에 전달
+- `FOnRollImpact`, `FOnRollReachedTarget` 델리게이트 추가 — GA가 바인딩하여 충돌/도달 이벤트를 수신
 
 ### 1-2. 소스 파일 생성 (`Source/DaeRune/Private/Character/DRArmadilloEnemy.cpp`)
 
@@ -412,16 +442,18 @@ void ADRArmadilloEnemy::TickRollCharge(float DeltaTime)
 
     // 2. 이동
     FVector NewVelocity = RollDirection * CurrentRollSpeed;
-    GetCharacterMovement()->Velocity = FVector(NewVelocity.X, NewVelocity.Y, GetCharacterMovement()->Velocity.Z);
+    GetCharacterMovement()->Velocity = FVector(NewVelocity.X, NewVelocity.Y,
+        GetCharacterMovement()->Velocity.Z);
 
     // 3. 목표점 도달 확인
     FVector ToTarget = RollTargetLocation - GetActorLocation();
     ToTarget.Z = 0;
-    float DotProduct = FVector::DotProduct(ToTarget.GetSafeNormal(), RollDirection);
-    if (DotProduct <= 0.f) // 목표점을 지나침
+    float Dot = FVector::DotProduct(ToTarget.GetSafeNormal(), RollDirection);
+    if (Dot <= 0.f) // 목표점을 지나침
     {
         StopRollCharge();
-        // 기본 폼으로 복귀 (GA에서 처리)
+        // ★ GA에 목표 도달 알림 → GA가 폼 복귀 처리
+        OnRollReachedTarget.Broadcast();
         return;
     }
 
@@ -429,8 +461,9 @@ void ADRArmadilloEnemy::TickRollCharge(float DeltaTime)
     FHitResult HitResult;
     if (DetectRollCollision(HitResult))
     {
-        ApplyRollImpact(HitResult.ImpactPoint);
         StopRollCharge();
+        // ★ 충돌 결과 수집 후 GA에 알림 → GA가 데미지/스턴 처리
+        BroadcastRollImpact(HitResult.ImpactPoint);
     }
 }
 
@@ -451,9 +484,14 @@ bool ADRArmadilloEnemy::DetectRollCollision(FHitResult& OutHit) const
     );
 }
 
-void ADRArmadilloEnemy::ApplyRollImpact(const FVector& ImpactLocation)
+// ★ 핵심 변경: 데미지/스턴을 직접 적용하지 않고, 충돌 데이터만 수집하여 GA에 전달
+void ADRArmadilloEnemy::BroadcastRollImpact(const FVector& ImpactLocation)
 {
-    // 1. 충돌 지점에서 반지름 50의 구 오버랩 검사
+    FRollImpactResult Result;
+    Result.ImpactLocation = ImpactLocation;
+    Result.bHitPlayerOrEnemy = false;
+
+    // 충돌 지점에서 반지름 50의 구 오버랩 검사
     TArray<FOverlapResult> Overlaps;
     FCollisionQueryParams Params;
     Params.AddIgnoredActor(this);
@@ -465,40 +503,40 @@ void ADRArmadilloEnemy::ApplyRollImpact(const FVector& ImpactLocation)
         Params
     );
 
-    bool bHitPlayerOrEnemy = false;
-
     for (const FOverlapResult& Overlap : Overlaps)
     {
         AActor* HitActor = Overlap.GetActor();
         if (!HitActor) continue;
 
-        // 플레이어 확인
-        if (ADRCharacter* Player = Cast<ADRCharacter>(HitActor))
+        Result.HitActors.Add(HitActor);
+
+        // 플레이어 또는 다른 적이 있는지만 판별 (데미지 적용은 GA에서)
+        if (HitActor->IsA(ADRCharacter::StaticClass()) ||
+            HitActor->IsA(ADREnemy::StaticClass()))
         {
-            bHitPlayerOrEnemy = true;
-            // 50 데미지 적용 (GE)
-            // 1초 스턴 적용 (GE)
-        }
-        // 다른 적 확인
-        else if (ADREnemy* Enemy = Cast<ADREnemy>(HitActor))
-        {
-            bHitPlayerOrEnemy = true;
-            // 50 데미지 적용 (GE)
-        }
-        // 클렌저 사이트 확인
-        else if (ADRCleanserSite* Cleanser = Cast<ADRCleanserSite>(HitActor))
-        {
-            // 75 데미지 (50 * 1.5) 적용 (GE)
+            Result.bHitPlayerOrEnemy = true;
         }
     }
 
-    // 2. 범위 내에 플레이어/적이 없고 지형지물만 있으면 → 본인 스턴
-    if (!bHitPlayerOrEnemy)
-    {
-        // 본인에게 1.5초 스턴 GE 적용
-    }
+    // GA에 충돌 결과 전달 → GA가 데미지/스턴 처리
+    OnRollImpact.Broadcast(Result);
 }
 ```
+
+**C++의 역할 요약** (데미지 로직 제거 후):
+| 역할 | 함수 |
+|------|------|
+| 폼 전환 메시 교체 | `StartFormChange`, `FinishFormChange`, `UpdateMeshVisibility` |
+| 돌진 이동 물리 | `StartRollCharge`, `StopRollCharge`, `TickRollCharge` |
+| 전방 충돌 감지 | `DetectRollCollision` (SphereTrace) |
+| 충돌 범위 수집 | `BroadcastRollImpact` (OverlapMulti → 액터 목록 수집) |
+| GA에 이벤트 전달 | `OnRollImpact.Broadcast`, `OnRollReachedTarget.Broadcast` |
+
+**C++이 하지 않는 것**:
+- ❌ GE를 만들거나 적용하지 않음
+- ❌ 데미지 계산하지 않음
+- ❌ 스턴 적용하지 않음
+- ❌ 클렌저 사이트 배율 계산하지 않음
 
 ---
 
@@ -548,13 +586,9 @@ GameplayTags.State_BallForm = UGameplayTagsManager::Get().AddNativeGameplayTag(
   - MoveSpeed: 250 (기본 폼 걷기 속도)
 - **참고**: 기존 `GE_PrimaryAttributes_Enemy`를 복제하여 수치만 조정
 
-### 3-2. `GE_ArmadilloRollDamage` (돌진 데미지)
+### 3-2. 돌진 데미지 GE — 별도 생성 불필요
 
-- **위치**: `Content/Blueprints/AbilitySystem/GE/Enemy/GE_ArmadilloRollDamage`
-- **Duration**: Instant
-- **Execution Calculation**: `ExecCalc_Damage` (기존 것 재사용)
-- **Set By Caller**: `Damage` 태그로 데미지 값 전달 (기본 50, 클렌저는 75)
-- **Damage Type**: `Damage.Physical`
+돌진 데미지는 `GA_ArmadilloRollCharge`가 `DRDamageGameplayAbility`를 상속하므로, 부모 클래스의 `DamageEffectClass` 프로퍼티에 **기존 범용 데미지 GE**를 설정하면 된다. `CauseDamage()` / `MakeDamageEffectParamsFromClassDefaults()`가 GA에 설정된 `Damage`, `DamageType` 값을 자동으로 사용하므로 별도의 `GE_ArmadilloRollDamage`를 만들 필요가 없다.
 
 ### 3-3. `GE_ArmadilloRollStun_Player` (플레이어 스턴)
 
@@ -602,40 +636,128 @@ GameplayTags.State_BallForm = UGameplayTagsManager::Get().AddNativeGameplayTag(
 - **CooldownGameplayEffectClass**: `GE_Cooldown_ArmadilloRollCharge`
 - **Cooldown Tags**: `Cooldown.Armadillo.RollCharge`
 
+**GA Blueprint 프로퍼티 설정** (부모 `DRDamageGameplayAbility`에서 상속):
+
+| 프로퍼티 | 값 | 비고 |
+|---------|-----|------|
+| DamageEffectClass | 기존 범용 데미지 GE | `ExecCalc_Damage` 사용하는 기존 GE |
+| DamageType | `Damage.Physical` | 물리 데미지 |
+| Damage | 50 | 기본 돌진 데미지 |
+| DebuffChance | 0 | 돌진은 별도 스턴 GE로 처리 |
+| KnockbackChance | 0 | 돌진에 넉백 없음 |
+
+**GA Blueprint 추가 변수** (GA 내부에서 선언):
+
+| 변수 | 타입 | 값 | 용도 |
+|------|------|-----|------|
+| CleanserDamageMultiplier | Float | 1.5 | 클렌저 사이트 데미지 배율 |
+| PlayerStunEffectClass | TSubclassOf\<UGameplayEffect\> | `GE_ArmadilloRollStun_Player` | 플레이어 1초 스턴 |
+| SelfStunEffectClass | TSubclassOf\<UGameplayEffect\> | `GE_ArmadilloRollStun_Self` | 본인 1.5초 스턴 |
+| SavedTargetLocation | FVector | - | 타겟팅 시점 위치 저장 |
+
 **GA Blueprint 로직 (ActivateAbility)**:
 
 ```
 [ActivateAbility]
     │
-    ├─ 1. FindRollTarget() 호출 (C++ 함수)
-    │     └─ 결과 null이면 → EndAbility (취소)
+    ├─ 1. ★ FindRollTarget() 호출 (C++ 함수) — 폼 전환 전에 먼저 타겟 검증
+    │     └─ 결과 null이면 → EndAbility (취소, 쿨타임 미적용)
+    │        ※ 기본 폼 유지, 폼 전환 애니메이션 재생하지 않음
     │
-    ├─ 2. StartFormChange(true) 호출 → Basic→Ball 전환 시작
+    ├─ 2. ★ 타겟 위치 저장
+    │     └─ SavedTargetLocation = TargetActor->GetActorLocation()
+    │        (이 시점의 위치가 돌진 목표점으로 고정됨)
+    │
+    ├─ 3. C++ 델리게이트 바인딩
+    │     ├─ OnRollImpact 바인딩 → HandleRollImpact (커스텀 이벤트)
+    │     └─ OnRollReachedTarget 바인딩 → HandleRollReachedTarget (커스텀 이벤트)
+    │
+    ├─ 4. StartFormChange(true) 호출 → Basic→Ball 전환 시작
     │     └─ BasicForm에서 FormChange_BasicToBall 몽타주 재생
     │     └─ AnimNotify → FinishFormChange() → 메시 교체
     │
-    ├─ 3. Wait for AnimNotify (FinishFormChange 완료 대기)
+    ├─ 5. Wait for AnimNotify (FinishFormChange 완료 대기)
     │
-    ├─ 4. 타겟 위치 저장 (FindRollTarget의 GetActorLocation)
-    │
-    ├─ 5. StartRollCharge(TargetLocation) 호출
+    ├─ 6. StartRollCharge(SavedTargetLocation) 호출
     │     └─ C++의 Tick에서 자동으로 이동 + 충돌 감지 수행
+    │     └─ 충돌 또는 도달 시 → C++이 바인딩된 델리게이트 브로드캐스트
     │
-    ├─ 6. Wait until bIsRolling == false (충돌 또는 도달 시)
-    │
-    ├─ 7. StartFormChange(false) 호출 → Ball→Basic 전환 시작
-    │     └─ BallForm에서 FormChange_BallToBasic 몽타주 재생
-    │     └─ AnimNotify → FinishFormChange() → 메시 교체
-    │
-    ├─ 8. Wait for AnimNotify (FinishFormChange 완료 대기)
-    │
-    └─ 9. CommitAbilityCooldown() → 쿨타임 10초 시작
-         └─ EndAbility
+    └─ 7. 이후 흐름은 델리게이트 콜백에서 처리 (아래 참조)
 ```
 
-**충돌 시 효과 적용은 C++의 `ApplyRollImpact()`에서 처리**:
-- GA에서 GE 클래스를 C++ 프로퍼티에 세팅
-- C++에서 ASC를 통해 GE 적용
+**HandleRollImpact (충돌 시 — 커스텀 이벤트)**:
+
+```
+HandleRollImpact(ImpactResult: FRollImpactResult)
+    │
+    ├─ ImpactResult.HitActors 배열을 순회:
+    │   │
+    │   ├─ [Cast to ADRCharacter 성공 — 플레이어]
+    │   │   ├─ ★ CauseDamage(PlayerActor) ← 부모의 DamageEffectClass/Damage(50) 자동 사용
+    │   │   │   └─ MakeDamageEffectParamsFromClassDefaults(PlayerActor)
+    │   │   │       └─ ASC->ApplyGameplayEffectSpecToTarget()
+    │   │   │           └─ ExecCalc_Damage → 플레이어 Health -50
+    │   │   │
+    │   │   └─ ★ 1초 스턴 GE 적용:
+    │   │       ├─ 플레이어의 ASC 가져오기 (IAbilitySystemInterface)
+    │   │       ├─ MakeOutgoingSpec(PlayerStunEffectClass)
+    │   │       └─ ApplyGameplayEffectSpecToTarget(플레이어 ASC)
+    │   │
+    │   ├─ [Cast to ADREnemy 성공 — 다른 적]
+    │   │   └─ ★ CauseDamage(EnemyActor) ← 동일하게 50 데미지
+    │   │
+    │   └─ [Cast to ADRCleanserSite 성공 — 클렌저 사이트]
+    │       └─ ★ 1.5배 데미지 적용:
+    │           ├─ MakeDamageEffectParamsFromClassDefaults(CleanserActor)
+    │           ├─ Params.Damage = GetDamageAtLevel() * CleanserDamageMultiplier (50 * 1.5 = 75)
+    │           └─ ApplyDamageEffect(Params) → ExecCalc_Damage → 클렌저 Health -75
+    │
+    ├─ ImpactResult.bHitPlayerOrEnemy 확인:
+    │   │
+    │   ├─ [true — 플레이어/적이 있었음]
+    │   │   └─ 본인 스턴 없음
+    │   │
+    │   └─ [false — 지형지물만 충돌]
+    │       └─ ★ 본인 스턴 GE 적용:
+    │           ├─ GetAbilitySystemComponentFromActorInfo()
+    │           ├─ MakeOutgoingSpec(SelfStunEffectClass)
+    │           └─ ApplyGameplayEffectSpecToSelf() → 1.5초 스턴
+    │
+    ├─ 폼 복귀: StartFormChange(false) → Ball→Basic 전환
+    │   └─ FormChange_BallToBasic 몽타주 재생
+    │   └─ AnimNotify → FinishFormChange() → 메시 교체
+    │
+    ├─ Wait for FormChange 완료
+    │
+    ├─ CommitAbilityCooldown() → 쿨타임 10초 시작
+    │
+    └─ EndAbility()
+```
+
+**HandleRollReachedTarget (충돌 없이 목표 도달 시 — 커스텀 이벤트)**:
+
+```
+HandleRollReachedTarget()
+    │
+    ├─ (데미지/스턴 없음 — 충돌이 발생하지 않았으므로)
+    │
+    ├─ 폼 복귀: StartFormChange(false) → Ball→Basic 전환
+    │   └─ FormChange_BallToBasic 몽타주 재생
+    │   └─ AnimNotify → FinishFormChange() → 메시 교체
+    │
+    ├─ Wait for FormChange 완료
+    │
+    ├─ CommitAbilityCooldown() → 쿨타임 10초 시작
+    │
+    └─ EndAbility()
+```
+
+**이 설계의 이점**:
+- `CauseDamage()`, `MakeDamageEffectParamsFromClassDefaults()` 등 **부모 클래스의 인프라를 그대로 활용**
+- `DamageEffectClass`, `Damage`, `DamageType` 등 **GA 프로퍼티에서 한 곳에서 설정** → 밸런싱 조정이 쉬움
+- C++에 데미지/GE 관련 코드가 없어 **책임 분리 명확** (C++ = 물리/충돌, GA = 효과/데미지)
+- 클렌저 1.5배 데미지도 GA Blueprint에서 `GetDamageAtLevel() * 1.5`로 간단히 처리
+- 스턴 GE도 GA Blueprint에서 직접 ASC에 적용 → 별도 C++ 프로퍼티 불필요
 
 ---
 
@@ -790,7 +912,10 @@ Root (Selector)
 │     ├─ Decorator: Target이 플레이어인지 확인
 │     ├─ Task: BTT_ArmadilloRollAttack (★ 신규)
 │     │     └─ TryActivateAbilitiesByTag("Abilities.Armadillo.RollCharge")
-│     └─ (스킬 실행 후 쿨타임 동안 RollSkillReady = false)
+│     │        ※ GA 내부에서 폼 전환 전에 FindRollTarget() 실행
+│     │        ※ 유효 타겟 없으면 GA가 즉시 종료 → BTT는 Failure 반환
+│     │        ※ 유효 타겟 있으면 타겟 위치 저장 → 폼 전환 → 돌진
+│     └─ (스킬 성공 시 쿨타임 동안 RollSkillReady = false)
 │
 ├─ [5] 기본 공격 분기 (Sequence)
 │     ├─ Decorator: BB "TargetToFollow" IsSet
@@ -835,9 +960,16 @@ Root (Selector)
   Execute:
     1. TryActivateAbilitiesByTag("Abilities.Armadillo.RollCharge")
     2. Wait for ability to end
-    3. Set BB "RollSkillReady" = false
-    4. Return Success/Failure
+    3. GA 결과 확인:
+       - GA가 유효 타겟을 찾지 못해 즉시 EndAbility한 경우:
+         → 쿨타임 미적용 상태, Return Failure (BT가 다음 분기로 이동)
+       - GA가 정상적으로 돌진을 수행하고 종료한 경우:
+         → 쿨타임 적용됨, Set BB "RollSkillReady" = false
+         → Return Success
   ```
+- **GA 실패 판별**: GA 내부에서 FindRollTarget() 실패 시 쿨타임을 적용하지 않으므로,
+  BTT는 GA 종료 후 ASC에 `Cooldown.Armadillo.RollCharge` 태그가 있는지 확인하여
+  성공/실패를 판별할 수 있다.
 
 ---
 
@@ -860,26 +992,24 @@ Root (Selector)
 
 | 프로퍼티 | 값 | 비고 |
 |---------|-----|------|
+| **ADRCharacterBase** | | |
 | CharacterClass | Warrior | 근접 공격 기반 |
 | Level | 1 (기본) | 스폰 시 조정 |
-| BehaviorTree | `BT_EnemyBehaviorTree_Armadillo` | |
 | BaseWalkSpeed | 250 | 기본 폼 이동 속도 |
-| RollInitialSpeed | 200 | 돌진 초기 속도 |
-| RollMaxSpeed | 2000 | 돌진 최대 속도 |
-| RollAcceleration | 400 | 초당 가속량 |
-| RollDamage | 50 | 돌진 데미지 |
-| CleanserDamageMultiplier | 1.5 | 클렌저 추가 데미지 |
-| PlayerStunDuration | 1.0 | 초 |
-| SelfStunDuration | 1.5 | 초 |
-| RollSkillCooldown | 10.0 | 초 |
-| RollTargetSearchRange | 3000 | 유닛 |
-| RollDetectionRadius | 30 | 전방 감지 구 반지름 |
-| RollImpactRadius | 50 | 충돌 효과 구 반지름 |
-| RollStunEffectClass | GE별로 할당 | |
-| RollDamageEffectClass | `GE_ArmadilloRollDamage` | |
+| **ADREnemy** | | |
+| BehaviorTree | `BT_EnemyBehaviorTree_Armadillo` | |
 | WaterReductionEffectClass | 기존 적 GE | |
 | WaterGrantEffectClass | 기존 적 GE | |
 | EnrageMovementSpeedGE | 기존 적 GE | |
+| **ADRArmadilloEnemy** | | |
+| RollInitialSpeed | 200 | 돌진 초기 속도 |
+| RollMaxSpeed | 2000 | 돌진 최대 속도 |
+| RollAcceleration | 400 | 초당 가속량 |
+| RollTargetSearchRange | 3000 | 유닛 |
+| RollDetectionRadius | 30 | 전방 감지 구 반지름 |
+| RollImpactRadius | 50 | 충돌 효과 구 반지름 |
+
+**참고**: 데미지(`RollDamage`), 클렌저 배율(`CleanserDamageMultiplier`), 스턴 GE 클래스(`RollStunEffectClass`), 데미지 GE 클래스(`RollDamageEffectClass`), 스턴 지속시간, 쿨타임 등은 C++이 아닌 **GA_ArmadilloRollCharge Blueprint의 프로퍼티**에서 설정한다.
 
 ### 9-4. 공격 몽타주 설정 (AttackMontages 배열)
 
@@ -964,10 +1094,10 @@ HitReactMontages[2] = AM_Armadillo_HitReact3
 
 ### Blueprint — GE 작업
 - [ ] 6. `GE_PrimaryAttributes_Armadillo` 생성
-- [ ] 7. `GE_ArmadilloRollDamage` 생성
-- [ ] 8. `GE_ArmadilloRollStun_Player` 생성 (1초)
-- [ ] 9. `GE_ArmadilloRollStun_Self` 생성 (1.5초)
-- [ ] 10. `GE_Cooldown_ArmadilloRollCharge` 생성 (10초)
+- [ ] 7. `GE_ArmadilloRollStun_Player` 생성 (1초)
+- [ ] 8. `GE_ArmadilloRollStun_Self` 생성 (1.5초)
+- [ ] 9. `GE_Cooldown_ArmadilloRollCharge` 생성 (10초)
+- ※ 돌진 데미지 GE는 별도 생성 불필요 (GA의 DamageEffectClass에 기존 범용 GE 사용)
 
 ### Blueprint — 애니메이션 작업
 - [ ] 11. `BS_Armadillo_IdleWalk` 블렌드 스페이스 생성
@@ -1037,8 +1167,889 @@ HitReactMontages[2] = AM_Armadillo_HitReact3
   - Ball → Basic 폼 전환
   - BT로 제어권 반환
 
-### 5. FindRollTarget 실패
+### 5. FindRollTarget 실패 (폼 전환 전 검증)
 - 3000 내에 벽 없는 플레이어가 없으면:
-  - GA 즉시 취소
-  - 폼 전환 없이 기본 폼 유지
-  - 쿨타임 적용하지 않음 (재시도 가능)
+  - GA의 ActivateAbility 진입 직후, **폼 전환 전에** FindRollTarget()이 nullptr 반환
+  - 즉시 EndAbility 호출 → GA 종료
+  - **폼 전환 애니메이션이 전혀 재생되지 않음** (기본 폼 유지)
+  - 쿨타임 미적용 (CommitAbilityCooldown 호출 전에 종료되므로)
+  - BT의 다음 Tick에서 즉시 다른 행동(근접 공격, 추적 등)으로 전환 가능
+
+---
+
+## 부록: 상황별 호출 흐름 상세
+
+아르마딜로가 겪는 모든 주요 상황에 대해, **어디(C++/BP/BT/GA/GE/AnimBP)의 어떤 함수/노드가 어떤 순서로 호출되는지**를 시간 순서대로 기술한다.
+
+---
+
+### A. 스폰 및 초기화
+
+```
+[1] 월드에 BP_Armadillo 스폰 (GameMode 또는 Phase에서 SpawnActor)
+    │
+    │ ── C++: ADRArmadilloEnemy::ADRArmadilloEnemy() (생성자)
+    │    ├─ BallFormMesh 컴포넌트 생성 (CreateDefaultSubobject)
+    │    ├─ BallFormMesh->SetVisibility(false)
+    │    └─ BallFormMesh->SetCollisionEnabled(NoCollision)
+    │
+    │ ── C++: ADREnemy::ADREnemy() (부모 생성자)
+    │    ├─ PartMeshComponent 생성
+    │    ├─ HealthBar 위젯 컴포넌트 생성
+    │    └─ HitboxComponents 초기화
+    │
+    │ ── C++: ADRCharacterBase::ADRCharacterBase() (조부모 생성자)
+    │    ├─ AbilitySystemComponent 생성
+    │    ├─ AttributeSets (UDREnemyAttributeSet) 생성
+    │    ├─ BurnDebuffComponent, StunDebuffComponent 생성
+    │    └─ Weapon SkeletalMeshComponent 생성
+    │
+    ▼
+[2] ADRArmadilloEnemy::BeginPlay()
+    │
+    ├─ Super::BeginPlay() 호출
+    │   │
+    │   ├─ ADREnemy::BeginPlay()
+    │   │   ├─ SetupHitboxComponents() — "Hitbox" 태그 컴포넌트 수집
+    │   │   ├─ CapsuleComponent->OnComponentHit 바인딩 → OnHit() (벽 스턴용)
+    │   │   └─ 체력 변화 델리게이트 바인딩 (OnHealthChanged, OnMaxHealthChanged)
+    │   │
+    │   └─ ADRCharacterBase::BeginPlay()
+    │       └─ Debuff 태그 콜백 등록 (Stun, Burn)
+    │
+    ├─ DefaultCapsuleRadius 저장 ← GetCapsuleComponent()->GetUnscaledCapsuleRadius()
+    └─ DefaultCapsuleHalfHeight 저장 ← GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight()
+    │
+    ▼
+[3] ADREnemy::PossessedBy(ADRAIController) — AI 컨트롤러 소유
+    │
+    ├─ DRAIController 참조 저장
+    ├─ InitAbilityActorInfo()
+    │   ├─ ASC->InitAbilityActorInfo(this, this)
+    │   ├─ ASC 태그 콜백 등록:
+    │   │   ├─ Effects.HitReact → HitReactTagChanged()
+    │   │   └─ Debuff.Stun → StunTagChanged()
+    │   └─ OnAscRegistered 델리게이트 브로드캐스트
+    │
+    ├─ InitializeDefaultAttributes()
+    │   ├─ UDRAbilitySystemLibrary::InitializeDefaultAttributes()
+    │   │   ├─ CharacterClassInfo에서 Warrior 클래스 정보 조회
+    │   │   ├─ GE_PrimaryAttributes_Armadillo 적용 (MaxHealth, MoveSpeed 등)
+    │   │   └─ GE_VitalAttributes_Enemy 적용 (현재 Health, Water 초기화)
+    │   └─ MoveSpeed 어트리뷰트 → CharacterMovement->MaxWalkSpeed 반영
+    │
+    ├─ AddCharacterAbilities() — 어빌리티 부여
+    │   ├─ GA_ArmadilloBite → ASC->GiveAbility()
+    │   ├─ GA_ArmadilloRollCharge → ASC->GiveAbility()
+    │   └─ GA_HitReact (공용) → ASC->GiveAbility()
+    │
+    ├─ Blackboard 초기화
+    │   ├─ BB->InitializeBlackboard(*BehaviorTree->BlackboardAsset)
+    │   ├─ BB->SetValueAsBool("RangedAttacker", false) — 근접 타입
+    │   ├─ BB->SetValueAsVector("HomeLocation", GetActorLocation())
+    │   └─ BB->SetValueAsBool("RollSkillReady", true) — 초기 스킬 사용 가능
+    │
+    └─ DRAIController->RunBehaviorTree(BT_EnemyBehaviorTree_Armadillo) — BT 실행 시작
+    │
+    ▼
+[4] AnimBP 초기화 (BP_Armadillo의 Mesh 컴포넌트에 설정)
+    │
+    ├─ ABP_Armadillo_Basic — BasicForm 메시의 AnimInstance
+    │   └─ Event Blueprint Initialize Animation
+    │       └─ Owner 캐스팅 → ADRArmadilloEnemy 참조 저장
+    │
+    └─ ABP_Armadillo_Ball — BallForm 메시의 AnimInstance (Hidden 상태지만 초기화됨)
+        └─ Event Blueprint Initialize Animation
+            └─ Owner 캐스팅 → ADRArmadilloEnemy 참조 저장
+```
+
+---
+
+### B. 평시 행동 (기본 폼 — 순찰 / 추적 / 대기)
+
+```
+[매 BT Tick]
+    │
+    ├─ BT: Root Selector 평가
+    │   ├─ [1] Dead == false → 스킵
+    │   ├─ [2] Stunned == false → 스킵
+    │   ├─ [3] HitReacting == false → 스킵
+    │   ├─ [4] RollSkillReady 확인 (BTS_CheckRollSkillReady에서 매 0.5초 갱신)
+    │   │     └─ ASC에 Cooldown.Armadillo.RollCharge 태그 없음 → RollSkillReady = true
+    │   │     └─ 하지만 TargetToFollow 미설정 또는 타겟이 플레이어 아님 → [4] 스킵
+    │   ├─ [5] 기본 공격: TargetToFollow 미설정 또는 범위 밖 → 스킵
+    │   ├─ [6] 추적: TargetToFollow 설정됨 → MoveTo 실행
+    │   └─ [7] 순찰: TargetToFollow 미설정 → HomeLocation 주변 이동
+    │
+    ▼
+[BTS_FindNearestPlayer (BT Service, 매 Tick)]
+    │
+    ├─ AIPerceptionComponent에서 감지된 플레이어 목록 조회
+    ├─ 가장 가까운 플레이어 → BB "TargetToFollow"에 설정
+    └─ 감지된 플레이어 없으면 → BB "TargetToFollow" 클리어
+    │
+    ▼
+[이동 중 — CharacterMovement]
+    │
+    ├─ C++: CharacterMovementComponent가 NavMesh 경로를 따라 이동
+    ├─ AnimBP: ABP_Armadillo_Basic → State Machine
+    │   ├─ Event Blueprint Update Animation (매 프레임)
+    │   │   └─ Speed = GetVelocity().Size()
+    │   └─ Locomotion 상태:
+    │       └─ BS_Armadillo_IdleWalk 블렌드 스페이스
+    │           ├─ Speed ≈ 0 → Idle 애니메이션
+    │           └─ Speed ≈ 250 → Walk 애니메이션
+    └─ (BallFormMesh는 Hidden이므로 ABP_Armadillo_Ball은 시각적 영향 없음)
+```
+
+---
+
+### C. 기본 공격 (BasicForm 근접 공격)
+
+```
+[1] BT: [5] 기본 공격 분기 진입
+    │
+    ├─ Decorator: BB "TargetToFollow" IsSet ✓
+    ├─ Decorator: 공격 범위 내 ✓
+    │
+    ├─ BTT_RotateToFaceTarget 실행
+    │   └─ C++/BP: 아르마딜로를 타겟 방향으로 회전
+    │
+    └─ BTT_Attack_Armadillo 실행
+        │
+        ▼
+[2] BTT_Attack_Armadillo (BT Task Blueprint)
+    │
+    └─ ASC->TryActivateAbilitiesByTag("Abilities.Armadillo.BasicAttack")
+        │
+        ▼
+[3] GA_ArmadilloBite::ActivateAbility() (GA Blueprint — UDRMeleeAttack 상속)
+    │
+    ├─ CommitAbility() — 코스트/쿨다운 확인
+    │
+    ├─ PlayMontageAndWait(AM_Armadillo_BasicAttack)
+    │   │
+    │   │ ── AnimBP: ABP_Armadillo_Basic
+    │   │    └─ DefaultSlot에 AM_Armadillo_BasicAttack 몽타주 재생
+    │   │    └─ BasicAttack 애니메이션 시작
+    │   │
+    │   ▼
+    ├─ [몽타주 재생 중 — 데미지 타이밍]
+    │   │
+    │   └─ AnimNotify 발동 (데미지 Notify)
+    │       │
+    │       └─ GA Blueprint: 이벤트 수신
+    │           ├─ GetAttackMontages() → FTaggedMontage 조회
+    │           ├─ GetCombatSocketLocation(CombatSocket.RightHand) → 소켓 위치
+    │           ├─ SphereTrace / BoxTrace 실행 (공격 범위)
+    │           ├─ 히트된 액터에 대해:
+    │           │   ├─ MakeDamageEffectParamsFromClassDefaults(HitActor)
+    │           │   │   └─ DamageType: Damage.Physical (또는 Damage.Bite)
+    │           │   │   └─ Damage: 설정된 수치
+    │           │   └─ CauseDamage(HitActor)
+    │           │       └─ ASC->ApplyGameplayEffectSpecToTarget()
+    │           │           │
+    │           │           └─ ExecCalc_Damage 실행 (서버)
+    │           │               ├─ 기본 데미지 계산
+    │           │               ├─ 디버프 확률 체크 (Physical → Debuff.Physical)
+    │           │               └─ 최종 데미지 적용 → 대상 Health 감소
+    │           │
+    │           └─ OnAttackExecuted() — 물 보상 감소 카운터 증가
+    │
+    ▼
+[4] 몽타주 완료
+    │
+    └─ GA_ArmadilloBite: OnCompleted 콜백
+        └─ EndAbility()
+            │
+            └─ BTT_Attack_Armadillo: OnAbilityEnded
+                └─ FinishExecute(true) → BT로 제어권 반환
+```
+
+---
+
+### D. 롤링 돌진 스킬 (성공 — 플레이어/적 충돌)
+
+```
+[1] BT: [4] 롤링 스킬 분기 진입
+    │
+    ├─ Decorator: BB "RollSkillReady" == true ✓
+    │   └─ (BTS_CheckRollSkillReady가 ASC에 Cooldown 태그 없음 확인)
+    ├─ Decorator: BB "TargetToFollow" IsSet ✓
+    ├─ Decorator: Target이 플레이어 ✓
+    │
+    └─ BTT_ArmadilloRollAttack 실행
+        │
+        └─ ASC->TryActivateAbilitiesByTag("Abilities.Armadillo.RollCharge")
+            │
+            ▼
+[2] GA_ArmadilloRollCharge::ActivateAbility() (GA Blueprint)
+    │
+    ├─ ★ Step 1: 타겟 검색 (폼 전환 전)
+    │   │
+    │   └─ C++: ADRArmadilloEnemy::FindRollTarget()
+    │       ├─ UGameplayStatics::GetAllActorsOfClass(ADRCharacter) — 플레이어 수집
+    │       ├─ 각 플레이어에 대해:
+    │       │   ├─ 거리 계산 (GetDistanceTo) — 3000 이내 필터링
+    │       │   ├─ LineTrace (자신 → 플레이어, ECC_WorldStatic)
+    │       │   │   └─ 히트 있으면 = 벽 차단 → 제외
+    │       │   │   └─ 히트 없으면 = 시야 확보 → 후보 목록에 추가
+    │       │   └─ (플레이어 사망 여부도 확인 — IsDead)
+    │       ├─ 후보 목록에서 랜덤 1명 선택
+    │       └─ 반환: 선택된 플레이어 Actor (또는 nullptr)
+    │
+    ├─ ★ Step 2: 타겟 유효성 확인
+    │   └─ FindRollTarget 결과 != nullptr → 계속 진행 ✓
+    │
+    ├─ ★ Step 3: 타겟 위치 저장
+    │   └─ RollTargetLocation = TargetActor->GetActorLocation()
+    │       (이 시점의 위치가 돌진 목표점으로 고정)
+    │
+    ▼
+[3] 폼 전환: Basic → Ball
+    │
+    ├─ C++: ADRArmadilloEnemy::StartFormChange(true)
+    │   └─ bPendingBallForm = true
+    │
+    ├─ GA Blueprint: PlayMontageAndWait(AM_Armadillo_FormChange_BtoD)
+    │   │
+    │   │ ── AnimBP: ABP_Armadillo_Basic
+    │   │    └─ DefaultSlot에 FormChange_BasicToBall 몽타주 재생
+    │   │    └─ 기본 폼이 볼로 말리는 애니메이션 시작
+    │   │
+    │   ├─ [몽타주 재생 중...]
+    │   │
+    │   └─ AnimNotify: AN_FinishFormChange 발동 (몽타주 끝 부분)
+    │       │
+    │       └─ C++: ADRArmadilloEnemy::FinishFormChange()
+    │           ├─ bIsBallForm = true (bPendingBallForm 값)
+    │           ├─ OnRep_BallForm() 호출 (서버 로컬)
+    │           │   └─ UpdateMeshVisibility()
+    │           │       ├─ GetMesh()->SetVisibility(false) — BasicForm 숨김
+    │           │       └─ BallFormMesh->SetVisibility(true) — BallForm 표시
+    │           ├─ 캡슐 크기 조정:
+    │           │   └─ SetCapsuleSize(BallFormCapsuleRadius, BallFormCapsuleHalfHeight)
+    │           │
+    │           └─ [리플리케이션] bIsBallForm = true → 클라이언트로 전파
+    │               └─ 클라이언트: OnRep_BallForm()
+    │                   └─ UpdateMeshVisibility() — 동일하게 메시 교체
+    │
+    ▼
+[4] 돌진 시작
+    │
+    ├─ C++: ADRArmadilloEnemy::StartRollCharge(RollTargetLocation)
+    │   ├─ bIsRolling = true
+    │   ├─ RollDirection = (TargetLocation - GetActorLocation()).GetSafeNormal2D()
+    │   ├─ CurrentRollSpeed = RollInitialSpeed (200)
+    │   └─ DRAIController->StopMovement() — AI 경로 이동 중지
+    │
+    │ ── AnimBP: ABP_Armadillo_Ball
+    │    └─ State Machine: bIsRolling == true → Roll 상태 진입
+    │        └─ Roll 애니메이션 Loop 재생
+    │
+    ▼
+[5] 돌진 중 (매 서버 Tick)
+    │
+    └─ C++: ADRArmadilloEnemy::Tick(DeltaTime)
+        └─ HasAuthority() && bIsRolling → TickRollCharge(DeltaTime)
+            │
+            ├─ 5-1. 가속
+            │   └─ CurrentRollSpeed += RollAcceleration * DeltaTime
+            │       (200 → 600 → 1000 → ... → 최대 2000)
+            │       └─ FMath::Min으로 RollMaxSpeed 클램프
+            │
+            ├─ 5-2. 이동
+            │   └─ CharacterMovement->Velocity = RollDirection * CurrentRollSpeed
+            │       └─ CharacterMovement가 리플리케이션으로 클라이언트에 위치 동기화
+            │
+            ├─ 5-3. 목표점 도달 확인
+            │   └─ DotProduct(ToTarget, RollDirection) > 0 → 아직 진행 중
+            │
+            └─ 5-4. 전방 충돌 감지
+                └─ DetectRollCollision(HitResult)
+                    └─ SweepSingleByChannel(반지름 30 구, ECC_Pawn)
+                        ├─ Start: 현재 위치
+                        ├─ End: 현재 위치 + 이동 방향 * 속도 * DeltaTime
+                        └─ 히트 감지됨! (플레이어 또는 적 또는 지형지물)
+    │
+    ▼
+[6] 충돌 감지 → C++이 결과를 GA에 전달
+    │
+    ├─ C++: StopRollCharge()
+    │   ├─ bIsRolling = false
+    │   ├─ CurrentRollSpeed = 0
+    │   └─ CharacterMovement->Velocity = Zero
+    │
+    ├─ C++: BroadcastRollImpact(HitResult.ImpactPoint)
+    │   │
+    │   ├─ 6-1. 충돌 지점에서 반지름 50 구 오버랩 검사
+    │   │   └─ OverlapMultiByChannel(ImpactPoint, 반지름 50, ECC_Pawn)
+    │   │       └─ 겹치는 액터 목록 수집 → FRollImpactResult.HitActors에 저장
+    │   │
+    │   ├─ 6-2. 각 액터 타입 확인 → bHitPlayerOrEnemy 플래그 설정
+    │   │   └─ ADRCharacter 또는 ADREnemy가 있으면 true
+    │   │
+    │   └─ 6-3. ★ OnRollImpact.Broadcast(Result) → GA에 충돌 결과 전달
+    │       └─ (C++은 데미지/스턴을 적용하지 않음)
+    │
+    │ ── AnimBP: ABP_Armadillo_Ball
+    │    └─ bIsRolling == false → Roll에서 Idle로 전환
+    │
+    ▼
+[7] ★ GA Blueprint: HandleRollImpact(ImpactResult) — 데미지/스턴 처리
+    │
+    ├─ ImpactResult.HitActors 배열 순회:
+    │   │
+    │   ├─ [Cast to ADRCharacter 성공 — 플레이어]
+    │   │   ├─ ★ CauseDamage(PlayerActor)
+    │   │   │   └─ 부모 DRDamageGameplayAbility의 인프라 사용:
+    │   │   │       ├─ MakeDamageEffectParamsFromClassDefaults(PlayerActor)
+    │   │   │       │   └─ DamageEffectClass, Damage(50), DamageType(Physical) 자동 적용
+    │   │   │       └─ ASC->ApplyGameplayEffectSpecToTarget(플레이어 ASC)
+    │   │   │           └─ ExecCalc_Damage 실행 → 플레이어 Health -50
+    │   │   │
+    │   │   └─ ★ 1초 스턴 GE 적용 (GA Blueprint에서 직접):
+    │   │       ├─ 플레이어 ASC 가져오기 (IAbilitySystemInterface)
+    │   │       ├─ MakeOutgoingSpec(PlayerStunEffectClass = GE_ArmadilloRollStun_Player)
+    │   │       └─ ApplyGameplayEffectSpecToTarget(플레이어 ASC)
+    │   │           ├─ 플레이어: Debuff.Stun 태그 부여
+    │   │           ├─ 플레이어: StunTagChanged() → bIsStunned = true
+    │   │           ├─ 플레이어: OnRep_Stunned() → StunDebuffComponent 활성화
+    │   │           └─ 1초 후 GE 만료 → 스턴 해제
+    │   │
+    │   ├─ [Cast to ADREnemy 성공 — 다른 적]
+    │   │   └─ ★ CauseDamage(EnemyActor) ← 동일하게 50 데미지
+    │   │       └─ MakeDamageEffectParamsFromClassDefaults → ExecCalc_Damage
+    │   │
+    │   └─ [Cast to ADRCleanserSite 성공 — 클렌저 사이트]
+    │       └─ ★ 1.5배 데미지 적용 (GA Blueprint에서 계산):
+    │           ├─ Params = MakeDamageEffectParamsFromClassDefaults(CleanserActor)
+    │           ├─ Params의 Damage를 GetDamageAtLevel() * CleanserDamageMultiplier로 변경
+    │           │   └─ 50 * 1.5 = 75
+    │           └─ ApplyDamageEffect(Params) → ExecCalc_Damage → 클렌저 Health -75
+    │
+    ├─ ImpactResult.bHitPlayerOrEnemy 확인:
+    │   ├─ [true] → 본인 스턴 없음
+    │   └─ [false — 지형지물만 충돌] → 본인 스턴 (GA Blueprint에서 적용):
+    │       ├─ GetAbilitySystemComponentFromActorInfo()
+    │       ├─ MakeOutgoingSpec(SelfStunEffectClass = GE_ArmadilloRollStun_Self)
+    │       └─ ApplyGameplayEffectSpecToSelf() → 1.5초 스턴
+    │
+    ▼
+[8] 기본 폼 복귀 + 스킬 완료 (GA Blueprint HandleRollImpact 계속)
+    │
+    ├─ C++: StartFormChange(false)
+    │   └─ bPendingBallForm = false
+    │
+    ├─ GA Blueprint: PlayMontageAndWait(AM_ArmadilloBall_FormChange_DtoB)
+    │   │
+    │   │ ── AnimBP: ABP_Armadillo_Ball
+    │   │    └─ FormChange_BallToBasic 몽타주 재생
+    │   │
+    │   └─ AnimNotify: AN_FinishFormChange 발동
+    │       │
+    │       └─ C++: FinishFormChange()
+    │           ├─ bIsBallForm = false
+    │           ├─ OnRep_BallForm()
+    │           │   └─ UpdateMeshVisibility()
+    │           │       ├─ GetMesh()->SetVisibility(true) — BasicForm 표시
+    │           │       └─ BallFormMesh->SetVisibility(false) — BallForm 숨김
+    │           └─ 캡슐 크기 복원:
+    │               └─ SetCapsuleSize(DefaultCapsuleRadius, DefaultCapsuleHalfHeight)
+    │
+    ├─ GA Blueprint: CommitAbilityCooldown()
+    │   └─ GE_Cooldown_ArmadilloRollCharge 적용 → ASC에 Cooldown 태그 10초
+    │
+    ├─ GA Blueprint: EndAbility()
+    │
+    └─ BTT_ArmadilloRollAttack: OnAbilityEnded
+        ├─ ASC에 Cooldown 태그 확인 → 있음 → 성공
+        ├─ BB "RollSkillReady" = false
+        └─ FinishExecute(true) → BT로 제어권 반환
+            │
+            └─ [이후] BTS_CheckRollSkillReady가 매 0.5초마다 Cooldown 태그 확인
+                └─ 10초 후 쿨타임 만료 → BB "RollSkillReady" = true
+```
+
+---
+
+### E. 롤링 돌진 스킬 — 지형 충돌 (본인 스턴)
+
+```
+[1~5] D의 [1]~[5]와 동일 (타겟 검색 → 폼 전환 → 돌진 시작 → Tick 이동)
+    │
+    ▼
+[6] 충돌 감지 → C++이 결과를 GA에 전달
+    │
+    ├─ C++: DetectRollCollision() — SphereTrace가 지형(WorldStatic) 히트
+    │
+    ├─ C++: StopRollCharge()
+    │   ├─ bIsRolling = false
+    │   ├─ CurrentRollSpeed = 0
+    │   └─ Velocity = Zero
+    │
+    ├─ C++: BroadcastRollImpact(ImpactPoint)
+    │   │
+    │   ├─ OverlapMultiByChannel(반지름 50) 실행
+    │   │   └─ 결과: ADRCharacter 없음, ADREnemy 없음
+    │   │   └─ (지형지물은 Pawn 채널이 아니므로 오버랩에 잡히지 않음)
+    │   │
+    │   ├─ FRollImpactResult 구성:
+    │   │   ├─ HitActors: 빈 배열 (또는 지형 액터만)
+    │   │   └─ bHitPlayerOrEnemy = false
+    │   │
+    │   └─ ★ OnRollImpact.Broadcast(Result) → GA에 전달
+    │
+    ▼
+[7] ★ GA Blueprint: HandleRollImpact(ImpactResult) — 본인 스턴 처리
+    │
+    ├─ ImpactResult.HitActors 순회 → 플레이어/적/클렌저 없음
+    │
+    ├─ ImpactResult.bHitPlayerOrEnemy == false
+    │   └─ ★ 본인 스턴 적용 (GA Blueprint에서):
+    │       ├─ GetAbilitySystemComponentFromActorInfo()
+    │       ├─ MakeOutgoingSpec(SelfStunEffectClass = GE_ArmadilloRollStun_Self)
+    │       └─ ApplyGameplayEffectSpecToSelf() → 1.5초 스턴
+    │           │
+    │           └─ C++: StunTagChanged(Debuff.Stun, 1)
+    │               ├─ bIsStunned = true
+    │               ├─ BB "Stunned" = true
+    │               ├─ OnRep_Stunned() → StunDebuffComponent 활성화 (VFX)
+    │               └─ CharacterMovement->MaxWalkSpeed = StunnedMoveSpeed (0)
+    │
+    ▼
+[8] 스턴 상태 (1.5초간)
+    │
+    ├─ BT: [2] Stunned == true → Wait 분기 진입
+    │   └─ 다른 모든 행동 차단
+    │
+    ├─ AnimBP: ABP_Armadillo_Ball
+    │   └─ bIsStunned == true → Idle 상태 (볼 폼에 Stun 애니가 없으므로)
+    │
+    ▼
+[9] 스턴 해제 후 기본 폼 복귀 (GA Blueprint HandleRollImpact 계속)
+    │
+    ├─ 1.5초 후: GE_ArmadilloRollStun_Self 만료
+    │   └─ C++: StunTagChanged(Debuff.Stun, 0)
+    │       ├─ bIsStunned = false
+    │       ├─ BB "Stunned" = false
+    │       ├─ OnRep_Stunned() → StunDebuffComponent 비활성화
+    │       └─ CharacterMovement->MaxWalkSpeed 복원
+    │
+    ├─ GA Blueprint: 폼 복귀 진행
+    │   ├─ StartFormChange(false)
+    │   ├─ PlayMontageAndWait(AM_ArmadilloBall_FormChange_DtoB)
+    │   ├─ AN_FinishFormChange → FinishFormChange()
+    │   │   └─ 메시 교체 + 캡슐 복원 (D의 [8]과 동일)
+    │   │
+    │   ├─ CommitAbilityCooldown() → 10초 쿨타임
+    │   └─ EndAbility()
+    │
+    └─ BTT → FinishExecute(true) → BT 정상 재개
+```
+
+---
+
+### F. 롤링 돌진 스킬 — 타겟 없음 (즉시 취소)
+
+```
+[1] BT: [4] 롤링 스킬 분기 진입
+    │
+    ├─ Decorator: RollSkillReady == true ✓
+    ├─ Decorator: TargetToFollow IsSet ✓
+    ├─ Decorator: Target이 플레이어 ✓
+    │
+    └─ BTT_ArmadilloRollAttack 실행
+        └─ ASC->TryActivateAbilitiesByTag("Abilities.Armadillo.RollCharge")
+            │
+            ▼
+[2] GA_ArmadilloRollCharge::ActivateAbility()
+    │
+    ├─ FindRollTarget() 호출
+    │   ├─ 3000 내 플레이어 수집
+    │   ├─ 각 플레이어에 LineTrace → 모두 벽에 차단됨
+    │   └─ 반환: nullptr (유효 타겟 없음)
+    │
+    ├─ ★ nullptr 확인 → 즉시 EndAbility()
+    │   └─ 폼 전환 없음 (StartFormChange 호출하지 않음)
+    │   └─ 쿨타임 없음 (CommitAbilityCooldown 호출하지 않음)
+    │
+    └─ BTT_ArmadilloRollAttack: OnAbilityEnded
+        ├─ ASC에 Cooldown 태그 확인 → 없음 → 실패로 판별
+        └─ FinishExecute(false) → BT Selector가 다음 분기([5] 기본 공격)로 이동
+            │
+            └─ 아르마딜로는 기본 폼 유지, 즉시 근접 공격이나 추적 수행
+```
+
+---
+
+### G. 롤링 돌진 — 목표점 도달 (충돌 없이 통과)
+
+```
+[1~5] D의 [1]~[5]와 동일 (타겟 검색 → 폼 전환 → 돌진)
+    │
+    ▼
+[6] 목표점 도달
+    │
+    └─ C++: TickRollCharge(DeltaTime)
+        ├─ ToTarget = RollTargetLocation - GetActorLocation()
+        ├─ DotProduct(ToTarget, RollDirection) <= 0 — 목표점을 지나침
+        │
+        ├─ StopRollCharge()
+        │   ├─ bIsRolling = false
+        │   ├─ CurrentRollSpeed = 0
+        │   └─ Velocity = Zero
+        │
+        └─ ★ OnRollReachedTarget.Broadcast() → GA에 목표 도달 알림
+    │
+    ▼
+[7] ★ GA Blueprint: HandleRollReachedTarget() — 폼 복귀 처리
+    │
+    ├─ (데미지/스턴 없음 — 충돌이 발생하지 않았으므로)
+    │
+    ├─ 폼 복귀: StartFormChange(false) → Ball→Basic 전환
+    │   └─ D의 [8]과 동일 (몽타주 → AN_FinishFormChange → 메시 교체)
+    │
+    ├─ CommitAbilityCooldown() → 10초 쿨타임
+    │
+    └─ EndAbility() → BTT 복귀
+```
+
+---
+
+### H. 피격 (HitReact)
+
+```
+[1] 플레이어 공격이 아르마딜로에 적중
+    │
+    ├─ C++: ExecCalc_Damage 실행 (서버)
+    │   ├─ 데미지 계산 → Health 감소
+    │   ├─ 디버프 확률 체크 (데미지 타입에 따라)
+    │   └─ HitReact GE 적용 시도
+    │
+    ▼
+[2] GE_HitReact 적용
+    │
+    └─ ASC에 Effects.HitReact 태그 부여
+        │
+        └─ C++: ADREnemy::HitReactTagChanged(Effects.HitReact, 1)
+            ├─ bHitReacting = true
+            ├─ BB "HitReacting" = true
+            └─ HitReactingMoveSpeed 적용 (200)
+    │
+    ▼
+[3] GA_HitReact 발동
+    │
+    ├─ ASC->TryActivateAbilitiesByTag(Abilities.HitReact)
+    │
+    └─ GA_HitReact::ActivateAbility()
+        │
+        ├─ ★ 볼 폼 중이면:
+        │   └─ 볼 폼에서는 HitReact 몽타주가 없음
+        │   └─ GA가 실패하거나 빈 몽타주로 처리
+        │   └─ (돌진 중이면 돌진은 계속됨 — HitReact로 중단하지 않음)
+        │
+        └─ ★ 기본 폼이면:
+            ├─ HitReactMontages 배열에서 랜덤 선택
+            │   └─ AM_Armadillo_HitReact1 / 2 / 3 중 하나
+            │
+            ├─ PlayMontageAndWait(선택된 HitReact 몽타주)
+            │   └─ AnimBP: ABP_Armadillo_Basic → 몽타주 재생
+            │
+            ├─ [몽타주 완료]
+            │   └─ EndAbility()
+            │
+            └─ HitReactTagChanged(Effects.HitReact, 0)
+                ├─ bHitReacting = false
+                ├─ BB "HitReacting" = false
+                └─ 이동 속도 복원
+    │
+    ▼
+[4] BT 재개
+    └─ HitReacting == false → 정상 분기 진행
+```
+
+---
+
+### I. 사망
+
+```
+[1] Health가 0 이하로 감소
+    │
+    └─ C++: ADREnemy::PostGameplayEffectExecute() 또는 AttributeSet에서 감지
+        └─ Die(DeathImpulse) 호출
+    │
+    ▼
+[2] ADREnemy::Die(DeathImpulse)
+    │
+    ├─ bDead = true
+    ├─ OnDeathDelegate 브로드캐스트 (Phase 시스템이 수신 → 적 카운트 감소)
+    ├─ ActivateDeathAbilities() — 사망 시 발동 어빌리티 (있으면)
+    ├─ DropPart() — 부품 드롭 (bCarriesPart이면)
+    └─ MulticastHandleDeath(DeathImpulse) 호출 — RPC
+    │
+    ▼
+[3] ADRArmadilloEnemy::MulticastHandleDeath_Implementation(DeathImpulse)
+    │  (모든 클라이언트 + 서버에서 실행)
+    │
+    ├─ ★ 돌진 중이면:
+    │   └─ StopRollCharge()
+    │       ├─ bIsRolling = false
+    │       └─ Velocity = Zero
+    │
+    ├─ ★ 볼 폼이면:
+    │   └─ 즉시 기본 폼으로 전환 (애니메이션 없이)
+    │       ├─ bIsBallForm = false
+    │       └─ UpdateMeshVisibility()
+    │           ├─ GetMesh()->SetVisibility(true)
+    │           └─ BallFormMesh->SetVisibility(false)
+    │
+    ├─ Super::MulticastHandleDeath_Implementation(DeathImpulse) — 부모 사망 처리
+    │   │
+    │   ├─ AI 정지:
+    │   │   ├─ DRAIController->StopMovement()
+    │   │   └─ BrainComponent->StopLogic("Dead")
+    │   │
+    │   ├─ BB "Dead" = true
+    │   │
+    │   ├─ ASC에 모든 활성 GA 취소
+    │   │   └─ GA_ArmadilloRollCharge 실행 중이면 취소됨
+    │   │
+    │   ├─ 캡슐 충돌 비활성화
+    │   │   └─ SetCollisionEnabled(NoCollision)
+    │   │
+    │   ├─ Dissolve 시작
+    │   │   └─ DissolveMaterialInstance 적용 → 타임라인 시작
+    │   │
+    │   └─ SetLifeSpan(LifeSpan) — 일정 시간 후 액터 소멸
+    │
+    │ ── AnimBP: ABP_Armadillo_Basic
+    │    └─ bIsDead == true → Death 상태 진입
+    │        └─ Death 애니메이션 재생 (1회)
+    │
+    ▼
+[4] LifeSpan 만료
+    │
+    └─ 액터 Destroy
+        └─ ADRCharacterBase::Destroyed()
+            └─ 정리 작업
+```
+
+---
+
+### J. 스턴 (외부 요인 — 기본 폼)
+
+```
+[1] 플레이어의 Lightning 공격 적중
+    │
+    └─ ExecCalc_Damage
+        ├─ Damage.Lightning → Debuff.Stun 매핑
+        ├─ 디버프 확률 성공
+        └─ Debuff Stun GE 적용
+    │
+    ▼
+[2] C++: ADRArmadilloEnemy::StunTagChanged(Debuff.Stun, 1)
+    │
+    ├─ Super::StunTagChanged() — ADREnemy::StunTagChanged()
+    │   ├─ bIsStunned = true
+    │   ├─ BB "Stunned" = true
+    │   ├─ BB "FirstAttacker" 클리어
+    │   ├─ BB "HasFirstAttacker" = false
+    │   ├─ BB "TargetToFollow" 클리어
+    │   └─ OnRep_Stunned() → StunDebuffComponent 활성화 (VFX)
+    │
+    ├─ CharacterMovement->MaxWalkSpeed = StunnedMoveSpeed (0)
+    │
+    └─ ★ bIsRolling 확인 → false (기본 폼이므로) → 추가 처리 없음
+    │
+    ▼
+[3] 스턴 상태
+    │
+    ├─ BT: [2] Stunned == true → Wait 분기
+    │
+    ├─ AnimBP: ABP_Armadillo_Basic
+    │   └─ State Machine: bIsStunned == true → Stun 상태 진입
+    │       └─ Stun 애니메이션 Loop 재생
+    │
+    └─ [스턴 지속시간 경과]
+    │
+    ▼
+[4] 스턴 해제
+    │
+    └─ GE 만료 → StunTagChanged(Debuff.Stun, 0)
+        ├─ bIsStunned = false
+        ├─ BB "Stunned" = false
+        ├─ OnRep_Stunned() → StunDebuffComponent 비활성화
+        ├─ CharacterMovement->MaxWalkSpeed 복원
+        │
+        └─ AnimBP: bIsStunned == false → Locomotion으로 Blend Out
+            └─ 정상 행동 재개
+```
+
+---
+
+### K. 스턴 (외부 요인 — 돌진 중)
+
+```
+[1] 돌진 중 플레이어의 스턴 공격 적중
+    │
+    └─ Debuff Stun GE 적용
+    │
+    ▼
+[2] C++: ADRArmadilloEnemy::StunTagChanged(Debuff.Stun, 1)
+    │
+    ├─ Super::StunTagChanged()
+    │   ├─ bIsStunned = true
+    │   ├─ BB 업데이트 (Stunned, 타겟 클리어)
+    │   └─ OnRep_Stunned() → VFX
+    │
+    ├─ ★ bIsRolling == true 확인 → 돌진 중단 필요!
+    │   │
+    │   └─ StopRollCharge()
+    │       ├─ bIsRolling = false
+    │       ├─ CurrentRollSpeed = 0
+    │       └─ Velocity = Zero
+    │
+    ├─ CharacterMovement->MaxWalkSpeed = 0
+    │
+    └─ GA_ArmadilloRollCharge: 외부에서 CancelAbility() 호출
+        └─ GA 즉시 종료 (쿨타임은 적용 여부 결정 필요)
+    │
+    ▼
+[3] 스턴 상태 (볼 폼 유지)
+    │
+    ├─ AnimBP: ABP_Armadillo_Ball
+    │   └─ bIsStunned == true → Idle (볼 폼 Stun = Idle)
+    │
+    └─ [스턴 지속시간 경과]
+    │
+    ▼
+[4] 스턴 해제 후 기본 폼 복귀
+    │
+    ├─ StunTagChanged(Debuff.Stun, 0) → bIsStunned = false
+    │
+    ├─ ★ 볼 폼 상태에서 스턴 해제 → 기본 폼으로 복귀 필요
+    │   ├─ StartFormChange(false)
+    │   ├─ FormChange_BallToBasic 몽타주 재생
+    │   ├─ AN_FinishFormChange → FinishFormChange()
+    │   │   └─ 메시 교체 + 캡슐 복원
+    │   └─ (이 복귀 로직은 StunTagChanged 내부에서 트리거하거나,
+    │       BT에서 bIsBallForm == true && bIsRolling == false 감지 시
+    │       별도 Task로 복귀 처리)
+    │
+    └─ BT 정상 재개
+```
+
+---
+
+### L. 벽 스턴 (넉백으로 벽에 충돌)
+
+```
+[1] 플레이어의 넉백 공격 적중
+    │
+    ├─ ExecCalc_Damage에서 KnockbackForce 적용
+    │   └─ LaunchCharacter() 또는 Velocity 직접 설정
+    │
+    └─ C++: ADREnemy::SetKnockbackState(true)
+        └─ bIsBeingKnockedBack = true
+    │
+    ▼
+[2] 넉백 이동 중 벽에 충돌
+    │
+    └─ C++: ADREnemy::OnHit(HitComponent, OtherActor, ...)
+        │
+        ├─ 조건 확인:
+        │   ├─ bIsBeingKnockedBack == true ✓
+        │   ├─ NormalImpulse의 속도 >= MinSpeedForStun (50) ✓
+        │   ├─ OtherActor가 StaticMeshActor (벽) ✓
+        │   ├─ OtherActor가 Floor 아님 ✓
+        │   └─ bIsStunImmune == false ✓
+        │
+        └─ ApplyWallStun()
+            ├─ Stun GE 적용 (WallStunDuration = 5초)
+            │   └─ StunTagChanged → bIsStunned = true (J와 동일)
+            │
+            ├─ bIsStunImmune = true
+            └─ SetTimer(EndStunImmunity, StunImmunityDuration = 5초)
+                └─ 5초 후: bIsStunImmune = false
+    │
+    ▼
+[3~4] J의 [3]~[4]와 동일 (스턴 상태 → 해제 → 복귀)
+    │
+    └─ ★ 돌진 중 벽 스턴이면 K의 흐름을 따름
+```
+
+---
+
+### M. 광폭화 (Enrage — Phase 3)
+
+```
+[1] Health가 EnrageHealthThreshold (20%) 이하로 감소
+    │
+    └─ C++: PostGameplayEffectExecute에서 체력 비율 확인
+        └─ Health / MaxHealth <= 0.2
+            └─ TriggerEnrage()
+    │
+    ▼
+[2] C++: ADREnemy::TriggerEnrage()
+    │
+    ├─ bIsEnraged = true
+    ├─ BB "IsEnraged" = true
+    ├─ BB "AttackSpeed" = EnrageAttackSpeedMultiplier (0.5 = 2배 빠름)
+    │
+    ├─ EnrageMovementSpeedGE 적용
+    │   └─ 이동 속도 증가 → CharacterMovement->MaxWalkSpeed 증가
+    │
+    └─ AnimBP: 애니메이션 재생 속도에 AttackSpeed 반영
+        └─ (몽타주 PlayRate에 적용)
+    │
+    ▼
+[3] 이후 행동
+    │
+    └─ BT는 동일하게 실행되지만:
+        ├─ 이동 속도 증가 → 추적/순찰이 빨라짐
+        └─ 공격 속도 증가 → 근접 공격 몽타주가 빠르게 재생
+```
+
+---
+
+### N. 호출 흐름 요약 (주체별)
+
+| 주체 | 담당 역할 | 호출되는 주요 함수/이벤트 |
+|------|----------|------------------------|
+| **BT** | AI 행동 결정 | Selector 분기 평가, BTT 실행, BTS 주기적 갱신 |
+| **BTT_Attack_Armadillo** | 기본 공격 트리거 | TryActivateAbilitiesByTag → GA_ArmadilloBite |
+| **BTT_ArmadilloRollAttack** | 돌진 스킬 트리거 | TryActivateAbilitiesByTag → GA_ArmadilloRollCharge |
+| **BTS_CheckRollSkillReady** | 쿨타임 확인 | ASC 태그 조회 → BB 갱신 |
+| **BTS_FindNearestPlayer** | 타겟 갱신 | AIPerception → BB "TargetToFollow" |
+| **GA_ArmadilloBite** | 근접 공격 실행 | 몽타주 재생, AnimNotify에서 Trace, CauseDamage |
+| **GA_ArmadilloRollCharge** | 돌진 스킬 실행 + **데미지/스턴 처리** | FindRollTarget, 델리게이트 바인딩, StartFormChange, StartRollCharge, **HandleRollImpact에서 CauseDamage/스턴 GE 적용**, 폼 복귀, 쿨타임 |
+| **GA_HitReact** | 피격 반응 | 랜덤 HitReact 몽타주 재생 |
+| **C++ ADRArmadilloEnemy** | 폼 전환 + 돌진 물리 + **충돌 결과 전달** | StartFormChange, FinishFormChange, TickRollCharge, DetectRollCollision, **BroadcastRollImpact**, FindRollTarget, **OnRollImpact/OnRollReachedTarget 브로드캐스트** |
+| **C++ ADREnemy** | 적 공통 로직 | Die, StunTagChanged, HitReactTagChanged, OnHit(벽 스턴), TriggerEnrage |
+| **C++ ADRCharacterBase** | 캐릭터 공통 | MulticastHandleDeath, Dissolve, RepNotify(Stun/Burn) |
+| **ABP_Armadillo_Basic** | 기본 폼 애니메이션 | Locomotion(BS), Stun(Loop), Death, 몽타주 재생 |
+| **ABP_Armadillo_Ball** | 볼 폼 애니메이션 | Idle, Roll(Loop), 몽타주 재생 |
+| **AN_FinishFormChange** | 폼 전환 완료 알림 | FinishFormChange() 호출 → 메시 교체 |
+| **GE (DamageEffectClass)** | 돌진 데미지 | GA의 DamageEffectClass에 설정된 기존 범용 GE → ExecCalc_Damage |
+| **GE_ArmadilloRollStun_Player** | 플레이어 스턴 | Debuff.Stun 1초 (GA에서 적용) |
+| **GE_ArmadilloRollStun_Self** | 본인 스턴 | Debuff.Stun 1.5초 (GA에서 적용) |
+| **GE_Cooldown_ArmadilloRollCharge** | 스킬 쿨타임 | Cooldown 태그 10초 (GA에서 적용) |
+| **ExecCalc_Damage** | 데미지 계산 | 기본 데미지 + 디버프 확률 판정 |
+
+**핵심 책임 분리 원칙**:
+```
+C++ (ADRArmadilloEnemy)              GA Blueprint (GA_ArmadilloRollCharge)
+──────────────────────────          ──────────────────────────────────────
+폼 전환 메시 교체                    타겟 검색 요청 (FindRollTarget 호출)
+돌진 이동/가속 물리                  타겟 위치 저장
+전방 SphereTrace 충돌 감지           델리게이트 바인딩
+충돌 범위 OverlapMulti 수집          HandleRollImpact에서:
+FRollImpactResult 구성                ├─ CauseDamage() (부모 인프라)
+OnRollImpact 브로드캐스트             ├─ 스턴 GE 적용
+OnRollReachedTarget 브로드캐스트      ├─ 클렌저 1.5배 데미지 계산
+                                      └─ 본인 스턴 GE 적용
+❌ GE 생성/적용하지 않음             폼 복귀 요청 (StartFormChange 호출)
+❌ 데미지 계산하지 않음              쿨타임 적용 (CommitAbilityCooldown)
+❌ 스턴 적용하지 않음                EndAbility
+```
