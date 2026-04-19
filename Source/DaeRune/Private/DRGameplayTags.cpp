@@ -98,6 +98,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Enemy is in hit reaction state")
 	);
 
+	GameplayTags.State_LockedDown = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.LockedDown"),
+		FString("Flying enemy is locked down after skill use (cannot move or attack)")
+	);
+
 	GameplayTags.Enemy_Detected = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Enemy.Detected"),
 		FString("Enemy has been detected by player")
@@ -235,6 +240,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Effects_HitReact = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Effects.HitReact"),
 		FString("Tag granted when Hit Reacting")
+	);
+
+	GameplayTags.Effects_CannotAttack = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Effects.CannotAttack"),
+		FString("Tag that blocks attack abilities while active")
 	);
 
 	/*

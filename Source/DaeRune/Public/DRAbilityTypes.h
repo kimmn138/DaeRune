@@ -57,6 +57,10 @@ struct FDamageEffectParams
 
 	UPROPERTY(BlueprintReadWrite)
 	FVector KnockbackForce = FVector::ZeroVector;
+
+	// 소스 어빌리티의 AssetTags (튜토리얼 등에서 어빌리티 구분용)
+	UPROPERTY(BlueprintReadWrite)
+	FGameplayTagContainer SourceAbilityTags;
 };
 
 // DaeRune 전용 확장된 GameplayEffectContext
@@ -72,6 +76,7 @@ public:
 	TSharedPtr<FGameplayTag> GetDamageType() const { return DamageType; }
 	FVector GetDeathImpulse() const { return DeathImpulse; }
 	FVector GetKnockbackForce() const { return KnockbackForce; }
+	const FGameplayTagContainer& GetSourceAbilityTags() const { return SourceAbilityTags; }
 
 	void SetIsSuccessfulDebuff(bool bInIsDebuff) { bIsSuccessfulDebuff = bInIsDebuff; }
 	void SetDebuffDamage(float InDamage) { DebuffDamage = InDamage; }
@@ -79,6 +84,7 @@ public:
 	void SetDamageType(TSharedPtr<FGameplayTag> InDamageType) { DamageType = InDamageType; }
 	void SetDeathImpulse(const FVector& InImpulse) { DeathImpulse = InImpulse; }
 	void SetKnockbackForce(const FVector& InForce) { KnockbackForce = InForce; }
+	void SetSourceAbilityTags(const FGameplayTagContainer& InTags) { SourceAbilityTags = InTags; }
 
 	// 언리얼 직렬화 시스템 연동
 	/** Returns the actual struct used for serialization, subclasses must override this! */
@@ -121,6 +127,9 @@ public:
 
 	UPROPERTY()
 	FVector KnockbackForce = FVector::ZeroVector;
+
+	UPROPERTY()
+	FGameplayTagContainer SourceAbilityTags;
 };
 
 // 네트워크 직렬화 및 복사 연산 지원을 위한 특성 정의

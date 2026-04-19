@@ -4,9 +4,11 @@
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystem/Data/GameBalanceConfig.h"
+#include "AbilitySystem/DRAttributeSet.h"
 #include "DRAbilityTypes.h"
 #include "DRGameplayTags.h"
 #include "Actor/DRCleanserSite.h"
+#include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "Game/DRGameModeBase.h"
 #include "Interaction/CombatInterface.h"
 #include "Kismet/GameplayStatics.h"
@@ -94,7 +96,73 @@ UCharacterClassInfo* UDRAbilitySystemLibrary::GetCharacterClassInfo(const UObjec
 {
 	const ADRGameModeBase* DRGameMode = Cast<ADRGameModeBase>(UGameplayStatics::GetGameMode(WorldContextObject));
 	if (DRGameMode == nullptr) return nullptr;
-	return DRGameMode->CharacterClassInfo;
+	return DRGameMode->EnemyCharacterClassInfo;
+}
+
+UPlayerCharacterClassInfo* UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(const UObject* WorldContextObject)
+{
+	const ADRGameModeBase* DRGameMode = Cast<ADRGameModeBase>(UGameplayStatics::GetGameMode(WorldContextObject));
+	if (DRGameMode == nullptr) return nullptr;
+	return DRGameMode->PlayerCharacterClassInfo;
+}
+
+void UDRAbilitySystemLibrary::InitializePlayerDefaultAttributes(
+	const UObject* WorldContextObject, EPlayerCharacterClass PlayerClass, float Level, UAbilitySystemComponent* ASC)
+{
+	AActor* AvatarActor = ASC->GetAvatarActor();
+
+	UPlayerCharacterClassInfo* ClassInfo = GetPlayerCharacterClassInfo(WorldContextObject);
+	if (!ClassInfo) return;
+
+	// Step 1: 기존 활성 GE 제거 (Infinite/HasDuration GE 대비)
+	for (auto& Pair : ClassInfo->CharacterClassInformation)
+	{
+		FCharacterClassDefaultInfo& Info = Pair.Value;
+		if (Info.PrimaryAttributes)
+		{
+			ASC->RemoveActiveGameplayEffectBySourceEffect(Info.PrimaryAttributes, ASC);
+		}
+		if (Info.VitalAttributes)
+		{
+			ASC->RemoveActiveGameplayEffectBySourceEffect(Info.VitalAttributes, ASC);
+		}
+	}
+
+	// Step 2: 속성 BaseValue 초기화 (Instant GE에 의한 누적값 제거)
+	if (const UDRAttributeSet* DRAS = ASC->GetSet<UDRAttributeSet>())
+	{
+		ASC->SetNumericAttributeBase(DRAS->GetMaxHealthAttribute(), 0.f);
+		ASC->SetNumericAttributeBase(DRAS->GetMaxWaterAttribute(), 0.f);
+		ASC->SetNumericAttributeBase(DRAS->GetMoveSpeedAttribute(), 0.f);
+		ASC->SetNumericAttributeBase(DRAS->GetHealthAttribute(), 0.f);
+		ASC->SetNumericAttributeBase(DRAS->GetWaterAttribute(), 0.f);
+	}
+
+	// Step 3: 선택된 클래스의 GE 적용 (깨끗한 상태에서)
+	FCharacterClassDefaultInfo ClassDefaultInfo = ClassInfo->GetClassDefaultInfo(PlayerClass);
+	CreateAndApplyEffectSpec(ASC, ClassDefaultInfo.PrimaryAttributes, AvatarActor, Level);
+	CreateAndApplyEffectSpec(ASC, ClassDefaultInfo.VitalAttributes, AvatarActor, Level);
+}
+
+void UDRAbilitySystemLibrary::GivePlayerStartupAbilities(
+	const UObject* WorldContextObject, UAbilitySystemComponent* ASC, EPlayerCharacterClass PlayerClass)
+{
+	UPlayerCharacterClassInfo* ClassInfo = GetPlayerCharacterClassInfo(WorldContextObject);
+	if (!ClassInfo) return;
+
+	UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(ASC);
+	if (!DRASC) return;
+
+	// 공통 + 클래스별 어빌리티를 하나의 배열로 수집
+	TArray<TSubclassOf<UGameplayAbility>> AllAbilities;
+	AllAbilities.Append(ClassInfo->CommonAbilities);
+
+	const FCharacterClassDefaultInfo& DefaultInfo = ClassInfo->GetClassDefaultInfo(PlayerClass);
+	AllAbilities.Append(DefaultInfo.StartupAbilities);
+
+	// AddCharacterAbilities가 DynamicAbilityTags, InputTagToAbilityMap,
+	// bStartupAbilitiesGiven, AbilitiesGivenDelegate를 모두 처리
+	DRASC->AddCharacterAbilities(AllAbilities);
 }
 
 UAbilityInfo* UDRAbilitySystemLibrary::GetAbilityInfo(const UObject* WorldContextObject)
@@ -311,6 +379,10 @@ FGameplayEffectContextHandle UDRAbilitySystemLibrary::ApplyDamageEffect(const FD
 	EffectContexthandle.AddSourceObject(SourceAvatarActor);
 	SetDeathImpulse(EffectContexthandle, DamageEffectParams.DeathImpulse);
 	SetKnockbackForce(EffectContexthandle, DamageEffectParams.KnockbackForce);
+	if (FDRGameplayEffectContext* DRContext = static_cast<FDRGameplayEffectContext*>(EffectContexthandle.Get()))
+	{
+		DRContext->SetSourceAbilityTags(DamageEffectParams.SourceAbilityTags);
+	}
 	const FGameplayEffectSpecHandle SpecHandle = DamageEffectParams.SourceAbilitySystemComponent->MakeOutgoingSpec(DamageEffectParams.DamageGameplayEffectClass, DamageEffectParams.AbilityLevel, EffectContexthandle);
 
 	UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(SpecHandle, DamageEffectParams.DamageType, DamageEffectParams.BaseDamage);

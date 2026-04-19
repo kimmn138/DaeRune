@@ -8,6 +8,8 @@
 #include "AbilitySystem/Data/GameBalanceConfig.h"
 #include "Net/UnrealNetwork.h"
 #include "DRGameplayTags.h"
+#include "Game/DRLobbyGameMode.h"
+#include "Player/DRPlayerController.h"
 
 ADRPlayerState::ADRPlayerState()
 {
@@ -34,6 +36,8 @@ void ADRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     // ���� �� ���� ���� ���ø����̼�
     DOREPLIFETIME(ADRPlayerState, bIsInCombat);
     DOREPLIFETIME(ADRPlayerState, bIsCorrupted);
+    DOREPLIFETIME(ADRPlayerState, WaitingRoomSlotIndex);
+    DOREPLIFETIME(ADRPlayerState, SelectedPlayerClass);
 }
 
 void ADRPlayerState::BeginPlay()
@@ -312,4 +316,51 @@ void ADRPlayerState::InitializeHealthRegenSpec()
     FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
     EffectContext.AddSourceObject(this);
     CachedHealthRegenSpec = AbilitySystemComponent->MakeOutgoingSpec(HealthRegenEffectClass, 1.f, EffectContext);
+}
+
+void ADRPlayerState::SetWaitingRoomSlotIndex(int32 NewIndex)
+{
+	if (!HasAuthority()) return;
+	if (WaitingRoomSlotIndex == NewIndex) return;
+	WaitingRoomSlotIndex = NewIndex;
+	ForceNetUpdate();
+}
+
+void ADRPlayerState::OnRep_WaitingRoomSlotIndex()
+{
+	if (APlayerController* PC = Cast<APlayerController>(GetOwner()))
+	{
+		if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
+		{
+			if (DRPC->IsLocalController())
+			{
+				DRPC->RefreshWaitingRoomUI();
+			}
+		}
+	}
+}
+
+void ADRPlayerState::SetSelectedPlayerClass(EPlayerCharacterClass NewClass)
+{
+	if (!HasAuthority()) return;
+	if (SelectedPlayerClass == NewClass) return;
+
+	SelectedPlayerClass = NewClass;
+	OnPlayerClassChanged.Broadcast(this, SelectedPlayerClass);
+
+	// 로비 대기실에서만 폰 교체 실행
+	ADRLobbyGameMode* LobbyGM = GetWorld()->GetAuthGameMode<ADRLobbyGameMode>();
+	if (LobbyGM)
+	{
+		APlayerController* PC = Cast<APlayerController>(GetOwner());
+		if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
+		{
+			LobbyGM->RespawnPlayerWithClass(DRPC, NewClass);
+		}
+	}
+}
+
+void ADRPlayerState::OnRep_SelectedPlayerClass()
+{
+	OnPlayerClassChanged.Broadcast(this, SelectedPlayerClass);
 }

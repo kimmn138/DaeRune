@@ -30,6 +30,7 @@ FDamageEffectParams UDRDamageGameplayAbility::MakeDamageEffectParamsFromClassDef
 	Params.DeathImpulseMagnitude = DeathImpulseMagnitude;
 	Params.KnockbackForceMagnitude = KnockbackForceMagnitude;
 	Params.KnockbackChance = KnockbackChance;
+	Params.SourceAbilityTags = GetAssetTags();
 	if (IsValid(TargetActor))
 	{
 		FRotator Rotation = (TargetActor->GetActorLocation() - GetAvatarActorFromActorInfo()->GetActorLocation()).Rotation();

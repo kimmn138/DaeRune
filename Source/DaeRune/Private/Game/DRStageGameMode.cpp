@@ -8,12 +8,36 @@
 #include "EngineUtils.h"
 #include "MultiplayerSessionsSubsystem.h"
 #include "Player/DRPlayerController.h"
+#include "Player/DRPlayerState.h"
+#include "Character/DRCharacter.h"
 
 ADRStageGameMode::ADRStageGameMode()
 {
 	// �⺻ ����
 	LobbyMapName = TEXT("LobbyMap");
 	WipeoutDelayTime = 5.0f;
+}
+
+UClass* ADRStageGameMode::GetDefaultPawnClassForController_Implementation(AController* InController)
+{
+	if (APlayerController* PC = Cast<APlayerController>(InController))
+	{
+		if (ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
+		{
+			EPlayerCharacterClass SelectedClass = PS->GetSelectedPlayerClass();
+
+			if (PlayerCharacterClassInfo)
+			{
+				TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(SelectedClass);
+				if (BPClassPtr && *BPClassPtr)
+				{
+					return *BPClassPtr;
+				}
+			}
+		}
+	}
+
+	return Super::GetDefaultPawnClassForController_Implementation(InController);
 }
 
 void ADRStageGameMode::TriggerGameOver()

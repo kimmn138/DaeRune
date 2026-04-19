@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 #pragma once
 
@@ -20,6 +20,9 @@ class UDRInputConfig;
 class UDRAbilitySystemComponent;
 class ADRCleanserPart;
 class ADRCleanserSite;
+class ADRWaitingRoomCameraActor;
+class UDRWaitingRoomWidget;
+enum class ELobbyState : uint8;
 
 /**
  * DaeRune �÷��̾��� �Է� ó�� �� UI ���� Ŭ����
@@ -106,6 +109,9 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Spectating")
 	bool bIsSpectating = false;
 
+	// 대기실 상태 플래그 (ViewTarget 복원 차단용)
+	bool bIsInWaitingRoom = false;
+
 	// ���� ���� ���� �÷��̾� �ε���
 	int32 CurrentSpectatedPlayerIndex = 0;
 
@@ -161,6 +167,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	bool IsInGameLevel() const;
 
+	// 현재 레벨이 튜토리얼인지 확인
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	bool IsInTutorial() const;
+
 	// 레벨 진입 시 공통 초기화 (ReceivedPlayer, PostSeamlessTravel에서 호출)
 	void OnLevelEntered();
 
@@ -177,8 +187,66 @@ public:
 	// 레벨 이동 전 설정창 닫기 (서버에서 호출)
 	UFUNCTION(Client, Reliable)
 	void ClientCloseSettingsMenu();
-	
-	// ========== ġƮ/����� ��� ==========
+
+	// ========== 대기실 카메라 ==========
+
+	// 서버 → 클라이언트: 대기실 슬롯 위치로 텔레포트
+	UFUNCTION(Client, Reliable)
+	void ClientTeleportToSlot(FVector SlotLocation, FRotator SlotRotation);
+
+	// 서버 → 클라이언트: 대기실 카메라로 ViewTarget 설정
+	UFUNCTION(Client, Reliable)
+	void ClientSetWaitingRoomView(ADRWaitingRoomCameraActor* CameraActor);
+
+	// 서버 → 클라이언트: 카메라를 캐릭터로 부드럽게 전환
+	UFUNCTION(Client, Reliable)
+	void ClientStartCameraTransitionToCharacter();
+
+	// 카메라 전환 로직 (Pawn 존재 보장 후 호출)
+	void ExecuteCameraTransitionToCharacter();
+
+	// ========== 대기실 카메라 보호 ==========
+
+	/** Possess 시 UE 엔진이 호출하는 ClientRestart를 오버라이드하여 대기실에서 ViewTarget 변경 차단 */
+	virtual void ClientRestart_Implementation(APawn* NewPawn) override;
+
+	/** Pawn 리플리케이션 시 엔진의 ViewTarget 자동 변경을 대기실에서 차단 */
+	virtual void OnRep_Pawn() override;
+
+	// 서버 → 클라이언트: 킥 당했음을 알림
+	UFUNCTION(Client, Reliable)
+	void ClientKicked(const FString& Reason);
+
+	// ========== 대기실 UI ==========
+
+	void CreateWaitingRoomUI();
+	void DestroyWaitingRoomUI();
+	UFUNCTION(BlueprintCallable)
+	void RefreshWaitingRoomUI();
+
+	// 서버 → 클라이언트: 대기실 UI 갱신 요청
+	UFUNCTION(Client, Reliable)
+	void ClientRefreshWaitingRoomUI();
+
+	// 호스트가 Power On 클릭 시
+	UFUNCTION(Server, Reliable, BlueprintCallable)
+	void ServerRequestPowerOn();
+
+	// 호스트가 Kick 클릭 시
+	UFUNCTION(Server, Reliable, BlueprintCallable)
+	void ServerRequestKickPlayer(APlayerState* TargetPlayerState);
+
+	// ========== 캐릭터 클래스 선택 ==========
+
+	// 클라이언트에서 호출 → 서버에서 실행
+	UFUNCTION(Server, Reliable, Category = "Character Selection")
+	void ServerRequestChangeClass(bool bNext);
+
+	// 블루프린트에서도 호출 가능한 래퍼
+	UFUNCTION(BlueprintCallable, Category = "Character Selection")
+	void RequestChangeClass(bool bNext);
+
+	// ========== 치트/디버그 모드 ==========
 
     // �׽�Ʈ�� ������ ��ŵ (��������Ʈ���� ȣ��)
     UFUNCTION(BlueprintCallable, Category = "Cheat|Phase")
@@ -216,6 +284,27 @@ protected:
 	// ���� ǥ�� ���� ��� ����
 	UPROPERTY()
 	TObjectPtr<UUserWidget> CurrentResultWidget;
+
+	// ========== 대기실 UI ==========
+
+	// 대기실 카메라 캐시 (ClientRestart에서 재고정에 사용)
+	UPROPERTY()
+	TWeakObjectPtr<ADRWaitingRoomCameraActor> CachedWaitingRoomCamera;
+
+	// ClientStartCameraTransitionToCharacter에서 Pawn 대기용 재시도 타이머
+	FTimerHandle CameraTransitionRetryHandle;
+
+	// 대기실 위젯 클래스 (블루프린트에서 설정)
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Lobby")
+	TSubclassOf<UDRWaitingRoomWidget> WaitingRoomWidgetClass;
+
+	// 현재 대기실 위젯 인스턴스
+	UPROPERTY()
+	TObjectPtr<UDRWaitingRoomWidget> WaitingRoomWidget;
+
+	// LobbyState 변경 시 UI 처리
+	UFUNCTION()
+	void OnLobbyStateChangedForUI(ELobbyState NewState);
 
 	// ========== ��ǰ �ý��� ���� ==========
 
@@ -341,6 +430,9 @@ private:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestDropPart();
 	
+	// FreeRoam 진입 시 HUD 오버레이 초기화 (대기실에서 스킵된 경우)
+	void InitOverlayForFreeRoam();
+
 	// �������� ������ ��ŵ ����
     UFUNCTION(Server, Reliable)
     void ServerCheatSkipToNextPhase();

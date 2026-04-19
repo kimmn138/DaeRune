@@ -18,7 +18,9 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "Engine/OverlapResult.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/ShapeComponent.h"
 #include "DRAbilityTypes.h"
+#include "DaeRune/DaeRune.h"
 #include "Net/UnrealNetwork.h"
 
 ADREnemy::ADREnemy()
@@ -70,8 +72,8 @@ void ADREnemy::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// 사망 상태에서는 회전 처리하지 않음
-	if (bDead) return;
+	// 사망 상태 또는 튜토리얼 더미는 회전 처리하지 않음
+	if (bDead || bIsTutorialDummy) return;
 
 	if (HasAuthority())
 	{
@@ -113,6 +115,9 @@ void ADREnemy::PossessedBy(AController* NewController)
 	DRAIController = Cast<ADRAIController>(NewController);
 
 	if (!DRAIController || !BehaviorTree || !BehaviorTree->BlackboardAsset) return;
+
+	// 튜토리얼 더미는 AI를 실행하지 않음 (이동/공격 비활성화)
+	if (bIsTutorialDummy) return;
 
 	// 블랙보드 초기화 및 비헤이비어 트리 실행
 	DRAIController->GetBlackboardComponent()->InitializeBlackboard(*BehaviorTree->BlackboardAsset);
@@ -338,6 +343,9 @@ void ADREnemy::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// 커스텀 히트박스 자동 수집 및 콜리전 설정
+	SetupHitboxComponents();
+
 	// GameBalanceConfig에서 밸런스 값 적용 (서버에서만)
 	if (HasAuthority())
 	{
@@ -558,6 +566,48 @@ void ADREnemy::ApplyWallStun()
 void ADREnemy::EndStunImmunity()
 {
 	bIsStunImmune = false;
+}
+
+void ADREnemy::SetupHitboxComponents()
+{
+	// "Hitbox" 태그가 달린 ShapeComponent 자동 수집
+	TArray<UShapeComponent*> AllShapeComponents;
+	GetComponents<UShapeComponent>(AllShapeComponents);
+
+	for (UShapeComponent* Comp : AllShapeComponents)
+	{
+		if (Comp && Comp->ComponentHasTag(TEXT("Hitbox")))
+		{
+			HitboxComponents.Add(Comp);
+		}
+	}
+
+	if (HitboxComponents.Num() == 0) return;
+
+	bUseCustomHitbox = true;
+
+	// CapsuleComponent에서 히트 판정 비활성화 (이동 전용으로 전환)
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	Capsule->SetCollisionResponseToChannel(ECC_Projectile, ECR_Ignore);
+	Capsule->SetCollisionResponseToChannel(ECC_Target, ECR_Ignore);
+
+	// Mesh에서도 히트 판정 비활성화 (커스텀 히트박스가 대체)
+	GetMesh()->SetCollisionResponseToChannel(ECC_Projectile, ECR_Ignore);
+
+	// 커스텀 히트박스 컴포넌트에 히트 판정 활성화
+	for (UShapeComponent* Hitbox : HitboxComponents)
+	{
+		Hitbox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		Hitbox->SetCollisionObjectType(ECC_Pawn);
+		Hitbox->SetCollisionResponseToAllChannels(ECR_Ignore);
+		Hitbox->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
+		Hitbox->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
+		Hitbox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+		Hitbox->SetCollisionResponseToChannel(ECC_Projectile, ECR_Overlap);
+		Hitbox->SetCollisionResponseToChannel(ECC_Target, ECR_Overlap);
+		Hitbox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+		Hitbox->SetGenerateOverlapEvents(true);
+	}
 }
 
 void ADREnemy::GrantWaterToPlayers()

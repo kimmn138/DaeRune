@@ -165,12 +165,7 @@ void ADRCleanserSite::SetPartsCollected()
 
 	CurrentState = ECleanserSiteState::PartsCollected;
 
-	// �޽� ��ü
-	if (CleanserMesh && CleanserMesh_AfterParts)
-	{
-		CleanserMesh->SetStaticMesh(CleanserMesh_AfterParts);
-	}
-
+	// 물 메시 교체
 	if (WaterMesh && WaterMesh_AfterParts)
 	{
 		WaterMesh->SetStaticMesh(WaterMesh_AfterParts);
@@ -416,12 +411,7 @@ void ADRCleanserSite::UpdateMeshByState()
 	case ECleanserSiteState::PartsCollected:
 	case ECleanserSiteState::Operational:
 	case ECleanserSiteState::Completed:
-		// ��ǰ ��ġ �� �޽÷� ��ü
-		if (CleanserMesh && CleanserMesh_AfterParts)
-		{
-			CleanserMesh->SetStaticMesh(CleanserMesh_AfterParts);
-			CleanserMesh->SetVisibility(true);
-		}
+		if (CleanserMesh) CleanserMesh->SetVisibility(true);
 		if (WaterMesh && WaterMesh_AfterParts)
 		{
 			WaterMesh->SetStaticMesh(WaterMesh_AfterParts);

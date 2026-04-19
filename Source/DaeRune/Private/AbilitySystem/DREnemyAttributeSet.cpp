@@ -9,6 +9,8 @@
 #include "Character/DREnemy.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "AI/DRAIController.h"
+#include "Tutorial/DRTutorialManager.h"
+#include "DRAbilityTypes.h"
 
 void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 {
@@ -48,6 +50,41 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		}
 
 		const float NewHealth = GetHealth() - LocalIncomingDamage;
+
+		// 튜토리얼 더미: 체력을 최소 1로 유지 (무적) + 적중 보고
+		if (ADREnemy* DummyCheck = Cast<ADREnemy>(Props.TargetAvatarActor))
+		{
+			if (DummyCheck->bIsTutorialDummy)
+			{
+				SetHealth(FMath::Max(1.f, NewHealth));
+
+				// 튜토리얼 매니저에 적중 보고 (AbilityTag로 구분)
+				if (DummyCheck->TutorialManagerRef.IsValid())
+				{
+					if (ADRTutorialManager* TM = Cast<ADRTutorialManager>(DummyCheck->TutorialManagerRef.Get()))
+					{
+						FGameplayTagContainer AbilityTags;
+						if (const FDRGameplayEffectContext* DRContext = static_cast<const FDRGameplayEffectContext*>(Props.EffectContextHandle.Get()))
+						{
+							AbilityTags = DRContext->GetSourceAbilityTags();
+						}
+						TM->ReportDamageHit(AbilityTags);
+					}
+				}
+
+				// 히트 리액션은 정상 재생
+				if (Props.TargetCharacter->Implements<UCombatInterface>() && !ICombatInterface::Execute_IsBeingShocked(Props.TargetCharacter))
+				{
+					FGameplayTagContainer TagContainer;
+					TagContainer.AddTag(FDRGameplayTags::Get().Effects_HitReact);
+					Props.TargetASC->TryActivateAbilitiesByTag(TagContainer);
+				}
+
+				ShowFloatingText(Props, LocalIncomingDamage);
+				return;
+			}
+		}
+
 		SetHealth(FMath::Clamp(NewHealth, 0.f, GetMaxHealth()));
 
 		if (ADREnemy* Enemy = Cast<ADREnemy>(Props.TargetAvatarActor))

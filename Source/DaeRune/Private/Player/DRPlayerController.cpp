@@ -8,13 +8,16 @@
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "Input/DRInputComponent.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "UI/Widget/DamageTextComponent.h"
 #include "Actor/DRCleanserPart.h"
 #include "Actor/DRCleanserSite.h"
+#include "Actor/DRWaitingRoomCameraActor.h"
 #include "Character/DRCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
+#include "Game/DRLobbyGameState.h"
 #include "UI/HUD/DRHUD.h"
 #include "Player/DRPlayerState.h"
 #include "UI/WidgetController/DRWidgetController.h"
@@ -25,6 +28,9 @@
 #include "Sound/DRSoundManager.h"
 #include "Actor/DRBGMActor.h"
 #include "Kismet/GameplayStatics.h"
+#include "UI/Widget/DRWaitingRoomWidget.h"
+#include "Game/DRLobbyGameMode.h"
+#include "MultiplayerSessionsSubsystem.h"
 
 ADRPlayerController::ADRPlayerController()
 {
@@ -290,6 +296,22 @@ void ADRPlayerController::ClientStopSpectating_Implementation()
 	}
 	CurrentSpectatedCharacter.Reset();
 
+	// 대기실이면 ViewTarget 복원 스킵 (ClientSetWaitingRoomView가 담당)
+	if (bIsInWaitingRoom)
+	{
+		// FreeRoam에서 ClientStopSpectating이 호출된 경우 대기실 플래그 교정
+		ADRLobbyGameState* LGS = GetWorld() ? GetWorld()->GetGameState<ADRLobbyGameState>() : nullptr;
+		if (LGS && LGS->GetLobbyState() == ELobbyState::FreeRoam)
+		{
+			bIsInWaitingRoom = false;
+			// 아래로 계속 진행하여 ViewTarget 복원
+		}
+		else
+		{
+			return;
+		}
+	}
+
 	// ViewTarget 복원
 	if (APawn* MyPawn = GetPawn())
 	{
@@ -310,6 +332,9 @@ void ADRPlayerController::ClientStopSpectating_Implementation()
 				{
 					if (ADRPlayerController* PC = WeakThis.Get())
 					{
+						// 대기실이면 ViewTarget 복원 스킵
+						if (PC->bIsInWaitingRoom) return;
+
 						if (APawn* MyPawn = PC->GetPawn())
 						{
 							PC->SetViewTarget(MyPawn);
@@ -574,6 +599,9 @@ void ADRPlayerController::OnLevelEntered()
 		CurrentResultWidget = nullptr;
 	}
 
+	// 대기실 위젯 정리 (레벨 이동 시 무효화된 포인터 정리)
+	DestroyWaitingRoomUI();
+
 	// 설정 위젯 초기화 (레벨 이동 시 무효화된 포인터 정리)
 	if (IsValid(SettingsWidget))
 	{
@@ -585,9 +613,46 @@ void ADRPlayerController::OnLevelEntered()
 	SettingsWidget = nullptr;
 	bIsSettingsMenuOpen = false;
 
-	// 관전 상태 초기화
+	// 관전 상태 초기화 (델리게이트 정리 포함)
+	if (CurrentSpectatedCharacter.IsValid())
+	{
+		if (ADRCharacterBase* OldTarget = Cast<ADRCharacterBase>(CurrentSpectatedCharacter.Get()))
+		{
+			OldTarget->OnDeathDelegate.RemoveDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
+		}
+	}
 	bIsSpectating = false;
 	CurrentSpectatedCharacter = nullptr;
+	CurrentSpectatedPlayerIndex = 0;
+
+	// 대기실 감지 → ViewTarget 복원 차단
+	ADRLobbyGameState* LGS = World->GetGameState<ADRLobbyGameState>();
+
+	if (IsInLobby())
+	{
+		if (!LGS)
+		{
+			// GameState 아직 복제 안됨 → 대기실로 가정 (서버 RPC가 이후 교정)
+			UE_LOG(LogTemp, Log, TEXT("OnLevelEntered: Lobby detected but LGS not replicated yet, defaulting to WaitingRoom"));
+			bIsInWaitingRoom = true;
+			bAutoManageActiveCameraTarget = false; // Pawn 수신 시 ViewTarget 자동 설정 차단
+			RestoreDefaultInputMode();
+			// WaitingRoom UI는 ClientSetWaitingRoomView RPC에서 생성
+			return;
+		}
+
+		if (LGS->GetLobbyState() == ELobbyState::WaitingRoom
+			|| LGS->GetLobbyState() == ELobbyState::Transitioning)
+		{
+			bIsInWaitingRoom = true;
+			bAutoManageActiveCameraTarget = false; // Pawn 수신 시 ViewTarget 자동 설정 차단
+			RestoreDefaultInputMode();
+			CreateWaitingRoomUI();
+			return;  // ViewTarget은 ClientSetWaitingRoomView RPC가 설정
+		}
+	}
+
+	bIsInWaitingRoom = false;
 
 	// ViewTarget 즉시 복원 (잘못된 타겟 참조 방지)
 	if (APawn* MyPawn = GetPawn())
@@ -606,6 +671,9 @@ void ADRPlayerController::OnLevelEntered()
 			{
 				if (ADRPlayerController* PC = WeakThis.Get())
 				{
+					// 대기실이면 ViewTarget 복원 스킵
+					if (PC->bIsInWaitingRoom) return;
+
 					if (APawn* MyPawn = PC->GetPawn())
 					{
 						PC->SetViewTarget(MyPawn);
@@ -938,9 +1006,31 @@ void ADRPlayerController::RestoreDefaultInputMode()
 		SetInputMode(FInputModeUIOnly());
 		SetShowMouseCursor(true);
 	}
+	else if (IsInTutorial())
+	{
+		// 튜토리얼: 게임 모드
+		SetInputMode(FInputModeGameOnly());
+		SetShowMouseCursor(false);
+	}
+	else if (IsInLobby())
+	{
+		// 로비 상태에 따라 분기
+		ADRLobbyGameState* LGS = GetWorld()->GetGameState<ADRLobbyGameState>();
+		if (LGS && (LGS->GetLobbyState() == ELobbyState::WaitingRoom
+				  || LGS->GetLobbyState() == ELobbyState::Transitioning))
+		{
+			SetInputMode(FInputModeUIOnly());
+			SetShowMouseCursor(true);
+		}
+		else
+		{
+			SetInputMode(FInputModeGameOnly());
+			SetShowMouseCursor(false);
+		}
+	}
 	else
 	{
-		// 로비, 스테이지: 게임 모드
+		// 스테이지: 게임 모드
 		SetInputMode(FInputModeGameOnly());
 		SetShowMouseCursor(false);
 	}
@@ -977,6 +1067,17 @@ bool ADRPlayerController::IsInGameLevel() const
 	CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
 
 	return CurrentLevelName.Contains(TEXT("Stage1"));
+}
+
+bool ADRPlayerController::IsInTutorial() const
+{
+	UWorld* World = GetWorld();
+	if (!World) return false;
+
+	FString CurrentLevelName = World->GetMapName();
+	CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+	return CurrentLevelName.Contains(TEXT("Tutorial"));
 }
 
 void ADRPlayerController::Client_ShowGameOverUI_Implementation()
@@ -1083,4 +1184,422 @@ void ADRPlayerController::ServerRequestDropPart_Implementation()
 
 	// 부품 떨어트리기
 	DRCharacter->DropCarriedPart();
+}
+
+void ADRPlayerController::RequestChangeClass(bool bNext)
+{
+	ServerRequestChangeClass(bNext);
+}
+
+void ADRPlayerController::ServerRequestChangeClass_Implementation(bool bNext)
+{
+	// 대기실 상태에서만 가능
+	ADRLobbyGameState* LGS = GetWorld()->GetGameState<ADRLobbyGameState>();
+	if (!LGS || LGS->GetLobbyState() != ELobbyState::WaitingRoom) return;
+
+	ADRPlayerState* PS = GetPlayerState<ADRPlayerState>();
+	if (!PS) return;
+
+	// 현재 클래스 가져오기
+	int32 CurrentIndex = static_cast<int32>(PS->GetSelectedPlayerClass());
+	constexpr int32 ClassCount = 2; // GardenRobot, VendingMachineRobot
+
+	// 순환
+	int32 NewIndex;
+	if (bNext)
+		NewIndex = (CurrentIndex + 1) % ClassCount;
+	else
+		NewIndex = (CurrentIndex - 1 + ClassCount) % ClassCount;
+
+	PS->SetSelectedPlayerClass(static_cast<EPlayerCharacterClass>(NewIndex));
+}
+
+void ADRPlayerController::ClientTeleportToSlot_Implementation(FVector SlotLocation, FRotator SlotRotation)
+{
+	if (APawn* MyPawn = GetPawn())
+	{
+		MyPawn->TeleportTo(SlotLocation, SlotRotation);
+
+		if (UCharacterMovementComponent* MovementComp =
+			Cast<UCharacterMovementComponent>(MyPawn->GetMovementComponent()))
+		{
+			MovementComp->Velocity = FVector::ZeroVector;
+			MovementComp->DisableMovement();
+		}
+	}
+}
+
+void ADRPlayerController::ClientSetWaitingRoomView_Implementation(
+	ADRWaitingRoomCameraActor* CameraActor)
+{
+	if (!CameraActor) return;
+
+	// 카메라 캐시 저장 (ClientRestart에서 재고정에 사용)
+	CachedWaitingRoomCamera = CameraActor;
+
+	bIsInWaitingRoom = true;
+	bAutoManageActiveCameraTarget = false; // Pawn 변경 시 자동 ViewTarget 전환 차단
+
+	// 잘못 생성된 LobbyOverlay가 있으면 제거
+	if (ADRHUD* DRHUD = Cast<ADRHUD>(GetHUD()))
+	{
+		DRHUD->RemoveOverlay();
+	}
+
+	// 즉시 고정 카메라로 전환
+	SetViewTargetWithBlend(CameraActor, 0.f);
+
+	// UI Only 모드 (마우스 커서 ON)
+	SetInputMode(FInputModeUIOnly());
+	SetShowMouseCursor(true);
+
+	// 소유 Pawn의 메시 가시성 전환 (1P 숨기기, 3P 보이기)
+	if (ADRCharacter* DRCharacter = Cast<ADRCharacter>(GetPawn()))
+	{
+		DRCharacter->SetWaitingRoomVisibility(true);
+	}
+
+	// 대기실 UI 생성 (아직 없으면)
+	CreateWaitingRoomUI();
+}
+
+void ADRPlayerController::ClientStartCameraTransitionToCharacter_Implementation()
+{
+	bIsInWaitingRoom = false;
+
+	APawn* MyPawn = GetPawn();
+	if (!MyPawn)
+	{
+		// Pawn이 아직 리플리케이트되지 않음 → 0.1초 간격으로 재시도
+		int32 MaxRetries = 50; // 5초 제한
+		GetWorldTimerManager().SetTimer(
+			CameraTransitionRetryHandle,
+			[this, MaxRetries, RetryCount = 0]() mutable
+			{
+				if (!IsValid(this)) return;
+
+				if (++RetryCount > MaxRetries)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("CameraTransition: Pawn not replicated after %d retries, forcing input mode"), MaxRetries);
+					GetWorldTimerManager().ClearTimer(CameraTransitionRetryHandle);
+					// 최소한 InputMode 전환으로 완전 고착 방지
+					bAutoManageActiveCameraTarget = true;
+					SetInputMode(FInputModeGameOnly());
+					SetShowMouseCursor(false);
+					InitOverlayForFreeRoam();
+					return;
+				}
+
+				APawn* Pawn = GetPawn();
+				if (!Pawn) return; // 아직 없으면 다음 반복에서 재시도
+
+				// Pawn 도착 완료 → 타이머 중지 + 카메라 전환 실행
+				GetWorldTimerManager().ClearTimer(CameraTransitionRetryHandle);
+				ExecuteCameraTransitionToCharacter();
+			},
+			0.1f,
+			true
+		);
+		return;
+	}
+
+	// Pawn이 이미 있으면 즉시 실행 (호스트 또는 빠른 리플리케이션)
+	ExecuteCameraTransitionToCharacter();
+}
+
+void ADRPlayerController::ExecuteCameraTransitionToCharacter()
+{
+	APawn* MyPawn = GetPawn();
+	if (!MyPawn) return;
+
+	// 메시 가시성 복원 (3P 숨기기, 1P 보이기 — 일반 FPS 모드)
+	if (ADRCharacter* DRCharacter = Cast<ADRCharacter>(MyPawn))
+	{
+		DRCharacter->SetWaitingRoomVisibility(false);
+	}
+
+	// 고정 카메라 → 캐릭터 카메라로 1.5초간 부드럽게 블렌드
+	SetViewTargetWithBlend(MyPawn, 1.5f, EViewTargetBlendFunction::VTBlend_EaseInOut);
+
+	// 전환 완료 후 인풋 모드 변경 + HUD 오버레이 초기화
+	FTimerHandle InputTimerHandle;
+	GetWorldTimerManager().SetTimer(
+		InputTimerHandle,
+		[this]()
+		{
+			if (!IsValid(this)) return;
+
+			// (1) 블렌드 완료 후에야 자동 카메라 관리 활성화
+			bAutoManageActiveCameraTarget = true;
+
+			// (2) ViewTarget을 Pawn으로 확정 (블렌드 잔여 상태 정리)
+			if (APawn* FinalPawn = GetPawn())
+			{
+				SetViewTarget(FinalPawn);
+
+				// (3) ControlRotation을 Pawn의 현재 회전으로 동기화
+				SetControlRotation(FinalPawn->GetActorRotation());
+			}
+
+			// (4) 입력 모드 전환
+			SetInputMode(FInputModeGameOnly());
+			SetShowMouseCursor(false);
+
+			// (5) HUD 오버레이 초기화 (대기실에서 스킵했으므로)
+			InitOverlayForFreeRoam();
+		},
+		1.5f,
+		false
+	);
+}
+
+void ADRPlayerController::OnRep_Pawn()
+{
+	// 엔진 기본 처리 (AcknowledgePossession 등)
+	Super::OnRep_Pawn();
+
+	// 대기실에서는 엔진이 변경한 ViewTarget을 즉시 복원
+	if (bIsInWaitingRoom && CachedWaitingRoomCamera.IsValid())
+	{
+		bAutoManageActiveCameraTarget = false;
+		SetViewTargetWithBlend(CachedWaitingRoomCamera.Get(), 0.f);
+	}
+}
+
+void ADRPlayerController::ClientRestart_Implementation(APawn* NewPawn)
+{
+	// 대기실에서는 ViewTarget 자동 전환만 차단하고, 나머지 엔진 초기화는 정상 수행
+	if (bIsInWaitingRoom)
+	{
+		// bAutoManageActiveCameraTarget = false로 Super 내부의 ViewTarget 자동 전환 차단
+		bAutoManageActiveCameraTarget = false;
+
+		// Super 호출: ResetIgnoreInputFlags, AcknowledgePossession, PawnClientRestart 등
+		// 엔진 초기화를 정상 수행 (호스트에서 Look/Move 입력이 무시되는 버그 방지)
+		Super::ClientRestart_Implementation(NewPawn);
+
+		// 새 폰에 대기실 가시성 적용
+		if (NewPawn)
+		{
+			if (ADRCharacter* DRChar = Cast<ADRCharacter>(NewPawn))
+			{
+				DRChar->SetWaitingRoomVisibility(true);
+			}
+		}
+
+		// Super가 ViewTarget을 변경했을 수 있으므로 캐시된 카메라로 즉시 복원
+		if (CachedWaitingRoomCamera.IsValid())
+		{
+			SetViewTargetWithBlend(CachedWaitingRoomCamera.Get(), 0.f);
+		}
+
+		return;
+	}
+
+	Super::ClientRestart_Implementation(NewPawn);
+}
+
+void ADRPlayerController::ClientKicked_Implementation(const FString& Reason)
+{
+	// 대기실 UI 제거
+	DestroyWaitingRoomUI();
+
+	// 세션 떠나기 → 메인 메뉴로 이동
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UMultiplayerSessionsSubsystem* Subsystem = GI->GetSubsystem<UMultiplayerSessionsSubsystem>())
+		{
+			Subsystem->LeaveServer();
+		}
+	}
+}
+
+// ========== 대기실 UI ==========
+
+void ADRPlayerController::CreateWaitingRoomUI()
+{
+	if (!IsLocalController()) return;
+	if (WaitingRoomWidget) return; // 이미 존재
+	if (!WaitingRoomWidgetClass) return;
+
+	WaitingRoomWidget = CreateWidget<UDRWaitingRoomWidget>(this, WaitingRoomWidgetClass);
+	if (WaitingRoomWidget)
+	{
+		WaitingRoomWidget->AddToViewport();
+
+		// 호스트 여부 설정 (Listen Server의 로컬 컨트롤러 = 호스트)
+		bool bIsHost = HasAuthority();
+		WaitingRoomWidget->SetIsHost(bIsHost);
+
+		// LobbyState 변경 구독
+		if (ADRLobbyGameState* LGS = GetWorld()->GetGameState<ADRLobbyGameState>())
+		{
+			LGS->OnLobbyStateChanged.AddDynamic(this, &ADRPlayerController::OnLobbyStateChangedForUI);
+		}
+
+		RefreshWaitingRoomUI();
+	}
+}
+
+void ADRPlayerController::DestroyWaitingRoomUI()
+{
+	// 델리게이트 해제
+	if (UWorld* World = GetWorld())
+	{
+		if (ADRLobbyGameState* LGS = World->GetGameState<ADRLobbyGameState>())
+		{
+			LGS->OnLobbyStateChanged.RemoveDynamic(this, &ADRPlayerController::OnLobbyStateChangedForUI);
+		}
+	}
+
+	if (WaitingRoomWidget)
+	{
+		WaitingRoomWidget->RemoveFromParent();
+		WaitingRoomWidget = nullptr;
+	}
+}
+
+void ADRPlayerController::ClientRefreshWaitingRoomUI_Implementation()
+{
+	RefreshWaitingRoomUI();
+}
+
+void ADRPlayerController::RefreshWaitingRoomUI()
+{
+	if (!WaitingRoomWidget) return;
+
+	ADRLobbyGameState* LGS = GetWorld()->GetGameState<ADRLobbyGameState>();
+	ADRGameStateBase* GS = GetWorld()->GetGameState<ADRGameStateBase>();
+	if (!LGS || !GS) return;
+
+	// 로컬 PlayerState 유효성 검사 + 재시도
+	APlayerState* MyPS = GetPlayerState<APlayerState>();
+	if (!MyPS)
+	{
+		FTimerHandle RetryTimer;
+		GetWorldTimerManager().SetTimer(
+			RetryTimer,
+			[WeakThis = TWeakObjectPtr<ADRPlayerController>(this)]()
+			{
+				if (ADRPlayerController* PC = WeakThis.Get())
+				{
+					PC->RefreshWaitingRoomUI();
+				}
+			},
+			0.2f, false
+		);
+		return;
+	}
+
+	TArray<FWaitingRoomPlayerInfo> Infos;
+	for (APlayerState* PS : GS->PlayerArray)
+	{
+		if (!PS) continue;
+		ADRPlayerState* DRPS = Cast<ADRPlayerState>(PS);
+		if (!DRPS) continue;
+
+		FWaitingRoomPlayerInfo Info;
+		Info.PlayerName = PS->GetPlayerName();
+		Info.SelectedClass = DRPS->GetSelectedPlayerClass();
+		Info.bIsHost = GS->IsPlayerHost(PS);
+		Info.OwningPlayerState = PS;
+
+		// 서버 권위 슬롯 인덱스 사용
+		Info.SlotIndex = DRPS->GetWaitingRoomSlotIndex();
+
+		// bIsLocalPlayer 판정 (PlayerId 비교)
+		Info.bIsLocalPlayer = (PS->GetPlayerId() == MyPS->GetPlayerId());
+
+		Infos.Add(Info);
+	}
+
+	// SlotIndex 기준으로 정렬하여 UI에 전달
+	Infos.Sort([](const FWaitingRoomPlayerInfo& A, const FWaitingRoomPlayerInfo& B)
+	{
+		return A.SlotIndex < B.SlotIndex;
+	});
+
+	WaitingRoomWidget->RefreshPlayerSlots(Infos);
+}
+
+void ADRPlayerController::OnLobbyStateChangedForUI(ELobbyState NewState)
+{
+	if (NewState == ELobbyState::Transitioning || NewState == ELobbyState::FreeRoam)
+	{
+		DestroyWaitingRoomUI();
+	}
+}
+
+void ADRPlayerController::InitOverlayForFreeRoam()
+{
+	ADRHUD* DRHUD = Cast<ADRHUD>(GetHUD());
+	if (!DRHUD) return;
+
+	ADRPlayerState* PS = GetPlayerState<ADRPlayerState>();
+	if (!PS) return;
+
+	UAbilitySystemComponent* ASC = PS->GetAbilitySystemComponent();
+	UAttributeSet* AS = PS->GetAttributeSet();
+	if (!ASC || !AS) return;
+
+	DRHUD->InitOverlay(this, PS, ASC, AS);
+
+	// 위젯 트리 완전 초기화 후 어빌리티 아이콘 강제 갱신
+	FTimerHandle AbilityIconTimerHandle;
+	GetWorldTimerManager().SetTimer(
+		AbilityIconTimerHandle,
+		[WeakThis = TWeakObjectPtr<ADRPlayerController>(this)]()
+		{
+			ADRPlayerController* PC = WeakThis.Get();
+			if (!PC) return;
+
+			ADRHUD* HUD = Cast<ADRHUD>(PC->GetHUD());
+			if (!HUD) return;
+
+			ADRPlayerState* PlayerState = PC->GetPlayerState<ADRPlayerState>();
+			if (!PlayerState) return;
+
+			UAbilitySystemComponent* AbilitySystem = PlayerState->GetAbilitySystemComponent();
+			UAttributeSet* Attributes = PlayerState->GetAttributeSet();
+			if (!AbilitySystem || !Attributes) return;
+
+			const FWidgetControllerParams Params(PC, PlayerState, AbilitySystem, Attributes);
+			if (UOverlayWidgetController* WC = HUD->GetOverlayWidgetController(Params))
+			{
+				WC->BroadcastAbilityInfo();
+			}
+		},
+		0.1f,
+		false
+	);
+}
+
+void ADRPlayerController::ServerRequestPowerOn_Implementation()
+{
+	// 호스트 검증: Server RPC이므로 서버에서 실행됨
+	// IsLocalController()로 호스트(Listen Server) 확인
+	if (!IsLocalController() || !HasAuthority()) return;
+
+	ADRLobbyGameMode* LobbyGM = GetWorld()->GetAuthGameMode<ADRLobbyGameMode>();
+	if (LobbyGM)
+	{
+		LobbyGM->PowerOn(this);
+	}
+}
+
+void ADRPlayerController::ServerRequestKickPlayer_Implementation(APlayerState* TargetPlayerState)
+{
+	// 호스트 검증
+	if (!IsLocalController() || !HasAuthority()) return;
+	if (!TargetPlayerState) return;
+
+	// TargetPlayerState → PlayerController 찾기
+	APlayerController* TargetPC = Cast<APlayerController>(TargetPlayerState->GetOwner());
+	ADRPlayerController* TargetDRPC = Cast<ADRPlayerController>(TargetPC);
+
+	ADRLobbyGameMode* LobbyGM = GetWorld()->GetAuthGameMode<ADRLobbyGameMode>();
+	if (LobbyGM && TargetDRPC)
+	{
+		LobbyGM->KickPlayer(this, TargetDRPC);
+	}
 }

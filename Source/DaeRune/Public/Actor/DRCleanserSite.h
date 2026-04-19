@@ -169,10 +169,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent> WaterMesh;
 
-	// ��ǰ ��ġ �� Ŭ���� �޽�
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mesh Assets")
-	TObjectPtr<UStaticMesh> CleanserMesh_AfterParts;
-
 	// ��ǰ ��ġ �� �� �޽�
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mesh Assets")
 	TObjectPtr<UStaticMesh> WaterMesh_AfterParts;

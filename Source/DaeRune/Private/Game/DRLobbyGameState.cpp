@@ -51,6 +51,7 @@ void ADRLobbyGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ADRLobbyGameState, RoomCode);
+	DOREPLIFETIME(ADRLobbyGameState, LobbyState);
 }
 
 void ADRLobbyGameState::SetRoomCode(const FString& NewRoomCode)
@@ -77,4 +78,19 @@ void ADRLobbyGameState::BroadcastRoomCode()
 void ADRLobbyGameState::InitializeRoomCode(const FString& NewRoomCode)
 {
 	SetRoomCode(NewRoomCode);
+}
+
+void ADRLobbyGameState::SetLobbyState(ELobbyState NewState)
+{
+	if (!HasAuthority()) return;
+	if (LobbyState == NewState) return;
+
+	LobbyState = NewState;
+	// 서버에서 직접 브로드캐스트 (OnRep은 클라이언트에서만 호출됨)
+	OnLobbyStateChanged.Broadcast(LobbyState);
+}
+
+void ADRLobbyGameState::OnRep_LobbyState()
+{
+	OnLobbyStateChanged.Broadcast(LobbyState);
 }

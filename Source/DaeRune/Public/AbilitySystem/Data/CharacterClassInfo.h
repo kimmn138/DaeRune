@@ -8,6 +8,7 @@
 
 class UGameplayEffect;
 class UGameplayAbility;
+class ADRCharacter;
 
 UENUM(BlueprintType)
 enum class ECharacterClass : uint8
@@ -15,6 +16,13 @@ enum class ECharacterClass : uint8
 	Elementalist,
 	Warrior,
 	Ranger
+};
+
+UENUM(BlueprintType)
+enum class EPlayerCharacterClass : uint8
+{
+	GardenRobot,
+	VendingMachineRobot
 };
 
 USTRUCT(BlueprintType)
@@ -51,4 +59,26 @@ public:
 	TArray<TSubclassOf<UGameplayAbility>> CommonAbilities;
 
 	FCharacterClassDefaultInfo GetClassDefaultInfo(ECharacterClass CharacterClass);
+};
+
+/**
+ * 플레이어 전용 캐릭터 클래스 정보 데이터 에셋
+ */
+UCLASS()
+class DAERUNE_API UPlayerCharacterClassInfo : public UDataAsset
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(EditDefaultsOnly, Category = "Character Class Defaults")
+	TMap<EPlayerCharacterClass, FCharacterClassDefaultInfo> CharacterClassInformation;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Common Class Defaults")
+	TArray<TSubclassOf<UGameplayAbility>> CommonAbilities;
+
+	// 클래스별 캐릭터 BP 매핑 (외형은 BP에서 전부 설정)
+	UPROPERTY(EditDefaultsOnly, Category = "Character Blueprint")
+	TMap<EPlayerCharacterClass, TSubclassOf<ADRCharacter>> CharacterBPClasses;
+
+	FCharacterClassDefaultInfo GetClassDefaultInfo(EPlayerCharacterClass CharacterClass);
 };

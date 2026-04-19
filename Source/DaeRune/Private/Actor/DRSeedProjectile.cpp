@@ -7,6 +7,7 @@
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Character/DRCharacter.h"
+#include "Character/DREnemy.h"
 #include "DrawDebugHelpers.h"
 #include "Actor/DRCleanserSite.h"
 #include "Engine/OverlapResult.h"
@@ -15,6 +16,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Sound/DRSoundDataAsset.h"
 #include "DRAssetManager.h"
+#include "Tutorial/DRTutorialManager.h"
+#include "DRGameplayTags.h"
 
 ADRSeedProjectile::ADRSeedProjectile()
 {
@@ -114,6 +117,7 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
     // �� ���Ϳ� ���� ó��
     int32 AffectedCount = 0;
     int32 BlockedCount = 0;
+    int32 EnemyHitCount = 0;
 
     for (const FOverlapResult& Result : OverlapResults)
     {
@@ -144,10 +148,26 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
         {
             ApplyEffectToActor(Target, Distance);
             AffectedCount++;
+
+            if (Cast<ADREnemy>(Target))
+            {
+                EnemyHitCount++;
+            }
         }
         else
         {
             BlockedCount++;
+        }
+    }
+
+    // 튜토리얼 매니저에 적중 수 보고 (튜토리얼 맵에서만 동작, SeedCannon 어빌리티만 인정)
+    if (EnemyHitCount > 0 &&
+        DamageEffectParams.SourceAbilityTags.HasTag(FDRGameplayTags::Get().Abilities_GardenRobot_SeedCannon))
+    {
+        if (ADRTutorialManager* TM = Cast<ADRTutorialManager>(
+            UGameplayStatics::GetActorOfClass(GetWorld(), ADRTutorialManager::StaticClass())))
+        {
+            TM->ReportSeedCannonHits(EnemyHitCount);
         }
     }
 
