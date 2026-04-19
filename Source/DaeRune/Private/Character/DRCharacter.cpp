@@ -395,18 +395,37 @@ void ADRCharacter::UpdateWaterPumpThirdPersonBeam()
 		InterpSpeed
 	);
 
-	// 빔 방향 계산
-	FVector BeamDir = WaterPumpBeamDisplayEndPoint - SocketLocation;
-	if (BeamDir.IsNearlyZero()) return;
-	BeamDir.Normalize();
+	// 빔 벡터/길이 계산
+	FVector BeamVector = WaterPumpBeamDisplayEndPoint - SocketLocation;
+	float BeamLength = BeamVector.Size();
+	if (BeamLength <= KINDA_SMALL_NUMBER) return;
 
+	FVector BeamDir = BeamVector / BeamLength;
 	const FRotator BeamRotation = BeamDir.Rotation();
+
+	// 1인칭과 같은 방식으로 길이 정규화
+	// WeaponRange는 1인칭에서 쓰는 값과 동일하게 맞춰야 함
+	const float WeaponRange = 1000.0f; // 예시값, 네 실제 값으로 바꿔
+	const float NormalizedLength = BeamLength / WeaponRange;
+
+	const float XValue = FMath::Clamp(NormalizedLength * 1000.0f, 0.0f, 1000.0f);
+	const float ZScale = FMath::Clamp(NormalizedLength * 5.0f, 0.0f, 5.0f);
 
 	// Niagara 업데이트
 	WaterPumpThirdPersonBeam->SetWorldLocation(SocketLocation);
 	WaterPumpThirdPersonBeam->SetWorldRotation(BeamRotation);
+
+	// 빔 길이 반영
 	WaterPumpThirdPersonBeam->SetVectorParameter(
-		FName("HitEffectPosition"), WaterPumpBeamDisplayEndPoint);
+		FName("WaterCannonScale"),
+		FVector(0.2f, 0.2f, ZScale)
+	);
+
+	// 우선 기존 3인칭 방식 유지
+	WaterPumpThirdPersonBeam->SetVectorParameter(
+		FName("HitEffectPosition"),
+		FVector(XValue, 0.0f, 0.0f)
+	);
 }
 
 void ADRCharacter::OnRep_bIsCarryingPart()
