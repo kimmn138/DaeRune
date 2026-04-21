@@ -50,11 +50,11 @@ ADRArmadilloEnemy
 ```
 
 **폼 전환 시 처리 순서**:
-1. 전환 애니메이션 재생 (현재 폼의 AnimBP에서)
-2. 애니메이션 완료 시점에 AnimNotify 발동
-3. 현재 폼 메시 Hidden + 새 폼 메시 Visible
-4. CapsuleComponent 크기 조정 (볼 폼은 더 작을 수 있음)
-5. 내부 상태 플래그 갱신 (`bIsBallForm`)
+1. 현재 폼에서 전환 몽타주 재생 (예: BasicForm의 FormChange_BasicToBall)
+2. AnimNotify(AN_FinishFormChange) 발동
+3. 현재 폼 메시 Hidden + 새 폼 메시 Visible + 캡슐 크기 조정 + `bIsBallForm` 갱신
+4. 새 폼에서 같은 전환의 이어지는 몽타주 재생 (예: BallForm의 FormChange_BasicToBall)
+5. 몽타주 완료 후 다음 행동으로 진행
 
 ### 2. 공격 시스템 설계
 
@@ -82,9 +82,11 @@ ADRArmadilloEnemy
 3. 조건 만족 플레이어 중 랜덤 1명 선택
    - 타겟팅 시점의 플레이어 위치 저장 (고정 목표점)
    ↓
-4. 폼 전환: Basic → Ball (FormChange 애니메이션)
+4. 폼 전환: Basic → Ball (양쪽 FormChange 애니메이션)
    - BasicForm에서 FormChange_BasicToBall 몽타주 재생
-   - 애니메이션 완료 시 AnimNotify → FinishFormChange() → 메시 교체
+   - AnimNotify(AN_FinishFormChange) → FinishFormChange() → 메시 교체
+   - BallForm에서 FormChange_BasicToBall 몽타주 이어서 재생
+   - 몽타주 완료 대기
    ↓
 5. 일직선 돌진 시작
    - 방향: 아르마딜로 → 저장된 목표점
@@ -546,8 +548,6 @@ void ADRArmadilloEnemy::BroadcastRollImpact(const FVector& ImpactLocation)
 
 ```cpp
 // 아르마딜로 태그
-FGameplayTag Abilities_Armadillo_BasicAttack;
-FGameplayTag Abilities_Armadillo_RollCharge;
 FGameplayTag Cooldown_Armadillo_RollCharge;
 FGameplayTag State_BallForm;
 ```
@@ -555,14 +555,6 @@ FGameplayTag State_BallForm;
 ### 2-2. `DRGameplayTags.cpp`의 `InitializeNativeGameplayTags()`에 등록
 
 ```cpp
-GameplayTags.Abilities_Armadillo_BasicAttack = UGameplayTagsManager::Get().AddNativeGameplayTag(
-    FName("Abilities.Armadillo.BasicAttack"),
-    FString("아르마딜로 기본 근접 공격"));
-
-GameplayTags.Abilities_Armadillo_RollCharge = UGameplayTagsManager::Get().AddNativeGameplayTag(
-    FName("Abilities.Armadillo.RollCharge"),
-    FString("아르마딜로 볼 폼 돌진 스킬"));
-
 GameplayTags.Cooldown_Armadillo_RollCharge = UGameplayTagsManager::Get().AddNativeGameplayTag(
     FName("Cooldown.Armadillo.RollCharge"),
     FString("아르마딜로 돌진 스킬 쿨타임"));
@@ -672,17 +664,25 @@ GameplayTags.State_BallForm = UGameplayTagsManager::Get().AddNativeGameplayTag(
     │     ├─ OnRollImpact 바인딩 → HandleRollImpact (커스텀 이벤트)
     │     └─ OnRollReachedTarget 바인딩 → HandleRollReachedTarget (커스텀 이벤트)
     │
-    ├─ 4. StartFormChange(true) 호출 → Basic→Ball 전환 시작
-    │     └─ BasicForm에서 FormChange_BasicToBall 몽타주 재생
-    │     └─ AnimNotify → FinishFormChange() → 메시 교체
+    ├─ 4. 폼 전환: Basic → Ball (양쪽 몽타주 재생)
+    │     │
+    │     ├─ StartFormChange(true) 호출
+    │     │
+    │     ├─ PlayMontageAndWait(AM_Armadillo_FormChange_BtoD) — BasicForm 메시에서 재생
+    │     │   └─ 기본 폼이 볼로 말리기 시작하는 애니메이션
+    │     │   └─ AN_FinishFormChange → FinishFormChange() → 메시 교체
+    │     │
+    │     ├─ PlayMontageAndWait(AM_ArmadilloBall_FormChange_BtoD) — BallForm 메시에서 이어서 재생
+    │     │   └─ 볼 폼이 완전히 말리는 마무리 애니메이션
+    │     │   └─ 몽타주 완료 대기
+    │     │
+    │     └─ 폼 전환 완료
     │
-    ├─ 5. Wait for AnimNotify (FinishFormChange 완료 대기)
-    │
-    ├─ 6. StartRollCharge(SavedTargetLocation) 호출
+    ├─ 5. StartRollCharge(SavedTargetLocation) 호출
     │     └─ C++의 Tick에서 자동으로 이동 + 충돌 감지 수행
     │     └─ 충돌 또는 도달 시 → C++이 바인딩된 델리게이트 브로드캐스트
     │
-    └─ 7. 이후 흐름은 델리게이트 콜백에서 처리 (아래 참조)
+    └─ 6. 이후 흐름은 델리게이트 콜백에서 처리 (아래 참조)
 ```
 
 **HandleRollImpact (충돌 시 — 커스텀 이벤트)**:
@@ -723,11 +723,19 @@ HandleRollImpact(ImpactResult: FRollImpactResult)
     │           ├─ MakeOutgoingSpec(SelfStunEffectClass)
     │           └─ ApplyGameplayEffectSpecToSelf() → 1.5초 스턴
     │
-    ├─ 폼 복귀: StartFormChange(false) → Ball→Basic 전환
-    │   └─ FormChange_BallToBasic 몽타주 재생
-    │   └─ AnimNotify → FinishFormChange() → 메시 교체
-    │
-    ├─ Wait for FormChange 완료
+    ├─ 폼 복귀: Ball → Basic (양쪽 몽타주 재생)
+    │   │
+    │   ├─ StartFormChange(false) 호출
+    │   │
+    │   ├─ PlayMontageAndWait(AM_ArmadilloBall_FormChange_DtoB) — BallForm 메시에서 재생
+    │   │   └─ 볼 폼이 펴지기 시작하는 애니메이션
+    │   │   └─ AN_FinishFormChange → FinishFormChange() → 메시 교체
+    │   │
+    │   ├─ PlayMontageAndWait(AM_Armadillo_FormChange_DtoB) — BasicForm 메시에서 이어서 재생
+    │   │   └─ 기본 폼이 완전히 펴지는 마무리 애니메이션
+    │   │   └─ 몽타주 완료 대기
+    │   │
+    │   └─ 폼 복귀 완료
     │
     ├─ CommitAbilityCooldown() → 쿨타임 10초 시작
     │
@@ -741,11 +749,19 @@ HandleRollReachedTarget()
     │
     ├─ (데미지/스턴 없음 — 충돌이 발생하지 않았으므로)
     │
-    ├─ 폼 복귀: StartFormChange(false) → Ball→Basic 전환
-    │   └─ FormChange_BallToBasic 몽타주 재생
-    │   └─ AnimNotify → FinishFormChange() → 메시 교체
-    │
-    ├─ Wait for FormChange 완료
+    ├─ 폼 복귀: Ball → Basic (양쪽 몽타주 재생)
+    │   │
+    │   ├─ StartFormChange(false) 호출
+    │   │
+    │   ├─ PlayMontageAndWait(AM_ArmadilloBall_FormChange_DtoB) — BallForm 메시에서 재생
+    │   │   └─ 볼 폼이 펴지기 시작하는 애니메이션
+    │   │   └─ AN_FinishFormChange → FinishFormChange() → 메시 교체
+    │   │
+    │   ├─ PlayMontageAndWait(AM_Armadillo_FormChange_DtoB) — BasicForm 메시에서 이어서 재생
+    │   │   └─ 기본 폼이 완전히 펴지는 마무리 애니메이션
+    │   │   └─ 몽타주 완료 대기
+    │   │
+    │   └─ 폼 복귀 완료
     │
     ├─ CommitAbilityCooldown() → 쿨타임 10초 시작
     │
@@ -895,41 +911,109 @@ HandleRollReachedTarget()
 Root (Selector)
 │
 ├─ [1] 사망 체크 (Sequence)
-│     ├─ Decorator: BB "Dead" == true
+│     ├─ Decorator: Blackboard — "Dead" == true
+│     │   ├─ Key Query: Is Set
+│     │   ├─ Notify Observer: On Value Change
+│     │   └─ Observer Aborts: Both (사망 시 하위 트리 모두 즉시 중단)
 │     └─ Task: BTT_StopBehavior
 │
 ├─ [2] 스턴 체크 (Sequence)
-│     ├─ Decorator: BB "Stunned" == true
+│     ├─ Decorator: Blackboard — "Stunned" == true
+│     │   ├─ Key Query: Is Set
+│     │   ├─ Notify Observer: On Value Change
+│     │   └─ Observer Aborts: Both (스턴 진입/해제 시 즉시 반응)
 │     └─ Task: Wait (스턴 해제될 때까지)
 │
 ├─ [3] 히트 리액트 (Sequence)
-│     ├─ Decorator: BB "HitReacting" == true
+│     ├─ Decorator: Blackboard — "HitReacting" == true
+│     │   ├─ Key Query: Is Set
+│     │   ├─ Notify Observer: On Value Change
+│     │   └─ Observer Aborts: Both
 │     └─ Task: Wait (히트 리액트 종료될 때까지)
 │
-├─ [4] 롤링 스킬 분기 (Sequence)
-│     ├─ Decorator: BB "RollSkillReady" == true
-│     ├─ Decorator: BB "TargetToFollow" IsSet
-│     ├─ Decorator: Target이 플레이어인지 확인
-│     ├─ Task: BTT_ArmadilloRollAttack (★ 신규)
-│     │     └─ TryActivateAbilitiesByTag("Abilities.Armadillo.RollCharge")
-│     │        ※ GA 내부에서 폼 전환 전에 FindRollTarget() 실행
-│     │        ※ 유효 타겟 없으면 GA가 즉시 종료 → BTT는 Failure 반환
-│     │        ※ 유효 타겟 있으면 타겟 위치 저장 → 폼 전환 → 돌진
-│     └─ (스킬 성공 시 쿨타임 동안 RollSkillReady = false)
+├─ [4] 전투 분기 — 타겟 있음 (Selector)
+│     │
+│     │  ★ 이 Selector에 Decorator를 걸어서 타겟 존재 여부를 검사
+│     ├─ Decorator: Blackboard — "TargetToFollow"
+│     │   ├─ Key Query: Is Set
+│     │   ├─ Notify Observer: On Value Change
+│     │   └─ Observer Aborts: Lower Priority
+│     │      (타겟이 새로 생기면 [5] 순찰을 중단하고 여기로 복귀)
+│     │
+│     ├─ [4-1] 롤링 스킬 (Sequence)
+│     │     │
+│     │     ├─ Decorator: Blackboard — "RollSkillReady" == true
+│     │     │   ├─ Key Query: Is Set
+│     │     │   ├─ Notify Observer: On Value Change
+│     │     │   └─ Observer Aborts: None
+│     │     │      (쿨타임이 돌아와도 현재 기본 공격을 중단하지 않음.
+│     │     │       기본 공격 완료 후 자연스럽게 다음 Tick에서 스킬 시도)
+│     │     │
+│     │     └─ Task: BTT_ArmadilloRollAttack (★ 신규)
+│     │           └─ TryActivateAbilitiesByTag("Abilities.Armadillo.RollCharge")
+│     │              ※ GA 내부에서 폼 전환 전에 FindRollTarget() 실행
+│     │              ※ 유효 타겟 없으면 GA가 즉시 종료 → BTT는 Failure 반환
+│     │              ※ 유효 타겟 있으면 타겟 위치 저장 → 폼 전환 → 돌진
+│     │              ※ 스킬 성공 시 쿨타임 적용 → RollSkillReady = false
+│     │
+│     └─ [4-2] 접근 + 기본 공격 (Sequence)
+│           │
+│           │  ★ Decorator 없음 — [4-1]이 실패(쿨다운 중)하면 자동으로 여기로 폴스루
+│           │
+│           ├─ Task: MoveTo (TargetToFollow)
+│           │   └─ Acceptable Radius: 공격 사거리 (예: 150)
+│           │
+│           ├─ Task: BTT_RotateToFaceTarget
+│           │
+│           └─ Task: BTT_Attack_Armadillo (★ 신규)
+│                 └─ TryActivateAbilitiesByTag("Abilities.Armadillo.BasicAttack")
 │
-├─ [5] 기본 공격 분기 (Sequence)
-│     ├─ Decorator: BB "TargetToFollow" IsSet
-│     ├─ Decorator: 공격 범위 내 확인
-│     ├─ Task: BTT_RotateToFaceTarget
-│     └─ Task: BTT_Attack_Armadillo (★ 신규)
-│           └─ TryActivateAbilitiesByTag("Abilities.Armadillo.BasicAttack")
-│
-├─ [6] 추적 (Sequence)
-│     ├─ Decorator: BB "TargetToFollow" IsSet
-│     └─ Task: MoveTo (TargetToFollow)
-│
-└─ [7] 순찰 (Sequence)
+└─ [5] 순찰 (Sequence)
+      │
+      │  ★ Decorator 없음 — [4]가 실패(타겟 없음)하면 자동으로 여기로 폴스루
+      │
       └─ Task: MoveTo (HomeLocation 주변 랜덤)
+```
+
+**데코레이터 설정 상세 설명**:
+
+| 노드 | 데코레이터 | Key Query | Observer Aborts | 이유 |
+|------|-----------|-----------|-----------------|------|
+| [1] 사망 | BB "Dead" | Is Set | **Both** | 사망은 최우선 — 어떤 행동 중이든 즉시 중단 |
+| [2] 스턴 | BB "Stunned" | Is Set | **Both** | 스턴 진입 시 하위 행동 중단, 해제 시 자기도 중단 |
+| [3] 히트리액트 | BB "HitReacting" | Is Set | **Both** | 위와 동일 |
+| [4] 전투 분기 | BB "TargetToFollow" | Is Set | **Lower Priority** | 타겟 생기면 순찰[5]을 중단하고 전투로 복귀 |
+| [4-1] 롤링 스킬 | BB "RollSkillReady" | Is Set | **None** | 쿨타임 복귀 시 기본 공격을 중간에 끊지 않음 |
+| [4-2] 기본 공격 | (없음) | - | - | 폴스루 전용 — 스킬 실패 시 자동 진입 |
+| [5] 순찰 | (없음) | - | - | 폴스루 전용 — 타겟 없을 때 자동 진입 |
+
+**Observer Aborts 해설**:
+- **None**: 값이 변해도 현재 실행 중인 노드를 중단하지 않음. 다음 자연 재평가 때 반영
+- **Self**: 조건이 **거짓**이 되면 자기 서브트리를 중단
+- **Lower Priority**: 조건이 **참**이 되면 자기보다 **아래(오른쪽)** 형제 노드를 중단하고 자기 실행
+- **Both**: Self + Lower Priority 합친 것
+
+**흐름 예시**:
+
+```
+[타겟 없음 → 순찰 중 → 타겟 감지]
+  순찰[5] 실행 중
+  → TargetToFollow 값 Set됨
+  → [4]의 Decorator(Lower Priority) 발동
+  → [5] 순찰 즉시 중단
+  → [4] 전투 분기 진입
+  → [4-1] RollSkillReady 확인 → true면 스킬, false면 [4-2] 기본 공격
+
+[스킬 쿨다운 중 → 기본 공격 중 → 쿨다운 해제]
+  [4-2] 기본 공격 실행 중
+  → BTS_CheckRollSkillReady가 RollSkillReady = true로 설정
+  → [4-1]의 Decorator(None) → 현재 공격을 중단하지 않음
+  → 기본 공격 완료 → Selector[4] 재평가 → [4-1] 스킬 시도
+
+[스킬 실행 → 쿨다운 적용 → 다음 행동]
+  [4-1] 스킬 성공 → RollSkillReady = false
+  → Selector[4] 재평가 → [4-1] 데코레이터 실패
+  → [4-2] 폴스루 → 접근 + 기본 공격
 ```
 
 ### 8-3. BT Service: `BTS_CheckRollSkillReady`
@@ -1411,7 +1495,7 @@ HitReactMontages[2] = AM_Armadillo_HitReact3
     ├─ C++: ADRArmadilloEnemy::StartFormChange(true)
     │   └─ bPendingBallForm = true
     │
-    ├─ GA Blueprint: PlayMontageAndWait(AM_Armadillo_FormChange_BtoD)
+    ├─ GA Blueprint: PlayMontageAndWait(AM_Armadillo_FormChange_BtoD) — BasicForm 메시에서 재생
     │   │
     │   │ ── AnimBP: ABP_Armadillo_Basic
     │   │    └─ DefaultSlot에 FormChange_BasicToBall 몽타주 재생
@@ -1419,7 +1503,7 @@ HitReactMontages[2] = AM_Armadillo_HitReact3
     │   │
     │   ├─ [몽타주 재생 중...]
     │   │
-    │   └─ AnimNotify: AN_FinishFormChange 발동 (몽타주 끝 부분)
+    │   └─ AnimNotify: AN_FinishFormChange 발동
     │       │
     │       └─ C++: ADRArmadilloEnemy::FinishFormChange()
     │           ├─ bIsBallForm = true (bPendingBallForm 값)
@@ -1433,6 +1517,14 @@ HitReactMontages[2] = AM_Armadillo_HitReact3
     │           └─ [리플리케이션] bIsBallForm = true → 클라이언트로 전파
     │               └─ 클라이언트: OnRep_BallForm()
     │                   └─ UpdateMeshVisibility() — 동일하게 메시 교체
+    │
+    ├─ GA Blueprint: PlayMontageAndWait(AM_ArmadilloBall_FormChange_BtoD) — BallForm 메시에서 이어서 재생
+    │   │
+    │   │ ── AnimBP: ABP_Armadillo_Ball
+    │   │    └─ BallForm의 FormChange_BasicToBall 몽타주 재생
+    │   │    └─ 볼 폼이 완전히 말리는 마무리 애니메이션
+    │   │
+    │   └─ [몽타주 완료 대기]
     │
     ▼
 [4] 돌진 시작
@@ -1541,7 +1633,7 @@ HitReactMontages[2] = AM_Armadillo_HitReact3
     ├─ C++: StartFormChange(false)
     │   └─ bPendingBallForm = false
     │
-    ├─ GA Blueprint: PlayMontageAndWait(AM_ArmadilloBall_FormChange_DtoB)
+    ├─ GA Blueprint: PlayMontageAndWait(AM_ArmadilloBall_FormChange_DtoB) — BallForm 메시에서 재생
     │   │
     │   │ ── AnimBP: ABP_Armadillo_Ball
     │   │    └─ FormChange_BallToBasic 몽타주 재생
@@ -1556,6 +1648,14 @@ HitReactMontages[2] = AM_Armadillo_HitReact3
     │           │       └─ BallFormMesh->SetVisibility(false) — BallForm 숨김
     │           └─ 캡슐 크기 복원:
     │               └─ SetCapsuleSize(DefaultCapsuleRadius, DefaultCapsuleHalfHeight)
+    │
+    ├─ GA Blueprint: PlayMontageAndWait(AM_Armadillo_FormChange_DtoB) — BasicForm 메시에서 이어서 재생
+    │   │
+    │   │ ── AnimBP: ABP_Armadillo_Basic
+    │   │    └─ BasicForm의 FormChange_BallToBasic 몽타주 재생
+    │   │    └─ 기본 폼이 완전히 펴지는 마무리 애니메이션
+    │   │
+    │   └─ [몽타주 완료 대기]
     │
     ├─ GA Blueprint: CommitAbilityCooldown()
     │   └─ GE_Cooldown_ArmadilloRollCharge 적용 → ASC에 Cooldown 태그 10초
@@ -1636,11 +1736,14 @@ HitReactMontages[2] = AM_Armadillo_HitReact3
     │       ├─ OnRep_Stunned() → StunDebuffComponent 비활성화
     │       └─ CharacterMovement->MaxWalkSpeed 복원
     │
-    ├─ GA Blueprint: 폼 복귀 진행
+    ├─ GA Blueprint: 폼 복귀 진행 (양쪽 몽타주 재생)
     │   ├─ StartFormChange(false)
-    │   ├─ PlayMontageAndWait(AM_ArmadilloBall_FormChange_DtoB)
-    │   ├─ AN_FinishFormChange → FinishFormChange()
-    │   │   └─ 메시 교체 + 캡슐 복원 (D의 [8]과 동일)
+    │   │
+    │   ├─ PlayMontageAndWait(AM_ArmadilloBall_FormChange_DtoB) — BallForm 메시에서 재생
+    │   │   └─ AN_FinishFormChange → FinishFormChange() → 메시 교체 + 캡슐 복원
+    │   │
+    │   ├─ PlayMontageAndWait(AM_Armadillo_FormChange_DtoB) — BasicForm 메시에서 이어서 재생
+    │   │   └─ 몽타주 완료 대기
     │   │
     │   ├─ CommitAbilityCooldown() → 10초 쿨타임
     │   └─ EndAbility()
@@ -1707,8 +1810,13 @@ HitReactMontages[2] = AM_Armadillo_HitReact3
     │
     ├─ (데미지/스턴 없음 — 충돌이 발생하지 않았으므로)
     │
-    ├─ 폼 복귀: StartFormChange(false) → Ball→Basic 전환
-    │   └─ D의 [8]과 동일 (몽타주 → AN_FinishFormChange → 메시 교체)
+    ├─ 폼 복귀: Ball → Basic (양쪽 몽타주 재생)
+    │   ├─ StartFormChange(false)
+    │   ├─ PlayMontageAndWait(AM_ArmadilloBall_FormChange_DtoB) — BallForm 메시에서 재생
+    │   │   └─ AN_FinishFormChange → FinishFormChange() → 메시 교체
+    │   ├─ PlayMontageAndWait(AM_Armadillo_FormChange_DtoB) — BasicForm 메시에서 이어서 재생
+    │   │   └─ 몽타주 완료 대기
+    │   └─ 폼 복귀 완료
     │
     ├─ CommitAbilityCooldown() → 10초 쿨타임
     │
@@ -1928,14 +2036,9 @@ HitReactMontages[2] = AM_Armadillo_HitReact3
     │
     ├─ StunTagChanged(Debuff.Stun, 0) → bIsStunned = false
     │
-    ├─ ★ 볼 폼 상태에서 스턴 해제 → 기본 폼으로 복귀 필요
-    │   ├─ StartFormChange(false)
-    │   ├─ FormChange_BallToBasic 몽타주 재생
-    │   ├─ AN_FinishFormChange → FinishFormChange()
-    │   │   └─ 메시 교체 + 캡슐 복원
-    │   └─ (이 복귀 로직은 StunTagChanged 내부에서 트리거하거나,
-    │       BT에서 bIsBallForm == true && bIsRolling == false 감지 시
-    │       별도 Task로 복귀 처리)
+    ├─ ★ 스턴 진입 시점(StunTagChanged)에서 이미 즉시 기본 폼으로 강제 전환 완료
+    │   └─ 애니메이션 없이 메시 교체 + 캡슐 복원 (C++ StunTagChanged 내부 처리)
+    │   └─ 스턴 해제 시점에는 이미 기본 폼 → 추가 복귀 불필요
     │
     └─ BT 정상 재개
 ```

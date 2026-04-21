@@ -103,6 +103,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Flying enemy is locked down after skill use (cannot move or attack)")
 	);
 
+	GameplayTags.State_BallForm = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.BallForm"),
+		FString("Armadillo is in ball form")
+	);
+
 	GameplayTags.Enemy_Detected = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Enemy.Detected"),
 		FString("Enemy has been detected by player")
@@ -349,6 +354,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Cooldown_Fire_FireBolt = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Cooldown.Fire.FireBolt"),
 		FString("FireBolt Cooldown Tag")
+	);
+
+	GameplayTags.Cooldown_Armadillo_RollCharge = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Cooldown.Armadillo.RollCharge"),
+		FString("Armadillo Roll Charge Cooldown Tag")
 	);
 
 	/*

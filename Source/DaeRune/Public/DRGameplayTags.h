@@ -41,6 +41,7 @@ public:
 	FGameplayTag State_Aggroed;
 	FGameplayTag State_HitReacting;
 	FGameplayTag State_LockedDown;
+	FGameplayTag State_BallForm;
 	FGameplayTag Enemy_Detected;
 
 	// �⺻ ������, Ÿ�� �� ������
@@ -101,6 +102,7 @@ public:
 
 	// �����Ƽ ��Ÿ��
 	FGameplayTag Cooldown_Fire_FireBolt;
+	FGameplayTag Cooldown_Armadillo_RollCharge;
 
 	// ���� ��ġ ����
 	FGameplayTag CombatSocket_Weapon;
