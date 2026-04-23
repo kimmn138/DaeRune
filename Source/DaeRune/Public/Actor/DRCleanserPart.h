@@ -12,8 +12,8 @@ class UWidgetComponent;
 class ADRPlayerController;
 
 /**
- * е╛╥╩юЗ ╨нг╟ ╬вем
- * Phase2©║╪╜ гц╥╧юл╬Н╟║ ╪ЖаЩго©╘ е╛╥╩юЗ ╩Гюлф╝©║ ╪Ёд║го╢б ╨нг╟
+ * е╛О©╫О©╫О©╫О©╫ О©╫О©╫г╟ О©╫О©╫О©╫О©╫
+ * Phase2О©╫О©╫О©╫О©╫ О©╫ц╥О©╫О©╫л╬Н╟║ О©╫О©╫О©╫О©╫О©╫о©О©╫ е╛О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫ф╝О©╫О©╫ О©╫О©╫д║О©╫о╢О©╫ О©╫О©╫г╟
  */
 UCLASS()
 class DAERUNE_API ADRCleanserPart : public AActor
@@ -23,32 +23,36 @@ class DAERUNE_API ADRCleanserPart : public AActor
 public:
 	ADRCleanserPart();
 
-	// ========== ╨нг╟ ╩Себ а╤х╦ ==========
+	// ========== О©╫О©╫г╟ О©╫О©╫О©╫О©╫ О©╫О©╫х╦ ==========
 
-	// х╧╣Ф ╟║╢и ©╘╨н х╝юн
+	// х╧О©╫О©╫ О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫ х╝О©╫О©╫
 	UFUNCTION(BlueprintCallable, Category = "CleanserPart")
 	bool CanBePickedUp() const;
 
-	// ========== ╨нг╟ цЁ╦╝ ==========
+	// К╤─М▓┬ К╘■Л▀° Getter (Л╨░К╕╜М└╟Л≈░Л└° 1P К╘■Л▀° КЁ╣Л═°Л≈░ Л┌╛Л ╘)
+	UFUNCTION(BlueprintCallable, Category = "CleanserPart")
+	UStaticMeshComponent* GetPartMesh() const { return PartMesh; }
 
-	// ╨нг╟ х╧╣Ф цЁ╦╝
+	// ========== О©╫О©╫г╟ цЁО©╫О©╫ ==========
+
+	// О©╫О©╫г╟ х╧О©╫О©╫ цЁО©╫О©╫
 	UFUNCTION(BlueprintCallable, Category = "CleanserPart")
 	void PickupPart(ADRCharacter* Character);
 
-	// ╨нг╟ ╪Ёд║ цЁ╦╝
+	// О©╫О©╫г╟ О©╫О©╫д║ цЁО©╫О©╫
 	UFUNCTION(BlueprintCallable, Category = "CleanserPart")
 	void InstallPart();
 
-	// дЁ╦╞ем╥н╨нем ╤Ё╬Н╤ъ╦╝╠Б 
+	// дЁО©╫О©╫О©╫м╥н╨О©╫О©╫О©╫ О©╫О©╫О©╫О©╫ъ╦О©╫О©╫О©╫ 
 	UFUNCTION(BlueprintCallable, Category = "CleanserPart")
 	void DropFromCarrier();
 
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayPickupSound();
 
-	// ========== ╤Сюнф╝╥╧юл╫л дщ╧И ========== 
+	// ========== О©╫О©╫О©╫О©╫ф╝О©╫О©╫О©╫л╫О©╫ О©╫щ╧О©╫ ========== 
 
-	// UI г╔╫ц/╪Ш╠Х (╦жф╪дЁ╫╨ф╝ - ╦П╣Г е╛╤Сюл╬Пф╝ ╫ггЮ)
+	// UI г╔О©╫О©╫/О©╫О©╫О©╫О©╫ (О©╫О©╫ф╪дЁО©╫О©╫ф╝ - О©╫О©╫О©╫ е╛О©╫О©╫О©╫л╬О©╫ф╝ О©╫О©╫О©╫О©╫)
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastShowInteractionUI(ADRPlayerController* PlayerController, bool bShow);
 
@@ -56,41 +60,41 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// ========== ддфВЁмф╝ ==========
+	// ========== О©╫О©╫О©╫О©╫О©╫О©╫ф╝ ==========
 
-	// ╨нг╟ ╦ч╫ц
+	// О©╫О©╫г╟ О©╫ч╫О©╫
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent> PartMesh;
 
-	// ╟╗аЖ ╧Эю╖ (╤Сюнф╝╥╧юл╫л х╟╪╨х╜©К)
+	// О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫ (О©╫О©╫О©╫О©╫ф╝О©╫О©╫О©╫л╫О©╫ х╟О©╫О©╫х╜О©╫О©╫)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USphereComponent> DetectionSphere;
 
-	// х╧╣Ф UI ю╖а╛ 
+	// х╧О©╫О©╫ UI О©╫О©╫О©╫О©╫ 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UWidgetComponent> InteractionWidget;
 
-	// ========== ╪Ёа╓ ==========
+	// ========== О©╫О©╫О©╫О©╫ ==========
 
-	// дЁ╦╞ем©║ ╨нбЬгр ╪рдо юл╦╖
+	// дЁО©╫О©╫О©╫м©О©╫ О©╫О©╫О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫ О©╫л╦О©╫
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "CleanserPart|Config")
-	FName AttachSocketName = "TestLeftHand";
+	FName AttachSocketName = "TestPartHand";
 
-	// ╟╗аЖ ╧Эю╖ ╧щ╟Ф
+	// О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫ О©╫щ╟О©╫
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "CleanserPart|Config")
 	float DetectionRadius = 150.f;
 
-	// ========== ╨нг╟ ╩Себ ==========
+	// ========== О©╫О©╫г╟ О©╫О©╫О©╫О©╫ ==========
 
-	// гц╥╧юл╬Н╟║ ╣И╟М юж╢б ╩Себ
+	// О©╫ц╥О©╫О©╫л╬Н╟║ О©╫О©╫О©╫ О©╫ж╢О©╫ О©╫О©╫О©╫О©╫
 	UPROPERTY(ReplicatedUsing = OnRep_bIsCarried, BlueprintReadOnly, Category = "CleanserPart")
 	bool bIsCarried;
 
-	// ╨нг╟ю╩ ╣И╟М юж╢б дЁ╦╞ем
+	// О©╫О©╫г╟О©╫О©╫ О©╫О©╫О©╫ О©╫ж╢О©╫ дЁО©╫О©╫О©╫О©╫
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "CleanserPart")
 	TObjectPtr<ADRCharacter> CarryingCharacter;
 
-	// ========== ©ю╧Ж╥╕ юл╨╔ф╝ ==========
+	// ========== О©╫О©╫О©╫О©╫О©╫О©╫ О©╫л╨О©╫ф╝ ==========
 
 	UFUNCTION()
 	void OnDetectionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
@@ -98,7 +102,7 @@ protected:
 	UFUNCTION()
 	void OnDetectionSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
-	// ========== ╦╝гц╦╝диюл╪г дщ╧И ==========
+	// ========== О©╫О©╫О©╫ц╦О©╫О©╫О©╫О©╫л╪О©╫ О©╫щ╧О©╫ ==========
 
 	UFUNCTION()
 	void OnRep_bIsCarried();

@@ -40,7 +40,7 @@ FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLoca
         OutHitResult,
         WeaponSocketLocation,
         CameraTargetPoint,
-        ECC_Pawn, // ��/��ֹ� ������ ä��
+        ECC_Visibility,
         QueryParams
     );
 

@@ -81,6 +81,13 @@ void ADRCleanserPart::PickupPart(ADRCharacter* Character)
 	// ĳ���� ���Ͽ� ����
 	AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
 
+	// 3P 부품은 다른 플레이어에게만 보이도록 설정
+	PartMesh->SetOwnerNoSee(true);
+	SetOwner(Character->GetOwner());
+
+	// 캐릭터의 1인칭 부품 메시 활성화
+	Character->ShowFirstPersonPart(PartMesh->GetStaticMesh());
+
 	MulticastPlayPickupSound();
 
 	// ĳ���Ϳ��� �±� ����
@@ -95,13 +102,19 @@ void ADRCleanserPart::InstallPart()
 {
 	if (!HasAuthority()) return;
 
+	// 1인칭 부품 메시 숨기기
+	if (CarryingCharacter)
+	{
+		CarryingCharacter->HideFirstPersonPart();
+	}
+
 	// ĳ���Ϳ��� �±� ����
 	UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(CarryingCharacter->GetAbilitySystemComponent());
 	if (DRASC)
 	{
 		DRASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
 	}
-	
+
 	// ���� �ı�
 	Destroy();
 }
@@ -111,6 +124,12 @@ void ADRCleanserPart::DropFromCarrier()
 	// ���������� ����
 	if (!HasAuthority()) return;
 
+	// 1인칭 부품 메시 숨기기 (드롭 전에 캐릭터 참조가 유효한 시점)
+	if (CarryingCharacter)
+	{
+		CarryingCharacter->HideFirstPersonPart();
+	}
+
 	// ĳ���Ϳ��� �и�
 	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 
@@ -119,6 +138,10 @@ void ADRCleanserPart::DropFromCarrier()
 	CarryingCharacter = nullptr;
 
 	SetActorRotation(FRotator::ZeroRotator);
+
+	// 바닥에 떨어진 부품은 모두에게 보이도록 OwnerNoSee 복원
+	PartMesh->SetOwnerNoSee(false);
+	SetOwner(nullptr);
 
 	// �޽� �ݸ��� ��Ȱ��ȭ
 	PartMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
@@ -228,6 +251,12 @@ void ADRCleanserPart::OnRep_bIsCarried()
 
 		// ĳ���� ���Ͽ� ����
 		AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
+
+		// 3P 부품은 주인에게 안 보이게
+		PartMesh->SetOwnerNoSee(true);
+
+		// 1인칭 부품 메시 표시
+		CarryingCharacter->ShowFirstPersonPart(PartMesh->GetStaticMesh());
 	}
 	// ��ǰ�� ����Ʈ�� ��
 	else
@@ -236,6 +265,9 @@ void ADRCleanserPart::OnRep_bIsCarried()
 		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 
 		SetActorRotation(FRotator::ZeroRotator);
+
+		// 바닥에 떨어진 부품은 모두에게 보이도록 복원
+		PartMesh->SetOwnerNoSee(false);
 
 		// �޽� �ݸ��� ��Ȱ��ȭ
 		PartMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);

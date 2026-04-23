@@ -45,6 +45,7 @@ void UDRAbilitySystemComponent::AddCharacterPassiveAbilities(const TArray<TSubcl
 void UDRAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& InputTag)
 {
 	if (!InputTag.IsValid()) return;
+	if (HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
 
 	// 캐시를 사용한 O(1) lookup
 	FGameplayAbilitySpec* AbilitySpec = FindAbilitySpecByInputTag(InputTag);
@@ -65,6 +66,7 @@ void UDRAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& Input
 void UDRAbilitySystemComponent::AbilityInputTagHeld(const FGameplayTag& InputTag)
 {
 	if (!InputTag.IsValid()) return;
+	if (HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputHeld)) return;
 
 	// 캐시를 사용한 O(1) lookup
 	FGameplayAbilitySpec* AbilitySpec = FindAbilitySpecByInputTag(InputTag);
@@ -81,6 +83,7 @@ void UDRAbilitySystemComponent::AbilityInputTagHeld(const FGameplayTag& InputTag
 void UDRAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& InputTag)
 {
 	if (!InputTag.IsValid()) return;
+	if (HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputReleased)) return;
 
 	// 캐시를 사용한 O(1) lookup
 	FGameplayAbilitySpec* AbilitySpec = FindAbilitySpecByInputTag(InputTag);

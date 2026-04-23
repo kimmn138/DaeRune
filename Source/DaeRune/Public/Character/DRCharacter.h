@@ -12,6 +12,7 @@ class UWidgetComponent;
 class ADRCleanserPart;
 class UNiagaraComponent;
 class UNiagaraSystem;
+class UStaticMesh;
 
 /**
  * �÷��̾� ĳ���� Ŭ����
@@ -114,8 +115,18 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mesh")
 	TObjectPtr<USkeletalMeshComponent> FirstPersonMesh;
 
+	// 1인칭 시점에서 보이는 부품 메시 (주인에게만 보임)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Part System")
+	TObjectPtr<UStaticMeshComponent> FirstPersonPartMesh;
+
 	// �޽� ���ü� ������Ʈ
 	void UpdateMeshVisibility();
+
+	// 1인칭 부품 메시 표시 (부품 픽업 시 호출)
+	void ShowFirstPersonPart(UStaticMesh* InPartMesh);
+
+	// 1인칭 부품 메시 숨기기 (부품 드롭/설치 시 호출)
+	void HideFirstPersonPart();
 
 	// 대기실 메시 가시성 전환 (고정 카메라에서 3P 메시를 보여주기 위해)
 	void SetWaitingRoomVisibility(bool bInWaitingRoom);

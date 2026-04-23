@@ -586,23 +586,20 @@ void ADREnemy::SetupHitboxComponents()
 
 	bUseCustomHitbox = true;
 
-	// CapsuleComponent에서 히트 판정 비활성화 (이동 전용으로 전환)
+	// CapsuleComponent에서 피격 판정 비활성화 (이동 전용으로 전환)
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
 	Capsule->SetCollisionResponseToChannel(ECC_Projectile, ECR_Ignore);
 	Capsule->SetCollisionResponseToChannel(ECC_Target, ECR_Ignore);
 
-	// Mesh에서도 히트 판정 비활성화 (커스텀 히트박스가 대체)
+	// Mesh에서도 피격 판정 비활성화 (커스텀 히트박스가 대체)
 	GetMesh()->SetCollisionResponseToChannel(ECC_Projectile, ECR_Ignore);
 
-	// 커스텀 히트박스 컴포넌트에 히트 판정 활성화
+	// 커스텀 히트박스 - 피격 판정 전용 (Query Only, 물리 충돌 없음)
 	for (UShapeComponent* Hitbox : HitboxComponents)
 	{
-		Hitbox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		Hitbox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 		Hitbox->SetCollisionObjectType(ECC_Pawn);
 		Hitbox->SetCollisionResponseToAllChannels(ECR_Ignore);
-		Hitbox->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
-		Hitbox->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
-		Hitbox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 		Hitbox->SetCollisionResponseToChannel(ECC_Projectile, ECR_Overlap);
 		Hitbox->SetCollisionResponseToChannel(ECC_Target, ECR_Overlap);
 		Hitbox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);

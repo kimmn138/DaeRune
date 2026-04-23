@@ -254,6 +254,12 @@ void ADRCharacterBase::StunTagChanged(const FGameplayTag CallbackTag, int32 NewC
 {
 	bIsStunned = NewCount > 0;
 	GetCharacterMovement()->MaxWalkSpeed = bIsStunned ? StunnedMoveSpeed : GetMoveSpeed();
+
+	// 서버(Listen Server 호스트)에서는 RepNotify가 자동 호출되지 않으므로 수동 호출
+	if (HasAuthority())
+	{
+		OnRep_Stunned();
+	}
 }
 
 void ADRCharacterBase::OnRep_Stunned()

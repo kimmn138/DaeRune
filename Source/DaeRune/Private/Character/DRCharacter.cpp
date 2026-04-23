@@ -63,6 +63,15 @@ ADRCharacter::ADRCharacter()
 	// 3인칭 메시 설정
 	GetMesh()->SetOwnerNoSee(true);
 
+	// 1인칭 부품 메시 생성 (픽업 전에는 비활성)
+	FirstPersonPartMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FirstPersonPartMesh"));
+	FirstPersonPartMesh->SetupAttachment(FirstPersonMesh, FName("TestPartHand"));
+	FirstPersonPartMesh->SetOnlyOwnerSee(true);
+	FirstPersonPartMesh->bCastDynamicShadow = false;
+	FirstPersonPartMesh->CastShadow = false;
+	FirstPersonPartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	FirstPersonPartMesh->SetVisibility(false);
+
 	// VOIPTalker 컴포넌트 생성
 	VOIPTalkerComponent = CreateDefaultSubobject<UDRVOIPTalker>(TEXT("VOIPTalker"));
 
@@ -285,6 +294,23 @@ void ADRCharacter::UpdateMeshVisibility()
 	}
 }
 
+void ADRCharacter::ShowFirstPersonPart(UStaticMesh* InPartMesh)
+{
+	if (!FirstPersonPartMesh || !InPartMesh) return;
+	if (!IsLocallyControlled()) return;
+
+	FirstPersonPartMesh->SetStaticMesh(InPartMesh);
+	FirstPersonPartMesh->SetVisibility(true);
+}
+
+void ADRCharacter::HideFirstPersonPart()
+{
+	if (!FirstPersonPartMesh) return;
+
+	FirstPersonPartMesh->SetVisibility(false);
+	FirstPersonPartMesh->SetStaticMesh(nullptr);
+}
+
 void ADRCharacter::SetWaitingRoomVisibility(bool bInWaitingRoom)
 {
 	if (bInWaitingRoom)
@@ -305,6 +331,12 @@ void ADRCharacter::SetWaitingRoomVisibility(bool bInWaitingRoom)
 			Weapon->SetOwnerNoSee(false);
 		}
 
+		// 1인칭 부품 메시도 숨기기 (대기실에서는 불필요)
+		if (FirstPersonPartMesh)
+		{
+			FirstPersonPartMesh->SetVisibility(false);
+		}
+
 		// 대기실에서는 오버헤드 닉네임 숨김 (WBP_PlayerSlot UI에서 표시)
 		SetOverheadWidgetVisibility(false);
 	}
@@ -316,6 +348,15 @@ void ADRCharacter::SetWaitingRoomVisibility(bool bInWaitingRoom)
 		if (Weapon)
 		{
 			Weapon->SetOwnerNoSee(true);
+		}
+
+		// 부품을 들고 있으면 1인칭 부품 메시 복원
+		if (bIsCarryingPart && CarriedPart && FirstPersonPartMesh)
+		{
+			if (UStaticMeshComponent* PMesh = CarriedPart->GetPartMesh())
+			{
+				ShowFirstPersonPart(PMesh->GetStaticMesh());
+			}
 		}
 
 		// FreeRoam부터 오버헤드 닉네임 표시 복원
@@ -535,7 +576,19 @@ void ADRCharacter::OnRep_bIsCarryingPart()
 
 void ADRCharacter::OnRep_CarriedPart()
 {
-	// Ŭ���̾�Ʈ �ð��� ȿ��
+	if (CarriedPart)
+	{
+		// 부품을 들고 있으면 1인칭 부품 메시 표시
+		if (UStaticMeshComponent* PMesh = CarriedPart->GetPartMesh())
+		{
+			ShowFirstPersonPart(PMesh->GetStaticMesh());
+		}
+	}
+	else
+	{
+		// 부품이 없으면 1인칭 부품 메시 숨기기
+		HideFirstPersonPart();
+	}
 }
 
 void ADRCharacter::InitializeDefaultAttributes() const
