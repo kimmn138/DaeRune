@@ -73,6 +73,17 @@ ADRCleanserSite::ADRCleanserSite()
 	HealthBar = CreateDefaultSubobject<UDRBillboardWidgetComponent>("HealthBar");
 	HealthBar->SetupAttachment(GetRootComponent());
 
+	// 설치된 부품 메시 슬롯 (메시와 위치는 블루프린트에서 설정)
+	InstalledPartMesh1 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("InstalledPartMesh1"));
+	InstalledPartMesh1->SetupAttachment(CleanserMesh);
+	InstalledPartMesh1->SetVisibility(false);
+	InstalledPartMesh1->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	InstalledPartMesh2 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("InstalledPartMesh2"));
+	InstalledPartMesh2->SetupAttachment(CleanserMesh);
+	InstalledPartMesh2->SetVisibility(false);
+	InstalledPartMesh2->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
 	// �ʱ� ����
 	CurrentState = ECleanserSiteState::Inactive;
 	bHealthEnabled = false;
@@ -141,6 +152,28 @@ void ADRCleanserSite::MulticastStopOperatingSound_Implementation()
 	}
 }
 
+void ADRCleanserSite::MulticastShowInstalledPart_Implementation(int32 SlotIndex)
+{
+	UStaticMeshComponent* TargetSlot = nullptr;
+
+	switch (SlotIndex)
+	{
+	case 0:
+		TargetSlot = InstalledPartMesh1;
+		break;
+	case 1:
+		TargetSlot = InstalledPartMesh2;
+		break;
+	default:
+		return;
+	}
+
+	if (TargetSlot)
+	{
+		TargetSlot->SetVisibility(true);
+	}
+}
+
 void ADRCleanserSite::ActivateSite()
 {
 	if (!HasAuthority()) return;
@@ -187,6 +220,9 @@ void ADRCleanserSite::InstallPart(ADRCharacter* Character)
 
 	// ��ǰ ��ġ ó��
 	Character->InstallCarriedPart();
+
+	// 설치된 슬롯의 부품 메시 표시 (카운트 증가 전에 호출하여 SlotIndex로 사용)
+	MulticastShowInstalledPart(InstalledPartsCount);
 
 	// ��ġ ���� ����
 	InstalledPartsCount++;
@@ -369,8 +405,15 @@ void ADRCleanserSite::OnRep_CurrentState()
 
 void ADRCleanserSite::OnRep_InstalledPartsCount()
 {
-	// Ŭ���̾�Ʈ���� �ð��� ������Ʈ
-	// ��: ��ǰ ������ ���� �޽ó� ����Ʈ ����
+	// 레이트 조인 클라이언트를 위한 부품 메시 Visibility 복원
+	if (InstalledPartMesh1)
+	{
+		InstalledPartMesh1->SetVisibility(InstalledPartsCount >= 1);
+	}
+	if (InstalledPartMesh2)
+	{
+		InstalledPartMesh2->SetVisibility(InstalledPartsCount >= 2);
+	}
 }
 
 void ADRCleanserSite::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass) const
@@ -401,11 +444,16 @@ void ADRCleanserSite::UpdateMeshByState()
 	case ECleanserSiteState::Inactive:
 		if (CleanserMesh) CleanserMesh->SetVisibility(false);
 		if (WaterMesh) WaterMesh->SetVisibility(false);
+		if (InstalledPartMesh1) InstalledPartMesh1->SetVisibility(false);
+		if (InstalledPartMesh2) InstalledPartMesh2->SetVisibility(false);
 		break;
 
 	case ECleanserSiteState::Active:
 		if (CleanserMesh) CleanserMesh->SetVisibility(true);
 		if (WaterMesh) WaterMesh->SetVisibility(true);
+		// 이미 설치된 부품 복원 (레이트 조인 대비)
+		if (InstalledPartMesh1) InstalledPartMesh1->SetVisibility(InstalledPartsCount >= 1);
+		if (InstalledPartMesh2) InstalledPartMesh2->SetVisibility(InstalledPartsCount >= 2);
 		break;
 
 	case ECleanserSiteState::PartsCollected:
@@ -417,6 +465,9 @@ void ADRCleanserSite::UpdateMeshByState()
 			WaterMesh->SetStaticMesh(WaterMesh_AfterParts);
 			WaterMesh->SetVisibility(true);
 		}
+		// 모든 부품 슬롯 표시 (이 상태면 2개 모두 설치 완료)
+		if (InstalledPartMesh1) InstalledPartMesh1->SetVisibility(true);
+		if (InstalledPartMesh2) InstalledPartMesh2->SetVisibility(true);
 		break;
 	}
 }

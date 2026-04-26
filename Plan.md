@@ -1,421 +1,913 @@
-# 부품 1인칭/3인칭 분리 표시 구현 계획
+# 자판기 로봇 (VendingMachineRobot) 전투 시스템 구현 계획
 
-## 목표
-플레이어가 부품(CleanserPart)을 집었을 때, 1인칭 시점(주인)과 3인칭 시점(다른 플레이어)에서 각각 독립적인 부품 메시를 보여줘서 애니메이션과 자연스럽게 어울리도록 한다.
+## 개요
 
-## 현재 구조 분석
+자판기 로봇의 기본 공격, 패시브(잭팟), 스킬(공격속도 버프)을 구현한다.
+기존 캐릭터(`ADRCharacter`)를 그대로 사용하며, `EPlayerCharacterClass::VendingMachineRobot`으로 구분된다.
+전투 관련 시스템(GA, GE, Projectile, Tag 등)만 새로 추가한다.
 
-### 현재 메시 시스템 (DRCharacter)
-- `FirstPersonMesh` (1P): `OnlyOwnerSee(true)`, 카메라에 부착, 주인만 보임
-- `GetMesh()` (3P): `OwnerNoSee(true)`, 주인에게는 안 보이고 다른 플레이어에게만 보임
-- `Weapon`: 3P 메시에 부착, `OwnerNoSee(true)`
+### 기존 프로젝트 패턴
 
-### 현재 부품 부착 방식 (DRCleanserPart)
-- `PartMesh` (UStaticMeshComponent)가 루트 컴포넌트
-- 픽업 시: 액터 전체를 `Character->GetMesh()` (3P 메시)의 `TestPartHand` 소켓에 부착
-- 모든 플레이어에게 동일한 메시가 보임 (1P/3P 구분 없음)
-- **문제점**: 주인은 3P 메시가 안 보이므로(`OwnerNoSee`) 부품이 3P 메시에 붙어있으면 주인에게도 안 보이거나, 보이더라도 1P 애니메이션과 위치가 맞지 않음
+이 프로젝트의 GA 구현 패턴은 다음과 같다:
+- **C++**: `BlueprintCallable` 함수(도구)와 `UPROPERTY`(설정값)만 제공
+- **Blueprint**: `ActivateAbility`를 오버라이드하여 실제 어빌리티 흐름을 조립
+- 예시: `UDRMeleeAttack`은 C++ 클래스가 완전히 빈 껍데기이고 모든 로직이 BP에 있음
+- 예시: `UDRFireBolt`은 C++에 `SpawnProjectiles()` BlueprintCallable 함수만 제공하고 발사 타이밍/몽타주/타겟팅은 BP에서 처리
 
-### 관련 코드 위치
-| 파일 | 역할 |
+이 패턴을 따라 자판기 로봇 GA도 **C++은 최소한의 도구 함수만, 나머지는 Blueprint에서 구현**한다.
+
+---
+
+## 1. Gameplay Tags 추가
+
+**파일**: `Source/DaeRune/Public/DRGameplayTags.h` / `Source/DaeRune/Private/DRGameplayTags.cpp`
+
+### 추가할 태그
+
+```
+Abilities.VendingMachine.BasicAttack      // 기본 공격 GA 식별
+Abilities.VendingMachine.AttackSpeedBuff  // 공격속도 버프 스킬 GA 식별
+State.VendingMachine.JackpotReady         // 잭팟 스택 5 도달 상태 (UI 연동용)
+Buff.VendingMachine.AttackSpeed           // 공격속도 버프 GE 식별/조회 태그
+```
+
+### 구현 상세
+
+`DRGameplayTags.h`에 멤버 추가:
+```cpp
+FGameplayTag Abilities_VendingMachine_BasicAttack;
+FGameplayTag Abilities_VendingMachine_AttackSpeedBuff;
+FGameplayTag State_VendingMachine_JackpotReady;
+FGameplayTag Buff_VendingMachine_AttackSpeed;
+```
+
+`DRGameplayTags.cpp`의 `InitializeNativeGameplayTags()`에 등록:
+```cpp
+GameplayTags.Abilities_VendingMachine_BasicAttack = UGameplayTagsManager::Get().AddNativeGameplayTag(
+    FName("Abilities.VendingMachine.BasicAttack"), FString("자판기 로봇 기본 공격"));
+GameplayTags.Abilities_VendingMachine_AttackSpeedBuff = UGameplayTagsManager::Get().AddNativeGameplayTag(
+    FName("Abilities.VendingMachine.AttackSpeedBuff"), FString("자판기 로봇 공격속도 버프 스킬"));
+GameplayTags.State_VendingMachine_JackpotReady = UGameplayTagsManager::Get().AddNativeGameplayTag(
+    FName("State.VendingMachine.JackpotReady"), FString("잭팟 스택 5 도달"));
+GameplayTags.Buff_VendingMachine_AttackSpeed = UGameplayTagsManager::Get().AddNativeGameplayTag(
+    FName("Buff.VendingMachine.AttackSpeed"), FString("공격속도 버프 활성 상태"));
+```
+
+**참고**: 기본 공격에 별도 Cooldown 태그를 추가하지 않는다. 발사 간격은 GA 내부 타이머로 제어한다.
+
+---
+
+## 2. 기본 공격 GA (잭팟 패시브 통합)
+
+### 설계 원칙: C++ vs Blueprint 분담
+
+기존 프로젝트 패턴을 따른다:
+- **C++**: 타이머 관리, 투사체 스폰, 잭팟 카운터, 공격속도 조회 → `BlueprintCallable` 함수로 제공
+- **Blueprint**: `ActivateAbility` 오버라이드, 발사 시작/중지 호출, 몽타주, VFX/SFX, UI 연동
+
+### 2-1. C++ 클래스: `UDRVendingMachineBasicAttack`
+
+**파일**:
+- `Source/DaeRune/Public/AbilitySystem/Abilities/DRVendingMachineBasicAttack.h`
+- `Source/DaeRune/Private/AbilitySystem/Abilities/DRVendingMachineBasicAttack.cpp`
+
+**상속**: `UDRProjectileSpell` → `UDRDamageGameplayAbility` → `UDRGameplayAbility`
+
+C++ 클래스는 `ActivateAbility()`를 오버라이드하지 않는다. Blueprint에서 호출할 도구 함수만 제공한다.
+
+### 클래스 선언
+
+```cpp
+UCLASS()
+class DAERUNE_API UDRVendingMachineBasicAttack : public UDRProjectileSpell
+{
+    GENERATED_BODY()
+
+public:
+    // ============================================================
+    // BlueprintCallable 함수 (Blueprint에서 호출하는 도구)
+    // ============================================================
+
+    /** 자동 연사 시작. LMB 홀드 시 Blueprint에서 호출. */
+    UFUNCTION(BlueprintCallable, Category = "VendingMachine|BasicAttack")
+    void StartAutoFire();
+
+    /** 자동 연사 중지. LMB 해제 시 Blueprint에서 호출. */
+    UFUNCTION(BlueprintCallable, Category = "VendingMachine|BasicAttack")
+    void StopAutoFire();
+
+    // ============================================================
+    // BlueprintPure 함수 (Blueprint에서 상태 조회)
+    // ============================================================
+
+    /** 현재 잭팟 스택 수 반환 */
+    UFUNCTION(BlueprintPure, Category = "VendingMachine|Jackpot")
+    int32 GetJackpotStacks() const { return CurrentJackpotStacks; }
+
+    /** 잭팟 발동 준비 상태인지 반환 */
+    UFUNCTION(BlueprintPure, Category = "VendingMachine|Jackpot")
+    bool IsJackpotReady() const { return CurrentJackpotStacks >= MaxJackpotStacks; }
+
+    /** 현재 공격속도 반영된 발사 간격 반환 */
+    UFUNCTION(BlueprintPure, Category = "VendingMachine|BasicAttack")
+    float GetCurrentFireInterval() const;
+
+    // ============================================================
+    // BlueprintImplementableEvent (C++ → Blueprint 콜백)
+    // ============================================================
+
+    /** 일반 투사체 발사 직후 호출 (BP에서 VFX/SFX/몽타주 처리) */
+    UFUNCTION(BlueprintImplementableEvent, Category = "VendingMachine|BasicAttack")
+    void OnNormalShotFired();
+
+    /** 잭팟 캡슐 발사 직후 호출 (BP에서 잭팟 연출 처리) */
+    UFUNCTION(BlueprintImplementableEvent, Category = "VendingMachine|Jackpot")
+    void OnCapsuleShotFired(int32 CapsuleTier);
+    // CapsuleTier: 0 = Bronze, 1 = Silver, 2 = Gold
+
+    /** 잭팟 스택 변경 시 호출 (BP에서 UI 업데이트) */
+    UFUNCTION(BlueprintImplementableEvent, Category = "VendingMachine|Jackpot")
+    void OnJackpotStacksChanged(int32 NewStacks, int32 MaxStacks);
+
+protected:
+    // ============================================================
+    // EditDefaultsOnly 프로퍼티 (BP 에디터에서 설정)
+    // ============================================================
+
+    // --- 발사 ---
+    /** 기본 발사 간격 (초). 공격속도 버프 없을 때의 간격. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|BasicAttack")
+    float BaseFireInterval = 0.3f;
+
+    /** 투사체 발사 소켓 태그 */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|BasicAttack")
+    FGameplayTag FireSocketTag;
+
+    // --- 잭팟 캡슐 투사체 클래스 ---
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|Jackpot")
+    int32 MaxJackpotStacks = 5;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|Jackpot")
+    TSubclassOf<ADRProjectile> BronzeCapsuleClass;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|Jackpot")
+    TSubclassOf<ADRProjectile> SilverCapsuleClass;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|Jackpot")
+    TSubclassOf<ADRProjectile> GoldCapsuleClass;
+
+    // --- 잭팟 캡슐 데미지 ---
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|Jackpot")
+    float BronzeCapsuleDamage = 10.f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|Jackpot")
+    float SilverCapsuleDamage = 30.f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|Jackpot")
+    float GoldCapsuleDamage = 150.f;
+
+    // --- 잭팟 캡슐 확률 ---
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|Jackpot",
+              meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float BronzeCapsuleChance = 0.5f;   // 50%
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|Jackpot",
+              meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float SilverCapsuleChance = 0.4f;   // 40%
+    // 금 캡슐 확률 = 1.0 - Bronze - Silver = 10%
+
+private:
+    int32 CurrentJackpotStacks = 0;
+    FTimerHandle AutoFireTimerHandle;
+    bool bIsFiring = false;
+
+    /** 타이머 콜백: 한 발 발사 + 다음 발사 스케줄링 */
+    void FireShotAndScheduleNext();
+
+    /** 발사 로직 (서버 전용) - 스택에 따라 일반/캡슐 투사체 선택 */
+    void ExecuteShot();
+
+    /** 타겟 위치 계산 (카메라 에임 방향) */
+    FVector CalculateTargetLocation() const;
+};
+```
+
+### C++ 구현
+
+```cpp
+// ===================== StartAutoFire =====================
+void UDRVendingMachineBasicAttack::StartAutoFire()
+{
+    if (bIsFiring) return;
+    bIsFiring = true;
+
+    // 첫 발 즉시 발사
+    ExecuteShot();
+
+    // 다음 발사 스케줄링
+    const float Interval = GetCurrentFireInterval();
+    GetWorld()->GetTimerManager().SetTimer(
+        AutoFireTimerHandle, this,
+        &UDRVendingMachineBasicAttack::FireShotAndScheduleNext,
+        Interval, false);
+}
+
+// ===================== StopAutoFire =====================
+void UDRVendingMachineBasicAttack::StopAutoFire()
+{
+    bIsFiring = false;
+    if (GetWorld())
+    {
+        GetWorld()->GetTimerManager().ClearTimer(AutoFireTimerHandle);
+    }
+}
+
+// ===================== FireShotAndScheduleNext =====================
+void UDRVendingMachineBasicAttack::FireShotAndScheduleNext()
+{
+    if (!bIsFiring) return;
+
+    ExecuteShot();
+
+    // 다음 발사 예약 (공격속도 변경 즉시 반영을 위해 매번 새로 스케줄링)
+    const float Interval = GetCurrentFireInterval();
+    GetWorld()->GetTimerManager().SetTimer(
+        AutoFireTimerHandle, this,
+        &UDRVendingMachineBasicAttack::FireShotAndScheduleNext,
+        Interval, false);
+}
+
+// ===================== ExecuteShot =====================
+void UDRVendingMachineBasicAttack::ExecuteShot()
+{
+    // 서버에서만 실행
+    if (!GetAvatarActorFromActorInfo()->HasAuthority()) return;
+
+    const FVector TargetLocation = CalculateTargetLocation();
+
+    if (CurrentJackpotStacks >= MaxJackpotStacks)
+    {
+        // ===== 잭팟 발동 =====
+        CurrentJackpotStacks = 0;
+
+        const float Roll = FMath::FRand();
+
+        TSubclassOf<ADRProjectile> SelectedClass;
+        float SelectedDamage;
+        int32 CapsuleTier;
+
+        if (Roll < BronzeCapsuleChance)
+        {
+            SelectedClass = BronzeCapsuleClass;
+            SelectedDamage = BronzeCapsuleDamage;
+            CapsuleTier = 0;
+        }
+        else if (Roll < BronzeCapsuleChance + SilverCapsuleChance)
+        {
+            SelectedClass = SilverCapsuleClass;
+            SelectedDamage = SilverCapsuleDamage;
+            CapsuleTier = 1;
+        }
+        else
+        {
+            SelectedClass = GoldCapsuleClass;
+            SelectedDamage = GoldCapsuleDamage;
+            CapsuleTier = 2;
+        }
+
+        // 캡슐 투사체 스폰
+        if (SelectedClass)
+        {
+            const FVector SocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(
+                GetAvatarActorFromActorInfo(), FireSocketTag);
+            FRotator Rotation = (TargetLocation - SocketLocation).Rotation();
+
+            FTransform SpawnTransform;
+            SpawnTransform.SetLocation(SocketLocation);
+            SpawnTransform.SetRotation(Rotation.Quaternion());
+
+            ADRProjectile* Projectile = GetWorld()->SpawnActorDeferred<ADRProjectile>(
+                SelectedClass, SpawnTransform,
+                GetOwningActorFromActorInfo(),
+                Cast<APawn>(GetOwningActorFromActorInfo()),
+                ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+            Projectile->DamageEffectParams = MakeDamageEffectParamsFromClassDefaults();
+            Projectile->DamageEffectParams.BaseDamage = SelectedDamage;
+
+            Projectile->FinishSpawning(SpawnTransform);
+        }
+
+        // Blueprint 콜백
+        OnCapsuleShotFired(CapsuleTier);
+        OnJackpotStacksChanged(CurrentJackpotStacks, MaxJackpotStacks);
+    }
+    else
+    {
+        // ===== 일반 공격 =====
+        // 부모 클래스의 SpawnProjectile() 재사용 (ProjectileClass에 설정된 기본 투사체)
+        SpawnProjectile(TargetLocation, FireSocketTag);
+
+        CurrentJackpotStacks++;
+
+        // Blueprint 콜백
+        OnNormalShotFired();
+        OnJackpotStacksChanged(CurrentJackpotStacks, MaxJackpotStacks);
+    }
+}
+
+// ===================== GetCurrentFireInterval =====================
+float UDRVendingMachineBasicAttack::GetCurrentFireInterval() const
+{
+    UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+    if (!ASC) return BaseFireInterval;
+
+    int32 BuffStacks = 0;
+    FGameplayTagContainer BuffTagFilter;
+    BuffTagFilter.AddTag(FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed);
+
+    TArray<FActiveGameplayEffectHandle> ActiveEffects =
+        ASC->GetActiveEffectsWithAllTags(BuffTagFilter);
+
+    for (const FActiveGameplayEffectHandle& EffectHandle : ActiveEffects)
+    {
+        const FActiveGameplayEffect* ActiveGE = ASC->GetActiveGameplayEffect(EffectHandle);
+        if (ActiveGE)
+        {
+            BuffStacks = ActiveGE->Spec.GetStackCount();
+            break;
+        }
+    }
+
+    const float SpeedMultiplier = 1.0f + (BuffStacks * 0.1f);
+    return BaseFireInterval / SpeedMultiplier;
+}
+
+// ===================== CalculateTargetLocation =====================
+FVector UDRVendingMachineBasicAttack::CalculateTargetLocation() const
+{
+    // 카메라 에임 방향으로 라인트레이스하여 타겟 위치 결정
+    const AActor* AvatarActor = GetAvatarActorFromActorInfo();
+    if (!AvatarActor) return FVector::ZeroVector;
+
+    const APlayerController* PC = Cast<APlayerController>(
+        Cast<APawn>(AvatarActor)->GetController());
+    if (!PC) return AvatarActor->GetActorForwardVector() * 5000.f + AvatarActor->GetActorLocation();
+
+    FVector CameraLocation;
+    FRotator CameraRotation;
+    PC->GetPlayerViewPoint(CameraLocation, CameraRotation);
+
+    const FVector TraceEnd = CameraLocation + CameraRotation.Vector() * 10000.f;
+
+    FHitResult HitResult;
+    FCollisionQueryParams Params;
+    Params.AddIgnoredActor(AvatarActor);
+
+    if (GetWorld()->LineTraceSingleByChannel(HitResult, CameraLocation, TraceEnd, ECC_Visibility, Params))
+    {
+        return HitResult.ImpactPoint;
+    }
+
+    return TraceEnd;
+}
+```
+
+### 2-2. Blueprint GA: `GA_VendingMachine_BasicAttack`
+
+**경로**: `Content/Blueprints/AbilitySystem/VendingMachine/GA_VendingMachine_BasicAttack`
+
+**부모 클래스**: `UDRVendingMachineBasicAttack`
+
+Blueprint에서 `Event ActivateAbility`를 오버라이드하여 다음 흐름을 구성한다:
+
+```
+Event ActivateAbility
+  │
+  ├─ (선택적) Play Montage / VFX 시작 연출
+  │
+  └─ Call StartAutoFire()
+       → C++에서 타이머 시작, 자동 연사 시작
+       → 매 발사마다 OnNormalShotFired / OnCapsuleShotFired 이벤트 발생
+
+Event OnNormalShotFired (BlueprintImplementableEvent)
+  │
+  └─ 일반 발사 VFX, SFX 재생 (총구 이펙트, 발사음 등)
+
+Event OnCapsuleShotFired (int32 CapsuleTier) (BlueprintImplementableEvent)
+  │
+  ├─ CapsuleTier에 따라 분기 (Switch on Int)
+  │   ├─ 0 (Bronze): 동 캡슐 발사 연출
+  │   ├─ 1 (Silver): 은 캡슐 발사 연출
+  │   └─ 2 (Gold):   금 캡슐 발사 연출 (화려한 이펙트)
+  │
+  └─ 잭팟 발동 SFX 재생
+
+Event OnJackpotStacksChanged (int32 NewStacks, int32 MaxStacks)
+  │
+  └─ UI 위젯 업데이트 (잭팟 게이지 등)
+
+Event InputReleased (또는 WaitInputRelease AbilityTask)
+  │
+  ├─ Call StopAutoFire()
+  │    → C++에서 타이머 클리어
+  │
+  ├─ (선택적) Stop VFX / 종료 연출
+  │
+  └─ Call EndAbility()
+```
+
+**BP에서 설정할 프로퍼티 (디테일 패널)**:
+
+| 프로퍼티 | 값 | 카테고리 |
+|---------|-----|---------|
+| `StartupInputTag` | `InputTag.LMB` | Input |
+| `ProjectileClass` | `BP_VendingMachineProjectile` | (부모) |
+| `DamageEffectClass` | 기존 공용 데미지 GE | (부모) |
+| `Damage` | `30` (ScalableFloat) | (부모) Damage |
+| `DamageType` | `Damage.Physical` | (부모) Damage |
+| `BaseFireInterval` | `0.3` | VendingMachine\|BasicAttack |
+| `FireSocketTag` | `CombatSocket.Weapon` | VendingMachine\|BasicAttack |
+| `MaxJackpotStacks` | `5` | VendingMachine\|Jackpot |
+| `BronzeCapsuleClass` | `BP_CapsuleBronze` | VendingMachine\|Jackpot |
+| `SilverCapsuleClass` | `BP_CapsuleSilver` | VendingMachine\|Jackpot |
+| `GoldCapsuleClass` | `BP_CapsuleGold` | VendingMachine\|Jackpot |
+| `BronzeCapsuleDamage` | `10.0` | VendingMachine\|Jackpot |
+| `SilverCapsuleDamage` | `30.0` | VendingMachine\|Jackpot |
+| `GoldCapsuleDamage` | `150.0` | VendingMachine\|Jackpot |
+| `BronzeCapsuleChance` | `0.5` | VendingMachine\|Jackpot |
+| `SilverCapsuleChance` | `0.4` | VendingMachine\|Jackpot |
+
+### 2-3. 동작 설명: LMB 홀드 연사
+
+마우스 좌클릭(LMB)을 꾹 누르면 총처럼 연속 발사된다:
+
+1. **LMB 누름** → ASC가 `InputTag.LMB`와 매칭되는 GA를 활성화
+2. **ActivateAbility (BP)** → `StartAutoFire()` 호출
+3. **StartAutoFire (C++)** → 첫 발 즉시 `ExecuteShot()` → 타이머 시작
+4. **타이머 반복** → `BaseFireInterval`(0.3초) 간격으로 `ExecuteShot()` 반복 호출
+   - 공격속도 버프가 있으면 간격이 줄어듦 (예: 스택 2 → 0.25초 간격)
+   - 매 발사마다 타이머를 새로 설정하므로 버프 변경이 즉시 반영
+5. **LMB 해제** → `InputReleased` 이벤트 (BP) → `StopAutoFire()` 호출 → 타이머 클리어 → `EndAbility()`
+
+**잭팟 스택은 EndAbility 시 리셋하지 않는다** — 다음 LMB 홀드 시 이전 스택을 이어서 카운트한다.
+
+---
+
+## 3. 패시브: 잭팟 시스템 상세
+
+### 잭팟 스택 관리
+
+- **저장 위치**: 기본 공격 GA C++ 클래스의 `int32 CurrentJackpotStacks` 변수
+- **증가**: 일반 투사체 발사 시 +1
+- **소모**: 스택이 `MaxJackpotStacks`(5)에 도달하면 다음 발사 시 전부 소모하고 캡슐 발사
+- **리셋 시점**: 잭팟 발동 시에만 0으로 리셋. GA 종료(LMB 해제) 시에는 리셋하지 않음
+- **서버 권한**: `ExecuteShot()`이 `HasAuthority()` 체크 하에서만 실행되므로 스택도 서버에서만 관리
+
+### 캡슐 확률 판정
+
+`ExecuteShot()` 내부에서 `FMath::FRand()`로 0.0~1.0 범위의 난수를 생성:
+
+```
+Roll < 0.5              → 동 캡슐 (50%, 10 데미지)
+0.5 ≤ Roll < 0.9        → 은 캡슐 (40%, 30 데미지)
+0.9 ≤ Roll              → 금 캡슐 (10%, 150 데미지)
+```
+
+확률과 데미지는 모두 BP 에디터에서 조정 가능한 `UPROPERTY`로 노출.
+
+### 캡슐 투사체 스폰 방식
+
+캡슐 투사체 스폰은 부모 `SpawnProjectile()`을 재사용하지 않고 `ExecuteShot()` 내부에서 직접 스폰한다.
+
+**이유**: 캡슐은 `ProjectileClass`(기본 투사체)와 다른 클래스를 사용하며, `BaseDamage`도 오버라이드해야 한다. 부모의 `SpawnProjectile()`은 항상 `ProjectileClass`와 `Damage` ScalableFloat를 사용하므로 캡슐에는 적합하지 않다.
+
+**스폰 흐름**:
+1. `SelectedClass` (동/은/금 캡슐 중 하나) 선택
+2. `SpawnActorDeferred<ADRProjectile>(SelectedClass, ...)` 호출
+3. `MakeDamageEffectParamsFromClassDefaults()`로 기본 데미지 파라미터 생성
+4. `DamageEffectParams.BaseDamage`를 캡슐 데미지로 오버라이드
+5. `FinishSpawning()` 호출
+
+### 잭팟 스택 UI 연동
+
+`OnJackpotStacksChanged` BlueprintImplementableEvent를 통해 BP에서 UI를 업데이트한다:
+- 스택 변경될 때마다 `(현재 스택, 최대 스택)` 전달
+- BP에서 `OverlayWidgetController`에 바인딩하거나 직접 위젯 갱신
+
+---
+
+## 4. 공격속도 버프 스킬
+
+### 4-1. C++ 클래스: `UDRVendingMachineAttackSpeedBuff`
+
+**파일**:
+- `Source/DaeRune/Public/AbilitySystem/Abilities/DRVendingMachineAttackSpeedBuff.h`
+- `Source/DaeRune/Private/AbilitySystem/Abilities/DRVendingMachineAttackSpeedBuff.cpp`
+
+**상속**: `UDRGameplayAbility` (데미지를 주지 않으므로 `DRDamageGameplayAbility` 불필요)
+
+기존 패턴에 따라 C++ 클래스는 최소한으로 구성. `ActivateAbility`를 오버라이드하지 않고 BlueprintCallable 도구만 제공한다. 하지만 이 스킬은 "GE 적용 후 즉시 EndAbility"로 매우 단순하므로, **BP에서 직접 GE를 적용하는 것만으로 충분**하다.
+
+### 클래스 선언
+
+```cpp
+UCLASS()
+class DAERUNE_API UDRVendingMachineAttackSpeedBuff : public UDRGameplayAbility
+{
+    GENERATED_BODY()
+
+protected:
+    /** 적용할 공격속도 버프 GE 클래스 */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|Skill")
+    TSubclassOf<UGameplayEffect> AttackSpeedBuffEffect;
+};
+```
+
+C++ 코드는 이것이 전부다. `AttackSpeedBuffEffect` 프로퍼티만 제공하고 나머지는 Blueprint에서 구현한다.
+
+### 4-2. Blueprint GA: `GA_VendingMachine_AttackSpeedBuff`
+
+**경로**: `Content/Blueprints/AbilitySystem/VendingMachine/GA_VendingMachine_AttackSpeedBuff`
+
+**부모 클래스**: `UDRVendingMachineAttackSpeedBuff`
+
+Blueprint에서 `Event ActivateAbility`를 오버라이드:
+
+```
+Event ActivateAbility
+  │
+  ├─ CommitAbility (CheckCost + ApplyCost)
+  │   ├─ 실패 → EndAbility (bCancelled = true)
+  │   └─ 성공 → 계속
+  │
+  ├─ Get AbilitySystemComponent (from OwnerActor)
+  │
+  ├─ MakeOutgoingGameplayEffectSpec (AttackSpeedBuffEffect)
+  │
+  ├─ ApplyGameplayEffectSpecToSelf
+  │   → GE 스택 정책에 의해 자동으로 중첩/지속시간 리셋 처리
+  │
+  ├─ (선택적) 버프 적용 VFX/SFX 재생
+  │
+  └─ EndAbility (bCancelled = false)
+```
+
+**BP에서 설정할 프로퍼티**:
+
+| 프로퍼티 | 값 |
+|---------|-----|
+| `StartupInputTag` | `InputTag.Q` |
+| `WaterCost` | `50.0` |
+| `AttackSpeedBuffEffect` | `GE_VendingMachine_AttackSpeedBuff` |
+
+---
+
+## 5. 공격속도 버프 방안 비교
+
+### 문제 정의
+
+스킬(Q) 사용 시 공격속도 10% 증가, 10초 지속, 중첩 가능, 중첩 시 지속시간 10초로 리셋.
+기본 공격 GA의 타이머 발사 간격에 어떻게 반영할 것인가?
+
+### 방안 A: GE 스택 카운트 직접 조회 (Modifier 없는 순수 태그 GE) — 추천
+
+**개요**: GE에 Attribute Modifier 없이 `GrantedTags`만 설정. 기본 공격 GA가 매 발사마다 ASC에서 해당 GE의 스택 수를 직접 조회하여 발사 간격 계산.
+
+**GE 설정**:
+| 항목 | 값 |
+|------|-----|
+| Duration Policy | `Has Duration` (10초) |
+| Stacking Type | `Aggregate by Target` |
+| Stack Limit Count | 0 (무제한) |
+| Stack Duration Refresh Policy | `Refresh on Successful Application` |
+| Stack Expiration Policy | `Clear Entire Stack` |
+| Modifiers | 없음 |
+| GrantedTags | `Buff.VendingMachine.AttackSpeed` |
+
+**기본 공격 GA에서 조회** (`GetCurrentFireInterval()`):
+```cpp
+// ASC에서 Buff.VendingMachine.AttackSpeed 태그 GE를 찾아 스택 수 확인
+// 발사 간격 = BaseFireInterval / (1 + StackCount * 0.1)
+```
+
+**장점**:
+- AttributeSet 수정 불필요, 기존 코드 영향 제로
+- GE 스택 정책만으로 중첩/리셋/만료 자동 처리
+- 자판기 로봇 전용 로직으로 완전 캡슐화
+- 구현이 가장 단순
+
+**단점**:
+- 공격속도가 Attribute가 아니므로 다른 시스템에서 참조 어려움
+- 다른 소스(디버프, 아이템 등)에서 공격속도를 수정하려면 확장 어려움
+
+---
+
+### 방안 B: AttackSpeed Attribute 추가 (GE Modifier로 직접 수정)
+
+**개요**: `UDRAttributeSet`에 `AttackSpeed` Attribute 추가. GE Modifier가 이 Attribute를 직접 수정. 기본 공격 GA는 Attribute 값만 읽으면 됨.
+
+**AttributeSet 변경**:
+```cpp
+UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_AttackSpeed, Category = "Primary Attributes")
+FGameplayAttributeData AttackSpeed;  // 기본값 1.0
+ATTRIBUTE_ACCESSORS(UDRAttributeSet, AttackSpeed);
+```
+
+**GE Modifier 설정**:
+- Attribute: `AttackSpeed`
+- Op: `Additive`
+- Magnitude: `+0.1` (스택당)
+
+**기본 공격 GA에서 조회**:
+```cpp
+float AttackSpeed = AttrSet->GetAttackSpeed(); // 기본 1.0, 버프 시 1.1, 1.2 ...
+return BaseFireInterval / FMath::Max(AttackSpeed, 0.1f);
+```
+
+**장점**:
+- GAS 정식 패턴 완전 준수
+- 다른 시스템에서 공격속도 참조/수정 용이 (UI, 디버프, 아이템 등)
+- Attribute 변경 시 `OnRep`으로 자동 클라이언트 동기화
+- GE 스택 조회 코드 불필요 (Attribute 값만 읽으면 됨)
+
+**단점**:
+- `UDRAttributeSet` 수정 필요 (보일러플레이트: GetLifetimeReplicatedProps, PreAttributeChange, OnRep 등)
+- 모든 캐릭터가 `AttackSpeed` Attribute를 갖게 됨 (자판기 로봇만 사용하더라도)
+- PrimaryAttributes GE에서 초기값 설정 필요
+
+---
+
+### 방안 C: GA 내부 float 변수 + GE Duration 감시
+
+**개요**: GA에 `AttackSpeedMultiplier` 변수를 두고, 공격속도 버프 GA가 ASC의 GE 적용/제거 콜백을 통해 이 변수를 수정.
+
+**장점**:
+- AttributeSet 변경 불필요
+- 자판기 로봇 전용으로 캡슐화
+
+**단점**:
+- GA 간 직접 참조 → 높은 결합도
+- GE 만료 콜백 처리 복잡
+- 지속시간 리셋, 스택 관리를 수동 구현
+- 멀티플레이어 동기화 별도 처리 필요
+
+---
+
+### 방안 비교표
+
+| 항목 | A: GE 스택 조회 | B: Attribute 추가 | C: GA 내부 변수 |
+|------|-----------------|-------------------|-----------------|
+| 기존 코드 수정 범위 | 없음 (태그만 추가) | AttributeSet 수정 | 없음 |
+| 구현 복잡도 | 낮음 | 중 | 상 |
+| 확장성 | 낮음 | 높음 | 낮음 |
+| GAS 패턴 준수 | 부분적 | 완전 | 비표준 |
+| UI 연동 용이성 | 중 | 상 | 하 |
+| 멀티플레이어 동기화 | 자동 (GE 리플리케이션) | 자동 (Attribute 리플리케이션) | 수동 |
+| 다른 캐릭터 영향 | 없음 | Attribute 추가됨 | 없음 |
+| 스택/지속시간 관리 | GE 정책 자동 | GE 정책 자동 | 수동 |
+
+### 추천: 방안 A
+
+현재 공격속도를 다른 소스에서 수정할 계획이 없으므로 가장 단순한 방안 A를 채택.
+향후 확장 필요 시 방안 B로 마이그레이션 가능 (GE 스택 조회 코드만 Attribute 조회로 교체).
+
+---
+
+## 6. GE: `GE_VendingMachine_AttackSpeedBuff`
+
+**Blueprint GE**: `Content/Blueprints/AbilitySystem/VendingMachine/GE_VendingMachine_AttackSpeedBuff`
+
+### GE 상세 설정
+
+| 항목 | 값 | 설명 |
+|------|-----|------|
+| **Duration Policy** | `Has Duration` | 지속시간 있는 효과 |
+| **Duration Magnitude** | `Scalable Float = 10.0` | 10초 지속 |
+| **Stacking Type** | `Aggregate by Target` | 대상 기준 스택 집계 |
+| **Stack Limit Count** | `0` (무제한) | 스택 상한 없음 |
+| **Stack Duration Refresh Policy** | `Refresh on Successful Application` | 새 스택 시 10초 리셋 |
+| **Stack Period Reset Policy** | `Reset on Successful Application` | Period 리셋 |
+| **Stack Expiration Policy** | `Clear Entire Stack` | 만료 시 모든 스택 제거 |
+| **Modifiers** | 없음 | Attribute 수정하지 않음 |
+| **Granted Tags** | `Buff.VendingMachine.AttackSpeed` | 스택 조회용 태그 |
+
+### 스택 동작 시나리오
+
+```
+t=0s   Q 사용 → 스택 1, 10초 타이머 시작 → 발사간격 0.3/1.1 ≈ 0.273초
+t=3s   Q 사용 → 스택 2, 10초로 리셋      → 발사간격 0.3/1.2 = 0.250초
+t=8s   Q 사용 → 스택 3, 10초로 리셋      → 발사간격 0.3/1.3 ≈ 0.231초
+t=18s  지속시간 만료 → 모든 스택 제거     → 발사간격 0.3초 (원래대로)
+```
+
+---
+
+## 7. 투사체 목록
+
+### 총 4종 투사체 Blueprint
+
+모두 기존 `ADRProjectile`을 부모 클래스로 사용. C++ 서브클래스 불필요.
+
+| Blueprint 이름 | 용도 | 데미지 | 비고 |
+|----------------|------|--------|------|
+| `BP_VendingMachineProjectile` | 기본 공격 투사체 | 30 | GA의 `ProjectileClass`에 설정 |
+| `BP_CapsuleBronze` | 잭팟 동 캡슐 | 10 | 50% 확률, 캡슐 모델 A |
+| `BP_CapsuleSilver` | 잭팟 은 캡슐 | 30 | 40% 확률, 캡슐 모델 B |
+| `BP_CapsuleGold` | 잭팟 금 캡슐 | 150 | 10% 확률, 캡슐 모델 C |
+
+**경로**: `Content/Blueprints/AbilitySystem/VendingMachine/`
+
+### 각 투사체 BP 설정
+
+**공통 설정**:
+- `Sphere` (USphereComponent): 콜리전 반경
+- `ProjectileMovement` (UProjectileMovementComponent): 속도, 중력 스케일
+- `LifeSpan`: 15초 (기본값)
+
+**차별화 설정**:
+| 항목 | 기본 투사체 | 동 캡슐 | 은 캡슐 | 금 캡슐 |
+|------|-----------|---------|---------|---------|
+| Mesh | 기본 투사체 메시 | 캡슐 모델 A | 캡슐 모델 B | 캡슐 모델 C |
+| ImpactEffect | 기본 히트 이펙트 | 동색 이펙트 | 은색 이펙트 | 금색 이펙트 |
+| ImpactSound | 기본 히트 사운드 | 동 히트음 | 은 히트음 | 금 히트음 |
+
+---
+
+## 8. 새로 추가/수정할 파일 목록
+
+### 새 C++ 파일 (4개)
+
+| 파일 | 내용 |
 |------|------|
-| `Source/DaeRune/Public/Actor/DRCleanserPart.h` | 부품 액터 선언 |
-| `Source/DaeRune/Private/Actor/DRCleanserPart.cpp` | 부품 픽업/드롭/설치 로직 |
-| `Source/DaeRune/Public/Character/DRCharacter.h` | 플레이어 캐릭터 선언 (1P/3P 메시) |
-| `Source/DaeRune/Private/Character/DRCharacter.cpp` | 캐릭터 메시 가시성, 부품 픽업 |
+| `Source/DaeRune/Public/AbilitySystem/Abilities/DRVendingMachineBasicAttack.h` | BlueprintCallable 도구 함수 + UPROPERTY 선언 |
+| `Source/DaeRune/Private/AbilitySystem/Abilities/DRVendingMachineBasicAttack.cpp` | 타이머 관리, 투사체 스폰, 잭팟 로직, 공격속도 조회 |
+| `Source/DaeRune/Public/AbilitySystem/Abilities/DRVendingMachineAttackSpeedBuff.h` | AttackSpeedBuffEffect UPROPERTY만 선언 |
+| `Source/DaeRune/Private/AbilitySystem/Abilities/DRVendingMachineAttackSpeedBuff.cpp` | 생성자만 (거의 빈 파일) |
 
----
+### 수정 C++ 파일 (2개)
 
-## 설계 방향
-
-### 핵심 아이디어
-**`ADRCharacter`에 1인칭용 부품 메시 컴포넌트를 추가**하고, 부품 픽업 시:
-- 기존 `ADRCleanserPart` 액터는 **3P 메시**의 `TestPartHand` 소켓에 부착 → `OwnerNoSee(true)` 설정 → 다른 플레이어에게만 보임
-- `ADRCharacter`의 새로운 1P 부품 메시는 **1P 메시(FirstPersonMesh)**의 `TestPartHand` 소켓에 부착 → `OnlyOwnerSee(true)` 설정 → 주인에게만 보임
-
-### 이 설계를 선택한 이유
-1. **책임 분리**: 캐릭터가 자신의 1P 표시를 관리 (WaterPump 3P 빔과 동일한 패턴)
-2. **부품 액터 독립성**: `ADRCleanserPart`는 캐릭터의 1P/3P 메시 구조를 알 필요 없음
-3. **리플리케이션 단순화**: `CarriedPart`가 이미 리플리케이트되므로 `OnRep_CarriedPart`에서 1P 메시 동기화 가능
-4. **기존 패턴과 일관성**: WaterPump 빔이 이미 동일한 1P/3P 분리 패턴을 사용 중
-
----
-
-## 상세 구현 단계
-
-### 1단계: ADRCharacter에 1인칭 부품 메시 컴포넌트 추가
-
-#### DRCharacter.h 수정
-
-```cpp
-// ========== 부품 1인칭 표시 ==========
-
-// 1인칭 시점에서 보이는 부품 메시 (주인에게만 보임)
-UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Part System")
-TObjectPtr<UStaticMeshComponent> FirstPersonPartMesh;
-```
-
-**위치**: `FirstPersonMesh` 선언 근처 또는 부품 시스템 섹션에 추가
-
-#### DRCharacter.cpp 생성자 수정
-
-```cpp
-// 1인칭 부품 메시 생성 (픽업 전에는 비활성)
-FirstPersonPartMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FirstPersonPartMesh"));
-FirstPersonPartMesh->SetupAttachment(FirstPersonMesh, FName("TestPartHand"));
-FirstPersonPartMesh->SetOnlyOwnerSee(true);       // 주인에게만 보임
-FirstPersonPartMesh->bCastDynamicShadow = false;
-FirstPersonPartMesh->CastShadow = false;
-FirstPersonPartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-FirstPersonPartMesh->SetVisibility(false);         // 초기에는 숨김
-```
-
-**핵심 포인트**:
-- `SetupAttachment(FirstPersonMesh, "TestPartHand")` — 1P 메시의 소켓에 직접 부착
-- `SetOnlyOwnerSee(true)` — 주인 클라이언트에서만 렌더링
-- 초기 `SetVisibility(false)` — 부품을 들고 있지 않을 때는 안 보임
-
----
-
-### 2단계: ADRCleanserPart의 3P 부품 메시에 OwnerNoSee 설정
-
-#### DRCleanserPart.cpp `PickupPart()` 수정
-
-현재 코드:
-```cpp
-void ADRCleanserPart::PickupPart(ADRCharacter* Character)
-{
-    // ... (기존 로직)
-    AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
-    // ...
-}
-```
-
-수정 후:
-```cpp
-void ADRCleanserPart::PickupPart(ADRCharacter* Character)
-{
-    // ... (기존 로직 유지)
-
-    // 3P 메시에 부착 (기존과 동일)
-    AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
-
-    // 3P 부품은 다른 플레이어에게만 보이도록 설정
-    PartMesh->SetOwnerNoSee(true);
-
-    // 캐릭터의 1인칭 부품 메시 활성화
-    Character->ShowFirstPersonPart(PartMesh->GetStaticMesh());
-
-    // ... (기존 사운드, 태그 로직)
-}
-```
-
-#### DRCleanserPart.cpp `OnRep_bIsCarried()` 수정
-
-현재 코드 (bIsCarried == true 분기):
-```cpp
-AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
-```
-
-수정 후:
-```cpp
-AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
-
-// 3P 부품은 다른 플레이어에게만 보이도록 설정
-PartMesh->SetOwnerNoSee(true);
-
-// 캐릭터의 1인칭 부품 메시 활성화
-CarryingCharacter->ShowFirstPersonPart(PartMesh->GetStaticMesh());
-```
-
-현재 코드 (bIsCarried == false 분기):
-```cpp
-DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-```
-
-수정 후 (else 분기 앞에 추가):
-```cpp
-// 이전 캐릭터의 1인칭 부품 메시 숨기기
-// (CarryingCharacter는 이미 nullptr일 수 있으므로 이전 값 캐시 필요)
-// → 3단계에서 OnRep_CarriedPart로 처리
-```
-
-**주의**: `OnRep_bIsCarried`에서 `CarryingCharacter`가 이미 nullptr일 수 있으므로, 1P 메시 숨기기는 `ADRCharacter::OnRep_CarriedPart()`에서 처리하는 것이 더 안전함 (3단계 참조).
-
-#### DRCleanserPart.cpp `DropFromCarrier()` 수정
-
-```cpp
-void ADRCleanserPart::DropFromCarrier()
-{
-    if (!HasAuthority()) return;
-
-    // 1인칭 부품 메시 숨기기 (드롭 전에 캐릭터 참조가 유효한 시점)
-    if (CarryingCharacter)
-    {
-        CarryingCharacter->HideFirstPersonPart();
-    }
-
-    // 기존 로직
-    DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-    bIsCarried = false;
-    CarryingCharacter = nullptr;
-
-    // OwnerNoSee 복원 (바닥에 떨어진 부품은 모두에게 보여야 함)
-    PartMesh->SetOwnerNoSee(false);
-
-    // ... (기존 콜리전 복원 로직)
-}
-```
-
-#### DRCleanserPart.cpp `InstallPart()` 수정
-
-```cpp
-void ADRCleanserPart::InstallPart()
-{
-    if (!HasAuthority()) return;
-
-    // 1인칭 부품 메시 숨기기
-    if (CarryingCharacter)
-    {
-        CarryingCharacter->HideFirstPersonPart();
-    }
-
-    // 기존 태그 제거 로직
-    UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(CarryingCharacter->GetAbilitySystemComponent());
-    if (DRASC)
-    {
-        DRASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
-    }
-
-    Destroy();
-}
-```
-
----
-
-### 3단계: ADRCharacter에 1인칭 부품 표시/숨기기 함수 추가
-
-#### DRCharacter.h에 함수 선언 추가
-
-```cpp
-// 1인칭 부품 메시 표시 (부품 픽업 시 호출)
-void ShowFirstPersonPart(UStaticMesh* InPartMesh);
-
-// 1인칭 부품 메시 숨기기 (부품 드롭/설치 시 호출)
-void HideFirstPersonPart();
-```
-
-#### DRCharacter.cpp에 함수 구현 추가
-
-```cpp
-void ADRCharacter::ShowFirstPersonPart(UStaticMesh* InPartMesh)
-{
-    if (!FirstPersonPartMesh || !InPartMesh) return;
-
-    FirstPersonPartMesh->SetStaticMesh(InPartMesh);
-    FirstPersonPartMesh->SetVisibility(true);
-}
-
-void ADRCharacter::HideFirstPersonPart()
-{
-    if (!FirstPersonPartMesh) return;
-
-    FirstPersonPartMesh->SetVisibility(false);
-    FirstPersonPartMesh->SetStaticMesh(nullptr);
-}
-```
-
-#### DRCharacter.cpp `OnRep_CarriedPart()` 수정
-
-현재 코드:
-```cpp
-void ADRCharacter::OnRep_CarriedPart()
-{
-    // 클라이언트 시각적 효과
-}
-```
-
-수정 후:
-```cpp
-void ADRCharacter::OnRep_CarriedPart()
-{
-    if (CarriedPart)
-    {
-        // 부품을 들고 있으면 1인칭 부품 메시 표시
-        if (UStaticMeshComponent* PMesh = CarriedPart->GetPartMesh())
-        {
-            ShowFirstPersonPart(PMesh->GetStaticMesh());
-        }
-    }
-    else
-    {
-        // 부품이 없으면 1인칭 부품 메시 숨기기
-        HideFirstPersonPart();
-    }
-}
-```
-
-**이 방식의 장점**: 서버에서 `CarriedPart`가 변경되면 `OnRep_CarriedPart`가 클라이언트에서 자동 호출되어 1P 메시가 올바르게 동기화됨.
-
-#### DRCleanserPart.h에 Getter 추가
-
-```cpp
-// 부품 메시 Getter (캐릭터에서 1P 메시 복제에 사용)
-UFUNCTION(BlueprintCallable, Category = "CleanserPart")
-UStaticMeshComponent* GetPartMesh() const { return PartMesh; }
-```
-
----
-
-### 4단계: 드롭/설치 시 3P 부품의 OwnerNoSee 복원
-
-#### OnRep_bIsCarried() else 분기 수정
-
-```cpp
-void ADRCleanserPart::OnRep_bIsCarried()
-{
-    if (bIsCarried && CarryingCharacter)
-    {
-        // ... (기존 부착 로직)
-
-        // 3P 부품은 주인에게 안 보이게
-        PartMesh->SetOwnerNoSee(true);
-
-        // 1P 부품 표시
-        CarryingCharacter->ShowFirstPersonPart(PartMesh->GetStaticMesh());
-    }
-    else
-    {
-        // ... (기존 분리 로직)
-
-        // 바닥에 떨어진 부품은 모두에게 보이도록 복원
-        PartMesh->SetOwnerNoSee(false);
-
-        // Note: 1P 메시 숨기기는 OnRep_CarriedPart에서 처리됨
-    }
-}
-```
-
----
-
-### 5단계: 대기실 가시성 처리
-
-#### DRCharacter.cpp `SetWaitingRoomVisibility()` 수정
-
-```cpp
-void ADRCharacter::SetWaitingRoomVisibility(bool bInWaitingRoom)
-{
-    if (bInWaitingRoom)
-    {
-        // ... (기존 로직)
-
-        // 1인칭 부품 메시도 숨기기 (대기실에서는 불필요)
-        if (FirstPersonPartMesh)
-        {
-            FirstPersonPartMesh->SetVisibility(false);
-        }
-    }
-    else
-    {
-        // 일반 FPS 모드 복원
-        UpdateMeshVisibility();
-        // ... (기존 로직)
-
-        // 부품을 들고 있으면 1인칭 부품 메시 복원
-        if (bIsCarryingPart && CarriedPart && FirstPersonPartMesh)
-        {
-            if (UStaticMeshComponent* PMesh = CarriedPart->GetPartMesh())
-            {
-                ShowFirstPersonPart(PMesh->GetStaticMesh());
-            }
-        }
-    }
-}
-```
-
----
-
-### 6단계: 사망 시 부품 드롭 처리 확인
-
-현재 `DropCarriedPart()`가 사망 시 호출되는지 확인 필요. 사망 시:
-- `HideFirstPersonPart()` 호출 → 1P 부품 메시 숨김
-- `PartMesh->SetOwnerNoSee(false)` 복원 → 바닥에 떨어진 부품 모두에게 보임
-
-이미 `DropCarriedPart()` → `DropFromCarrier()` 흐름에서 처리되므로 추가 작업 불필요.
-단, 사망 로직에서 `DropCarriedPart()`가 호출되는지 `DRCharacterBase` 또는 `DRAttributeSet`의 사망 처리 코드를 확인해야 함.
-
----
-
-## 수정 파일 요약
-
-| 파일 | 수정 내용 |
+| 파일 | 변경 내용 |
 |------|----------|
-| `DRCharacter.h` | `FirstPersonPartMesh` 컴포넌트 추가, `ShowFirstPersonPart()`, `HideFirstPersonPart()` 함수 선언 |
-| `DRCharacter.cpp` | 생성자에서 1P 부품 메시 생성, Show/Hide 함수 구현, `OnRep_CarriedPart()` 구현, `SetWaitingRoomVisibility()` 수정 |
-| `DRCleanserPart.h` | `GetPartMesh()` Getter 추가 |
-| `DRCleanserPart.cpp` | `PickupPart()`에서 OwnerNoSee + 1P 메시 활성화, `DropFromCarrier()`에서 1P 메시 비활성화 + OwnerNoSee 복원, `InstallPart()`에서 1P 메시 비활성화, `OnRep_bIsCarried()`에서 OwnerNoSee + 1P 메시 동기화 |
+| `Source/DaeRune/Public/DRGameplayTags.h` | 4개 태그 멤버 추가 |
+| `Source/DaeRune/Private/DRGameplayTags.cpp` | 4개 태그 등록 |
+
+### 새 Blueprint 에셋 (7개)
+
+| 에셋 | 부모 클래스 | 설명 |
+|------|------------|------|
+| `GA_VendingMachine_BasicAttack` | `UDRVendingMachineBasicAttack` | 기본 공격 GA (ActivateAbility BP 구현) |
+| `GA_VendingMachine_AttackSpeedBuff` | `UDRVendingMachineAttackSpeedBuff` | 공격속도 버프 GA (ActivateAbility BP 구현) |
+| `GE_VendingMachine_AttackSpeedBuff` | `UGameplayEffect` | 공격속도 버프 GE (스택 정책) |
+| `BP_VendingMachineProjectile` | `ADRProjectile` | 기본 공격 투사체 |
+| `BP_CapsuleBronze` | `ADRProjectile` | 동 캡슐 투사체 |
+| `BP_CapsuleSilver` | `ADRProjectile` | 은 캡슐 투사체 |
+| `BP_CapsuleGold` | `ADRProjectile` | 금 캡슐 투사체 |
+
+**경로**: 모두 `Content/Blueprints/AbilitySystem/VendingMachine/`
 
 ---
 
-## 소켓 전제 조건
+## 9. 데이터 에셋 설정 (에디터에서)
 
-1P 메시(`FirstPersonMesh`)와 3P 메시(`GetMesh()`) 모두 `TestPartHand` 소켓이 존재해야 함.
-- **3P 메시**: 이미 존재 (현재 부품 부착에 사용 중)
-- **1P 메시**: 소켓 존재 여부 확인 필요 → 없으면 1P 스켈레톤에 `TestPartHand` 소켓 추가 필요 (언리얼 에디터에서 작업)
+### `PlayerCharacterClassInfo` 데이터 에셋
+
+`CharacterClassInformation` 맵에 `VendingMachineRobot` 항목 추가:
+
+```
+VendingMachineRobot:
+  PrimaryAttributes: GE_VendingMachine_PrimaryAttributes (MaxHealth, MaxWater, MoveSpeed)
+  VitalAttributes: GE_VendingMachine_VitalAttributes (초기 Health, Water)
+  StartupAbilities:
+    - GA_VendingMachine_BasicAttack     (StartupInputTag = InputTag.LMB)
+    - GA_VendingMachine_AttackSpeedBuff (StartupInputTag = InputTag.Q)
+  DeathAbilities: (기존 공통 사망 GA 재사용)
+```
+
+`CharacterBPClasses` 맵에 `VendingMachineRobot → BP_VendingMachineCharacter` 추가
 
 ---
 
-## 실행 흐름 요약
+## 10. 전체 흐름 요약
 
-### 픽업 시 (서버)
+### 기본 공격 + 잭팟 흐름
+
 ```
-ADRCharacter::PickupPart()
-  → ADRCleanserPart::PickupPart(Character)
-    → Actor를 3P 메시의 TestPartHand에 부착
-    → PartMesh->SetOwnerNoSee(true)         ← 3P 부품: 다른 플레이어에게만 보임
-    → Character->ShowFirstPersonPart(mesh)   ← 1P 부품: 주인에게만 보임
-  → bIsCarryingPart = true, CarriedPart = Part (리플리케이트)
+[LMB 꾹 누름]
+  → ASC가 InputTag.LMB 매칭 GA 활성화
+  → Event ActivateAbility (Blueprint)
+    → StartAutoFire() 호출 (C++ BlueprintCallable)
+
+StartAutoFire() (C++):
+  → ExecuteShot() 즉시 1회 (첫 발)
+  → SetTimer(GetCurrentFireInterval()) → 0.3초(÷공격속도) 후 FireShotAndScheduleNext
+
+FireShotAndScheduleNext() (C++ 타이머 콜백, 반복):
+  → ExecuteShot()
+  → SetTimer(GetCurrentFireInterval()) → 다음 발사 예약
+
+ExecuteShot() (C++, 서버 전용):
+  CurrentJackpotStacks < MaxJackpotStacks(5)?
+    ├─ Yes → SpawnProjectile() (부모 함수, 기본 투사체 30 데미지)
+    │        → CurrentJackpotStacks++
+    │        → OnNormalShotFired() → BP에서 발사 VFX/SFX
+    │        → OnJackpotStacksChanged(스택, 최대) → BP에서 UI 갱신
+    │
+    └─ No  → CurrentJackpotStacks = 0
+             → FMath::FRand() 확률 판정
+             ├─ 50% → SpawnActorDeferred(BronzeCapsule, 10 데미지)
+             ├─ 40% → SpawnActorDeferred(SilverCapsule, 30 데미지)
+             └─ 10% → SpawnActorDeferred(GoldCapsule, 150 데미지)
+             → OnCapsuleShotFired(Tier) → BP에서 잭팟 연출
+             → OnJackpotStacksChanged(0, 5) → BP에서 UI 갱신
+
+[LMB 해제]
+  → Event InputReleased (Blueprint)
+    → StopAutoFire() 호출 (C++ BlueprintCallable)
+    → EndAbility()
+  (JackpotStacks는 리셋하지 않음, 다음 LMB에서 이어서 카운트)
 ```
 
-### 픽업 시 (클라이언트 - 리플리케이션)
-```
-OnRep_bIsCarried() [ADRCleanserPart]
-  → 3P 메시에 부착 + OwnerNoSee(true)
-  → CarryingCharacter->ShowFirstPersonPart(mesh)
+### 공격속도 버프 흐름
 
-OnRep_CarriedPart() [ADRCharacter]
-  → ShowFirstPersonPart(CarriedPart의 StaticMesh)
 ```
+[Q 누름]
+  → ASC가 InputTag.Q 매칭 GA 활성화
+  → Event ActivateAbility (Blueprint)
+    → CommitAbility()
+      → CheckCost(): Water >= 50 확인
+      → ApplyCost(): Water 50 소모
+    → MakeOutgoingGameplayEffectSpec(AttackSpeedBuffEffect)
+    → ApplyGameplayEffectSpecToSelf()
+      ├─ 첫 사용:  GE 생성, 스택 1, 10초 타이머
+      ├─ 중첩 사용: 스택 +1, 지속시간 10초 리셋
+      └─ 만료:     모든 스택 일괄 제거
+    → (선택적) 버프 VFX/SFX
+    → EndAbility() (즉발)
 
-### 드롭 시 (서버)
-```
-ADRCharacter::DropCarriedPart()
-  → Character->HideFirstPersonPart()        ← 1P 부품 숨김
-  → ADRCleanserPart::DropFromCarrier()
-    → DetachFromActor
-    → PartMesh->SetOwnerNoSee(false)         ← 바닥 부품: 모두에게 보임
-  → CarriedPart = nullptr (리플리케이트 → OnRep_CarriedPart → HideFirstPersonPart)
-```
+[기본 공격 발사 시 공격속도 반영]
+  → GetCurrentFireInterval() (C++)
+    → ASC에서 Buff.VendingMachine.AttackSpeed 태그 GE 검색
+    → 스택 수 조회
+    → return BaseFireInterval / (1 + 스택수 × 0.1)
 
-### 설치 시 (서버)
-```
-ADRCharacter::InstallCarriedPart()
-  → ADRCleanserPart::InstallPart()
-    → HideFirstPersonPart()                  ← 1P 부품 숨김
-    → Destroy()
-  → CarriedPart = nullptr (리플리케이트 → OnRep_CarriedPart → HideFirstPersonPart)
+  발사 간격 예시:
+    스택 0 → 0.3 / 1.0 = 0.300초
+    스택 1 → 0.3 / 1.1 ≈ 0.273초
+    스택 2 → 0.3 / 1.2 = 0.250초
+    스택 3 → 0.3 / 1.3 ≈ 0.231초
 ```
 
 ---
 
-## 주의 사항
+## 11. 멀티플레이어 고려사항
 
-1. **OwnerNoSee의 Owner**: `AttachToComponent`로 부착하면 부품 액터의 Owner가 자동으로 설정되지 않음. `PartMesh->SetOwnerNoSee(true)`가 올바르게 동작하려면 부품 액터의 Owner를 캐릭터(또는 캐릭터의 Owner인 PlayerController)로 설정해야 할 수 있음. 필요 시 `PickupPart()`에서 `SetOwner(Character)` 또는 `SetOwner(Character->GetOwner())` 호출 추가.
+| 항목 | 서버 | 클라이언트 |
+|------|------|-----------|
+| 투사체 스폰 | 서버에서만 (`HasAuthority()`) | `ADRProjectile` 자동 리플리케이트 |
+| 잭팟 스택 | 서버에서만 관리 | `OnJackpotStacksChanged` 이벤트로 UI 갱신 |
+| 캡슐 확률 결정 | 서버에서 `FMath::FRand()` | 투사체 리플리케이션으로 결과 전달 |
+| 공격속도 버프 GE | 서버에서 적용 | GE 리플리케이션으로 자동 동기화 |
+| Water 소모 | 서버에서 처리 | Attribute 리플리케이션으로 동기화 |
+| 발사 간격 | 서버에서 타이머 관리 | 클라이언트는 투사체 수신만 처리 |
 
-2. **리플리케이션 타이밍**: `OnRep_bIsCarried`와 `OnRep_CarriedPart`는 독립적으로 도착할 수 있음. 두 콜백 모두에서 1P 메시를 처리하여 어느 것이 먼저 도착하든 정상 동작하도록 함.
+---
 
-3. **1P 메시 소켓**: 1P 스켈레톤에 `TestPartHand` 소켓이 없으면 부품이 보이지 않음. 반드시 언리얼 에디터에서 1P 스켈레톤에 해당 소켓을 추가해야 함.
+## 12. 구현 순서
 
-4. **StaticMesh 참조**: `FirstPersonPartMesh`의 StaticMesh는 `ADRCleanserPart`의 `PartMesh`에서 동적으로 복사하므로, 부품마다 다른 메시를 사용해도 자동으로 대응됨.
+### Phase 1: C++ 코드 (컴파일 필요)
+1. **Gameplay Tags 추가** (`DRGameplayTags.h/.cpp`) — 4개 태그
+2. **기본 공격 GA C++ 클래스** (`DRVendingMachineBasicAttack.h/.cpp`)
+   - BlueprintCallable: `StartAutoFire()`, `StopAutoFire()`
+   - BlueprintPure: `GetJackpotStacks()`, `IsJackpotReady()`, `GetCurrentFireInterval()`
+   - BlueprintImplementableEvent: `OnNormalShotFired()`, `OnCapsuleShotFired()`, `OnJackpotStacksChanged()`
+   - Private: `ExecuteShot()`, `FireShotAndScheduleNext()`, `CalculateTargetLocation()`
+3. **공격속도 버프 GA C++ 클래스** (`DRVendingMachineAttackSpeedBuff.h/.cpp`)
+   - `AttackSpeedBuffEffect` UPROPERTY만 선언
+4. **빌드 및 컴파일 확인**
 
-5. **부품 액터 Owner 설정**: `SetOwnerNoSee`가 동작하려면 해당 컴포넌트가 속한 액터(또는 부모 액터)에 올바른 Owner가 설정되어 있어야 함. `ADRCleanserPart::PickupPart()`에서 `SetOwner(Character->GetOwner())`를 호출하고, `DropFromCarrier()`에서 `SetOwner(nullptr)`로 복원해야 함. 이것이 가장 중요한 포인트.
+### Phase 2: Blueprint 에셋 (에디터에서)
+5. **투사체 BP 4종 생성** — `ADRProjectile` 기반, 메시/이펙트/사운드 설정
+6. **GE_VendingMachine_AttackSpeedBuff 생성** — 스택 정책 설정
+7. **GA_VendingMachine_BasicAttack BP 생성**
+   - ActivateAbility에서 `StartAutoFire()` 호출
+   - InputReleased에서 `StopAutoFire()` → `EndAbility()` 호출
+   - `OnNormalShotFired`, `OnCapsuleShotFired`, `OnJackpotStacksChanged` 이벤트 구현
+   - 디테일 패널에서 프로퍼티 설정 (투사체 클래스, 데미지, 확률, 간격 등)
+8. **GA_VendingMachine_AttackSpeedBuff BP 생성**
+   - ActivateAbility에서 `CommitAbility` → `ApplyGameplayEffectSpecToSelf` → `EndAbility`
+9. **PlayerCharacterClassInfo에 VendingMachineRobot 추가**
+10. **캐릭터 BP 생성 및 메시/소켓 설정**
+
+### Phase 3: 테스트
+11. **기능 테스트**
+    - LMB 홀드 시 0.3초 간격 연사 확인
+    - LMB 해제 시 발사 즉시 중지 확인
+    - 잭팟 5스택 후 캡슐 발사 확인 (스택 리셋, 다음 발사부터 다시 카운트)
+    - 캡슐 확률 분포 확인 (다수 시행)
+    - 캡슐별 데미지 차이 확인 (10, 30, 150)
+    - Q 스킬 사용 → 발사 간격 감소 확인
+    - Q 스킬 중첩 → 추가 감소 + 지속시간 리셋 확인
+    - 버프 만료 후 발사 간격 원복 확인
+    - Water 50 미만 시 Q 스킬 사용 불가 확인
+    - 멀티플레이어: 투사체 리플리케이션, GE 동기화 확인

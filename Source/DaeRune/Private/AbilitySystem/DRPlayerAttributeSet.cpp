@@ -222,13 +222,39 @@ float UDRPlayerAttributeSet::CalculateContainerDamage(float CurrentHealth, float
 
 void UDRPlayerAttributeSet::ApplyHitReactAndKnockback(const FEffectProperties& Props)
 {
+	UE_LOG(LogTemp, Warning, TEXT("=== Player ApplyHitReactAndKnockback called ==="));
+	UE_LOG(LogTemp, Warning, TEXT("TargetCharacter: %s"), Props.TargetCharacter ? *Props.TargetCharacter->GetName() : TEXT("NULL"));
+	UE_LOG(LogTemp, Warning, TEXT("TargetASC: %s"), Props.TargetASC ? TEXT("Valid") : TEXT("NULL"));
+
 	// Hit React
 	if (Props.TargetCharacter && Props.TargetCharacter->Implements<UCombatInterface>() &&
 		!ICombatInterface::Execute_IsBeingShocked(Props.TargetCharacter))
 	{
+		UE_LOG(LogTemp, Warning, TEXT("Conditions passed. Attempting TryActivateAbilitiesByTag with Effects.HitReact"));
 		FGameplayTagContainer TagContainer;
 		TagContainer.AddTag(FDRGameplayTags::Get().Effects_HitReact);
-		Props.TargetASC->TryActivateAbilitiesByTag(TagContainer);
+		const bool bSuccess = Props.TargetASC->TryActivateAbilitiesByTag(TagContainer);
+		UE_LOG(LogTemp, Warning, TEXT("TryActivateAbilitiesByTag result: %s"), bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"));
+
+		if (!bSuccess && Props.TargetASC)
+		{
+			FGameplayTagContainer ActivatableAbilities;
+			TArray<FGameplayAbilitySpec*> MatchingSpecs;
+			Props.TargetASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(TagContainer, MatchingSpecs);
+			UE_LOG(LogTemp, Warning, TEXT("Matching ability specs count: %d"), MatchingSpecs.Num());
+			for (const FGameplayAbilitySpec* Spec : MatchingSpecs)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("  - Ability: %s, IsActive: %s"),
+					*Spec->Ability->GetName(),
+					Spec->IsActive() ? TEXT("true") : TEXT("false"));
+			}
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Conditions FAILED - TargetCharacter: %s, IsBeingShocked: %s"),
+			Props.TargetCharacter ? TEXT("Valid") : TEXT("NULL"),
+			Props.TargetCharacter ? (ICombatInterface::Execute_IsBeingShocked(Props.TargetCharacter) ? TEXT("true") : TEXT("false")) : TEXT("N/A"));
 	}
 
 	// Knockback

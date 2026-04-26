@@ -35,6 +35,7 @@ public:
 	FGameplayTag State_Corrupt;
 	FGameplayTag State_Carrying;
 	FGameplayTag State_InCombat;
+	FGameplayTag State_VendingMachine_JackpotReady;
 
 	// 적 상태
 	FGameplayTag State_Enraged;
@@ -57,6 +58,7 @@ public:
 
 	// ���� ȿ��
 	FGameplayTag Buff_Elite;
+	FGameplayTag Buff_VendingMachine_AttackSpeed;
 	
 	// ����� ȿ��
 	FGameplayTag Debuff_Burn; 
@@ -85,12 +87,14 @@ public:
 	FGameplayTag Abilities_Summon;
 	FGameplayTag Abilities_Skill1;
 
-	// ��ü�� �����Ƽ 
+	// ��ü�� �����Ƽ
 	FGameplayTag Abilities_Fire_FireBolt;
 	FGameplayTag Abilities_Lightning_Electrocute;
 	FGameplayTag Abilities_GardenRobot_ClawSwipe;
 	FGameplayTag Abilities_GardenRobot_WaterPump;
 	FGameplayTag Abilities_GardenRobot_SeedCannon;
+	FGameplayTag Abilities_VendingMachine_BasicAttack;
+	FGameplayTag Abilities_VendingMachine_AttackSpeedBuff;
 
 	// Ÿ�� ����
 	FGameplayTag Abilities_HitReact;

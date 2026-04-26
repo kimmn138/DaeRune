@@ -1,55 +1,19 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "AbilitySystem/Abilities/DRSeedCannon.h"
 #include "Actor/DRSeedProjectile.h"
-#include "Character/DRCharacter.h"
-#include "DRGameplayTags.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Interaction/CombatInterface.h"
-#include "Kismet/KismetMathLibrary.h"
 
 void UDRSeedCannon::SpawnSeedProjectile(const FVector& ForwardVector, const FGameplayTag& SocketTag)
 {
     const bool bIsServer = GetAvatarActorFromActorInfo()->HasAuthority();
     if (!bIsServer) return;
 
-    // 1인칭 메시에서 발사 위치 가져오기
-    FVector SocketLocation;
-    ADRCharacter* DRChar = Cast<ADRCharacter>(GetAvatarActorFromActorInfo());
-    if (DRChar && DRChar->FirstPersonMesh)
-    {
-        const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
-        FName SocketName = NAME_None;
-
-        if (SocketTag.MatchesTagExact(GameplayTags.CombatSocket_Weapon))
-        {
-            SocketName = DRChar->WeaponTipSocketName;
-        }
-        else if (SocketTag.MatchesTagExact(GameplayTags.CombatSocket_LeftHand))
-        {
-            SocketName = DRChar->LeftHandSocketName;
-        }
-        else if (SocketTag.MatchesTagExact(GameplayTags.CombatSocket_RightHand))
-        {
-            SocketName = DRChar->RightHandSocketName;
-        }
-
-        if (SocketName != NAME_None && DRChar->FirstPersonMesh->DoesSocketExist(SocketName))
-        {
-            SocketLocation = DRChar->FirstPersonMesh->GetSocketLocation(SocketName);
-        }
-        else
-        {
-            SocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(
-                GetAvatarActorFromActorInfo(), SocketTag);
-        }
-    }
-    else
-    {
-        SocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(
-            GetAvatarActorFromActorInfo(), SocketTag);
-    }
+    // 3인칭 메시에서 발사 위치 가져오기
+    FVector SocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(
+        GetAvatarActorFromActorInfo(), SocketTag);
 
     // ī�޶� ������ ���͸� �޾Ƽ� 60�� ���� ȸ��
     // ������ ���͸� �������� �����
