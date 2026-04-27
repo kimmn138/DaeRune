@@ -27,7 +27,9 @@
       "Bash(\"D:/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development -Project=\"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -WaitMutex -FromMsBuild)",
       "Bash(while read hash msg)",
       "Bash(do echo \"=== $msg ===\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(ls:*)",
+      "Bash(file:*)"
     ]
   }
 }

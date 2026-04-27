@@ -4,16 +4,11 @@
 #include "AbilitySystem/Abilities/DRSeedCannon.h"
 #include "Actor/DRSeedProjectile.h"
 #include "GameFramework/ProjectileMovementComponent.h"
-#include "Interaction/CombatInterface.h"
 
-void UDRSeedCannon::SpawnSeedProjectile(const FVector& ForwardVector, const FGameplayTag& SocketTag)
+void UDRSeedCannon::SpawnSeedProjectile(const FVector& ForwardVector, const FVector& SocketLocation)
 {
     const bool bIsServer = GetAvatarActorFromActorInfo()->HasAuthority();
     if (!bIsServer) return;
-
-    // 3인칭 메시에서 발사 위치 가져오기
-    FVector SocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(
-        GetAvatarActorFromActorInfo(), SocketTag);
 
     // ī�޶� ������ ���͸� �޾Ƽ� 60�� ���� ȸ��
     // ������ ���͸� �������� �����

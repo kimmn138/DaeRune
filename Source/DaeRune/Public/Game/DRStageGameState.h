@@ -8,6 +8,8 @@
 #include "DRStageGameState.generated.h"
 
 class ADRDoorManager;
+class UNiagaraComponent;
+class UNiagaraSystem;
 
 // ������ ��ǥ ������Ʈ ��������Ʈ
 DECLARE_MULTICAST_DELEGATE(FOnPhaseObjectiveChanged);
@@ -172,6 +174,24 @@ public:
     UFUNCTION(NetMulticast, Reliable)
     void Multicast_PlayGameOverSound();
 
+    // ========== Phase3 스폰 포인트 VFX (Multicast RPC) ==========
+
+    // 일반 적 스폰 포인트 VFX 활성화
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_ActivateEnemySpawnPointVFX(const TArray<FVector>& SpawnPointLocations, UNiagaraSystem* NiagaraAsset);
+
+    // 일반 적 스폰 포인트 VFX 비활성화
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_DeactivateEnemySpawnPointVFX();
+
+    // 엘리트 보스 스폰 포인트 VFX 활성화
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_ActivateEliteSpawnPointVFX(const TArray<FVector>& SpawnPointLocations, UNiagaraSystem* NiagaraAsset);
+
+    // 엘리트 보스 스폰 포인트 VFX 비활성화
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_DeactivateEliteSpawnPointVFX();
+
 protected:
     // ========== ���ø����̼� �ݹ� ==========
     UFUNCTION()
@@ -256,4 +276,11 @@ private:
     // ========== UI ������Ʈ ==========
     UPROPERTY(ReplicatedUsing = OnRep_CurrentObjectiveProgress)
     int32 CurrentObjectiveProgress = 0;
+
+    // ========== Phase3 VFX 컴포넌트 캐시 ==========
+    UPROPERTY()
+    TArray<TObjectPtr<UNiagaraComponent>> EnemySpawnPointVFXComponents;
+
+    UPROPERTY()
+    TArray<TObjectPtr<UNiagaraComponent>> EliteSpawnPointVFXComponents;
 };

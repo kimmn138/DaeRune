@@ -48,7 +48,21 @@ void UDRPhase3::OnPhaseStart()
 	{
 		InitializeActiveSpawnPoints();
 		FindEnemySpawnPoints();
-		
+
+		// 일반 적 스폰 포인트 VFX 활성화
+		if (GameState && EnemySpawnPointNiagaraSystem)
+		{
+			TArray<FVector> SpawnPointLocations;
+			for (const TObjectPtr<AActor>& SpawnPoint : EnemySpawnPoints)
+			{
+				if (SpawnPoint)
+				{
+					SpawnPointLocations.Add(SpawnPoint->GetActorLocation());
+				}
+			}
+			GameState->Multicast_ActivateEnemySpawnPointVFX(SpawnPointLocations, EnemySpawnPointNiagaraSystem);
+		}
+
 		DefenseStartTime = World->GetTimeSeconds();
 		World->GetTimerManager().SetTimer(
 			DefenseTimerHandle,
@@ -73,7 +87,14 @@ void UDRPhase3::OnPhaseStart()
 void UDRPhase3::OnPhaseEnd()
 {
 	Super::OnPhaseEnd();
-	
+
+	// 스폰 포인트 VFX 비활성화
+	if (GameState)
+	{
+		GameState->Multicast_DeactivateEnemySpawnPointVFX();
+		GameState->Multicast_DeactivateEliteSpawnPointVFX();
+	}
+
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(WaveTimerHandle);
@@ -81,6 +102,7 @@ void UDRPhase3::OnPhaseEnd()
 		World->GetTimerManager().ClearTimer(DefenseTimerHandle);
 		World->GetTimerManager().ClearTimer(WaveTimerUpdateHandle);
 		World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
+		World->GetTimerManager().ClearTimer(EliteSpawnVFXTimerHandle);
 	}
 
 	for (const TObjectPtr<ADRCleanserSite>& Site : CleanserSites)
@@ -115,6 +137,7 @@ void UDRPhase3::BeginDestroy()
 		World->GetTimerManager().ClearTimer(DefenseTimerHandle);
 		World->GetTimerManager().ClearTimer(WaveTimerUpdateHandle);
 		World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
+		World->GetTimerManager().ClearTimer(EliteSpawnVFXTimerHandle);
 	}
 
 	Super::BeginDestroy();
@@ -240,12 +263,49 @@ void UDRPhase3::StartNextWave()
 	{
 		if (CleanserSites.Num() > 0 && CleanserSites[0])
 		{
+			// 보스 스폰 포인트 위치 수집
+			TArray<FVector> BossSpawnLocations;
 			for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 			{
 				AActor* BossSpawnPoint = *It;
 				if (BossSpawnPoint && BossSpawnPoint->ActorHasTag(BossSpawnPointTag))
 				{
-					SpawnEliteMonster(BossSpawnPoint->GetActorLocation());
+					BossSpawnLocations.Add(BossSpawnPoint->GetActorLocation());
+				}
+			}
+
+			// 엘리트 스폰 포인트 VFX 활성화
+			if (GameState && EliteSpawnPointNiagaraSystem && BossSpawnLocations.Num() > 0)
+			{
+				GameState->Multicast_ActivateEliteSpawnPointVFX(BossSpawnLocations, EliteSpawnPointNiagaraSystem);
+			}
+
+			// 엘리트 보스 스폰
+			for (const FVector& Location : BossSpawnLocations)
+			{
+				SpawnEliteMonster(Location);
+			}
+
+			// 일정 시간 후 엘리트 VFX 비활성화
+			if (GameState && BossSpawnLocations.Num() > 0)
+			{
+				if (UWorld* SpawnWorld = GetWorld())
+				{
+					SpawnWorld->GetTimerManager().ClearTimer(EliteSpawnVFXTimerHandle);
+
+					TWeakObjectPtr<ADRStageGameState> WeakGameState(GameState);
+					SpawnWorld->GetTimerManager().SetTimer(
+						EliteSpawnVFXTimerHandle,
+						[WeakGameState]()
+						{
+							if (ADRStageGameState* GS = WeakGameState.Get())
+							{
+								GS->Multicast_DeactivateEliteSpawnPointVFX();
+							}
+						},
+						EliteSpawnVFXDuration,
+						false
+					);
 				}
 			}
 		}

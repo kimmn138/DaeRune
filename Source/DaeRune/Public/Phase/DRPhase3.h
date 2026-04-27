@@ -11,6 +11,7 @@ class ADRPoisonGasActor;
 class ADREnemy;
 class ADRCharacter;
 class ADRCleanserSite;
+class UNiagaraSystem;
 
 UENUM(BlueprintType)
 enum class EPoisonGasSpawnPointType : uint8
@@ -252,6 +253,21 @@ private:
 	int32 CurrentSpawnCycleIndex = 0;
 
 	bool bEliteBossSpawned = false;
+
+	// ========== VFX ==========
+	// 일반 적 스폰 포인트에 표시할 나이아가라 에셋
+	UPROPERTY(EditDefaultsOnly, Category = "Phase3|VFX")
+	TObjectPtr<UNiagaraSystem> EnemySpawnPointNiagaraSystem;
+
+	// 엘리트 보스 스폰 포인트에 표시할 나이아가라 에셋
+	UPROPERTY(EditDefaultsOnly, Category = "Phase3|VFX")
+	TObjectPtr<UNiagaraSystem> EliteSpawnPointNiagaraSystem;
+
+	// 엘리트 스폰 포인트 VFX 표시 시간 (초)
+	UPROPERTY(EditDefaultsOnly, Category = "Phase3|VFX")
+	float EliteSpawnVFXDuration = 3.0f;
+
+	FTimerHandle EliteSpawnVFXTimerHandle;
 
 	TMap<TObjectPtr<ADRCleanserSite>, bool> CleanserSiteHalfHealthTriggered;
 
