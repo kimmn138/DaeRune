@@ -29,7 +29,8 @@
       "Bash(do echo \"=== $msg ===\")",
       "Bash(done)",
       "Bash(ls:*)",
-      "Bash(file:*)"
+      "Bash(file:*)",
+      "Bash(git status:*)"
     ]
   }
 }

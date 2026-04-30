@@ -149,6 +149,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Settings")
 	bool IsSettingsMenuOpen() const { return bIsSettingsMenuOpen; }
 
+	// Blueprint에서 위젯 생성/제거를 구현
+	UFUNCTION(BlueprintImplementableEvent, Category = "Settings")
+	void OnSettingsMenuOpened();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Settings")
+	void OnSettingsMenuClosed();
+
 	// ========== �Է� ��� ���� ==========
 
 	// ���� ������ �´� �Է� ���� ����
@@ -380,12 +387,6 @@ private:
 	void StopJump(const FInputActionValue& InputActionValue);
 	// ��ȣ�ۿ� Ű�� ������ ��
 	void HandleInteract();
-
-	UPROPERTY()
-	TObjectPtr<class UDRSettingsWidget> SettingsWidget;
-
-	UPROPERTY(EditDefaultsOnly, Category = "UI")
-	TSubclassOf<UDRSettingsWidget> SettingsWidgetClass;
 
 	// GAS �����Ƽ �Է� ó��
 	void AbilityInputTagPressed(FGameplayTag InputTag);

@@ -22,7 +22,6 @@
 #include "Player/DRPlayerState.h"
 #include "UI/WidgetController/DRWidgetController.h"
 #include "UI/WidgetController/OverlayWidgetController.h"
-#include "UI/Widget/DRSettingsWidget.h"
 #include "Game/DRSettingsManager.h"
 #include "Game/DRGameUserSettings.h"
 #include "Sound/DRSoundManager.h"
@@ -602,15 +601,11 @@ void ADRPlayerController::OnLevelEntered()
 	// 대기실 위젯 정리 (레벨 이동 시 무효화된 포인터 정리)
 	DestroyWaitingRoomUI();
 
-	// 설정 위젯 초기화 (레벨 이동 시 무효화된 포인터 정리)
-	if (IsValid(SettingsWidget))
+	// 설정 메뉴 상태 초기화 (레벨 이동 시)
+	if (bIsSettingsMenuOpen)
 	{
-		if (SettingsWidget->IsInViewport())
-		{
-			SettingsWidget->RemoveFromParent();
-		}
+		CloseSettingsMenu();
 	}
-	SettingsWidget = nullptr;
 	bIsSettingsMenuOpen = false;
 
 	// 관전 상태 초기화 (델리게이트 정리 포함)
@@ -938,40 +933,14 @@ void ADRPlayerController::OpenSettingsMenu()
 	// 이미 열려있으면 무시
 	if (bIsSettingsMenuOpen) return;
 
-	// 위젯이 없거나 무효화되었거나 현재 뷰포트에 없으면 새로 생성
-	// (SeamlessTravel 후 이전 월드의 위젯이 남아있을 수 있음)
-	bool bNeedNewWidget = !IsValid(SettingsWidget) || !SettingsWidget->IsInViewport();
+	bIsSettingsMenuOpen = true;
 
-	if (bNeedNewWidget)
-	{
-		// 기존 위젯 정리
-		if (SettingsWidget)
-		{
-			SettingsWidget->RemoveFromParent();
-			SettingsWidget = nullptr;
-		}
+	// 입력 모드 변경
+	SetInputMode(FInputModeUIOnly());
+	SetShowMouseCursor(true);
 
-		// 새 위젯 생성
-		if (SettingsWidgetClass)
-		{
-			SettingsWidget = CreateWidget<UDRSettingsWidget>(this, SettingsWidgetClass);
-			if (SettingsWidget)
-			{
-				SettingsWidget->AddToViewport(100); // 높은 Z-Order로 다른 UI 위에 표시
-				SettingsWidget->SetVisibility(ESlateVisibility::Collapsed); // 처음엔 숨김
-			}
-		}
-	}
-
-	if (IsValid(SettingsWidget))
-	{
-		SettingsWidget->OpenSettings();
-		bIsSettingsMenuOpen = true;
-
-		// 입력 모드 변경
-		SetInputMode(FInputModeUIOnly());
-		SetShowMouseCursor(true);
-	}
+	// Blueprint에서 위젯 생성
+	OnSettingsMenuOpened();
 }
 
 void ADRPlayerController::CloseSettingsMenu()
@@ -982,10 +951,8 @@ void ADRPlayerController::CloseSettingsMenu()
 	// 이미 닫혀있으면 무시
 	if (!bIsSettingsMenuOpen) return;
 
-	if (IsValid(SettingsWidget))
-	{
-		SettingsWidget->CloseSettings();
-	}
+	// Blueprint에서 위젯 제거
+	OnSettingsMenuClosed();
 
 	bIsSettingsMenuOpen = false;
 	RestoreDefaultInputMode();
