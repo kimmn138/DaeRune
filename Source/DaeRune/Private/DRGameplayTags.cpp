@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "DRGameplayTags.h"
@@ -170,6 +170,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Buff for Elite Monster")
 	);
 
+	GameplayTags.Buff_Elite_Roar = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.Elite.Roar"),
+		FString("Buff applied to allied enemies by Elite Monster Roar Aura")
+	);
+
 	GameplayTags.Buff_VendingMachine_AttackSpeed = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Buff.VendingMachine.AttackSpeed"),
 		FString("VendingMachine Attack Speed Buff")
@@ -300,6 +305,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Skill1 Ability Tag")
 	);
 
+	GameplayTags.Abilities_Skill2 = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.Skill2"),
+		FString("Skill2 Ability Tag")
+	);
+
 	/*
 	 * ��ü�� �����Ƽ 
 	 */
@@ -338,6 +348,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FName("Abilities.VendingMachine.AttackSpeedBuff"),
 		FString("VendingMachine Attack Speed Buff Ability Tag")
 	);
+
 
 	/*
 	 * Ÿ�� ����
@@ -379,6 +390,16 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Cooldown_Armadillo_RollCharge = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Cooldown.Armadillo.RollCharge"),
 		FString("Armadillo Roll Charge Cooldown Tag")
+	);
+
+	GameplayTags.Cooldown_Elite_Sweep = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Cooldown.Elite.Sweep"),
+		FString("Elite Sweep Attack Cooldown Tag")
+	);
+
+	GameplayTags.Cooldown_Elite_Roar = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Cooldown.Elite.Roar"),
+		FString("Elite Roar Cooldown Tag")
 	);
 
 	/*

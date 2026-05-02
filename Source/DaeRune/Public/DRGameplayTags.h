@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 #pragma once
 
@@ -58,6 +58,7 @@ public:
 
 	// ���� ȿ��
 	FGameplayTag Buff_Elite;
+	FGameplayTag Buff_Elite_Roar;
 	FGameplayTag Buff_VendingMachine_AttackSpeed;
 	
 	// ����� ȿ��
@@ -86,6 +87,7 @@ public:
 	FGameplayTag Abilities_Death;
 	FGameplayTag Abilities_Summon;
 	FGameplayTag Abilities_Skill1;
+	FGameplayTag Abilities_Skill2;
 
 	// ��ü�� �����Ƽ
 	FGameplayTag Abilities_Fire_FireBolt;
@@ -107,6 +109,8 @@ public:
 	// �����Ƽ ��Ÿ��
 	FGameplayTag Cooldown_Fire_FireBolt;
 	FGameplayTag Cooldown_Armadillo_RollCharge;
+	FGameplayTag Cooldown_Elite_Sweep;
+	FGameplayTag Cooldown_Elite_Roar;
 
 	// ���� ��ġ ����
 	FGameplayTag CombatSocket_Weapon;

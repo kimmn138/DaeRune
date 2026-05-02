@@ -436,12 +436,10 @@ void UDRPhase3::FindEnemySpawnPoints()
 
 	if (EnemySpawnPoints.Num() < 4)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Phase3: Need 4 enemy spawn points. Tag=%s, Found=%d"), *EnemySpawnPointTag.ToString(), EnemySpawnPoints.Num());
-	}
+}
 	else if (EnemySpawnPoints.Num() > 4)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Phase3: More than 4 enemy spawn points found. Tag=%s, Found=%d. Using first 4."), *EnemySpawnPointTag.ToString(), EnemySpawnPoints.Num());
-		EnemySpawnPoints.SetNum(4);
+EnemySpawnPoints.SetNum(4);
 	}
 
 	RemainingEnemySpawnPointIndices.Empty();
@@ -586,13 +584,7 @@ void UDRPhase3::SpawnMonsterByCycle()
 						CombatInterface->GetOnDeathDelegate().AddDynamic(this, &UDRPhaseBase::OnEnemyDeath);
 					}
 
-					if (bEliteBossSpawned)
-					{
-						if (UAbilitySystemComponent* ASC = SpawnedEnemy->GetAbilitySystemComponent())
-						{
-							ASC->AddLooseGameplayTag(FDRGameplayTags::Get().Buff_Elite);
-						}
-					}
+					// 기존 글로벌 Buff.Elite 태그 시스템은 포효(Roar) 오라로 대체됨
 
 					SpawnedEnemies.Add(SpawnedEnemy);
 					CheckGameOverConditions();
@@ -662,8 +654,7 @@ FWaveLevelModifier UDRPhase3::GetWaveLevelModifier(int32 WaveLevel) const
 		Modifier.SpawnCycleLengthPerPlayer = FMath::Max(4, Modifier.SpawnCycleLengthPerPlayer);
 		if (Modifier.SpawnCycleLengthPerPlayer % 4 != 0)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Phase3: Level%d cycle length should be a multiple of 4. Current=%d"), ClampedLevel, Modifier.SpawnCycleLengthPerPlayer);
-		}
+}
 
 		if (Modifier.MonsterSpawnCycle.Num() < Modifier.SpawnCycleLengthPerPlayer)
 		{
@@ -948,9 +939,6 @@ void UDRPhase3::FindPoisonGasSpawnPoints()
 
 		AllPoisonGasSpawnPoints.Add(PointData);
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("Phase3: Found %d poison gas spawn points via tag '%s'"),
-		AllPoisonGasSpawnPoints.Num(), *PoisonGasSpawnPointTag.ToString());
 }
 
 // 클렌저가 파괴되면 즉시 게임오버를 처리합니다.
@@ -1153,90 +1141,17 @@ void UDRPhase3::RemoveToxicGas()
 }
 
 // 엘리트 보스 활성 시 적/아군 태그를 부여합니다.
+// 기존 글로벌 태그 시스템은 포효(Roar) 스킬의 범위 기반 오라 버프로 대체됨.
 void UDRPhase3::GrantEliteBossTag()
 {
-	if (!bEliteBossSpawned) return;
-
-	if(!GameState) return;
-
-	for (TWeakObjectPtr<AActor>& EnemyPtr : SpawnedEnemies)
-	{
-		if (!EnemyPtr.IsValid()) continue;
-
-		ADREnemy* Enemy = Cast<ADREnemy>(EnemyPtr.Get());
-		if (!Enemy) continue;
-
-		if (UAbilitySystemComponent* ASC = Enemy->GetAbilitySystemComponent())
-		{
-			ASC->AddLooseGameplayTag(FDRGameplayTags::Get().Buff_Elite);
-		}
-	}
-	
-	TArray<ADRCharacter*> PlayerCharacters;
-	PlayerCharacters = GameState->GetAlivePlayers();
-	if (PlayerCharacters.Num() == 0) return;
-
-	for (ADRCharacter* Player : PlayerCharacters)
-	{
-		if (UAbilitySystemComponent* ASC = Player->GetAbilitySystemComponent())
-		{
-			ASC->AddLooseGameplayTag(FDRGameplayTags::Get().Debuff_Elite);
-		}
-	}
-
-	for (const TObjectPtr<ADRCleanserSite>& Site : CleanserSites)
-	{
-		if (!Site || !IsValid(Site)) continue;
-
-		if (UAbilitySystemComponent* ASC = Site->GetAbilitySystemComponent())
-		{
-			ASC->AddLooseGameplayTag(FDRGameplayTags::Get().Debuff_Elite);
-		}
-	}
 }
 
 // 엘리트 보스 비활성 시 부여한 태그를 제거합니다.
+// 기존 글로벌 태그 시스템은 포효(Roar) 스킬의 범위 기반 오라 버프로 대체됨.
 void UDRPhase3::RemoveEliteBossTag()
 {
-	if (bEliteBossSpawned) return;
-
-	if (!GameState) return;
-
-	for (TWeakObjectPtr<AActor>& EnemyPtr : SpawnedEnemies)
-	{
-		if (!EnemyPtr.IsValid()) continue;
-
-		ADREnemy* Enemy = Cast<ADREnemy>(EnemyPtr.Get());
-		if (!Enemy) continue;
-
-		if (UAbilitySystemComponent* ASC = Enemy->GetAbilitySystemComponent())
-		{
-			ASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().Buff_Elite);
-		}
-	}
-	
-	TArray<ADRCharacter*> PlayerCharacters;
-	PlayerCharacters = GameState->GetAlivePlayers();
-	if (PlayerCharacters.Num() == 0) return;
-
-	for (ADRCharacter* Player : PlayerCharacters)
-	{
-		if (UAbilitySystemComponent* ASC = Player->GetAbilitySystemComponent())
-		{
-			ASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().Debuff_Elite);
-		}
-	}
-
-	for (const TObjectPtr<ADRCleanserSite>& Site : CleanserSites)
-	{
-		if (!Site || !IsValid(Site)) continue;
-
-		if (UAbilitySystemComponent* ASC = Site->GetAbilitySystemComponent())
-		{
-			ASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().Debuff_Elite);
-		}
-	}
 }
+
 
 
 

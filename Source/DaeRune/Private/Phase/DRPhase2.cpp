@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "Phase/DRPhase2.h"
@@ -15,46 +15,45 @@ void UDRPhase2::OnPhaseStart()
 
 	if (!GameMode || !GameState) return;
 
-	// ��ǥ ����
+	// 占쏙옙표 占쏙옙占쏙옙
 	SetupPhaseObjective(2);
 
-	// GameState Phase2 �ʱ�ȭ
+	// GameState Phase2 占십깍옙화
 	GameState->SetCollectedParts(0);
 	GameState->SetCleanserActivated(false);
 
-	// Phase1에서 선택된 활성 클렌저 사이트 가져오기
+	// Phase1?먯꽌 ?좏깮???쒖꽦 ?대젋? ?ъ씠??媛?몄삤湲?
 	const TArray<TObjectPtr<ADRCleanserSite>>& ActiveSites = GetActiveCleanserSites();
 
-	// 클렌저 사이트 유효성 검사
+	// ?대젋? ?ъ씠???좏슚??寃??
 	if (ActiveSites.Num() != 2)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Phase2: ActiveCleanserSites가 2개가 아닙니다! 현재: %d개"), ActiveSites.Num());
-		return;
+return;
 	}
 
-	// �Ϸ�� ����Ʈ ���� �ʱ�ȭ
+	// 占싹뤄옙占?占쏙옙占쏙옙트 占쏙옙占쏙옙 占십깍옙화
 	CompletedSites.Empty();
 
-	// �� Ŭ���� ����Ʈ�� ��ǰ ��ġ ��������Ʈ ����
+	// 占쏙옙 클占쏙옙占쏙옙 占쏙옙占쏙옙트占쏙옙 占쏙옙품 占쏙옙치 占쏙옙占쏙옙占쏙옙占쏙옙트 占쏙옙占쏙옙
 	for (ADRCleanserSite* Site : ActiveSites)
 	{
 		if (Site)
 		{
-			// ��ǰ ��ġ �̺�Ʈ ����
+			// 占쏙옙품 占쏙옙치 占싱븝옙트 占쏙옙占쏙옙
 			Site->OnPartInstalled.AddDynamic(this, &UDRPhase2::OnPartInstalled);
 		}
 	}
 
-	// ���� ����Ʈ ã��
+	// 占쏙옙占쏙옙 占쏙옙占쏙옙트 찾占쏙옙
 	FindEnemySpawnPoints();
 
-	// ��ǰ�� ��� ����ġ�� �� ����
+	// 占쏙옙품占쏙옙 占쏙옙占?占쏙옙占쏙옙치占쏙옙 占쏙옙 占쏙옙占쏙옙
 	SpawnPartCarryingEnemies();
 }
 
 void UDRPhase2::OnPhaseEnd()
 {
-	// Ŭ���� ����Ʈ ��������Ʈ ���� ����
+	// 클占쏙옙占쏙옙 占쏙옙占쏙옙트 占쏙옙占쏙옙占쏙옙占쏙옙트 占쏙옙占쏙옙 占쏙옙占쏙옙
 	const TArray<TObjectPtr<ADRCleanserSite>>& ActiveSites = GetActiveCleanserSites();
 	for (ADRCleanserSite* Site : ActiveSites)
 	{
@@ -64,10 +63,10 @@ void UDRPhase2::OnPhaseEnd()
 		}
 	}
 
-	// �Ϸ� ���� �ʱ�ȭ
+	// 占싹뤄옙 占쏙옙占쏙옙 占십깍옙화
 	CompletedSites.Empty();
 
-	// ���� ����Ʈ �ʱ�ȭ
+	// 占쏙옙占쏙옙 占쏙옙占쏙옙트 占십깍옙화
 	EnemySpawnPoints.Empty();
 
 	Super::OnPhaseEnd();
@@ -82,7 +81,7 @@ void UDRPhase2::FindEnemySpawnPoints()
 
 	EnemySpawnPoints.Empty();
 
-	// �±׷� �������� ���� ����Ʈ ã��
+	// 占승그뤄옙 占쏙옙占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙占쏙옙트 찾占쏙옙
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Actor = *It;
@@ -97,26 +96,23 @@ void UDRPhase2::SpawnPartCarryingEnemies()
 {
 	if (!GameMode) return;
 
-	// 적 클래스 유효성 검사
+	// ???대옒???좏슚??寃??
 	if (!PartCarryingEnemyClass)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Phase2: PartCarryingEnemyClass가 설정되지 않았습니다!"));
-		return;
+return;
 	}
 
-	// 스폰 포인트 유효성 검사
+	// ?ㅽ룿 ?ъ씤???좏슚??寃??
 	if (EnemySpawnPoints.Num() < 1)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Phase2: 스폰 포인트를 찾을 수 없습니다! SpawnPointTag: %s"), *SpawnPointTag.ToString());
-		return;
+return;
 	}
 
 	if (EnemySpawnPoints.Num() != 4)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Phase2: 스폰 포인트가 4개가 아닙니다. 현재: %d개"), EnemySpawnPoints.Num());
-	}
+}
 
-	// 각 스폰 포인트에 적 생성
+	// 媛??ㅽ룿 ?ъ씤?몄뿉 ???앹꽦
 	for (AActor* SpawnPoint : EnemySpawnPoints)
 	{
 		if (!SpawnPoint) continue;
@@ -124,13 +120,13 @@ void UDRPhase2::SpawnPartCarryingEnemies()
 		ADREnemy* SpawnedEnemy = SpawnEnemyAtLocation(SpawnPoint);
 		if (SpawnedEnemy)
 		{
-			// ��������Ʈ ���ε�
+			// 占쏙옙占쏙옙占쏙옙占쏙옙트 占쏙옙占싸듸옙
 			if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(SpawnedEnemy))
 			{
 				CombatInterface->GetOnDeathDelegate().AddDynamic(this, &UDRPhaseBase::OnEnemyDeath);
 			}
 			
-			// ������ �� ���� (OnPhaseEnd���� ���� �� ������)
+			// 占쏙옙占쏙옙占쏙옙 占쏙옙 占쏙옙占쏙옙 (OnPhaseEnd占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙 占쏙옙占쏙옙占쏙옙)
 			SpawnedEnemies.Add(SpawnedEnemy);
 		}
 	}
@@ -143,15 +139,15 @@ ADREnemy* UDRPhase2::SpawnEnemyAtLocation(AActor* SpawnPoint)
 	UWorld* World = GameMode->GetWorld();
 	if (!World) return nullptr;
 
-	// ���� ����Ʈ�� ��ġ�� ȸ�� ��������
+	// 占쏙옙占쏙옙 占쏙옙占쏙옙트占쏙옙 占쏙옙치占쏙옙 회占쏙옙 占쏙옙占쏙옙占쏙옙占쏙옙
 	FVector Location = SpawnPoint->GetActorLocation();
 	FRotator Rotation = SpawnPoint->GetActorRotation();
 
-	// ���� �Ķ���� ����
+	// 占쏙옙占쏙옙 占식띰옙占쏙옙占?占쏙옙占쏙옙
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	// �� ����
+	// 占쏙옙 占쏙옙占쏙옙
 	ADREnemy* SpawnedEnemy = World->SpawnActor<ADREnemy>(
 		PartCarryingEnemyClass,
 		Location,
@@ -166,7 +162,7 @@ void UDRPhase2::OnPartInstalled(ADRCleanserSite* Site)
 {
 	if (!Site || !GameState) return;
 
-	// GameState ������Ʈ: ��ġ�� ��ǰ ���� ����
+	// GameState 占쏙옙占쏙옙占쏙옙트: 占쏙옙치占쏙옙 占쏙옙품 占쏙옙占쏙옙 占쏙옙占쏙옙
 	int32 TotalInstalledParts = 0;
 	const TArray<TObjectPtr<ADRCleanserSite>>& ActiveSites = GetActiveCleanserSites();
 	for (ADRCleanserSite* ActiveSite : ActiveSites)
@@ -179,35 +175,36 @@ void UDRPhase2::OnPartInstalled(ADRCleanserSite* Site)
 	GameState->SetCollectedParts(TotalInstalledParts);
 	GameState->UpdatePhaseObjectiveProgress(TotalInstalledParts);
 
-	// �ش� ����Ʈ�� ��ǰ ��ġ�� �Ϸ�Ǿ����� Ȯ��
+	// 占쌔댐옙 占쏙옙占쏙옙트占쏙옙 占쏙옙품 占쏙옙치占쏙옙 占싹뤄옙퓸占쏙옙占쏙옙占?확占쏙옙
 	if (Site->IsPartInstallationComplete())
 	{
-		// �Ϸ�� ����Ʈ�� ����
+		// 占싹뤄옙占?占쏙옙占쏙옙트占쏙옙 占쏙옙占쏙옙
 		CompletedSites.Add(Site);
 	}
 
-	// ������ �Ϸ� ���� üũ
+	// 占쏙옙占쏙옙占쏙옙 占싹뤄옙 占쏙옙占쏙옙 체크
 	CheckPhaseCompletion();
 }
 
 void UDRPhase2::CheckPhaseCompletion()
 {
-	// ��� Ŭ���� ����Ʈ�� ��ǰ�� 2���� ��ġ�Ǿ����� Ȯ��
+	// 占쏙옙占?클占쏙옙占쏙옙 占쏙옙占쏙옙트占쏙옙 占쏙옙품占쏙옙 2占쏙옙占쏙옙 占쏙옙치占실억옙占쏙옙占쏙옙 확占쏙옙
 	const TArray<TObjectPtr<ADRCleanserSite>>& ActiveSites = GetActiveCleanserSites();
 
-	// Ȱ�� ����Ʈ�� 2������ Ȯ��
+	// 활占쏙옙 占쏙옙占쏙옙트占쏙옙 2占쏙옙占쏙옙占쏙옙 확占쏙옙
 	if (ActiveSites.Num() != 2) return;
 
-	// �Ϸ�� ����Ʈ�� 2������ Ȯ��
+	// 占싹뤄옙占?占쏙옙占쏙옙트占쏙옙 2占쏙옙占쏙옙占쏙옙 확占쏙옙
 	if (CompletedSites.Num() == 2)
 	{
-		// Ŭ���� Ȱ��ȭ ���·� ����
+		// 클占쏙옙占쏙옙 활占쏙옙화 占쏙옙占승뤄옙 占쏙옙占쏙옙
 		GameState->SetCleanserActivated(true);
 
-		// Phase2 �Ϸ�
+		// Phase2 占싹뤄옙
 		if (GameMode)
 		{
 			GameMode->ValidatePhaseCompletion();
 		}
 	}
 }
+

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
+#include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "DRGameInstance.generated.h"
 
 class UDRSaveGame;
@@ -22,6 +23,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sound")
 	TObjectPtr<class UDRSoundDataAsset> SoundDataAsset;
 
+	// ========== 맵 전환 시 캐릭터 선택 보존 ==========
+
+	void SavePlayerClassSelection(const FString& PlayerName, EPlayerCharacterClass SelectedClass);
+	EPlayerCharacterClass LoadPlayerClassSelection(const FString& PlayerName) const;
+	void SaveAllPlayerSelections(UWorld* World);
+	void ClearPlayerClassSelections();
+
 	// ========== 진행도 저장/로드 ==========
 
 	UFUNCTION(BlueprintCallable, Category = "Save")
@@ -39,4 +47,7 @@ public:
 private:
 	UPROPERTY()
 	TObjectPtr<UDRSaveGame> CurrentSaveGame;
+
+	// 맵 전환 시 캐릭터 선택 보존용 (GameInstance는 맵 전환에서 절대 파괴되지 않음)
+	TMap<FString, EPlayerCharacterClass> PlayerClassSelections;
 };

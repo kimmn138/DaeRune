@@ -27,6 +27,7 @@
 #include "Components/WidgetComponent.h"
 #include "Game/DRLobbyGameState.h"
 #include "Game/DRTutorialGameMode.h"
+#include "Character/DRFacialExpressionComponent.h"
 
 ADRCharacter::ADRCharacter()
 {
@@ -79,6 +80,9 @@ ADRCharacter::ADRCharacter()
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationRoll = false;
 	bUseControllerRotationYaw = true;
+
+	// 표정 컴포넌트 생성
+	FacialExpressionComponent = CreateDefaultSubobject<UDRFacialExpressionComponent>(TEXT("FacialExpression"));
 
 	// 부품 시스템 초기화
 	bIsCarryingPart = false;
@@ -422,6 +426,12 @@ void ADRCharacter::BeginPlay()
 		Light->RegisterComponent();
 	}
 
+	// 표정 시스템 초기화 (3P 메시에 적용)
+	if (FacialExpressionComponent)
+	{
+		FacialExpressionComponent->InitializeFaceMaterial(GetMesh());
+	}
+
 	// 대기실이면 오버헤드 닉네임 위젯 숨김
 	if (UWorld* World = GetWorld())
 	{
@@ -670,6 +680,21 @@ void ADRCharacter::InitAbilityActorInfo()
 		EGameplayTagEventType::NewOrRemoved
 	).AddUObject(this, &ADRCharacter::StunTagChanged);
 
+	// 표정 시스템: HitReact 태그 바인딩
+	AbilitySystemComponent->RegisterGameplayTagEvent(
+		FDRGameplayTags::Get().Effects_HitReact,
+		EGameplayTagEventType::NewOrRemoved
+	).AddUObject(this, &ADRCharacter::HitReactTagChanged);
+
+	// 표정 시스템: 자판기 공속 버프 태그 바인딩
+	if (PlayerCharacterClass == EPlayerCharacterClass::VendingMachineRobot)
+	{
+		AbilitySystemComponent->RegisterGameplayTagEvent(
+			FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed,
+			EGameplayTagEventType::NewOrRemoved
+		).AddUObject(this, &ADRCharacter::AttackSpeedBuffTagChanged);
+	}
+
 	// �÷��̾� ��Ʈ�ѷ��� HUD �ʱ�ȭ ��û
 	if (ADRPlayerController* DRPlayerController = Cast<ADRPlayerController>(GetController()))
 	{
@@ -685,4 +710,20 @@ void ADRCharacter::InitAbilityActorInfo()
 
 	// �⺻ �Ӽ� �ʱ�ȭ
 	InitializeDefaultAttributes();
+}
+
+void ADRCharacter::HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
+{
+	if (NewCount > 0 && FacialExpressionComponent)
+	{
+		FacialExpressionComponent->OnHitReact();
+	}
+}
+
+void ADRCharacter::AttackSpeedBuffTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
+{
+	if (NewCount > 0 && FacialExpressionComponent)
+	{
+		FacialExpressionComponent->SetExpression(EFacialExpression::IncreasedAttackSpeed, 2.f);
+	}
 }

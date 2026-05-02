@@ -76,6 +76,9 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	// Seamless Travel 시 커스텀 프로퍼티 복사
+	virtual void CopyProperties(APlayerState* PlayerState) override;
+
 	// GAS ������Ʈ��
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;

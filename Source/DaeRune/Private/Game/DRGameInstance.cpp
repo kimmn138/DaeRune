@@ -1,9 +1,12 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "Game/DRGameInstance.h"
 #include "Game/DRSaveGame.h"
 #include "Kismet/GameplayStatics.h"
+#include "Player/DRPlayerState.h"
+#include "GameFramework/GameStateBase.h"
+#include "GameFramework/PlayerState.h"
 
 void UDRGameInstance::Init()
 {
@@ -42,6 +45,39 @@ void UDRGameInstance::LoadProgress()
 	}
 }
 
+void UDRGameInstance::SavePlayerClassSelection(const FString& PlayerName, EPlayerCharacterClass SelectedClass)
+{
+	PlayerClassSelections.Add(PlayerName, SelectedClass);
+}
+
+EPlayerCharacterClass UDRGameInstance::LoadPlayerClassSelection(const FString& PlayerName) const
+{
+	const EPlayerCharacterClass* Found = PlayerClassSelections.Find(PlayerName);
+	return Found ? *Found : EPlayerCharacterClass::GardenRobot;
+}
+
+void UDRGameInstance::SaveAllPlayerSelections(UWorld* World)
+{
+	if (!World) return;
+
+	AGameStateBase* GS = World->GetGameState<AGameStateBase>();
+	if (!GS) return;
+
+	PlayerClassSelections.Empty();
+	for (APlayerState* PS : GS->PlayerArray)
+	{
+		if (ADRPlayerState* DRPS = Cast<ADRPlayerState>(PS))
+		{
+			PlayerClassSelections.Add(DRPS->GetPlayerName(), DRPS->GetSelectedPlayerClass());
+		}
+	}
+}
+
+void UDRGameInstance::ClearPlayerClassSelections()
+{
+	PlayerClassSelections.Empty();
+}
+
 void UDRGameInstance::SaveProgress()
 {
 	if (CurrentSaveGame)
@@ -49,3 +85,4 @@ void UDRGameInstance::SaveProgress()
 		UGameplayStatics::SaveGameToSlot(CurrentSaveGame, UDRSaveGame::SaveSlotName, UDRSaveGame::UserIndex);
 	}
 }
+

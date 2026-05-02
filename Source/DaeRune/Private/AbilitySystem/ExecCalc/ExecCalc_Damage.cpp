@@ -65,6 +65,13 @@ void UExecCalc_Damage::Execute_Implementation(const FGameplayEffectCustomExecuti
 		Damage += DamageTypeValue;
 	}
 
+	// Elite Roar Aura: enemies with Buff.Elite.Roar deal 20% more damage
+	const UAbilitySystemComponent* SourceASC = ExecutionParams.GetSourceAbilitySystemComponent();
+	if (SourceASC && SourceASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Buff_Elite_Roar))
+	{
+		Damage *= 1.2f;
+	}
+
 	// 타겟의 AttributeSet 타입에 따라 올바른 IncomingDamage Attribute 사용
 	UAbilitySystemComponent* TargetASC = ExecutionParams.GetTargetAbilitySystemComponent();
 	FGameplayAttribute IncomingDamageAttribute;

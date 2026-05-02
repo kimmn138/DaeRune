@@ -15,6 +15,7 @@
 #include "Player/DRPlayerController.h"
 #include "Character/DRCharacter.h"
 #include "Components/AudioComponent.h"
+#include "Character/DRFacialExpressionComponent.h"
 
 ADRCharacterBase::ADRCharacterBase()
 {
@@ -220,6 +221,15 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 	{
 		MeshComp->SetSimulatePhysics(false);
 		MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	}
+
+	// Death 표정 적용 (Dissolve 전에 실행)
+	if (ADRCharacter* PC = Cast<ADRCharacter>(this))
+	{
+		if (PC->FacialExpressionComponent)
+		{
+			PC->FacialExpressionComponent->OnDeath();
+		}
 	}
 
 	// Dissolve ȿ�� ����

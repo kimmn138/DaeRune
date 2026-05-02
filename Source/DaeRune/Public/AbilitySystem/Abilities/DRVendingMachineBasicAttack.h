@@ -108,6 +108,7 @@ private:
 	int32 CurrentJackpotStacks = 0;
 	FTimerHandle AutoFireTimerHandle;
 	bool bIsFiring = false;
+	double LastShotTime = 0.0;
 
 	void FireShotAndScheduleNext();
 	void ExecuteShot();

@@ -30,7 +30,9 @@
       "Bash(done)",
       "Bash(ls:*)",
       "Bash(file:*)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "Bash(\"C:/Program Files/Epic Games/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development \"C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject\" -waitmutex)",
+      "Bash(\"/d/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development \"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -waitmutex)"
     ]
   }
 }

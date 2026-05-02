@@ -14,15 +14,28 @@ void UDRVendingMachineBasicAttack::StartAutoFire()
 	if (bIsFiring) return;
 	bIsFiring = true;
 
-	// 첫 발 즉시 발사
-	ExecuteShot();
-
-	// 다음 발사 스케줄링
+	const double CurrentTime = GetWorld()->GetTimeSeconds();
 	const float Interval = GetCurrentFireInterval();
-	GetWorld()->GetTimerManager().SetTimer(
-		AutoFireTimerHandle, this,
-		&UDRVendingMachineBasicAttack::FireShotAndScheduleNext,
-		Interval, false);
+	const double TimeSinceLastShot = CurrentTime - LastShotTime;
+
+	if (TimeSinceLastShot >= Interval)
+	{
+		// 인터벌 충분히 경과 → 즉시 발사
+		ExecuteShot();
+		GetWorld()->GetTimerManager().SetTimer(
+			AutoFireTimerHandle, this,
+			&UDRVendingMachineBasicAttack::FireShotAndScheduleNext,
+			Interval, false);
+	}
+	else
+	{
+		// 연타로 인해 인터벌 미경과 → 남은 시간 후 발사
+		const float RemainingTime = Interval - TimeSinceLastShot;
+		GetWorld()->GetTimerManager().SetTimer(
+			AutoFireTimerHandle, this,
+			&UDRVendingMachineBasicAttack::FireShotAndScheduleNext,
+			RemainingTime, false);
+	}
 }
 
 void UDRVendingMachineBasicAttack::StopAutoFire()
@@ -51,6 +64,8 @@ void UDRVendingMachineBasicAttack::FireShotAndScheduleNext()
 void UDRVendingMachineBasicAttack::ExecuteShot()
 {
 	if (!GetAvatarActorFromActorInfo() || !GetAvatarActorFromActorInfo()->HasAuthority()) return;
+
+	LastShotTime = GetWorld()->GetTimeSeconds();
 
 	const FVector TargetLocation = CalculateTargetLocation();
 

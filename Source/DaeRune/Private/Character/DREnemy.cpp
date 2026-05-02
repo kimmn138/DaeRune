@@ -389,14 +389,12 @@ void ADREnemy::BeginPlay()
 	if (UDRUserWidget* DRUserWidget = Cast<UDRUserWidget>(HealthBar->GetUserWidgetObject()))
 	{
 		DRUserWidget->SetWidgetController(this);
-		UE_LOG(LogTemp, Log, TEXT("1"));
-	}
+}
 
 	// 어트리뷰트 변화 이벤트 바인딩
 	if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets))
 	{
-		UE_LOG(LogTemp, Log, TEXT("2"));
-		// 체력 변화 델리게이트 바인딩
+// 체력 변화 델리게이트 바인딩
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRAS->GetHealthAttribute()).AddLambda(
 			[this](const FOnAttributeChangeData& Data)
 			{
@@ -695,3 +693,4 @@ void ADREnemy::GrantWaterToPlayers()
 		}
 	}
 }
+

@@ -13,6 +13,7 @@ class ADRCleanserPart;
 class UNiagaraComponent;
 class UNiagaraSystem;
 class UStaticMesh;
+class UDRFacialExpressionComponent;
 
 /**
  * �÷��̾� ĳ���� Ŭ����
@@ -134,6 +135,11 @@ public:
 	// 오버헤드 닉네임 위젯 가시성 제어 (WaitingRoom에서는 숨김, FreeRoam부터 표시)
 	void SetOverheadWidgetVisibility(bool bVisible);
 
+	// ========== 표정 시스템 ==========
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Facial Expression")
+	TObjectPtr<UDRFacialExpressionComponent> FacialExpressionComponent;
+
 	// ========== 대기실 슬롯 텔레포트 ==========
 
 	/** 서버에서 호출 → 모든 클라이언트(+서버)에서 즉시 위치 설정 (CMC 우회) */
@@ -191,6 +197,10 @@ private:
 
 	// 3P 빔 위치 업데이트 함수 (타이머 콜백)
 	void UpdateWaterPumpThirdPersonBeam();
+
+	// 표정 태그 콜백
+	void HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+	void AttackSpeedBuffTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 
 	// GAS 초기화
 	virtual void InitAbilityActorInfo() override;

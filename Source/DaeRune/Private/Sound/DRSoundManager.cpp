@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "Sound/DRSoundManager.h"
@@ -14,7 +14,7 @@ void UDRSoundManager::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	// AssetManager에서 로드된 SoundData 가져오기
+	// AssetManager?먯꽌 濡쒕뱶??SoundData 媛?몄삤湲?
 	if (UAssetManager* AssetManager = UAssetManager::GetIfInitialized())
 	{
 		if (UDRAssetManager* DRAssetManager = Cast<UDRAssetManager>(AssetManager))
@@ -23,14 +23,14 @@ void UDRSoundManager::Initialize(FSubsystemCollectionBase& Collection)
 		}
 	}
 
-	// AssetManager에서 못 가져왔으면 직접 로드 시도
+	// AssetManager?먯꽌 紐?媛?몄솕?쇰㈃ 吏곸젒 濡쒕뱶 ?쒕룄
 	if (!SoundData)
 	{
 		static const TCHAR* SoundDataPath = TEXT("/Game/Blueprints/Sound/Data/DA_SoundData.DA_SoundData");
 		SoundData = LoadObject<UDRSoundDataAsset>(nullptr, SoundDataPath);
 	}
 
-	// 마지막으로 GameInstance에서 시도 (에디터 폴백)
+	// 留덉?留됱쑝濡?GameInstance?먯꽌 ?쒕룄 (?먮뵒???대갚)
 	if (!SoundData)
 	{
 		if (UGameInstance* GI = GetGameInstance())
@@ -44,8 +44,7 @@ void UDRSoundManager::Initialize(FSubsystemCollectionBase& Collection)
 
 	if (!SoundData)
 	{
-		UE_LOG(LogTemp, Error, TEXT("DRSoundManager: SoundDataAsset is null! Sound effects will not play."));
-	}
+}
 }
 
 void UDRSoundManager::PlaySound2D(USoundBase* Sound)
@@ -201,3 +200,4 @@ UAudioComponent* UDRSoundManager::StartCleanserOperatingSound(const FVector& Loc
 		false
 	);
 }
+
