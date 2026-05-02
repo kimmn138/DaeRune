@@ -10,10 +10,6 @@ void UDRVOIPTalker::OnTalkingBegin(UAudioComponent* AudioComponent)
 
     if (!AudioComponent) return;
 
-	// ·ÎÄÃ ÇÃ·¹ÀÌ¾îÀÇ ¼³Á¤ °¡Á®¿À±â
-	if (UDRGameUserSettings* UserSettings = UDRGameUserSettings::GetDRGameUserSettings())
-	{
-		// º¼·ı Àû¿ë (0.0 ~ 2.0)
-		AudioComponent->SetVolumeMultiplier(UserSettings->VoiceVolume);
-	}
+	// ìŒì„±ì±„íŒ… ì œê±° ì˜ˆì • â€” ê¸°ë³¸ ë³¼ë¥¨ ì‚¬ìš©
+	AudioComponent->SetVolumeMultiplier(1.0f);
 }

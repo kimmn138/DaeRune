@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "Menu.h"
@@ -77,16 +77,6 @@ void UMenu::OnCreateSession(bool bWasSuccessful)
 {
 	if (bWasSuccessful)
 	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Yellow,
-				FString::Printf(TEXT("Session created successfully!"))
-			);
-		}
-
 		UWorld* World = GetWorld();
 		if (World)
 		{
@@ -95,15 +85,6 @@ void UMenu::OnCreateSession(bool bWasSuccessful)
 	}
 	else
 	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				15.f,
-				FColor::Red,
-				FString::Printf(TEXT("Failed to create session!"))
-			);
-		}
 		HostButton->SetIsEnabled(true);
 	}
 }
@@ -116,7 +97,7 @@ void UMenu::OnFindSessions(const TArray<FOnlineSessionSearchResult>& SessionResu
 		return;
 	}
 
-	// �� �ڵ�θ� ��ġ����ŷ
+	// 占쏙옙 占쌘듸옙罐占?占쏙옙치占쏙옙占쏙옙킹
 	bool bFoundRoom = false;
 
 	if (bWasSuccessful && SessionResults.Num() > 0)
@@ -126,19 +107,10 @@ void UMenu::OnFindSessions(const TArray<FOnlineSessionSearchResult>& SessionResu
 			FString FoundRoomCode;
 			Result.Session.SessionSettings.Get(FName("RoomCode"), FoundRoomCode);
 
-			// �Է��� �� �ڵ�� ��ġ�ϴ��� Ȯ��
+			// 占쌉뤄옙占쏙옙 占쏙옙 占쌘듸옙占?占쏙옙치占싹댐옙占쏙옙 확占쏙옙
 			if (FoundRoomCode == PendingJoinRoomCode)
 			{
-				if (GEngine)
-				{
-					GEngine->AddOnScreenDebugMessage(
-						-1,
-						5.f,
-						FColor::Green,
-						FString::Printf(TEXT("[Menu] MATCH! Joining session with code: %s"), *FoundRoomCode)
-					);
-				}
-				// const 참조이므로 복사본 생성 후 수정
+				// const 李몄“?대?濡?蹂듭궗蹂??앹꽦 ???섏젙
 				FOnlineSessionSearchResult ModifiableResult = Result;
 				ModifiableResult.Session.SessionSettings.bUseLobbiesIfAvailable = true;
 				ModifiableResult.Session.SessionSettings.bUsesPresence = true;
@@ -151,16 +123,6 @@ void UMenu::OnFindSessions(const TArray<FOnlineSessionSearchResult>& SessionResu
 
 	if (!bFoundRoom)
 	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				5.f,
-				FColor::Red,
-				FString::Printf(TEXT("No room found with code: %s"), *PendingJoinRoomCode)
-			);
-		}
-
 		JoinButton->SetIsEnabled(true);
 		PendingJoinRoomCode.Empty();
 	}
@@ -215,16 +177,6 @@ void UMenu::HostButtonClicked()
 
 void UMenu::JoinButtonClicked()
 {
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(
-			-1,
-			5.f,
-			FColor::Cyan,
-			TEXT("[Menu] JoinButtonClicked() called!")
-		);
-	}
-
 	if (!RoomCodeInputBox || !JoinButton)
 	{
 		return;
@@ -234,32 +186,14 @@ void UMenu::JoinButtonClicked()
 
 	if (InputRoomCode.Len() != ROOM_CODE_LENGTH)
 	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				5.f,
-				FColor::Red,
-				FString::Printf(TEXT("Room code must be 8 characters!"))
-			);
-		}
 		return;
 	}
 
-	// ���ĺ��� ���ڸ� ���
+	// 占쏙옙占식븝옙占쏙옙 占쏙옙占쌘몌옙 占쏙옙占?
 	for (TCHAR Char : InputRoomCode)
 	{
 		if (!FChar::IsAlnum(Char))
 		{
-			if (GEngine)
-			{
-				GEngine->AddOnScreenDebugMessage(
-					-1,
-					5.f,
-					FColor::Red,
-					TEXT("Room code must contain only letters and numbers!")
-				);
-			}
 			return;
 		}
 	}
@@ -277,3 +211,4 @@ void UMenu::MenuTearDown()
 {
 	RemoveFromParent();
 }
+

@@ -20,7 +20,19 @@
       "Bash(\"/c/Program Files/Epic Games/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development \"/c/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -waitmutex)",
       "Bash(cat:*)",
       "Bash(xxd:*)",
-      "Bash(\"/c/Program Files/Epic Games/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development -Project=\"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -WaitMutex -FromMsBuild)"
+      "Bash(\"/c/Program Files/Epic Games/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development -Project=\"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -WaitMutex -FromMsBuild)",
+      "Bash(reg query:*)",
+      "Bash(cmd.exe /c:*)",
+      "Bash(cmd.exe /c \"\"\"C:\\\\Program Files \\(x86\\)\\\\Microsoft Visual Studio\\\\2022\\\\BuildTools\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\"\" /version 2>NUL\")",
+      "Bash(\"D:/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development -Project=\"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -WaitMutex -FromMsBuild)",
+      "Bash(while read hash msg)",
+      "Bash(do echo \"=== $msg ===\")",
+      "Bash(done)",
+      "Bash(ls:*)",
+      "Bash(file:*)",
+      "Bash(git status:*)",
+      "Bash(\"C:/Program Files/Epic Games/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development \"C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject\" -waitmutex)",
+      "Bash(\"/d/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development \"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -waitmutex)"
     ]
   }
 }

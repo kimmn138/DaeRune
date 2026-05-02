@@ -10,6 +10,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Sound/DRSoundDataAsset.h"
 #include "DRAssetManager.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraComponent.h"
 
 ADRStageGameState::ADRStageGameState()
 {
@@ -324,4 +326,104 @@ void ADRStageGameState::Multicast_PlayGameOverSound_Implementation()
             }
         }
     }
+}
+
+// ========== Phase3 스폰 포인트 VFX ==========
+
+void ADRStageGameState::Multicast_ActivateEnemySpawnPointVFX_Implementation(
+    const TArray<FVector>& SpawnPointLocations, UNiagaraSystem* NiagaraAsset)
+{
+    if (!NiagaraAsset) return;
+
+    for (UNiagaraComponent* Comp : EnemySpawnPointVFXComponents)
+    {
+        if (Comp && IsValid(Comp))
+        {
+            Comp->DeactivateImmediate();
+            Comp->DestroyComponent();
+        }
+    }
+    EnemySpawnPointVFXComponents.Empty();
+
+    for (const FVector& Location : SpawnPointLocations)
+    {
+        UNiagaraComponent* NewComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+            this,
+            NiagaraAsset,
+            Location,
+            FRotator::ZeroRotator,
+            FVector(1.f),
+            false,
+            true,
+            ENCPoolMethod::None,
+            true
+        );
+
+        if (NewComp)
+        {
+            EnemySpawnPointVFXComponents.Add(NewComp);
+        }
+    }
+}
+
+void ADRStageGameState::Multicast_DeactivateEnemySpawnPointVFX_Implementation()
+{
+    for (UNiagaraComponent* Comp : EnemySpawnPointVFXComponents)
+    {
+        if (Comp && IsValid(Comp))
+        {
+            Comp->DeactivateImmediate();
+            Comp->DestroyComponent();
+        }
+    }
+    EnemySpawnPointVFXComponents.Empty();
+}
+
+void ADRStageGameState::Multicast_ActivateEliteSpawnPointVFX_Implementation(
+    const TArray<FVector>& SpawnPointLocations, UNiagaraSystem* NiagaraAsset)
+{
+    if (!NiagaraAsset) return;
+
+    for (UNiagaraComponent* Comp : EliteSpawnPointVFXComponents)
+    {
+        if (Comp && IsValid(Comp))
+        {
+            Comp->DeactivateImmediate();
+            Comp->DestroyComponent();
+        }
+    }
+    EliteSpawnPointVFXComponents.Empty();
+
+    for (const FVector& Location : SpawnPointLocations)
+    {
+        UNiagaraComponent* NewComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+            this,
+            NiagaraAsset,
+            Location,
+            FRotator::ZeroRotator,
+            FVector(1.f),
+            false,
+            true,
+            ENCPoolMethod::None,
+            true
+        );
+
+        if (NewComp)
+        {
+            EliteSpawnPointVFXComponents.Add(NewComp);
+        }
+    }
+}
+
+void ADRStageGameState::Multicast_DeactivateEliteSpawnPointVFX_Implementation()
+{
+    for (UNiagaraComponent* Comp : EliteSpawnPointVFXComponents)
+    {
+        if (Comp && IsValid(Comp))
+        {
+            Comp->DeactivateImmediate();
+            Comp->DestroyComponent();
+        }
+    }
+    EliteSpawnPointVFXComponents.Empty();
 }

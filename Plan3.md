@@ -1,2055 +1,1863 @@
-# 아르마딜로(Armadillo) 적 캐릭터 구현 계획 (Plan3.md)
+# Plan3: 설정 UI — C++ 코드 ↔ WBP Graph 연결 상세 설계
 
-기존 `ADREnemy` 시스템을 기반으로 **폼 전환(BasicForm ↔ BallForm)** 메커니즘을 가진 아르마딜로 적 캐릭터 구현 방법을 상세히 기술한다.
-
----
-
-## 에셋 현황
-
-### 스켈레탈 메시
-| 폼 | 경로 | 비고 |
-|----|------|------|
-| BasicForm | `Content/DaeRuneAssets/Characters/Enemy/Armadilo/BasicForm/Armadillo_v0_1_2.uasset` | 걸어다니는 기본 형태 |
-| BallForm | `Content/DaeRuneAssets/Characters/Enemy/Armadilo/RollForm/Armadillo_Ball_v0_1_0.uasset` | 둥글게 말린 볼 형태 |
-
-**중요**: BasicForm과 BallForm은 **서로 다른 Skeleton/리깅**을 사용한다. 하나의 AnimBP로 처리할 수 없으므로 **2개의 SkeletalMeshComponent + 2개의 AnimBP**가 필요하다.
-
-### 애니메이션
-| 폼 | 애니메이션 | 용도 |
-|----|-----------|------|
-| BasicForm | Idle | 기본 대기 |
-| BasicForm | Walk | 걷기 이동 |
-| BasicForm | BasicAttack | 근접 공격 |
-| BasicForm | Death | 사망 |
-| BasicForm | HitReact 1, 2, 3 | 피격 리액션 |
-| BasicForm | Stun | 스턴 상태 |
-| BasicForm | FormChange_BasicToBall | 기본→볼 폼 전환 |
-| BasicForm | FormChange_BallToBasic | 볼→기본 폼 전환 |
-| BallForm | Idle | 볼 대기 |
-| BallForm | Roll | 구르기 이동 |
-| BallForm | FormChange_BasicToBall | 기본→볼 폼 전환 |
-| BallForm | FormChange_BallToBasic | 볼→기본 폼 전환 |
+> **구현 순서**: 작은 위젯부터 큰 위젯 순서 (Bottom-Up)로 배치.
+> 작은 요소의 함수/디스패처를 먼저 만든 뒤, 큰 요소에서 바인딩하도록 한다.
 
 ---
 
-## 핵심 설계 결정
-
-### 1. 듀얼 메시 시스템 (리깅이 다른 2개의 폼)
-
-BasicForm과 BallForm의 Skeleton이 다르므로, **하나의 Actor에 2개의 SkeletalMeshComponent**를 배치한다.
+## 0. 전체 아키텍처 요약
 
 ```
-ADRArmadilloEnemy
-├── CapsuleComponent (Root)
-├── BasicFormMesh (SkeletalMeshComponent) ← 기본 폼 메시, 평시 Visible
-│   └── ABP_Armadillo_Basic (AnimInstance)
-├── BallFormMesh (SkeletalMeshComponent) ← 볼 폼 메시, 평시 Hidden
-│   └── ABP_Armadillo_Ball (AnimInstance)
-├── RollCollisionSphere (SphereComponent, R=30) ← 구르기 전방 충돌 감지용
-└── RollImpactSphere (SphereComponent, R=50) ← 충돌 시 효과 적용 범위
-```
-
-**폼 전환 시 처리 순서**:
-1. 전환 애니메이션 재생 (현재 폼의 AnimBP에서)
-2. 애니메이션 완료 시점에 AnimNotify 발동
-3. 현재 폼 메시 Hidden + 새 폼 메시 Visible
-4. CapsuleComponent 크기 조정 (볼 폼은 더 작을 수 있음)
-5. 내부 상태 플래그 갱신 (`bIsBallForm`)
-
-### 2. 공격 시스템 설계
-
-| 구분 | 기본 폼 (BasicForm) | 볼 폼 (BallForm) |
-|------|---------------------|-------------------|
-| 공격 유형 | 근접 공격 (Dog의 GA_DogBite 복사) | 롤링 돌진 스킬 |
-| 발동 조건 | BT에서 플레이어 감지 시 | 현재 타겟이 플레이어 + 쿨타임 10초 경과 |
-| GA 클래스 | `GA_ArmadilloBite` (BP) | `GA_ArmadilloRollCharge` (BP) |
-| 데미지 | 기본 근접 데미지 | 50 (대상 무관) + 클렌저 1.5배 |
-| 부가 효과 | 없음 | 플레이어 1초 스턴, 지형 충돌 시 본인 1.5초 스턴 |
-
-### 3. 볼 폼 롤링 스킬 상세
-
-```
-[스킬 발동 흐름]
-
-1. BT에서 스킬 조건 확인 (타겟=플레이어, 쿨타임 10초)
-   ↓
-2. ★ 타겟 선택 (폼 전환 전에 먼저 수행):
-   - 자신으로부터 3000 거리 내 플레이어 수집
-   - LineTrace로 각 플레이어와 사이에 벽 차단 여부 확인 (ECC_WorldStatic)
-   - 조건 만족 플레이어가 없으면 → 스킬 취소 (GA 즉시 EndAbility)
-   - 폼 전환 없이 기본 폼 유지, 쿨타임 미적용 (재시도 가능)
-   ↓
-3. 조건 만족 플레이어 중 랜덤 1명 선택
-   - 타겟팅 시점의 플레이어 위치 저장 (고정 목표점)
-   ↓
-4. 폼 전환: Basic → Ball (FormChange 애니메이션)
-   - BasicForm에서 FormChange_BasicToBall 몽타주 재생
-   - 애니메이션 완료 시 AnimNotify → FinishFormChange() → 메시 교체
-   ↓
-5. 일직선 돌진 시작
-   - 방향: 아르마딜로 → 저장된 목표점
-   - 속도: 시간에 따라 점진적 가속 (초기 200 → 최대 2000)
-   - 전방 충돌 감지: 반지름 30 구(Sphere Sweep)
-   ↓
-6-A. 충돌 감지 (첫 번째 대상)
-   → 충돌 지점에서 반지름 50 구 범위 판정
-   → 범위 내 대상에 따라 분기:
-
-   [6-A-1] 플레이어 또는 다른 적이 범위 내에 있음:
-     - 범위 내 모든 플레이어/적에게 50 데미지
-     - 플레이어에게 1초 스턴
-     - 클렌저 사이트가 범위 내이면 75 데미지 (1.5배)
-     - 아르마딜로: 스턴 없음, 즉시 기본 폼 복귀
-
-   [6-A-2] 범위 내에 지형지물만 있음 (플레이어/적 없음):
-     - 아르마딜로 본인 1.5초 스턴
-     - 이후 기본 폼 복귀
-
-6-B. 목표점 도달 (충돌 없이)
-   → 돌진 종료, 기본 폼 복귀
-
-7. 스킬 쿨타임 10초 시작
-```
-
-**핵심 변경점**: 타겟 유효성 검사를 폼 전환 **이전**에 수행한다. 이렇게 하면 유효한 타겟이 없을 때 불필요한 폼 전환 애니메이션이 재생되지 않고, 기본 폼을 유지한 채 즉시 다른 행동(근접 공격, 추적 등)으로 전환할 수 있다.
-
----
-
-## 제작 순서
-
----
-
-## Phase 1: C++ 클래스 — `ADRArmadilloEnemy`
-
-### 1-1. 헤더 파일 생성 (`Source/DaeRune/Public/Character/DRArmadilloEnemy.h`)
-
-```cpp
-// Copyright DaeRune
-
-#pragma once
-
-#include "CoreMinimal.h"
-#include "Character/DREnemy.h"
-#include "DRArmadilloEnemy.generated.h"
-
-class USphereComponent;
-
-/**
- * 롤링 충돌 결과 데이터 — C++에서 충돌 감지 후 GA(Blueprint)에 전달
- * GA가 이 데이터를 받아 데미지/스턴 등 효과를 직접 처리한다.
- */
-USTRUCT(BlueprintType)
-struct FRollImpactResult
-{
-    GENERATED_BODY()
-
-    /** 충돌 지점 (효과 범위의 중심) */
-    UPROPERTY(BlueprintReadOnly)
-    FVector ImpactLocation = FVector::ZeroVector;
-
-    /** 충돌 범위(반지름 50) 내 액터 목록 (자기 자신 제외) */
-    UPROPERTY(BlueprintReadOnly)
-    TArray<AActor*> HitActors;
-
-    /** 범위 내에 플레이어 또는 다른 적이 있었는지 (false = 지형지물만 충돌) */
-    UPROPERTY(BlueprintReadOnly)
-    bool bHitPlayerOrEnemy = false;
-};
-
-/** 롤링 충돌 발생 시 GA에 알리는 델리게이트 */
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRollImpact, const FRollImpactResult&, ImpactResult);
-
-/** 롤링이 충돌 없이 목표점에 도달했을 때 GA에 알리는 델리게이트 */
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnRollReachedTarget);
-
-/**
- * 아르마딜로 적: 기본 폼(걷기/근접공격)과 볼 폼(구르기/돌진 스킬) 전환
- *
- * C++은 폼 전환, 돌진 이동, 충돌 감지만 담당한다.
- * 데미지/스턴 등 효과 적용은 GA Blueprint(DRDamageGameplayAbility)에서 처리한다.
- */
-UCLASS()
-class DAERUNE_API ADRArmadilloEnemy : public ADREnemy
-{
-    GENERATED_BODY()
-
-public:
-    ADRArmadilloEnemy();
-    virtual void Tick(float DeltaTime) override;
-    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
-    /** Combat Interface Override */
-    virtual void MulticastHandleDeath_Implementation(const FVector& DeathImpulse) override;
-
-    // ===== 폼 전환 시스템 =====
-
-    /** 현재 볼 폼 여부 */
-    UFUNCTION(BlueprintPure, Category = "Armadillo|Form")
-    bool IsBallForm() const { return bIsBallForm; }
-
-    /** 폼 전환 요청 (서버) — 전환 애니메이션 끝에 AnimNotify에서 FinishFormChange 호출 */
-    UFUNCTION(BlueprintCallable, Category = "Armadillo|Form")
-    void StartFormChange(bool bToBallForm);
-
-    /** 폼 전환 완료 (AnimNotify에서 호출) — 메시 교체 + 상태 갱신 */
-    UFUNCTION(BlueprintCallable, Category = "Armadillo|Form")
-    void FinishFormChange();
-
-    // ===== 롤링 돌진 스킬 =====
-
-    /** 롤링 돌진 중 여부 */
-    UFUNCTION(BlueprintPure, Category = "Armadillo|Roll")
-    bool IsRolling() const { return bIsRolling; }
-
-    /** 돌진 시작 (GA에서 호출) */
-    UFUNCTION(BlueprintCallable, Category = "Armadillo|Roll")
-    void StartRollCharge(FVector TargetLocation);
-
-    /** 돌진 종료 (충돌 또는 목표 도달 시) */
-    UFUNCTION(BlueprintCallable, Category = "Armadillo|Roll")
-    void StopRollCharge();
-
-    /** 유효한 돌진 타겟 찾기: 3000 내 벽 없는 랜덤 플레이어 */
-    UFUNCTION(BlueprintCallable, Category = "Armadillo|Roll")
-    AActor* FindRollTarget() const;
-
-    // ===== 롤링 충돌 이벤트 (GA가 바인딩) =====
-
-    /** 충돌 발생 시 브로드캐스트 — GA가 이 이벤트를 받아 데미지/스턴 처리 */
-    UPROPERTY(BlueprintAssignable, Category = "Armadillo|Roll")
-    FOnRollImpact OnRollImpact;
-
-    /** 충돌 없이 목표점 도달 시 브로드캐스트 — GA가 폼 복귀 처리 */
-    UPROPERTY(BlueprintAssignable, Category = "Armadillo|Roll")
-    FOnRollReachedTarget OnRollReachedTarget;
-
-    // ===== 볼 폼 메시 참조 =====
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Armadillo|Mesh")
-    TObjectPtr<USkeletalMeshComponent> BallFormMesh;
-
-protected:
-    virtual void BeginPlay() override;
-    virtual void StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount) override;
-
-    // ===== 폼 전환 설정 =====
-
-    /** 볼 폼 전환 중 목표 상태 (true=볼 전환 중, false=기본 전환 중) */
-    UPROPERTY(BlueprintReadOnly, Category = "Armadillo|Form")
-    bool bPendingBallForm = false;
-
-    /** 볼 폼 상태 (복제) */
-    UPROPERTY(ReplicatedUsing = OnRep_BallForm, BlueprintReadOnly, Category = "Armadillo|Form")
-    bool bIsBallForm = false;
-
-    UFUNCTION()
-    void OnRep_BallForm();
-
-    /** 볼 폼 캡슐 반지름 */
-    UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Form")
-    float BallFormCapsuleRadius = 40.f;
-
-    /** 볼 폼 캡슐 반높이 */
-    UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Form")
-    float BallFormCapsuleHalfHeight = 40.f;
-
-    /** 기본 폼 캡슐 반지름 (BeginPlay에서 저장) */
-    float DefaultCapsuleRadius;
-
-    /** 기본 폼 캡슐 반높이 (BeginPlay에서 저장) */
-    float DefaultCapsuleHalfHeight;
-
-    // ===== 롤링 돌진 설정 =====
-
-    /** 돌진 상태 (복제) */
-    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Armadillo|Roll")
-    bool bIsRolling = false;
-
-    /** 돌진 목표 위치 */
-    UPROPERTY(BlueprintReadOnly, Category = "Armadillo|Roll")
-    FVector RollTargetLocation;
-
-    /** 돌진 방향 (정규화) */
-    UPROPERTY(BlueprintReadOnly, Category = "Armadillo|Roll")
-    FVector RollDirection;
-
-    /** 현재 돌진 속도 */
-    UPROPERTY(BlueprintReadOnly, Category = "Armadillo|Roll")
-    float CurrentRollSpeed = 0.f;
-
-    /** 돌진 초기 속도 */
-    UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
-    float RollInitialSpeed = 200.f;
-
-    /** 돌진 최대 속도 */
-    UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
-    float RollMaxSpeed = 2000.f;
-
-    /** 돌진 가속도 (초당 속도 증가량) */
-    UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
-    float RollAcceleration = 400.f;
-
-    /** 전방 충돌 감지 구 반지름 */
-    UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
-    float RollDetectionRadius = 30.f;
-
-    /** 충돌 효과 적용 구 반지름 */
-    UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
-    float RollImpactRadius = 50.f;
-
-    /** 타겟 검색 최대 거리 */
-    UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
-    float RollTargetSearchRange = 3000.f;
-
-private:
-    /** 돌진 중 Tick 처리 (이동 + 충돌 감지) */
-    void TickRollCharge(float DeltaTime);
-
-    /** 전방 충돌 감지 (SphereTrace) */
-    bool DetectRollCollision(FHitResult& OutHit) const;
-
-    /**
-     * 충돌 시 범위 내 액터를 수집하여 FRollImpactResult를 구성하고
-     * OnRollImpact 델리게이트를 브로드캐스트한다.
-     * ※ 데미지/스턴 적용은 하지 않음 — GA가 델리게이트를 받아 처리
-     */
-    void BroadcastRollImpact(const FVector& ImpactLocation);
-
-    /** 메시 가시성 업데이트 */
-    void UpdateMeshVisibility();
-};
-```
-
-**이전 설계와의 차이점**:
-- `RollDamage`, `CleanserDamageMultiplier`, `PlayerStunDuration`, `SelfStunDuration`, `RollSkillCooldown`, `RollStunEffectClass`, `RollDamageEffectClass` 프로퍼티 **제거** — 이 값들은 GA Blueprint의 `DRDamageGameplayAbility` 프로퍼티(`Damage`, `DamageEffectClass` 등)로 설정
-- `ApplyRollImpact()` → `BroadcastRollImpact()`로 변경 — 데미지를 직접 적용하지 않고 충돌 결과만 델리게이트로 전달
-- `FRollImpactResult` 구조체 추가 — 충돌 위치, 범위 내 액터 목록, 플레이어/적 존재 여부를 GA에 전달
-- `FOnRollImpact`, `FOnRollReachedTarget` 델리게이트 추가 — GA가 바인딩하여 충돌/도달 이벤트를 수신
-
-### 1-2. 소스 파일 생성 (`Source/DaeRune/Private/Character/DRArmadilloEnemy.cpp`)
-
-구현 핵심 로직:
-
-```cpp
-ADRArmadilloEnemy::ADRArmadilloEnemy()
-{
-    PrimaryActorTick.bCanEverTick = true;
-
-    // 볼 폼 메시 컴포넌트 생성
-    BallFormMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("BallFormMesh"));
-    BallFormMesh->SetupAttachment(GetRootComponent());
-    BallFormMesh->SetVisibility(false); // 기본 폼이 초기 상태
-    BallFormMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-}
-
-void ADRArmadilloEnemy::BeginPlay()
-{
-    Super::BeginPlay();
-
-    // 기본 캡슐 크기 저장
-    DefaultCapsuleRadius = GetCapsuleComponent()->GetUnscaledCapsuleRadius();
-    DefaultCapsuleHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
-}
-
-void ADRArmadilloEnemy::Tick(float DeltaTime)
-{
-    Super::Tick(DeltaTime);
-
-    if (HasAuthority() && bIsRolling)
-    {
-        TickRollCharge(DeltaTime);
-    }
-}
-
-// ===== 폼 전환 =====
-
-void ADRArmadilloEnemy::StartFormChange(bool bToBallForm)
-{
-    if (!HasAuthority()) return;
-    bPendingBallForm = bToBallForm;
-    // 전환 애니메이션은 GA에서 재생 → AnimNotify가 FinishFormChange() 호출
-}
-
-void ADRArmadilloEnemy::FinishFormChange()
-{
-    if (!HasAuthority()) return;
-    bIsBallForm = bPendingBallForm;
-    OnRep_BallForm(); // 서버 로컬도 갱신
-
-    // 캡슐 크기 조정
-    if (bIsBallForm)
-    {
-        GetCapsuleComponent()->SetCapsuleSize(BallFormCapsuleRadius, BallFormCapsuleHalfHeight);
-    }
-    else
-    {
-        GetCapsuleComponent()->SetCapsuleSize(DefaultCapsuleRadius, DefaultCapsuleHalfHeight);
-    }
-}
-
-void ADRArmadilloEnemy::OnRep_BallForm()
-{
-    UpdateMeshVisibility();
-}
-
-void ADRArmadilloEnemy::UpdateMeshVisibility()
-{
-    // 기본 메시 = GetMesh() (부모의 SkeletalMeshComponent)
-    GetMesh()->SetVisibility(!bIsBallForm);
-    BallFormMesh->SetVisibility(bIsBallForm);
-}
-
-// ===== 롤링 돌진 =====
-
-AActor* ADRArmadilloEnemy::FindRollTarget() const
-{
-    // 1. 월드 내 모든 플레이어 수집
-    // 2. 거리 3000 이내 필터링
-    // 3. LineTrace로 벽 차단 여부 확인 (ECC_WorldStatic 채널)
-    // 4. 조건 만족 플레이어 중 랜덤 1명 반환
-    // 5. 없으면 nullptr 반환
-}
-
-void ADRArmadilloEnemy::StartRollCharge(FVector TargetLocation)
-{
-    if (!HasAuthority()) return;
-
-    bIsRolling = true;
-    RollTargetLocation = TargetLocation;
-    RollDirection = (TargetLocation - GetActorLocation()).GetSafeNormal2D();
-    CurrentRollSpeed = RollInitialSpeed;
-
-    // AI 이동 중지 (CharacterMovement는 직접 제어)
-    if (DRAIController)
-    {
-        DRAIController->StopMovement();
-    }
-}
-
-void ADRArmadilloEnemy::StopRollCharge()
-{
-    if (!HasAuthority()) return;
-
-    bIsRolling = false;
-    CurrentRollSpeed = 0.f;
-    GetCharacterMovement()->Velocity = FVector::ZeroVector;
-}
-
-void ADRArmadilloEnemy::TickRollCharge(float DeltaTime)
-{
-    // 1. 가속
-    CurrentRollSpeed = FMath::Min(CurrentRollSpeed + RollAcceleration * DeltaTime, RollMaxSpeed);
-
-    // 2. 이동
-    FVector NewVelocity = RollDirection * CurrentRollSpeed;
-    GetCharacterMovement()->Velocity = FVector(NewVelocity.X, NewVelocity.Y,
-        GetCharacterMovement()->Velocity.Z);
-
-    // 3. 목표점 도달 확인
-    FVector ToTarget = RollTargetLocation - GetActorLocation();
-    ToTarget.Z = 0;
-    float Dot = FVector::DotProduct(ToTarget.GetSafeNormal(), RollDirection);
-    if (Dot <= 0.f) // 목표점을 지나침
-    {
-        StopRollCharge();
-        // ★ GA에 목표 도달 알림 → GA가 폼 복귀 처리
-        OnRollReachedTarget.Broadcast();
-        return;
-    }
-
-    // 4. 전방 충돌 감지
-    FHitResult HitResult;
-    if (DetectRollCollision(HitResult))
-    {
-        StopRollCharge();
-        // ★ 충돌 결과 수집 후 GA에 알림 → GA가 데미지/스턴 처리
-        BroadcastRollImpact(HitResult.ImpactPoint);
-    }
-}
-
-bool ADRArmadilloEnemy::DetectRollCollision(FHitResult& OutHit) const
-{
-    FVector Start = GetActorLocation();
-    FVector End = Start + RollDirection * CurrentRollSpeed * GetWorld()->GetDeltaSeconds();
-
-    FCollisionQueryParams Params;
-    Params.AddIgnoredActor(this);
-
-    // SphereTrace 반지름 30으로 전방 감지
-    return GetWorld()->SweepSingleByChannel(
-        OutHit, Start, End, FQuat::Identity,
-        ECC_Pawn, // 또는 커스텀 채널
-        FCollisionShape::MakeSphere(RollDetectionRadius),
-        Params
-    );
-}
-
-// ★ 핵심 변경: 데미지/스턴을 직접 적용하지 않고, 충돌 데이터만 수집하여 GA에 전달
-void ADRArmadilloEnemy::BroadcastRollImpact(const FVector& ImpactLocation)
-{
-    FRollImpactResult Result;
-    Result.ImpactLocation = ImpactLocation;
-    Result.bHitPlayerOrEnemy = false;
-
-    // 충돌 지점에서 반지름 50의 구 오버랩 검사
-    TArray<FOverlapResult> Overlaps;
-    FCollisionQueryParams Params;
-    Params.AddIgnoredActor(this);
-
-    GetWorld()->OverlapMultiByChannel(
-        Overlaps, ImpactLocation, FQuat::Identity,
-        ECC_Pawn,
-        FCollisionShape::MakeSphere(RollImpactRadius),
-        Params
-    );
-
-    for (const FOverlapResult& Overlap : Overlaps)
-    {
-        AActor* HitActor = Overlap.GetActor();
-        if (!HitActor) continue;
-
-        Result.HitActors.Add(HitActor);
-
-        // 플레이어 또는 다른 적이 있는지만 판별 (데미지 적용은 GA에서)
-        if (HitActor->IsA(ADRCharacter::StaticClass()) ||
-            HitActor->IsA(ADREnemy::StaticClass()))
-        {
-            Result.bHitPlayerOrEnemy = true;
-        }
-    }
-
-    // GA에 충돌 결과 전달 → GA가 데미지/스턴 처리
-    OnRollImpact.Broadcast(Result);
-}
-```
-
-**C++의 역할 요약** (데미지 로직 제거 후):
-| 역할 | 함수 |
-|------|------|
-| 폼 전환 메시 교체 | `StartFormChange`, `FinishFormChange`, `UpdateMeshVisibility` |
-| 돌진 이동 물리 | `StartRollCharge`, `StopRollCharge`, `TickRollCharge` |
-| 전방 충돌 감지 | `DetectRollCollision` (SphereTrace) |
-| 충돌 범위 수집 | `BroadcastRollImpact` (OverlapMulti → 액터 목록 수집) |
-| GA에 이벤트 전달 | `OnRollImpact.Broadcast`, `OnRollReachedTarget.Broadcast` |
-
-**C++이 하지 않는 것**:
-- ❌ GE를 만들거나 적용하지 않음
-- ❌ 데미지 계산하지 않음
-- ❌ 스턴 적용하지 않음
-- ❌ 클렌저 사이트 배율 계산하지 않음
-
----
-
-## Phase 2: 게임플레이 태그 추가
-
-### 2-1. `DRGameplayTags.h`에 태그 추가
-
-```cpp
-// 아르마딜로 태그
-FGameplayTag Abilities_Armadillo_BasicAttack;
-FGameplayTag Abilities_Armadillo_RollCharge;
-FGameplayTag Cooldown_Armadillo_RollCharge;
-FGameplayTag State_BallForm;
-```
-
-### 2-2. `DRGameplayTags.cpp`의 `InitializeNativeGameplayTags()`에 등록
-
-```cpp
-GameplayTags.Abilities_Armadillo_BasicAttack = UGameplayTagsManager::Get().AddNativeGameplayTag(
-    FName("Abilities.Armadillo.BasicAttack"),
-    FString("아르마딜로 기본 근접 공격"));
-
-GameplayTags.Abilities_Armadillo_RollCharge = UGameplayTagsManager::Get().AddNativeGameplayTag(
-    FName("Abilities.Armadillo.RollCharge"),
-    FString("아르마딜로 볼 폼 돌진 스킬"));
-
-GameplayTags.Cooldown_Armadillo_RollCharge = UGameplayTagsManager::Get().AddNativeGameplayTag(
-    FName("Cooldown.Armadillo.RollCharge"),
-    FString("아르마딜로 돌진 스킬 쿨타임"));
-
-GameplayTags.State_BallForm = UGameplayTagsManager::Get().AddNativeGameplayTag(
-    FName("State.BallForm"),
-    FString("아르마딜로 볼 폼 상태"));
+┌────────────────────────────────────────────────────────────┐
+│                   BP_DRPlayerController                     │
+│  OpenSettingsMenu_Implementation → WBP_SettingsScreen 생성  │
+│  CloseSettingsMenu_Implementation → WBP_SettingsScreen 제거 │
+└──────────────┬─────────────────────────────────────────────┘
+               │ CreateWidget / RemoveFromParent
+               ▼
+┌────────────────────────────────────────────────────────────┐
+│                  WBP_SettingsScreen                         │
+│  ┌─────────────┐  ┌──────────────────────────────────┐     │
+│  │ TabButtons   │  │  WidgetSwitcher_SettingsPages     │     │
+│  │  (4 tabs)    │  │  ┌─ Page_Gameplay ──────────┐    │     │
+│  │              │  │  │  Row_Slider_CameraSens   │    │     │
+│  │              │  │  │  Row_Dropdown_Language    │    │     │
+│  │              │  │  └──────────────────────────┘    │     │
+│  │              │  │  ┌─ Page_Graphics ──────────┐    │     │
+│  │              │  │  │  Row_Dropdown_DisplayMode│    │     │
+│  │              │  │  │  Row_Dropdown_Resolution │    │     │
+│  │              │  │  │  Row_Toggle_VSync        │    │     │
+│  │              │  │  │  Row_Dropdown_FPS        │    │     │
+│  │              │  │  │  Row_Dropdown_Scalability│    │     │
+│  │              │  │  │  Row_Slider_Gamma        │    │     │
+│  │              │  │  └──────────────────────────┘    │     │
+│  │              │  │  ┌─ Page_Audio ─────────────┐    │     │
+│  │              │  │  │  Row_Slider_MasterVol    │    │     │
+│  │              │  │  │  Row_Slider_MusicVol     │    │     │
+│  │              │  │  │  Row_Slider_SFXVol       │    │     │
+│  │              │  │  └──────────────────────────┘    │     │
+│  │              │  │  ┌─ Page_Controls ──────────┐    │     │
+│  │              │  │  │  (비어있음)              │    │     │
+│  │              │  │  └──────────────────────────┘    │     │
+│  └─────────────┘  └──────────────────────────────────┘     │
+│  ┌─────────────┐  ┌─────────────┐                          │
+│  │ KeyHintBar   │  │ ScrollBar    │                          │
+│  │ R:RESET      │  │ (장식용)     │                          │
+│  │ ESC:BACK     │  └─────────────┘                          │
+│  │ A:APPLY      │                                           │
+│  └─────────────┘                                            │
+└──────────────┬─────────────────────────────────────────────┘
+               │ GetGameInstance → GetSubsystem
+               ▼
+┌────────────────────────────────────────────────────────────┐
+│               UDRSettingsManager (C++ Subsystem)            │
+│                                                             │
+│  InitSettings()  → BuildDefinitions + Load                  │
+│  GetDefinitionsByTab(Tab) → 페이지별 설정 정의 목록           │
+│  GetPendingValue(SettingId) → 현재 대기 값                   │
+│  SetPendingValue(SettingId, Value) → 값 변경                 │
+│  ApplyPendingSettings() → 모든 대기 변경 적용                │
+│  ResetTabToDefault(Tab) → 탭별 기본값 리셋                   │
+│  DiscardPendingChanges() → 변경 취소                         │
+│                                                             │
+│  Delegates:                                                 │
+│    OnPendingValueChanged(SettingId, NewValue)                │
+│    OnHasPendingChangesChanged(bHasPending)                   │
+│    OnSettingsReset(Tab)                                      │
+│    OnSettingsLoaded()                                        │
+│    OnSettingsApplied()                                       │
+└──────────────┬─────────────────────────────────────────────┘
+               │ ApplySingleSetting → GameUserSettings 반영
+               ▼
+┌────────────────────────────────────────────────────────────┐
+│              UDRGameUserSettings (C++ Config)                │
+│  MasterVolume, BGMVolume, SFXVolume                         │
+│  MouseSensitivity, Gamma                                    │
+│  + UGameUserSettings 내장: Resolution, WindowMode, VSync 등  │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Phase 3: 게임플레이 이펙트 (GE) — Blueprint
+## 1. C++ 코드 수정사항 (모두 적용 완료)
 
-### 3-1. `GE_PrimaryAttributes_Armadillo` (적 기본 스탯)
-
-- **위치**: `Content/Blueprints/AbilitySystem/GE/Enemy/GE_PrimaryAttributes_Armadillo`
-- **부모 클래스**: `UGameplayEffect`
-- **Duration**: Instant
-- **설정**:
-  - MaxHealth: (밸런싱 수치, 예: 200)
-  - MoveSpeed: 250 (기본 폼 걷기 속도)
-- **참고**: 기존 `GE_PrimaryAttributes_Enemy`를 복제하여 수치만 조정
-
-### 3-2. 돌진 데미지 GE — 별도 생성 불필요
-
-돌진 데미지는 `GA_ArmadilloRollCharge`가 `DRDamageGameplayAbility`를 상속하므로, 부모 클래스의 `DamageEffectClass` 프로퍼티에 **기존 범용 데미지 GE**를 설정하면 된다. `CauseDamage()` / `MakeDamageEffectParamsFromClassDefaults()`가 GA에 설정된 `Damage`, `DamageType` 값을 자동으로 사용하므로 별도의 `GE_ArmadilloRollDamage`를 만들 필요가 없다.
-
-### 3-3. `GE_ArmadilloRollStun_Player` (플레이어 스턴)
-
-- **위치**: `Content/Blueprints/AbilitySystem/GE/Enemy/GE_ArmadilloRollStun_Player`
-- **Duration**: Has Duration = 1.0초
-- **Granted Tags**: `Debuff.Stun`
-- **효과**: 플레이어 이동 불가 + 공격 불가
-
-### 3-4. `GE_ArmadilloRollStun_Self` (본인 스턴 — 지형 충돌 시)
-
-- **위치**: `Content/Blueprints/AbilitySystem/GE/Enemy/GE_ArmadilloRollStun_Self`
-- **Duration**: Has Duration = 1.5초
-- **Granted Tags**: `Debuff.Stun`
-- **효과**: 아르마딜로 이동 불가 + 공격 불가
-
-### 3-5. `GE_Cooldown_ArmadilloRollCharge` (돌진 쿨타임)
-
-- **위치**: `Content/Blueprints/AbilitySystem/GE/Enemy/GE_Cooldown_ArmadilloRollCharge`
-- **Duration**: Has Duration = 10.0초
-- **Granted Tags**: `Cooldown.Armadillo.RollCharge`
-- **용도**: GA의 `CooldownGameplayEffectClass`에 설정
+| 번호 | 파일 | 변경 내용 | 상태 |
+|---:|---|---|---|
+| 1 | DRSettingsManager.cpp | BuildDefinitions: FPS 옵션 30,60,120,UNLIMITED (4개), DefaultValue SelectedIndex=2 | Done |
+| 2 | DRSettingsManager.cpp | BuildDefinitions: Language — Japanese 제거, Korean→Chinese→English, 기본값 Korean | Done |
+| 3 | DRSettingsManager.cpp | BuildDefinitions: Scalability 추가 (LOW~CINEMATIC, 기본 EPIC SelectedIndex=3) | Done |
+| 4 | DRSettingsManager.cpp | BuildDefinitions/Load/Save/Apply: VoiceVolume 전부 삭제 | Done |
+| 5 | DRSettingsManager.cpp | LoadFromGameUserSettings: FPSLimit Options 배열 순회로 정확한 SelectedIndex 계산 | Done |
+| 6 | DRSettingsManager.cpp | LoadFromGameUserSettings: Scalability 로드 (GetOverallScalabilityLevel, Mixed=-1→Epic) | Done |
+| 7 | DRSettingsManager.cpp | SaveToGameUserSettings: Scalability 저장 (SetOverallScalabilityLevel) | Done |
+| 8 | DRSettingsManager.cpp | ApplySingleSetting: Scalability 적용 (SetGraphicsQuality + ApplyGraphicsQualitySettings) | Done |
+| 9 | DRSettingsManager.cpp/h | SetVoiceVolume 함수/선언 삭제, VoiceSoundClass 멤버 삭제 | Done |
+| 10 | DRGameUserSettings.h/cpp | VoiceVolume 프로퍼티/클램프/기본값 삭제 | Done |
+| 11 | DRVOIPTalker.cpp | VoiceVolume 참조 → 고정값 1.0f 대체 | Done |
 
 ---
 
-## Phase 4: 게임플레이 어빌리티 (GA) — Blueprint
+## 2. Event Dispatcher / 이벤트 이름 규칙
 
-### 4-1. `GA_ArmadilloBite` (기본 폼 근접 공격)
+혼동을 막기 위해, 이 문서에서 사용하는 이벤트 이름을 정리한다.
 
-- **위치**: `Content/Blueprints/AbilitySystem/GA/Enemy/GA_ArmadilloBite`
-- **부모 클래스**: `UDRMeleeAttack` (C++)
-- **제작 방법**: 기존 `GA_DogBite`를 **복제(Duplicate)**하여 생성
-- **AbilityTag**: `Abilities.Armadillo.BasicAttack`
-- **설정**:
-  - DamageEffectClass: 기존 적 데미지 GE 또는 새로 생성
-  - DamageType: `Damage.Physical` 또는 `Damage.Bite`
-  - Damage: (밸런싱 수치)
-  - 공격 몽타주: BasicForm의 BasicAttack 애니메이션
-- **로직**: `GA_DogBite`와 동일 (몽타주 재생 → AnimNotify에서 Trace/데미지 적용)
+### 2.1 UMG 내장 이벤트 (직접 만들지 않아도 존재)
 
-### 4-2. `GA_ArmadilloRollCharge` (볼 폼 돌진 스킬)
+| 위젯 | 내장 이벤트 | 시그니처 | 설명 |
+|---|---|---|---|
+| USlider (`Slider_Input`) | `OnValueChanged` | `(float Value)` | 0~1 정규화된 값. Slider Details 패널에서 + 버튼으로 바인딩 |
+| UButton (`Button_Hit`) | `OnClicked` | `()` | 버튼 클릭. Details 패널에서 바인딩 |
+| UButton (`Button_Hit`) | `OnHovered` | `()` | 마우스 올림 |
+| UButton (`Button_Hit`) | `OnUnhovered` | `()` | 마우스 벗어남 |
 
-- **위치**: `Content/Blueprints/AbilitySystem/GA/Enemy/GA_ArmadilloRollCharge`
-- **부모 클래스**: `UDRDamageGameplayAbility` (C++)
-- **AbilityTag**: `Abilities.Armadillo.RollCharge`
-- **CooldownGameplayEffectClass**: `GE_Cooldown_ArmadilloRollCharge`
-- **Cooldown Tags**: `Cooldown.Armadillo.RollCharge`
+### 2.2 직접 만드는 Custom Event Dispatcher (My Blueprint 패널에서 생성)
 
-**GA Blueprint 프로퍼티 설정** (부모 `DRDamageGameplayAbility`에서 상속):
+| WBP | 디스패처 이름 | 시그니처 | 바인딩 주체 |
+|---|---|---|---|
+| WBP_SciFiSlider | **OnSliderValueChanged** | `(float AbsoluteValue)` | WBP_SettingRow_Slider |
+| WBP_SciFiToggle | **OnToggleChanged** | `(bool bNewState)` | WBP_SettingRow_Toggle |
+| WBP_SciFiDropdownOption | **OnOptionClicked** | `(int32 OptionIndex)` | WBP_SciFiDropdownOptionList |
+| WBP_SciFiDropdown | **OnSelectionChanged** | `(int32 NewIndex)` | WBP_SettingRow_Dropdown |
 
-| 프로퍼티 | 값 | 비고 |
-|---------|-----|------|
-| DamageEffectClass | 기존 범용 데미지 GE | `ExecCalc_Damage` 사용하는 기존 GE |
-| DamageType | `Damage.Physical` | 물리 데미지 |
-| Damage | 50 | 기본 돌진 데미지 |
-| DebuffChance | 0 | 돌진은 별도 스턴 GE로 처리 |
-| KnockbackChance | 0 | 돌진에 넉백 없음 |
+> **핵심 구분**: `Slider_Input`의 내장 `OnValueChanged`(0~1)와 WBP_SciFiSlider의 커스텀 `OnSliderValueChanged`(절대값)는 **완전히 다른 이벤트**이다.
+> - `OnValueChanged` = USlider가 자동으로 가진 것. Slider Details에서 바인딩.
+> - `OnSliderValueChanged` = My Blueprint 패널에서 직접 만드는 것. 부모 Row가 바인딩.
 
-**GA Blueprint 추가 변수** (GA 내부에서 선언):
+### 2.3 UDRSettingsManager 참조 방법
 
-| 변수 | 타입 | 값 | 용도 |
-|------|------|-----|------|
-| CleanserDamageMultiplier | Float | 1.5 | 클렌저 사이트 데미지 배율 |
-| PlayerStunEffectClass | TSubclassOf\<UGameplayEffect\> | `GE_ArmadilloRollStun_Player` | 플레이어 1초 스턴 |
-| SelfStunEffectClass | TSubclassOf\<UGameplayEffect\> | `GE_ArmadilloRollStun_Self` | 본인 1.5초 스턴 |
-| SavedTargetLocation | FVector | - | 타겟팅 시점 위치 저장 |
+`UDRSettingsManager`는 `UGameInstanceSubsystem`이므로, Blueprint에서 변수 타입으로 직접 검색이 어려울 수 있다.
 
-**GA Blueprint 로직 (ActivateAbility)**:
+**권장 패턴**: 필요할 때마다 인라인으로 가져오기
 
 ```
-[ActivateAbility]
-    │
-    ├─ 1. ★ FindRollTarget() 호출 (C++ 함수) — 폼 전환 전에 먼저 타겟 검증
-    │     └─ 결과 null이면 → EndAbility (취소, 쿨타임 미적용)
-    │        ※ 기본 폼 유지, 폼 전환 애니메이션 재생하지 않음
-    │
-    ├─ 2. ★ 타겟 위치 저장
-    │     └─ SavedTargetLocation = TargetActor->GetActorLocation()
-    │        (이 시점의 위치가 돌진 목표점으로 고정됨)
-    │
-    ├─ 3. C++ 델리게이트 바인딩
-    │     ├─ OnRollImpact 바인딩 → HandleRollImpact (커스텀 이벤트)
-    │     └─ OnRollReachedTarget 바인딩 → HandleRollReachedTarget (커스텀 이벤트)
-    │
-    ├─ 4. StartFormChange(true) 호출 → Basic→Ball 전환 시작
-    │     └─ BasicForm에서 FormChange_BasicToBall 몽타주 재생
-    │     └─ AnimNotify → FinishFormChange() → 메시 교체
-    │
-    ├─ 5. Wait for AnimNotify (FinishFormChange 완료 대기)
-    │
-    ├─ 6. StartRollCharge(SavedTargetLocation) 호출
-    │     └─ C++의 Tick에서 자동으로 이동 + 충돌 감지 수행
-    │     └─ 충돌 또는 도달 시 → C++이 바인딩된 델리게이트 브로드캐스트
-    │
-    └─ 7. 이후 흐름은 델리게이트 콜백에서 처리 (아래 참조)
+Get Game Instance → Get Subsystem (UDRSettingsManager) → 결과 사용
 ```
 
-**HandleRollImpact (충돌 시 — 커스텀 이벤트)**:
+또는 Blueprint 함수 `GetSettingsManager`를 만들어 재사용:
 
 ```
-HandleRollImpact(ImpactResult: FRollImpactResult)
-    │
-    ├─ ImpactResult.HitActors 배열을 순회:
-    │   │
-    │   ├─ [Cast to ADRCharacter 성공 — 플레이어]
-    │   │   ├─ ★ CauseDamage(PlayerActor) ← 부모의 DamageEffectClass/Damage(50) 자동 사용
-    │   │   │   └─ MakeDamageEffectParamsFromClassDefaults(PlayerActor)
-    │   │   │       └─ ASC->ApplyGameplayEffectSpecToTarget()
-    │   │   │           └─ ExecCalc_Damage → 플레이어 Health -50
-    │   │   │
-    │   │   └─ ★ 1초 스턴 GE 적용:
-    │   │       ├─ 플레이어의 ASC 가져오기 (IAbilitySystemInterface)
-    │   │       ├─ MakeOutgoingSpec(PlayerStunEffectClass)
-    │   │       └─ ApplyGameplayEffectSpecToTarget(플레이어 ASC)
-    │   │
-    │   ├─ [Cast to ADREnemy 성공 — 다른 적]
-    │   │   └─ ★ CauseDamage(EnemyActor) ← 동일하게 50 데미지
-    │   │
-    │   └─ [Cast to ADRCleanserSite 성공 — 클렌저 사이트]
-    │       └─ ★ 1.5배 데미지 적용:
-    │           ├─ MakeDamageEffectParamsFromClassDefaults(CleanserActor)
-    │           ├─ Params.Damage = GetDamageAtLevel() * CleanserDamageMultiplier (50 * 1.5 = 75)
-    │           └─ ApplyDamageEffect(Params) → ExecCalc_Damage → 클렌저 Health -75
-    │
-    ├─ ImpactResult.bHitPlayerOrEnemy 확인:
-    │   │
-    │   ├─ [true — 플레이어/적이 있었음]
-    │   │   └─ 본인 스턴 없음
-    │   │
-    │   └─ [false — 지형지물만 충돌]
-    │       └─ ★ 본인 스턴 GE 적용:
-    │           ├─ GetAbilitySystemComponentFromActorInfo()
-    │           ├─ MakeOutgoingSpec(SelfStunEffectClass)
-    │           └─ ApplyGameplayEffectSpecToSelf() → 1.5초 스턴
-    │
-    ├─ 폼 복귀: StartFormChange(false) → Ball→Basic 전환
-    │   └─ FormChange_BallToBasic 몽타주 재생
-    │   └─ AnimNotify → FinishFormChange() → 메시 교체
-    │
-    ├─ Wait for FormChange 완료
-    │
-    ├─ CommitAbilityCooldown() → 쿨타임 10초 시작
-    │
-    └─ EndAbility()
-```
-
-**HandleRollReachedTarget (충돌 없이 목표 도달 시 — 커스텀 이벤트)**:
-
-```
-HandleRollReachedTarget()
-    │
-    ├─ (데미지/스턴 없음 — 충돌이 발생하지 않았으므로)
-    │
-    ├─ 폼 복귀: StartFormChange(false) → Ball→Basic 전환
-    │   └─ FormChange_BallToBasic 몽타주 재생
-    │   └─ AnimNotify → FinishFormChange() → 메시 교체
-    │
-    ├─ Wait for FormChange 완료
-    │
-    ├─ CommitAbilityCooldown() → 쿨타임 10초 시작
-    │
-    └─ EndAbility()
-```
-
-**이 설계의 이점**:
-- `CauseDamage()`, `MakeDamageEffectParamsFromClassDefaults()` 등 **부모 클래스의 인프라를 그대로 활용**
-- `DamageEffectClass`, `Damage`, `DamageType` 등 **GA 프로퍼티에서 한 곳에서 설정** → 밸런싱 조정이 쉬움
-- C++에 데미지/GE 관련 코드가 없어 **책임 분리 명확** (C++ = 물리/충돌, GA = 효과/데미지)
-- 클렌저 1.5배 데미지도 GA Blueprint에서 `GetDamageAtLevel() * 1.5`로 간단히 처리
-- 스턴 GE도 GA Blueprint에서 직접 ASC에 적용 → 별도 C++ 프로퍼티 불필요
-
----
-
-## Phase 5: 애니메이션 블루프린트 (ABP) — 2개
-
-### 5-1. `ABP_Armadillo_Basic` (기본 폼)
-
-- **위치**: `Content/Blueprints/Character/Enemy/Armadillo/ABP_Armadillo_Basic`
-- **Skeleton**: BasicForm의 Skeleton 사용
-
-**State Machine 구조**:
-```
-[Entry] → Locomotion
-              │
-              ├─ (bIsStunned == true) → Stun (Loop)
-              │     └─ (bIsStunned == false) → Locomotion
-              │
-              ├─ (bIsDead == true) → Death
-              │
-              └─ Locomotion 내부:
-                    ├─ Idle (Speed < 10)
-                    └─ Walk (Speed >= 10)
-                    (BlendSpace BS_IdleWalk로 통합 가능)
-```
-
-**사용 애니메이션**:
-- `Idle` → Locomotion 대기
-- `Walk` → Locomotion 이동
-- `Stun` → 스턴 상태 (Loop 재생)
-- `Death` → 사망
-- `FormChange_BasicToBall` → 몽타주로 재생 (GA에서 트리거)
-- `FormChange_BallToBasic` → 몽타주로 재생 (GA에서 트리거)
-- `BasicAttack` → 몽타주로 재생 (GA_ArmadilloBite에서 트리거)
-- `HitReact 1/2/3` → 몽타주로 재생 (GA_HitReact에서 트리거)
-
-**AnimNotify 설정**:
-- `BasicAttack` 몽타주: 데미지 타이밍에 `AN_AttackTrace` 또는 커스텀 Notify
-- `FormChange_BasicToBall` 몽타주: 전환 완료 시점에 `AN_FinishFormChange` Notify
-- `FormChange_BallToBasic` 몽타주: 전환 완료 시점에 `AN_FinishFormChange` Notify
-
-### 5-2. `ABP_Armadillo_Ball` (볼 폼)
-
-- **위치**: `Content/Blueprints/Character/Enemy/Armadillo/ABP_Armadillo_Ball`
-- **Skeleton**: BallForm(RollForm)의 Skeleton 사용
-
-**State Machine 구조**:
-```
-[Entry] → Idle
-              │
-              ├─ (bIsRolling == true) → Roll (Loop)
-              │     └─ (bIsRolling == false) → Idle
-              │
-              └─ (bIsStunned == true) → Idle (볼 폼에서 스턴 = Idle)
-```
-
-**사용 애니메이션**:
-- `Idle` → 볼 대기 상태
-- `Roll` → 구르기 (Loop, 돌진 중 재생)
-- `FormChange_BasicToBall` → 몽타주 (전환 시작 시 재생)
-- `FormChange_BallToBasic` → 몽타주 (전환 종료 시 재생)
-
-**참고**: 볼 폼에서는 HitReact/Death 애니메이션이 없으므로, 볼 폼 중 사망 시 기본 폼으로 전환 후 Death 재생.
-
----
-
-## Phase 6: 애니메이션 몽타주 생성
-
-### 6-1. 기본 폼 몽타주
-
-| 몽타주 이름 | 원본 애니메이션 | 슬롯 | AnimNotify |
-|------------|----------------|------|------------|
-| `AM_Armadillo_BasicAttack` | BasicAttack | DefaultSlot | 데미지 타이밍에 Notify 추가 |
-| `AM_Armadillo_HitReact1` | HitReact1 | DefaultSlot | - |
-| `AM_Armadillo_HitReact2` | HitReact2 | DefaultSlot | - |
-| `AM_Armadillo_HitReact3` | HitReact3 | DefaultSlot | - |
-| `AM_Armadillo_FormChange_BtoD` | FormChange_BasicToBall | DefaultSlot | 끝에 `AN_FinishFormChange` |
-| `AM_Armadillo_FormChange_DtoB` | FormChange_BallToBasic | DefaultSlot | 끝에 `AN_FinishFormChange` |
-
-### 6-2. 볼 폼 몽타주
-
-| 몽타주 이름 | 원본 애니메이션 | 슬롯 | AnimNotify |
-|------------|----------------|------|------------|
-| `AM_ArmadilloBall_FormChange_BtoD` | FormChange_BasicToBall | DefaultSlot | 끝에 `AN_FinishFormChange` |
-| `AM_ArmadilloBall_FormChange_DtoB` | FormChange_BallToBasic | DefaultSlot | 끝에 `AN_FinishFormChange` |
-
----
-
-## Phase 7: AnimNotify — `AN_FinishFormChange`
-
-### 7-1. AnimNotify 생성
-
-- **위치**: `Content/Blueprints/Character/Enemy/Armadillo/AN_FinishFormChange`
-- **부모 클래스**: `UAnimNotify` (Blueprint)
-- **로직**:
-  ```
-  Received_Notify →
-    Get Owning Actor →
-    Cast to ADRArmadilloEnemy →
-    Call FinishFormChange()
-  ```
-
-이 Notify는 기본 폼과 볼 폼 양쪽의 FormChange 몽타주에 배치한다.
-
----
-
-## Phase 8: Behavior Tree (BT) — Blueprint
-
-### 8-1. Blackboard 에셋: `BB_Armadillo`
-
-- **위치**: `Content/Blueprints/AI/Armadillo/BB_Armadillo`
-- **기존 키 상속** (DRBlackboardKeys에 정의된 것들 모두 포함):
-  - `HitReacting` (Bool)
-  - `Dead` (Bool)
-  - `Stunned` (Bool)
-  - `HomeLocation` (Vector)
-  - `FirstAttacker` (Object)
-  - `HasFirstAttacker` (Bool)
-  - `TargetToFollow` (Object)
-  - `IsEnraged` (Bool)
-  - `AttackSpeed` (Float)
-  - `RangedAttacker` (Bool) → **false** (근접 공격자)
-
-- **아르마딜로 전용 키 추가**:
-  - `IsBallForm` (Bool) — 현재 폼 상태
-  - `RollSkillReady` (Bool) — 쿨타임 완료 여부
-  - `RollTarget` (Object) — 돌진 타겟 플레이어
-
-### 8-2. Behavior Tree: `BT_EnemyBehaviorTree_Armadillo`
-
-- **위치**: `Content/Blueprints/AI/Armadillo/BT_EnemyBehaviorTree_Armadillo`
-
-**BT 구조**:
-
-```
-Root (Selector)
+Function: GetSettingsManager
+Return: UDRSettingsManager*
 │
-├─ [1] 사망 체크 (Sequence)
-│     ├─ Decorator: BB "Dead" == true
-│     └─ Task: BTT_StopBehavior
+├─ Get Game Instance
+│  → Get Subsystem (UDRSettingsManager)
+│  → Return
+```
+
+Page/Row의 Init 함수에서는 **파라미터로 전달받는 것**이 가장 편리하다.
+WBP_SettingsScreen의 Construct에서 한 번 가져온 뒤, 각 Page → Row로 전달한다.
+
+---
+
+## 3. WBP_KeyHint — Graph 로직
+
+Graph 로직 불필요. Designer에서 이미지와 텍스트만 설정하면 끝.
+동적으로 키/텍스트를 바꿀 필요가 있으면 `Image_KeyIcon`과 `Text_Label`을 Is Variable로 노출.
+
+---
+
+## 4. WBP_SciFiSlider — Graph 로직
+
+### 4.1 구조 복습
+
+```
+WBP_SciFiSlider
+└─ SizeBox_Root (380 x 48)
+   └─ CanvasPanel_Slider
+      ├─ Overlay_Track
+      │  ├─ Image_SliderFrame
+      │  ├─ SizeBox_FillClip (Clipping: Clip to Bounds)
+      │  │  └─ Image_SliderFill
+      │  └─ Slider_Input (Opacity: 0)
+      └─ Overlay_ValueBox
+         ├─ Image_ValueBox
+         └─ Text_Value
+```
+
+### 4.2 필요한 변수
+
+| 변수 이름 | 타입 | 설명 |
+|---|---|---|
+| `Slider_Input` | USlider* | Designer 바인딩. 투명 입력 슬라이더 |
+| `SizeBox_FillClip` | USizeBox* | Designer 바인딩. Fill 바 클리핑 영역 |
+| `Text_Value` | UTextBlock* | Designer 바인딩. "80%" 같은 표시 텍스트 |
+| `TrackWidth` | float | 280.0 (Overlay_Track의 가로 크기) |
+| `MinValue` | float | 설정 최소값 (예: 0) |
+| `MaxValue` | float | 설정 최대값 (예: 100) |
+| `StepValue` | float | 스냅 단위 (예: 1) |
+| `SuffixText` | FText | "%" 같은 접미사 |
+| `bSuppressCallback` | bool | 프로그래밍 방식 SetValue 시 무한 루프 방지 플래그 |
+
+### 4.3 Custom Event Dispatcher 생성
+
+**My Blueprint 패널 → Event Dispatchers → + 버튼** → 이름: `OnSliderValueChanged`
+
+시그니처 (Inputs에서 추가):
+
+```
+OnSliderValueChanged (float NewAbsoluteValue)
+```
+
+이것은 부모 WBP_SettingRow_Slider가 바인딩할 디스패처이다.
+`Slider_Input`의 내장 `OnValueChanged`(0~1)와 **완전히 별개**이다.
+
+### 4.4 InitSlider 함수
+
+```
+Function: InitSlider
+Input: float InMin, float InMax, float InStep, FText InSuffix
 │
-├─ [2] 스턴 체크 (Sequence)
-│     ├─ Decorator: BB "Stunned" == true
-│     └─ Task: Wait (스턴 해제될 때까지)
+├─ MinValue = InMin
+├─ MaxValue = InMax
+├─ StepValue = InStep
+├─ SuffixText = InSuffix
 │
-├─ [3] 히트 리액트 (Sequence)
-│     ├─ Decorator: BB "HitReacting" == true
-│     └─ Task: Wait (히트 리액트 종료될 때까지)
+├─ Slider_Input → Set Min Value: 0.0
+├─ Slider_Input → Set Max Value: 1.0
+│   (내부적으로 0~1 정규화 사용, Min~Max 변환은 이 위젯이 처리)
 │
-├─ [4] 롤링 스킬 분기 (Sequence)
-│     ├─ Decorator: BB "RollSkillReady" == true
-│     ├─ Decorator: BB "TargetToFollow" IsSet
-│     ├─ Decorator: Target이 플레이어인지 확인
-│     ├─ Task: BTT_ArmadilloRollAttack (★ 신규)
-│     │     └─ TryActivateAbilitiesByTag("Abilities.Armadillo.RollCharge")
-│     │        ※ GA 내부에서 폼 전환 전에 FindRollTarget() 실행
-│     │        ※ 유효 타겟 없으면 GA가 즉시 종료 → BTT는 Failure 반환
-│     │        ※ 유효 타겟 있으면 타겟 위치 저장 → 폼 전환 → 돌진
-│     └─ (스킬 성공 시 쿨타임 동안 RollSkillReady = false)
+├─ ★ Slider_Input의 내장 OnValueChanged 바인딩:
+│   Slider_Input → Details 패널의 OnValueChanged 옆 + 버튼
+│   → HandleNativeSliderChanged 함수에 바인딩
 │
-├─ [5] 기본 공격 분기 (Sequence)
-│     ├─ Decorator: BB "TargetToFollow" IsSet
-│     ├─ Decorator: 공격 범위 내 확인
-│     ├─ Task: BTT_RotateToFaceTarget
-│     └─ Task: BTT_Attack_Armadillo (★ 신규)
-│           └─ TryActivateAbilitiesByTag("Abilities.Armadillo.BasicAttack")
+│   또는 Graph에서:
+│   Slider_Input → Bind Event to OnValueChanged
+│   → Create Event → HandleNativeSliderChanged
 │
-├─ [6] 추적 (Sequence)
-│     ├─ Decorator: BB "TargetToFollow" IsSet
-│     └─ Task: MoveTo (TargetToFollow)
+└─ (끝)
+```
+
+### 4.5 SetValue 함수 (외부에서 호출 — Row가 호출)
+
+```
+Function: SetValue
+Input: float AbsoluteValue
 │
-└─ [7] 순찰 (Sequence)
-      └─ Task: MoveTo (HomeLocation 주변 랜덤)
+├─ bSuppressCallback = true
+│
+├─ NormalizedValue = (AbsoluteValue - MinValue) / (MaxValue - MinValue)
+│
+├─ Slider_Input → Set Value (NormalizedValue)
+│   ※ 이때 USlider 내장 OnValueChanged가 발생하지만
+│     bSuppressCallback=true이므로 HandleNativeSliderChanged에서 무시됨
+│
+├─ Fill 바 업데이트:
+│   FillWidth = TrackWidth * NormalizedValue
+│   SizeBox_FillClip → Set Width Override (FillWidth)
+│
+├─ 텍스트 업데이트:
+│   DisplayValue = Round(AbsoluteValue)
+│   Text_Value → SetText (DisplayValue + SuffixText)
+│   예: "80%"
+│
+├─ bSuppressCallback = false
+│
+└─ (끝)
 ```
 
-### 8-3. BT Service: `BTS_CheckRollSkillReady`
+### 4.6 HandleNativeSliderChanged 콜백
 
-- **위치**: `Content/Blueprints/AI/Armadillo/BTS_CheckRollSkillReady`
-- **기능**: 매 Tick마다 ASC에서 `Cooldown.Armadillo.RollCharge` 태그 여부를 확인
-  - 쿨타임 태그 없음 → `RollSkillReady = true`
-  - 쿨타임 태그 있음 → `RollSkillReady = false`
-- **Tick Interval**: 0.5초
-
-### 8-4. BT Service: `BTS_FindNearestPlayer_Armadillo`
-
-- **기존 `BTS_FindNearestPlayer`를 복제**하여 사용
-- 또는 기존 것을 그대로 재사용 (동작이 동일하므로)
-
-### 8-5. BT Task: `BTT_Attack_Armadillo` (기본 공격)
-
-- **위치**: `Content/Blueprints/AI/Armadillo/BTT_Attack_Armadillo`
-- **기존 `BTT_Attack_Dog`를 복제**
-- `TryActivateAbilitiesByTag`로 `Abilities.Armadillo.BasicAttack` 활성화
-- **로직**: 타겟 방향 회전 → 어빌리티 활성화 → 어빌리티 종료 대기 → Task 완료
-
-### 8-6. BT Task: `BTT_ArmadilloRollAttack` (돌진 스킬)
-
-- **위치**: `Content/Blueprints/AI/Armadillo/BTT_ArmadilloRollAttack`
-- **로직**:
-  ```
-  Execute:
-    1. TryActivateAbilitiesByTag("Abilities.Armadillo.RollCharge")
-    2. Wait for ability to end
-    3. GA 결과 확인:
-       - GA가 유효 타겟을 찾지 못해 즉시 EndAbility한 경우:
-         → 쿨타임 미적용 상태, Return Failure (BT가 다음 분기로 이동)
-       - GA가 정상적으로 돌진을 수행하고 종료한 경우:
-         → 쿨타임 적용됨, Set BB "RollSkillReady" = false
-         → Return Success
-  ```
-- **GA 실패 판별**: GA 내부에서 FindRollTarget() 실패 시 쿨타임을 적용하지 않으므로,
-  BTT는 GA 종료 후 ASC에 `Cooldown.Armadillo.RollCharge` 태그가 있는지 확인하여
-  성공/실패를 판별할 수 있다.
-
----
-
-## Phase 9: Blueprint 캐릭터 — `BP_Armadillo`
-
-### 9-1. Blueprint 생성
-
-- **위치**: `Content/Blueprints/Character/Enemy/Armadillo/BP_Armadillo`
-- **부모 클래스**: `ADRArmadilloEnemy` (C++)
-
-### 9-2. 컴포넌트 설정
-
-| 컴포넌트 | 설정 |
-|----------|------|
-| **Mesh (기본 폼)** | SkeletalMesh = `Armadillo_v0_1_2`, AnimClass = `ABP_Armadillo_Basic` |
-| **BallFormMesh** | SkeletalMesh = `Armadillo_Ball_v0_1_0`, AnimClass = `ABP_Armadillo_Ball`, Visibility = Hidden |
-| **CapsuleComponent** | 아르마딜로 체형에 맞게 조정 (예: Radius=34, HalfHeight=60) |
-
-### 9-3. 프로퍼티 설정
-
-| 프로퍼티 | 값 | 비고 |
-|---------|-----|------|
-| **ADRCharacterBase** | | |
-| CharacterClass | Warrior | 근접 공격 기반 |
-| Level | 1 (기본) | 스폰 시 조정 |
-| BaseWalkSpeed | 250 | 기본 폼 이동 속도 |
-| **ADREnemy** | | |
-| BehaviorTree | `BT_EnemyBehaviorTree_Armadillo` | |
-| WaterReductionEffectClass | 기존 적 GE | |
-| WaterGrantEffectClass | 기존 적 GE | |
-| EnrageMovementSpeedGE | 기존 적 GE | |
-| **ADRArmadilloEnemy** | | |
-| RollInitialSpeed | 200 | 돌진 초기 속도 |
-| RollMaxSpeed | 2000 | 돌진 최대 속도 |
-| RollAcceleration | 400 | 초당 가속량 |
-| RollTargetSearchRange | 3000 | 유닛 |
-| RollDetectionRadius | 30 | 전방 감지 구 반지름 |
-| RollImpactRadius | 50 | 충돌 효과 구 반지름 |
-
-**참고**: 데미지(`RollDamage`), 클렌저 배율(`CleanserDamageMultiplier`), 스턴 GE 클래스(`RollStunEffectClass`), 데미지 GE 클래스(`RollDamageEffectClass`), 스턴 지속시간, 쿨타임 등은 C++이 아닌 **GA_ArmadilloRollCharge Blueprint의 프로퍼티**에서 설정한다.
-
-### 9-4. 공격 몽타주 설정 (AttackMontages 배열)
+이 함수는 `Slider_Input`의 **내장** `OnValueChanged`에 바인딩된다.
+사용자가 슬라이더를 드래그할 때 0~1 값이 들어온다.
 
 ```
-AttackMontages[0]:
-  Montage = AM_Armadillo_BasicAttack
-  MontageTag = Montage.Attack.1
-  SocketTag = CombatSocket.RightHand (또는 Tail)
+Function: HandleNativeSliderChanged
+Input: float NormalizedValue (0~1, USlider 내장 OnValueChanged에서 전달)
+│
+├─ Branch: bSuppressCallback == true?
+│   └─ True → return (프로그래밍 방식 SetValue 호출 중이므로 무시)
+│
+├─ AbsoluteValue = MinValue + (MaxValue - MinValue) * NormalizedValue
+│
+├─ AbsoluteValue = ClampAndSnapFloat(AbsoluteValue, MinValue, MaxValue, StepValue)
+│   ※ UDRSettingsFunctionLibrary::ClampAndSnapFloat BP 호출
+│
+├─ Fill 바 업데이트:
+│   FillWidth = TrackWidth * ((AbsoluteValue - MinValue) / (MaxValue - MinValue))
+│   SizeBox_FillClip → Set Width Override (FillWidth)
+│
+├─ 텍스트 업데이트:
+│   Text_Value → SetText (Round(AbsoluteValue) + SuffixText)
+│
+├─ ★ OnSliderValueChanged 디스패처 → Broadcast (AbsoluteValue)
+│   (커스텀 디스패처를 통해 부모 Row에 절대값 전달)
+│
+└─ (끝)
 ```
 
-### 9-5. 히트 리액트 몽타주 설정 (HitReactMontages 배열)
-
+**흐름 정리**:
 ```
-HitReactMontages[0] = AM_Armadillo_HitReact1
-HitReactMontages[1] = AM_Armadillo_HitReact2
-HitReactMontages[2] = AM_Armadillo_HitReact3
+사용자 드래그 → Slider_Input 내장 OnValueChanged(0.8)
+  → HandleNativeSliderChanged(0.8)
+    → AbsoluteValue 계산 (예: 80)
+    → Fill/Text 업데이트
+    → 커스텀 OnSliderValueChanged 디스패처 Broadcast(80.0)
+      → 부모 Row::HandleSliderValueChanged(80.0) 호출됨
 ```
 
 ---
 
-## Phase 10: CharacterClassInfo 데이터 에셋 업데이트
+## 5. WBP_SciFiToggle — Graph 로직
 
-### 10-1. 기존 `DA_CharacterClassInfo` 업데이트
-
-**새 항목 추가 또는 기존 Warrior 항목에 아르마딜로 전용 설정**:
-
-아르마딜로는 `ECharacterClass::Warrior`를 사용하므로, `BP_Armadillo` Blueprint에서 직접 StartupAbilities를 설정하거나, 별도의 CharacterClass enum 값을 추가할 수 있다.
-
-**추천 방법**: `BP_Armadillo`에서 직접 StartupAbilities 오버라이드
-- `GA_ArmadilloBite` (기본 공격)
-- `GA_ArmadilloRollCharge` (돌진 스킬)
-- `GA_HitReact` (공용 히트 리액트)
-
----
-
-## Phase 11: 블렌드 스페이스 생성
-
-### 11-1. `BS_Armadillo_IdleWalk` (기본 폼)
-
-- **위치**: `Content/Blueprints/Character/Enemy/Armadillo/BS_Armadillo_IdleWalk`
-- **축**: Speed (0 ~ 300)
-- **포인트**:
-  - Speed = 0: `Idle`
-  - Speed = 250: `Walk`
-
----
-
-## Phase 12: 멀티플레이어 리플리케이션 확인
-
-### 리플리케이트 프로퍼티
-
-| 프로퍼티 | 리플리케이션 | RepNotify |
-|---------|-------------|-----------|
-| `bIsBallForm` | `DOREPLIFETIME` | `OnRep_BallForm` (메시 가시성 갱신) |
-| `bIsRolling` | `DOREPLIFETIME` | 없음 (시각적으로는 이동으로 표현) |
-| `bIsStunned` | 부모에서 처리 | `OnRep_Stunned` (부모) |
-| `bIsBurned` | 부모에서 처리 | `OnRep_Burned` (부모) |
-
-### 서버 권한 로직
-
-- 폼 전환 결정: **서버**
-- 돌진 이동/충돌: **서버** (Tick에서 처리)
-- 데미지/스턴 GE 적용: **서버**
-- 타겟 선택: **서버**
-
-### 클라이언트 처리
-
-- `OnRep_BallForm()`으로 메시 교체 동기화
-- 이동은 CharacterMovement의 기본 리플리케이션으로 처리
-- 스턴 VFX는 `OnRep_Stunned()`로 동기화
-
----
-
-## Phase 13: 최종 제작 체크리스트 (순서대로)
-
-### C++ 작업
-- [ ] 1. `DRGameplayTags.h/.cpp`에 아르마딜로 관련 태그 추가
-- [ ] 2. `DRArmadilloEnemy.h` 헤더 파일 생성
-- [ ] 3. `DRArmadilloEnemy.cpp` 소스 파일 생성
-- [ ] 4. `DaeRune.Build.cs`에 필요 모듈 확인 (보통 추가 불필요)
-- [ ] 5. 컴파일 및 오류 수정
-
-### Blueprint — GE 작업
-- [ ] 6. `GE_PrimaryAttributes_Armadillo` 생성
-- [ ] 7. `GE_ArmadilloRollStun_Player` 생성 (1초)
-- [ ] 8. `GE_ArmadilloRollStun_Self` 생성 (1.5초)
-- [ ] 9. `GE_Cooldown_ArmadilloRollCharge` 생성 (10초)
-- ※ 돌진 데미지 GE는 별도 생성 불필요 (GA의 DamageEffectClass에 기존 범용 GE 사용)
-
-### Blueprint — 애니메이션 작업
-- [ ] 11. `BS_Armadillo_IdleWalk` 블렌드 스페이스 생성
-- [ ] 12. 기본 폼 몽타주 6개 생성 (BasicAttack, HitReact1~3, FormChange x2)
-- [ ] 13. 볼 폼 몽타주 2개 생성 (FormChange x2)
-- [ ] 14. `AN_FinishFormChange` AnimNotify 생성
-- [ ] 15. `ABP_Armadillo_Basic` AnimBP 생성
-- [ ] 16. `ABP_Armadillo_Ball` AnimBP 생성
-
-### Blueprint — GA 작업
-- [ ] 17. `GA_ArmadilloBite` 생성 (GA_DogBite 복제)
-- [ ] 18. `GA_ArmadilloRollCharge` 생성
-
-### Blueprint — AI 작업
-- [ ] 19. `BB_Armadillo` Blackboard 생성
-- [ ] 20. `BTS_CheckRollSkillReady` BT Service 생성
-- [ ] 21. `BTT_Attack_Armadillo` BT Task 생성 (BTT_Attack_Dog 복제)
-- [ ] 22. `BTT_ArmadilloRollAttack` BT Task 생성
-- [ ] 23. `BT_EnemyBehaviorTree_Armadillo` Behavior Tree 생성
-
-### Blueprint — 캐릭터 작업
-- [ ] 24. `BP_Armadillo` Blueprint 생성
-- [ ] 25. 컴포넌트 설정 (메시, AnimBP, 캡슐 등)
-- [ ] 26. 프로퍼티 설정 (데미지, 속도, 쿨타임 등)
-- [ ] 27. CharacterClassInfo에 StartupAbilities 설정
-
-### 테스트
-- [ ] 28. 에디터에서 스폰 후 기본 폼 이동/대기 확인
-- [ ] 29. 기본 공격 (근접) 동작 확인
-- [ ] 30. 폼 전환 (Basic→Ball→Basic) 시각적 확인
-- [ ] 31. 롤링 돌진 — 플레이어 타겟팅 + 일직선 이동 확인
-- [ ] 32. 롤링 돌진 — 가속도 동작 확인
-- [ ] 33. 롤링 돌진 — 플레이어/적 충돌 시 데미지+스턴 확인
-- [ ] 34. 롤링 돌진 — 지형 충돌 시 본인 스턴 확인
-- [ ] 35. 롤링 돌진 — 클렌저 사이트 충돌 시 1.5배 데미지 확인
-- [ ] 36. 롤링 돌진 — 벽 뒤 플레이어 미타겟팅 확인
-- [ ] 37. 쿨타임 10초 동작 확인
-- [ ] 38. 사망 처리 확인
-- [ ] 39. 멀티플레이어 동기화 테스트 (폼 전환, 돌진, 스턴)
-- [ ] 40. Phase 1/3 스폰 통합 테스트
-
----
-
-## 주의사항 및 엣지 케이스
-
-### 1. 돌진 중 사망 처리
-- 돌진 중(`bIsRolling == true`) 사망 시:
-  1. `StopRollCharge()` 즉시 호출
-  2. 볼 폼이면 기본 폼으로 전환 (메시 교체만, 애니메이션 없이)
-  3. 기본 폼의 Death 애니메이션 재생
-
-### 2. 돌진 중 스턴 (외부 요인)
-- 플레이어의 스턴 공격으로 돌진 중 스턴될 경우:
-  1. `StunTagChanged`에서 `bIsRolling`이면 `StopRollCharge()` 호출
-  2. GA_ArmadilloRollCharge를 CancelAbility
-  3. 볼 폼에서 스턴 → 기본 폼 전환 후 스턴 상태 진입
-
-### 3. 폼 전환 중 피격
-- FormChange 애니메이션 재생 중 피격 시:
-  - HitReact는 무시 (전환 애니메이션 우선)
-  - 데미지는 정상 적용
-  - 이를 위해 FormChange 몽타주에 `Effects.CannotAttack` 태그를 부여하지 않되, HitReact GA의 `BlockAbilitiesWithTag`에 폼 전환 관련 태그 추가
-
-### 4. 목표점 도달 후 복귀
-- 돌진이 충돌 없이 목표점에 도달하면:
-  - 즉시 정지 (데미지/스턴 없음)
-  - Ball → Basic 폼 전환
-  - BT로 제어권 반환
-
-### 5. FindRollTarget 실패 (폼 전환 전 검증)
-- 3000 내에 벽 없는 플레이어가 없으면:
-  - GA의 ActivateAbility 진입 직후, **폼 전환 전에** FindRollTarget()이 nullptr 반환
-  - 즉시 EndAbility 호출 → GA 종료
-  - **폼 전환 애니메이션이 전혀 재생되지 않음** (기본 폼 유지)
-  - 쿨타임 미적용 (CommitAbilityCooldown 호출 전에 종료되므로)
-  - BT의 다음 Tick에서 즉시 다른 행동(근접 공격, 추적 등)으로 전환 가능
-
----
-
-## 부록: 상황별 호출 흐름 상세
-
-아르마딜로가 겪는 모든 주요 상황에 대해, **어디(C++/BP/BT/GA/GE/AnimBP)의 어떤 함수/노드가 어떤 순서로 호출되는지**를 시간 순서대로 기술한다.
-
----
-
-### A. 스폰 및 초기화
+### 5.1 구조 복습
 
 ```
-[1] 월드에 BP_Armadillo 스폰 (GameMode 또는 Phase에서 SpawnActor)
-    │
-    │ ── C++: ADRArmadilloEnemy::ADRArmadilloEnemy() (생성자)
-    │    ├─ BallFormMesh 컴포넌트 생성 (CreateDefaultSubobject)
-    │    ├─ BallFormMesh->SetVisibility(false)
-    │    └─ BallFormMesh->SetCollisionEnabled(NoCollision)
-    │
-    │ ── C++: ADREnemy::ADREnemy() (부모 생성자)
-    │    ├─ PartMeshComponent 생성
-    │    ├─ HealthBar 위젯 컴포넌트 생성
-    │    └─ HitboxComponents 초기화
-    │
-    │ ── C++: ADRCharacterBase::ADRCharacterBase() (조부모 생성자)
-    │    ├─ AbilitySystemComponent 생성
-    │    ├─ AttributeSets (UDREnemyAttributeSet) 생성
-    │    ├─ BurnDebuffComponent, StunDebuffComponent 생성
-    │    └─ Weapon SkeletalMeshComponent 생성
-    │
-    ▼
-[2] ADRArmadilloEnemy::BeginPlay()
-    │
-    ├─ Super::BeginPlay() 호출
-    │   │
-    │   ├─ ADREnemy::BeginPlay()
-    │   │   ├─ SetupHitboxComponents() — "Hitbox" 태그 컴포넌트 수집
-    │   │   ├─ CapsuleComponent->OnComponentHit 바인딩 → OnHit() (벽 스턴용)
-    │   │   └─ 체력 변화 델리게이트 바인딩 (OnHealthChanged, OnMaxHealthChanged)
-    │   │
-    │   └─ ADRCharacterBase::BeginPlay()
-    │       └─ Debuff 태그 콜백 등록 (Stun, Burn)
-    │
-    ├─ DefaultCapsuleRadius 저장 ← GetCapsuleComponent()->GetUnscaledCapsuleRadius()
-    └─ DefaultCapsuleHalfHeight 저장 ← GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight()
-    │
-    ▼
-[3] ADREnemy::PossessedBy(ADRAIController) — AI 컨트롤러 소유
-    │
-    ├─ DRAIController 참조 저장
-    ├─ InitAbilityActorInfo()
-    │   ├─ ASC->InitAbilityActorInfo(this, this)
-    │   ├─ ASC 태그 콜백 등록:
-    │   │   ├─ Effects.HitReact → HitReactTagChanged()
-    │   │   └─ Debuff.Stun → StunTagChanged()
-    │   └─ OnAscRegistered 델리게이트 브로드캐스트
-    │
-    ├─ InitializeDefaultAttributes()
-    │   ├─ UDRAbilitySystemLibrary::InitializeDefaultAttributes()
-    │   │   ├─ CharacterClassInfo에서 Warrior 클래스 정보 조회
-    │   │   ├─ GE_PrimaryAttributes_Armadillo 적용 (MaxHealth, MoveSpeed 등)
-    │   │   └─ GE_VitalAttributes_Enemy 적용 (현재 Health, Water 초기화)
-    │   └─ MoveSpeed 어트리뷰트 → CharacterMovement->MaxWalkSpeed 반영
-    │
-    ├─ AddCharacterAbilities() — 어빌리티 부여
-    │   ├─ GA_ArmadilloBite → ASC->GiveAbility()
-    │   ├─ GA_ArmadilloRollCharge → ASC->GiveAbility()
-    │   └─ GA_HitReact (공용) → ASC->GiveAbility()
-    │
-    ├─ Blackboard 초기화
-    │   ├─ BB->InitializeBlackboard(*BehaviorTree->BlackboardAsset)
-    │   ├─ BB->SetValueAsBool("RangedAttacker", false) — 근접 타입
-    │   ├─ BB->SetValueAsVector("HomeLocation", GetActorLocation())
-    │   └─ BB->SetValueAsBool("RollSkillReady", true) — 초기 스킬 사용 가능
-    │
-    └─ DRAIController->RunBehaviorTree(BT_EnemyBehaviorTree_Armadillo) — BT 실행 시작
-    │
-    ▼
-[4] AnimBP 초기화 (BP_Armadillo의 Mesh 컴포넌트에 설정)
-    │
-    ├─ ABP_Armadillo_Basic — BasicForm 메시의 AnimInstance
-    │   └─ Event Blueprint Initialize Animation
-    │       └─ Owner 캐스팅 → ADRArmadilloEnemy 참조 저장
-    │
-    └─ ABP_Armadillo_Ball — BallForm 메시의 AnimInstance (Hidden 상태지만 초기화됨)
-        └─ Event Blueprint Initialize Animation
-            └─ Owner 캐스팅 → ADRArmadilloEnemy 참조 저장
+WBP_SciFiToggle
+└─ SizeBox_Root (280 x 48)
+   └─ CanvasPanel_Toggle
+      ├─ Image_SelectedFill
+      ├─ Image_Frame
+      ├─ Text_Off
+      ├─ Text_On
+      └─ Button_Hit
+```
+
+### 5.2 필요한 변수
+
+| 변수 이름 | 타입 | 설명 |
+|---|---|---|
+| `Image_SelectedFill` | UImage* | Designer 바인딩 |
+| `Text_Off` | UTextBlock* | Designer 바인딩 |
+| `Text_On` | UTextBlock* | Designer 바인딩 |
+| `Button_Hit` | UButton* | Designer 바인딩 |
+| `bIsOn` | bool | 현재 토글 상태 |
+| `bSuppressCallback` | bool | 프로그래밍 방식 SetToggleState 시 무한 루프 방지 |
+
+### 5.3 Custom Event Dispatcher 생성
+
+**My Blueprint 패널 → Event Dispatchers → + 버튼** → 이름: `OnToggleChanged`
+
+```
+OnToggleChanged (bool bNewState)
+```
+
+### 5.4 Event Construct
+
+```
+Event Construct:
+│
+├─ Button_Hit → OnClicked 바인딩 → HandleClicked
+│
+└─ (끝)
+```
+
+### 5.5 SetToggleState 함수 (외부에서 호출 — Row가 호출)
+
+```
+Function: SetToggleState
+Input: bool bNewOn
+│
+├─ bSuppressCallback = true
+├─ bIsOn = bNewOn
+│
+├─ UpdateVisuals()
+│
+├─ bSuppressCallback = false
+│
+└─ (끝)
+```
+
+### 5.6 UpdateVisuals 함수
+
+```
+Function: UpdateVisuals
+│
+├─ Branch: bIsOn?
+│   ├─ True (ON 상태):
+│   │   Image_SelectedFill → Slot as Canvas Panel Slot → Set Position ((142, 4))
+│   │   Text_Off → Set Color and Opacity: #DDF7FFFF (밝은 — Fill이 없는 쪽)
+│   │   Text_On → Set Color and Opacity: #6677B8FF (어두운 — Fill 위에 있는 쪽)
+│   │
+│   └─ False (OFF 상태):
+│       Image_SelectedFill → Slot as Canvas Panel Slot → Set Position ((4, 4))
+│       Text_Off → Set Color and Opacity: #6677B8FF (어두운 — Fill 위에 있는 쪽)
+│       Text_On → Set Color and Opacity: #DDF7FFFF (밝은 — Fill이 없는 쪽)
+│
+└─ (끝)
+```
+
+**Canvas Panel Slot Position 변경 (Blueprint 노드)**:
+```
+Image_SelectedFill → Slot as Canvas Panel Slot → Set Position (FVector2D)
+```
+
+### 5.7 HandleClicked
+
+```
+Function: HandleClicked
+│
+├─ bIsOn = NOT bIsOn (토글)
+│
+├─ UpdateVisuals()
+│
+├─ Branch: bSuppressCallback == false?
+│   └─ True → OnToggleChanged 디스패처 → Broadcast (bIsOn)
+│
+└─ (끝)
 ```
 
 ---
 
-### B. 평시 행동 (기본 폼 — 순찰 / 추적 / 대기)
+## 6. WBP_SciFiDropdownOption — Graph 로직
+
+### 6.1 구조 복습
 
 ```
-[매 BT Tick]
-    │
-    ├─ BT: Root Selector 평가
-    │   ├─ [1] Dead == false → 스킵
-    │   ├─ [2] Stunned == false → 스킵
-    │   ├─ [3] HitReacting == false → 스킵
-    │   ├─ [4] RollSkillReady 확인 (BTS_CheckRollSkillReady에서 매 0.5초 갱신)
-    │   │     └─ ASC에 Cooldown.Armadillo.RollCharge 태그 없음 → RollSkillReady = true
-    │   │     └─ 하지만 TargetToFollow 미설정 또는 타겟이 플레이어 아님 → [4] 스킵
-    │   ├─ [5] 기본 공격: TargetToFollow 미설정 또는 범위 밖 → 스킵
-    │   ├─ [6] 추적: TargetToFollow 설정됨 → MoveTo 실행
-    │   └─ [7] 순찰: TargetToFollow 미설정 → HomeLocation 주변 이동
-    │
-    ▼
-[BTS_FindNearestPlayer (BT Service, 매 Tick)]
-    │
-    ├─ AIPerceptionComponent에서 감지된 플레이어 목록 조회
-    ├─ 가장 가까운 플레이어 → BB "TargetToFollow"에 설정
-    └─ 감지된 플레이어 없으면 → BB "TargetToFollow" 클리어
-    │
-    ▼
-[이동 중 — CharacterMovement]
-    │
-    ├─ C++: CharacterMovementComponent가 NavMesh 경로를 따라 이동
-    ├─ AnimBP: ABP_Armadillo_Basic → State Machine
-    │   ├─ Event Blueprint Update Animation (매 프레임)
-    │   │   └─ Speed = GetVelocity().Size()
-    │   └─ Locomotion 상태:
-    │       └─ BS_Armadillo_IdleWalk 블렌드 스페이스
-    │           ├─ Speed ≈ 0 → Idle 애니메이션
-    │           └─ Speed ≈ 250 → Walk 애니메이션
-    └─ (BallFormMesh는 Hidden이므로 ABP_Armadillo_Ball은 시각적 영향 없음)
+WBP_SciFiDropdownOption
+└─ SizeBox_Root (280 x 44)
+   └─ Overlay_Root
+      ├─ Image_BG_Normal
+      ├─ Image_BG_Hover (Hidden)
+      ├─ Image_BG_Selected (Hidden)
+      ├─ Text_Option
+      └─ Button_Hit
 ```
 
----
+### 6.2 필요한 변수
 
-### C. 기본 공격 (BasicForm 근접 공격)
+| 변수 이름 | 타입 | 설명 |
+|---|---|---|
+| `Text_Option` | UTextBlock* | Designer 바인딩 |
+| `Image_BG_Normal` | UImage* | Designer 바인딩 |
+| `Image_BG_Hover` | UImage* | Designer 바인딩 |
+| `Image_BG_Selected` | UImage* | Designer 바인딩 |
+| `Button_Hit` | UButton* | Designer 바인딩 |
+| `OptionIndex` | int32 | 이 옵션의 배열 인덱스 |
+| `bIsSelected` | bool | 현재 선택된 옵션인지 |
+
+### 6.3 Custom Event Dispatcher 생성
+
+**My Blueprint 패널 → Event Dispatchers → + 버튼** → 이름: `OnOptionClicked`
 
 ```
-[1] BT: [5] 기본 공격 분기 진입
-    │
-    ├─ Decorator: BB "TargetToFollow" IsSet ✓
-    ├─ Decorator: 공격 범위 내 ✓
-    │
-    ├─ BTT_RotateToFaceTarget 실행
-    │   └─ C++/BP: 아르마딜로를 타겟 방향으로 회전
-    │
-    └─ BTT_Attack_Armadillo 실행
-        │
-        ▼
-[2] BTT_Attack_Armadillo (BT Task Blueprint)
-    │
-    └─ ASC->TryActivateAbilitiesByTag("Abilities.Armadillo.BasicAttack")
-        │
-        ▼
-[3] GA_ArmadilloBite::ActivateAbility() (GA Blueprint — UDRMeleeAttack 상속)
-    │
-    ├─ CommitAbility() — 코스트/쿨다운 확인
-    │
-    ├─ PlayMontageAndWait(AM_Armadillo_BasicAttack)
-    │   │
-    │   │ ── AnimBP: ABP_Armadillo_Basic
-    │   │    └─ DefaultSlot에 AM_Armadillo_BasicAttack 몽타주 재생
-    │   │    └─ BasicAttack 애니메이션 시작
-    │   │
-    │   ▼
-    ├─ [몽타주 재생 중 — 데미지 타이밍]
-    │   │
-    │   └─ AnimNotify 발동 (데미지 Notify)
-    │       │
-    │       └─ GA Blueprint: 이벤트 수신
-    │           ├─ GetAttackMontages() → FTaggedMontage 조회
-    │           ├─ GetCombatSocketLocation(CombatSocket.RightHand) → 소켓 위치
-    │           ├─ SphereTrace / BoxTrace 실행 (공격 범위)
-    │           ├─ 히트된 액터에 대해:
-    │           │   ├─ MakeDamageEffectParamsFromClassDefaults(HitActor)
-    │           │   │   └─ DamageType: Damage.Physical (또는 Damage.Bite)
-    │           │   │   └─ Damage: 설정된 수치
-    │           │   └─ CauseDamage(HitActor)
-    │           │       └─ ASC->ApplyGameplayEffectSpecToTarget()
-    │           │           │
-    │           │           └─ ExecCalc_Damage 실행 (서버)
-    │           │               ├─ 기본 데미지 계산
-    │           │               ├─ 디버프 확률 체크 (Physical → Debuff.Physical)
-    │           │               └─ 최종 데미지 적용 → 대상 Health 감소
-    │           │
-    │           └─ OnAttackExecuted() — 물 보상 감소 카운터 증가
-    │
-    ▼
-[4] 몽타주 완료
-    │
-    └─ GA_ArmadilloBite: OnCompleted 콜백
-        └─ EndAbility()
-            │
-            └─ BTT_Attack_Armadillo: OnAbilityEnded
-                └─ FinishExecute(true) → BT로 제어권 반환
+OnOptionClicked (int32 OptionIndex)
+```
+
+### 6.4 InitOption 함수
+
+```
+Function: InitOption
+Input: FText InText, int32 InIndex, bool bInSelected
+│
+├─ OptionIndex = InIndex
+├─ bIsSelected = bInSelected
+├─ Text_Option → SetText (InText)
+│
+├─ Branch: bInSelected?
+│   ├─ True:
+│   │   Image_BG_Normal → Set Visibility: Hidden
+│   │   Image_BG_Selected → Set Visibility: Not Hit-Testable (Self & All Children)
+│   └─ False:
+│       (기본 Normal 상태 유지)
+│
+├─ Button_Hit → OnClicked 바인딩 → HandleClicked
+├─ Button_Hit → OnHovered 바인딩 → HandleHovered
+├─ Button_Hit → OnUnhovered 바인딩 → HandleUnhovered
+│
+└─ (끝)
+```
+
+### 6.5 HandleClicked
+
+```
+Function: HandleClicked
+│
+├─ OnOptionClicked 디스패처 → Broadcast (OptionIndex)
+│
+└─ (끝)
+```
+
+### 6.6 HandleHovered / HandleUnhovered
+
+```
+Function: HandleHovered
+│
+├─ Branch: bIsSelected == false?
+│   └─ True:
+│       Image_BG_Normal → Set Visibility: Hidden
+│       Image_BG_Hover → Set Visibility: Not Hit-Testable (Self & All Children)
+│
+└─ (끝)
+```
+
+```
+Function: HandleUnhovered
+│
+├─ Branch: bIsSelected == false?
+│   └─ True:
+│       Image_BG_Hover → Set Visibility: Hidden
+│       Image_BG_Normal → Set Visibility: Not Hit-Testable (Self & All Children)
+│
+└─ (끝)
 ```
 
 ---
 
-### D. 롤링 돌진 스킬 (성공 — 플레이어/적 충돌)
+## 7. WBP_SciFiDropdownOptionList — Graph 로직
+
+### 7.1 구조 복습
 
 ```
-[1] BT: [4] 롤링 스킬 분기 진입
-    │
-    ├─ Decorator: BB "RollSkillReady" == true ✓
-    │   └─ (BTS_CheckRollSkillReady가 ASC에 Cooldown 태그 없음 확인)
-    ├─ Decorator: BB "TargetToFollow" IsSet ✓
-    ├─ Decorator: Target이 플레이어 ✓
-    │
-    └─ BTT_ArmadilloRollAttack 실행
-        │
-        └─ ASC->TryActivateAbilitiesByTag("Abilities.Armadillo.RollCharge")
-            │
-            ▼
-[2] GA_ArmadilloRollCharge::ActivateAbility() (GA Blueprint)
-    │
-    ├─ ★ Step 1: 타겟 검색 (폼 전환 전)
-    │   │
-    │   └─ C++: ADRArmadilloEnemy::FindRollTarget()
-    │       ├─ UGameplayStatics::GetAllActorsOfClass(ADRCharacter) — 플레이어 수집
-    │       ├─ 각 플레이어에 대해:
-    │       │   ├─ 거리 계산 (GetDistanceTo) — 3000 이내 필터링
-    │       │   ├─ LineTrace (자신 → 플레이어, ECC_WorldStatic)
-    │       │   │   └─ 히트 있으면 = 벽 차단 → 제외
-    │       │   │   └─ 히트 없으면 = 시야 확보 → 후보 목록에 추가
-    │       │   └─ (플레이어 사망 여부도 확인 — IsDead)
-    │       ├─ 후보 목록에서 랜덤 1명 선택
-    │       └─ 반환: 선택된 플레이어 Actor (또는 nullptr)
-    │
-    ├─ ★ Step 2: 타겟 유효성 확인
-    │   └─ FindRollTarget 결과 != nullptr → 계속 진행 ✓
-    │
-    ├─ ★ Step 3: 타겟 위치 저장
-    │   └─ RollTargetLocation = TargetActor->GetActorLocation()
-    │       (이 시점의 위치가 돌진 목표점으로 고정)
-    │
-    ▼
-[3] 폼 전환: Basic → Ball
-    │
-    ├─ C++: ADRArmadilloEnemy::StartFormChange(true)
-    │   └─ bPendingBallForm = true
-    │
-    ├─ GA Blueprint: PlayMontageAndWait(AM_Armadillo_FormChange_BtoD)
-    │   │
-    │   │ ── AnimBP: ABP_Armadillo_Basic
-    │   │    └─ DefaultSlot에 FormChange_BasicToBall 몽타주 재생
-    │   │    └─ 기본 폼이 볼로 말리는 애니메이션 시작
-    │   │
-    │   ├─ [몽타주 재생 중...]
-    │   │
-    │   └─ AnimNotify: AN_FinishFormChange 발동 (몽타주 끝 부분)
-    │       │
-    │       └─ C++: ADRArmadilloEnemy::FinishFormChange()
-    │           ├─ bIsBallForm = true (bPendingBallForm 값)
-    │           ├─ OnRep_BallForm() 호출 (서버 로컬)
-    │           │   └─ UpdateMeshVisibility()
-    │           │       ├─ GetMesh()->SetVisibility(false) — BasicForm 숨김
-    │           │       └─ BallFormMesh->SetVisibility(true) — BallForm 표시
-    │           ├─ 캡슐 크기 조정:
-    │           │   └─ SetCapsuleSize(BallFormCapsuleRadius, BallFormCapsuleHalfHeight)
-    │           │
-    │           └─ [리플리케이션] bIsBallForm = true → 클라이언트로 전파
-    │               └─ 클라이언트: OnRep_BallForm()
-    │                   └─ UpdateMeshVisibility() — 동일하게 메시 교체
-    │
-    ▼
-[4] 돌진 시작
-    │
-    ├─ C++: ADRArmadilloEnemy::StartRollCharge(RollTargetLocation)
-    │   ├─ bIsRolling = true
-    │   ├─ RollDirection = (TargetLocation - GetActorLocation()).GetSafeNormal2D()
-    │   ├─ CurrentRollSpeed = RollInitialSpeed (200)
-    │   └─ DRAIController->StopMovement() — AI 경로 이동 중지
-    │
-    │ ── AnimBP: ABP_Armadillo_Ball
-    │    └─ State Machine: bIsRolling == true → Roll 상태 진입
-    │        └─ Roll 애니메이션 Loop 재생
-    │
-    ▼
-[5] 돌진 중 (매 서버 Tick)
-    │
-    └─ C++: ADRArmadilloEnemy::Tick(DeltaTime)
-        └─ HasAuthority() && bIsRolling → TickRollCharge(DeltaTime)
-            │
-            ├─ 5-1. 가속
-            │   └─ CurrentRollSpeed += RollAcceleration * DeltaTime
-            │       (200 → 600 → 1000 → ... → 최대 2000)
-            │       └─ FMath::Min으로 RollMaxSpeed 클램프
-            │
-            ├─ 5-2. 이동
-            │   └─ CharacterMovement->Velocity = RollDirection * CurrentRollSpeed
-            │       └─ CharacterMovement가 리플리케이션으로 클라이언트에 위치 동기화
-            │
-            ├─ 5-3. 목표점 도달 확인
-            │   └─ DotProduct(ToTarget, RollDirection) > 0 → 아직 진행 중
-            │
-            └─ 5-4. 전방 충돌 감지
-                └─ DetectRollCollision(HitResult)
-                    └─ SweepSingleByChannel(반지름 30 구, ECC_Pawn)
-                        ├─ Start: 현재 위치
-                        ├─ End: 현재 위치 + 이동 방향 * 속도 * DeltaTime
-                        └─ 히트 감지됨! (플레이어 또는 적 또는 지형지물)
-    │
-    ▼
-[6] 충돌 감지 → C++이 결과를 GA에 전달
-    │
-    ├─ C++: StopRollCharge()
-    │   ├─ bIsRolling = false
-    │   ├─ CurrentRollSpeed = 0
-    │   └─ CharacterMovement->Velocity = Zero
-    │
-    ├─ C++: BroadcastRollImpact(HitResult.ImpactPoint)
-    │   │
-    │   ├─ 6-1. 충돌 지점에서 반지름 50 구 오버랩 검사
-    │   │   └─ OverlapMultiByChannel(ImpactPoint, 반지름 50, ECC_Pawn)
-    │   │       └─ 겹치는 액터 목록 수집 → FRollImpactResult.HitActors에 저장
-    │   │
-    │   ├─ 6-2. 각 액터 타입 확인 → bHitPlayerOrEnemy 플래그 설정
-    │   │   └─ ADRCharacter 또는 ADREnemy가 있으면 true
-    │   │
-    │   └─ 6-3. ★ OnRollImpact.Broadcast(Result) → GA에 충돌 결과 전달
-    │       └─ (C++은 데미지/스턴을 적용하지 않음)
-    │
-    │ ── AnimBP: ABP_Armadillo_Ball
-    │    └─ bIsRolling == false → Roll에서 Idle로 전환
-    │
-    ▼
-[7] ★ GA Blueprint: HandleRollImpact(ImpactResult) — 데미지/스턴 처리
-    │
-    ├─ ImpactResult.HitActors 배열 순회:
-    │   │
-    │   ├─ [Cast to ADRCharacter 성공 — 플레이어]
-    │   │   ├─ ★ CauseDamage(PlayerActor)
-    │   │   │   └─ 부모 DRDamageGameplayAbility의 인프라 사용:
-    │   │   │       ├─ MakeDamageEffectParamsFromClassDefaults(PlayerActor)
-    │   │   │       │   └─ DamageEffectClass, Damage(50), DamageType(Physical) 자동 적용
-    │   │   │       └─ ASC->ApplyGameplayEffectSpecToTarget(플레이어 ASC)
-    │   │   │           └─ ExecCalc_Damage 실행 → 플레이어 Health -50
-    │   │   │
-    │   │   └─ ★ 1초 스턴 GE 적용 (GA Blueprint에서 직접):
-    │   │       ├─ 플레이어 ASC 가져오기 (IAbilitySystemInterface)
-    │   │       ├─ MakeOutgoingSpec(PlayerStunEffectClass = GE_ArmadilloRollStun_Player)
-    │   │       └─ ApplyGameplayEffectSpecToTarget(플레이어 ASC)
-    │   │           ├─ 플레이어: Debuff.Stun 태그 부여
-    │   │           ├─ 플레이어: StunTagChanged() → bIsStunned = true
-    │   │           ├─ 플레이어: OnRep_Stunned() → StunDebuffComponent 활성화
-    │   │           └─ 1초 후 GE 만료 → 스턴 해제
-    │   │
-    │   ├─ [Cast to ADREnemy 성공 — 다른 적]
-    │   │   └─ ★ CauseDamage(EnemyActor) ← 동일하게 50 데미지
-    │   │       └─ MakeDamageEffectParamsFromClassDefaults → ExecCalc_Damage
-    │   │
-    │   └─ [Cast to ADRCleanserSite 성공 — 클렌저 사이트]
-    │       └─ ★ 1.5배 데미지 적용 (GA Blueprint에서 계산):
-    │           ├─ Params = MakeDamageEffectParamsFromClassDefaults(CleanserActor)
-    │           ├─ Params의 Damage를 GetDamageAtLevel() * CleanserDamageMultiplier로 변경
-    │           │   └─ 50 * 1.5 = 75
-    │           └─ ApplyDamageEffect(Params) → ExecCalc_Damage → 클렌저 Health -75
-    │
-    ├─ ImpactResult.bHitPlayerOrEnemy 확인:
-    │   ├─ [true] → 본인 스턴 없음
-    │   └─ [false — 지형지물만 충돌] → 본인 스턴 (GA Blueprint에서 적용):
-    │       ├─ GetAbilitySystemComponentFromActorInfo()
-    │       ├─ MakeOutgoingSpec(SelfStunEffectClass = GE_ArmadilloRollStun_Self)
-    │       └─ ApplyGameplayEffectSpecToSelf() → 1.5초 스턴
-    │
-    ▼
-[8] 기본 폼 복귀 + 스킬 완료 (GA Blueprint HandleRollImpact 계속)
-    │
-    ├─ C++: StartFormChange(false)
-    │   └─ bPendingBallForm = false
-    │
-    ├─ GA Blueprint: PlayMontageAndWait(AM_ArmadilloBall_FormChange_DtoB)
-    │   │
-    │   │ ── AnimBP: ABP_Armadillo_Ball
-    │   │    └─ FormChange_BallToBasic 몽타주 재생
-    │   │
-    │   └─ AnimNotify: AN_FinishFormChange 발동
-    │       │
-    │       └─ C++: FinishFormChange()
-    │           ├─ bIsBallForm = false
-    │           ├─ OnRep_BallForm()
-    │           │   └─ UpdateMeshVisibility()
-    │           │       ├─ GetMesh()->SetVisibility(true) — BasicForm 표시
-    │           │       └─ BallFormMesh->SetVisibility(false) — BallForm 숨김
-    │           └─ 캡슐 크기 복원:
-    │               └─ SetCapsuleSize(DefaultCapsuleRadius, DefaultCapsuleHalfHeight)
-    │
-    ├─ GA Blueprint: CommitAbilityCooldown()
-    │   └─ GE_Cooldown_ArmadilloRollCharge 적용 → ASC에 Cooldown 태그 10초
-    │
-    ├─ GA Blueprint: EndAbility()
-    │
-    └─ BTT_ArmadilloRollAttack: OnAbilityEnded
-        ├─ ASC에 Cooldown 태그 확인 → 있음 → 성공
-        ├─ BB "RollSkillReady" = false
-        └─ FinishExecute(true) → BT로 제어권 반환
-            │
-            └─ [이후] BTS_CheckRollSkillReady가 매 0.5초마다 Cooldown 태그 확인
-                └─ 10초 후 쿨타임 만료 → BB "RollSkillReady" = true
+WBP_SciFiDropdownOptionList
+└─ SizeBox_Root (280 x Auto)
+   └─ VerticalBox_Options
+      ├─ WBP_SciFiDropdownOption (동적 생성)
+      ├─ WBP_SciFiDropdownOption
+      └─ ...
+```
+
+### 7.2 필요한 변수
+
+| 변수 이름 | 타입 | 설명 |
+|---|---|---|
+| `VerticalBox_Options` | UVerticalBox* | Designer 바인딩 |
+| `OwnerDropdown` | WBP_SciFiDropdown* | 이 리스트를 소유한 드롭다운 참조 |
+
+### 7.3 InitOptionList 함수
+
+```
+Function: InitOptionList
+Input: TArray<FText> InOptions, int32 CurrentSelectedIndex, WBP_SciFiDropdown* InOwner
+│
+├─ OwnerDropdown = InOwner
+│
+├─ VerticalBox_Options → Clear Children
+│
+├─ For Each (InOptions, Index i):
+│   │
+│   ├─ Create Widget (WBP_SciFiDropdownOption) → OptionWidget
+│   │
+│   ├─ OptionWidget → InitOption (InOptions[i], i, i == CurrentSelectedIndex)
+│   │
+│   ├─ ★ OptionWidget.OnOptionClicked 바인딩 → HandleOptionClicked
+│   │   (WBP_SciFiDropdownOption의 커스텀 디스패처에 바인딩)
+│   │
+│   ├─ VerticalBox_Options → Add Child (OptionWidget)
+│   │   Slot: Size = Auto, HAlign = Fill, VAlign = Fill
+│
+└─ (끝)
+```
+
+### 7.4 HandleOptionClicked
+
+```
+Function: HandleOptionClicked
+Input: int32 OptionIndex
+│
+├─ OwnerDropdown → OnOptionSelected (OptionIndex)
+│   (WBP_SciFiDropdown의 함수를 직접 호출)
+│
+└─ (끝)
 ```
 
 ---
 
-### E. 롤링 돌진 스킬 — 지형 충돌 (본인 스턴)
+## 8. WBP_SciFiDropdown — Graph 로직
+
+### 8.1 구조 복습
 
 ```
-[1~5] D의 [1]~[5]와 동일 (타겟 검색 → 폼 전환 → 돌진 시작 → Tick 이동)
-    │
-    ▼
-[6] 충돌 감지 → C++이 결과를 GA에 전달
-    │
-    ├─ C++: DetectRollCollision() — SphereTrace가 지형(WorldStatic) 히트
-    │
-    ├─ C++: StopRollCharge()
-    │   ├─ bIsRolling = false
-    │   ├─ CurrentRollSpeed = 0
-    │   └─ Velocity = Zero
-    │
-    ├─ C++: BroadcastRollImpact(ImpactPoint)
-    │   │
-    │   ├─ OverlapMultiByChannel(반지름 50) 실행
-    │   │   └─ 결과: ADRCharacter 없음, ADREnemy 없음
-    │   │   └─ (지형지물은 Pawn 채널이 아니므로 오버랩에 잡히지 않음)
-    │   │
-    │   ├─ FRollImpactResult 구성:
-    │   │   ├─ HitActors: 빈 배열 (또는 지형 액터만)
-    │   │   └─ bHitPlayerOrEnemy = false
-    │   │
-    │   └─ ★ OnRollImpact.Broadcast(Result) → GA에 전달
-    │
-    ▼
-[7] ★ GA Blueprint: HandleRollImpact(ImpactResult) — 본인 스턴 처리
-    │
-    ├─ ImpactResult.HitActors 순회 → 플레이어/적/클렌저 없음
-    │
-    ├─ ImpactResult.bHitPlayerOrEnemy == false
-    │   └─ ★ 본인 스턴 적용 (GA Blueprint에서):
-    │       ├─ GetAbilitySystemComponentFromActorInfo()
-    │       ├─ MakeOutgoingSpec(SelfStunEffectClass = GE_ArmadilloRollStun_Self)
-    │       └─ ApplyGameplayEffectSpecToSelf() → 1.5초 스턴
-    │           │
-    │           └─ C++: StunTagChanged(Debuff.Stun, 1)
-    │               ├─ bIsStunned = true
-    │               ├─ BB "Stunned" = true
-    │               ├─ OnRep_Stunned() → StunDebuffComponent 활성화 (VFX)
-    │               └─ CharacterMovement->MaxWalkSpeed = StunnedMoveSpeed (0)
-    │
-    ▼
-[8] 스턴 상태 (1.5초간)
-    │
-    ├─ BT: [2] Stunned == true → Wait 분기 진입
-    │   └─ 다른 모든 행동 차단
-    │
-    ├─ AnimBP: ABP_Armadillo_Ball
-    │   └─ bIsStunned == true → Idle 상태 (볼 폼에 Stun 애니가 없으므로)
-    │
-    ▼
-[9] 스턴 해제 후 기본 폼 복귀 (GA Blueprint HandleRollImpact 계속)
-    │
-    ├─ 1.5초 후: GE_ArmadilloRollStun_Self 만료
-    │   └─ C++: StunTagChanged(Debuff.Stun, 0)
-    │       ├─ bIsStunned = false
-    │       ├─ BB "Stunned" = false
-    │       ├─ OnRep_Stunned() → StunDebuffComponent 비활성화
-    │       └─ CharacterMovement->MaxWalkSpeed 복원
-    │
-    ├─ GA Blueprint: 폼 복귀 진행
-    │   ├─ StartFormChange(false)
-    │   ├─ PlayMontageAndWait(AM_ArmadilloBall_FormChange_DtoB)
-    │   ├─ AN_FinishFormChange → FinishFormChange()
-    │   │   └─ 메시 교체 + 캡슐 복원 (D의 [8]과 동일)
-    │   │
-    │   ├─ CommitAbilityCooldown() → 10초 쿨타임
-    │   └─ EndAbility()
-    │
-    └─ BTT → FinishExecute(true) → BT 정상 재개
+WBP_SciFiDropdown
+└─ SizeBox_Root (280 x 48)
+   └─ Overlay_Root
+      ├─ Image_BG_Normal
+      ├─ Image_BG_Hover (Hidden)
+      ├─ Image_BG_Selected (Hidden)
+      ├─ Image_Frame
+      ├─ Text_SelectedValue
+      ├─ SizeBox_Arrow
+      │  └─ Image_Arrow
+      └─ Button_Hit
 ```
 
----
+### 8.2 필요한 변수
 
-### F. 롤링 돌진 스킬 — 타겟 없음 (즉시 취소)
+| 변수 이름 | 타입 | 설명 |
+|---|---|---|
+| `Image_BG_Normal` | UImage* | Designer 바인딩 |
+| `Image_BG_Hover` | UImage* | Designer 바인딩 |
+| `Image_BG_Selected` | UImage* | Designer 바인딩 |
+| `Text_SelectedValue` | UTextBlock* | Designer 바인딩 |
+| `Button_Hit` | UButton* | Designer 바인딩 |
+| `Options` | TArray\<FText\> | 옵션 텍스트 배열 |
+| `SelectedIndex` | int32 | 현재 선택된 인덱스 |
+| `bIsOpen` | bool | 드롭다운 열림 상태 |
+| `ParentScreen` | WBP_SettingsScreen* | 팝업 레이어를 가진 부모 화면 |
+| `OptionListWidget` | WBP_SciFiDropdownOptionList* | 현재 열린 옵션 리스트 인스턴스 |
 
-```
-[1] BT: [4] 롤링 스킬 분기 진입
-    │
-    ├─ Decorator: RollSkillReady == true ✓
-    ├─ Decorator: TargetToFollow IsSet ✓
-    ├─ Decorator: Target이 플레이어 ✓
-    │
-    └─ BTT_ArmadilloRollAttack 실행
-        └─ ASC->TryActivateAbilitiesByTag("Abilities.Armadillo.RollCharge")
-            │
-            ▼
-[2] GA_ArmadilloRollCharge::ActivateAbility()
-    │
-    ├─ FindRollTarget() 호출
-    │   ├─ 3000 내 플레이어 수집
-    │   ├─ 각 플레이어에 LineTrace → 모두 벽에 차단됨
-    │   └─ 반환: nullptr (유효 타겟 없음)
-    │
-    ├─ ★ nullptr 확인 → 즉시 EndAbility()
-    │   └─ 폼 전환 없음 (StartFormChange 호출하지 않음)
-    │   └─ 쿨타임 없음 (CommitAbilityCooldown 호출하지 않음)
-    │
-    └─ BTT_ArmadilloRollAttack: OnAbilityEnded
-        ├─ ASC에 Cooldown 태그 확인 → 없음 → 실패로 판별
-        └─ FinishExecute(false) → BT Selector가 다음 분기([5] 기본 공격)로 이동
-            │
-            └─ 아르마딜로는 기본 폼 유지, 즉시 근접 공격이나 추적 수행
-```
+### 8.3 Custom Event Dispatcher 생성
 
----
-
-### G. 롤링 돌진 — 목표점 도달 (충돌 없이 통과)
+**My Blueprint 패널 → Event Dispatchers → + 버튼** → 이름: `OnSelectionChanged`
 
 ```
-[1~5] D의 [1]~[5]와 동일 (타겟 검색 → 폼 전환 → 돌진)
-    │
-    ▼
-[6] 목표점 도달
-    │
-    └─ C++: TickRollCharge(DeltaTime)
-        ├─ ToTarget = RollTargetLocation - GetActorLocation()
-        ├─ DotProduct(ToTarget, RollDirection) <= 0 — 목표점을 지나침
-        │
-        ├─ StopRollCharge()
-        │   ├─ bIsRolling = false
-        │   ├─ CurrentRollSpeed = 0
-        │   └─ Velocity = Zero
-        │
-        └─ ★ OnRollReachedTarget.Broadcast() → GA에 목표 도달 알림
-    │
-    ▼
-[7] ★ GA Blueprint: HandleRollReachedTarget() — 폼 복귀 처리
-    │
-    ├─ (데미지/스턴 없음 — 충돌이 발생하지 않았으므로)
-    │
-    ├─ 폼 복귀: StartFormChange(false) → Ball→Basic 전환
-    │   └─ D의 [8]과 동일 (몽타주 → AN_FinishFormChange → 메시 교체)
-    │
-    ├─ CommitAbilityCooldown() → 10초 쿨타임
-    │
-    └─ EndAbility() → BTT 복귀
+OnSelectionChanged (int32 NewIndex)
 ```
 
----
-
-### H. 피격 (HitReact)
+### 8.4 InitDropdown 함수
 
 ```
-[1] 플레이어 공격이 아르마딜로에 적중
-    │
-    ├─ C++: ExecCalc_Damage 실행 (서버)
-    │   ├─ 데미지 계산 → Health 감소
-    │   ├─ 디버프 확률 체크 (데미지 타입에 따라)
-    │   └─ HitReact GE 적용 시도
-    │
-    ▼
-[2] GE_HitReact 적용
-    │
-    └─ ASC에 Effects.HitReact 태그 부여
-        │
-        └─ C++: ADREnemy::HitReactTagChanged(Effects.HitReact, 1)
-            ├─ bHitReacting = true
-            ├─ BB "HitReacting" = true
-            └─ HitReactingMoveSpeed 적용 (200)
-    │
-    ▼
-[3] GA_HitReact 발동
-    │
-    ├─ ASC->TryActivateAbilitiesByTag(Abilities.HitReact)
-    │
-    └─ GA_HitReact::ActivateAbility()
-        │
-        ├─ ★ 볼 폼 중이면:
-        │   └─ 볼 폼에서는 HitReact 몽타주가 없음
-        │   └─ GA가 실패하거나 빈 몽타주로 처리
-        │   └─ (돌진 중이면 돌진은 계속됨 — HitReact로 중단하지 않음)
-        │
-        └─ ★ 기본 폼이면:
-            ├─ HitReactMontages 배열에서 랜덤 선택
-            │   └─ AM_Armadillo_HitReact1 / 2 / 3 중 하나
-            │
-            ├─ PlayMontageAndWait(선택된 HitReact 몽타주)
-            │   └─ AnimBP: ABP_Armadillo_Basic → 몽타주 재생
-            │
-            ├─ [몽타주 완료]
-            │   └─ EndAbility()
-            │
-            └─ HitReactTagChanged(Effects.HitReact, 0)
-                ├─ bHitReacting = false
-                ├─ BB "HitReacting" = false
-                └─ 이동 속도 복원
-    │
-    ▼
-[4] BT 재개
-    └─ HitReacting == false → 정상 분기 진행
+Function: InitDropdown
+Input: TArray<FText> InOptions, WBP_SettingsScreen* InScreen
+│
+├─ Options = InOptions
+├─ ParentScreen = InScreen
+├─ bIsOpen = false
+├─ SelectedIndex = 0
+│
+├─ Button_Hit → OnClicked 바인딩 → HandleClicked
+├─ Button_Hit → OnHovered 바인딩 → HandleHovered
+├─ Button_Hit → OnUnhovered 바인딩 → HandleUnhovered
+│
+└─ (끝)
+```
+
+### 8.5 SetSelectedIndex 함수 (외부에서 호출)
+
+```
+Function: SetSelectedIndex
+Input: int32 InIndex
+│
+├─ SelectedIndex = InIndex
+│
+├─ Branch: InIndex가 Options 배열 범위 내?
+│   ├─ True → Text_SelectedValue → SetText (Options[InIndex])
+│   └─ False → (skip)
+│
+└─ (끝)
+```
+
+### 8.6 HandleClicked
+
+```
+Function: HandleClicked
+│
+├─ Branch: bIsOpen?
+│   ├─ True → CloseDropdown()
+│   └─ False → OpenDropdown()
+│
+└─ (끝)
+```
+
+### 8.7 OpenDropdown
+
+```
+Function: OpenDropdown
+│
+├─ bIsOpen = true
+│
+├─ 비주얼 업데이트:
+│   Image_BG_Normal → Set Visibility: Hidden
+│   Image_BG_Hover → Set Visibility: Hidden
+│   Image_BG_Selected → Set Visibility: Not Hit-Testable (Self & All Children)
+│
+├─ OptionListWidget 생성:
+│   Create Widget (WBP_SciFiDropdownOptionList) → OptionListWidget
+│   OptionListWidget → InitOptionList (Options, SelectedIndex, self)
+│
+├─ 위치 계산 (LocalToAbsolute → AbsoluteToLocal 변환):
+│   (1) Button_Hit → Get Cached Geometry → MyGeo
+│   (2) AbsolutePos = MyGeo → Local To Absolute (LocalCoord: (0, 48))
+│       // (0, 48) = 드롭다운 박스 바로 아래 위치
+│   (3) CanvasPanel_DropdownPopupLayer → Get Cached Geometry → PopupGeo
+│       // ParentScreen에서 CanvasPanel_DropdownPopupLayer 참조를 가져와야 함
+│   (4) LocalPos = PopupGeo → Absolute To Local (AbsolutePos)
+│
+├─ ParentScreen → ShowDropdownPopup (OptionListWidget, LocalPos)
+│
+└─ (끝)
+```
+
+> **참고**: `CanvasPanel_DropdownPopupLayer`의 참조는 `ParentScreen`의 public 변수나 함수를 통해 접근한다.
+> 예: `ParentScreen → GetDropdownPopupLayer()` 또는 `ParentScreen.CanvasPanel_DropdownPopupLayer` 직접 접근.
+
+### 8.8 CloseDropdown
+
+```
+Function: CloseDropdown
+│
+├─ bIsOpen = false
+│
+├─ 비주얼 업데이트:
+│   Image_BG_Selected → Set Visibility: Hidden
+│   Image_BG_Normal → Set Visibility: Not Hit-Testable (Self & All Children)
+│
+├─ ParentScreen → HideDropdownPopup()
+│
+├─ OptionListWidget = null
+│
+└─ (끝)
+```
+
+### 8.9 HandleHovered / HandleUnhovered
+
+```
+Function: HandleHovered
+│
+├─ Branch: bIsOpen == false?
+│   └─ True:
+│       Image_BG_Normal → Set Visibility: Hidden
+│       Image_BG_Hover → Set Visibility: Not Hit-Testable (Self & All Children)
+│
+└─ (끝)
+```
+
+```
+Function: HandleUnhovered
+│
+├─ Branch: bIsOpen == false?
+│   └─ True:
+│       Image_BG_Hover → Set Visibility: Hidden
+│       Image_BG_Normal → Set Visibility: Not Hit-Testable (Self & All Children)
+│
+└─ (끝)
+```
+
+### 8.10 OnOptionSelected 콜백 (OptionList에서 호출)
+
+```
+Function: OnOptionSelected
+Input: int32 NewIndex
+│
+├─ SetSelectedIndex (NewIndex)
+├─ CloseDropdown()
+├─ ★ OnSelectionChanged 디스패처 → Broadcast (NewIndex)
+│   (커스텀 디스패처를 통해 부모 Row에 인덱스 전달)
+│
+└─ (끝)
 ```
 
 ---
 
-### I. 사망
+## 9. WBP_SettingRow_Slider — Graph 로직
+
+### 9.1 구조 복습
 
 ```
-[1] Health가 0 이하로 감소
-    │
-    └─ C++: ADREnemy::PostGameplayEffectExecute() 또는 AttributeSet에서 감지
-        └─ Die(DeathImpulse) 호출
-    │
-    ▼
-[2] ADREnemy::Die(DeathImpulse)
-    │
-    ├─ bDead = true
-    ├─ OnDeathDelegate 브로드캐스트 (Phase 시스템이 수신 → 적 카운트 감소)
-    ├─ ActivateDeathAbilities() — 사망 시 발동 어빌리티 (있으면)
-    ├─ DropPart() — 부품 드롭 (bCarriesPart이면)
-    └─ MulticastHandleDeath(DeathImpulse) 호출 — RPC
-    │
-    ▼
-[3] ADRArmadilloEnemy::MulticastHandleDeath_Implementation(DeathImpulse)
-    │  (모든 클라이언트 + 서버에서 실행)
-    │
-    ├─ ★ 돌진 중이면:
-    │   └─ StopRollCharge()
-    │       ├─ bIsRolling = false
-    │       └─ Velocity = Zero
-    │
-    ├─ ★ 볼 폼이면:
-    │   └─ 즉시 기본 폼으로 전환 (애니메이션 없이)
-    │       ├─ bIsBallForm = false
-    │       └─ UpdateMeshVisibility()
-    │           ├─ GetMesh()->SetVisibility(true)
-    │           └─ BallFormMesh->SetVisibility(false)
-    │
-    ├─ Super::MulticastHandleDeath_Implementation(DeathImpulse) — 부모 사망 처리
-    │   │
-    │   ├─ AI 정지:
-    │   │   ├─ DRAIController->StopMovement()
-    │   │   └─ BrainComponent->StopLogic("Dead")
-    │   │
-    │   ├─ BB "Dead" = true
-    │   │
-    │   ├─ ASC에 모든 활성 GA 취소
-    │   │   └─ GA_ArmadilloRollCharge 실행 중이면 취소됨
-    │   │
-    │   ├─ 캡슐 충돌 비활성화
-    │   │   └─ SetCollisionEnabled(NoCollision)
-    │   │
-    │   ├─ Dissolve 시작
-    │   │   └─ DissolveMaterialInstance 적용 → 타임라인 시작
-    │   │
-    │   └─ SetLifeSpan(LifeSpan) — 일정 시간 후 액터 소멸
-    │
-    │ ── AnimBP: ABP_Armadillo_Basic
-    │    └─ bIsDead == true → Death 상태 진입
-    │        └─ Death 애니메이션 재생 (1회)
-    │
-    ▼
-[4] LifeSpan 만료
-    │
-    └─ 액터 Destroy
-        └─ ADRCharacterBase::Destroyed()
-            └─ 정리 작업
+WBP_SettingRow_Slider
+└─ SizeBox_Root (760 x 92)
+   └─ CanvasPanel_Row
+      ├─ Text_Label
+      ├─ Image_SeparatorLine
+      └─ WBP_SciFiSlider
 ```
 
----
+### 9.2 필요한 변수
 
-### J. 스턴 (외부 요인 — 기본 폼)
+| 변수 이름 | 타입 | 설명 |
+|---|---|---|
+| `Text_Label` | UTextBlock* | Designer 바인딩 |
+| `SciFiSlider` | WBP_SciFiSlider* | Designer 바인딩 |
+| `SettingId` | FName | 이 Row가 담당하는 설정 ID (예: "Audio.MasterVolume") |
+| `Definition` | FDRSettingDefinition | 설정 정의 사본 |
+
+### 9.3 InitRow 함수
 
 ```
-[1] 플레이어의 Lightning 공격 적중
-    │
-    └─ ExecCalc_Damage
-        ├─ Damage.Lightning → Debuff.Stun 매핑
-        ├─ 디버프 확률 성공
-        └─ Debuff Stun GE 적용
-    │
-    ▼
-[2] C++: ADRArmadilloEnemy::StunTagChanged(Debuff.Stun, 1)
-    │
-    ├─ Super::StunTagChanged() — ADREnemy::StunTagChanged()
-    │   ├─ bIsStunned = true
-    │   ├─ BB "Stunned" = true
-    │   ├─ BB "FirstAttacker" 클리어
-    │   ├─ BB "HasFirstAttacker" = false
-    │   ├─ BB "TargetToFollow" 클리어
-    │   └─ OnRep_Stunned() → StunDebuffComponent 활성화 (VFX)
-    │
-    ├─ CharacterMovement->MaxWalkSpeed = StunnedMoveSpeed (0)
-    │
-    └─ ★ bIsRolling 확인 → false (기본 폼이므로) → 추가 처리 없음
-    │
-    ▼
-[3] 스턴 상태
-    │
-    ├─ BT: [2] Stunned == true → Wait 분기
-    │
-    ├─ AnimBP: ABP_Armadillo_Basic
-    │   └─ State Machine: bIsStunned == true → Stun 상태 진입
-    │       └─ Stun 애니메이션 Loop 재생
-    │
-    └─ [스턴 지속시간 경과]
-    │
-    ▼
-[4] 스턴 해제
-    │
-    └─ GE 만료 → StunTagChanged(Debuff.Stun, 0)
-        ├─ bIsStunned = false
-        ├─ BB "Stunned" = false
-        ├─ OnRep_Stunned() → StunDebuffComponent 비활성화
-        ├─ CharacterMovement->MaxWalkSpeed 복원
-        │
-        └─ AnimBP: bIsStunned == false → Locomotion으로 Blend Out
-            └─ 정상 행동 재개
+Function: InitRow
+Input: FDRSettingDefinition InDefinition, UDRSettingsManager* InManager
+│
+├─ Definition = InDefinition
+├─ SettingId = InDefinition.SettingId
+│
+├─ Text_Label → SetText (InDefinition.LabelText)
+│
+├─ SciFiSlider → InitSlider (
+│     MinValue = InDefinition.MinValue,       (예: 0)
+│     MaxValue = InDefinition.MaxValue,       (예: 100)
+│     StepValue = InDefinition.StepValue,     (예: 1)
+│     SuffixText = InDefinition.SuffixText    (예: "%")
+│   )
+│
+├─ 현재값 로드:
+│   InManager → GetPendingValue (SettingId) → CurrentValue
+│   SciFiSlider → SetValue (CurrentValue.FloatValue)
+│
+├─ ★ SciFiSlider.OnSliderValueChanged 바인딩 → HandleSliderValueChanged
+│   (WBP_SciFiSlider의 커스텀 디스패처에 바인딩)
+│
+│   바인딩 방법:
+│   SciFiSlider → Bind Event to OnSliderValueChanged
+│   → Create Event → HandleSliderValueChanged
+│
+└─ (끝)
+```
+
+### 9.4 HandleSliderValueChanged 콜백
+
+이 함수는 WBP_SciFiSlider의 **커스텀** `OnSliderValueChanged` 디스패처에 바인딩된다.
+절대값(예: 80.0)이 전달된다.
+
+```
+Function: HandleSliderValueChanged
+Input: float NewAbsoluteValue (OnSliderValueChanged에서 전달된 절대값)
+│
+├─ FDRSettingsValue SettingsValue = MakeFloatValue (NewAbsoluteValue)
+│
+├─ Get Game Instance → Get Subsystem (UDRSettingsManager) → SettingsManager
+│   SettingsManager → SetPendingValue (SettingId, SettingsValue)
+│   (Instant 모드 설정은 C++ 내부에서 즉시 ApplySingleSetting + CommitSingleSetting 호출됨)
+│
+└─ (끝)
+```
+
+### 9.5 UpdateDisplayValue 함수 (Page에서 호출)
+
+```
+Function: UpdateDisplayValue
+Input: FDRSettingsValue NewValue
+│
+├─ SciFiSlider → SetValue (NewValue.FloatValue)
+│   (SetValue 내부에서 bSuppressCallback=true이므로
+│    OnSliderValueChanged 디스패처가 발생하지 않음 → 무한 루프 없음)
+│
+└─ (끝)
+```
+
+### 9.6 RefreshFromManager 함수 (Reset 시 호출)
+
+```
+Function: RefreshFromManager
+│
+├─ Get Game Instance → Get Subsystem (UDRSettingsManager) → SettingsManager
+│   SettingsManager → GetPendingValue (SettingId) → Value
+├─ UpdateDisplayValue (Value)
+│
+└─ (끝)
 ```
 
 ---
 
-### K. 스턴 (외부 요인 — 돌진 중)
+## 10. WBP_SettingRow_Toggle — Graph 로직
+
+### 10.1 구조 복습
 
 ```
-[1] 돌진 중 플레이어의 스턴 공격 적중
-    │
-    └─ Debuff Stun GE 적용
-    │
-    ▼
-[2] C++: ADRArmadilloEnemy::StunTagChanged(Debuff.Stun, 1)
-    │
-    ├─ Super::StunTagChanged()
-    │   ├─ bIsStunned = true
-    │   ├─ BB 업데이트 (Stunned, 타겟 클리어)
-    │   └─ OnRep_Stunned() → VFX
-    │
-    ├─ ★ bIsRolling == true 확인 → 돌진 중단 필요!
-    │   │
-    │   └─ StopRollCharge()
-    │       ├─ bIsRolling = false
-    │       ├─ CurrentRollSpeed = 0
-    │       └─ Velocity = Zero
-    │
-    ├─ CharacterMovement->MaxWalkSpeed = 0
-    │
-    └─ GA_ArmadilloRollCharge: 외부에서 CancelAbility() 호출
-        └─ GA 즉시 종료 (쿨타임은 적용 여부 결정 필요)
-    │
-    ▼
-[3] 스턴 상태 (볼 폼 유지)
-    │
-    ├─ AnimBP: ABP_Armadillo_Ball
-    │   └─ bIsStunned == true → Idle (볼 폼 Stun = Idle)
-    │
-    └─ [스턴 지속시간 경과]
-    │
-    ▼
-[4] 스턴 해제 후 기본 폼 복귀
-    │
-    ├─ StunTagChanged(Debuff.Stun, 0) → bIsStunned = false
-    │
-    ├─ ★ 볼 폼 상태에서 스턴 해제 → 기본 폼으로 복귀 필요
-    │   ├─ StartFormChange(false)
-    │   ├─ FormChange_BallToBasic 몽타주 재생
-    │   ├─ AN_FinishFormChange → FinishFormChange()
-    │   │   └─ 메시 교체 + 캡슐 복원
-    │   └─ (이 복귀 로직은 StunTagChanged 내부에서 트리거하거나,
-    │       BT에서 bIsBallForm == true && bIsRolling == false 감지 시
-    │       별도 Task로 복귀 처리)
-    │
-    └─ BT 정상 재개
+WBP_SettingRow_Toggle
+└─ SizeBox_Root (760 x 92)
+   └─ CanvasPanel_Row
+      ├─ Text_Label
+      ├─ Image_SeparatorLine
+      └─ WBP_SciFiToggle
 ```
 
----
+### 10.2 필요한 변수
 
-### L. 벽 스턴 (넉백으로 벽에 충돌)
+| 변수 이름 | 타입 | 설명 |
+|---|---|---|
+| `Text_Label` | UTextBlock* | Designer 바인딩 |
+| `SciFiToggle` | WBP_SciFiToggle* | Designer 바인딩 |
+| `SettingId` | FName | 이 Row가 담당하는 설정 ID |
+| `Definition` | FDRSettingDefinition | 설정 정의 사본 |
+
+### 10.3 InitRow 함수
 
 ```
-[1] 플레이어의 넉백 공격 적중
-    │
-    ├─ ExecCalc_Damage에서 KnockbackForce 적용
-    │   └─ LaunchCharacter() 또는 Velocity 직접 설정
-    │
-    └─ C++: ADREnemy::SetKnockbackState(true)
-        └─ bIsBeingKnockedBack = true
-    │
-    ▼
-[2] 넉백 이동 중 벽에 충돌
-    │
-    └─ C++: ADREnemy::OnHit(HitComponent, OtherActor, ...)
-        │
-        ├─ 조건 확인:
-        │   ├─ bIsBeingKnockedBack == true ✓
-        │   ├─ NormalImpulse의 속도 >= MinSpeedForStun (50) ✓
-        │   ├─ OtherActor가 StaticMeshActor (벽) ✓
-        │   ├─ OtherActor가 Floor 아님 ✓
-        │   └─ bIsStunImmune == false ✓
-        │
-        └─ ApplyWallStun()
-            ├─ Stun GE 적용 (WallStunDuration = 5초)
-            │   └─ StunTagChanged → bIsStunned = true (J와 동일)
-            │
-            ├─ bIsStunImmune = true
-            └─ SetTimer(EndStunImmunity, StunImmunityDuration = 5초)
-                └─ 5초 후: bIsStunImmune = false
-    │
-    ▼
-[3~4] J의 [3]~[4]와 동일 (스턴 상태 → 해제 → 복귀)
-    │
-    └─ ★ 돌진 중 벽 스턴이면 K의 흐름을 따름
+Function: InitRow
+Input: FDRSettingDefinition InDef, UDRSettingsManager* InMgr
+│
+├─ Definition = InDef
+├─ SettingId = InDef.SettingId
+│
+├─ Text_Label → SetText (InDef.LabelText)
+│
+├─ 현재값 로드:
+│   InMgr → GetPendingValue (SettingId) → PendingValue
+│   SciFiToggle → SetToggleState (PendingValue.BoolValue)
+│
+├─ ★ SciFiToggle.OnToggleChanged 바인딩 → HandleToggleChanged
+│   (WBP_SciFiToggle의 커스텀 디스패처에 바인딩)
+│
+└─ (끝)
+```
+
+### 10.4 HandleToggleChanged
+
+```
+Function: HandleToggleChanged
+Input: bool bNewState (OnToggleChanged에서 전달)
+│
+├─ Value = MakeBoolValue (bNewState)
+│
+├─ Get Game Instance → Get Subsystem (UDRSettingsManager) → SettingsManager
+│   SettingsManager → SetPendingValue (SettingId, Value)
+│
+└─ (끝)
+```
+
+### 10.5 UpdateDisplayValue / RefreshFromManager
+
+```
+Function: UpdateDisplayValue
+Input: FDRSettingsValue NewValue
+│
+├─ SciFiToggle → SetToggleState (NewValue.BoolValue)
+│   (SetToggleState 내부에서 bSuppressCallback=true이므로
+│    OnToggleChanged가 발생하지 않음 → 무한 루프 없음)
+│
+└─ (끝)
+```
+
+```
+Function: RefreshFromManager
+│
+├─ Get Game Instance → Get Subsystem (UDRSettingsManager) → SettingsManager
+│   SettingsManager → GetPendingValue (SettingId) → Value
+├─ UpdateDisplayValue (Value)
+│
+└─ (끝)
 ```
 
 ---
 
-### M. 광폭화 (Enrage — Phase 3)
+## 11. WBP_SettingRow_Dropdown — Graph 로직
+
+### 11.1 구조 복습
 
 ```
-[1] Health가 EnrageHealthThreshold (20%) 이하로 감소
-    │
-    └─ C++: PostGameplayEffectExecute에서 체력 비율 확인
-        └─ Health / MaxHealth <= 0.2
-            └─ TriggerEnrage()
-    │
-    ▼
-[2] C++: ADREnemy::TriggerEnrage()
-    │
-    ├─ bIsEnraged = true
-    ├─ BB "IsEnraged" = true
-    ├─ BB "AttackSpeed" = EnrageAttackSpeedMultiplier (0.5 = 2배 빠름)
-    │
-    ├─ EnrageMovementSpeedGE 적용
-    │   └─ 이동 속도 증가 → CharacterMovement->MaxWalkSpeed 증가
-    │
-    └─ AnimBP: 애니메이션 재생 속도에 AttackSpeed 반영
-        └─ (몽타주 PlayRate에 적용)
-    │
-    ▼
-[3] 이후 행동
-    │
-    └─ BT는 동일하게 실행되지만:
-        ├─ 이동 속도 증가 → 추적/순찰이 빨라짐
-        └─ 공격 속도 증가 → 근접 공격 몽타주가 빠르게 재생
+WBP_SettingRow_Dropdown
+└─ SizeBox_Root (760 x 92)
+   └─ CanvasPanel_Row
+      ├─ Text_Label
+      ├─ Image_SeparatorLine
+      └─ WBP_SciFiDropdown
+```
+
+### 11.2 필요한 변수
+
+| 변수 이름 | 타입 | 설명 |
+|---|---|---|
+| `Text_Label` | UTextBlock* | Designer 바인딩 |
+| `SciFiDropdown` | WBP_SciFiDropdown* | Designer 바인딩 |
+| `SettingId` | FName | 이 Row가 담당하는 설정 ID |
+| `Definition` | FDRSettingDefinition | 설정 정의 사본 |
+
+### 11.3 InitRow 함수
+
+```
+Function: InitRow
+Input: FDRSettingDefinition InDef, UDRSettingsManager* InMgr, WBP_SettingsScreen* InScreen
+│
+├─ Definition = InDef
+├─ SettingId = InDef.SettingId
+│
+├─ Text_Label → SetText (InDef.LabelText)
+│
+├─ 옵션 텍스트 배열 구성:
+│   OptionTexts = []
+│   For Each (InDef.Options):
+│     OptionTexts.Add (Option.DisplayText)
+│
+├─ SciFiDropdown → InitDropdown (OptionTexts, InScreen)
+│
+├─ 현재값 로드:
+│   InMgr → GetPendingValue (SettingId) → PendingValue
+│   SciFiDropdown → SetSelectedIndex (PendingValue.SelectedIndex)
+│
+├─ ★ SciFiDropdown.OnSelectionChanged 바인딩 → HandleSelectionChanged
+│   (WBP_SciFiDropdown의 커스텀 디스패처에 바인딩)
+│
+└─ (끝)
+```
+
+### 11.4 HandleSelectionChanged 콜백
+
+```
+Function: HandleSelectionChanged
+Input: int32 NewIndex (OnSelectionChanged에서 전달)
+│
+├─ SelectedOption = Definition.Options[NewIndex]
+│
+├─ Switch (Definition.ValueType):
+│   │
+│   ├─ Name (DisplayMode, Language 등):
+│   │   Value = MakeNameValue (SelectedOption.OptionId, NewIndex)
+│   │
+│   ├─ Int (FPSLimit, Scalability 등):
+│   │   Value = MakeIntValue (SelectedOption.IntValue)
+│   │   Value.SelectedIndex = NewIndex
+│   │   ※ MakeIntValue는 SelectedIndex를 0으로 초기화하므로 반드시 수동 설정
+│   │
+│   ├─ Resolution:
+│   │   Value = MakeResolutionValue (SelectedOption.ResolutionX, SelectedOption.ResolutionY, NewIndex)
+│   │
+│   └─ (기타 타입)
+│
+├─ Get Game Instance → Get Subsystem (UDRSettingsManager) → SettingsManager
+│   SettingsManager → SetPendingValue (SettingId, Value)
+│
+└─ (끝)
+```
+
+### 11.5 UpdateDisplayValue / RefreshFromManager
+
+```
+Function: UpdateDisplayValue
+Input: FDRSettingsValue NewValue
+│
+├─ SciFiDropdown → SetSelectedIndex (NewValue.SelectedIndex)
+│
+└─ (끝)
+```
+
+```
+Function: RefreshFromManager
+│
+├─ Get Game Instance → Get Subsystem (UDRSettingsManager) → SettingsManager
+│   SettingsManager → GetPendingValue (SettingId) → PendingValue
+├─ UpdateDisplayValue (PendingValue)
+│
+└─ (끝)
 ```
 
 ---
 
-### N. 호출 흐름 요약 (주체별)
+## 12. WBP_SettingsTabButton — Graph 로직
 
-| 주체 | 담당 역할 | 호출되는 주요 함수/이벤트 |
-|------|----------|------------------------|
-| **BT** | AI 행동 결정 | Selector 분기 평가, BTT 실행, BTS 주기적 갱신 |
-| **BTT_Attack_Armadillo** | 기본 공격 트리거 | TryActivateAbilitiesByTag → GA_ArmadilloBite |
-| **BTT_ArmadilloRollAttack** | 돌진 스킬 트리거 | TryActivateAbilitiesByTag → GA_ArmadilloRollCharge |
-| **BTS_CheckRollSkillReady** | 쿨타임 확인 | ASC 태그 조회 → BB 갱신 |
-| **BTS_FindNearestPlayer** | 타겟 갱신 | AIPerception → BB "TargetToFollow" |
-| **GA_ArmadilloBite** | 근접 공격 실행 | 몽타주 재생, AnimNotify에서 Trace, CauseDamage |
-| **GA_ArmadilloRollCharge** | 돌진 스킬 실행 + **데미지/스턴 처리** | FindRollTarget, 델리게이트 바인딩, StartFormChange, StartRollCharge, **HandleRollImpact에서 CauseDamage/스턴 GE 적용**, 폼 복귀, 쿨타임 |
-| **GA_HitReact** | 피격 반응 | 랜덤 HitReact 몽타주 재생 |
-| **C++ ADRArmadilloEnemy** | 폼 전환 + 돌진 물리 + **충돌 결과 전달** | StartFormChange, FinishFormChange, TickRollCharge, DetectRollCollision, **BroadcastRollImpact**, FindRollTarget, **OnRollImpact/OnRollReachedTarget 브로드캐스트** |
-| **C++ ADREnemy** | 적 공통 로직 | Die, StunTagChanged, HitReactTagChanged, OnHit(벽 스턴), TriggerEnrage |
-| **C++ ADRCharacterBase** | 캐릭터 공통 | MulticastHandleDeath, Dissolve, RepNotify(Stun/Burn) |
-| **ABP_Armadillo_Basic** | 기본 폼 애니메이션 | Locomotion(BS), Stun(Loop), Death, 몽타주 재생 |
-| **ABP_Armadillo_Ball** | 볼 폼 애니메이션 | Idle, Roll(Loop), 몽타주 재생 |
-| **AN_FinishFormChange** | 폼 전환 완료 알림 | FinishFormChange() 호출 → 메시 교체 |
-| **GE (DamageEffectClass)** | 돌진 데미지 | GA의 DamageEffectClass에 설정된 기존 범용 GE → ExecCalc_Damage |
-| **GE_ArmadilloRollStun_Player** | 플레이어 스턴 | Debuff.Stun 1초 (GA에서 적용) |
-| **GE_ArmadilloRollStun_Self** | 본인 스턴 | Debuff.Stun 1.5초 (GA에서 적용) |
-| **GE_Cooldown_ArmadilloRollCharge** | 스킬 쿨타임 | Cooldown 태그 10초 (GA에서 적용) |
-| **ExecCalc_Damage** | 데미지 계산 | 기본 데미지 + 디버프 확률 판정 |
+### 12.1 구조 복습
 
-**핵심 책임 분리 원칙**:
 ```
-C++ (ADRArmadilloEnemy)              GA Blueprint (GA_ArmadilloRollCharge)
-──────────────────────────          ──────────────────────────────────────
-폼 전환 메시 교체                    타겟 검색 요청 (FindRollTarget 호출)
-돌진 이동/가속 물리                  타겟 위치 저장
-전방 SphereTrace 충돌 감지           델리게이트 바인딩
-충돌 범위 OverlapMulti 수집          HandleRollImpact에서:
-FRollImpactResult 구성                ├─ CauseDamage() (부모 인프라)
-OnRollImpact 브로드캐스트             ├─ 스턴 GE 적용
-OnRollReachedTarget 브로드캐스트      ├─ 클렌저 1.5배 데미지 계산
-                                      └─ 본인 스턴 GE 적용
-❌ GE 생성/적용하지 않음             폼 복귀 요청 (StartFormChange 호출)
-❌ 데미지 계산하지 않음              쿨타임 적용 (CommitAbilityCooldown)
-❌ 스턴 적용하지 않음                EndAbility
+WBP_SettingsTabButton
+└─ SizeBox_Root (330 x 92)
+   └─ Overlay_Root
+      ├─ Image_SelectedBG
+      ├─ Text_Label
+      └─ Button_Hit
+```
+
+### 12.2 필요한 변수
+
+| 변수 이름 | 타입 | 설명 |
+|---|---|---|
+| `Image_SelectedBG` | UImage* | Designer 바인딩 |
+| `Text_Label` | UTextBlock* | Designer 바인딩 |
+| `Button_Hit` | UButton* | Designer 바인딩 |
+| `TabIndex` | int32 | 이 버튼의 탭 인덱스 (0~3) |
+| `ParentScreen` | WBP_SettingsScreen* | 부모 화면 참조 |
+| `bIsSelected` | bool | 현재 선택 상태 |
+
+### 12.3 InitTab 함수
+
+```
+Function: InitTab
+Input: int32 InTabIndex, WBP_SettingsScreen* InParentScreen
+│
+├─ TabIndex = InTabIndex
+├─ ParentScreen = InParentScreen
+│
+├─ Switch (TabIndex):
+│   0 → Text_Label → SetText ("GAMEPLAY")
+│   1 → Text_Label → SetText ("GRAPHICS")
+│   2 → Text_Label → SetText ("AUDIO")
+│   3 → Text_Label → SetText ("CONTROLS")
+│
+├─ Button_Hit → OnClicked 바인딩 → HandleClicked
+│
+└─ (끝)
+```
+
+### 12.4 HandleClicked
+
+```
+Function: HandleClicked
+│
+├─ ParentScreen → SelectTab (TabIndex)
+│
+└─ (끝)
+```
+
+### 12.5 SetSelected 함수
+
+```
+Function: SetSelected
+Input: bool bSelected
+│
+├─ bIsSelected = bSelected
+│
+├─ Branch: bSelected?
+│   ├─ True:
+│   │   Image_SelectedBG → Set Visibility: Not Hit-Testable (Self & All Children)
+│   │   Image_SelectedBG → Set Render Opacity: 1.0
+│   │   Text_Label → Set Color and Opacity: #DDF7FFFF (밝은 색)
+│   └─ False:
+│       Image_SelectedBG → Set Visibility: Hidden
+│       Text_Label → Set Color and Opacity: #6677B8FF (어두운 색)
+│
+└─ (끝)
+```
+
+### 12.6 Hover 효과 (선택 사항)
+
+```
+Button_Hit → OnHovered:
+  Branch: bIsSelected == false?
+    True → Image_SelectedBG → Set Visibility: Not Hit-Testable (Self & All Children)
+            Image_SelectedBG → Set Render Opacity: 0.4
+
+Button_Hit → OnUnhovered:
+  Branch: bIsSelected == false?
+    True → Image_SelectedBG → Set Visibility: Hidden
+```
+
+---
+
+## 13. WBP_KeyHintBar — Graph 로직
+
+### 13.1 구조 복습
+
+```
+WBP_KeyHintBar
+└─ SizeBox_Root (460 x 60)
+   └─ HorizontalBox_Hints
+      ├─ WBP_KeyHint_R ("RESET")
+      ├─ Spacer
+      ├─ WBP_KeyHint_ESC ("BACK")
+      ├─ Spacer
+      └─ WBP_KeyHint_A ("APPLY")
+```
+
+### 13.2 필요한 변수
+
+| 변수 이름 | 타입 | 설명 |
+|---|---|---|
+| `KeyHint_A` | WBP_KeyHint* | Designer 바인딩. A 키 힌트 위젯 |
+
+### 13.3 SetApplyVisible 함수
+
+```
+Function: SetApplyVisible
+Input: bool bVisible
+│
+├─ Branch: bVisible?
+│   ├─ True → KeyHint_A → Set Visibility: Not Hit-Testable (Self & All Children)
+│   └─ False → KeyHint_A → Set Visibility: Collapsed
+│
+└─ (끝)
+```
+
+WBP_SettingsScreen에서 `OnHasPendingChangesChanged`를 받으면 이 함수를 호출한다.
+
+---
+
+## 14. WBP_SettingsPage_Gameplay — Graph 로직
+
+### 14.1 구조 복습
+
+```
+WBP_SettingsPage_Gameplay
+└─ SizeBox_Root
+   └─ CanvasPanel_Page
+      ├─ Text_PageTitle ("GAMEPLAY")
+      └─ VerticalBox_Rows
+         ├─ WBP_SettingRow_Slider_CameraSensitivity
+         └─ WBP_SettingRow_Dropdown_Language
+```
+
+### 14.2 필요한 변수
+
+| 변수 이름 | 타입 | 설명 |
+|---|---|---|
+| `Row_CameraSensitivity` | WBP_SettingRow_Slider* | Designer 바인딩 |
+| `Row_Language` | WBP_SettingRow_Dropdown* | Designer 바인딩 |
+
+### 14.3 InitializePage 함수
+
+```
+Function: InitializePage
+Input: UDRSettingsManager* InManager, WBP_SettingsScreen* InParentScreen
+│
+├─ ① Camera Sensitivity Row 초기화
+│   InManager → GetDefinitionById ("Gameplay.CameraSensitivity") → Definition
+│   Row_CameraSensitivity → InitRow (Definition, InManager)
+│
+├─ ② Language Row 초기화
+│   InManager → GetDefinitionById ("Gameplay.Language") → Definition
+│   Row_Language → InitRow (Definition, InManager, InParentScreen)
+│
+├─ ③ 델리게이트 바인딩
+│   InManager.OnPendingValueChanged → OnPendingValueChanged
+│   InManager.OnSettingsReset → OnSettingsReset
+│
+└─ (끝)
+```
+
+### 14.4 OnPendingValueChanged 콜백
+
+```
+Function: OnPendingValueChanged
+Input: FName SettingId, FDRSettingsValue NewValue
+│
+├─ Branch: SettingId == "Gameplay.CameraSensitivity"?
+│   └─ True → Row_CameraSensitivity → UpdateDisplayValue (NewValue)
+│
+├─ Branch: SettingId == "Gameplay.Language"?
+│   └─ True → Row_Language → UpdateDisplayValue (NewValue)
+│
+└─ (끝)
+```
+
+### 14.5 OnSettingsReset 콜백
+
+```
+Function: OnSettingsReset
+Input: EDRSettingsTab Tab
+│
+├─ Branch: Tab == Gameplay?
+│   └─ True:
+│       Row_CameraSensitivity → RefreshFromManager()
+│       Row_Language → RefreshFromManager()
+│
+└─ (끝)
+```
+
+---
+
+## 15. WBP_SettingsPage_Graphics — Graph 로직
+
+### 15.1 구조 복습
+
+```
+WBP_SettingsPage_Graphics
+└─ SizeBox_Root
+   └─ CanvasPanel_Page
+      ├─ Text_PageTitle ("GRAPHICS")
+      └─ VerticalBox_Rows
+         ├─ WBP_SettingRow_Dropdown_DisplayMode
+         ├─ WBP_SettingRow_Dropdown_Resolution
+         ├─ WBP_SettingRow_Toggle_VSync
+         ├─ WBP_SettingRow_Dropdown_FPS
+         ├─ WBP_SettingRow_Dropdown_Scalability
+         └─ WBP_SettingRow_Slider_Gamma
+```
+
+### 15.2 필요한 변수
+
+| 변수 이름 | 타입 | 설명 |
+|---|---|---|
+| `Row_DisplayMode` | WBP_SettingRow_Dropdown* | Designer 바인딩 |
+| `Row_Resolution` | WBP_SettingRow_Dropdown* | Designer 바인딩 |
+| `Row_VSync` | WBP_SettingRow_Toggle* | Designer 바인딩 |
+| `Row_FPS` | WBP_SettingRow_Dropdown* | Designer 바인딩 |
+| `Row_Scalability` | WBP_SettingRow_Dropdown* | Designer 바인딩 |
+| `Row_Gamma` | WBP_SettingRow_Slider* | Designer 바인딩 |
+
+### 15.3 InitializePage 함수
+
+```
+Function: InitializePage
+Input: UDRSettingsManager* InManager, WBP_SettingsScreen* InParentScreen
+│
+├─ ① DisplayMode
+│   InManager → GetDefinitionById ("Graphics.DisplayMode") → Def
+│   Row_DisplayMode → InitRow (Def, InManager, InParentScreen)
+│
+├─ ② Resolution
+│   InManager → GetDefinitionById ("Graphics.Resolution") → Def
+│   Row_Resolution → InitRow (Def, InManager, InParentScreen)
+│
+├─ ③ VSync
+│   InManager → GetDefinitionById ("Graphics.VSync") → Def
+│   Row_VSync → InitRow (Def, InManager)
+│
+├─ ④ FPS
+│   InManager → GetDefinitionById ("Graphics.FPSLimit") → Def
+│   Row_FPS → InitRow (Def, InManager, InParentScreen)
+│
+├─ ⑤ Scalability
+│   InManager → GetDefinitionById ("Graphics.Scalability") → Def
+│   Row_Scalability → InitRow (Def, InManager, InParentScreen)
+│
+├─ ⑥ Gamma
+│   InManager → GetDefinitionById ("Graphics.Gamma") → Def
+│   Row_Gamma → InitRow (Def, InManager)
+│
+├─ 델리게이트 바인딩:
+│   InManager.OnPendingValueChanged → OnPendingValueChanged
+│   InManager.OnSettingsReset → OnSettingsReset
+│
+└─ (끝)
+```
+
+### 15.4 OnPendingValueChanged 콜백
+
+```
+Function: OnPendingValueChanged
+Input: FName SettingId, FDRSettingsValue NewValue
+│
+├─ Switch (SettingId):
+│   "Graphics.DisplayMode"  → Row_DisplayMode  → UpdateDisplayValue (NewValue)
+│   "Graphics.Resolution"   → Row_Resolution   → UpdateDisplayValue (NewValue)
+│   "Graphics.VSync"        → Row_VSync        → UpdateDisplayValue (NewValue)
+│   "Graphics.FPSLimit"     → Row_FPS          → UpdateDisplayValue (NewValue)
+│   "Graphics.Scalability"  → Row_Scalability  → UpdateDisplayValue (NewValue)
+│   "Graphics.Gamma"        → Row_Gamma        → UpdateDisplayValue (NewValue)
+│
+└─ (끝)
+```
+
+### 15.5 OnSettingsReset 콜백
+
+```
+Function: OnSettingsReset
+Input: EDRSettingsTab Tab
+│
+├─ Branch: Tab == Graphics?
+│   └─ True:
+│       Row_DisplayMode → RefreshFromManager()
+│       Row_Resolution → RefreshFromManager()
+│       Row_VSync → RefreshFromManager()
+│       Row_FPS → RefreshFromManager()
+│       Row_Scalability → RefreshFromManager()
+│       Row_Gamma → RefreshFromManager()
+│
+└─ (끝)
+```
+
+---
+
+## 16. WBP_SettingsPage_Audio — Graph 로직
+
+### 16.1 구조
+
+```
+WBP_SettingsPage_Audio
+└─ SizeBox_Root
+   └─ CanvasPanel_Page
+      ├─ Text_PageTitle ("AUDIO")
+      └─ VerticalBox_Rows
+         ├─ WBP_SettingRow_Slider_MasterVolume
+         ├─ WBP_SettingRow_Slider_MusicVolume
+         └─ WBP_SettingRow_Slider_SFXVolume
+```
+
+### 16.2 필요한 변수
+
+| 변수 이름 | 타입 | 설명 |
+|---|---|---|
+| `Row_MasterVolume` | WBP_SettingRow_Slider* | Designer 바인딩 |
+| `Row_MusicVolume` | WBP_SettingRow_Slider* | Designer 바인딩 |
+| `Row_SFXVolume` | WBP_SettingRow_Slider* | Designer 바인딩 |
+
+### 16.3 InitializePage
+
+```
+Function: InitializePage
+Input: UDRSettingsManager* InManager, WBP_SettingsScreen* InParentScreen
+│
+├─ InManager → GetDefinitionById ("Audio.MasterVolume") → Def
+│  Row_MasterVolume → InitRow (Def, InManager)
+│
+├─ InManager → GetDefinitionById ("Audio.MusicVolume") → Def
+│  Row_MusicVolume → InitRow (Def, InManager)
+│
+├─ InManager → GetDefinitionById ("Audio.SFXVolume") → Def
+│  Row_SFXVolume → InitRow (Def, InManager)
+│
+├─ 델리게이트 바인딩:
+│   InManager.OnPendingValueChanged → OnPendingValueChanged
+│   InManager.OnSettingsReset → OnSettingsReset
+│
+└─ (끝)
+```
+
+### 16.4 OnPendingValueChanged / OnSettingsReset
+
+```
+OnPendingValueChanged (FName SettingId, FDRSettingsValue NewValue):
+  "Audio.MasterVolume" → Row_MasterVolume → UpdateDisplayValue (NewValue)
+  "Audio.MusicVolume"  → Row_MusicVolume  → UpdateDisplayValue (NewValue)
+  "Audio.SFXVolume"    → Row_SFXVolume    → UpdateDisplayValue (NewValue)
+```
+
+```
+OnSettingsReset (EDRSettingsTab Tab):
+  Tab == Audio? → 모든 Row → RefreshFromManager()
+```
+
+---
+
+## 17. WBP_SettingsPage_Controls — Graph 로직
+
+현재 비어있으므로 InitializePage에서 아무것도 초기화하지 않는다.
+
+```
+Function: InitializePage
+Input: UDRSettingsManager* InManager, WBP_SettingsScreen* InParentScreen
+│
+└─ (아무것도 안 함 — 추후 키 리바인딩 추가 시 여기에 작성)
+```
+
+---
+
+## 18. WBP_SettingsScreen — Graph 로직
+
+### 18.1 필요한 변수
+
+| 변수 이름 | 타입 | 카테고리 | 설명 |
+|---|---|---|---|
+| `WidgetSwitcher_SettingsPages` | UWidgetSwitcher* | Designer 바인딩 | 페이지 전환기 |
+| `CanvasPanel_DropdownPopupLayer` | UCanvasPanel* | Designer 바인딩 | 드롭다운 팝업 레이어 |
+| `CurrentTabIndex` | int32 | State | 현재 선택된 탭 (0~3) |
+| `TabButtons` | TArray\<WBP_SettingsTabButton*\> | State | 탭 버튼 4개 배열 |
+| `PageGameplay` | WBP_SettingsPage_Gameplay* | Designer 바인딩 | |
+| `PageGraphics` | WBP_SettingsPage_Graphics* | Designer 바인딩 | |
+| `PageAudio` | WBP_SettingsPage_Audio* | Designer 바인딩 | |
+| `PageControls` | WBP_SettingsPage_Controls* | Designer 바인딩 | |
+| `KeyHintBar` | WBP_KeyHintBar* | Designer 바인딩 | 하단 키 힌트 바 |
+| `ActiveDropdown` | WBP_SciFiDropdown* | State | 현재 열린 드롭다운 (닫기용) |
+
+### 18.2 Event Construct
+
+```
+Event Construct
+│
+├─ ① SettingsManager 참조 획득
+│   Get Game Instance → Get Subsystem (UDRSettingsManager) → SettingsManager (로컬 변수)
+│
+├─ ② 설정 시스템 초기화
+│   SettingsManager → InitSettings()
+│   (이미 로드된 경우 bLoaded=true로 조기 리턴)
+│
+├─ ③ 각 페이지 초기화
+│   PageGameplay → InitializePage (SettingsManager, self)
+│   PageGraphics → InitializePage (SettingsManager, self)
+│   PageAudio → InitializePage (SettingsManager, self)
+│   PageControls → InitializePage (SettingsManager, self)
+│
+├─ ④ 탭 버튼 초기화
+│   TabButtons 배열에 4개의 WBP_SettingsTabButton 참조 추가
+│   (Designer에서 VerticalBox_LeftTabs의 자식들을 Is Variable로 설정해 두었으므로 직접 참조)
+│   각 TabButton → InitTab (TabIndex, self)
+│
+├─ ⑤ 기본 탭 선택 (Graphics = 인덱스 1)
+│   SelectTab (1)
+│
+├─ ⑥ 델리게이트 바인딩
+│   SettingsManager.OnHasPendingChangesChanged → OnPendingChangesChanged
+│   SettingsManager.OnSettingsApplied → OnSettingsApplied
+│
+├─ ⑦ 키보드 포커스 설정
+│   self → Set Keyboard Focus
+│   (OnKeyDown을 받기 위해 필요)
+│
+└─ (끝)
+```
+
+### 18.3 SelectTab 함수
+
+```
+Function: SelectTab
+Input: int32 TabIndex
+│
+├─ CurrentTabIndex = TabIndex
+│
+├─ WidgetSwitcher_SettingsPages → Set Active Widget Index (TabIndex)
+│
+├─ For Each (TabButtons 배열):
+│   │
+│   ├─ Branch: 현재 Index == TabIndex?
+│   │   ├─ True → TabButton → SetSelected (true)
+│   │   └─ False → TabButton → SetSelected (false)
+│
+└─ (끝)
+```
+
+### 18.4 키보드 입력 처리 (OnKeyDown 오버라이드)
+
+WBP_SettingsScreen은 `Is Focusable: true`로 설정되어 있으므로, `OnKeyDown`을 오버라이드하여 키 입력을 처리한다.
+
+> **왜 OnKeyDown인가?**: 설정 화면이 열리면 `SetInputMode(FInputModeUIOnly)`가 호출되어 Enhanced Input이 작동하지 않는다.
+> 따라서 UMG의 `OnKeyDown`이 키 입력을 받는 유일한 방법이다.
+
+```
+Event OnKeyDown (MyGeometry, InKeyEvent)
+│
+├─ Key = InKeyEvent → Get Key
+│
+├─ Branch: Key == Escape?
+│   └─ True:
+│       ├─ Get Game Instance → Get Subsystem (UDRSettingsManager) → Mgr
+│       │   Branch: Mgr.bHasPendingChanges?
+│       │   ├─ True → Mgr → DiscardPendingChanges()
+│       │   └─ False → (skip)
+│       ├─ Get Owning Player → Cast to DRPlayerController
+│       │   → CloseSettingsMenu()
+│       └─ Return: Handled
+│
+├─ Branch: Key == R?
+│   └─ True:
+│       ├─ CurrentTabIndex → EDRSettingsTab 변환 (아래 참고)
+│       ├─ Get Game Instance → Get Subsystem (UDRSettingsManager) → Mgr
+│       │   Mgr → ResetTabToDefault (변환된 EDRSettingsTab)
+│       └─ Return: Handled
+│
+├─ Branch: Key == A?
+│   └─ True:
+│       ├─ Get Game Instance → Get Subsystem (UDRSettingsManager) → Mgr
+│       │   Branch: Mgr.bHasPendingChanges?
+│       │   ├─ True → Mgr → ApplyPendingSettings()
+│       │   └─ False → (skip)
+│       └─ Return: Handled
+│
+└─ Return: Unhandled
+```
+
+**CurrentTabIndex → EDRSettingsTab 변환**:
+- 0 → `EDRSettingsTab::Gameplay`
+- 1 → `EDRSettingsTab::Graphics`
+- 2 → `EDRSettingsTab::Audio`
+- 3 → `EDRSettingsTab::Controls`
+
+Switch 노드 또는 `static_cast` (Make Literal Enum)로 처리 가능.
+
+### 18.5 OnPendingChangesChanged 콜백
+
+```
+Function: OnPendingChangesChanged
+Input: bool bHasPendingChanges
+│
+├─ KeyHintBar → SetApplyVisible (bHasPendingChanges)
+│
+└─ (끝)
+```
+
+### 18.6 OnSettingsApplied 콜백
+
+```
+Function: OnSettingsApplied
+│
+├─ (현재는 특별한 처리 불필요)
+│  (Apply 후 bHasPendingChanges가 false가 되면
+│   OnPendingChangesChanged에서 A 키 힌트가 자동으로 사라짐)
+│
+└─ (끝)
+```
+
+### 18.7 드롭다운 팝업 레이어 관련 함수
+
+WBP_SciFiDropdown이 열릴 때 옵션 목록을 `CanvasPanel_DropdownPopupLayer`에 띄워야 한다.
+
+```
+Function: ShowDropdownPopup
+Input: WBP_SciFiDropdownOptionList* OptionListWidget, FVector2D ScreenPosition
+│
+├─ CanvasPanel_DropdownPopupLayer → Clear Children
+│
+├─ ── 외부 클릭으로 닫기 위한 투명 배경 버튼 추가 ──
+│   Create Widget (UButton) → BackgroundButton
+│   BackgroundButton의 Style: 모든 상태 Tint Alpha = 0
+│   CanvasPanel_DropdownPopupLayer → Add Child (BackgroundButton)
+│   Canvas Panel Slot:
+│     Anchors: (0,0) ~ (1,1)  (전체 화면)
+│     Offsets: 0,0,0,0
+│     ZOrder: 0
+│   BackgroundButton.OnClicked → HandleBackgroundClicked
+│
+├─ ── 옵션 리스트 위젯 추가 ──
+│   CanvasPanel_DropdownPopupLayer → Add Child (OptionListWidget)
+│   Canvas Panel Slot:
+│     Position = ScreenPosition
+│     Size = (280, Auto)
+│     ZOrder: 1
+│
+├─ CanvasPanel_DropdownPopupLayer → Set Visibility: Visible
+│
+├─ ActiveDropdown = OptionListWidget의 OwnerDropdown
+│   (닫기 처리를 위해 현재 열린 드롭다운 추적)
+│
+└─ (끝)
+```
+
+```
+Function: HideDropdownPopup
+│
+├─ CanvasPanel_DropdownPopupLayer → Clear Children
+│
+├─ CanvasPanel_DropdownPopupLayer → Set Visibility: Not Hit-Testable (Self Only)
+│
+├─ ActiveDropdown = null
+│
+├─ self → Set Keyboard Focus
+│   (포커스를 다시 SettingsScreen으로 돌려 OnKeyDown 작동 보장)
+│
+└─ (끝)
+```
+
+```
+Function: HandleBackgroundClicked
+│
+├─ Branch: ActiveDropdown이 Valid?
+│   └─ True → ActiveDropdown → CloseDropdown()
+│
+└─ (끝)
+```
+
+---
+
+## 19. BP_DRPlayerController — 설정 화면 열기/닫기
+
+`ADRPlayerController`의 `OpenSettingsMenu`/`CloseSettingsMenu`는 `BlueprintNativeEvent`로 선언되어 있으므로, 블루프린트 자식 클래스(`BP_DRPlayerController`)에서 오버라이드하여 WBP 생성/제거 로직을 구현한다.
+
+### 19.1 변수 추가 (BP_DRPlayerController)
+
+| 변수 이름 | 타입 | 설명 |
+|---|---|---|
+| `SettingsScreenClass` | TSubclassOf\<UUserWidget\> | WBP_SettingsScreen 클래스 참조 (Details에서 설정) |
+| `SettingsScreenInstance` | UUserWidget* | 현재 생성된 설정 화면 인스턴스 |
+
+### 19.2 OpenSettingsMenu 오버라이드
+
+```
+Event OpenSettingsMenu
+│
+├─ (부모 호출: Parent: OpenSettingsMenu)
+│   → C++ 내부: bIsSettingsMenuOpen = true
+│   → C++ 내부: InputMode = UI Only
+│   → C++ 내부: ShowMouseCursor = true
+│
+├─ Branch: SettingsScreenInstance가 Valid한가?
+│   ├─ True → 이미 존재하면 아무것도 안 함 (return)
+│   └─ False → 아래로 진행
+│
+├─ Create Widget (SettingsScreenClass, Owning Player = self)
+│   → 결과를 SettingsScreenInstance에 저장
+│
+├─ SettingsScreenInstance → Add to Viewport (ZOrder: 50)
+│
+└─ (끝)
+```
+
+### 19.3 CloseSettingsMenu 오버라이드
+
+```
+Event CloseSettingsMenu
+│
+├─ Branch: SettingsScreenInstance가 Valid한가?
+│   ├─ True:
+│   │   ├─ SettingsScreenInstance → Remove from Parent
+│   │   └─ SettingsScreenInstance = null
+│   └─ False → skip
+│
+└─ (부모 호출: Parent: CloseSettingsMenu)
+    → C++ 내부: bIsSettingsMenuOpen = false
+    → C++ 내부: RestoreDefaultInputMode()
+```
+
+---
+
+## 20. 데이터 흐름 요약
+
+### 20.1 설정 화면 열기 흐름
+
+```
+(1) 플레이어가 ESC(또는 설정 키) 누름
+(2) DRPlayerController::HandleToggleSettings() → ToggleSettingsMenu()
+(3) OpenSettingsMenu_Implementation() (C++: 입력 모드 변경)
+(4) BP_DRPlayerController Override: WBP_SettingsScreen 생성 + Viewport에 추가
+(5) WBP_SettingsScreen::Event Construct:
+    - GetGameInstance → GetSubsystem(UDRSettingsManager) → SettingsManager
+    - SettingsManager → InitSettings()
+    - 각 Page → InitializePage(SettingsManager, self)
+    - 각 Row → InitRow(Definition, SettingsManager, ...)
+    - 현재값 로드 및 표시
+```
+
+### 20.2 값 변경 흐름 (슬라이더 예시: Gamma)
+
+```
+(1) 플레이어가 Gamma 슬라이더 드래그
+(2) Slider_Input 내장 OnValueChanged(0.8) 발생
+(3) WBP_SciFiSlider::HandleNativeSliderChanged(0.8)
+    → AbsoluteValue = 80.0 계산
+    → Fill 바/텍스트 업데이트
+    → ★ 커스텀 OnSliderValueChanged 디스패처 Broadcast(80.0)
+(4) WBP_SettingRow_Slider::HandleSliderValueChanged(80.0)
+    → MakeFloatValue(80.0)
+    → SettingsManager::SetPendingValue("Graphics.Gamma", Value)
+(5) SettingsManager 내부:
+    - PendingValues에 저장
+    - DirtySettingIds에 추가
+    - OnPendingValueChanged 브로드캐스트
+    - ApplyMode == Instant이므로:
+      → ApplySingleSetting() → Gamma 즉시 적용
+      → CommitSingleSetting() → CurrentValues에 반영
+(6) WBP_SettingsPage_Graphics::OnPendingValueChanged
+    → Row_Gamma → UpdateDisplayValue
+    → SciFiSlider → SetValue(80.0)
+    → bSuppressCallback=true이므로 디스패처 발생 안 함 (무한 루프 방지)
+```
+
+### 20.3 값 변경 흐름 (드롭다운 예시: DisplayMode)
+
+```
+(1) 플레이어가 DisplayMode 드롭다운 클릭
+(2) WBP_SciFiDropdown::HandleClicked → OpenDropdown()
+(3) WBP_SettingsScreen::ShowDropdownPopup() → 팝업 레이어에 OptionList 표시
+(4) 플레이어가 "WINDOWED" 옵션 클릭
+(5) WBP_SciFiDropdownOption::HandleClicked
+    → ★ 커스텀 OnOptionClicked 디스패처 Broadcast(2)
+(6) WBP_SciFiDropdownOptionList::HandleOptionClicked(2)
+    → WBP_SciFiDropdown::OnOptionSelected(2)
+(7) WBP_SciFiDropdown:
+    → SetSelectedIndex(2) — 텍스트 "WINDOWED"로 변경
+    → CloseDropdown() — 팝업 닫기
+    → ★ 커스텀 OnSelectionChanged 디스패처 Broadcast(2)
+(8) WBP_SettingRow_Dropdown::HandleSelectionChanged(2)
+    → Definition.Options[2] → OptionId="Windowed"
+    → MakeNameValue("Windowed", 2)
+    → SettingsManager::SetPendingValue("Graphics.DisplayMode", Value)
+(9) ApplyMode == RequiresApply이므로 Pending에만 저장됨
+(10) OnHasPendingChangesChanged → Apply 힌트(A 키) 표시
+```
+
+### 20.4 Apply 흐름
+
+```
+(1) 플레이어가 A 키 누름
+(2) WBP_SettingsScreen::OnKeyDown 핸들러
+(3) SettingsManager::ApplyPendingSettings()
+    - 모든 Dirty 설정 ApplySingleSetting()
+    - CurrentValues = PendingValues
+    - SaveToGameUserSettings() → INI 파일 저장
+    - ApplyResolutionSettings() + ApplyNonResolutionSettings()
+    - OnSettingsApplied 브로드캐스트
+(4) bHasPendingChanges = false → A 키 힌트 숨김
+```
+
+### 20.5 Reset 흐름
+
+```
+(1) 플레이어가 R 키 누름
+(2) WBP_SettingsScreen::OnKeyDown 핸들러
+(3) CurrentTabIndex → EDRSettingsTab 변환 (예: 1 → Graphics)
+(4) SettingsManager::ResetTabToDefault(Graphics)
+    - 해당 탭의 모든 설정을 DefaultValue로 PendingValues에 설정
+    - 각 설정에 대해 OnPendingValueChanged 브로드캐스트
+    - OnSettingsReset(Graphics) 브로드캐스트
+(5) 각 Row의 UI가 기본값으로 업데이트됨
+(6) Apply 필요 시 A 키 힌트 표시
+```
+
+### 20.6 닫기 흐름
+
+```
+(1) 플레이어가 ESC 키 누름
+(2) WBP_SettingsScreen::OnKeyDown 핸들러
+(3) bHasPendingChanges → DiscardPendingChanges() (변경 취소)
+(4) PlayerController → CloseSettingsMenu()
+    - BP Override: WBP_SettingsScreen → RemoveFromParent
+    - C++ Parent: bIsSettingsMenuOpen = false, RestoreDefaultInputMode()
+```
+
+---
+
+## 21. 주의사항 및 팁
+
+### 21.1 슬라이더 무한 루프 방지 (bSuppressCallback)
+
+슬라이더에서 무한 루프가 발생할 수 있는 경로:
+
+```
+사용자 드래그
+→ Slider_Input 내장 OnValueChanged
+→ HandleNativeSliderChanged
+→ 커스텀 OnSliderValueChanged 디스패처
+→ Row::HandleSliderValueChanged
+→ SetPendingValue
+→ OnPendingValueChanged (C++ 델리게이트)
+→ Page::OnPendingValueChanged
+→ Row::UpdateDisplayValue
+→ SciFiSlider::SetValue
+→ Slider_Input → Set Value
+→ Slider_Input 내장 OnValueChanged 다시 발생! ← 무한 루프
+```
+
+**해결**: `WBP_SciFiSlider::SetValue()`에서 `bSuppressCallback = true`로 설정한 뒤 Slider 값 변경. `HandleNativeSliderChanged`가 호출되어도 `bSuppressCallback` 체크로 즉시 리턴.
+
+**토글도 동일**: `WBP_SciFiToggle::SetToggleState()`에서 `bSuppressCallback = true`로 설정하여 `HandleClicked`에서 `OnToggleChanged`가 발생하지 않도록 처리.
+
+### 21.2 드롭다운 외부 클릭으로 닫기
+
+드롭다운이 열린 상태에서 다른 곳을 클릭하면 닫혀야 한다.
+
+**구현 방법** (Section 18.7에 포함):
+`ShowDropdownPopup`에서 `CanvasPanel_DropdownPopupLayer`에 먼저 전체 화면 투명 Button을 추가(ZOrder 0), 그 위에 OptionList를 추가(ZOrder 1). 투명 Button의 OnClicked → `ActiveDropdown → CloseDropdown()`.
+
+### 21.3 Focus 관리
+
+WBP_SettingsScreen이 키보드 입력(ESC, R, A)을 받으려면:
+- `Is Focusable: true` (Designer에서 설정)
+- Event Construct에서 `self → Set Keyboard Focus`
+- 드롭다운/버튼 클릭 후 Focus가 해당 위젯으로 이동할 수 있으므로, `HideDropdownPopup`에서 Focus를 SettingsScreen으로 돌려야 함
+
+### 21.4 해상도 드롭다운 동적 옵션
+
+`Graphics.Resolution`의 Options는 `BuildDefinitions()`에서 `GetSupportedResolutions()`를 통해 동적으로 생성됨.
+모니터에 따라 옵션 수가 다를 수 있으므로, OptionList의 높이가 유동적이어야 함.
+`WBP_SciFiDropdownOptionList`의 `SizeBox_Root`에서 `Height Override: 체크 해제`가 이를 처리함.
+
+### 21.5 Instant vs RequiresApply 설정
+
+| 설정 | ApplyMode | 동작 |
+|---|---|---|
+| Gameplay.CameraSensitivity | **Instant** | 슬라이더 움직이면 즉시 감도 변경 |
+| Gameplay.Language | RequiresApply | A 키로 Apply 필요 |
+| Graphics.DisplayMode | RequiresApply | A 키로 Apply 필요 |
+| Graphics.Resolution | RequiresApply | A 키로 Apply 필요 |
+| Graphics.VSync | RequiresApply | A 키로 Apply 필요 |
+| Graphics.FPSLimit | RequiresApply | A 키로 Apply 필요 |
+| Graphics.Scalability | RequiresApply | A 키로 Apply 필요 |
+| Graphics.Gamma | **Instant** | 슬라이더 움직이면 즉시 감마 변경 |
+| Audio.MasterVolume | **Instant** | 슬라이더 움직이면 즉시 볼륨 변경 |
+| Audio.MusicVolume | **Instant** | 슬라이더 움직이면 즉시 볼륨 변경 |
+| Audio.SFXVolume | **Instant** | 슬라이더 움직이면 즉시 볼륨 변경 |
+
+Instant 설정은 `SetPendingValue()` 내부에서 자동으로 `ApplySingleSetting()` + `CommitSingleSetting()`을 호출하므로, WBP에서 별도 처리가 필요 없음.
+
+RequiresApply 설정은 A 키를 눌러 `ApplyPendingSettings()`를 호출해야만 실제 적용됨.
+
+---
+
+## 22. 구현 순서 요약
+
+### Phase A: C++ 수정 (완료)
+
+모든 코드 수정 적용 완료 (Section 1 참고).
+
+### Phase B: WBP Designer 제작 (사용자가 직접)
+
+`WBP_Designer_Hierarchy_Details.md` 문서대로 모든 WBP Designer 배치.
+
+### Phase C: WBP Graph 로직 (Bottom-Up 순서)
+
+```
+ 1. WBP_KeyHint ─────────────────── Graph 로직 없음
+ 2. WBP_SciFiSlider ─────────────── 커스텀 OnSliderValueChanged 디스패처 생성
+ 3. WBP_SciFiToggle ─────────────── 커스텀 OnToggleChanged 디스패처 생성
+ 4. WBP_SciFiDropdownOption ─────── 커스텀 OnOptionClicked 디스패처 생성
+ 5. WBP_SciFiDropdownOptionList ─── OnOptionClicked 바인딩
+ 6. WBP_SciFiDropdown ──────────── 커스텀 OnSelectionChanged 디스패처 생성
+ 7. WBP_SettingRow_Slider ──────── OnSliderValueChanged 바인딩
+ 8. WBP_SettingRow_Toggle ──────── OnToggleChanged 바인딩
+ 9. WBP_SettingRow_Dropdown ────── OnSelectionChanged 바인딩
+10. WBP_SettingsTabButton ──────── Button_Hit.OnClicked 바인딩
+11. WBP_KeyHintBar ─────────────── SetApplyVisible 함수
+12. WBP_SettingsPage_Gameplay ──── Row 초기화 + 델리게이트 바인딩
+13. WBP_SettingsPage_Graphics ──── Row 초기화 + 델리게이트 바인딩
+14. WBP_SettingsPage_Audio ─────── Row 초기화 + 델리게이트 바인딩
+15. WBP_SettingsPage_Controls ──── 빈 페이지
+16. WBP_SettingsScreen ─────────── 전체 조립, OnKeyDown, 드롭다운 팝업
+17. BP_DRPlayerController ─────── OpenSettings / CloseSettings 오버라이드
+```
+
+### Phase D: 통합 테스트
+
+```
+1. 설정 화면 열기/닫기 테스트
+2. 탭 전환 테스트
+3. 슬라이더 조작 → 즉시 적용 확인 (Gamma, Volume, Sensitivity)
+4. 드롭다운 선택 → Pending 상태 확인
+5. Apply (A 키) 테스트
+6. Reset (R 키) 테스트
+7. ESC로 Discard 후 닫기 테스트
+8. 설정 저장 후 재시작 시 값 유지 확인
 ```

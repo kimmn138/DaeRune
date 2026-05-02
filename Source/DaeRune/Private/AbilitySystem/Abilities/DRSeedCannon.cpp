@@ -1,43 +1,35 @@
-// Copyright DaeRune
+ï»¿// Copyright DaeRune
 
 
 #include "AbilitySystem/Abilities/DRSeedCannon.h"
 #include "Actor/DRSeedProjectile.h"
 #include "GameFramework/ProjectileMovementComponent.h"
-#include "Interaction/CombatInterface.h"
-#include "Kismet/KismetMathLibrary.h"
 
-void UDRSeedCannon::SpawnSeedProjectile(const FVector& ForwardVector, const FGameplayTag& SocketTag)
+void UDRSeedCannon::SpawnSeedProjectile(const FVector& ForwardVector, const FVector& SocketLocation)
 {
     const bool bIsServer = GetAvatarActorFromActorInfo()->HasAuthority();
     if (!bIsServer) return;
 
-    // ¹ß»ç À§Ä¡ °¡Á®¿À±â
-    const FVector SocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(
-        GetAvatarActorFromActorInfo(),
-        SocketTag
-    );
-
-    // Ä«¸Þ¶ó Æ÷¿öµå º¤ÅÍ¸¦ ¹Þ¾Æ¼­ 60µµ À§·Î È¸Àü
-    // Æ÷¿öµå º¤ÅÍ¸¦ ¼öÆòÀ¸·Î ¸¸µé±â
+    // Ä«ï¿½Þ¶ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Í¸ï¿½ ï¿½Þ¾Æ¼ï¿½ 60ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ È¸ï¿½ï¿½
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Í¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½
     FVector CameraForward = ForwardVector;
     CameraForward.Normalize();
 
-    // Right º¤ÅÍ °è»ê
+    // Right ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
     FVector CameraUp = FVector::UpVector;
     FVector RightVector = FVector::CrossProduct(CameraUp, CameraForward);
     RightVector.Normalize();
 
-    // LaunchAngle¸¸Å­ À§·Î È¸Àü
+    // LaunchAngleï¿½ï¿½Å­ ï¿½ï¿½ï¿½ï¿½ È¸ï¿½ï¿½
     FVector LaunchDirection = CameraForward.RotateAngleAxis(LaunchAngle, RightVector);
     LaunchDirection.Normalize();
 
-    // Transform ¼³Á¤
+    // Transform ï¿½ï¿½ï¿½ï¿½
     FTransform SpawnTransform;
     SpawnTransform.SetLocation(SocketLocation);
     SpawnTransform.SetRotation(LaunchDirection.Rotation().Quaternion());
 
-    // ¹ß»çÃ¼ »ý¼º (Deferred Spawn)
+    // ï¿½ß»ï¿½Ã¼ ï¿½ï¿½ï¿½ï¿½ (Deferred Spawn)
     ADRSeedProjectile* Projectile = GetWorld()->SpawnActorDeferred<ADRSeedProjectile>(
         SeedProjectileClass,
         SpawnTransform,
@@ -46,29 +38,29 @@ void UDRSeedCannon::SpawnSeedProjectile(const FVector& ForwardVector, const FGam
         ESpawnActorCollisionHandlingMethod::AlwaysSpawn
     );
 
-    // µ¥¹ÌÁö ÆÄ¶ó¹ÌÅÍ ¼³Á¤
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ä¶ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     Projectile->DamageEffectParams = MakeDamageEffectParamsFromClassDefaults();
 
-    // ¼Óµµ º¤ÅÍ Á÷Á¢ ¼³Á¤
+    // ï¿½Óµï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     Projectile->ProjectileMovement->Velocity = LaunchDirection * LaunchSpeed;
 
-    // Áß·Â È®½ÇÈ÷ È°¼ºÈ­
+    // ï¿½ß·ï¿½ È®ï¿½ï¿½ï¿½ï¿½ È°ï¿½ï¿½È­
     Projectile->ProjectileMovement->ProjectileGravityScale = 1.0f;
 
-    // À¯µµ ±â´É ºñÈ°¼ºÈ­
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­
     Projectile->ProjectileMovement->bIsHomingProjectile = false;
     Projectile->ProjectileMovement->HomingTargetComponent = nullptr;
 
-    // È¸Àüµµ ¼Óµµ ¹æÇâÀ¸·Î ¼³Á¤
+    // È¸ï¿½ï¿½ï¿½ï¿½ ï¿½Óµï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     Projectile->ProjectileMovement->bRotationFollowsVelocity = true;
     Projectile->ProjectileMovement->bInitialVelocityInLocalSpace = false;
 
-    // ½ºÆù ¿Ï·á
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½
     Projectile->FinishSpawning(SpawnTransform);
 
-//    // µð¹ö±× ½Ã°¢È­ (°³¹ß ºôµå¿¡¼­¸¸)
+//    // ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½È­ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½å¿¡ï¿½ï¿½ï¿½ï¿½)
 //#if !UE_BUILD_SHIPPING
-//    // ¹ß»ç ¹æÇâ È­»ìÇ¥ ±×¸®±â
+//    // ï¿½ß»ï¿½ ï¿½ï¿½ï¿½ï¿½ È­ï¿½ï¿½Ç¥ ï¿½×¸ï¿½ï¿½ï¿½
 //    DrawDebugDirectionalArrow(
 //        GetWorld(),
 //        SocketLocation,
@@ -81,14 +73,14 @@ void UDRSeedCannon::SpawnSeedProjectile(const FVector& ForwardVector, const FGam
 //        5.f
 //    );
 //
-//    // ¿¹»ó ±ËÀû ±×¸®±â (°£´ÜÇÑ Æ÷¹°¼±)
+//    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½×¸ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
 //    FVector PrevPoint = SocketLocation;
 //    float TimeStep = 0.05f;
 //    for (int i = 1; i <= 20; i++)
 //    {
 //        float Time = TimeStep * i;
 //        FVector Point = SocketLocation + (LaunchDirection * LaunchSpeed * Time) +
-//            (0.5f * FVector(0, 0, -980.f) * Time * Time); // Áß·Â °¡¼Óµµ
+//            (0.5f * FVector(0, 0, -980.f) * Time * Time); // ï¿½ß·ï¿½ ï¿½ï¿½ï¿½Óµï¿½
 //
 //        DrawDebugLine(GetWorld(), PrevPoint, Point, FColor::Yellow, false, 3.0f, 0, 2.f);
 //        PrevPoint = Point;

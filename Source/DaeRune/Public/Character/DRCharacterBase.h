@@ -93,6 +93,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
 	TObjectPtr<USkeletalMeshComponent> Weapon;
 
+public:
 	// ���� �̸���
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	FName WeaponTipSocketName;
@@ -106,6 +107,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	FName TailSocketName;
 
+protected:
 	// 사망 상태
 	bool bDead = false;
 

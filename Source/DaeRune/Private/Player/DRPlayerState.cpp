@@ -40,6 +40,17 @@ void ADRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(ADRPlayerState, SelectedPlayerClass);
 }
 
+void ADRPlayerState::CopyProperties(APlayerState* PlayerState)
+{
+	Super::CopyProperties(PlayerState);
+
+	if (ADRPlayerState* DRPS = Cast<ADRPlayerState>(PlayerState))
+	{
+		DRPS->SelectedPlayerClass = SelectedPlayerClass;
+		DRPS->WaitingRoomSlotIndex = WaitingRoomSlotIndex;
+	}
+}
+
 void ADRPlayerState::BeginPlay()
 {
     Super::BeginPlay();

@@ -7,6 +7,7 @@
 #include "GameplayTagContainer.h"
 #include "Interfaces/OnlineIdentityInterface.h"
 #include "GenericTeamAgentInterface.h"
+#include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "DRPlayerController.generated.h"
 
 // ��ȣ�ۿ� ��������Ʈ
@@ -149,6 +150,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Settings")
 	bool IsSettingsMenuOpen() const { return bIsSettingsMenuOpen; }
 
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void ToggleFirstPersonMeshAndHUDVisibility();
+
+	// Blueprint에서 위젯 생성/제거를 구현
+	UFUNCTION(BlueprintImplementableEvent, Category = "Settings")
+	void OnSettingsMenuOpened();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Settings")
+	void OnSettingsMenuClosed();
+
 	// ========== �Է� ��� ���� ==========
 
 	// ���� ������ �´� �Է� ���� ����
@@ -245,6 +256,10 @@ public:
 	// 블루프린트에서도 호출 가능한 래퍼
 	UFUNCTION(BlueprintCallable, Category = "Character Selection")
 	void RequestChangeClass(bool bNext);
+
+	// Seamless Travel 시 PlayerState 값 유실 방지용 캐시
+	EPlayerCharacterClass GetCachedSelectedClass() const { return CachedSelectedClass; }
+	void SetCachedSelectedClass(EPlayerCharacterClass InClass) { CachedSelectedClass = InClass; }
 
 	// ========== 치트/디버그 모드 ==========
 
@@ -381,12 +396,6 @@ private:
 	// ��ȣ�ۿ� Ű�� ������ ��
 	void HandleInteract();
 
-	UPROPERTY()
-	TObjectPtr<class UDRSettingsWidget> SettingsWidget;
-
-	UPROPERTY(EditDefaultsOnly, Category = "UI")
-	TSubclassOf<UDRSettingsWidget> SettingsWidgetClass;
-
 	// GAS �����Ƽ �Է� ó��
 	void AbilityInputTagPressed(FGameplayTag InputTag);
 	void AbilityInputTagReleased(FGameplayTag InputTag);
@@ -404,6 +413,9 @@ private:
 	// ������ �ؽ�Ʈ ������Ʈ Ŭ����
 	UPROPERTY(EditDefaultsOnly)
 	TSubclassOf<UDamageTextComponent> DamageTextComponentClass;
+
+	// Seamless Travel 시 캐릭터 클래스 보존 (PlayerController는 Travel에서 생존)
+	EPlayerCharacterClass CachedSelectedClass = EPlayerCharacterClass::GardenRobot;
 
 	// ����Ʈ���̽� Ȱ��ȭ ����
 	bool bPartDetectionEnabled = false;

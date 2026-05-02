@@ -15,6 +15,7 @@
 #include "Player/DRPlayerController.h"
 #include "Character/DRCharacter.h"
 #include "Components/AudioComponent.h"
+#include "Character/DRFacialExpressionComponent.h"
 
 ADRCharacterBase::ADRCharacterBase()
 {
@@ -222,6 +223,15 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 		MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	}
 
+	// Death 표정 적용 (Dissolve 전에 실행)
+	if (ADRCharacter* PC = Cast<ADRCharacter>(this))
+	{
+		if (PC->FacialExpressionComponent)
+		{
+			PC->FacialExpressionComponent->OnDeath();
+		}
+	}
+
 	// Dissolve ȿ�� ����
 	Dissolve();
 
@@ -254,6 +264,12 @@ void ADRCharacterBase::StunTagChanged(const FGameplayTag CallbackTag, int32 NewC
 {
 	bIsStunned = NewCount > 0;
 	GetCharacterMovement()->MaxWalkSpeed = bIsStunned ? StunnedMoveSpeed : GetMoveSpeed();
+
+	// 서버(Listen Server 호스트)에서는 RepNotify가 자동 호출되지 않으므로 수동 호출
+	if (HasAuthority())
+	{
+		OnRep_Stunned();
+	}
 }
 
 void ADRCharacterBase::OnRep_Stunned()

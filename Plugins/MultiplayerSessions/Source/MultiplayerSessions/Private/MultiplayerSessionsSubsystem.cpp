@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "MultiplayerSessionsSubsystem.h"
@@ -33,7 +33,7 @@ void UMultiplayerSessionsSubsystem::Initialize(FSubsystemCollectionBase& Collect
 			GEngine->OnNetworkFailure().AddUObject(this, &UMultiplayerSessionsSubsystem::HandleNetworkFailure);
 		}
 
-		// ���� �ʴ� ������ ���
+		// 占쏙옙占쏙옙 占십댐옙 占쏙옙占쏙옙占쏙옙 占쏙옙占?
 		if (SessionInterface.IsValid())
 		{
 			SessionUserInviteAcceptedDelegateHandle = SessionInterface->AddOnSessionUserInviteAcceptedDelegate_Handle(SessionUserInviteAcceptedDelegate);
@@ -62,7 +62,7 @@ void UMultiplayerSessionsSubsystem::CreateSessionWithRoomCode(int32 NumPublicCon
 		return;
 	}
 
-	// ���� ���� ������ ���� ����
+	// 占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙占쏙옙
 	auto ExistingSession = SessionInterface->GetNamedSession(NAME_GameSession);
 	if (ExistingSession != nullptr)
 	{
@@ -72,7 +72,7 @@ void UMultiplayerSessionsSubsystem::CreateSessionWithRoomCode(int32 NumPublicCon
 		return;
 	}
 
-	// �� �ڵ� �����ϰ� �ߺ� üũ ����
+	// 占쏙옙 占쌘듸옙 占쏙옙占쏙옙占싹곤옙 占쌩븝옙 체크 占쏙옙占쏙옙
 	bIsCreatingWithRoomCode = true;
 	PendingRoomCode = GenerateRoomCode();
 	LastNumPublicConnections = NumPublicConnections;
@@ -90,14 +90,14 @@ void UMultiplayerSessionsSubsystem::FindSessionByRoomCode(const FString& RoomCod
 
 	SearchingRoomCode = RoomCode;
 
-	// �� �ڵ�� ���� �˻�
+	// 占쏙옙 占쌘듸옙占?占쏙옙占쏙옙 占싯삼옙
 	FindSessionsCompleteDelegateHandle = SessionInterface->AddOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegate);
 
 	LastSessionSearch = MakeShareable(new FOnlineSessionSearch());
 	LastSessionSearch->MaxSearchResults = 100;
 	LastSessionSearch->bIsLanQuery = IOnlineSubsystem::Get()->GetSubsystemName() == "NULL" ? true : false;
 
-	// �� �ڵ�� ���͸�
+	// 占쏙옙 占쌘듸옙占?占쏙옙占싶몌옙
 	LastSessionSearch->QuerySettings.Set(FName("RoomCode"), RoomCode, EOnlineComparisonOp::Equals);
 	LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
 
@@ -157,13 +157,13 @@ void UMultiplayerSessionsSubsystem::UpdateSessionJoinability(bool bAllowJoin)
 	FNamedOnlineSession* ExistingSession = SessionInterface->GetNamedSession(NAME_GameSession);
 	if (!ExistingSession) return;
 
-	// ���� ���� ������Ʈ
+	// 占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙트
 	ExistingSession->SessionSettings.bAllowJoinInProgress = bAllowJoin;
 
-	// ��������Ʈ ���
+	// 占쏙옙占쏙옙占쏙옙占쏙옙트 占쏙옙占?
 	UpdateSessionCompleteDelegateHandle = SessionInterface->AddOnUpdateSessionCompleteDelegate_Handle(UpdateSessionCompleteDelegate);
 
-	// ���� ������Ʈ ����
+	// 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙트 占쏙옙占쏙옙
 	if (!SessionInterface->UpdateSession(NAME_GameSession, ExistingSession->SessionSettings))
 	{
 		SessionInterface->ClearOnUpdateSessionCompleteDelegate_Handle(UpdateSessionCompleteDelegateHandle);
@@ -250,33 +250,33 @@ void UMultiplayerSessionsSubsystem::OnFindSessionsComplete(bool bWasSuccessful)
 		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegateHandle);
 	}
 
-	// �� �ڵ� �ߺ� üũ ���̾��ٸ�
+	// 占쏙옙 占쌘듸옙 占쌩븝옙 체크 占쏙옙占싱억옙占쌕몌옙
 	if (bIsCreatingWithRoomCode)
 	{
 		bIsCreatingWithRoomCode = false;
 
 		if (LastSessionSearch.IsValid() && LastSessionSearch->SearchResults.Num() > 0)
 		{
-			// �̹� �����ϴ� �� �ڵ�� ���� ����
+			// 占싱뱄옙 占쏙옙占쏙옙占싹댐옙 占쏙옙 占쌘듸옙占?占쏙옙占쏙옙 占쏙옙占쏙옙
 			PendingRoomCode = GenerateRoomCode();
 			ValidateAndCreateSessionWithCode();
 		}
 		else
 		{
-			// �ߺ� ������ �� �ڵ�� ���� ����
+			// 占쌩븝옙 占쏙옙占쏙옙占쏙옙 占쏙옙 占쌘듸옙占?占쏙옙占쏙옙 占쏙옙占쏙옙
 			CurrentRoomCode = PendingRoomCode;
 			CreateSessionInternal(LastNumPublicConnections);
 		}
 		return;
 	}
 
-	// �� ������ ���� �˻��̾��ٸ�
+	// 占쏙옙 占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙 占싯삼옙占싱억옙占쌕몌옙
 	if (!SearchingRoomCode.IsEmpty())
 	{
 		SearchingRoomCode.Empty();
 	}
 
-	// �˻� ��� ��ε�ĳ��Ʈ
+	// 占싯삼옙 占쏙옙占?占쏙옙琯占식놂옙占싣?
 	if (LastSessionSearch.IsValid())
 	{
 		MultiplayerOnFindSessionsComplete.Broadcast(LastSessionSearch->SearchResults, bWasSuccessful);
@@ -300,7 +300,7 @@ void UMultiplayerSessionsSubsystem::OnJoinSessionComplete(FName SessionName, EOn
 
 	if (Result == EOnJoinSessionCompleteResult::Success)
 	{
-		// ���� ���� ��������
+		// 占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙占쏙옙
 		if (SessionInterface.IsValid())
 		{
 			FNamedOnlineSession* Session = SessionInterface->GetNamedSession(NAME_GameSession);
@@ -313,7 +313,7 @@ void UMultiplayerSessionsSubsystem::OnJoinSessionComplete(FName SessionName, EOn
 				{
 					CurrentRoomCode = ExtractedRoomCode;
 
-					// ��������Ʈ ��ε�ĳ��Ʈ! ���� GameState�� ���� �� ����
+					// 占쏙옙占쏙옙占쏙옙占쏙옙트 占쏙옙琯占식놂옙占싣? 占쏙옙占쏙옙 GameState占쏙옙 占쏙옙占쏙옙 占쏙옙 占쏙옙占쏙옙
 					MultiplayerOnRoomCodeGenerated.Broadcast(CurrentRoomCode);
 				}
 			}
@@ -353,24 +353,22 @@ void UMultiplayerSessionsSubsystem::OnUpdateSessionComplete(FName SessionName, b
 
 void UMultiplayerSessionsSubsystem::OnSessionUserInviteAccepted(const bool bWasSuccessful, const int32 ControllerId, FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& InviteResult)
 {
-	UE_LOG(LogTemp, Log, TEXT("[Invite] Received"));
+if (!bWasSuccessful) return;
 
-	if (!bWasSuccessful) return;
-
-	// �̹� �ʴ밡 ��� ���̰ų� Join ���۵�
+	// 占싱뱄옙 占십대가 占쏙옙占?占쏙옙占싱거놂옙 Join 占쏙옙占쌜듸옙
 	if (bInvitePending || bInviteJoinStarted) return;
 
-	// �ʴ� ���� ����
+	// 占십댐옙 占쏙옙占쏙옙 占쏙옙占쏙옙
 	bInvitePending = true;
 	CachedInviteResult = MakeShared<FOnlineSessionSearchResult>(InviteResult);
 
-	// Join�� �õ��ϵ�, ���� ���� ���� �ÿ��� �����
+	// Join占쏙옙 占시듸옙占싹듸옙, 占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙占쏙옙 占시울옙占쏙옙 占쏙옙占쏙옙占?
 	TryProcessPendingInvite();
 }
 
 void UMultiplayerSessionsSubsystem::HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver, ENetworkFailure::Type FailureType, const FString& ErrorString)
 {
-	// ������ ����� ���̽� ä�õ� ����
+	// 占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙占?占쏙옙占싱쏙옙 채占시듸옙 占쏙옙占쏙옙
 	StopVoiceChat();
 
 	SessionInterface->DestroySession(NAME_GameSession);
@@ -379,7 +377,7 @@ void UMultiplayerSessionsSubsystem::HandleNetworkFailure(UWorld* World, UNetDriv
 	{
 		if (World && World->GetFirstPlayerController())
 		{
-			// NOTE: crash �߻����� ���� ������ Travel �ּ�ó��. (�⺻ ������ �̵��ϴϱ� �׳� ������)
+			// NOTE: crash 占쌩삼옙占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 Travel 占쌍쇽옙처占쏙옙. (占썩본 占쏙옙占쏙옙占쏙옙 占싱듸옙占싹니깍옙 占쌓놂옙 占쏙옙占쏙옙占쏙옙)
 			// World->GetFirstPlayerController()->ClientTravel(TEXT("/Game/VoiceChat/MainMenu"), TRAVEL_Absolute);
 		}
 	}
@@ -445,7 +443,7 @@ void UMultiplayerSessionsSubsystem::CreateSessionInternal(int32 NumPublicConnect
 	LastSessionSettings->bUseLobbiesIfAvailable = true;
 	LastSessionSettings->BuildUniqueId = 1;
 
-	// �� �ڵ带 ���� ������ �߰�
+	// 占쏙옙 占쌘드를 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 占쌩곤옙
 	LastSessionSettings->Set(FName("RoomCode"), CurrentRoomCode, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
 	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
@@ -480,3 +478,4 @@ void UMultiplayerSessionsSubsystem::TryProcessPendingInvite()
 	JoinSession(*CachedInviteResult);
 	CachedInviteResult.Reset();
 }
+

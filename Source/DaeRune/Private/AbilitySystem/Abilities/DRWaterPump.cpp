@@ -40,7 +40,7 @@ FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLoca
         OutHitResult,
         WeaponSocketLocation,
         CameraTargetPoint,
-        ECC_Pawn, // ��/��ֹ� ������ ä��
+        ECC_Visibility,
         QueryParams
     );
 
@@ -401,33 +401,26 @@ FGameplayAbilityTargetDataHandle UDRWaterPump::MakeTargetDataHandleFromActors(AA
 
 void UDRWaterPump::StartBeamEffect()
 {
-    UE_LOG(LogTemp, Warning, TEXT("StartBeamEffect called"));
-
-    if (!WaterCannonEffect)
+if (!WaterCannonEffect)
     {
-        UE_LOG(LogTemp, Error, TEXT("StartBeamEffect: WaterCannonEffect is NULL!"));
-        return;
+return;
     }
 
     ADRCharacter* Character = Cast<ADRCharacter>(GetAvatarActorFromActorInfo());
     if (!Character)
     {
-        UE_LOG(LogTemp, Error, TEXT("StartBeamEffect: Character cast failed!"));
-        return;
+return;
     }
 
     USkeletalMeshComponent* FPMesh = Character->FirstPersonMesh;
     if (!FPMesh)
     {
-        UE_LOG(LogTemp, Error, TEXT("StartBeamEffect: FirstPersonMesh is NULL!"));
-        return;
+return;
     }
 
     if (!FPMesh->DoesSocketExist(MuzzleSocketName))
     {
-        UE_LOG(LogTemp, Error, TEXT("StartBeamEffect: Socket '%s' does not exist on FPMesh!"),
-            *MuzzleSocketName.ToString());
-        return;
+return;
     }
 
     // 1P 빔만 생성 (IsLocallyControlled 분기에서 소유 클라이언트에서만 호출됨)
@@ -446,12 +439,10 @@ void UDRWaterPump::StartBeamEffect()
     {
         FirstPersonBeam->SetOnlyOwnerSee(true);
         FirstPersonBeam->SetVectorParameter(FName("HitEffectPosition"), CachedBeamEndPoint);
-        UE_LOG(LogTemp, Warning, TEXT("StartBeamEffect: 1P beam created successfully"));
-    }
+}
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("StartBeamEffect: SpawnSystemAttached returned null!"));
-    }
+}
 }
 
 void UDRWaterPump::UpdateBeamEndpoint()
@@ -540,4 +531,5 @@ bool UDRWaterPump::GetAimDirection(FVector& OutAimStart, FVector& OutAimDirectio
 
     return true;
 }
+
 

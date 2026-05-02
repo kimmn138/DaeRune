@@ -70,6 +70,10 @@ public:
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayInstallSound(bool bIsComplete);
 
+	// 부품 설치 시 해당 슬롯 메시를 모든 클라이언트에서 표시
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastShowInstalledPart(int32 SlotIndex);
+
 	// Phase3 클린저 작동 사운드 (루프 - 시작/종료 시 한 번씩만 호출)
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastStartOperatingSound();
@@ -181,6 +185,16 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UWidgetComponent> InteractionWidget;
 
+	// ========== 설치된 부품 메시 슬롯 ==========
+
+	// 1번째 부품이 표시될 메시 컴포넌트 (블루프린트에서 메시/위치 설정)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|InstalledParts")
+	TObjectPtr<UStaticMeshComponent> InstalledPartMesh1;
+
+	// 2번째 부품이 표시될 메시 컴포넌트 (블루프린트에서 메시/위치 설정)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|InstalledParts")
+	TObjectPtr<UStaticMeshComponent> InstalledPartMesh2;
+
 	// ========== GAS Components ==========
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
@@ -215,7 +229,7 @@ protected:
 	void OnRep_CurrentState();
 
 	UFUNCTION()
-	static void OnRep_InstalledPartsCount();
+	void OnRep_InstalledPartsCount();
 
 	// ========== ü�� ���� (Phase3 ����) ==========
 

@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "DRGameplayTags.h"
@@ -79,6 +79,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Player is in combat (recently took damage)")
 	);
 
+	GameplayTags.State_VendingMachine_JackpotReady = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.VendingMachine.JackpotReady"),
+		FString("VendingMachine Jackpot stacks reached max")
+	);
+
 	/*
 	 * 적 상태
 	 */
@@ -101,6 +106,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.State_LockedDown = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("State.LockedDown"),
 		FString("Flying enemy is locked down after skill use (cannot move or attack)")
+	);
+
+	GameplayTags.State_BallForm = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.BallForm"),
+		FString("Armadillo is in ball form")
 	);
 
 	GameplayTags.Enemy_Detected = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -158,6 +168,16 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Buff_Elite = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Buff.Elite"),
 		FString("Buff for Elite Monster")
+	);
+
+	GameplayTags.Buff_Elite_Roar = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.Elite.Roar"),
+		FString("Buff applied to allied enemies by Elite Monster Roar Aura")
+	);
+
+	GameplayTags.Buff_VendingMachine_AttackSpeed = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.VendingMachine.AttackSpeed"),
+		FString("VendingMachine Attack Speed Buff")
 	);
 	
 	/*
@@ -285,6 +305,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Skill1 Ability Tag")
 	);
 
+	GameplayTags.Abilities_Skill2 = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.Skill2"),
+		FString("Skill2 Ability Tag")
+	);
+
 	/*
 	 * ��ü�� �����Ƽ 
 	 */
@@ -313,6 +338,17 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FName("Abilities.GardenRobot.SeedCannon"),
 		FString("SeedCannon Ability Tag")
 	);
+
+	GameplayTags.Abilities_VendingMachine_BasicAttack = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.VendingMachine.BasicAttack"),
+		FString("VendingMachine Basic Attack Ability Tag")
+	);
+
+	GameplayTags.Abilities_VendingMachine_AttackSpeedBuff = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.VendingMachine.AttackSpeedBuff"),
+		FString("VendingMachine Attack Speed Buff Ability Tag")
+	);
+
 
 	/*
 	 * Ÿ�� ����
@@ -349,6 +385,21 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Cooldown_Fire_FireBolt = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Cooldown.Fire.FireBolt"),
 		FString("FireBolt Cooldown Tag")
+	);
+
+	GameplayTags.Cooldown_Armadillo_RollCharge = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Cooldown.Armadillo.RollCharge"),
+		FString("Armadillo Roll Charge Cooldown Tag")
+	);
+
+	GameplayTags.Cooldown_Elite_Sweep = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Cooldown.Elite.Sweep"),
+		FString("Elite Sweep Attack Cooldown Tag")
+	);
+
+	GameplayTags.Cooldown_Elite_Roar = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Cooldown.Elite.Roar"),
+		FString("Elite Roar Cooldown Tag")
 	);
 
 	/*

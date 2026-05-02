@@ -7,17 +7,27 @@
 #include "DRWaterSource.generated.h"
 
 class UBoxComponent;
+class UNiagaraComponent;
+class UNiagaraSystem;
 
 /**
- * 
+ *
  */
 UCLASS()
 class DAERUNE_API ADRWaterSource : public ADREffectActor
 {
 	GENERATED_BODY()
-	
+
 public:
     ADRWaterSource();
+
+    // ìˆ˜ì›ì§€ ì‚¬ìš© ê°€ëŠ¥ ì‹œ í‘œì‹œí•  ë‚˜ì´ì•„ê°€ë¼ ì—ì…‹ 1
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Source|VFX")
+    TObjectPtr<UNiagaraSystem> AvailableVFXSystem1;
+
+    // ìˆ˜ì›ì§€ ì‚¬ìš© ê°€ëŠ¥ ì‹œ í‘œì‹œí•  ë‚˜ì´ì•„ê°€ë¼ ì—ì…‹ 2
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Source|VFX")
+    TObjectPtr<UNiagaraSystem> AvailableVFXSystem2;
 
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -28,7 +38,7 @@ public:
     UPROPERTY(ReplicatedUsing = OnRep_bIsAvailable, BlueprintReadWrite, Category = "Water Source")
     bool bIsAvailable = true;
 
-    // ¹° Ã¤¿ì±â GameplayEffect
+    // ï¿½ï¿½ Ã¤ï¿½ï¿½ï¿½ GameplayEffect
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Source")
     TSubclassOf<UGameplayEffect> WaterFillEffectClass;
 
@@ -36,11 +46,11 @@ public:
     void MulticastPlayWaterGainSound();
 
 protected:
-    // DREffectActorÀÇ OnOverlap/OnEndOverlap ¿À¹ö¶óÀÌµå
+    // DREffectActorï¿½ï¿½ OnOverlap/OnEndOverlap ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ìµï¿½
     virtual void OnOverlap(AActor* TargetActor) override;
     virtual void OnEndOverlap(AActor* TargetActor) override;
 
-    // ºí·çÇÁ¸°Æ®¿¡¼­ È£ÃâÇÒ ¼ö ÀÖ´Â ÇÔ¼öµé
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ È£ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ö´ï¿½ ï¿½Ô¼ï¿½ï¿½ï¿½
     UFUNCTION(BlueprintCallable, Category = "Water Source")
     void FillPlayerWater(AActor* TargetActor);
 
@@ -50,14 +60,14 @@ protected:
     UFUNCTION(BlueprintCallable, Category = "Water Source")
     void StartRechargeTimer();
 
-    // ¼ö¿øÁö ÀçÃæÀü ¿Ï·á
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½
     UFUNCTION()
     void OnSourceRecharged();
 
     UFUNCTION()
     void OnRep_bIsAvailable();
 
-    // ºí·çÇÁ¸°Æ®¿¡¼­ ±¸ÇöÇÒ ÀÌº¥Æ®
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìºï¿½Æ®
     UFUNCTION(BlueprintImplementableEvent, Category = "Water Source")
     void OnWaterSourceUsed(AActor* User);
 
@@ -66,6 +76,19 @@ protected:
 
     UFUNCTION(BlueprintImplementableEvent, Category = "Water Source")
     void OnAvailabilityChanged(bool bNewAvailable);
+
+    virtual void BeginPlay() override;
+
+    // VFX í™œì„±í™”/ë¹„í™œì„±í™” í—¬í¼
+    void UpdateAvailabilityVFX(bool bAvailable);
+
+    // ë‚˜ì´ì•„ê°€ë¼ ì»´í¬ë„ŒíŠ¸ 1
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Water Source|VFX")
+    TObjectPtr<UNiagaraComponent> AvailableVFXComponent1;
+
+    // ë‚˜ì´ì•„ê°€ë¼ ì»´í¬ë„ŒíŠ¸ 2
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Water Source|VFX")
+    TObjectPtr<UNiagaraComponent> AvailableVFXComponent2;
 
 private:
     FTimerHandle RechargeTimerHandle;

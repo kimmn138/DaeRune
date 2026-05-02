@@ -17,20 +17,21 @@ class DAERUNE_API UDRSeedCannon : public UDRProjectileSpell
 	GENERATED_BODY()
 	
 public:
-    // ¹ß»çÃ¼ ½ºÆù ÇÔ¼ö - ºí·çÇÁ¸°Æ®¿¡¼­ È£Ãâ
+    // ë°œì‚¬ì²´ ìƒì„± í•¨ìˆ˜ - ë¸”ë£¨í”„ë¦°íŠ¸ì—ì„œ í˜¸ì¶œ
+    // SocketLocation: í´ë¼ì´ì–¸íŠ¸ì˜ 1ì¸ì¹­ ë©”ì‹œì—ì„œ êµ¬í•œ ì†Œì¼“ ì›”ë“œ ìœ„ì¹˜
     UFUNCTION(BlueprintCallable, Category = "SeedCannon")
-    void SpawnSeedProjectile(const FVector& ForwardVector, const FGameplayTag& SocketTag);
+    void SpawnSeedProjectile(const FVector& ForwardVector, const FVector& SocketLocation);
 
 protected:
-    // SeedCannon Àü¿ë ¹ß»çÃ¼ Å¬·¡½º
+    // SeedCannon ï¿½ï¿½ï¿½ï¿½ ï¿½ß»ï¿½Ã¼ Å¬ï¿½ï¿½ï¿½ï¿½
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon")
     TSubclassOf<ADRSeedProjectile> SeedProjectileClass;
 
-    // ¹ß»ç ¼Óµµ
+    // ï¿½ß»ï¿½ ï¿½Óµï¿½
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon")
     float LaunchSpeed = 500.f;
 
-    // ¹ß»ç °¢µµ (¼öÆò ±âÁØ À§·Î)
+    // ï¿½ß»ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon")
     float LaunchAngle = 35.f;
 };

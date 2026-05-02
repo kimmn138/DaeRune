@@ -7,7 +7,7 @@
 #include "DRGameUserSettings.generated.h"
 
 /**
- * DaeRune Ä¿½ºÅÒ ¼³Á¤ ÀúÀå Å¬·¡½º
+ * DaeRune Ä¿ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½
  */
 UCLASS()
 class DAERUNE_API UDRGameUserSettings : public UGameUserSettings
@@ -15,13 +15,13 @@ class DAERUNE_API UDRGameUserSettings : public UGameUserSettings
 	GENERATED_BODY()
 	
 public:
-    // ½Ì±ÛÅæ Á¢±ÙÀÚ
+    // ï¿½Ì±ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     static UDRGameUserSettings* GetDRGameUserSettings();
 
-    // Ä¿½ºÅÒ ¼³Á¤ Àû¿ë
+    // Ä¿ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     void ApplyCustomSettings();
 
-    // ±âº»°ªÀ¸·Î ÃÊ±âÈ­
+    // ï¿½âº»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­
     virtual void SetToDefaults() override;
 
 public:
@@ -34,9 +34,9 @@ public:
     UPROPERTY(Config, BlueprintReadWrite, Category = "Settings|Audio")
     float SFXVolume = 1.0f;
 
-    UPROPERTY(Config, BlueprintReadWrite, Category = "Settings|Audio")
-    float VoiceVolume = 1.0f;
-
     UPROPERTY(Config, BlueprintReadWrite, Category = "Settings|Gameplay")
     float MouseSensitivity = 1.0f;
+
+    UPROPERTY(Config, BlueprintReadWrite, Category = "Settings|Graphics")
+    float Gamma = 80.0f;
 };

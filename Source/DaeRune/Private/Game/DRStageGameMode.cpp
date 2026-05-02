@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "Game/DRStageGameMode.h"
@@ -10,10 +10,11 @@
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
 #include "Character/DRCharacter.h"
+#include "Game/DRGameInstance.h"
 
 ADRStageGameMode::ADRStageGameMode()
 {
-	// �⺻ ����
+	// 占썩본 占쏙옙占쏙옙
 	LobbyMapName = TEXT("LobbyMap");
 	WipeoutDelayTime = 5.0f;
 }
@@ -22,17 +23,28 @@ UClass* ADRStageGameMode::GetDefaultPawnClassForController_Implementation(AContr
 {
 	if (APlayerController* PC = Cast<APlayerController>(InController))
 	{
+		// GameInstance?먯꽌 ??λ맂 ?좏깮 ?뺣낫 蹂듭썝 (留??꾪솚 諛⑹떇??愿怨꾩뾾???뺤떎??蹂댁〈??
+		EPlayerCharacterClass SelectedClass = EPlayerCharacterClass::GardenRobot;
+
 		if (ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
 		{
-			EPlayerCharacterClass SelectedClass = PS->GetSelectedPlayerClass();
-
-			if (PlayerCharacterClassInfo)
+			if (UDRGameInstance* GI = Cast<UDRGameInstance>(GetGameInstance()))
 			{
-				TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(SelectedClass);
-				if (BPClassPtr && *BPClassPtr)
+				SelectedClass = GI->LoadPlayerClassSelection(PS->GetPlayerName());
+// PlayerState???숆린??
+				if (PS->GetSelectedPlayerClass() != SelectedClass)
 				{
-					return *BPClassPtr;
+					PS->SetSelectedPlayerClass(SelectedClass);
 				}
+			}
+		}
+
+		if (PlayerCharacterClassInfo)
+		{
+			TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(SelectedClass);
+			if (BPClassPtr && *BPClassPtr)
+			{
+				return *BPClassPtr;
 			}
 		}
 	}
@@ -44,7 +56,7 @@ void ADRStageGameMode::TriggerGameOver()
 {
 	if (!HasAuthority()) return;
 
-	// 이미 게임 오버 처리 중이면 중복 호출 방지
+	// ?대? 寃뚯엫 ?ㅻ쾭 泥섎━ 以묒씠硫?以묐났 ?몄텧 諛⑹?
 	if (bIsWipeoutInProgress) return;
 
 	bIsWipeoutInProgress = true;
@@ -54,16 +66,16 @@ void ADRStageGameMode::TriggerGameOver()
 		CurrentPhase->OnPhaseEnd();
 	}
 
-	// Multicast RPC로 모든 클라이언트에서 사운드 재생
+	// Multicast RPC濡?紐⑤뱺 ?대씪?댁뼵?몄뿉???ъ슫???ъ깮
 	if (ADRStageGameState* StageGameState = GetGameState<ADRStageGameState>())
 	{
 		StageGameState->Multicast_PlayGameOverSound();
 	}
 
-	// 모든 플레이어에게 게임 오버 알림 (단일 순회)
+	// 紐⑤뱺 ?뚮젅?댁뼱?먭쾶 寃뚯엫 ?ㅻ쾭 ?뚮┝ (?⑥씪 ?쒗쉶)
 	NotifyAllPlayersGameEnd(false);
 
-	// 약간의 딜레이 후 로비로 복귀
+	// ?쎄컙???쒕젅????濡쒕퉬濡?蹂듦?
 	GetWorldTimerManager().SetTimer(
 		WipeoutTimerHandle,
 		this,
@@ -77,7 +89,7 @@ void ADRStageGameMode::TriggerGameClear()
 {
 	if (!HasAuthority()) return;
 
-	// 이미 게임 오버 처리 중이면 중복 호출 방지
+	// ?대? 寃뚯엫 ?ㅻ쾭 泥섎━ 以묒씠硫?以묐났 ?몄텧 諛⑹?
 	if (bIsWipeoutInProgress) return;
 
 	bIsWipeoutInProgress = true;
@@ -87,16 +99,16 @@ void ADRStageGameMode::TriggerGameClear()
 		CurrentPhase->OnPhaseEnd();
 	}
 
-	// Multicast RPC로 모든 클라이언트에서 사운드 재생
+	// Multicast RPC濡?紐⑤뱺 ?대씪?댁뼵?몄뿉???ъ슫???ъ깮
 	if (ADRStageGameState* StageGameState = GetGameState<ADRStageGameState>())
 	{
 		StageGameState->Multicast_PlayGameClearSound();
 	}
 
-	// 모든 플레이어에게 게임 클리어 알림 (단일 순회)
+	// 紐⑤뱺 ?뚮젅?댁뼱?먭쾶 寃뚯엫 ?대━???뚮┝ (?⑥씪 ?쒗쉶)
 	NotifyAllPlayersGameEnd(true);
 
-	// 약간의 딜레이 후 로비로 복귀
+	// ?쎄컙???쒕젅????濡쒕퉬濡?蹂듦?
 	GetWorldTimerManager().SetTimer(
 		WipeoutTimerHandle,
 		this,
@@ -110,19 +122,19 @@ void ADRStageGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 도중 참가 차단
+	// ?꾩쨷 李멸? 李⑤떒
 	BlockJoinInProgress();
 
-	// GameState ĳ��
+	// GameState 캐占쏙옙
 	CachedGameState = GetGameState<ADRStageGameState>();
 
-	// �������� Ŭ���� ����Ʈ �ڵ� Ž��
+	// 占쏙옙占쏙옙占쏙옙占쏙옙 클占쏙옙占쏙옙 占쏙옙占쏙옙트 占쌘듸옙 탐占쏙옙
 	UWorld* World = GetWorld();
 	if (World)
 	{
 		CleanserSites.Empty();
 
-		// �±׷� Ŭ���� ����Ʈ ã��
+		// 占승그뤄옙 클占쏙옙占쏙옙 占쏙옙占쏙옙트 찾占쏙옙
 		for (TActorIterator<ADRCleanserSite> It(World); It; ++It)
 		{
 			ADRCleanserSite* Site = *It;
@@ -133,7 +145,7 @@ void ADRStageGameMode::BeginPlay()
 		}
 	}
 
-	// ������ �ý��� �ʱ�ȭ
+	// 占쏙옙占쏙옙占쏙옙 占시쏙옙占쏙옙 占십깍옙화
 	InitializePhaseSystem();
 }
 
@@ -141,7 +153,7 @@ void ADRStageGameMode::HandleWipeout()
 {
 	if (!HasAuthority()) return;
 
-	// TODO: �й� UI ǥ��, �й� ���� ��� ��
+	// TODO: 占싻뱄옙 UI 표占쏙옙, 占싻뱄옙 占쏙옙占쏙옙 占쏙옙占?占쏙옙
 
 	ReturnToLobby();
 }
@@ -156,7 +168,7 @@ void ADRStageGameMode::BlockJoinInProgress()
 	UMultiplayerSessionsSubsystem* SessionsSubsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>();
 	if (SessionsSubsystem)
 	{
-		// 스테이지에서는 도중 참가 차단!
+		// ?ㅽ뀒?댁??먯꽌???꾩쨷 李멸? 李⑤떒!
 		SessionsSubsystem->UpdateSessionJoinability(false);
 	}
 }
@@ -165,7 +177,7 @@ void ADRStageGameMode::ReturnToLobby()
 {
 	if (!HasAuthority()) return;
 
-	// 맵 전환 전 정리 작업 (부모 클래스의 공통 함수 사용)
+	// 留??꾪솚 ???뺣━ ?묒뾽 (遺紐??대옒?ㅼ쓽 怨듯넻 ?⑥닔 ?ъ슜)
 	PrepareForTravel();
 
 	UWorld* World = GetWorld();
@@ -175,7 +187,7 @@ void ADRStageGameMode::ReturnToLobby()
 		World->ServerTravel(LobbyMapName + TEXT("?listen"));
 	}
 
-	// 플래그 리셋
+	// ?뚮옒洹?由ъ뀑
 	bIsWipeoutInProgress = false;
 }
 
@@ -183,12 +195,12 @@ void ADRStageGameMode::NotifyAllPlayersGameEnd(bool bIsGameClear)
 {
 	if (!HasAuthority()) return;
 
-	// 단일 순회로 UI 표시 + 오디오 정리 수행
+	// ?⑥씪 ?쒗쉶濡?UI ?쒖떆 + ?ㅻ뵒???뺣━ ?섑뻾
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
 		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
 		{
-			// UI 표시
+			// UI ?쒖떆
 			if (bIsGameClear)
 			{
 				PC->Client_ShowGameClearUI();
@@ -198,7 +210,7 @@ void ADRStageGameMode::NotifyAllPlayersGameEnd(bool bIsGameClear)
 				PC->Client_ShowGameOverUI();
 			}
 
-			// 오디오 정리 (맵 전환 전 미리 수행)
+			// ?ㅻ뵒???뺣━ (留??꾪솚 ??誘몃━ ?섑뻾)
 			PC->ClientStopAllAudio();
 		}
 	}
@@ -208,23 +220,23 @@ void ADRStageGameMode::InitializePhaseSystem()
 {
 	if (!HasAuthority()) return;
 
-	// Ŭ���� ����Ʈ ��ȿ�� ����
+	// 클占쏙옙占쏙옙 占쏙옙占쏙옙트 占쏙옙효占쏙옙 占쏙옙占쏙옙
 	if (CleanserSites.Num() < 3) return;
 
-	// ���� ������ �ν��Ͻ� ����
+	// 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 占싸쏙옙占싹쏙옙 占쏙옙占쏙옙
 	PhaseInstances.Empty();
 
-	// ������ Ŭ������κ��� �ν��Ͻ� ����
+	// 占쏙옙占쏙옙占쏙옙 클占쏙옙占쏙옙占쏙옙觀占쏙옙占?占싸쏙옙占싹쏙옙 占쏙옙占쏙옙
 	for (TSubclassOf<UDRPhaseBase> PhaseClass : PhaseClasses)
 	{
 		if (PhaseClass)
 		{
 			UDRPhaseBase* NewPhase = NewObject<UDRPhaseBase>(this, PhaseClass);
 
-			// ������ �ʱ�ȭ (GameMode, GameState ����)
+			// 占쏙옙占쏙옙占쏙옙 占십깍옙화 (GameMode, GameState 占쏙옙占쏙옙)
 			NewPhase->Initialize(this, CachedGameState);
 
-			// Ŭ���� ����Ʈ ���� (��� ����� ����)
+			// 클占쏙옙占쏙옙 占쏙옙占쏙옙트 占쏙옙占쏙옙 (占쏙옙占?占쏙옙占쏙옙占쏘가 占쏙옙占쏙옙)
 			TArray<ADRCleanserSite*> SitesArray;
 			for (const TObjectPtr<ADRCleanserSite>& Site : CleanserSites)
 			{
@@ -239,10 +251,10 @@ void ADRStageGameMode::InitializePhaseSystem()
 		}
 	}
 
-	// 첫 번째 페이즈 시작 (클라이언트 초기화 대기를 위한 딜레이)
+	// 泥?踰덉㎏ ?섏씠利??쒖옉 (?대씪?댁뼵??珥덇린???湲곕? ?꾪븳 ?쒕젅??
 	if (PhaseInstances.Num() > 0)
 	{
-		// 클라이언트가 SeamlessTravel 후 오디오/UI 시스템을 초기화할 시간을 줌
+		// ?대씪?댁뼵?멸? SeamlessTravel ???ㅻ뵒??UI ?쒖뒪?쒖쓣 珥덇린?뷀븷 ?쒓컙??以?
 		FTimerHandle PhaseStartTimer;
 		GetWorldTimerManager().SetTimer(
 			PhaseStartTimer,
@@ -250,7 +262,7 @@ void ADRStageGameMode::InitializePhaseSystem()
 			{
 				StartPhase(0);
 			},
-			1.0f,  // 1초 딜레이
+			1.0f,  // 1珥??쒕젅??
 			false
 		);
 	}
@@ -262,15 +274,15 @@ void ADRStageGameMode::StartPhase(int32 PhaseIndex)
 
 	if (PhaseIndex < 0 || PhaseIndex >= PhaseInstances.Num()) return;
 
-	// ���� ������ ����
+	// 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙
 	if (CurrentPhase)
 	{
-		// ���� Phase�� ActiveCleanserSites ����
+		// 占쏙옙占쏙옙 Phase占쏙옙 ActiveCleanserSites 占쏙옙占쏙옙
 		TArray<TObjectPtr<ADRCleanserSite>> PreviousActiveSites = CurrentPhase->GetActiveCleanserSites();
 
 		CurrentPhase->OnPhaseEnd();
 
-		// �� Phase�� ����
+		// 占쏙옙 Phase占쏙옙 占쏙옙占쏙옙
 		if (PhaseIndex > 0 && PreviousActiveSites.Num() > 0)
 		{
 			UDRPhaseBase* NextPhase = PhaseInstances[PhaseIndex];
@@ -281,23 +293,23 @@ void ADRStageGameMode::StartPhase(int32 PhaseIndex)
 		}
 	}
 
-	// �� ������ ����
+	// 占쏙옙 占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙
 	CurrentPhase = PhaseInstances[PhaseIndex];
 
-	// GameState ������Ʈ
+	// GameState 占쏙옙占쏙옙占쏙옙트
 	CachedGameState->SetCurrentPhaseIndex(PhaseIndex);
 	CachedGameState->SetCurrentPhaseState(EPhaseState::InProgress);
 
-	// 페이즈 시작
+	// ?섏씠利??쒖옉
 	if (CurrentPhase)
 	{
 		CurrentPhase->OnPhaseStart();
 	}
 
-	// Phase 전환 완료 - Race Condition 방지 플래그 해제
+	// Phase ?꾪솚 ?꾨즺 - Race Condition 諛⑹? ?뚮옒洹??댁젣
 	bIsTransitioningPhase = false;
 
-	// 델리게이트 이벤트 호출
+	// ?몃━寃뚯씠???대깽???몄텧
 	// OnPhaseStarted();
 }
 
@@ -305,19 +317,19 @@ void ADRStageGameMode::EndCurrentPhase()
 {
 	if (!HasAuthority() || !CachedGameState || !CurrentPhase) return;
 
-	// Phase 전환 시작 - Race Condition 방지
+	// Phase ?꾪솚 ?쒖옉 - Race Condition 諛⑹?
 	bIsTransitioningPhase = true;
 
-	// 페이즈 완료 상태로 변경
+	// ?섏씠利??꾨즺 ?곹깭濡?蹂寃?
 	CachedGameState->SetCurrentPhaseState(EPhaseState::Completed);
 
-	// ������ ���� ó��
+	// 占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙 처占쏙옙
 	if (CurrentPhase)
 	{
-		CurrentPhase->OnPhaseEnd(); // PhaseBase���� ����
+		CurrentPhase->OnPhaseEnd(); // PhaseBase占쏙옙占쏙옙 占쏙옙占쏙옙
 	}
 
-	// ��������Ʈ �Ϸ� �̺�Ʈ ȣ��
+	// 占쏙옙占쏙옙占쏙옙占쏙옙트 占싹뤄옙 占싱븝옙트 호占쏙옙
 	// OnPhaseCompleted();
 
 	TransitionToNextPhase();
@@ -330,15 +342,15 @@ void ADRStageGameMode::TransitionToNextPhase()
 	int32 CurrentIndex = CachedGameState->GetCurrentPhaseIndex();
 	int32 NextIndex = CurrentIndex + 1;
 
-	// ��� ������ �Ϸ� üũ
+	// 占쏙옙占?占쏙옙占쏙옙占쏙옙 占싹뤄옙 체크
 	if (NextIndex >= PhaseInstances.Num())
 	{
-		// ��������Ʈ ��ü �Ϸ� �̺�Ʈ ȣ��
+		// 占쏙옙占쏙옙占쏙옙占쏙옙트 占쏙옙체 占싹뤄옙 占싱븝옙트 호占쏙옙
 		TriggerGameClear();
 		return;
 	}
 
-	// ���� ������� ��ȯ
+	// 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙占?占쏙옙환
 	StartPhase(NextIndex);
 }
 
@@ -346,16 +358,16 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 {
 	if (!CurrentPhase || !CachedGameState) return false;
 
-	// Phase 전환 중이거나 게임 종료 처리 중이면 중복 호출 방지
+	// Phase ?꾪솚 以묒씠嫄곕굹 寃뚯엫 醫낅즺 泥섎━ 以묒씠硫?以묐났 ?몄텧 諛⑹?
 	if (bIsTransitioningPhase || bIsWipeoutInProgress) return false;
 
 	int32 CurrentPhaseIndex = CachedGameState->GetCurrentPhaseIndex();
 	bool bIsCompleted = false;
 
-	// ����� �Ϸ� ���� ����
+	// 占쏙옙占쏙옙占쏘별 占싹뤄옙 占쏙옙占쏙옙 占쏙옙占쏙옙
 	switch (CurrentPhaseIndex)
 	{
-	case 0: // Phase 1: Ŭ���� Ȯ��
+	case 0: // Phase 1: 클占쏙옙占쏙옙 확占쏙옙
 	{
 		bool bAreaSecured = CachedGameState->IsCleanserAreaSecured();
 		int32 RemainingEnemies = CachedGameState->GetRemainingEnemiesInArea();
@@ -364,7 +376,7 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 	}
 	break;
 
-	case 1: // Phase 2: ��ǰ ȸ��
+	case 1: // Phase 2: 占쏙옙품 회占쏙옙
 	{
 		int32 CollectedParts = CachedGameState->GetCollectedParts();
 		bool bActivated = CachedGameState->IsCleanserActivated();
@@ -373,7 +385,7 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 	}
 	break;
 
-	case 2: // Phase 3: ���
+	case 2: // Phase 3: 占쏙옙占?
 	{
 		int32 CurrentWaveNumber = CachedGameState->GetCurrentWaveNumber();
 		int32 TotalWaves = CachedGameState->GetTotalWaves();
@@ -382,7 +394,7 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 	}
 	break;
 
-	case 3: // Phase 4: ����
+	case 3: // Phase 4: 占쏙옙占쏙옙
 	{
 		float BossHealth = CachedGameState->GetBossHealth();
 
@@ -401,4 +413,5 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 
 	return bIsCompleted;
 }
+
 

@@ -12,10 +12,17 @@
 #include "Kismet/GameplayStatics.h"
 #include "Sound/DRSoundDataAsset.h"
 #include "DRAssetManager.h"
+#include "NiagaraComponent.h"
 
 ADRWaterSource::ADRWaterSource()
 {
+    AvailableVFXComponent1 = CreateDefaultSubobject<UNiagaraComponent>(TEXT("AvailableVFX1"));
+    AvailableVFXComponent1->SetupAttachment(RootComponent);
+    AvailableVFXComponent1->bAutoActivate = false;
 
+    AvailableVFXComponent2 = CreateDefaultSubobject<UNiagaraComponent>(TEXT("AvailableVFX2"));
+    AvailableVFXComponent2->SetupAttachment(RootComponent);
+    AvailableVFXComponent2->bAutoActivate = false;
 }
 
 void ADRWaterSource::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -114,7 +121,8 @@ void ADRWaterSource::SetWaterSourceAvailable(bool bNewAvailable)
     if (bIsAvailable != bNewAvailable)
     {
         bIsAvailable = bNewAvailable;
-        OnRep_bIsAvailable(); // ���������� ȣ��
+        UpdateAvailabilityVFX(bIsAvailable);
+        OnRep_bIsAvailable();
     }
 }
 
@@ -141,8 +149,52 @@ void ADRWaterSource::OnSourceRecharged()
     OnWaterSourceRecharged();
 }
 
+void ADRWaterSource::BeginPlay()
+{
+    Super::BeginPlay();
+
+    if (AvailableVFXSystem1 && AvailableVFXComponent1)
+    {
+        AvailableVFXComponent1->SetAsset(AvailableVFXSystem1);
+    }
+
+    if (AvailableVFXSystem2 && AvailableVFXComponent2)
+    {
+        AvailableVFXComponent2->SetAsset(AvailableVFXSystem2);
+    }
+
+    UpdateAvailabilityVFX(bIsAvailable);
+}
+
+void ADRWaterSource::UpdateAvailabilityVFX(bool bAvailable)
+{
+    if (AvailableVFXComponent1)
+    {
+        if (bAvailable)
+        {
+            AvailableVFXComponent1->Activate(true);
+        }
+        else
+        {
+            AvailableVFXComponent1->Deactivate();
+        }
+    }
+
+    if (AvailableVFXComponent2)
+    {
+        if (bAvailable)
+        {
+            AvailableVFXComponent2->Activate(true);
+        }
+        else
+        {
+            AvailableVFXComponent2->Deactivate();
+        }
+    }
+}
+
 void ADRWaterSource::OnRep_bIsAvailable()
 {
-    // ��������Ʈ �̺�Ʈ ȣ��
+    UpdateAvailabilityVFX(bIsAvailable);
     OnAvailabilityChanged(bIsAvailable);
 }

@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 #pragma once
 
@@ -35,12 +35,14 @@ public:
 	FGameplayTag State_Corrupt;
 	FGameplayTag State_Carrying;
 	FGameplayTag State_InCombat;
+	FGameplayTag State_VendingMachine_JackpotReady;
 
 	// 적 상태
 	FGameplayTag State_Enraged;
 	FGameplayTag State_Aggroed;
 	FGameplayTag State_HitReacting;
 	FGameplayTag State_LockedDown;
+	FGameplayTag State_BallForm;
 	FGameplayTag Enemy_Detected;
 
 	// �⺻ ������, Ÿ�� �� ������
@@ -56,6 +58,8 @@ public:
 
 	// ���� ȿ��
 	FGameplayTag Buff_Elite;
+	FGameplayTag Buff_Elite_Roar;
+	FGameplayTag Buff_VendingMachine_AttackSpeed;
 	
 	// ����� ȿ��
 	FGameplayTag Debuff_Burn; 
@@ -83,13 +87,16 @@ public:
 	FGameplayTag Abilities_Death;
 	FGameplayTag Abilities_Summon;
 	FGameplayTag Abilities_Skill1;
+	FGameplayTag Abilities_Skill2;
 
-	// ��ü�� �����Ƽ 
+	// ��ü�� �����Ƽ
 	FGameplayTag Abilities_Fire_FireBolt;
 	FGameplayTag Abilities_Lightning_Electrocute;
 	FGameplayTag Abilities_GardenRobot_ClawSwipe;
 	FGameplayTag Abilities_GardenRobot_WaterPump;
 	FGameplayTag Abilities_GardenRobot_SeedCannon;
+	FGameplayTag Abilities_VendingMachine_BasicAttack;
+	FGameplayTag Abilities_VendingMachine_AttackSpeedBuff;
 
 	// Ÿ�� ����
 	FGameplayTag Abilities_HitReact;
@@ -101,6 +108,9 @@ public:
 
 	// �����Ƽ ��Ÿ��
 	FGameplayTag Cooldown_Fire_FireBolt;
+	FGameplayTag Cooldown_Armadillo_RollCharge;
+	FGameplayTag Cooldown_Elite_Sweep;
+	FGameplayTag Cooldown_Elite_Roar;
 
 	// ���� ��ġ ����
 	FGameplayTag CombatSocket_Weapon;

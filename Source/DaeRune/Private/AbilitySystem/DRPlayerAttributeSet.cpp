@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "AbilitySystem/DRPlayerAttributeSet.h"
@@ -25,7 +25,7 @@ int32 UDRPlayerAttributeSet::GetCurrentContainerIndex() const
 
 	int32 ContainerIndex = FMath::FloorToInt(CurrentHealth / ContainerHealth);
 
-	// ��Ȯ�� �����̳� ��迡 �ִ� ���
+	// 占쏙옙확占쏙옙 占쏙옙占쏙옙占싱놂옙 占쏙옙瓦?占쌍댐옙 占쏙옙占?
 	if (FMath::IsNearlyEqual(CurrentHealth, ContainerIndex * ContainerHealth))
 	{
 		ContainerIndex = FMath::Max(0, ContainerIndex - 1);
@@ -40,11 +40,11 @@ void UDRPlayerAttributeSet::EnterCorruptedState(const FEffectProperties& Props)
 
 	bCorrupted = true;
 
-	// ���� ���·� ü�� ����
+	// 占쏙옙占쏙옙 占쏙옙占승뤄옙 체占쏙옙 占쏙옙占쏙옙
 	SetMaxHealth(GetCorruptMaxHealth());
 	SetHealth(GetCorruptMaxHealth());
 
-	// PlayerState�� �˸�
+	// PlayerState占쏙옙 占싯몌옙
 	if (Props.TargetAvatarActor && Props.TargetController)
 	{
 		if (ADRPlayerState* DRPS = Props.TargetController->GetPlayerState<ADRPlayerState>())
@@ -65,12 +65,12 @@ void UDRPlayerAttributeSet::ExitCorruptedState(const FEffectProperties& Props)
 
 	bCorrupted = false;
 
-	// ���� ���·� ���� (�ִ� ü���� �������)
+	// 占쏙옙占쏙옙 占쏙옙占승뤄옙 占쏙옙占쏙옙 (占쌍댐옙 체占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙占?
 	const float NormalMaxHealth = NumContainers * ContainerHealth;
 	SetMaxHealth(NormalMaxHealth);
-	SetHealth(ContainerHealth); // ù ��° �����̳ʸ� ȸ��
+	SetHealth(ContainerHealth); // 첫 占쏙옙째 占쏙옙占쏙옙占싱너몌옙 회占쏙옙
 
-	// PlayerState�� �˸�
+	// PlayerState占쏙옙 占싯몌옙
 	if (Props.TargetAvatarActor && Props.TargetController)
 	{
 		if (ADRPlayerState* PS = Props.TargetController->GetPlayerState<ADRPlayerState>())
@@ -104,10 +104,10 @@ void UDRPlayerAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		);
 	}
 
-	// ���� ���� ���� �˸�
+	// 占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙占쏙옙 占싯몌옙
 	NotifyEnterCombat(Props);
 
-	// 디버프/데미지 원인 적의 전투 상태 갱신
+	// ?붾쾭???곕?吏 ?먯씤 ?곸쓽 ?꾪닾 ?곹깭 媛깆떊
 	if (ADREnemy* SourceEnemy = Cast<ADREnemy>(Props.SourceAvatarActor))
 	{
 		if (ADRAIController* AIC = Cast<ADRAIController>(SourceEnemy->GetController()))
@@ -128,7 +128,7 @@ void UDRPlayerAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		}
 	}
 
-	// ���� ���� ó��
+	// 占쏙옙占쏙옙 占쏙옙占쏙옙 처占쏙옙
 	if (bCorrupted)
 	{
 		ProcessCorruptedDamage(Props, LocalIncomingDamage);
@@ -138,7 +138,7 @@ void UDRPlayerAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		ProcessNormalDamage(Props, LocalIncomingDamage);
 	}
 
-	// ���� ó��
+	// 占쏙옙占쏙옙 처占쏙옙
 	ShowFloatingText(Props, LocalIncomingDamage);
 
 	if (UDRAbilitySystemLibrary::IsSuccessfulDebuff(Props.EffectContextHandle))
@@ -154,7 +154,7 @@ void UDRPlayerAttributeSet::ProcessCorruptedDamage(const FEffectProperties& Prop
 
 	if (NewHealth <= 0.f)
 	{
-		// ���� ���¿��� ��� ���
+		// 占쏙옙占쏙옙 占쏙옙占승울옙占쏙옙 占쏙옙占?占쏙옙占?
 		if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(Props.TargetAvatarActor))
 		{
 			CombatInterface->Die(UDRAbilitySystemLibrary::GetDeathImpulse(Props.EffectContextHandle));
@@ -173,7 +173,7 @@ void UDRPlayerAttributeSet::ProcessNormalDamage(const FEffectProperties& Props, 
 
 	if (NewHealth <= 0.f)
 	{
-		// ���� ���·� ��ȯ
+		// 占쏙옙占쏙옙 占쏙옙占승뤄옙 占쏙옙환
 		EnterCorruptedState(Props);
 	}
 	else
@@ -206,7 +206,7 @@ float UDRPlayerAttributeSet::CalculateContainerDamage(float CurrentHealth, float
 
 		float OverflowDamage = RemainingDamage - HealthInContainer;
 
-		// �����÷ο� üũ
+		// 占쏙옙占쏙옙占시로울옙 체크
 		if (OverflowDamage <= (Damage * OVERFLOW_THRESHOLD))
 		{
 			NewHealth = ContainerIndex * ContainerHealth + 1.f;
@@ -222,14 +222,28 @@ float UDRPlayerAttributeSet::CalculateContainerDamage(float CurrentHealth, float
 
 void UDRPlayerAttributeSet::ApplyHitReactAndKnockback(const FEffectProperties& Props)
 {
-	// Hit React
+
+
+// Hit React
 	if (Props.TargetCharacter && Props.TargetCharacter->Implements<UCombatInterface>() &&
 		!ICombatInterface::Execute_IsBeingShocked(Props.TargetCharacter))
 	{
-		FGameplayTagContainer TagContainer;
+FGameplayTagContainer TagContainer;
 		TagContainer.AddTag(FDRGameplayTags::Get().Effects_HitReact);
-		Props.TargetASC->TryActivateAbilitiesByTag(TagContainer);
+		const bool bSuccess = Props.TargetASC->TryActivateAbilitiesByTag(TagContainer);
+if (!bSuccess && Props.TargetASC)
+		{
+			FGameplayTagContainer ActivatableAbilities;
+			TArray<FGameplayAbilitySpec*> MatchingSpecs;
+			Props.TargetASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(TagContainer, MatchingSpecs);
+for (const FGameplayAbilitySpec* Spec : MatchingSpecs)
+			{
+}
+		}
 	}
+	else
+	{
+}
 
 	// Knockback
 	const FVector& KnockbackForce = UDRAbilitySystemLibrary::GetKnockbackForce(Props.EffectContextHandle);
@@ -249,39 +263,35 @@ void UDRPlayerAttributeSet::HandleIncomingHealing(const FEffectProperties& Props
 	const float CurrentHealth = GetHealth();
 	const float MaxHealthValue = GetMaxHealth();
 
-	// ���� ���� Ȯ��
+	// 占쏙옙占쏙옙 占쏙옙占쏙옙 확占쏙옙
 	if (IsCorrupted())
 	{
-		// ���� ��ȭ ó��
+		// 占쏙옙占쏙옙 占쏙옙화 처占쏙옙
 		HandleCorruptionPurification(Props, LocalIncomingHealing);
 		return;
 	}
 
-	// ���� ����: �׳� ���� ���� (�����̳� �����ϰ�)
+	// 占쏙옙占쏙옙 占쏙옙占쏙옙: 占쌓놂옙 占쏙옙占쏙옙 占쏙옙占쏙옙 (占쏙옙占쏙옙占싱놂옙 占쏙옙占쏙옙占싹곤옙)
 	float NewHealth = FMath::Min(CurrentHealth + LocalIncomingHealing, MaxHealthValue);
 	SetHealth(NewHealth);
 }
 
 void UDRPlayerAttributeSet::HandleCorruptionPurification(const FEffectProperties& Props, float HealAmount)
 {
-	UE_LOG(LogTemp, Log, TEXT("Purifying corruption with healing"));
+bCorrupted = false;
 
-	bCorrupted = false;
-
-	// 1. ���� ���·� ���� (�ִ� ü���� �������)
+	// 1. 占쏙옙占쏙옙 占쏙옙占승뤄옙 占쏙옙占쏙옙 (占쌍댐옙 체占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙占?
 	const float NormalMaxHealth = NumContainers * ContainerHealth;
 	SetMaxHealth(NormalMaxHealth);
 	SetHealth(ContainerHealth);
 
-	// DRPlayerState�� SetCorruptedState ���
+	// DRPlayerState占쏙옙 SetCorruptedState 占쏙옙占?
 	if (ADRCharacter* Owner = Cast<ADRCharacter>(Props.TargetAvatarActor))
 	{
 		if (ADRPlayerState* PlayerState = Owner->GetPlayerState<ADRPlayerState>())
 		{
-			// false�� �����Ͽ� ���� ���� ����
+			// false占쏙옙 占쏙옙占쏙옙占싹울옙 占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙占쏙옙
 			PlayerState->SetCorruptedState(false);
-
-			UE_LOG(LogTemp, Log, TEXT("Corruption purified using SetCorruptedState"));
-		}
+}
 	}
 }

@@ -2,6 +2,20 @@
 
 
 #include "Game/DRGameUserSettings.h"
+#include "Engine/Engine.h"
+
+namespace
+{
+	constexpr float MinDisplayGamma = 0.5f;
+	constexpr float MaxDisplayGamma = 5.0f;
+
+	// Keep legacy UI default (80) close to UE default display gamma (~2.2).
+	float ToDisplayGamma(float UIGammaPercent)
+	{
+		constexpr float Slope = 1.7f / 80.0f; // 80 -> +1.7 over 0.5 => 2.2
+		return FMath::Clamp(MinDisplayGamma + (UIGammaPercent * Slope), MinDisplayGamma, MaxDisplayGamma);
+	}
+}
 
 UDRGameUserSettings* UDRGameUserSettings::GetDRGameUserSettings()
 {
@@ -10,12 +24,17 @@ UDRGameUserSettings* UDRGameUserSettings::GetDRGameUserSettings()
 
 void UDRGameUserSettings::ApplyCustomSettings()
 {
-    // ¿©±â¼± µ¥ÀÌÅÍ À¯È¿¼º °ËÁõ
+    // ï¿½ï¿½ï¿½â¼± ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È¿ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     MasterVolume = FMath::Clamp(MasterVolume, 0.0f, 1.0f);
     BGMVolume = FMath::Clamp(BGMVolume, 0.0f, 1.0f);
     SFXVolume = FMath::Clamp(SFXVolume, 0.0f, 1.0f);
-    VoiceVolume = FMath::Clamp(VoiceVolume, 0.0f, 2.0f);
     MouseSensitivity = FMath::Clamp(MouseSensitivity, 0.1f, 5.0f);
+    Gamma = FMath::Clamp(Gamma, 0.0f, 100.0f);
+
+    if (GEngine)
+    {
+        GEngine->DisplayGamma = ToDisplayGamma(Gamma);
+    }
 }
 
 void UDRGameUserSettings::SetToDefaults()
@@ -25,6 +44,6 @@ void UDRGameUserSettings::SetToDefaults()
     MasterVolume = 1.0f;
     BGMVolume = 1.0f;
     SFXVolume = 1.0f;
-    VoiceVolume = 1.0f;
     MouseSensitivity = 1.0f;
+    Gamma = 80.0f;
 }

@@ -22,9 +22,9 @@ ADRBreakableDoor::ADRBreakableDoor()
 	RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootSceneComponent"));
 	SetRootComponent(RootSceneComponent);
 
-	// NavModifier Component »ý¼º
+	// NavModifier Component ï¿½ï¿½ï¿½ï¿½
 	NavModifierComponent = CreateDefaultSubobject<UNavModifierComponent>(TEXT("NavModifierComponent"));
-	// ÃÊ±â¿¡´Â NavArea_Null·Î ¼³Á¤
+	// ï¿½Ê±â¿¡ï¿½ï¿½ NavArea_Nullï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	NavModifierComponent->SetAreaClass(UNavArea_Null::StaticClass());
 }
 
@@ -32,7 +32,7 @@ void ADRBreakableDoor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// ¸ðµç Á¶°¢ ¼öÁý
+	// ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	CollectDoorPieces();
 }
 
@@ -48,7 +48,7 @@ void ADRBreakableDoor::CollectDoorPieces()
 	DoorPieces.Empty();
 	InitialTransforms.Empty();
 
-	// ÀÌ ¾×ÅÍÀÇ ¸ðµç StaticMeshComponent ¼öÁý
+	// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ StaticMeshComponent ï¿½ï¿½ï¿½ï¿½
 	TArray<UStaticMeshComponent*> MeshComponents;
 	GetComponents<UStaticMeshComponent>(MeshComponents);
 
@@ -58,13 +58,13 @@ void ADRBreakableDoor::CollectDoorPieces()
 		{
 			DoorPieces.Add(MeshComp);
 
-			// ÃÊ±â Transform ÀúÀå
+			// ï¿½Ê±ï¿½ Transform ï¿½ï¿½ï¿½ï¿½
 			FPieceInitialTransform InitialTransform;
 			InitialTransform.Location = MeshComp->GetRelativeLocation();
 			InitialTransform.Rotation = MeshComp->GetRelativeRotation();
 			InitialTransforms.Add(InitialTransform);
 
-			// ¹°¸® ½Ã¹Ä·¹ÀÌ¼ÇÀº ÀÏ´Ü ºñÈ°¼ºÈ­
+			// ï¿½ï¿½ï¿½ï¿½ ï¿½Ã¹Ä·ï¿½ï¿½Ì¼ï¿½ï¿½ï¿½ ï¿½Ï´ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­
 			MeshComp->SetSimulatePhysics(false);
 			MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		}
@@ -95,27 +95,27 @@ void ADRBreakableDoor::ExecuteBreak()
 {
 	bIsBroken = true;
 
-	// NavModifier ¿µ¿ªÀ» Áö³ª°¥ ¼ö ÀÖ°Ô º¯°æ
+	// NavModifier ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ö°ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (NavModifierComponent)
 	{
-		// NavArea_Default·Î º¯°æÇÏ¿© AI°¡ Áö³ª°¥ ¼ö ÀÖ°Ô ÇÔ
+		// NavArea_Defaultï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï¿ï¿½ AIï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ö°ï¿½ ï¿½ï¿½
 		NavModifierComponent->SetAreaClass(UNavArea_Default::StaticClass());
 	}
 
-	// ¼­¹ö¿¡¼­ ÆÄ±« È¿°ú ½ÇÇà
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ä±ï¿½ È¿ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	ApplyImpulseToPieces();
 	PlayBreakEffects();
 
-	// ¸ðµç Å¬¶óÀÌ¾ðÆ®¿¡ ÆÄ±« È¿°ú ÀüÆÄ
+	// ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ ï¿½Ä±ï¿½ È¿ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	Multicast_PlayBreakEffect();
 
-	// ¸ó½ºÅÍ ½ºÆù
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (bSpawnEnemiesOnBreak && bShouldSpawnEnemies)
 	{
 		SpawnEnemies();
 	}
 
-	// ÆÄÆí Á¤¸® Å¸ÀÌ¸Ó ½ÃÀÛ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Å¸ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½
 	GetWorld()->GetTimerManager().SetTimer(
 		CleanupTimerHandle,
 		this,
@@ -124,7 +124,7 @@ void ADRBreakableDoor::ExecuteBreak()
 		false
 	);
 
-	// Delegate ºê·ÎµåÄ³½ºÆ®
+	// Delegate ï¿½ï¿½Îµï¿½Ä³ï¿½ï¿½Æ®
 	OnDoorBroken.Broadcast();
 }
 
@@ -132,7 +132,7 @@ void ADRBreakableDoor::OnRep_IsBroken()
 {
 	if (bIsBroken)
 	{
-		// ´Ê°Ô Âü¿©ÇÑ Å¬¶óÀÌ¾ðÆ®¸¦ À§ÇÑ »óÅÂ µ¿±âÈ­
+		// ï¿½Ê°ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½È­
 		for (UStaticMeshComponent* Piece : DoorPieces)
 		{
 			if (Piece)
@@ -150,43 +150,44 @@ void ADRBreakableDoor::ApplyImpulseToPieces()
 		UStaticMeshComponent* Piece = DoorPieces[i];
 		if (!Piece) continue;
 
-		// ¹°¸® ½Ã¹Ä·¹ÀÌ¼Ç È°¼ºÈ­
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½Ã¹Ä·ï¿½ï¿½Ì¼ï¿½ È°ï¿½ï¿½È­
 		Piece->SetSimulatePhysics(true);
 		Piece->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		Piece->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore); // ÇÃ·¹ÀÌ¾î¿Í Ãæµ¹ ¹«½Ã
+		Piece->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore); // ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ï¿½ ï¿½æµ¹ ï¿½ï¿½ï¿½ï¿½
+		Piece->SetCanEverAffectNavigation(false); // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ NavMeshï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 
-		// Impulse °è»ê ¹× Àû¿ë
+		// Impulse ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		FVector Impulse = CalculatePieceImpulse(Piece, i);
-		Piece->AddImpulse(Impulse, NAME_None, true); // bVelChange = true (Áú·® ¹«½Ã)
+		Piece->AddImpulse(Impulse, NAME_None, true); // bVelChange = true (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
 	}
 }
 
 FVector ADRBreakableDoor::CalculatePieceImpulse(UStaticMeshComponent* Piece, int32 PieceIndex)
 {
-	// ±âº» ¹æÇâ
+	// ï¿½âº» ï¿½ï¿½ï¿½ï¿½
 	FVector BaseDirection = BreakDirection.GetSafeNormal();
 
-	// Á¶°¢ÀÇ »ó´ë À§Ä¡ °¡Á®¿À±â
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	FVector PieceLocation = Piece->GetRelativeLocation();
 
-	// ÁÂ¿ì ºÐ»ê °è»ê (Á¶°¢ÀÇ Y À§Ä¡¿¡ µû¶ó)
-	// ¹®ÀÇ Áß½ÉÀ» ±âÁØÀ¸·Î ¿ÞÂÊ/¿À¸¥ÂÊÀ¸·Î Èð¾îÁö°Ô
-	float SideOffset = PieceLocation.Y; // ·ÎÄÃ Y ÁÂÇ¥
+	// ï¿½Â¿ï¿½ ï¿½Ð»ï¿½ ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Y ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ß½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	float SideOffset = PieceLocation.Y; // ï¿½ï¿½ï¿½ï¿½ Y ï¿½ï¿½Ç¥
 	FVector SidewaysDirection = FVector(0.0f, FMath::Sign(SideOffset), 0.0f);
-	float SidewaysStrength = FMath::Abs(SideOffset) / 100.0f; // Áß½É¿¡¼­ ¸Ö¼ö·Ï ´õ ¸¹ÀÌ Èð¾îÁü
+	float SidewaysStrength = FMath::Abs(SideOffset) / 100.0f; // ï¿½ß½É¿ï¿½ï¿½ï¿½ ï¿½Ö¼ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½
 	SidewaysStrength = FMath::Clamp(SidewaysStrength, 0.0f, 1.0f);
 
-	// À§ÂÊ Èû
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½
 	FVector UpwardDirection = FVector(0.0f, 0.0f, 1.0f);
 
-	// ·£´ý º¯µ¿
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	FVector RandomOffset = FVector(
 		FMath::FRandRange(-1.0f, 1.0f),
 		FMath::FRandRange(-1.0f, 1.0f),
-		FMath::FRandRange(0.0f, 1.0f) // Z´Â ¾ç¼ö¸¸ (À§·Î¸¸)
+		FMath::FRandRange(0.0f, 1.0f) // Zï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½Î¸ï¿½)
 	) * RandomVariation;
 
-	// ÃÖÁ¾ ¹æÇâ ÇÕ¼º
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Õ¼ï¿½
 	FVector FinalDirection = BaseDirection
 		+ (SidewaysDirection * SidewaysStrength * SidewaysSpreadRatio)
 		+ (UpwardDirection * UpwardForceRatio)
@@ -194,7 +195,7 @@ FVector ADRBreakableDoor::CalculatePieceImpulse(UStaticMeshComponent* Piece, int
 
 	FinalDirection = FinalDirection.GetSafeNormal();
 
-	// ÃÖÁ¾ Impulse
+	// ï¿½ï¿½ï¿½ï¿½ Impulse
 	FVector FinalImpulse = FinalDirection * ImpulseStrength;
 
 	return FinalImpulse;
@@ -204,14 +205,14 @@ void ADRBreakableDoor::Multicast_PlayBreakEffect_Implementation()
 {
 	if (HasAuthority()) return;
 
-	// Å¬¶óÀÌ¾ðÆ®¿¡¼­ ¹°¸® ½Ã¹Ä·¹ÀÌ¼Ç ¹× ÀÌÆåÆ® ½ÇÇà
+	// Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã¹Ä·ï¿½ï¿½Ì¼ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 	ApplyImpulseToPieces();
 	PlayBreakEffects();
 }
 
 void ADRBreakableDoor::PlayBreakEffects()
 {
-	// »ç¿îµå Àç»ý
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 	if (BreakSound)
 	{
 		FVector SoundLocation = GetActorLocation();
@@ -223,7 +224,7 @@ void ADRBreakableDoor::PlayBreakEffects()
 		UGameplayStatics::PlaySoundAtLocation(this, BreakSound, SoundLocation);
 	}
 
-	// ÆÄÆ¼Å¬ ÀÌÆåÆ®
+	// ï¿½ï¿½Æ¼Å¬ ï¿½ï¿½ï¿½ï¿½Æ®
 	if (BreakParticle)
 	{
 		UGameplayStatics::SpawnEmitterAtLocation(
@@ -234,7 +235,7 @@ void ADRBreakableDoor::PlayBreakEffects()
 		);
 	}
 
-	// ³ªÀÌ¾Æ°¡¶ó ÀÌÆåÆ®
+	// ï¿½ï¿½ï¿½Ì¾Æ°ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®
 	if (BreakNiagara)
 	{
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
@@ -253,13 +254,13 @@ void ADRBreakableDoor::SpawnEnemies()
 
 	int32 SpawnCount = FMath::Min(EnemySpawnCount, EnemySpawnOffsets.Num());
 
-	// SpawnOffsetsÀÌ ºñ¾îÀÖÀ¸¸é ±âº» À§Ä¡¿¡¼­ ½ºÆù
+	// SpawnOffsetsï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½âº» ï¿½ï¿½Ä¡ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (EnemySpawnOffsets.Num() == 0)
 	{
 		SpawnCount = EnemySpawnCount;
 	}
 
-	// Launch ¹æÇâ °è»ê
+	// Launch ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 	FVector LaunchDirection = BreakDirection.GetSafeNormal();
 	LaunchDirection.Z += EnemyLaunchUpwardRatio;
 	LaunchDirection = LaunchDirection.GetSafeNormal();
@@ -271,14 +272,14 @@ void ADRBreakableDoor::SpawnEnemies()
 
 		if (EnemySpawnOffsets.IsValidIndex(i))
 		{
-			// ·ÎÄÃ ¿ÀÇÁ¼ÂÀ» ¿ùµå ÁÂÇ¥·Î º¯È¯
+			// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç¥ï¿½ï¿½ ï¿½ï¿½È¯
 			SpawnLocation = GetActorLocation() + GetActorRotation().RotateVector(EnemySpawnOffsets[i]);
 		}
 		else
 		{
-			// ¹® µÚÂÊ¿¡¼­ ½ºÆù
+			// ï¿½ï¿½ ï¿½ï¿½ï¿½Ê¿ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 			FVector Offset = -BreakDirection.GetSafeNormal() * 100.0f;
-			Offset.Y += (i - SpawnCount / 2.0f) * 150.0f; // ÁÂ¿ì·Î ºÐ»ê
+			Offset.Y += (i - SpawnCount / 2.0f) * 150.0f; // ï¿½Â¿ï¿½ï¿½ ï¿½Ð»ï¿½
 			SpawnLocation = GetActorLocation() + Offset;
 		}
 
@@ -294,7 +295,7 @@ void ADRBreakableDoor::SpawnEnemies()
 
 		if (SpawnedEnemy)
 		{
-			// ÀûÀ» BreakDirection ¹æÇâÀ¸·Î ¹Ð¾îÁÖ±â
+			// ï¿½ï¿½ï¿½ï¿½ BreakDirection ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ð¾ï¿½ï¿½Ö±ï¿½
 			SpawnedEnemy->LaunchCharacter(LaunchVelocity, true, true);
 		}
 	}
@@ -306,11 +307,11 @@ void ADRBreakableDoor::CleanupPieces()
 	{
 		if (Piece)
 		{
-			// ¹°¸® ½Ã¹Ä·¹ÀÌ¼Ç ÁßÁö
+			// ï¿½ï¿½ï¿½ï¿½ ï¿½Ã¹Ä·ï¿½ï¿½Ì¼ï¿½ ï¿½ï¿½ï¿½ï¿½
 			Piece->SetSimulatePhysics(false);
-			// ¼û±â±â
+			// ï¿½ï¿½ï¿½ï¿½ï¿½
 			Piece->SetVisibility(false);
-			// Ãæµ¹µµ ²ô±â
+			// ï¿½æµ¹ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 			Piece->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		}
 	}

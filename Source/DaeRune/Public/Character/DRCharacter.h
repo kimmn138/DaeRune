@@ -12,6 +12,8 @@ class UWidgetComponent;
 class ADRCleanserPart;
 class UNiagaraComponent;
 class UNiagaraSystem;
+class UStaticMesh;
+class UDRFacialExpressionComponent;
 
 /**
  * �÷��̾� ĳ���� Ŭ����
@@ -114,14 +116,29 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mesh")
 	TObjectPtr<USkeletalMeshComponent> FirstPersonMesh;
 
+	// 1인칭 시점에서 보이는 부품 메시 (주인에게만 보임)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Part System")
+	TObjectPtr<UStaticMeshComponent> FirstPersonPartMesh;
+
 	// �޽� ���ü� ������Ʈ
 	void UpdateMeshVisibility();
+
+	// 1인칭 부품 메시 표시 (부품 픽업 시 호출)
+	void ShowFirstPersonPart(UStaticMesh* InPartMesh);
+
+	// 1인칭 부품 메시 숨기기 (부품 드롭/설치 시 호출)
+	void HideFirstPersonPart();
 
 	// 대기실 메시 가시성 전환 (고정 카메라에서 3P 메시를 보여주기 위해)
 	void SetWaitingRoomVisibility(bool bInWaitingRoom);
 
 	// 오버헤드 닉네임 위젯 가시성 제어 (WaitingRoom에서는 숨김, FreeRoam부터 표시)
 	void SetOverheadWidgetVisibility(bool bVisible);
+
+	// ========== 표정 시스템 ==========
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Facial Expression")
+	TObjectPtr<UDRFacialExpressionComponent> FacialExpressionComponent;
 
 	// ========== 대기실 슬롯 텔레포트 ==========
 
@@ -180,6 +197,10 @@ private:
 
 	// 3P 빔 위치 업데이트 함수 (타이머 콜백)
 	void UpdateWaterPumpThirdPersonBeam();
+
+	// 표정 태그 콜백
+	void HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+	void AttackSpeedBuffTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 
 	// GAS 초기화
 	virtual void InitAbilityActorInfo() override;
