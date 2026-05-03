@@ -280,7 +280,7 @@ void ADRCleanserSite::UpdateWaterMeshScale(float HealthRatio)
 
 	// �� ��ġ ���
 	const float ScaleChange = InitialWaterMeshScale.Z - NewScale.Z;
-	const float LocationOffset = ScaleChange * 250.0f;
+	const float LocationOffset = ScaleChange * 9.0f;
 	FVector NewLocation = InitialWaterMeshLocation;
 	NewLocation.Z = InitialWaterMeshLocation.Z + LocationOffset;
 

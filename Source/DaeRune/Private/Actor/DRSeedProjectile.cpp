@@ -118,11 +118,14 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
     int32 AffectedCount = 0;
     int32 BlockedCount = 0;
     int32 EnemyHitCount = 0;
+    TSet<AActor*> ProcessedTargets;
 
     for (const FOverlapResult& Result : OverlapResults)
     {
         AActor* Target = Result.GetActor();
         if (!Target) continue;
+        if (ProcessedTargets.Contains(Target)) continue;
+        ProcessedTargets.Add(Target);
 
         // ���� ĳ���ʹ� ����
         if (Target->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Target))

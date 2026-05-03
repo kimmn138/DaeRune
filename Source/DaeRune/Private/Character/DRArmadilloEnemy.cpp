@@ -151,7 +151,7 @@ AActor* ADRArmadilloEnemy::FindRollTarget() const
 	TArray<AActor*> ValidTargets;
 	const FVector MyLocation = GetActorLocation();
 
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 	// Draw search range
 	DrawDebugSphere(GetWorld(), MyLocation, RollTargetSearchRange, 24, FColor::Cyan, false, 2.f);
 #endif
@@ -169,7 +169,7 @@ AActor* ADRArmadilloEnemy::FindRollTarget() const
 		const float Distance = FVector::Dist(MyLocation, Player->GetActorLocation());
 		if (Distance > RollTargetSearchRange)
 		{
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 			// Out of range — gray line
 			DrawDebugLine(GetWorld(), MyLocation, Player->GetActorLocation(), FColor::Silver, false, 2.f);
 			DrawDebugString(GetWorld(), Player->GetActorLocation() + FVector(0, 0, 50), TEXT("OUT OF RANGE"), nullptr, FColor::Silver, 2.f);
@@ -194,7 +194,7 @@ AActor* ADRArmadilloEnemy::FindRollTarget() const
 		if (!bBlocked)
 		{
 			ValidTargets.Add(Player);
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 			// Valid target — green line
 			DrawDebugLine(GetWorld(), MyLocation, Player->GetActorLocation(), FColor::Green, false, 2.f);
 			DrawDebugSphere(GetWorld(), Player->GetActorLocation(), 40.f, 8, FColor::Green, false, 2.f);
@@ -202,7 +202,7 @@ AActor* ADRArmadilloEnemy::FindRollTarget() const
 		}
 		else
 		{
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 			// Blocked by wall — red line to wall hit, then red dashed to player
 			DrawDebugLine(GetWorld(), MyLocation, HitResult.ImpactPoint, FColor::Red, false, 2.f);
 			DrawDebugLine(GetWorld(), HitResult.ImpactPoint, Player->GetActorLocation(), FColor::Orange, false, 2.f);
@@ -215,7 +215,7 @@ AActor* ADRArmadilloEnemy::FindRollTarget() const
 	// 3. Return random valid target, or nullptr
 	if (ValidTargets.Num() == 0)
 	{
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 		DrawDebugString(GetWorld(), MyLocation + FVector(0, 0, 100), TEXT("NO VALID TARGET"), nullptr, FColor::Red, 2.f);
 #endif
 		return nullptr;
@@ -224,7 +224,7 @@ AActor* ADRArmadilloEnemy::FindRollTarget() const
 	const int32 RandomIndex = FMath::RandRange(0, ValidTargets.Num() - 1);
 	AActor* ChosenTarget = ValidTargets[RandomIndex];
 
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 	// Highlight chosen target
 	DrawDebugSphere(GetWorld(), ChosenTarget->GetActorLocation(), 60.f, 12, FColor::Magenta, false, 3.f);
 	DrawDebugString(GetWorld(), ChosenTarget->GetActorLocation() + FVector(0, 0, 80), TEXT("CHOSEN TARGET"), nullptr, FColor::Magenta, 3.f);
@@ -286,7 +286,7 @@ void ADRArmadilloEnemy::TickRollCharge(float DeltaTime)
 	{
 		StopRollCharge();
 
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 		// Draw impact radius sphere at collision point
 		DrawDebugSphere(GetWorld(), HitResult.ImpactPoint, RollImpactRadius, 12, FColor::Red, false, 3.f);
 #endif
@@ -295,7 +295,7 @@ void ADRArmadilloEnemy::TickRollCharge(float DeltaTime)
 		BroadcastRollImpact(HitResult.ImpactPoint);
 	}
 
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 	// Draw forward detection sphere
 	const float CapsuleRadius = GetCapsuleComponent()->GetScaledCapsuleRadius();
 	FVector TraceStart = GetActorLocation() + RollDirection * CapsuleRadius;
