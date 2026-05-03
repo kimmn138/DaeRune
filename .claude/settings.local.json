@@ -32,7 +32,10 @@
       "Bash(file:*)",
       "Bash(git status:*)",
       "Bash(\"C:/Program Files/Epic Games/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development \"C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject\" -waitmutex)",
-      "Bash(\"/d/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development \"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -waitmutex)"
+      "Bash(\"/d/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development \"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -waitmutex)",
+      "Bash(git log:*)",
+      "Bash(\"C:/Program Files/Epic Games/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development -Project=\"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -WaitMutex -FromMsBuild)",
+      "Bash(\"/d/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development -Project=\"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -WaitMutex -FromMsBuild)"
     ]
   }
 }

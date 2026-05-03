@@ -323,12 +323,21 @@ bool ADRArmadilloEnemy::DetectRollCollision(FHitResult& OutHit) const
 	ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic); // Cleanser sites, etc.
 
 	// SphereTrace with radius 30 for forward detection (multi-channel)
-	return GetWorld()->SweepSingleByObjectType(
+	bool bHit = GetWorld()->SweepSingleByObjectType(
 		OutHit, Start, End, FQuat::Identity,
 		ObjectParams,
 		FCollisionShape::MakeSphere(RollDetectionRadius),
 		Params
 	);
+
+	// Skip trigger volumes (QueryOnly components like door triggers)
+	// SweepByObjectType treats all matching object types as blocking regardless of response settings
+	if (bHit && OutHit.GetComponent() && OutHit.GetComponent()->GetCollisionEnabled() == ECollisionEnabled::QueryOnly)
+	{
+		return false;
+	}
+
+	return bHit;
 }
 
 void ADRArmadilloEnemy::BroadcastRollImpact(const FVector& ImpactLocation)

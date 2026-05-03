@@ -216,3 +216,13 @@ void UDRAbilitySystemComponent::RemoveFromInputTagCache(const FGameplayTag& Inpu
 {
 	InputTagToAbilityMap.Remove(InputTag);
 }
+
+void UDRAbilitySystemComponent::NotifyVendingMachineStacksChanged(int32 CurrentStacks, int32 MaxStacks)
+{
+	ClientVendingMachineStacksChanged(CurrentStacks, MaxStacks);
+}
+
+void UDRAbilitySystemComponent::ClientVendingMachineStacksChanged_Implementation(int32 CurrentStacks, int32 MaxStacks)
+{
+	OnVendingMachineStacksChanged.Broadcast(CurrentStacks, MaxStacks);
+}

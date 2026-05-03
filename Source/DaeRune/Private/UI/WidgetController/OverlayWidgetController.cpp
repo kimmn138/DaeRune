@@ -4,14 +4,18 @@
 #include "UI/WidgetController/OverlayWidgetController.h"
 #include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystem/DRAttributeSet.h"
 #include "AbilitySystem/DRCleanserSiteAttributeSet.h"
+#include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "AbilitySystem/Data/StatusEffectInfo.h"
 #include "Actor/DRCleanserSite.h"
 #include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
 #include "Phase/DRPhase3.h"
 #include "Phase/DRPhaseBase.h"
+#include "Player/DRPlayerState.h"
+#include "UI/Widget/DRUserWidget.h"
 
 void UOverlayWidgetController::BroadcastInitialValues()
 {
@@ -79,16 +83,34 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 	// �����Ƽ ���� �ʱ�ȭ ó��
 	if (GetDRASC())
 	{
+		// 자판기 잭팟 스택 변경 델리게이트 바인딩
+		GetDRASC()->OnVendingMachineStacksChanged.AddLambda(
+			[WeakThis](int32 CurrentStacks, int32 MaxStacks)
+			{
+				if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+				{
+					StrongThis->OnVendingMachineStackCountChanged.Broadcast(CurrentStacks, MaxStacks);
+				}
+			}
+		);
+
 		GetDRASC()->EffectAssetTags.AddLambda(
 			[WeakThis](const FGameplayTagContainer& AssetTags, bool HasDuration, const float Duration, bool DisplayStackCount, const int32 StackCount)
 			{
 				UOverlayWidgetController* StrongThis = WeakThis.Get();
 				if (!StrongThis || !StrongThis->StatusEffectData) return;
 
-				FGameplayTag BuffTag = FGameplayTag::RequestGameplayTag(FName("Buff"));
-				FGameplayTag DebuffTag = FGameplayTag::RequestGameplayTag(FName("Debuff"));
+				const FGameplayTag BuffTag = FGameplayTag::RequestGameplayTag(FName("Buff"));
+				const FGameplayTag DebuffTag = FGameplayTag::RequestGameplayTag(FName("Debuff"));
+				const FGameplayTag AttackSpeedBuffTag = FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed;
 				for (const FGameplayTag& Tag : AssetTags)
 				{
+					// 자판기 공격속도 버프 감지
+					if (Tag.MatchesTagExact(AttackSpeedBuffTag))
+					{
+						StrongThis->OnVendingMachineAttackSpeedBuff.Broadcast();
+					}
+
 					if (Tag.MatchesTag(BuffTag))
 					{
 						FEffectInfo EffectInfo = StrongThis->StatusEffectData->FindEffectInfoForTag(Tag);
@@ -418,6 +440,23 @@ void UOverlayWidgetController::OnPhaseChanged(int32 NewPhaseIndex)
 		}
 
 		CachedPhaseNumber = NewPhaseIndex;
+	}
+}
+
+void UOverlayWidgetController::BroadcastSkillIconWidgetClass()
+{
+	ADRPlayerState* PS = GetDRPS();
+	if (!PS) return;
+
+	EPlayerCharacterClass CharClass = PS->GetSelectedPlayerClass();
+
+	UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(GetWorld());
+	if (!ClassInfo) return;
+
+	FCharacterClassDefaultInfo DefaultInfo = ClassInfo->GetClassDefaultInfo(CharClass);
+	if (DefaultInfo.SkillIconWidgetClass)
+	{
+		OnSkillIconClassChanged.Broadcast(DefaultInfo.SkillIconWidgetClass);
 	}
 }
 

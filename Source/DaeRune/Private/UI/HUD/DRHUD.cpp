@@ -42,6 +42,8 @@ void ADRHUD::InitOverlay(APlayerController* PC, APlayerState* PS, UAbilitySystem
 	OverlayWidget->SetWidgetController(WidgetController);
 	// �ʱ� ������ UI�� ��ε�ĳ��Ʈ
 	WidgetController->BroadcastInitialValues();
+	// 캐릭터 클래스에 맞는 스킬아이콘 위젯 브로드캐스트
+	WidgetController->BroadcastSkillIconWidgetClass();
 	// 어빌리티 아이콘 갱신 (위젯 컨트롤러 할당 후 호출하여 소실 방지)
 	WidgetController->BroadcastAbilityInfo();
 	// ȭ�鿡 ���� �߰�
@@ -68,6 +70,7 @@ void ADRHUD::UpdateOverlayForSpectating(APlayerController* PC, APlayerState* PS,
 	{
 		OverlayWidget->SetWidgetController(WidgetController);
 		WidgetController->BroadcastInitialValues();
+		WidgetController->BroadcastSkillIconWidgetClass();
 		WidgetController->BroadcastAbilityInfo();
 	}
 }

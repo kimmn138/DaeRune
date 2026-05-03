@@ -93,8 +93,11 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			{
 				UBlackboardComponent* BB = AIController->GetBlackboardComponent();
 
+				// 공격자가 플레이어인 경우에만 타겟 설정 (적끼리 공격 시 타겟팅 방지)
+				const bool bSourceIsPlayer = Props.SourceAvatarActor && Props.SourceAvatarActor->ActorHasTag(FName("Player"));
+
 				// FirstAttacker가 없고, 부품을 들고 도망치는 적이 아닌 경우에만 설정
-				if (!BB->GetValueAsBool("HasFirstAttacker") && !Enemy->bCarriesPart)
+				if (bSourceIsPlayer && !BB->GetValueAsBool("HasFirstAttacker") && !Enemy->bCarriesPart)
 				{
 					// 첫 공격자 설정
 					BB->SetValueAsObject("FirstAttacker", Props.SourceAvatarActor);
@@ -115,7 +118,10 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 						EnemyASC->AddLooseGameplayTag(FDRGameplayTags::Get().State_Aggroed);
 					}
 				}
-				BB->SetValueAsObject("AttackingPlayer", Props.SourceAvatarActor);
+				if (bSourceIsPlayer)
+				{
+					BB->SetValueAsObject("AttackingPlayer", Props.SourceAvatarActor);
+				}
 
 				if (NewHealth <= GetMaxHealth() * 0.3f)
 				{

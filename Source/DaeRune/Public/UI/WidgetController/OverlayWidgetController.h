@@ -47,6 +47,12 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWaveTimerChangedSignature, int
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPhaseAlarmSignature, const FText&, PhaseText);
 // 독가스 경고 UI 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnToxicGasWarningUISignature, bool, bIsToxicGasWave);
+// 스킬아이콘 위젯 클래스 변경 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSkillIconClassChangedSignature, TSubclassOf<UDRUserWidget>, SkillIconWidgetClass);
+// 자판기 잭팟 스택 카운트 변경 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnVendingMachineStackCountChangedSignature, int32, CurrentStacks, int32, MaxStacks);
+// 자판기 공격속도 버프 시작 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnVendingMachineAttackSpeedBuffSignature);
 
 /**
  * ���� ���� UI �������̸� �����ϴ� ��Ʈ�ѷ�
@@ -120,6 +126,21 @@ public:
 	// 독가스 경고 UI 델리게이트 (Blueprint에서 바인딩하여 경고 위젯 표시/숨김)
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Warning")
 	FOnToxicGasWarningUISignature OnToxicGasWarning;
+
+	// 스킬아이콘 위젯 클래스 변경 델리게이트 (캐릭터별 스킬아이콘 위젯 교체용)
+	UPROPERTY(BlueprintAssignable, Category = "GAS|SkillIcon")
+	FOnSkillIconClassChangedSignature OnSkillIconClassChanged;
+
+	// 자판기 잭팟 스택 카운트 변경 델리게이트 (잭팟 스택 UI 업데이트용)
+	UPROPERTY(BlueprintAssignable, Category = "GAS|VendingMachine")
+	FOnVendingMachineStackCountChangedSignature OnVendingMachineStackCountChanged;
+
+	// 자판기 공격속도 버프 시작 델리게이트 (버프 UI 표시용)
+	UPROPERTY(BlueprintAssignable, Category = "GAS|VendingMachine")
+	FOnVendingMachineAttackSpeedBuffSignature OnVendingMachineAttackSpeedBuff;
+
+	// 캐릭터 클래스에 맞는 스킬아이콘 위젯 클래스를 브로드캐스트
+	void BroadcastSkillIconWidgetClass();
 
 private:
 	void HandlePhaseObjectiveChanged();

@@ -10,6 +10,9 @@ class UGameplayEffect;
 class UGameplayAbility;
 class ADRCharacter;
 
+// UDRUserWidget forward declaration (TSubclassOf only needs forward decl in UE5.5 with UHT)
+class UDRUserWidget;
+
 UENUM(BlueprintType)
 enum class ECharacterClass : uint8
 {
@@ -42,6 +45,10 @@ struct FCharacterClassDefaultInfo
 
 	UPROPERTY(EditDefaultsOnly, Category = "Class Defaults")
 	TArray<TSubclassOf<UGameplayAbility>> DeathAbilities;
+
+	// 해당 캐릭터 전용 스킬아이콘 위젯 클래스
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UDRUserWidget> SkillIconWidgetClass;
 };
 
 /**

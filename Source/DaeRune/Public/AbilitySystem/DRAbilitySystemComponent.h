@@ -10,6 +10,7 @@ DECLARE_MULTICAST_DELEGATE_FiveParams(FEffectAssetTags, const FGameplayTagContai
 DECLARE_MULTICAST_DELEGATE_OneParam(FEffectRemovedSignature, const FGameplayTagContainer& /*AssetTags*/);
 DECLARE_MULTICAST_DELEGATE(FAbilitiesGiven);
 DECLARE_DELEGATE_OneParam(FForEachAbility, const FGameplayAbilitySpec&);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnVendingMachineStacksChanged, int32 /*CurrentStacks*/, int32 /*MaxStacks*/);
 
 /**
  * 
@@ -25,6 +26,7 @@ public:
 	FEffectAssetTags EffectAssetTags;
 	FEffectRemovedSignature EffectRemovedDelegate;
 	FAbilitiesGiven AbilitiesGivenDelegate;
+	FOnVendingMachineStacksChanged OnVendingMachineStacksChanged;
 
 	void AddCharacterAbilities(const TArray<TSubclassOf<UGameplayAbility>>& StartupAbilities);
 	void AddCharacterPassiveAbilities(const TArray<TSubclassOf<UGameplayAbility>>& StartupPassiveAbilities);
@@ -48,6 +50,8 @@ public:
 	void AddToInputTagCache(const FGameplayAbilitySpec& AbilitySpec);
 	void RemoveFromInputTagCache(const FGameplayTag& InputTag);
 
+	void NotifyVendingMachineStacksChanged(int32 CurrentStacks, int32 MaxStacks);
+
 protected:
 	// InputTag → AbilitySpecHandle 캐시 (성능 최적화)
 	UPROPERTY()
@@ -63,4 +67,8 @@ protected:
 
 	UFUNCTION(Client, Reliable)
 	void OnRemoveGameplayEffectCallback(const FActiveGameplayEffect& EffectRemoved);
+
+	// 자판기 잭팟 스택 변경을 클라이언트에 전달
+	UFUNCTION(Client, Reliable)
+	void ClientVendingMachineStacksChanged(int32 CurrentStacks, int32 MaxStacks);
 };

@@ -3,6 +3,7 @@
 
 #include "AbilitySystem/Abilities/DRVendingMachineBasicAttack.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "ActiveGameplayEffectHandle.h"
 #include "GameplayEffect.h"
 #include "Actor/DRProjectile.h"
@@ -123,6 +124,11 @@ void UDRVendingMachineBasicAttack::ExecuteShot()
 
 		OnCapsuleShotFired(CapsuleTier);
 		OnJackpotStacksChanged(CurrentJackpotStacks, MaxJackpotStacks);
+
+		if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
+		{
+			DRASC->NotifyVendingMachineStacksChanged(CurrentJackpotStacks, MaxJackpotStacks);
+		}
 	}
 	else
 	{
@@ -133,6 +139,11 @@ void UDRVendingMachineBasicAttack::ExecuteShot()
 
 		OnNormalShotFired();
 		OnJackpotStacksChanged(CurrentJackpotStacks, MaxJackpotStacks);
+
+		if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
+		{
+			DRASC->NotifyVendingMachineStacksChanged(CurrentJackpotStacks, MaxJackpotStacks);
+		}
 	}
 }
 
