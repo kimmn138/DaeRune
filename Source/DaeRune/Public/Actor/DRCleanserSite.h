@@ -117,6 +117,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	FVector GetSpawnLocation() const;
 
+	UFUNCTION(BlueprintCallable, Category = "CleanserSite|Phase1")
+	TArray<FVector> GetPhase1EnemySpawnLocations() const;
+
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	FVector GetClosestSurfacePoint(const FVector& FromLocation) const;
 
@@ -159,6 +162,10 @@ protected:
 	// Ŭ���� ����Ʈ ���� �ĺ���
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cleanser Site")
 	FName CleanserID = NAME_None;
+
+	// World locations used by Phase1 normal enemy spawning. The legacy property name is kept to preserve placed map data.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CleanserSite|Phase1|Spawn", meta = (DisplayName = "Phase1 Enemy Spawn World Locations"))
+	TArray<FVector> Phase1EnemySpawnOffsets;
 
 	// ========== Components ==========
 

@@ -248,6 +248,11 @@ FVector ADRCleanserSite::GetSpawnLocation() const
 	return GetActorLocation();
 }
 
+TArray<FVector> ADRCleanserSite::GetPhase1EnemySpawnLocations() const
+{
+	return Phase1EnemySpawnOffsets;
+}
+
 FVector ADRCleanserSite::GetClosestSurfacePoint(const FVector& FromLocation) const
 {
 	if (!CleanserMesh)
@@ -270,6 +275,7 @@ FVector ADRCleanserSite::GetClosestSurfacePoint(const FVector& FromLocation) con
 void ADRCleanserSite::UpdateWaterMeshScale(float HealthRatio)
 {
 	if (!WaterMesh) return;
+	if (CurrentState != ECleanserSiteState::PartsCollected) return;
 
 	// ü�� ������ 0~1 ���̷� ����
 	HealthRatio = FMath::Clamp(HealthRatio, 0.0f, 1.0f);

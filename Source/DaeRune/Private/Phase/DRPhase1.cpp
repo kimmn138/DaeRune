@@ -1,4 +1,4 @@
-// Copyright DaeRune
+ï»¿// Copyright DaeRune
 
 
 #include "Phase/DRPhase1.h"
@@ -14,17 +14,21 @@ void UDRPhase1::OnPhaseStart()
 
 	if (!GameMode || !GameState) return;
 
-	// ¸ñÇ¥ ¼³Á¤
+	// ëª©í‘œ ì„¤ì •
 	SetupPhaseObjective(1);
 
-	// GameState Phase 1 ÃÊ±âÈ­
+	// GameState Phase 1 ì´ˆê¸°í™”
 	GameState->SetCleanserAreaSecured(false);
 	GameState->SetRemainingEnemiesInArea(0);
 
-	// Å¬·»Àú À§Ä¡¿¡ Àû ½ºÆù
+	// í´ë Œì € ìœ„ì¹˜ì— ì  ìŠ¤í°
 	SpawnEnemiesAtCleanserSites();
 
-	// ÃÑ Àû ¼ö·Î GameState ¾÷µ¥ÀÌÆ®
+	FPhaseObjectiveData PhaseObjective = GameState->GetCurrentPhaseObjective();
+	PhaseObjective.RequiredCount = TotalEnemyCount;
+	GameState->SetPhaseObjective(PhaseObjective);
+
+	// ì´ ì  ìˆ˜ë¡œ GameState ì—…ë°ì´íŠ¸
 	GameState->SetRemainingEnemiesInArea(TotalEnemyCount);
 
 	GameState->SetInitialPlayerCount(GameState->GetAlivePlayers().Num());
@@ -34,13 +38,13 @@ void UDRPhase1::OnPhaseEnd()
 {
 	Super::OnPhaseEnd();
 
-	// DoorManager¿¡ ¾Ë¸²
+	// DoorManagerì— ì•Œë¦¼
 	if (ADRDoorManager* DoorMgr = GetDoorManager())
 	{
 		DoorMgr->OnPhase1Ended();
 	}
 
-	// Phase1 Àü¿ë Á¤¸®
+	// Phase1 ì „ìš© ì •ë¦¬
 	SelectedCleanserSites.Empty();
 	TotalEnemyCount = 0;
 }
@@ -51,20 +55,21 @@ void UDRPhase1::OnEnemyDeath(AActor* DeadEnemy)
 
 	if (!GameMode || !GameState || !bIsPhaseActive) return;
 
-	// »ì¾ÆÀÖ´Â Àû ¼ö °è»ê
+	// ì‚´ì•„ìˆëŠ” ì  ìˆ˜ ê³„ì‚°
 	int32 AliveCount = GetAliveEnemyCount();
 
-	// GameState ¾÷µ¥ÀÌÆ®
+	// GameState ì—…ë°ì´íŠ¸
 	GameState->SetRemainingEnemiesInArea(AliveCount);
-	GameState->UpdatePhaseObjectiveProgress(GameState->CurrentPhaseObjective.RequiredCount - AliveCount);
+	const int32 DefeatedEnemyCount = FMath::Max(0, TotalEnemyCount - AliveCount);
+	GameState->UpdatePhaseObjectiveProgress(DefeatedEnemyCount);
 
-	// ¸ğµç ÀûÀÌ Á×¾úÀ¸¸é Áö¿ª È®º¸ ¿Ï·á
+	// ëª¨ë“  ì ì´ ì£½ì—ˆìœ¼ë©´ ì§€ì—­ í™•ë³´ ì™„ë£Œ
 	if (AliveCount == 0)
 	{
 		GameState->SetCleanserAreaSecured(true);
 	}
 
-	// GameMode¿¡ ¿Ï·á Á¶°Ç Ã¼Å© ¿äÃ»
+	// GameModeì— ì™„ë£Œ ì¡°ê±´ ì²´í¬ ìš”ì²­
 	GameMode->ValidatePhaseCompletion();
 }
 
@@ -72,76 +77,49 @@ void UDRPhase1::SpawnEnemiesAtCleanserSites()
 {
 	if (!GameMode) return;
 
-	// PhaseBase¿¡¼­ ÀüÃ¼ Å¬·»Àú »çÀÌÆ® °¡Á®¿À±â
+	// PhaseBaseì—ì„œ ì „ì²´ í´ë Œì € ì‚¬ì´íŠ¸ ê°€ì ¸ì˜¤ê¸°
 	if (CleanserSites.Num() < 3) return;
 
-	// ·£´ıÀ¸·Î Á¦°ÅÇÒ 1°³ ¼±ÅÃ
+	// ëœë¤ìœ¼ë¡œ ì œê±°í•  1ê°œ ì„ íƒ
 	int32 IndexToRemove = FMath::RandRange(0, CleanserSites.Num() - 1);
 	TObjectPtr<ADRCleanserSite> SiteToDestroy = CleanserSites[IndexToRemove];
 
-	// Á¦°Å ´ë»ó ¾×ÅÍ ÆÄ±«
+	// ì œê±° ëŒ€ìƒ ì•¡í„° íŒŒê´´
 	if (SiteToDestroy && IsValid(SiteToDestroy))
 	{
 		SiteToDestroy->Destroy();
 	}
 
-	// ¹è¿­¿¡¼­ Á¦°Å
+	// ë°°ì—´ì—ì„œ ì œê±°
 	CleanserSites.RemoveAt(IndexToRemove);
 
-	// ³²Àº 2°³¸¦ È°¼º Å¬·»Àú »çÀÌÆ®·Î ¼³Á¤
+	// ë‚¨ì€ 2ê°œë¥¼ í™œì„± í´ë Œì € ì‚¬ì´íŠ¸ë¡œ ì„¤ì •
 	SelectedCleanserSites = CleanserSites; 
 	SetActiveCleanserSites(SelectedCleanserSites);
 	GameState->SetCleanserSites(SelectedCleanserSites);
 
-	// ¼±ÅÃµÈ »çÀÌÆ® È°¼ºÈ­ ¹× Àû ½ºÆù
+	// ì„ íƒëœ ì‚¬ì´íŠ¸ í™œì„±í™” ë° ì  ìŠ¤í°
 	for (const TObjectPtr<ADRCleanserSite>& SelectedSite : SelectedCleanserSites)
 	{
 		if (!SelectedSite) continue;
 
-		// Å¬·»Àú »çÀÌÆ® È°¼ºÈ­
+		// í´ë Œì € ì‚¬ì´íŠ¸ í™œì„±í™”
 		SelectedSite->ActivateSite();
 
-		// ÇØ´ç À§Ä¡¿¡ Àû ½ºÆù
+		// í•´ë‹¹ ìœ„ì¹˜ì— ì  ìŠ¤í°
 		SpawnEnemyGroupAtCleanserSite(SelectedSite.Get());
 	}
 }
 
 void UDRPhase1::SpawnEnemyGroupAtCleanserSite(ADRCleanserSite* CleanserSite)
 {
-	if (!CleanserSite || !EliteEnemyClass || !NormalEnemyClass) return;
+	if (!CleanserSite || !NormalEnemyClass) return;
 
-	// Å¬·»Àú »çÀÌÆ®ÀÇ ½ºÆù À§Ä¡ °¡Á®¿À±â
-	FVector CenterLocation = CleanserSite->GetSpawnLocation();
+	const TArray<FVector> SpawnLocations = CleanserSite->GetPhase1EnemySpawnLocations();
+	if (SpawnLocations.Num() == 0) return;
 
-	// 1. ¿¤¸®Æ® ¸ó½ºÅÍ 1¸¶¸® (Å¬·»Àú¿¡¼­ ¾à°£ ¶³¾îÁø À§Ä¡)
-	// ·£´ıÇÑ ¹æÇâÀ¸·Î EliteSpawnOffset¸¸Å­ ¶³¾î¶ß¸®±â
-	float RandomAngle = FMath::FRandRange(0.0f, 360.0f);
-	FVector EliteOffset = FVector(
-		FMath::Cos(FMath::DegreesToRadians(RandomAngle)) * EliteSpawnOffset,
-		FMath::Sin(FMath::DegreesToRadians(RandomAngle)) * EliteSpawnOffset,
-		0.0f
-	);
-	FVector EliteSpawnLocation = CenterLocation + EliteOffset;
-
-	AActor* EliteEnemy = SpawnEnemy(EliteEnemyClass, EliteSpawnLocation);
-	if (EliteEnemy)
+	for (const FVector& SpawnLocation : SpawnLocations)
 	{
-		TotalEnemyCount++;
-	}
-
-	// 2. ÀÏ¹İ ¸ó½ºÅÍ 4¸¶¸® (ÁÖº¯¿¡ ¿øÇüÀ¸·Î)
-	for (int32 i = 0; i < NormalEnemyCount; i++)
-	{
-		// ¿øÇü ¹èÄ¡ °è»ê
-		float Angle = (360.0f / NormalEnemyCount) * i;
-		FVector Offset = FVector(
-			FMath::Cos(FMath::DegreesToRadians(Angle)) * SpawnRadius,
-			FMath::Sin(FMath::DegreesToRadians(Angle)) * SpawnRadius,
-			0.0f
-		);
-
-		FVector SpawnLocation = CenterLocation + Offset;
-
 		AActor* NormalEnemy = SpawnEnemy(NormalEnemyClass, SpawnLocation);
 		if (NormalEnemy)
 		{
@@ -157,22 +135,22 @@ AActor* UDRPhase1::SpawnEnemy(TSubclassOf<AActor> EnemyClass, const FVector& Loc
 	UWorld* World = GameMode->GetWorld();
 	if (!World) return nullptr;
 
-	// ½ºÆù ÆÄ¶ó¹ÌÅÍ ¼³Á¤
+	// ìŠ¤í° íŒŒë¼ë¯¸í„° ì„¤ì •
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	// Àû ½ºÆù
+	// ì  ìŠ¤í°
 	AActor* SpawnedEnemy = World->SpawnActor<AActor>(EnemyClass, Location, FRotator::ZeroRotator, SpawnParams);
 
 	if (SpawnedEnemy)
 	{
-		// µ¨¸®°ÔÀÌÆ® ¹ÙÀÎµù
+		// ë¸ë¦¬ê²Œì´íŠ¸ ë°”ì¸ë”©
 		if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(SpawnedEnemy))
 		{
 			CombatInterface->GetOnDeathDelegate().AddDynamic(this, &UDRPhase1::OnEnemyDeath);
 		}
 
-		// ½ºÆùµÈ Àû ¸®½ºÆ®¿¡ Ãß°¡
+		// ìŠ¤í°ëœ ì  ë¦¬ìŠ¤íŠ¸ì— ì¶”ê°€
 		SpawnedEnemies.Add(SpawnedEnemy);
 	}
 
@@ -181,13 +159,13 @@ AActor* UDRPhase1::SpawnEnemy(TSubclassOf<AActor> EnemyClass, const FVector& Loc
 
 ADRDoorManager* UDRPhase1::GetDoorManager()
 {
-	// ÀÌ¹Ì Ä³½ÌµÇ¾î ÀÖÀ¸¸é ¹İÈ¯
+	// ì´ë¯¸ ìºì‹±ë˜ì–´ ìˆìœ¼ë©´ ë°˜í™˜
 	if (CachedDoorManager)
 	{
 		return CachedDoorManager;
 	}
 
-	// GameState¿¡¼­ °¡Á®¿À±â
+	// GameStateì—ì„œ ê°€ì ¸ì˜¤ê¸°
 	if (UWorld* World = GetWorld())
 	{
 		if (ADRStageGameState* StageGameState = World->GetGameState<ADRStageGameState>())
