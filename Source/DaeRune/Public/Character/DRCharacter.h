@@ -120,6 +120,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Part System")
 	TObjectPtr<UStaticMeshComponent> FirstPersonPartMesh;
 
+	// Third-person carried part visual. Hidden from the owning player.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Part System")
+	TObjectPtr<UStaticMeshComponent> ThirdPersonPartMesh;
+
 	// �޽� ���ü� ������Ʈ
 	void UpdateMeshVisibility();
 
@@ -128,6 +132,11 @@ public:
 
 	// 1인칭 부품 메시 숨기기 (부품 드롭/설치 시 호출)
 	void HideFirstPersonPart();
+
+	// Third-person carried part visual.
+	void ShowThirdPersonPart(UStaticMesh* InPartMesh);
+	void HideThirdPersonPart();
+	void RefreshCarriedPartVisuals();
 
 	// 대기실 메시 가시성 전환 (고정 카메라에서 3P 메시를 보여주기 위해)
 	void SetWaitingRoomVisibility(bool bInWaitingRoom);

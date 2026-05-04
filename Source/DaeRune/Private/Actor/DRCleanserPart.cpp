@@ -82,11 +82,13 @@ void ADRCleanserPart::PickupPart(ADRCharacter* Character)
 	AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
 
 	// 3P 부품은 다른 플레이어에게만 보이도록 설정
-	PartMesh->SetOwnerNoSee(true);
-	SetOwner(Character->GetOwner());
+	PartMesh->SetVisibility(false);
+	PartMesh->SetHiddenInGame(true);
+	PartMesh->SetOwnerNoSee(false);
+	SetOwner(Character);
 
 	// 캐릭터의 1인칭 부품 메시 활성화
-	Character->ShowFirstPersonPart(PartMesh->GetStaticMesh());
+	RefreshCarriedState();
 
 	MulticastPlayPickupSound();
 
@@ -98,6 +100,48 @@ void ADRCleanserPart::PickupPart(ADRCharacter* Character)
 	}
 }
 
+void ADRCleanserPart::OnRep_CarryingCharacter()
+{
+	RefreshCarriedState();
+}
+
+void ADRCleanserPart::RefreshCarriedState()
+{
+	if (bIsCarried)
+	{
+		PartMesh->SetVisibility(false);
+		PartMesh->SetHiddenInGame(true);
+		PartMesh->SetOwnerNoSee(false);
+		PartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		DetectionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		InteractionWidget->SetVisibility(false);
+
+		if (CarryingCharacter)
+		{
+			if (USkeletalMeshComponent* CharacterMesh = CarryingCharacter->GetMesh())
+			{
+				AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
+			}
+		}
+	}
+	else
+	{
+		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		SetActorRotation(FRotator::ZeroRotator);
+
+		PartMesh->SetHiddenInGame(false);
+		PartMesh->SetVisibility(true);
+		PartMesh->SetOwnerNoSee(false);
+		PartMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		PartMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+		PartMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
+		DetectionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		DetectionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+		DetectionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	}
+}
+
 void ADRCleanserPart::InstallPart()
 {
 	if (!HasAuthority()) return;
@@ -106,13 +150,17 @@ void ADRCleanserPart::InstallPart()
 	if (CarryingCharacter)
 	{
 		CarryingCharacter->HideFirstPersonPart();
+		CarryingCharacter->HideThirdPersonPart();
 	}
 
 	// ĳ���Ϳ��� �±� ����
-	UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(CarryingCharacter->GetAbilitySystemComponent());
-	if (DRASC)
+	if (CarryingCharacter)
 	{
-		DRASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
+		UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(CarryingCharacter->GetAbilitySystemComponent());
+		if (DRASC)
+		{
+			DRASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
+		}
 	}
 
 	// ���� �ı�
@@ -128,6 +176,7 @@ void ADRCleanserPart::DropFromCarrier()
 	if (CarryingCharacter)
 	{
 		CarryingCharacter->HideFirstPersonPart();
+		CarryingCharacter->HideThirdPersonPart();
 	}
 
 	// ĳ���Ϳ��� �и�
@@ -142,6 +191,7 @@ void ADRCleanserPart::DropFromCarrier()
 	// 바닥에 떨어진 부품은 모두에게 보이도록 OwnerNoSee 복원
 	PartMesh->SetOwnerNoSee(false);
 	SetOwner(nullptr);
+	RefreshCarriedState();
 
 	// �޽� �ݸ��� ��Ȱ��ȭ
 	PartMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
@@ -235,6 +285,8 @@ void ADRCleanserPart::OnDetectionSphereEndOverlap(UPrimitiveComponent* Overlappe
 
 void ADRCleanserPart::OnRep_bIsCarried()
 {
+	RefreshCarriedState();
+
 	// ��ǰ�� �ֿ� �� Ŭ���̾�Ʈ���� �ð��� ������Ʈ
 	if (bIsCarried && CarryingCharacter)
 	{
@@ -259,7 +311,7 @@ void ADRCleanserPart::OnRep_bIsCarried()
 		CarryingCharacter->ShowFirstPersonPart(PartMesh->GetStaticMesh());
 	}
 	// ��ǰ�� ����Ʈ�� ��
-	else
+	else if (!bIsCarried)
 	{
 		// ĳ���Ϳ��� �и�
 		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);

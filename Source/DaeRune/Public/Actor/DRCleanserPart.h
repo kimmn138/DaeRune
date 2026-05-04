@@ -91,7 +91,7 @@ protected:
 	bool bIsCarried;
 
 	// ��ǰ�� ��� �ִ� ĳ����
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "CleanserPart")
+	UPROPERTY(ReplicatedUsing = OnRep_CarryingCharacter, BlueprintReadOnly, Category = "CleanserPart")
 	TObjectPtr<ADRCharacter> CarryingCharacter;
 
 	// ========== ������ �̺�Ʈ ==========
@@ -106,4 +106,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_bIsCarried();
+
+	UFUNCTION()
+	void OnRep_CarryingCharacter();
+
+	void RefreshCarriedState();
 };

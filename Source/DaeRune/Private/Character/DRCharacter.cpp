@@ -73,6 +73,13 @@ ADRCharacter::ADRCharacter()
 	FirstPersonPartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	FirstPersonPartMesh->SetVisibility(false);
 
+	// 3인칭 부품 메시 생성 (픽업 전에는 비활성)
+	ThirdPersonPartMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ThirdPersonPartMesh"));
+	ThirdPersonPartMesh->SetupAttachment(GetMesh(), FName("TestPartHand"));
+	ThirdPersonPartMesh->SetOwnerNoSee(true);
+	ThirdPersonPartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ThirdPersonPartMesh->SetVisibility(false);
+
 	// VOIPTalker 컴포넌트 생성
 	VOIPTalkerComponent = CreateDefaultSubobject<UDRVOIPTalker>(TEXT("VOIPTalker"));
 
@@ -188,6 +195,7 @@ bool ADRCharacter::PickupPart(ADRCleanserPart* Part)
 	// ���� ������Ʈ
 	bIsCarryingPart = true;
 	CarriedPart = Part;
+	RefreshCarriedPartVisuals();
 
 	// ȹ�� �ð� ���
 	LastPartPickupTime = GetWorld()->GetTimeSeconds();
@@ -211,6 +219,7 @@ void ADRCharacter::InstallCarriedPart()
 	// ���� �ʱ�ȭ
 	bIsCarryingPart = false;
 	CarriedPart = nullptr;
+	RefreshCarriedPartVisuals();
 }
 
 void ADRCharacter::DropCarriedPart()
@@ -238,6 +247,7 @@ void ADRCharacter::DropCarriedPart()
 	// ĳ���� ���¸� �ʱ�ȭ
 	bIsCarryingPart = false;
 	CarriedPart = nullptr;
+	RefreshCarriedPartVisuals();
 }
 
 void ADRCharacter::TryRegisterVoiceTalker()
@@ -315,6 +325,46 @@ void ADRCharacter::HideFirstPersonPart()
 	FirstPersonPartMesh->SetStaticMesh(nullptr);
 }
 
+void ADRCharacter::ShowThirdPersonPart(UStaticMesh* InPartMesh)
+{
+	if (!ThirdPersonPartMesh || !InPartMesh) return;
+
+	ThirdPersonPartMesh->SetStaticMesh(InPartMesh);
+	ThirdPersonPartMesh->SetVisibility(!IsLocallyControlled());
+}
+
+void ADRCharacter::HideThirdPersonPart()
+{
+	if (!ThirdPersonPartMesh) return;
+
+	ThirdPersonPartMesh->SetVisibility(false);
+	ThirdPersonPartMesh->SetStaticMesh(nullptr);
+}
+
+void ADRCharacter::RefreshCarriedPartVisuals()
+{
+	UStaticMesh* CarriedStaticMesh = nullptr;
+
+	if (CarriedPart)
+	{
+		if (UStaticMeshComponent* PMesh = CarriedPart->GetPartMesh())
+		{
+			CarriedStaticMesh = PMesh->GetStaticMesh();
+		}
+	}
+
+	if (CarriedStaticMesh)
+	{
+		ShowFirstPersonPart(CarriedStaticMesh);
+		ShowThirdPersonPart(CarriedStaticMesh);
+	}
+	else
+	{
+		HideFirstPersonPart();
+		HideThirdPersonPart();
+	}
+}
+
 void ADRCharacter::SetWaitingRoomVisibility(bool bInWaitingRoom)
 {
 	if (bInWaitingRoom)
@@ -340,6 +390,10 @@ void ADRCharacter::SetWaitingRoomVisibility(bool bInWaitingRoom)
 		{
 			FirstPersonPartMesh->SetVisibility(false);
 		}
+		if (ThirdPersonPartMesh)
+		{
+			ThirdPersonPartMesh->SetVisibility(false);
+		}
 
 		// 대기실에서는 오버헤드 닉네임 숨김 (WBP_PlayerSlot UI에서 표시)
 		SetOverheadWidgetVisibility(false);
@@ -354,14 +408,7 @@ void ADRCharacter::SetWaitingRoomVisibility(bool bInWaitingRoom)
 			Weapon->SetOwnerNoSee(true);
 		}
 
-		// 부품을 들고 있으면 1인칭 부품 메시 복원
-		if (bIsCarryingPart && CarriedPart && FirstPersonPartMesh)
-		{
-			if (UStaticMeshComponent* PMesh = CarriedPart->GetPartMesh())
-			{
-				ShowFirstPersonPart(PMesh->GetStaticMesh());
-			}
-		}
+		RefreshCarriedPartVisuals();
 
 		// FreeRoam부터 오버헤드 닉네임 표시 복원
 		SetOverheadWidgetVisibility(true);
@@ -586,19 +633,7 @@ void ADRCharacter::OnRep_bIsCarryingPart()
 
 void ADRCharacter::OnRep_CarriedPart()
 {
-	if (CarriedPart)
-	{
-		// 부품을 들고 있으면 1인칭 부품 메시 표시
-		if (UStaticMeshComponent* PMesh = CarriedPart->GetPartMesh())
-		{
-			ShowFirstPersonPart(PMesh->GetStaticMesh());
-		}
-	}
-	else
-	{
-		// 부품이 없으면 1인칭 부품 메시 숨기기
-		HideFirstPersonPart();
-	}
+	RefreshCarriedPartVisuals();
 }
 
 void ADRCharacter::InitializeDefaultAttributes() const
