@@ -19,7 +19,8 @@ enum class ECharacterClass : uint8
 	Elementalist,
 	Warrior,
 	Ranger,
-	Bear
+	Bear,
+	PartEnemy
 };
 
 UENUM(BlueprintType)

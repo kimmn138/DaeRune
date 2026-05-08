@@ -48,10 +48,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Corruption")
 	void CorruptedStateChanged(bool bIsStateChanged);
 
-	// ���� ä�� Ȱ��ȭ/��Ȱ��ȭ
-	UFUNCTION(BlueprintImplementableEvent, Category = "Corruption")
-	void SetVoiceChatEnabled(bool bEnabled);
-
 	// �Ʊ�/�� ���� ǥ�� ����
 	UFUNCTION(BlueprintImplementableEvent, Category = "Corruption")
 	void SetTeamVisualsEnabled(bool bEnabled);
@@ -59,17 +55,6 @@ public:
 	// ���� ���� Ȯ��
 	UFUNCTION(BlueprintCallable, Category = "Corruption")
 	bool IsInCorruptedState() const { return bIsCorrupted; }
-
-	// ���� ä�� ������Ʈ
-	UFUNCTION(BlueprintCallable, Category = "Voice Chat")
-	void UpdateVoiceChannelForDeathState(bool bIsDead);
-
-	// Ư�� �÷��̾� ��Ʈ/���Ʈ
-	UFUNCTION(BlueprintCallable, Category = "Voice Chat")
-	void SetPlayerVoiceMuted(APlayerState* TargetPlayer, bool bMute);
-
-	// ��� �÷��̾� ���� ��Ʈ ���� ������Ʈ
-	void RefreshAllPlayerVoiceMutes();
 
 	// ��ȣ�ۿ� �̺�Ʈ
 	UPROPERTY(BlueprintAssignable, Category = "Input")
@@ -421,7 +406,6 @@ private:
 	bool bPartDetectionEnabled = false;
 
 	// ���� �÷��̾ �׾����� ����
-	bool bIsDeadForVoice = false;
 
 	// ����Ʈ���̽� Ÿ�̸�
 	float LineTraceTimer = 0.f;

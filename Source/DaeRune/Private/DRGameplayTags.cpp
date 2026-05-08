@@ -113,11 +113,6 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Armadillo is in ball form")
 	);
 
-	GameplayTags.Enemy_Detected = UGameplayTagsManager::Get().AddNativeGameplayTag(
-		FName("Enemy.Detected"),
-		FString("Enemy has been detected by player")
-	);
-
 	/*
 	 * �⺻ ������, Ÿ�� �� ������
 	 */

@@ -8,6 +8,7 @@
 #include "DRGameInstance.generated.h"
 
 class UDRSaveGame;
+class UPlayerCharacterClassInfo;
 
 /**
  *
@@ -22,6 +23,10 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sound")
 	TObjectPtr<class UDRSoundDataAsset> SoundDataAsset;
+
+	// 플레이어 전용 CharacterClassInfo (서버/클라이언트 모두 접근 가능)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character Class Defaults")
+	TObjectPtr<UPlayerCharacterClassInfo> PlayerCharacterClassInfo;
 
 	// ========== 맵 전환 시 캐릭터 선택 보존 ==========
 

@@ -17,6 +17,8 @@
 #include "EngineUtils.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
+#include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "Game/DRGameInstance.h"
 
 ADRLobbyGameMode::ADRLobbyGameMode()
@@ -309,8 +311,9 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 		if (!PS) continue;
 
 		// ?좏깮???대옒?ㅼ쓽 BP ?ㅽ룿
-		if (!PlayerCharacterClassInfo) continue;
-		TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(PS->GetSelectedPlayerClass());
+		UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this);
+		if (!ClassInfo) continue;
+		TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(PS->GetSelectedPlayerClass());
 		if (!BPClassPtr || !*BPClassPtr) continue;
 
 		int32* SlotIdx = PlayerSlotMap.Find(PC);
@@ -586,8 +589,9 @@ void ADRLobbyGameMode::RespawnPlayerWithClass(ADRPlayerController* PC, EPlayerCh
 	}
 
 	// FreeRoam: 湲곗〈 ??援먯껜 濡쒖쭅 (吏꾩쭨 Possess ?꾩슂)
-	if (!PlayerCharacterClassInfo) return;
-	TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(NewClass);
+	UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this);
+	if (!ClassInfo) return;
+	TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(NewClass);
 	if (!BPClassPtr || !*BPClassPtr) return;
 
 	APawn* OldPawn = PC->GetPawn();
@@ -643,9 +647,9 @@ UClass* ADRLobbyGameMode::GetDefaultPawnClassForController_Implementation(AContr
 		{
 			EPlayerCharacterClass SelectedClass = PS->GetSelectedPlayerClass();
 
-			if (PlayerCharacterClassInfo)
+			if (UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this))
 			{
-				TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(SelectedClass);
+				TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(SelectedClass);
 				if (BPClassPtr && *BPClassPtr)
 				{
 					return *BPClassPtr;
@@ -659,8 +663,10 @@ UClass* ADRLobbyGameMode::GetDefaultPawnClassForController_Implementation(AContr
 
 void ADRLobbyGameMode::SpawnDisplayCharacter(AController* Player, EPlayerCharacterClass CharClass, int32 SlotIndex)
 {
-	if (!PlayerCharacterClassInfo || !Player) return;
-	TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(CharClass);
+	if (!Player) return;
+	UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this);
+	if (!ClassInfo) return;
+	TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(CharClass);
 	if (!BPClassPtr || !*BPClassPtr) return;
 
 	if (WaitingRoomSlots.Num() == 0) return;

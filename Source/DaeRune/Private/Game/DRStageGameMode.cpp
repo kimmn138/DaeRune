@@ -11,6 +11,8 @@
 #include "Player/DRPlayerState.h"
 #include "Character/DRCharacter.h"
 #include "Game/DRGameInstance.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
+#include "AbilitySystem/Data/CharacterClassInfo.h"
 
 ADRStageGameMode::ADRStageGameMode()
 {
@@ -39,9 +41,9 @@ UClass* ADRStageGameMode::GetDefaultPawnClassForController_Implementation(AContr
 			}
 		}
 
-		if (PlayerCharacterClassInfo)
+		if (UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this))
 		{
-			TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(SelectedClass);
+			TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(SelectedClass);
 			if (BPClassPtr && *BPClassPtr)
 			{
 				return *BPClassPtr;

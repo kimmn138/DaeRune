@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "Character/DRCharacterBase.h"
 #include "AbilitySystem/Data/CharacterClassInfo.h"
-#include "Voice/DRVOIPTalker.h"
 #include "DRCharacter.generated.h"
 
 class UWidgetComponent;
@@ -67,21 +66,6 @@ public:
 	// ��ǰ ����߸���
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void DropCarriedPart();
-
-	// ========== 음성 채팅 ==========
-
-	// VOIPTalker 컴포넌트 반환
-	UFUNCTION(BlueprintCallable, Category = "Voice Chat")
-	UDRVOIPTalker* GetVOIPTalker() const { return VOIPTalkerComponent; }
-
-	// VOIP 청취 컴포넌트
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Voice Chat")
-	TObjectPtr<UDRVOIPTalker> VOIPTalkerComponent;
-
-	FTimerHandle PlayerStateRegisterTimerHandle;
-
-	void TryRegisterVoiceTalker();
-	void RegisterVoiceTalker();
 
 	// ========== ī�޶� ==========
 

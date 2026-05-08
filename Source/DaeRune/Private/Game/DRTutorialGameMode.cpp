@@ -7,6 +7,7 @@
 #include "Player/DRPlayerState.h"
 #include "Character/DRCharacter.h"
 #include "AbilitySystem/Data/CharacterClassInfo.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Kismet/GameplayStatics.h"
 
 ADRTutorialGameMode::ADRTutorialGameMode()
@@ -27,9 +28,9 @@ UClass* ADRTutorialGameMode::GetDefaultPawnClassForController_Implementation(ACo
 		{
 			EPlayerCharacterClass SelectedClass = PS->GetSelectedPlayerClass();
 
-			if (PlayerCharacterClassInfo)
+			if (UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this))
 			{
-				TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(SelectedClass);
+				TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(SelectedClass);
 				if (BPClassPtr && *BPClassPtr)
 				{
 					return *BPClassPtr;

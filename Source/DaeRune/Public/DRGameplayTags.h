@@ -43,7 +43,6 @@ public:
 	FGameplayTag State_HitReacting;
 	FGameplayTag State_LockedDown;
 	FGameplayTag State_BallForm;
-	FGameplayTag Enemy_Detected;
 
 	// �⺻ ������, Ÿ�� �� ������
 	FGameplayTag Damage;

@@ -10,6 +10,7 @@
 #include "Actor/DRCleanserSite.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "Game/DRGameModeBase.h"
+#include "Game/DRGameInstance.h"
 #include "Interaction/CombatInterface.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/DRPlayerState.h"
@@ -101,9 +102,10 @@ UCharacterClassInfo* UDRAbilitySystemLibrary::GetCharacterClassInfo(const UObjec
 
 UPlayerCharacterClassInfo* UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(const UObject* WorldContextObject)
 {
-	const ADRGameModeBase* DRGameMode = Cast<ADRGameModeBase>(UGameplayStatics::GetGameMode(WorldContextObject));
-	if (DRGameMode == nullptr) return nullptr;
-	return DRGameMode->PlayerCharacterClassInfo;
+	// GameInstance는 서버/클라이언트 모두에 존재하므로 양쪽에서 안전하게 접근 가능
+	const UDRGameInstance* DRGameInstance = Cast<UDRGameInstance>(UGameplayStatics::GetGameInstance(WorldContextObject));
+	if (DRGameInstance == nullptr) return nullptr;
+	return DRGameInstance->PlayerCharacterClassInfo;
 }
 
 void UDRAbilitySystemLibrary::InitializePlayerDefaultAttributes(

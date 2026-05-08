@@ -23,7 +23,6 @@
 #include "Components/PointLightComponent.h"
 #include "Game/DRGameUserSettings.h"
 #include "UObject/UObjectIterator.h"
-#include "Components/SynthComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Game/DRLobbyGameState.h"
 #include "Game/DRTutorialGameMode.h"
@@ -79,9 +78,6 @@ ADRCharacter::ADRCharacter()
 	ThirdPersonPartMesh->SetOwnerNoSee(true);
 	ThirdPersonPartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	ThirdPersonPartMesh->SetVisibility(false);
-
-	// VOIPTalker 컴포넌트 생성
-	VOIPTalkerComponent = CreateDefaultSubobject<UDRVOIPTalker>(TEXT("VOIPTalker"));
 
 	// 컨트롤러 회전 설정
 	bUseControllerRotationPitch = false;
@@ -248,31 +244,6 @@ void ADRCharacter::DropCarriedPart()
 	bIsCarryingPart = false;
 	CarriedPart = nullptr;
 	RefreshCarriedPartVisuals();
-}
-
-void ADRCharacter::TryRegisterVoiceTalker()
-{
-	if (APlayerState* PS = GetPlayerState())
-	{
-		GetWorld()->GetTimerManager().ClearTimer(PlayerStateRegisterTimerHandle);
-		RegisterVoiceTalker();
-	}
-}
-
-void ADRCharacter::RegisterVoiceTalker()
-{
-	if (VOIPTalkerComponent)
-	{
-		if (APlayerState* PS = GetPlayerState())
-		{
-			VOIPTalkerComponent->RegisterWithPlayerState(PS);
-
-			// 거리 감쇠 비활성화 (전역 음성)
-			VOIPTalkerComponent->Settings.ComponentToAttachTo = nullptr;
-			VOIPTalkerComponent->Settings.AttenuationSettings = nullptr;
-			VOIPTalkerComponent->Settings.SourceEffectChain = nullptr;
-		}
-	}
 }
 
 void ADRCharacter::UpdateMeshVisibility()
@@ -449,17 +420,6 @@ void ADRCharacter::BeginPlay()
 	// �޽� ���ü� ������Ʈ
 	UpdateMeshVisibility();
 
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(
-			PlayerStateRegisterTimerHandle,
-			this,
-			&ADRCharacter::TryRegisterVoiceTalker,
-			0.2f,
-			true
-		);
-	}
-
 	// 1��Ī ���� ��� �ϴ� ����Ʈ �߰�
 	if (IsLocallyControlled())
 	{
@@ -496,7 +456,6 @@ void ADRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	// 타이머 정리 (메모리 누수 방지)
 	if (UWorld* World = GetWorld())
 	{
-		World->GetTimerManager().ClearTimer(PlayerStateRegisterTimerHandle);
 		World->GetTimerManager().ClearTimer(WaterPumpBeamUpdateTimer);
 	}
 

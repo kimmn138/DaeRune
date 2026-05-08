@@ -6,7 +6,6 @@
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/GameStateBase.h"
 #include "TimerManager.h"
-#include "Game/DRDetectionManager.h"
 #include "Player/DRPlayerController.h"
 
 ADRGameModeBase::ADRGameModeBase()
@@ -87,9 +86,6 @@ bool ADRGameModeBase::CheckTeamWipeout()
 void ADRGameModeBase::BeginPlay()
 {
 	Super::BeginPlay();
-
-	// Ž�� �Ŵ��� ����
-	SpawnDetectionManager();
 }
 
 void ADRGameModeBase::HandleWipeout()
@@ -115,21 +111,3 @@ void ADRGameModeBase::PrepareForTravel()
 	}
 }
 
-void ADRGameModeBase::SpawnDetectionManager()
-{
-	// ���������� ����
-	if (!HasAuthority()) return;
-
-	if (!DetectionManagerClass) return;
-
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.Owner = this;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-	DetectionManager = GetWorld()->SpawnActor<ADRDetectionManager>(
-		DetectionManagerClass,
-		FVector::ZeroVector,
-		FRotator::ZeroRotator,
-		SpawnParams
-	);
-}

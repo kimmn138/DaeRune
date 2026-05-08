@@ -114,9 +114,6 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 			// ���� ����
 			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
 			{
-				// ���� ä���� ���� ���·� ������Ʈ
-				DRPC->UpdateVoiceChannelForDeathState(true);
-
 				// ������ �� ���� ��� ��ȯ
 				FTimerHandle SpectatorTimerHandle;
 				GetWorld()->GetTimerManager().SetTimer(
@@ -247,17 +244,6 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 
 	// ��� �̺�Ʈ ��ε�ĳ��Ʈ
 	OnDeathDelegate.Broadcast(this);
-
-	if (UWorld* World = GetWorld())
-	{
-		if (APlayerController* LocalPC = World->GetFirstPlayerController())
-		{
-			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(LocalPC))
-			{
-				DRPC->RefreshAllPlayerVoiceMutes();
-			}
-		}
-	}
 }
 
 void ADRCharacterBase::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)

@@ -46,97 +46,7 @@ ADRPlayerController::ADRPlayerController()
 
 void ADRPlayerController::CorruptedStateChanged(bool bIsStateChanged)
 {
-	// 占쏙옙占쏙옙 占쏙옙占쏙옙 占시뤄옙占쏙옙 占쏙옙占쏙옙占쏙옙트
 	bIsCorrupted = bIsStateChanged;
-
-	// 占쏙옙占쏙옙 채占쏙옙 占쏙옙占쏙옙
-	//SetVoiceChatEnabled(!bIsCorrupted);
-
-	// 占쏙옙 占쏙옙占쏙옙 占시곤옙 효占쏙옙 占쏙옙占쏙옙
-	//SetTeamVisualsEnabled(!bIsCorrupted);
-}
-
-void ADRPlayerController::UpdateVoiceChannelForDeathState(bool bIsDead)
-{
-	// 濡쒖뺄 而⑦듃濡ㅻ윭?먯꽌留??ㅽ뻾
-	if (!IsLocalController()) return;
-
-	bIsDeadForVoice = bIsDead;
-
-	// 紐⑤뱺 ?뚮젅?댁뼱?????裕ㅽ듃 ?곹깭 ?낅뜲?댄듃
-	RefreshAllPlayerVoiceMutes();
-}
-
-void ADRPlayerController::SetPlayerVoiceMuted(APlayerState* TargetPlayer, bool bMute)
-{
-	if (!TargetPlayer || !IsLocalController()) return;
-
-	// ?먭린 ?먯떊? 裕ㅽ듃?섏? ?딆쓬
-	if (TargetPlayer == PlayerState) return;
-
-	// PlayerController???댁옣 裕ㅽ듃 ?⑥닔 ?ъ슜
-	FUniqueNetIdRepl TargetNetId = TargetPlayer->GetUniqueId();
-	if (TargetNetId.IsValid())
-	{
-		if (bMute)
-		{
-			// 裕ㅽ듃 由ъ뒪?몄뿉 異붽?
-			GameplayMutePlayer(TargetNetId);
-		}
-		else
-		{
-			// 裕ㅽ듃 由ъ뒪?몄뿉???쒓굅
-			GameplayUnmutePlayer(TargetNetId);
-		}
-	}
-}
-
-void ADRPlayerController::RefreshAllPlayerVoiceMutes()
-{
-	if (!IsLocalController()) return;
-
-	UWorld* World = GetWorld();
-	if (!World) return;
-
-	AGameStateBase* GameState = World->GetGameState();
-	if (!GameState) return;
-
-	// 紐⑤뱺 ?뚮젅?댁뼱 ?쒗쉶
-	for (APlayerState* OtherPS : GameState->PlayerArray)
-	{
-		if (!OtherPS || OtherPS == PlayerState) continue;
-
-		// ?곷?諛⑹쓽 ?щ쭩 ?곹깭 ?뺤씤
-		bool bOtherIsDead = false;
-
-		if (APawn* OtherPawn = OtherPS->GetPawn())
-		{
-			if (OtherPawn->Implements<UCombatInterface>())
-			{
-				bOtherIsDead = ICombatInterface::Execute_IsDead(OtherPawn);
-			}
-		}
-		else
-		{
-			// Pawn???놁쑝硫?二쎌? 寃껋쑝濡?媛꾩＜
-			bOtherIsDead = true;
-		}
-
-		bool bShouldMute = false;
-
-		if (!bIsDeadForVoice)
-		{
-			// ?닿? ?댁븘?덉쑝硫? 二쎌? ?뚮젅?댁뼱??裕ㅽ듃
-			bShouldMute = bOtherIsDead;
-		}
-		else
-		{
-			// ?닿? 二쎌뿀?쇰㈃, 紐⑤몢 ?ㅻ┝
-			bShouldMute = false;
-		}
-
-		SetPlayerVoiceMuted(OtherPS, bShouldMute);
-	}
 }
 
 void ADRPlayerController::ShowDamageNumber_Implementation(float DamageAmount, ACharacter* TargetCharacter)
@@ -408,34 +318,6 @@ void ADRPlayerController::ClientStopAllAudio_Implementation()
 		}
 	}
 
-	// VOIP 愿??SynthComponent ?뺣━ (SeamlessTravel ???꾩닔)
-	// DestroyComponent() 吏곸젒 ?몄텧 ???뚮뜑 ?ъ뿉??AudioComponent媛 ?댁젣?섏? ?딆븘 ?щ옒??諛쒖깮
-	// ?덉쟾???뺣━ ?쒖꽌: Deactivate -> UnregisterComponent
-	TArray<AActor*> AllActors;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), AllActors);
-
-	for (AActor* Actor : AllActors)
-	{
-		if (!Actor) continue;
-
-		TArray<UActorComponent*> AllComps;
-		Actor->GetComponents<UActorComponent>(AllComps);
-
-		for (UActorComponent* Comp : AllComps)
-		{
-			if (Comp && Comp->GetClass()->GetName().Contains(TEXT("VoipListenerSynthComponent")))
-			{
-				// 1. 癒쇱? 鍮꾪솢?깊솕
-				Comp->Deactivate();
-
-				// 2. ?ъ뿉???깅줉 ?댁젣
-				if (Comp->IsRegistered())
-				{
-					Comp->UnregisterComponent();
-				}
-			}
-		}
-	}
 }
 
 void ADRPlayerController::CheatSkipToNextPhase()

@@ -8,9 +8,7 @@
 
 class UAbilityInfo;
 class UCharacterClassInfo;
-class UPlayerCharacterClassInfo;
 class UGameBalanceConfig;
-class ADRDetectionManager;
 
 /**
  * DaeRune �⺻ ���� ��� Ŭ����
@@ -26,10 +24,6 @@ public:
 	// 적 전용 CharacterClassInfo
 	UPROPERTY(EditDefaultsOnly, Category = "Character Class Defaults")
 	TObjectPtr<UCharacterClassInfo> EnemyCharacterClassInfo;
-
-	// 플레이어 전용 CharacterClassInfo
-	UPROPERTY(EditDefaultsOnly, Category = "Character Class Defaults")
-	TObjectPtr<UPlayerCharacterClassInfo> PlayerCharacterClassInfo;
 
 	// �����Ƽ ���� ������ ����
 	UPROPERTY(EditDefaultsOnly, Category = "Ability Info")
@@ -63,15 +57,4 @@ protected:
 
 	// ���� ó�� ������ ����
 	bool bIsWipeoutInProgress = false;
-
-	// Ž�� �Ŵ��� Ŭ����
-	UPROPERTY(EditDefaultsOnly, Category = "Detection")
-	TSubclassOf<ADRDetectionManager> DetectionManagerClass;
-
-	// ������ Ž�� �Ŵ��� �ν��Ͻ�
-	UPROPERTY()
-	TObjectPtr<ADRDetectionManager> DetectionManager;
-
-	// Ž�� �Ŵ��� ����
-	void SpawnDetectionManager();
 };
