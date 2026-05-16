@@ -12,7 +12,7 @@ class UAIPerceptionComponent;
 class UAISenseConfig_Sight;
 
 /**
- * DREnemy Àü¿ë AI ÄÁÆ®·Ñ·¯
+ * DREnemy ï¿½ï¿½ï¿½ï¿½ AI ï¿½ï¿½Æ®ï¿½Ñ·ï¿½
  */
 UCLASS()
 class DAERUNE_API ADRAIController : public AAIController
@@ -27,24 +27,24 @@ public:
 	virtual void SetGenericTeamId(const FGenericTeamId& NewTeamId) override { TeamId = NewTeamId; }
 	virtual ETeamAttitude::Type GetTeamAttitudeTowards(const AActor& Other) const override;
 
-	// Æ¯Á¤ °Å¸® ³» ÇÃ·¹ÀÌ¾îµé °¡Á®¿À±â
+	// Æ¯ï¿½ï¿½ ï¿½Å¸ï¿½ ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "AI|Perception")
 	TArray<AActor*> GetPlayers() const { return PerceivedPlayers; }
 
-	// °¨ÁöµÈ ÇÃ·¹ÀÌ¾î ¼ö
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "AI|Perception")
 	int32 GetPerceivedPlayerCount() const { return PerceivedPlayers.Num(); }
 	
-	// ÀüÅõ ½Ã°£ ¾÷µ¥ÀÌÆ®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
     UFUNCTION(BlueprintCallable, Category = "AI|Combat")
     void UpdateCombatTime();
         
-    // ÀüÅõ ÀÌÅ» ¿©ºÎ È®ÀÎ
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Å» ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
     UFUNCTION(BlueprintCallable, Category = "AI|Combat")
     bool HasCombatTimedOut(float TimeoutSeconds = 3.0f) const;
 
 protected:
-	// ºñÇìÀÌºñ¾î Æ®¸® ½ÇÇà ÄÄÆ÷³ÍÆ®
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Ìºï¿½ï¿½ Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY()
 	TObjectPtr<UBehaviorTreeComponent> BehaviorTreeComponent;
 
@@ -56,20 +56,24 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI|Perception")
 	TObjectPtr<UAISenseConfig_Sight> SightConfig;
 
-	// Perception ¾÷µ¥ÀÌÆ® Äİ¹é
+	// Perception ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½İ¹ï¿½
 	UFUNCTION()
 	void OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus);
 
 private:
 	FGenericTeamId TeamId;
 
-	// °Å¸®º°·Î Á¤·ÄµÈ ÇÃ·¹ÀÌ¾î ¹è¿­
+	// ï¿½Å¸ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Äµï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½è¿­
 	UPROPERTY(VisibleAnywhere, Category = "AI|Perception", meta = (AllowPrivateAccess = "true"))
 	TArray<AActor*> PerceivedPlayers;
 
-	// °Å¸® ¾÷µ¥ÀÌÆ®
+	// ï¿½Å¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	void UpdatePlayer(AActor* Player);
 
-	// ÇÃ·¹ÀÌ¾î Á¦°Å
+	// ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½ï¿½ï¿½ï¿½
 	void RemovePlayer(AActor* Player);
+
+	// [DEBUG] Phase3 ë©ˆì¶˜ ì  ì¶”ì ìš© ì£¼ê¸° ë¡œê·¸
+	FTimerHandle DebugStateLogTimerHandle;
+	void DebugStateLog();
 };

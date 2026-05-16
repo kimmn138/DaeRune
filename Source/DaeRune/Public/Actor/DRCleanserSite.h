@@ -74,6 +74,10 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastShowInstalledPart(int32 SlotIndex);
 
+	// 라인트레이스 감지에 의한 상호작용 UI 표시/숨김 (요청한 컨트롤러의 로컬 머신에서만 표시)
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastShowInteractionUI(ADRPlayerController* PlayerController, bool bShow);
+
 	// Phase3 클린저 작동 사운드 (루프 - 시작/종료 시 한 번씩만 호출)
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastStartOperatingSound();
@@ -146,6 +150,10 @@ public:
 	void InitializeDefaultAttributes() const;
 
 	void UpdateMeshByState();
+
+	// 캐릭터의 현재 오버랩 + 부품 보유 상태를 재평가하여 상호작용 UI를 갱신
+	// (오버랩 도중 부품을 집어들거나 내려놓을 때 호출)
+	void RefreshOverlapStateFor(class ADRCharacter* Character);
 
 protected:
 	virtual void BeginPlay() override;

@@ -44,6 +44,9 @@ public:
 	void SetTutorialCompleted();
 
 	UFUNCTION(BlueprintCallable, Category = "Save")
+	void ResetTutorialProgress();
+
+	UFUNCTION(BlueprintCallable, Category = "Save")
 	void LoadProgress();
 
 	UFUNCTION(BlueprintCallable, Category = "Save")

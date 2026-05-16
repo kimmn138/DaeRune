@@ -7,6 +7,7 @@
 #include "DRArmadilloEnemy.generated.h"
 
 class USphereComponent;
+class UAudioComponent;
 
 /**
  * Rolling impact result data - collected by C++ collision detection, passed to GA (Blueprint).
@@ -104,6 +105,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount) override;
 
 	// ===== Form Switching Config =====
@@ -135,9 +137,13 @@ protected:
 
 	// ===== Rolling Charge Config =====
 
-	/** Rolling state (replicated) */
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Armadillo|Roll")
+	/** Rolling state (replicated). OnRep starts/stops the loop sound on remote clients;
+	    server-side StartRollCharge/StopRollCharge invoke OnRep_IsRolling() manually for parity. */
+	UPROPERTY(ReplicatedUsing = OnRep_IsRolling, BlueprintReadOnly, Category = "Armadillo|Roll")
 	bool bIsRolling = false;
+
+	UFUNCTION()
+	void OnRep_IsRolling();
 
 	/** Charge target location */
 	UPROPERTY(BlueprintReadOnly, Category = "Armadillo|Roll")
@@ -175,7 +181,34 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
 	float RollTargetSearchRange = 3000.f;
 
+	/** If movement during a roll stays below StuckMoveThreshold for this many seconds, treat as stuck and end the roll. */
+	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
+	float StuckTimeLimit = 3.f;
+
+	/** 2D distance (cm) below which we consider the armadillo to not be moving for stuck detection. */
+	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
+	float StuckMoveThreshold = 10.f;
+
+	FVector LastStuckCheckLocation = FVector::ZeroVector;
+	float StuckTimeAccumulator = 0.f;
+
 private:
+	// ===== Roll/Impact Sound (Plan2.md §6.2, §6.3) =====
+
+	/** Loop sound component (spawned on first roll, stopped on roll end / death / EndPlay). */
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> RollLoopComponent;
+
+	/** Start roll loop sound. Safe to call multiple times (skips if already playing). Skipped on dedicated server. */
+	void StartArmadilloRollLoop();
+
+	/** Stop roll loop sound. Safe to call multiple times. */
+	void StopArmadilloRollLoop();
+
+	/** Multicast impact sound (server -> all clients). Reliable: discrete impact event must not be dropped. */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayRollImpactSound(FVector_NetQuantize Location);
+
 	/** Tick processing during charge (movement + collision detection) */
 	void TickRollCharge(float DeltaTime);
 

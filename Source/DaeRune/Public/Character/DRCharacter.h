@@ -13,6 +13,7 @@ class UNiagaraComponent;
 class UNiagaraSystem;
 class UStaticMesh;
 class UDRFacialExpressionComponent;
+class UAnimMontage;
 
 /**
  * �÷��̾� ĳ���� Ŭ����
@@ -38,6 +39,30 @@ public:
 	// �÷��̾� ���� ����� RepNotify �Լ���
 	virtual void OnRep_Stunned() override;
 	virtual void OnRep_Burned() override;
+
+	// ========== 사망 애니메이션 ==========
+
+	// 사망 시 재생할 몽타주들. 비어있으면 기존 동작(몽타주 미재생).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Death")
+	TArray<TObjectPtr<UAnimMontage>> DeathMontages;
+
+	// 사망 몽타주 재생 속도
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Death", meta = (ClampMin = "0.1"))
+	float DeathMontagePlayRate = 1.0f;
+
+	// 서버가 결정한 사망 몽타주 인덱스 (모든 머신에서 동일한 몽타주 재생)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Combat|Death")
+	int32 DeathMontageIndex = INDEX_NONE;
+
+	// BP에서 사망 시점에 추가 연출을 붙이고 싶을 때 사용 (선택)
+	UFUNCTION(BlueprintImplementableEvent, Category = "Combat|Death", meta = (DisplayName = "On Character Died"))
+	void K2_OnCharacterDied();
+
+	// 사망 처리 override (인덱스 결정 + BP 이벤트 호출)
+	virtual void MulticastHandleDeath_Implementation(const FVector& DeathImpulse) override;
+
+	// 사망 상태 동기화 override (bDead가 true가 되면 몽타주 재생)
+	virtual void OnRep_Dead() override;
 
 	UFUNCTION(BlueprintCallable, Category = "Camera")
 	UCameraComponent* GetFollowCamera() const { return FollowCamera; }
@@ -66,6 +91,10 @@ public:
 	// ��ǰ ����߸���
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void DropCarriedPart();
+
+	// 부품 보유 상태가 바뀐 직후 현재 오버랩 중인 CleanserSite/CleanserPart 들의 UI/감지를 재평가
+	// (오버랩 영역 안에서 집어들기/내려놓기 시 UI가 갱신되지 않는 문제 해결)
+	void RefreshNearbyInteractions();
 
 	// ========== ī�޶� ==========
 
@@ -139,9 +168,37 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastTeleportToSlot(FVector Location, FRotator Rotation);
 
+	// ========== 자판기 사운드 동기화 (Plan2.md §3.3) ==========
+
+	/** 일반 공격(코인) 발사 사운드. 서버에서 호출 → 모든 클라이언트 재생.
+	    Unreliable: 0.3초당 1회 발사이므로 RPC 누락 시 큰 문제 없음. */
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayVendingCoinShot(FVector_NetQuantize Location);
+
+	/** 잭팟 캡슐 발사 사운드. CapsuleTier=0(Bronze)/1(Silver)/2(Gold).
+	    Reliable: 잭팟은 드물고 임팩트가 큰 이벤트이므로 누락되면 어색함. */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayVendingCapsuleShot(uint8 CapsuleTier, FVector_NetQuantize Location);
+
+	/** 자판기 스킬 버프 사용 사운드. Stacks에 따라 피치 증가.
+	    Reliable: 1회성, Stacks가 정확히 전달되어야 함. */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayVendingSkillUse(uint8 NewStacks);
+
+	/** 피격 표정 트리거. 서버에서 호출 → 모든 클라이언트에서 Heat 표정 표시.
+	    Unreliable: 표정은 보조 연출이므로 1회 누락 허용. */
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayHitReactFacial();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	// 사망 몽타주가 이미 재생되었는지 (멀티캐스트와 RepNotify가 둘 다 도착해도 1회만 재생)
+	bool bDeathMontagePlayed = false;
+
+	// 사망 몽타주 재생 실제 구현 (모든 머신에서 호출 가능, 내부에서 중복 방지)
+	virtual void PlayDeathMontage_Internal();
 
 	// UPlayerCharacterClassInfo 기반 어트리뷰트 초기화
 	virtual void InitializeDefaultAttributes() const override;
@@ -190,10 +247,6 @@ private:
 
 	// 3P 빔 위치 업데이트 함수 (타이머 콜백)
 	void UpdateWaterPumpThirdPersonBeam();
-
-	// 표정 태그 콜백
-	void HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
-	void AttackSpeedBuffTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 
 	// GAS 초기화
 	virtual void InitAbilityActorInfo() override;

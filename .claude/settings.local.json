@@ -35,7 +35,11 @@
       "Bash(\"/d/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development \"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -waitmutex)",
       "Bash(git log:*)",
       "Bash(\"C:/Program Files/Epic Games/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development -Project=\"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -WaitMutex -FromMsBuild)",
-      "Bash(\"/d/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development -Project=\"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -WaitMutex -FromMsBuild)"
+      "Bash(\"/d/UE_5.5/Engine/Build/BatchFiles/Build.bat\" DaeRuneEditor Win64 Development -Project=\"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject\" -WaitMutex -FromMsBuild)",
+      "Bash(awk 'NR>=918 && NR<=925' \"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/Source/DaeRune/Private/Game/DRSettingsManager.cpp\")",
+      "Bash(awk 'NR>=914 && NR<=922' \"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/Source/DaeRune/Private/Game/DRSettingsManager.cpp\")",
+      "Bash(awk 'NR==936' \"C:/Users/OWNER/Documents/Unreal Projects/DaeRune/Source/DaeRune/Private/Game/DRSettingsManager.cpp\")",
+      "Bash(python *)"
     ]
   }
 }

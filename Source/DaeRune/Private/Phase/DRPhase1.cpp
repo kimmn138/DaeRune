@@ -80,21 +80,47 @@ void UDRPhase1::SpawnEnemiesAtCleanserSites()
 	// PhaseBase에서 전체 클렌저 사이트 가져오기
 	if (CleanserSites.Num() < 3) return;
 
-	// 랜덤으로 제거할 1개 선택
-	int32 IndexToRemove = FMath::RandRange(0, CleanserSites.Num() - 1);
-	TObjectPtr<ADRCleanserSite> SiteToDestroy = CleanserSites[IndexToRemove];
-
-	// 제거 대상 액터 파괴
-	if (SiteToDestroy && IsValid(SiteToDestroy))
+	// [임시] 1개만 활성화: 첫 번째 인덱스(0)만 남기고 나머지는 모두 파괴
+	const int32 IndexToKeep = 0;
+	for (int32 i = CleanserSites.Num() - 1; i >= 0; --i)
 	{
-		SiteToDestroy->Destroy();
+		if (i == IndexToKeep) continue;
+		TObjectPtr<ADRCleanserSite> SiteToDestroy = CleanserSites[i];
+		if (SiteToDestroy && IsValid(SiteToDestroy))
+		{
+			SiteToDestroy->Destroy();
+		}
+		CleanserSites.RemoveAt(i);
 	}
 
-	// 배열에서 제거
-	CleanserSites.RemoveAt(IndexToRemove);
+	// // [이전] 1개만 활성화: 랜덤으로 1개 선택해서 남기고 나머지는 모두 파괴
+	// int32 IndexToKeep = FMath::RandRange(0, CleanserSites.Num() - 1);
+	// for (int32 i = CleanserSites.Num() - 1; i >= 0; --i)
+	// {
+	// 	if (i == IndexToKeep) continue;
+	// 	TObjectPtr<ADRCleanserSite> SiteToDestroy = CleanserSites[i];
+	// 	if (SiteToDestroy && IsValid(SiteToDestroy))
+	// 	{
+	// 		SiteToDestroy->Destroy();
+	// 	}
+	// 	CleanserSites.RemoveAt(i);
+	// }
 
-	// 남은 2개를 활성 클렌저 사이트로 설정
-	SelectedCleanserSites = CleanserSites; 
+	// // 랜덤으로 제거할 1개 선택
+	// int32 IndexToRemove = FMath::RandRange(0, CleanserSites.Num() - 1);
+	// TObjectPtr<ADRCleanserSite> SiteToDestroy = CleanserSites[IndexToRemove];
+	//
+	// // 제거 대상 액터 파괴
+	// if (SiteToDestroy && IsValid(SiteToDestroy))
+	// {
+	// 	SiteToDestroy->Destroy();
+	// }
+	//
+	// // 배열에서 제거
+	// CleanserSites.RemoveAt(IndexToRemove);
+
+	// 남은 활성 클렌저 사이트로 설정
+	SelectedCleanserSites = CleanserSites;
 	SetActiveCleanserSites(SelectedCleanserSites);
 	GameState->SetCleanserSites(SelectedCleanserSites);
 

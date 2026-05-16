@@ -2,13 +2,16 @@
 
 #include "Character/DRArmadilloEnemy.h"
 #include "Character/DRCharacter.h"
+#include "DRAssetManager.h"
 #include "DRGameplayTags.h"
 #include "AI/DRAIController.h"
 #include "BehaviorTree/BlackboardComponent.h"
+#include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "Sound/DRSoundDataAsset.h"
 #include "Engine/OverlapResult.h"
 #include "DrawDebugHelpers.h"
 
@@ -30,6 +33,18 @@ void ADRArmadilloEnemy::BeginPlay()
 	// Save default capsule size
 	DefaultCapsuleRadius = GetCapsuleComponent()->GetUnscaledCapsuleRadius();
 	DefaultCapsuleHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
+
+	// Late-join 대응: 우리가 늦게 들어왔는데 적이 이미 구르고 있다면
+	// bIsRolling=true가 초기 복제로 들어오면서 OnRep_IsRolling이 자동 발화되어 루프 시작.
+	// 즉 별도 처리 불필요 — RepNotify가 알아서 처리.
+}
+
+void ADRArmadilloEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// 레벨 변경/월드 정리/Destroy 등 어떤 사유든 루프 즉시 정지 (중복 호출 안전)
+	StopArmadilloRollLoop();
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void ADRArmadilloEnemy::Tick(float DeltaTime)
@@ -58,6 +73,10 @@ void ADRArmadilloEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 
 void ADRArmadilloEnemy::MulticastHandleDeath_Implementation(const FVector& DeathImpulse)
 {
+	// 0. 모든 인스턴스(서버+클라)에서 루프 사운드 즉시 정지.
+	//    StopRollCharge는 서버 권한만 동작하므로 클라에서는 bIsRolling 복제 도착 전 잔류 가능 → 명시적 정지.
+	StopArmadilloRollLoop();
+
 	// 1. Stop roll charge if rolling
 	if (bIsRolling)
 	{
@@ -241,6 +260,11 @@ void ADRArmadilloEnemy::StartRollCharge(FVector TargetLocation)
 	RollTargetLocation = TargetLocation;
 	RollDirection = (TargetLocation - GetActorLocation()).GetSafeNormal2D();
 	CurrentRollSpeed = RollInitialSpeed;
+	LastStuckCheckLocation = GetActorLocation();
+	StuckTimeAccumulator = 0.f;
+
+	// 서버 로컬에서도 루프 시작 (OnRep은 원격 클라 전용이므로 수동 호출)
+	OnRep_IsRolling();
 
 	// Stop AI movement (CharacterMovement is controlled directly)
 	if (DRAIController)
@@ -256,10 +280,31 @@ void ADRArmadilloEnemy::StopRollCharge()
 	bIsRolling = false;
 	CurrentRollSpeed = 0.f;
 	GetCharacterMovement()->Velocity = FVector::ZeroVector;
+
+	// 서버 로컬에서도 루프 정지
+	OnRep_IsRolling();
 }
 
 void ADRArmadilloEnemy::TickRollCharge(float DeltaTime)
 {
+	// Stuck detection: if 2D position barely changes for StuckTimeLimit seconds, treat as reaching the target.
+	const float Moved = FVector::Dist2D(GetActorLocation(), LastStuckCheckLocation);
+	if (Moved < StuckMoveThreshold)
+	{
+		StuckTimeAccumulator += DeltaTime;
+		if (StuckTimeAccumulator >= StuckTimeLimit)
+		{
+			StopRollCharge();
+			OnRollReachedTarget.Broadcast();
+			return;
+		}
+	}
+	else
+	{
+		StuckTimeAccumulator = 0.f;
+		LastStuckCheckLocation = GetActorLocation();
+	}
+
 	// 1. Accelerate
 	CurrentRollSpeed = FMath::Min(CurrentRollSpeed + RollAcceleration * DeltaTime, RollMaxSpeed);
 
@@ -375,4 +420,64 @@ void ADRArmadilloEnemy::BroadcastRollImpact(const FVector& ImpactLocation)
 
 	// Pass collision result to GA -> GA handles damage/stun
 	OnRollImpact.Broadcast(Result);
+
+	// 충돌 사운드 모든 클라이언트로 브로드캐스트 (Plan2.md §6.3)
+	MulticastPlayRollImpactSound(ImpactLocation);
+}
+
+// ===== Roll/Impact Sound (Plan2.md §6.2, §6.3) =====
+
+void ADRArmadilloEnemy::OnRep_IsRolling()
+{
+	if (bIsRolling)
+	{
+		StartArmadilloRollLoop();
+	}
+	else
+	{
+		StopArmadilloRollLoop();
+	}
+}
+
+void ADRArmadilloEnemy::StartArmadilloRollLoop()
+{
+	// 데디케이티드 서버는 오디오 출력이 없으므로 스폰 생략
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	// 이미 재생 중이면 무시 (중복 spawn 방지)
+	if (IsValid(RollLoopComponent)) return;
+
+	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
+	if (!AssetManager) return;
+	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
+	if (!SoundData || !SoundData->ArmadilloRollLoopSound) return;
+
+	RollLoopComponent = UGameplayStatics::SpawnSoundAttached(
+		SoundData->ArmadilloRollLoopSound,
+		GetRootComponent(),
+		NAME_None,
+		FVector::ZeroVector,
+		EAttachLocation::SnapToTarget,
+		/*bStopWhenAttachedToDestroyed=*/true);
+}
+
+void ADRArmadilloEnemy::StopArmadilloRollLoop()
+{
+	if (IsValid(RollLoopComponent))
+	{
+		RollLoopComponent->Stop();
+		RollLoopComponent = nullptr;
+	}
+}
+
+void ADRArmadilloEnemy::MulticastPlayRollImpactSound_Implementation(FVector_NetQuantize Location)
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
+	if (!AssetManager) return;
+	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
+	if (!SoundData || !SoundData->ArmadilloImpactSound) return;
+
+	UGameplayStatics::PlaySoundAtLocation(this, SoundData->ArmadilloImpactSound, Location);
 }

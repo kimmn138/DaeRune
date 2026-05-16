@@ -8,6 +8,7 @@
 #include "DRStageGameState.generated.h"
 
 class ADRDoorManager;
+class UAudioComponent;
 class UNiagaraComponent;
 class UNiagaraSystem;
 
@@ -174,6 +175,22 @@ public:
     UFUNCTION(NetMulticast, Reliable)
     void Multicast_PlayGameOverSound();
 
+    // 독가스 경고 사운드 (스폰 배치당 1회, 모든 클라이언트에서 재생)
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_PlayPoisonGasWarningSound();
+
+    // 독가스 활성 루프 사운드 시작 (모든 클라이언트에서 2D 루프 재생)
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_StartPoisonGasLoopSound();
+
+    // 독가스 활성 루프 사운드 정지
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_StopPoisonGasLoopSound();
+
+    // 서버 전용: 활성 독가스 카운트 관리 (PoisonGasActor가 호출)
+    void NotifyPoisonGasActivated();
+    void NotifyPoisonGasDeactivated();
+
     // ========== Phase3 스폰 포인트 VFX (Multicast RPC) ==========
 
     // 일반 적 스폰 포인트 VFX 활성화
@@ -283,4 +300,12 @@ private:
 
     UPROPERTY()
     TArray<TObjectPtr<UNiagaraComponent>> EliteSpawnPointVFXComponents;
+
+    // ========== 독가스 사운드 상태 ==========
+    // 서버에서만 사용: 현재 활성 상태의 독가스 액터 수
+    int32 ActivePoisonGasCount = 0;
+
+    // 클라이언트/서버 각자 보유: 2D 루프 사운드 핸들 (1개만 유지)
+    UPROPERTY()
+    TObjectPtr<UAudioComponent> PoisonGasLoopAudioComponent;
 };

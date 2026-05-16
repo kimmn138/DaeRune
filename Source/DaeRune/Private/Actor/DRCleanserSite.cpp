@@ -349,48 +349,40 @@ void ADRCleanserSite::BeginPlay()
 
 void ADRCleanserSite::OnBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	// Phase2�� �ƴϸ� ����
-	if (CurrentState != ECleanserSiteState::Active) return;
-
-	// �̹� ��ǰ�� �� ��ġ�Ǿ����� ����
-	if (InstalledPartsCount >= RequiredPartsCount) return;
-
-	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
-	if (!Character) return;
-
-	// �÷��̾ ��ǰ�� ��� �ִ��� Ȯ��
-	if (!Character->IsCarryingPart()) return;
-
-	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
-	if (!PC) return;
-
-	// ���� ��Ʈ�ѷ������� ó��
-	if (PC->IsLocalController())
-	{
-		// PlayerController�� ���� ����Ʈ ����
-		PC->CurrentOverlappedSite = this;
-		
-		// UI ǥ��
-		InteractionWidget->SetVisibility(true);
-	}
+	RefreshOverlapStateFor(Cast<ADRCharacter>(OtherActor));
 }
 
 void ADRCleanserSite::OnBoxEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
-	if (!Character) return;
+	RefreshOverlapStateFor(Cast<ADRCharacter>(OtherActor));
+}
+
+void ADRCleanserSite::RefreshOverlapStateFor(ADRCharacter* Character)
+{
+	if (!Character || !InteractionBox) return;
 
 	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
-	if (!PC) return;
+	if (!PC || !PC->IsLocalController()) return;
 
-	// ���� ��Ʈ�ѷ������� ó��
-	if (PC->IsLocalController())
+	const bool bIsOverlapping = InteractionBox->IsOverlappingActor(Character);
+	const bool bShouldDetect =
+		bIsOverlapping &&
+		CurrentState == ECleanserSiteState::Active &&
+		InstalledPartsCount < RequiredPartsCount &&
+		Character->IsCarryingPart();
+
+	// 사이트 감지를 토글; 실제 위젯 표시 여부는 PlayerController의 라인트레이스가 결정
+	PC->SetSiteDetectionEnabled(bShouldDetect, this);
+}
+
+void ADRCleanserSite::MulticastShowInteractionUI_Implementation(ADRPlayerController* PlayerController, bool bShow)
+{
+	if (!PlayerController) return;
+
+	// 해당 플레이어의 로컬 컨트롤러에서만 UI 표시/숨김
+	if (PlayerController->IsLocalController() && InteractionWidget)
 	{
-		// PlayerController�� ����Ʈ ���� ����
-		PC->CurrentOverlappedSite = nullptr;
-		
-		// UI ����
-		InteractionWidget->SetVisibility(false);
+		InteractionWidget->SetVisibility(bShow);
 	}
 }
 

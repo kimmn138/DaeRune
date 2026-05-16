@@ -10,6 +10,8 @@ class UBoxComponent;
 class UNiagaraComponent;
 class UNiagaraSystem;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWaterSourceUsedSignature, AActor*, User);
+
 /**
  *
  */
@@ -44,6 +46,10 @@ public:
 
     UFUNCTION(NetMulticast, Unreliable)
     void MulticastPlayWaterGainSound();
+
+    // 수원지가 사용(소비)되었을 때 발화 (서버 권한)
+    UPROPERTY(BlueprintAssignable, Category = "Water Source")
+    FOnWaterSourceUsedSignature OnWaterSourceUsedDelegate;
 
 protected:
     // DREffectActor�� OnOverlap/OnEndOverlap �������̵�

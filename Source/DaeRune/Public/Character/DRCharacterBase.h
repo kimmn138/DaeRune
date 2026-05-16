@@ -107,10 +107,15 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	FName TailSocketName;
 
-protected:
-	// 사망 상태
+public:
+	// 사망 상태 (서버에서 MulticastHandleDeath로 변경, OnRep_Dead로 클라 동기화)
+	UPROPERTY(ReplicatedUsing = OnRep_Dead, BlueprintReadOnly, Category = "Combat|Death")
 	bool bDead = false;
 
+	UFUNCTION()
+	virtual void OnRep_Dead();
+
+protected:
 	// ���� �±� �ݹ�
 	virtual void StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 

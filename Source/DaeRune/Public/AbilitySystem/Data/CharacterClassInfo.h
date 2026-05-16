@@ -12,6 +12,7 @@ class ADRCharacter;
 
 // UDRUserWidget forward declaration (TSubclassOf only needs forward decl in UE5.5 with UHT)
 class UDRUserWidget;
+class UUserWidget;
 
 UENUM(BlueprintType)
 enum class ECharacterClass : uint8
@@ -50,6 +51,10 @@ struct FCharacterClassDefaultInfo
 	// 해당 캐릭터 전용 스킬아이콘 위젯 클래스
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UDRUserWidget> SkillIconWidgetClass;
+
+	// Tab 키로 띄우는 캐릭터 설명창 위젯 클래스
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UUserWidget> CharacterInfoWidgetClass;
 };
 
 /**

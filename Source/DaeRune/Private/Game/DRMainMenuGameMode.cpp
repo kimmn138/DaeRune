@@ -239,3 +239,24 @@ void ADRMainMenuGameMode::OnTutorialTransitionFinished()
 	// 튜토리얼 맵으로 이동
 	UGameplayStatics::OpenLevel(World, FName(*TutorialMapName));
 }
+
+void ADRMainMenuGameMode::ResetTutorialAndReloadMenu()
+{
+	UDRGameInstance* GI = Cast<UDRGameInstance>(GetGameInstance());
+	if (!GI) return;
+
+	GI->ResetTutorialProgress();
+
+	if (CurrentMenuWidget)
+	{
+		CurrentMenuWidget->RemoveFromParent();
+		CurrentMenuWidget = nullptr;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// 현재 메인 메뉴 맵을 그대로 재오픈 → BeginPlay()가 다시 분기 평가
+	const FName CurrentMapName(*UGameplayStatics::GetCurrentLevelName(World, true));
+	UGameplayStatics::OpenLevel(World, CurrentMapName);
+}

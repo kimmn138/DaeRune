@@ -147,7 +147,7 @@ void UDRPhase3::BeginDestroy()
 void UDRPhase3::OnEliteEnemyDeath(AActor* DeadEnemy)
 {
 	if (!DeadEnemy || !bIsPhaseActive) return;
-	
+
 	EliteBosses.Remove(DeadEnemy);
 
 	if (EliteBosses.IsEmpty())
@@ -155,6 +155,39 @@ void UDRPhase3::OnEliteEnemyDeath(AActor* DeadEnemy)
 		bEliteBossSpawned = false;
 		RemoveEliteBossTag();
 	}
+
+	CheckWaveCompletion();
+}
+
+// 일반 적 사망 시 웨이브 조기 종료 조건을 검사합니다.
+void UDRPhase3::OnEnemyDeath(AActor* DeadEnemy)
+{
+	Super::OnEnemyDeath(DeadEnemy);
+
+	CheckWaveCompletion();
+}
+
+// 이번 웨이브의 모든 몬스터가 스폰 완료되고 모두 처치되면 즉시 웨이브를 종료합니다.
+void UDRPhase3::CheckWaveCompletion()
+{
+	if (!bIsPhaseActive) return;
+	if (CurrentWaveState != EWaveState::InProgress) return;
+
+	// 예정된 스폰이 모두 완료되었는지 확인 (스폰 예정이 없는 웨이브는 타이머에 맡김)
+	if (TotalSpawnTick <= 0) return;
+	if (CurrentSpawnTick < TotalSpawnTick) return;
+	if (CurrentSpawnCount < TotalSpawnCount) return;
+
+	// 일반 적 생존자 확인
+	if (GetAliveEnemyCount() > 0) return;
+
+	// 엘리트 보스 생존자 확인
+	for (const TWeakObjectPtr<AActor>& Elite : EliteBosses)
+	{
+		if (Elite.IsValid()) return;
+	}
+
+	EndCurrentWave();
 }
 
 // 다음 웨이브를 시작하고 스폰 타이머를 설정합니다.
@@ -391,6 +424,86 @@ void UDRPhase3::EndRestTime()
 	StartNextWave();
 }
 
+// 치트: 현재 웨이브를 즉시 종료하고 다음 웨이브로 진입합니다. 마지막 웨이브였다면 페이즈를 종료합니다.
+void UDRPhase3::SkipToNextWave()
+{
+	if (!bIsPhaseActive) return;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// 웨이브 관련 타이머 정리
+	World->GetTimerManager().ClearTimer(WaveTimerHandle);
+	World->GetTimerManager().ClearTimer(SpawnTimerHandle);
+	World->GetTimerManager().ClearTimer(WaveTimerUpdateHandle);
+	World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
+	World->GetTimerManager().ClearTimer(EliteSpawnVFXTimerHandle);
+
+	// 일반 적 제거 (사망 델리게이트는 분리하여 CheckWaveCompletion이 호출되지 않도록 함)
+	for (TWeakObjectPtr<AActor>& EnemyPtr : SpawnedEnemies)
+	{
+		if (EnemyPtr.IsValid())
+		{
+			if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(EnemyPtr.Get()))
+			{
+				CombatInterface->GetOnDeathDelegate().RemoveDynamic(this, &UDRPhaseBase::OnEnemyDeath);
+			}
+			EnemyPtr->Destroy();
+		}
+	}
+	SpawnedEnemies.Empty();
+
+	// 엘리트 보스 제거
+	for (TWeakObjectPtr<AActor>& ElitePtr : EliteBosses)
+	{
+		if (ElitePtr.IsValid())
+		{
+			if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(ElitePtr.Get()))
+			{
+				CombatInterface->GetOnDeathDelegate().RemoveDynamic(this, &UDRPhase3::OnEliteEnemyDeath);
+			}
+			ElitePtr->Destroy();
+		}
+	}
+	EliteBosses.Empty();
+
+	if (bEliteBossSpawned)
+	{
+		bEliteBossSpawned = false;
+		RemoveEliteBossTag();
+	}
+
+	// 독가스 정리
+	RemoveToxicGas();
+
+	// 웨이브 카운터 리셋 및 UI 상태 정리
+	CurrentSpawnCount = 0;
+	TotalSpawnCount = 0;
+	CurrentSpawnTick = 0;
+	TotalSpawnTick = 0;
+
+	if (GameState)
+	{
+		GameState->Multicast_DeactivateEliteSpawnPointVFX();
+		GameState->SetIsToxicGasWave(false);
+		GameState->UpdatePhaseObjectiveProgress(CurrentWaveNumber);
+	}
+
+	// 마지막 웨이브였다면 페이즈 자체를 종료
+	if (CurrentWaveNumber >= 5)
+	{
+		if (GameMode)
+		{
+			GameMode->ValidatePhaseCompletion();
+		}
+		return;
+	}
+
+	// 휴식 시간을 스킵하고 곧바로 다음 웨이브 시작
+	CurrentWaveState = EWaveState::Waiting;
+	StartNextWave();
+}
+
 // 스폰 주기마다 4개 위치 동시 스폰을 1회 처리합니다.
 void UDRPhase3::ProcessWaveSpawn()
 {
@@ -574,6 +687,13 @@ void UDRPhase3::SpawnMonsterByCycle()
 				}
 
 				SpawnedEnemy->FinishSpawning(FTransform(SpawnRotation, SpawnLocation));
+
+				UE_LOG(LogTemp, Warning, TEXT("[DRPhase3] Spawned %s from point [%s] | RequestedLoc=%s | FinalLoc=%s | Controller=%s"),
+					*SpawnedEnemy->GetName(),
+					*SpawnPointActor->GetName(),
+					*SpawnLocation.ToString(),
+					*SpawnedEnemy->GetActorLocation().ToString(),
+					SpawnedEnemy->GetController() ? *SpawnedEnemy->GetController()->GetName() : TEXT("NULL"));
 
 				if (SpawnedEnemy->IsValidLowLevel())
 				{
@@ -811,12 +931,17 @@ void UDRPhase3::IncreaseWaveLevel(int32 Amount)
 // 활성 클렌저 사이트의 속성/델리게이트를 초기화합니다.
 void UDRPhase3::InitializeCleanserSite()
 {
-	if (ActiveCleanserSites.Num() != 2) return;
-	
+	// [임시] 1개 사이트 기준으로 검증
+	if (ActiveCleanserSites.Num() < 1) return;
+	// if (ActiveCleanserSites.Num() != 2) return;
+
 	CleanserSiteHalfHealthTriggered.Empty();
 
+	// [임시] 1개 사이트만 활성화: Second는 First와 동일한 사이트로 처리
 	ADRCleanserSite* FirstCleanserSite = ActiveCleanserSites[0].Get();
-	ADRCleanserSite* SecondCleanserSite = ActiveCleanserSites[1].Get();
+	ADRCleanserSite* SecondCleanserSite = ActiveCleanserSites.Num() >= 2 ? ActiveCleanserSites[1].Get() : FirstCleanserSite;
+	// ADRCleanserSite* FirstCleanserSite = ActiveCleanserSites[0].Get();
+	// ADRCleanserSite* SecondCleanserSite = ActiveCleanserSites[1].Get();
 	
 	for (ADRCleanserSite* Site : ActiveCleanserSites)
 	{
@@ -1090,6 +1215,8 @@ void UDRPhase3::SpawnPoisonGasActor()
 
 	if (SelectedIndices.Num() == 0) return;
 
+	bool bAnySpawned = false;
+
 	for (int32 Index : SelectedIndices)
 	{
 		if (!AllPoisonGasSpawnPoints.IsValidIndex(Index)) continue;
@@ -1111,6 +1238,16 @@ void UDRPhase3::SpawnPoisonGasActor()
 			PoisonGas->SetLifeSpan(10.0f);  // 경고 3초 + 활성 7초
 
 			ToxicGasActors.Add(PoisonGas);
+			bAnySpawned = true;
+		}
+	}
+
+	// 배치당 1회 경고 사운드
+	if (bAnySpawned)
+	{
+		if (ADRStageGameState* GS = World->GetGameState<ADRStageGameState>())
+		{
+			GS->Multicast_PlayPoisonGasWarningSound();
 		}
 	}
 }

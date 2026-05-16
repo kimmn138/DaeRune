@@ -27,6 +27,16 @@ void UOverlayWidgetController::BroadcastInitialValues()
 
 	// 페이즈 목표 초기값 추가
 	HandlePhaseObjectiveChanged();
+
+	// Phase3 타이머 UI 초기 표시 상태 (현재 페이즈 기준)
+	if (ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>())
+	{
+		OnPhase3TimerVisibilityChanged.Broadcast(DRGameState->GetCurrentPhaseIndex() == 2);
+	}
+	else
+	{
+		OnPhase3TimerVisibilityChanged.Broadcast(false);
+	}
 }
 
 void UOverlayWidgetController::BindCallbacksToDependencies()
@@ -105,10 +115,10 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 				const FGameplayTag AttackSpeedBuffTag = FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed;
 				for (const FGameplayTag& Tag : AssetTags)
 				{
-					// 자판기 공격속도 버프 감지
+					// 자판기 공격속도 버프 감지 (현재 스택 수 전달)
 					if (Tag.MatchesTagExact(AttackSpeedBuffTag))
 					{
-						StrongThis->OnVendingMachineAttackSpeedBuff.Broadcast();
+						StrongThis->OnVendingMachineAttackSpeedBuff.Broadcast(StackCount);
 					}
 
 					if (Tag.MatchesTag(BuffTag))
@@ -148,8 +158,14 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 
 				FGameplayTag BuffTag = FGameplayTag::RequestGameplayTag(FName("Buff"));
 				FGameplayTag DebuffTag = FGameplayTag::RequestGameplayTag(FName("Debuff"));
+				const FGameplayTag AttackSpeedBuffTag = FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed;
 				for (const FGameplayTag& Tag : AssetTags)
 				{
+					// 자판기 공격속도 버프 만료 시 스킬 아이콘 스택 0으로 리셋
+					if (Tag.MatchesTagExact(AttackSpeedBuffTag))
+					{
+						StrongThis->OnVendingMachineAttackSpeedBuff.Broadcast(0);
+					}
 					if (Tag.MatchesTag(BuffTag))
 					{
 						StrongThis->EffectTagRemovedDelegate.Broadcast(Tag, false);
@@ -413,22 +429,26 @@ void UOverlayWidgetController::OnPhaseChanged(int32 NewPhaseIndex)
 		BindCallbacksCleanserSiteToDependencies();
 	}
 
+	// Phase 3 진입 시점에만 타이머 UI 표시, 그 외엔 숨김
+	// 매번 브로드캐스트해도 위젯 측에서 SetVisibility는 idempotent 하므로 안전
+	OnPhase3TimerVisibilityChanged.Broadcast(NewPhaseIndex == 2);
+
 	if (CachedPhaseNumber != NewPhaseIndex || !bPhaseAlarmShown)
 	{
 		FText PhaseText;
 		switch (NewPhaseIndex)
 		{
 		case 0:
-			PhaseText = FText::FromString(TEXT("Phase 1: Secure"));
+			PhaseText = FText::FromString(TEXT("페이즈 1: 확보"));
 			break;
 		case 1:
-			PhaseText = FText::FromString(TEXT("Phase 2: Collect"));
+			PhaseText = FText::FromString(TEXT("페이즈 2: 수집"));
 			break;
 		case 2:
-			PhaseText = FText::FromString(TEXT("Phase 3: Defense"));
+			PhaseText = FText::FromString(TEXT("페이즈 3: 방어"));
 			break;
 		default:
-			PhaseText = FText::FromString(TEXT("Unknown Phase"));
+			PhaseText = FText::FromString(TEXT("알 수 없는 페이즈"));
 			break;
 		}
 

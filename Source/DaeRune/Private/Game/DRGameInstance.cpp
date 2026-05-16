@@ -3,14 +3,35 @@
 
 #include "Game/DRGameInstance.h"
 #include "Game/DRSaveGame.h"
+#include "Game/DRGameUserSettings.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/DRPlayerState.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerState.h"
+#include "Internationalization/Internationalization.h"
 
 void UDRGameInstance::Init()
 {
 	Super::Init();
+
+	// Apply saved UI culture before any widget is constructed.
+	// PreferredCulture is "ko" or "en" persisted in GameUserSettings.ini.
+	if (UDRGameUserSettings* UserSettings = UDRGameUserSettings::GetDRGameUserSettings())
+	{
+		const FString& Culture = UserSettings->PreferredCulture;
+		if (Culture == TEXT("ko") || Culture == TEXT("en"))
+		{
+			FInternationalization::Get().SetCurrentLanguageAndLocale(Culture);
+		}
+		else
+		{
+			// Unknown / empty culture -> force Korean default and persist it.
+			UserSettings->PreferredCulture = TEXT("ko");
+			UserSettings->SaveSettings();
+			FInternationalization::Get().SetCurrentLanguageAndLocale(TEXT("ko"));
+		}
+	}
+
 	LoadProgress();
 }
 
@@ -27,6 +48,16 @@ void UDRGameInstance::SetTutorialCompleted()
 		LoadProgress();
 	}
 	CurrentSaveGame->bHasCompletedTutorial = true;
+	SaveProgress();
+}
+
+void UDRGameInstance::ResetTutorialProgress()
+{
+	if (!CurrentSaveGame)
+	{
+		LoadProgress();
+	}
+	CurrentSaveGame->bHasCompletedTutorial = false;
 	SaveProgress();
 }
 

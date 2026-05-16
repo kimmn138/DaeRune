@@ -19,6 +19,7 @@
 #include "UI/HUD/DRHUD.h"
 #include "AbilitySystem/DRPlayerAttributeSet.h"
 #include "Actor/DRCleanserPart.h"
+#include "Actor/DRCleanserSite.h"
 #include "Net/UnrealNetwork.h"
 #include "Components/PointLightComponent.h"
 #include "Game/DRGameUserSettings.h"
@@ -27,6 +28,12 @@
 #include "Game/DRLobbyGameState.h"
 #include "Game/DRTutorialGameMode.h"
 #include "Character/DRFacialExpressionComponent.h"
+#include "DRAssetManager.h"
+#include "Sound/DRSoundDataAsset.h"
+#include "Kismet/GameplayStatics.h"
+#include "Components/AudioComponent.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 
 ADRCharacter::ADRCharacter()
 {
@@ -62,6 +69,15 @@ ADRCharacter::ADRCharacter()
 
 	// 3인칭 메시 설정
 	GetMesh()->SetOwnerNoSee(true);
+
+	// 호스트(Listen Server)에서 simulated/autonomous proxy의 AnimBP가 항상 평가되고 본도 갱신되도록 강제.
+	// AlwaysTickPose만으로는 본 갱신이 가시성 판정에 게이팅되어 시각적으로 안 보일 수 있음.
+	// AlwaysTickPoseAndRefreshBones는 가시성/거리와 무관하게 매 프레임 본까지 새로고침.
+	GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+
+	// URO(Update Rate Optimizations) 비활성화 — 거리 기반 tick 스로틀링으로 인한 누락 방지.
+	// 코옵 PvE 게임이라 동시 플레이어 수가 적어 성능 영향 미미.
+	GetMesh()->bEnableUpdateRateOptimizations = false;
 
 	// 1인칭 부품 메시 생성 (픽업 전에는 비활성)
 	FirstPersonPartMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FirstPersonPartMesh"));
@@ -103,6 +119,9 @@ void ADRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	// WaterPump 3P 빔 리플리케이트
 	DOREPLIFETIME(ADRCharacter, bWaterPumpActive);
 	DOREPLIFETIME_CONDITION(ADRCharacter, WaterPumpBeamEndPoint, COND_SkipOwner);
+
+	// 사망 몽타주 인덱스 (서버 결정, 모든 클라이언트 동일 인덱스 재생)
+	DOREPLIFETIME(ADRCharacter, DeathMontageIndex);
 }
 
 void ADRCharacter::PossessedBy(AController* NewController)
@@ -181,6 +200,33 @@ void ADRCharacter::OnRep_Burned()
 	}
 }
 
+void ADRCharacter::RefreshNearbyInteractions()
+{
+	if (!IsLocallyControlled()) return;
+
+	TArray<AActor*> Overlapping;
+	GetOverlappingActors(Overlapping, ADRCleanserSite::StaticClass());
+	for (AActor* Actor : Overlapping)
+	{
+		if (!IsValid(Actor)) continue;
+		if (ADRCleanserSite* Site = Cast<ADRCleanserSite>(Actor))
+		{
+			Site->RefreshOverlapStateFor(this);
+		}
+	}
+
+	Overlapping.Reset();
+	GetOverlappingActors(Overlapping, ADRCleanserPart::StaticClass());
+	for (AActor* Actor : Overlapping)
+	{
+		if (!IsValid(Actor)) continue;
+		if (ADRCleanserPart* Part = Cast<ADRCleanserPart>(Actor))
+		{
+			Part->RefreshOverlapStateFor(this);
+		}
+	}
+}
+
 bool ADRCharacter::PickupPart(ADRCleanserPart* Part)
 {
 	if (!HasAuthority() || !Part || bIsCarryingPart) return false;
@@ -202,6 +248,9 @@ bool ADRCharacter::PickupPart(ADRCleanserPart* Part)
 		PC->ClientShowPartPickupUI();
 	}
 
+	// 리슨 서버 로컬 캐릭터: OnRep이 호출되지 않으므로 여기서 즉시 재평가
+	RefreshNearbyInteractions();
+
 	return true;
 }
 
@@ -216,6 +265,9 @@ void ADRCharacter::InstallCarriedPart()
 	bIsCarryingPart = false;
 	CarriedPart = nullptr;
 	RefreshCarriedPartVisuals();
+
+	// 리슨 서버 로컬 캐릭터: 설치 직후 주변 부품/사이트 UI 재평가
+	RefreshNearbyInteractions();
 }
 
 void ADRCharacter::DropCarriedPart()
@@ -244,6 +296,9 @@ void ADRCharacter::DropCarriedPart()
 	bIsCarryingPart = false;
 	CarriedPart = nullptr;
 	RefreshCarriedPartVisuals();
+
+	// 리슨 서버 로컬 캐릭터: 드롭 직후 주변 부품/사이트 UI 재평가
+	RefreshNearbyInteractions();
 }
 
 void ADRCharacter::UpdateMeshVisibility()
@@ -410,6 +465,77 @@ void ADRCharacter::MulticastTeleportToSlot_Implementation(FVector Location, FRot
 	if (UCharacterMovementComponent* CMC = GetCharacterMovement())
 	{
 		CMC->StopMovementImmediately();
+	}
+}
+
+// ========== 자판기 사운드 동기화 (Plan2.md §3.3) ==========
+
+void ADRCharacter::MulticastPlayVendingCoinShot_Implementation(FVector_NetQuantize Location)
+{
+	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
+	if (!AssetManager) return;
+
+	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
+	if (!SoundData || !SoundData->VendingCoinShotSound) return;
+
+	UGameplayStatics::PlaySoundAtLocation(this, SoundData->VendingCoinShotSound, Location);
+}
+
+void ADRCharacter::MulticastPlayVendingCapsuleShot_Implementation(uint8 CapsuleTier, FVector_NetQuantize Location)
+{
+	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
+	if (!AssetManager) return;
+
+	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
+	if (!SoundData) return;
+
+	// 1) Pop 사운드: 모든 Tier 공통
+	if (SoundData->VendingJackpotPopSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, SoundData->VendingJackpotPopSound, Location);
+	}
+
+	// 2) Tier별 보상 사운드 (Bronze=0은 Pop만 재생)
+	USoundBase* TierSound = nullptr;
+	switch (CapsuleTier)
+	{
+	case 1: TierSound = SoundData->VendingGainSilverSound; break;
+	case 2: TierSound = SoundData->VendingGainGoldSound;   break;
+	default: break;
+	}
+	if (TierSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, TierSound, Location);
+	}
+}
+
+void ADRCharacter::MulticastPlayVendingSkillUse_Implementation(uint8 NewStacks)
+{
+	// 공속 버프 표정 트리거 (스킬 사용 시점에 직접 호출)
+	if (FacialExpressionComponent)
+	{
+		FacialExpressionComponent->SetExpression(EFacialExpression::IncreasedAttackSpeed, 2.f);
+	}
+
+	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
+	if (!AssetManager) return;
+
+	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
+	if (!SoundData || !SoundData->VendingSkillUseSound) return;
+
+	// 1.0(1스택) → 1.6(7스택) 정도가 자연스러움.
+	const float Pitch = 1.0f + 0.1f * FMath::Max(0, static_cast<int32>(NewStacks) - 1);
+
+	UAudioComponent* Comp = UGameplayStatics::SpawnSoundAttached(
+		SoundData->VendingSkillUseSound,
+		GetRootComponent(),
+		NAME_None,
+		FVector::ZeroVector,
+		EAttachLocation::SnapToTarget,
+		true);
+	if (Comp)
+	{
+		Comp->SetPitchMultiplier(Pitch);
 	}
 }
 
@@ -587,7 +713,8 @@ void ADRCharacter::UpdateWaterPumpThirdPersonBeam()
 
 void ADRCharacter::OnRep_bIsCarryingPart()
 {
-	// Ŭ���̾�Ʈ �ð��� ȿ��
+	// 클라이언트(소유 컨트롤러)에서 부품 보유 상태가 바뀐 직후 주변 상호작용 UI 재평가
+	RefreshNearbyInteractions();
 }
 
 void ADRCharacter::OnRep_CarriedPart()
@@ -674,20 +801,8 @@ void ADRCharacter::InitAbilityActorInfo()
 		EGameplayTagEventType::NewOrRemoved
 	).AddUObject(this, &ADRCharacter::StunTagChanged);
 
-	// 표정 시스템: HitReact 태그 바인딩
-	AbilitySystemComponent->RegisterGameplayTagEvent(
-		FDRGameplayTags::Get().Effects_HitReact,
-		EGameplayTagEventType::NewOrRemoved
-	).AddUObject(this, &ADRCharacter::HitReactTagChanged);
-
-	// 표정 시스템: 자판기 공속 버프 태그 바인딩
-	if (PlayerCharacterClass == EPlayerCharacterClass::VendingMachineRobot)
-	{
-		AbilitySystemComponent->RegisterGameplayTagEvent(
-			FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed,
-			EGameplayTagEventType::NewOrRemoved
-		).AddUObject(this, &ADRCharacter::AttackSpeedBuffTagChanged);
-	}
+	// 표정 시스템은 명시적 멀티캐스트(MulticastPlayHitReactFacial /
+	// MulticastPlayVendingSkillUse)에서 트리거하므로 태그 바인딩 불필요.
 
 	// �÷��̾� ��Ʈ�ѷ��� HUD �ʱ�ȭ ��û
 	if (ADRPlayerController* DRPlayerController = Cast<ADRPlayerController>(GetController()))
@@ -706,18 +821,75 @@ void ADRCharacter::InitAbilityActorInfo()
 	InitializeDefaultAttributes();
 }
 
-void ADRCharacter::HitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
+void ADRCharacter::MulticastPlayHitReactFacial_Implementation()
 {
-	if (NewCount > 0 && FacialExpressionComponent)
+	if (FacialExpressionComponent)
 	{
 		FacialExpressionComponent->OnHitReact();
 	}
 }
 
-void ADRCharacter::AttackSpeedBuffTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
+// ========== 사망 애니메이션 (이벤트 기반) ==========
+
+void ADRCharacter::MulticastHandleDeath_Implementation(const FVector& DeathImpulse)
 {
-	if (NewCount > 0 && FacialExpressionComponent)
+	// 서버에서만 사망 몽타주 인덱스 결정.
+	// Super 호출 전이어야 OnRep_Dead 수동 호출 시점에 인덱스가 채워져 있음.
+	if (HasAuthority() && DeathMontages.Num() > 0)
 	{
-		FacialExpressionComponent->SetExpression(EFacialExpression::IncreasedAttackSpeed, 2.f);
+		DeathMontageIndex = FMath::RandRange(0, DeathMontages.Num() - 1);
+	}
+
+	// 베이스 본체 실행:
+	//  - bDead = true
+	//  - 충돌/이동/물리/Dissolve/표정/디버프 정리
+	//  - OnRep_Dead() 수동 호출 → ADRCharacter::OnRep_Dead override가 PlayDeathMontage_Internal 호출
+	//  - Mesh VisibilityBasedAnimTickOption = AlwaysTickPoseAndRefreshBones
+	Super::MulticastHandleDeath_Implementation(DeathImpulse);
+
+	// BP에서 추가 사망 연출이 필요한 경우의 훅
+	K2_OnCharacterDied();
+}
+
+void ADRCharacter::OnRep_Dead()
+{
+	Super::OnRep_Dead();
+
+	if (bDead)
+	{
+		PlayDeathMontage_Internal();
+	}
+}
+
+void ADRCharacter::PlayDeathMontage_Internal()
+{
+	// 중복 재생 방지: 멀티캐스트와 RepNotify가 둘 다 호출돼도 1회만 재생.
+	if (bDeathMontagePlayed) return;
+
+	if (DeathMontages.Num() == 0) return;
+
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (!MeshComp) return;
+
+	UAnimInstance* AnimInst = MeshComp->GetAnimInstance();
+	if (!AnimInst) return;
+
+	// 서버 인덱스 결정이 아직 안 됐을 경우 0번으로 폴백.
+	int32 Idx = DeathMontageIndex;
+	if (!DeathMontages.IsValidIndex(Idx))
+	{
+		Idx = 0;
+	}
+
+	UAnimMontage* Montage = DeathMontages[Idx];
+	if (!Montage) return;
+
+	// HitReact 같은 다른 몽타주가 진행 중이면 즉시 중단
+	AnimInst->StopAllMontages(0.1f);
+
+	const float PlayedLength = AnimInst->Montage_Play(Montage, DeathMontagePlayRate);
+	if (PlayedLength > 0.f)
+	{
+		bDeathMontagePlayed = true;
 	}
 }

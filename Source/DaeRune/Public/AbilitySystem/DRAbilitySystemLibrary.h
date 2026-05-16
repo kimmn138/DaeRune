@@ -11,6 +11,7 @@ class UAbilityInfo;
 class UAbilitySystemComponent;
 class UGameBalanceConfig;
 class UOverlayWidgetController;
+class UUserWidget;
 struct FWidgetControllerParams;
 
 /**
@@ -39,6 +40,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|CharacterClassDefaults")
 	static UPlayerCharacterClassInfo* GetPlayerCharacterClassInfo(const UObject* WorldContextObject);
+
+	// EPlayerCharacterClass에 매핑된 캐릭터 설명창 위젯 클래스 반환 (Tab Hold 패널용)
+	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|CharacterClassDefaults", meta = (DefaultToSelf = "WorldContextObject"))
+	static TSubclassOf<UUserWidget> GetCharacterInfoWidgetClass(const UObject* WorldContextObject, EPlayerCharacterClass PlayerClass);
 
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|CharacterClassDefaults")
 	static void InitializePlayerDefaultAttributes(const UObject* WorldContextObject, EPlayerCharacterClass PlayerClass, float Level, UAbilitySystemComponent* ASC);

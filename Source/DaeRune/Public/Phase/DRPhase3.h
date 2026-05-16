@@ -92,6 +92,10 @@ public:
 
 	virtual void OnPhaseStart() override;
 	virtual void OnPhaseEnd() override;
+	virtual void OnEnemyDeath(AActor* DeadEnemy) override;
+
+	// 치트: 현재 웨이브에서 스폰된 적을 모두 제거하고 다음 웨이브로 즉시 진행. 마지막 웨이브였다면 페이즈 종료.
+	void SkipToNextWave();
 
 	UFUNCTION()
 	void OnEliteEnemyDeath(AActor* DeadEnemy);
@@ -116,6 +120,8 @@ protected:
 
 	UFUNCTION()
 	void ProcessWaveSpawn();
+
+	void CheckWaveCompletion();
 
 	// 적 스폰 시스템
 	void FindEnemySpawnPoints();

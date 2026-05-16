@@ -31,26 +31,35 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UWidgetComponent> InteractionWidget;
 
-    // ¸ñÀûÁö ¸Ê ÀÌ¸§
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ì¸ï¿½
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Portal")
     FString DestinationMapName;
 
 private:
-    // ¿À¹ö·¦ ÀÌº¥Æ®
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìºï¿½Æ®
     UFUNCTION()
     void OnBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
     UFUNCTION()
     void OnBoxEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
-    // »óÈ£ÀÛ¿ë Ã³¸®
+    // ï¿½ï¿½È£ï¿½Û¿ï¿½ Ã³ï¿½ï¿½
     UFUNCTION()
     void OnHostInteract();
 
     UFUNCTION(Server, Reliable)
     void ServerRequestTravel();
 
-    // ÇöÀç ¿À¹ö·¦ ÁßÀÎ È£½ºÆ® ÄÁÆ®·Ñ·¯
+    // í˜¸ìŠ¤íŠ¸ì—ê²Œ UIë¥¼ í•­ìƒ í‘œì‹œí•˜ê¸° ìœ„í•œ ì…‹ì—… (í˜¸ìŠ¤íŠ¸ í°ì„ ì˜¤ë„ˆë¡œ ì§€ì •)
+    void SetupHostWidgetVisibility();
+
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ È£ï¿½ï¿½Æ® ï¿½ï¿½Æ®ï¿½Ñ·ï¿½
     UPROPERTY()
     TObjectPtr<ADRPlayerController> OverlappingHostController;
+
+    // UI ê°€ì‹œì„±ì„ ìœ„í•´ ì˜¤ë„ˆë¡œ ì„¤ì •ëœ í˜¸ìŠ¤íŠ¸ ì»¨íŠ¸ë¡¤ëŸ¬
+    UPROPERTY()
+    TObjectPtr<ADRPlayerController> HostController;
+
+    FTimerHandle HostSetupTimerHandle;
 };

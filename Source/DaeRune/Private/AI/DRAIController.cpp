@@ -8,57 +8,60 @@
 #include "Perception/AISenseConfig_Sight.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 ADRAIController::ADRAIController()
 {
-	// ºí·¢º¸µå ÄÄÆ÷³ÍÆ® »ý¼º - AI »óÅÂ µ¥ÀÌÅÍ ÀúÀå¼Ò
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ - AI ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½
 	Blackboard = CreateDefaultSubobject<UBlackboardComponent>("BlackboardComponent");
 	check(Blackboard);
-	// ºñÇìÀÌºñ¾î Æ®¸® ÄÄÆ÷³ÍÆ® »ý¼º - AI Çàµ¿ ·ÎÁ÷ ½ÇÇà
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Ìºï¿½ï¿½ Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ - AI ï¿½àµ¿ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	BehaviorTreeComponent = CreateDefaultSubobject<UBehaviorTreeComponent>("BehaviorTreeComponent");
 	check(BehaviorTreeComponent);
 
-	// AI Perception ÄÄÆ÷³ÍÆ® »ý¼º
+	// AI Perception ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 	AIPerceptionComponent = CreateDefaultSubobject<UAIPerceptionComponent>("AIPerceptionComponent");
 	SetPerceptionComponent(*AIPerceptionComponent);
 
-	// ½Ã¾ß °¨Áö ¼³Á¤
+	// ï¿½Ã¾ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>("SightConfig");
-	SightConfig->SightRadius = 2000.f;  // ½Ã¾ß °Å¸®
-	SightConfig->LoseSightRadius = SightConfig->SightRadius + 500.f;  // ½Ã¾ß ÀÒ´Â °Å¸®
-	SightConfig->PeripheralVisionAngleDegrees = 360.f;  // ½Ã¾ß°¢
-	SightConfig->SetMaxAge(3.f);  // ±â¾ï À¯Áö ½Ã°£
+	SightConfig->SightRadius = 2000.f;  // ï¿½Ã¾ï¿½ ï¿½Å¸ï¿½
+	SightConfig->LoseSightRadius = SightConfig->SightRadius + 500.f;  // ï¿½Ã¾ï¿½ ï¿½Ò´ï¿½ ï¿½Å¸ï¿½
+	SightConfig->PeripheralVisionAngleDegrees = 360.f;  // ï¿½Ã¾ß°ï¿½
+	SightConfig->SetMaxAge(3.f);  // ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½
 
-	// ¸¶Áö¸· À§Ä¡ 1000 À¯´Ö ÀÌ³»¸é ÀÚµ¿ ¼º°ø
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ 1000 ï¿½ï¿½ï¿½ï¿½ ï¿½Ì³ï¿½ï¿½ï¿½ ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½
 	SightConfig->AutoSuccessRangeFromLastSeenLocation = 1000.f;
 
-	// °¨Áö ´ë»ó ¼³Á¤ - ÇÃ·¹ÀÌ¾î¸¸ °¨Áö
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ - ï¿½Ã·ï¿½ï¿½Ì¾î¸¸ ï¿½ï¿½ï¿½ï¿½
 	SightConfig->DetectionByAffiliation.bDetectEnemies = true;
 	SightConfig->DetectionByAffiliation.bDetectFriendlies = false;
 	SightConfig->DetectionByAffiliation.bDetectNeutrals = false;
 
 	SetGenericTeamId(FGenericTeamId(1));
 
-	// Perception¿¡ °¨Áö ¼³Á¤ Ãß°¡
+	// Perceptionï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ß°ï¿½
 	AIPerceptionComponent->ConfigureSense(*SightConfig);
 	AIPerceptionComponent->SetDominantSense(SightConfig->GetSenseImplementation());
 }
 
 ETeamAttitude::Type ADRAIController::GetTeamAttitudeTowards(const AActor& Other) const
 {
-	// ÇÃ·¹ÀÌ¾î ÄÁÆ®·Ñ·¯ Ã¼Å©
+	// ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½ï¿½Æ®ï¿½Ñ·ï¿½ Ã¼Å©
 	if (const APawn* OtherPawn = Cast<APawn>(&Other))
 	{
 		if (const IGenericTeamAgentInterface* TeamAgent = Cast<const IGenericTeamAgentInterface>(OtherPawn->GetController()))
 		{
 			FGenericTeamId OtherTeamId = TeamAgent->GetGenericTeamId();
 
-			// TeamId 0 = ÇÃ·¹ÀÌ¾î = Àû
+			// TeamId 0 = ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ = ï¿½ï¿½
 			if (OtherTeamId == 0)
 			{
 				return ETeamAttitude::Hostile;
 			}
-			// TeamId 1 = ´Ù¸¥ AI = ¾Æ±º
+			// TeamId 1 = ï¿½Ù¸ï¿½ AI = ï¿½Æ±ï¿½
 			else if (OtherTeamId == 1)
 			{
 				return ETeamAttitude::Friendly;
@@ -73,18 +76,18 @@ void ADRAIController::UpdateCombatTime()
 {
 	if (!Blackboard) return;
 	
-	// ÇöÀç ¿ùµå ½Ã°£À» ºí·¢º¸µå¿¡ ÀúÀå
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½å¿¡ ï¿½ï¿½ï¿½ï¿½
 	const float CurrentTime = GetWorld()->GetTimeSeconds();
 	Blackboard->SetValueAsFloat(FName("LastCombatTime"), CurrentTime);
 }
 
 bool ADRAIController::HasCombatTimedOut(float TimeoutSeconds) const
 {
-	if (!Blackboard) return true; // ºí·¢º¸µå ¾øÀ¸¸é ÀüÅõ Á¾·á·Î °£ÁÖ
+	if (!Blackboard) return true; // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	
 	const float LastCombatTime = Blackboard->GetValueAsFloat(FName("LastCombatTime"));
 	
-	// ¾ÆÁ÷ ÀüÅõÇÑ Àû ¾øÀ½ (ÃÊ±â°ª 0)
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½Ê±â°ª 0)
 	if (LastCombatTime <= 0.0f) return true;
 	
 	const float CurrentTime = GetWorld()->GetTimeSeconds();
@@ -97,32 +100,75 @@ void ADRAIController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Perception ÀÌº¥Æ® ¹ÙÀÎµù
+	// Perception ï¿½Ìºï¿½Æ® ï¿½ï¿½ï¿½Îµï¿½
 	if (AIPerceptionComponent)
 	{
 		AIPerceptionComponent->OnTargetPerceptionUpdated.AddDynamic(this, &ADRAIController::OnTargetPerceptionUpdated);
 	}
+
+	// [DEBUG] ë§¤ 1ì´ˆë§ˆë‹¤ AI ìƒíƒœ ë¡œê¹… (ì„œë²„ + Possess í›„ì—ë§Œ)
+	GetWorld()->GetTimerManager().SetTimer(DebugStateLogTimerHandle, this,
+		&ADRAIController::DebugStateLog, 1.0f, true, 1.0f);
+}
+
+void ADRAIController::DebugStateLog()
+{
+	if (!HasAuthority()) return;
+	APawn* MyPawn = GetPawn();
+	if (!MyPawn) return;
+
+	ACharacter* MyChar = Cast<ACharacter>(MyPawn);
+	UCharacterMovementComponent* CMC = MyChar ? MyChar->GetCharacterMovement() : nullptr;
+
+	FString TargetName = TEXT("NULL");
+	FVector TargetLoc = FVector::ZeroVector;
+	bool bHasPlayerInRange = false;
+	FString BTNodeName = TEXT("?");
+	if (Blackboard)
+	{
+		if (UObject* TargetObj = Blackboard->GetValueAsObject(FName("TargetCleanserSite")))
+		{
+			TargetName = TargetObj->GetName();
+		}
+		TargetLoc = Blackboard->GetValueAsVector(FName("TargetCleanserSiteLocation"));
+		bHasPlayerInRange = Blackboard->GetValueAsBool(FName("HasPlayerInRange"));
+	}
+	if (BehaviorTreeComponent)
+	{
+		BTNodeName = BehaviorTreeComponent->DescribeActiveTasks();
+	}
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("[AITick] %s | Loc=%s | Vel=%.0f | MoveMode=%d | Target=%s | TargetLoc=%s | HasPlayer=%d | BT=%s"),
+		*MyPawn->GetName(),
+		*MyPawn->GetActorLocation().ToString(),
+		MyPawn->GetVelocity().Size(),
+		CMC ? static_cast<int32>(CMC->MovementMode.GetValue()) : -1,
+		*TargetName,
+		*TargetLoc.ToString(),
+		bHasPlayerInRange ? 1 : 0,
+		*BTNodeName);
 }
 
 void ADRAIController::OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
 {
-	// ¼­¹ö¿¡¼­¸¸ Ã³¸®
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 	if (!HasAuthority()) return;
 
 	APawn* PerceivedPawn = Cast<APawn>(Actor);
 	if (!PerceivedPawn) return;
 
-	// ÇÃ·¹ÀÌ¾î ÄÁÆ®·Ñ·¯ÀÎÁö È®ÀÎ
+	// ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½ï¿½Æ®ï¿½Ñ·ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
 	if (!PerceivedPawn->IsPlayerControlled()) return;
 
 	if (Stimulus.WasSuccessfullySensed())
 	{
-		// ÇÃ·¹ÀÌ¾î °¨ÁöµÊ - ¸Ê¿¡ Ãß°¡
+		// ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ - ï¿½Ê¿ï¿½ ï¿½ß°ï¿½
 		UpdatePlayer(Actor);
 	}
 	else
 	{
-		// ÇÃ·¹ÀÌ¾î ½Ã¾ß¿¡¼­ ¹þ¾î³² - ¸Ê¿¡¼­ Á¦°Å
+		// ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½Ã¾ß¿ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½î³² - ï¿½Ê¿ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		RemovePlayer(Actor);
 	}
 }

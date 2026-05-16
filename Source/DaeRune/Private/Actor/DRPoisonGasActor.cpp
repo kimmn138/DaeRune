@@ -5,6 +5,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Actor/DRCleanserSite.h"
+#include "Game/DRStageGameState.h"
 #include "Materials/MaterialInterface.h"
 
 TMap<TWeakObjectPtr<AActor>, int32> ADRPoisonGasActor::OverlapCountMap;
@@ -122,6 +123,16 @@ void ADRPoisonGasActor::TransitionToActive()
 	// 효과 구체 콜리전 활성화 (같은 위치)
 	EffectSphere->SetWorldLocation(GroundPos);
 	EffectSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+
+	// 서버에서만 GameState에 활성 카운트 증가를 알림 (멀티캐스트로 루프 사운드 재생)
+	if (HasAuthority())
+	{
+		if (ADRStageGameState* GS = GetWorld()->GetGameState<ADRStageGameState>())
+		{
+			GS->NotifyPoisonGasActivated();
+			bNotifiedActive = true;
+		}
+	}
 }
 
 void ADRPoisonGasActor::OnPoisonGasOverlap(AActor* TargetActor)
@@ -219,6 +230,19 @@ void ADRPoisonGasActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (ActiveNiagaraComponent)
 	{
 		ActiveNiagaraComponent->Deactivate();
+	}
+
+	// 활성 카운트를 줄여 마지막 액터면 루프 사운드 정지
+	if (bNotifiedActive && HasAuthority())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			if (ADRStageGameState* GS = World->GetGameState<ADRStageGameState>())
+			{
+				GS->NotifyPoisonGasDeactivated();
+			}
+		}
+		bNotifiedActive = false;
 	}
 
 	Super::EndPlay(EndPlayReason);

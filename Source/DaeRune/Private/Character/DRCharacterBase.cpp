@@ -54,6 +54,9 @@ void ADRCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(ADRCharacterBase, bIsStunned);
 	DOREPLIFETIME(ADRCharacterBase, bIsBurned);
 	DOREPLIFETIME(ADRCharacterBase, bIsBeingShocked);
+
+	// 사망 상태 (RepNotify 안전망 - Relevancy 회복/늦은 조인 커버)
+	DOREPLIFETIME(ADRCharacterBase, bDead);
 }
 
 UAbilitySystemComponent* ADRCharacterBase::GetAbilitySystemComponent() const
@@ -125,7 +128,7 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 							DRPC->ClientStartSpectating();
 						}
 					},
-					4.0f,
+					2.5f,
 					false
 				);
 			}
@@ -141,7 +144,7 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 					 Destroy();
 				  }
 			   },
-			   3.5f,
+			   2.2f,
 			   false
 			);
 		}
@@ -210,7 +213,11 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 	{
 		CharMoveComp->StopMovementImmediately();
 		CharMoveComp->DisableMovement();
-		CharMoveComp->SetComponentTickEnabled(false);
+		// NOTE: SetComponentTickEnabled(false)는 호출하지 않음.
+		// ACharacter는 Mesh->AddTickPrerequisiteComponent(CharacterMovement)로 mesh tick을 CMC에 종속시키는데,
+		// 서버의 Autonomous Proxy(원격 클라이언트의 캐릭터)에 한해 CMC tick을 끄면 mesh tick까지 함께 멈춰
+		// 호스트 시점에서 사망 몽타주가 보이지 않음.
+		// MovementMode가 MOVE_None이고 StopMovementImmediately가 호출됐으므로 CMC가 계속 tick해도 부하 미미.
 	}
 
 	// �޽ø� ���� ��ġ�� ����
@@ -242,6 +249,10 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 		StunDebuffComponent->Deactivate();
 	}
 
+	// RepNotify는 클라이언트에서만 자동 호출됨. 서버에서도 동일 처리를 위해 수동 호출.
+	// virtual이므로 ADRCharacter 인스턴스에서는 override가 호출되어 사망 몽타주 재생.
+	OnRep_Dead();
+
 	// ��� �̺�Ʈ ��ε�ĳ��Ʈ
 	OnDeathDelegate.Broadcast(this);
 }
@@ -264,6 +275,11 @@ void ADRCharacterBase::OnRep_Stunned()
 
 void ADRCharacterBase::OnRep_Burned()
 {
+}
+
+void ADRCharacterBase::OnRep_Dead()
+{
+	// 기본 구현은 비어있음. 파생 클래스(ADRCharacter)에서 사망 애니메이션 재생.
 }
 
 void ADRCharacterBase::BeginPlay()

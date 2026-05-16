@@ -4,6 +4,8 @@
 #include "UI/HUD/DRHUD.h"
 #include "UI/Widget/DRUserWidget.h"
 #include "UI/WidgetController/OverlayWidgetController.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
+#include "Blueprint/UserWidget.h"
 
 UOverlayWidgetController* ADRHUD::GetOverlayWidgetController(const FWidgetControllerParams& WCParams)
 {
@@ -88,5 +90,50 @@ void ADRHUD::RemoveOverlay()
 		OverlayWidgetController->UnbindAllDelegates();
 		OverlayWidgetController->ConditionalBeginDestroy();
 		OverlayWidgetController = nullptr;
+	}
+
+	if (CharacterInfoWidget)
+	{
+		CharacterInfoWidget->RemoveFromParent();
+		CharacterInfoWidget = nullptr;
+	}
+	bHasCachedCharacterInfoClass = false;
+}
+
+void ADRHUD::ShowCharacterInfo(EPlayerCharacterClass CharacterClass)
+{
+	// 캐싱된 위젯이 다른 클래스용이면 제거 후 재생성
+	if (CharacterInfoWidget && bHasCachedCharacterInfoClass && CachedCharacterInfoClass != CharacterClass)
+	{
+		CharacterInfoWidget->RemoveFromParent();
+		CharacterInfoWidget = nullptr;
+	}
+
+	if (CharacterInfoWidget == nullptr)
+	{
+		TSubclassOf<UUserWidget> WidgetClass = UDRAbilitySystemLibrary::GetCharacterInfoWidgetClass(this, CharacterClass);
+		if (WidgetClass == nullptr) return;
+
+		APlayerController* PC = GetOwningPlayerController();
+		if (PC == nullptr) return;
+
+		CharacterInfoWidget = CreateWidget<UUserWidget>(PC, WidgetClass);
+		if (CharacterInfoWidget == nullptr) return;
+
+		CachedCharacterInfoClass = CharacterClass;
+		bHasCachedCharacterInfoClass = true;
+		CharacterInfoWidget->AddToViewport();
+	}
+	else
+	{
+		CharacterInfoWidget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	}
+}
+
+void ADRHUD::HideCharacterInfo()
+{
+	if (CharacterInfoWidget)
+	{
+		CharacterInfoWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }

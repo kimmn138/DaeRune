@@ -383,7 +383,9 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 		int32 CollectedParts = CachedGameState->GetCollectedParts();
 		bool bActivated = CachedGameState->IsCleanserActivated();
 
-		bIsCompleted = (CollectedParts >= 4) && bActivated;
+		// [임시] 1개 사이트 기준 (파츠 2개)
+		bIsCompleted = (CollectedParts >= 2) && bActivated;
+		// bIsCompleted = (CollectedParts >= 4) && bActivated;
 	}
 	break;
 

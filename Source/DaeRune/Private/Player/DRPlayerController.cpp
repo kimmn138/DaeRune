@@ -13,9 +13,11 @@
 #include "Actor/DRCleanserPart.h"
 #include "Actor/DRCleanserSite.h"
 #include "Actor/DRWaitingRoomCameraActor.h"
+#include "Tutorial/DRTutorialManager.h"
 #include "Character/DRCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "Game/DRStageGameMode.h"
+#include "Phase/DRPhase3.h"
 #include "Game/DRStageGameState.h"
 #include "Game/DRLobbyGameState.h"
 #include "UI/HUD/DRHUD.h"
@@ -157,6 +159,91 @@ void ADRPlayerController::ServerNotifyLineTraceLost_Implementation(ADRCleanserPa
 	Part->MulticastShowInteractionUI(this, false);
 }
 
+void ADRPlayerController::SetSiteDetectionEnabled(bool bEnabled, ADRCleanserSite* Site)
+{
+	if (bEnabled)
+	{
+		bSiteDetectionEnabled = true;
+		NearbySite = Site;
+	}
+	else
+	{
+		// 진입한 사이트가 같을 때만 비활성화 (다른 사이트 진입 우선)
+		if (NearbySite == Site)
+		{
+			bSiteDetectionEnabled = false;
+			NearbySite = nullptr;
+
+			// 현재 라인트레이스로 잡혀있던 사이트 UI 제거
+			if (CurrentOverlappedSite)
+			{
+				ServerNotifySiteLost(CurrentOverlappedSite);
+				CurrentOverlappedSite = nullptr;
+			}
+		}
+	}
+}
+
+ADRCleanserSite* ADRPlayerController::FindSiteByLineTrace()
+{
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter) return nullptr;
+
+	// 부품을 들고 있어야만 사이트 감지
+	if (!DRCharacter->IsCarryingPart()) return nullptr;
+
+	UCameraComponent* Camera = DRCharacter->FindComponentByClass<UCameraComponent>();
+	if (!Camera) return nullptr;
+
+	const FVector Start = Camera->GetComponentLocation();
+	const FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
+
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(DRCharacter);
+
+	const bool bHit = GetWorld()->LineTraceSingleByChannel(
+		HitResult,
+		Start,
+		End,
+		ECC_Visibility,
+		QueryParams
+	);
+
+	if (bHit)
+	{
+		ADRCleanserSite* HitSite = Cast<ADRCleanserSite>(HitResult.GetActor());
+		// 박스 오버랩 중인 사이트와 동일한지 확인 (다른 사이트가 시점에 잡히는 케이스 차단)
+		if (HitSite && HitSite == NearbySite)
+		{
+			return HitSite;
+		}
+	}
+
+	return nullptr;
+}
+
+void ADRPlayerController::ServerNotifySiteDetected_Implementation(ADRCleanserSite* Site)
+{
+	if (!Site) return;
+	Site->MulticastShowInteractionUI(this, true);
+}
+
+void ADRPlayerController::ServerNotifySiteLost_Implementation(ADRCleanserSite* Site)
+{
+	if (!Site) return;
+	Site->MulticastShowInteractionUI(this, false);
+}
+
+void ADRPlayerController::ServerReportTutorialCharacterInfoOpened_Implementation()
+{
+	// 튜토리얼 매니저에 캐릭터 설명창이 열렸음을 보고 (서버 권한)
+	if (ADRTutorialManager* TM = Cast<ADRTutorialManager>(
+		UGameplayStatics::GetActorOfClass(GetWorld(), ADRTutorialManager::StaticClass())))
+	{
+		TM->ReportCharacterInfoOpened();
+	}
+}
 void ADRPlayerController::ServerRequestInstallPartToSite_Implementation(ADRCleanserSite* Site)
 {
 	if (!Site) return;
@@ -377,43 +464,72 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 
-	if (bIsSpectating) return;
-	
-	// 占쏙옙품 占쏙옙占쏙옙占쏙옙 占쏙옙활占쏙옙화占실억옙 占쏙옙占쏙옙占쏙옙 占쏙옙킵
-	if (!bPartDetectionEnabled) return;
+	// Tab Hold 안전장치: 누른 채로 설정창이 열리거나 컨텍스트가 깨지면 Completed 이벤트가 유실될 수 있어 강제 숨김
+	if (bIsCharacterInfoVisible && !CanShowCharacterInfo())
+	{
+		if (ADRHUD* DRHUD = GetHUD<ADRHUD>())
+		{
+			DRHUD->HideCharacterInfo();
+		}
+		bIsCharacterInfoVisible = false;
+	}
 
-	// 濡쒖뺄 而⑦듃濡ㅻ윭?먯꽌留??쇱씤?몃젅?댁떛 ?ㅽ뻾
+	if (bIsSpectating) return;
+
+	// 로컬 컨트롤러에서만 라인트레이스 실행
 	if (!IsLocalController()) return;
 
-	// 占쏙옙占쏙옙트占쏙옙占싱쏙옙 타占싱몌옙 占쏙옙占쏙옙占쏙옙트
+	// 둘 다 비활성화면 스킵
+	if (!bPartDetectionEnabled && !bSiteDetectionEnabled) return;
+
 	LineTraceTimer += DeltaTime;
 	if (LineTraceTimer >= LineTraceUpdateInterval)
 	{
 		LineTraceTimer = 0.f;
 
-		// 占쏙옙품 占쏙옙占쏙옙
-		ADRCleanserPart* DetectedPart = FindPartByLineTrace();
-
-		// 占쏙옙占쏙옙占쏙옙 占쏙옙품占쏙옙 占쏙옙占쏙옙퓸占쏙옙占쏙옙占?확占쏙옙
-		if (DetectedPart != CurrentDetectedPart)
+		// 부품 라인트레이스
+		if (bPartDetectionEnabled)
 		{
-			// 占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 占쏙옙품占쏙옙 占쏙옙占쏙옙占쏙옙 占싯몌옙
-			if (CurrentDetectedPart)
+			ADRCleanserPart* DetectedPart = FindPartByLineTrace();
+
+			if (DetectedPart != CurrentDetectedPart)
 			{
-				ServerNotifyLineTraceLost(CurrentDetectedPart);
+				if (CurrentDetectedPart)
+				{
+					ServerNotifyLineTraceLost(CurrentDetectedPart);
+				}
+
+				CurrentDetectedPart = DetectedPart;
+
+				if (CurrentDetectedPart)
+				{
+					ServerNotifyLineTraceDetected(CurrentDetectedPart);
+				}
 			}
+		}
 
-			CurrentDetectedPart = DetectedPart;
+		// 사이트 라인트레이스
+		if (bSiteDetectionEnabled)
+		{
+			ADRCleanserSite* DetectedSite = FindSiteByLineTrace();
 
-			// 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 占쏙옙품占쏙옙 占쏙옙占쏙옙占쏙옙 占싯몌옙
-			if (CurrentDetectedPart)
+			if (DetectedSite != CurrentOverlappedSite)
 			{
-				ServerNotifyLineTraceDetected(CurrentDetectedPart);
+				if (CurrentOverlappedSite)
+				{
+					ServerNotifySiteLost(CurrentOverlappedSite);
+				}
+
+				CurrentOverlappedSite = DetectedSite;
+
+				if (CurrentOverlappedSite)
+				{
+					ServerNotifySiteDetected(CurrentOverlappedSite);
+				}
 			}
 		}
 	}
 }
-
 void ADRPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
@@ -429,6 +545,9 @@ void ADRPlayerController::SetupInputComponent()
 	DRInputComponent->BindAction(SpectateNextAction, ETriggerEvent::Started, this, &ADRPlayerController::HandleSpectateNext);
 	DRInputComponent->BindAction(SpectatePreviousAction, ETriggerEvent::Started, this, &ADRPlayerController::HandleSpectatePrevious);
 	DRInputComponent->BindAction(ToggleSettingsAction, ETriggerEvent::Started, this, &ADRPlayerController::HandleToggleSettings);
+	// Tab Hold: 누름/뗌 두 이벤트 모두 바인딩. Hold Trigger 없이 Started/Completed로 Hold 동작 구현.
+	DRInputComponent->BindAction(CharacterInfoAction, ETriggerEvent::Started,   this, &ADRPlayerController::HandleCharacterInfoPressed);
+	DRInputComponent->BindAction(CharacterInfoAction, ETriggerEvent::Completed, this, &ADRPlayerController::HandleCharacterInfoReleased);
 	// 占쏙옙占쏙옙占싣?占쌉뤄옙 占쏙옙占싸듸옙 (InputConfig 占쏙옙占?
 	DRInputComponent->BindAbilityActions(InputConfig, this, &ThisClass::AbilityInputTagPressed, &ThisClass::AbilityInputTagReleased, &ThisClass::AbilityInputTagHeld);
 }
@@ -556,6 +675,53 @@ bIsInWaitingRoom = true;
 void ADRPlayerController::HandleToggleSettings()
 {
 	ToggleSettingsMenu();
+}
+
+bool ADRPlayerController::CanShowCharacterInfo() const
+{
+	// 로컬 컨트롤러만 UI 토글
+	if (!IsLocalController()) return false;
+
+	// 게임 레벨/튜토리얼/로비에서만 허용 (메인메뉴 차단)
+	if (!IsInGameLevel() && !IsInTutorial() && !IsInLobby()) return false;
+
+	// 로비의 캐릭터 선택창(대기실)은 차단 — 캐릭터를 아직 확정/소유하지 않은 상태
+	if (bIsInWaitingRoom) return false;
+
+	// 설정창 열려있으면 차단
+	if (bIsSettingsMenuOpen) return false;
+
+	return true;
+}
+
+void ADRPlayerController::HandleCharacterInfoPressed()
+{
+	if (!CanShowCharacterInfo()) return;
+
+	ADRHUD* DRHUD = GetHUD<ADRHUD>();
+	if (DRHUD == nullptr) return;
+
+	// 입력 모드는 변경하지 않음 — GameOnly 유지로 Tab Hold 중에도 이동/조작 가능.
+	// 위젯 자체도 IsFocusable=false로 두어 Tab 키 이벤트가 컨트롤러로 그대로 흐르게 함.
+	DRHUD->ShowCharacterInfo(GetCachedSelectedClass());
+	bIsCharacterInfoVisible = true;
+
+	// 튜토리얼 중에는 매니저에 보고
+	if (IsInTutorial())
+	{
+		ServerReportTutorialCharacterInfoOpened();
+	}
+}
+
+void ADRPlayerController::HandleCharacterInfoReleased()
+{
+	if (!bIsCharacterInfoVisible) return;
+
+	if (ADRHUD* DRHUD = GetHUD<ADRHUD>())
+	{
+		DRHUD->HideCharacterInfo();
+	}
+	bIsCharacterInfoVisible = false;
 }
 
 void ADRPlayerController::ToggleFirstPersonMeshAndHUDVisibility()
@@ -985,7 +1151,7 @@ void ADRPlayerController::Client_ShowGameClearUI_Implementation()
 void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 {
 	if (bIsSpectating) return;
-	
+
 	// 占쌉뤄옙 占쏙옙占?확占쏙옙 占쏙옙 占쏙옙占쏙옙占싣?占쌉뤄옙 처占쏙옙
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
 
@@ -993,17 +1159,41 @@ void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 	{
 		GetASC()->AbilityInputTagPressed(InputTag);
 	}
+
+	// 스킬 아이콘 UI 피드백 브로드캐스트 (로컬 컨트롤러만)
+	if (IsLocalController())
+	{
+		if (ADRHUD* HUD = Cast<ADRHUD>(GetHUD()))
+		{
+			if (UOverlayWidgetController* WC = HUD->GetOverlayWidgetControllerCached())
+			{
+				WC->OnAbilityInputPressed.Broadcast(InputTag);
+			}
+		}
+	}
 }
 
 void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 {
 	if (bIsSpectating) return;
-	
+
 	// 占쌉뤄옙 占쏙옙占쏙옙 占쏙옙占?확占쏙옙
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputReleased)) return;
 
 	if (GetASC() == nullptr) return;
 	GetASC()->AbilityInputTagReleased(InputTag);
+
+	// 스킬 아이콘 UI 피드백 브로드캐스트 (로컬 컨트롤러만)
+	if (IsLocalController())
+	{
+		if (ADRHUD* HUD = Cast<ADRHUD>(GetHUD()))
+		{
+			if (UOverlayWidgetController* WC = HUD->GetOverlayWidgetControllerCached())
+			{
+				WC->OnAbilityInputReleased.Broadcast(InputTag);
+			}
+		}
+	}
 }
 
 void ADRPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
@@ -1029,6 +1219,12 @@ void ADRPlayerController::ServerCheatSkipToNextPhase_Implementation()
 	if (!StageGameMode) return;
 
 	// ?섏씠利??꾪솚
+	if (UDRPhase3* Phase3 = Cast<UDRPhase3>(StageGameMode->GetCurrentPhase()))
+	{
+		Phase3->SkipToNextWave();
+		return;
+	}
+
 	StageGameMode->TransitionToNextPhase();
 }
 

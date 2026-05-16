@@ -12,6 +12,7 @@
 #include "DRAssetManager.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
+#include "Components/AudioComponent.h"
 
 ADRStageGameState::ADRStageGameState()
 {
@@ -325,6 +326,77 @@ void ADRStageGameState::Multicast_PlayGameOverSound_Implementation()
                 UGameplayStatics::PlaySound2D(this, SoundData->GameOverSound);
             }
         }
+    }
+}
+
+void ADRStageGameState::Multicast_PlayPoisonGasWarningSound_Implementation()
+{
+    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
+    {
+        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
+        {
+            if (SoundData->PoisonGasWarningSound)
+            {
+                UGameplayStatics::PlaySound2D(this, SoundData->PoisonGasWarningSound);
+            }
+        }
+    }
+}
+
+void ADRStageGameState::Multicast_StartPoisonGasLoopSound_Implementation()
+{
+    // 이미 재생 중이면 무시 (멱등 처리)
+    if (PoisonGasLoopAudioComponent && PoisonGasLoopAudioComponent->IsPlaying())
+    {
+        return;
+    }
+
+    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
+    {
+        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
+        {
+            if (SoundData->PoisonGasActiveLoopSound)
+            {
+                PoisonGasLoopAudioComponent = UGameplayStatics::SpawnSound2D(
+                    this,
+                    SoundData->PoisonGasActiveLoopSound,
+                    1.0f, 1.0f, 0.0f,
+                    nullptr, false, false
+                );
+            }
+        }
+    }
+}
+
+void ADRStageGameState::Multicast_StopPoisonGasLoopSound_Implementation()
+{
+    if (PoisonGasLoopAudioComponent)
+    {
+        PoisonGasLoopAudioComponent->Stop();
+        PoisonGasLoopAudioComponent = nullptr;
+    }
+}
+
+void ADRStageGameState::NotifyPoisonGasActivated()
+{
+    if (!HasAuthority()) return;
+
+    ++ActivePoisonGasCount;
+    if (ActivePoisonGasCount == 1)
+    {
+        Multicast_StartPoisonGasLoopSound();
+    }
+}
+
+void ADRStageGameState::NotifyPoisonGasDeactivated()
+{
+    if (!HasAuthority()) return;
+
+    --ActivePoisonGasCount;
+    if (ActivePoisonGasCount <= 0)
+    {
+        ActivePoisonGasCount = 0;
+        Multicast_StopPoisonGasLoopSound();
     }
 }
 

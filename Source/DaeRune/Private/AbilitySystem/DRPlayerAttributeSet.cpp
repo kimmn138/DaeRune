@@ -11,11 +11,55 @@
 #include "Player/DRPlayerState.h"
 #include "Character/DRCharacter.h"
 #include "Character/DREnemy.h"
+#include "Game/DRLobbyGameMode.h"
+#include "Game/DRTutorialGameMode.h"
+#include "Engine/World.h"
 
 void UDRPlayerAttributeSet::SetContainerInfo(int32 InNumContainers, float InContainerHealth)
 {
 	NumContainers = InNumContainers;
 	ContainerHealth = InContainerHealth;
+}
+
+void UDRPlayerAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue)
+{
+	Super::PostAttributeChange(Attribute, OldValue, NewValue);
+
+	if (Attribute == GetHealthAttribute() && !bCorrupted)
+	{
+		// 체력값으로부터 0-based 컨테이너 인덱스 계산 (인덱스 0 = 마지막 컨테이너)
+		auto ContainerIndexFromHealth = [this](float HealthValue) -> int32
+		{
+			if (HealthValue <= 0.f) return -1;
+			int32 Idx = FMath::FloorToInt(HealthValue / ContainerHealth);
+			if (FMath::IsNearlyEqual(HealthValue, Idx * ContainerHealth))
+			{
+				Idx = FMath::Max(0, Idx - 1);
+			}
+			return FMath::Clamp(Idx, 0, NumContainers - 1);
+		};
+
+		const int32 OldIndex = ContainerIndexFromHealth(OldValue);
+		const int32 NewIndex = ContainerIndexFromHealth(NewValue);
+
+		// 컨테이너 N → 1 전이 시점에만 큐 발동 (1개 상태에서 매 피격마다 울리지 않도록)
+		if (OldIndex > 0 && NewIndex == 0)
+		{
+			if (UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent())
+			{
+				FGameplayCueParameters CueParams;
+				if (AActor* Avatar = ASC->GetAvatarActor())
+				{
+					CueParams.Location = Avatar->GetActorLocation();
+				}
+
+				ASC->ExecuteGameplayCue(
+					FDRGameplayTags::Get().GameplayCue_Player_LowHealth,
+					CueParams
+				);
+			}
+		}
+	}
 }
 
 int32 UDRPlayerAttributeSet::GetCurrentContainerIndex() const
@@ -128,6 +172,13 @@ void UDRPlayerAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		}
 	}
 
+	// 로비/튜토리얼에서는 체력이 1 미만으로 내려가지 않도록 데미지 클램프
+	if (ShouldPreventDeath())
+	{
+		const float MaxAllowedDamage = FMath::Max(0.f, GetHealth() - 1.f);
+		LocalIncomingDamage = FMath::Min(LocalIncomingDamage, MaxAllowedDamage);
+	}
+
 	// 占쏙옙占쏙옙 占쏙옙占쏙옙 처占쏙옙
 	if (bCorrupted)
 	{
@@ -228,6 +279,13 @@ void UDRPlayerAttributeSet::ApplyHitReactAndKnockback(const FEffectProperties& P
 	if (Props.TargetCharacter && Props.TargetCharacter->Implements<UCombatInterface>() &&
 		!ICombatInterface::Execute_IsBeingShocked(Props.TargetCharacter))
 	{
+		// 피격 표정 트리거 (서버 → 모든 클라이언트). 태그 이벤트는 카운트 누적으로
+		// 1회만 발화하므로, 표정은 명시적 멀티캐스트로 매 피격마다 발화시킨다.
+		if (ADRCharacter* TargetDRChar = Cast<ADRCharacter>(Props.TargetCharacter))
+		{
+			TargetDRChar->MulticastPlayHitReactFacial();
+		}
+
 FGameplayTagContainer TagContainer;
 		TagContainer.AddTag(FDRGameplayTags::Get().Effects_HitReact);
 		const bool bSuccess = Props.TargetASC->TryActivateAbilitiesByTag(TagContainer);
@@ -274,6 +332,17 @@ void UDRPlayerAttributeSet::HandleIncomingHealing(const FEffectProperties& Props
 	// 占쏙옙占쏙옙 占쏙옙占쏙옙: 占쌓놂옙 占쏙옙占쏙옙 占쏙옙占쏙옙 (占쏙옙占쏙옙占싱놂옙 占쏙옙占쏙옙占싹곤옙)
 	float NewHealth = FMath::Min(CurrentHealth + LocalIncomingHealing, MaxHealthValue);
 	SetHealth(NewHealth);
+}
+
+bool UDRPlayerAttributeSet::ShouldPreventDeath() const
+{
+	const UWorld* World = GetWorld();
+	if (!World) return false;
+
+	const AGameModeBase* GM = World->GetAuthGameMode();
+	if (!GM) return false;
+
+	return GM->IsA<ADRLobbyGameMode>() || GM->IsA<ADRTutorialGameMode>();
 }
 
 void UDRPlayerAttributeSet::HandleCorruptionPurification(const FEffectProperties& Props, float HealAmount)

@@ -78,7 +78,21 @@ public:
 
 	UPROPERTY()
 	TObjectPtr<ADRCleanserSite> CurrentOverlappedSite;
-	
+
+	// 사이트 감지 활성화/비활성화 (사이트 박스 오버랩에서 호출)
+	UFUNCTION(BlueprintCallable, Category = "Part System")
+	void SetSiteDetectionEnabled(bool bEnabled, ADRCleanserSite* Site);
+
+	// 시점 라인트레이스로 사이트 찾기
+	UFUNCTION(BlueprintCallable, Category = "Part System")
+	ADRCleanserSite* FindSiteByLineTrace();
+
+	UFUNCTION(Server, Reliable)
+	void ServerNotifySiteDetected(ADRCleanserSite* Site);
+
+	UFUNCTION(Server, Reliable)
+	void ServerNotifySiteLost(ADRCleanserSite* Site);
+
 	UFUNCTION(Server, Reliable)
 	void ServerRequestInstallPartToSite(ADRCleanserSite* Site);
 
@@ -310,7 +324,7 @@ protected:
 
 	// ����Ʈ���̽� �Ÿ�
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Part System|Config")
-	float LineTraceDistance = 100.f;
+	float LineTraceDistance = 250.f;
 
 	// ����Ʈ���̽� ������Ʈ ���� (��)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Part System|Config")
@@ -347,8 +361,26 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> ToggleSettingsAction;
 
+	// 캐릭터 설명창 표시(Tab Hold) 입력 액션
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<UInputAction> CharacterInfoAction;
+
 	// ���� �޴� ��� ó��
 	void HandleToggleSettings();
+
+	// 캐릭터 설명창 Hold 입력 처리
+	void HandleCharacterInfoPressed();
+	void HandleCharacterInfoReleased();
+
+	// 튜토리얼: Tab으로 캐릭터 설명창 열림을 서버 매니저에 보고
+	UFUNCTION(Server, Reliable)
+	void ServerReportTutorialCharacterInfoOpened();
+
+	// 현재 캐릭터 설명창이 표시 중인지 추적 (포커스 유실 대비)
+	bool bIsCharacterInfoVisible = false;
+
+	// Tab Hold 입력 가능한 컨텍스트인지 검사 (게임 레벨/튜토리얼이며, 대기실/설정창이 아닐 때)
+	bool CanShowCharacterInfo() const;
 
 	// ���� �Է� ó��
 	void HandleSpectateNext();
@@ -404,6 +436,13 @@ private:
 
 	// ����Ʈ���̽� Ȱ��ȭ ����
 	bool bPartDetectionEnabled = false;
+
+	// 사이트 라인트레이스 감지 활성화 여부 (사이트 박스 오버랩 중일 때 true)
+	bool bSiteDetectionEnabled = false;
+
+	// 박스 오버랩 중인 사이트 (감지 후보)
+	UPROPERTY()
+	TObjectPtr<ADRCleanserSite> NearbySite;
 
 	// ���� �÷��̾ �׾����� ����
 

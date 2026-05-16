@@ -27,6 +27,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnHasPendingChangesChanged, bool, b
 // 탭 리셋 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSettingsReset, EDRSettingsTab, Tab);
 
+// 언어 변경 델리게이트 (CultureCode: "ko", "en")
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLanguageChanged, const FString&, CultureCode);
+
 /**
  * 설정 관리 매니저 - 기존 오디오/그래픽 적용 로직 유지 + 데이터 주도 관리 레이어
  */
@@ -170,6 +173,16 @@ public:
 
     UPROPERTY(BlueprintAssignable, Category = "Settings|DataDriven")
     FOnSettingsReset OnSettingsReset;
+
+    /** 언어가 실제로 적용된 직후 발행. UI는 이 시점에 LOCTEXT 기반 텍스트를 다시 갱신해야 한다. */
+    UPROPERTY(BlueprintAssignable, Category = "Settings|Localization")
+    FOnLanguageChanged OnLanguageChanged;
+
+    /** Gameplay.Language OptionId(FName: "Korean", "English") → 컬처 코드(FString: "ko", "en"). 없으면 빈 문자열. */
+    static FString LanguageOptionIdToCulture(FName OptionId);
+
+    /** 컬처 코드 → OptionId 역변환. 없으면 NAME_None. */
+    static FName CultureToLanguageOptionId(const FString& CultureCode);
 
     // ========== 데이터 접근 ==========
 

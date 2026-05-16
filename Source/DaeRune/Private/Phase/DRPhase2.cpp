@@ -26,10 +26,15 @@ void UDRPhase2::OnPhaseStart()
 	const TArray<TObjectPtr<ADRCleanserSite>>& ActiveSites = GetActiveCleanserSites();
 
 	// ?대젋? ?ъ씠???좏슚??寃??
-	if (ActiveSites.Num() != 2)
+	// [임시] 1개 사이트 기준으로 검증
+	if (ActiveSites.Num() < 1)
 	{
-return;
+		return;
 	}
+	// if (ActiveSites.Num() != 2)
+	// {
+	// return;
+	// }
 
 	// 占싹뤄옙占?占쏙옙占쏙옙트 占쏙옙占쏙옙 占십깍옙화
 	CompletedSites.Empty();
@@ -112,24 +117,45 @@ return;
 	{
 }
 
-	// 媛??ㅽ룿 ?ъ씤?몄뿉 ???앹꽦
+	// [임시] 파츠 운반 적 2마리만 스폰
+	const int32 MaxEnemiesToSpawn = 2;
+	int32 SpawnedCount = 0;
 	for (AActor* SpawnPoint : EnemySpawnPoints)
 	{
 		if (!SpawnPoint) continue;
+		if (SpawnedCount >= MaxEnemiesToSpawn) break;
 
 		ADREnemy* SpawnedEnemy = SpawnEnemyAtLocation(SpawnPoint);
 		if (SpawnedEnemy)
 		{
-			// 占쏙옙占쏙옙占쏙옙占쏙옙트 占쏙옙占싸듸옙
 			if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(SpawnedEnemy))
 			{
 				CombatInterface->GetOnDeathDelegate().AddDynamic(this, &UDRPhaseBase::OnEnemyDeath);
 			}
-			
-			// 占쏙옙占쏙옙占쏙옙 占쏙옙 占쏙옙占쏙옙 (OnPhaseEnd占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙 占쏙옙占쏙옙占쏙옙)
+
 			SpawnedEnemies.Add(SpawnedEnemy);
+			++SpawnedCount;
 		}
 	}
+
+	// // 占쏙옙占?占쏙옙占쏙옙 占쏙옙占쏙옙트占쏙옙 占쏙옙 占쏙옙占쏙옙
+	// for (AActor* SpawnPoint : EnemySpawnPoints)
+	// {
+	// 	if (!SpawnPoint) continue;
+	//
+	// 	ADREnemy* SpawnedEnemy = SpawnEnemyAtLocation(SpawnPoint);
+	// 	if (SpawnedEnemy)
+	// 	{
+	// 		// 占쏙옙占쏙옙占쏙옙占쏙옙트 占쏙옙占싸듸옙
+	// 		if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(SpawnedEnemy))
+	// 		{
+	// 			CombatInterface->GetOnDeathDelegate().AddDynamic(this, &UDRPhaseBase::OnEnemyDeath);
+	// 		}
+	//
+	// 		// 占쏙옙占쏙옙占쏙옙 占쏙옙 占쏙옙占쏙옙 (OnPhaseEnd占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙 占쏙옙占쏙옙占쏙옙)
+	// 		SpawnedEnemies.Add(SpawnedEnemy);
+	// 	}
+	// }
 }
 
 ADREnemy* UDRPhase2::SpawnEnemyAtLocation(AActor* SpawnPoint)
@@ -191,11 +217,13 @@ void UDRPhase2::CheckPhaseCompletion()
 	// 占쏙옙占?클占쏙옙占쏙옙 占쏙옙占쏙옙트占쏙옙 占쏙옙품占쏙옙 2占쏙옙占쏙옙 占쏙옙치占실억옙占쏙옙占쏙옙 확占쏙옙
 	const TArray<TObjectPtr<ADRCleanserSite>>& ActiveSites = GetActiveCleanserSites();
 
-	// 활占쏙옙 占쏙옙占쏙옙트占쏙옙 2占쏙옙占쏙옙占쏙옙 확占쏙옙
-	if (ActiveSites.Num() != 2) return;
+	// [임시] 1개 사이트 기준으로 검증
+	if (ActiveSites.Num() < 1) return;
+	// if (ActiveSites.Num() != 2) return;
 
-	// 占싹뤄옙占?占쏙옙占쏙옙트占쏙옙 2占쏙옙占쏙옙占쏙옙 확占쏙옙
-	if (CompletedSites.Num() == 2)
+	// [임시] 1개 사이트의 파츠 설치 완료 확인
+	if (CompletedSites.Num() == ActiveSites.Num())
+	// if (CompletedSites.Num() == 2)
 	{
 		// 클占쏙옙占쏙옙 활占쏙옙화 占쏙옙占승뤄옙 占쏙옙占쏙옙
 		GameState->SetCleanserActivated(true);

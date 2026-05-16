@@ -9,6 +9,8 @@
 
 class UGameplayAbility;
 class UGameplayEffect;
+class UAudioComponent;
+class USoundBase;
 
 /**
  * 비행 적 기본 클래스
@@ -40,7 +42,14 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void OnMoveSpeedChanged(const FOnAttributeChangeData& Data) override;
+
+	// ===== 비행 루프 사운드 (Plan2.md §5.2 방안 A) =====
+
+	/** 비행 루프 SoundCue. SC_DragonFlyFlight 등 Looping=true + Concurrency 자산 지정. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "FlyingEnemy|Sound")
+	TObjectPtr<USoundBase> FlightSound;
 
 	// ===== 비행 설정 =====
 
@@ -86,6 +95,13 @@ private:
 
 	// 경직 종료 콜백
 	void EndSkillLockdown();
+
+	// 비행 루프 정지 (사망/EndPlay 공용). 중복 호출 안전.
+	void StopFlightLoop();
+
+	// 비행 루프 오디오 컴포넌트 (BeginPlay에서 spawn, 사망/EndPlay에서 stop)
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> FlightLoopComponent;
 
 	// ===== 상태 =====
 

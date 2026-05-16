@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "AbilitySystem/Abilities/DRVendingMachineBasicAttack.h"
@@ -7,6 +7,7 @@
 #include "ActiveGameplayEffectHandle.h"
 #include "GameplayEffect.h"
 #include "Actor/DRProjectile.h"
+#include "Character/DRCharacter.h"
 #include "Interaction/CombatInterface.h"
 #include "DRGameplayTags.h"
 
@@ -129,6 +130,14 @@ void UDRVendingMachineBasicAttack::ExecuteShot()
 		{
 			DRASC->NotifyVendingMachineStacksChanged(CurrentJackpotStacks, MaxJackpotStacks);
 		}
+
+		// 잭팟 캡슐 발사 사운드 멀티캐스트 (Plan2.md §3.3)
+		if (ADRCharacter* DRChar = Cast<ADRCharacter>(GetAvatarActorFromActorInfo()))
+		{
+			const FVector ShotLocation = ICombatInterface::Execute_GetCombatSocketLocation(
+				GetAvatarActorFromActorInfo(), FireSocketTag);
+			DRChar->MulticastPlayVendingCapsuleShot(static_cast<uint8>(CapsuleTier), ShotLocation);
+		}
 	}
 	else
 	{
@@ -143,6 +152,14 @@ void UDRVendingMachineBasicAttack::ExecuteShot()
 		if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
 		{
 			DRASC->NotifyVendingMachineStacksChanged(CurrentJackpotStacks, MaxJackpotStacks);
+		}
+
+		// 일반 코인 발사 사운드 멀티캐스트 (Plan2.md §3.3)
+		if (ADRCharacter* DRChar = Cast<ADRCharacter>(GetAvatarActorFromActorInfo()))
+		{
+			const FVector ShotLocation = ICombatInterface::Execute_GetCombatSocketLocation(
+				GetAvatarActorFromActorInfo(), FireSocketTag);
+			DRChar->MulticastPlayVendingCoinShot(ShotLocation);
 		}
 	}
 }
@@ -169,7 +186,7 @@ float UDRVendingMachineBasicAttack::GetCurrentFireInterval() const
 		}
 	}
 
-	const float SpeedMultiplier = 1.0f + (BuffStacks * 0.1f);
+	const float SpeedMultiplier = 1.0f + (BuffStacks * 0.2f);
 	return BaseFireInterval / SpeedMultiplier;
 }
 

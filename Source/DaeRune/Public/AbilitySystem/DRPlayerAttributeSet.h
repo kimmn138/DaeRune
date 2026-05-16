@@ -15,15 +15,15 @@ class DAERUNE_API UDRPlayerAttributeSet : public UDRAttributeSet
 	GENERATED_BODY()
 
 	public:
-	// ÄÁÅ×ÀÌ³Ê Á¤º¸ ¼³Á¤ (°ÔÀÓ ½ÃÀÛ ½Ã ÇÑ ¹ø¸¸)
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
 	void SetContainerInfo(int32 InNumContainers, float InContainerHealth);
 
-	// ÄÁÅ×ÀÌ³Ê Á¤º¸ Á¢±ÙÀÚ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	int32 GetNumContainers() const { return NumContainers; }
 	float GetContainerHealth() const { return ContainerHealth; }
 	float GetCorruptMaxHealth() const { return CorruptMaxHealth; }
 
-	// ÇöÀç ÄÁÅ×ÀÌ³Ê ÀÎµ¦½º °è»ê
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½Îµï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 	int32 GetCurrentContainerIndex() const;
 
 	void EnterCorruptedState(const FEffectProperties& Props);
@@ -34,6 +34,7 @@ class DAERUNE_API UDRPlayerAttributeSet : public UDRAttributeSet
 protected:
 	virtual void HandleIncomingDamage(const FEffectProperties& Props) override;
 	virtual void HandleIncomingHealing(const FEffectProperties& Props) override;
+	virtual void PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue) override;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Debuff")
 	float EliteDebuffModifier = 1.5f;
@@ -45,7 +46,10 @@ private:
 	void ApplyHitReactAndKnockback(const FEffectProperties& Props);
 	void HandleCorruptionPurification(const FEffectProperties& Props, float HealAmount);
 
-	// Ä³¸¯ÅÍº° ÄÁÅ×ÀÌ³Ê ¼³Á¤ (Replicate ºÒÇÊ¿ä - °¢ Å¬¶óÀÌ¾ğÆ®°¡ ÀÚÃ¼ °è»ê)
+	// ë¡œë¹„/íŠœí† ë¦¬ì–¼ ë“± ì‚¬ë§ ë°©ì§€ê°€ í•„ìš”í•œ ëª¨ë“œì¸ì§€ í™•ì¸
+	bool ShouldPreventDeath() const;
+
+	// Ä³ï¿½ï¿½ï¿½Íºï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½ï¿½ï¿½ï¿½ (Replicate ï¿½ï¿½ï¿½Ê¿ï¿½ - ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½Ã¼ ï¿½ï¿½ï¿½)
 	UPROPERTY()
 	int32 NumContainers = 4;
 
@@ -57,6 +61,6 @@ private:
 
 	bool bCorrupted = false;
 
-	// ¿À¹öÇÃ·Î¿ì ÀÓ°è°ª
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Ã·Î¿ï¿½ ï¿½Ó°è°ª
 	static constexpr float OVERFLOW_THRESHOLD = 0.1f;
 };

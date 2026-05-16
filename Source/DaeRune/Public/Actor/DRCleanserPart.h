@@ -56,6 +56,10 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastShowInteractionUI(ADRPlayerController* PlayerController, bool bShow);
 
+	// 캐릭터의 현재 오버랩 + 부품 보유 상태를 재평가하여 라인트레이스 감지를 갱신
+	// (오버랩 도중 부품을 집어들거나 내려놓을 때 호출)
+	void RefreshOverlapStateFor(ADRCharacter* Character);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -82,7 +86,7 @@ protected:
 
 	// ���� ���� �ݰ�
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "CleanserPart|Config")
-	float DetectionRadius = 150.f;
+	float DetectionRadius = 300.f;
 
 	// ========== ��ǰ ���� ==========
 

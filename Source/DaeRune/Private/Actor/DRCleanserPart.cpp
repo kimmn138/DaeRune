@@ -249,40 +249,29 @@ void ADRCleanserPart::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 
 void ADRCleanserPart::OnDetectionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	// �̹� ��������� ����
-	if (bIsCarried) return;
-
-	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
-	if (!Character) return;
-
-	// �̹� ��ǰ�� ��� ������ ����
-	if (Character->IsCarryingPart()) return;
-
-	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
-	if (!PC) return;
-
-	// ���� ��Ʈ�ѷ������� ����Ʈ���̽� Ȱ��ȭ
-	if (PC->IsLocalController())
-	{
-		PC->SetPartDetectionEnabled(true, this);
-	}
+	RefreshOverlapStateFor(Cast<ADRCharacter>(OtherActor));
 }
 
 void ADRCleanserPart::OnDetectionSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
-	if (!Character) return;
-
-	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
-	if (!PC) return;
-
-	// ���� ��Ʈ�ѷ������� ����Ʈ���̽� ��Ȱ��ȭ
-	if (PC->IsLocalController())
-	{
-		PC->SetPartDetectionEnabled(false, this);
-	}
+	RefreshOverlapStateFor(Cast<ADRCharacter>(OtherActor));
 }
 
+void ADRCleanserPart::RefreshOverlapStateFor(ADRCharacter* Character)
+{
+	if (!Character || !DetectionSphere) return;
+
+	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
+	if (!PC || !PC->IsLocalController()) return;
+
+	const bool bIsOverlapping = DetectionSphere->IsOverlappingActor(Character);
+	const bool bShouldDetect =
+		bIsOverlapping &&
+		!bIsCarried &&
+		!Character->IsCarryingPart();
+
+	PC->SetPartDetectionEnabled(bShouldDetect, this);
+}
 void ADRCleanserPart::OnRep_bIsCarried()
 {
 	RefreshCarriedState();

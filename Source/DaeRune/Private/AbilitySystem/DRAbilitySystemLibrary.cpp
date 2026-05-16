@@ -108,6 +108,15 @@ UPlayerCharacterClassInfo* UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(
 	return DRGameInstance->PlayerCharacterClassInfo;
 }
 
+TSubclassOf<UUserWidget> UDRAbilitySystemLibrary::GetCharacterInfoWidgetClass(const UObject* WorldContextObject, EPlayerCharacterClass PlayerClass)
+{
+	UPlayerCharacterClassInfo* ClassInfo = GetPlayerCharacterClassInfo(WorldContextObject);
+	if (ClassInfo == nullptr) return nullptr;
+
+	FCharacterClassDefaultInfo Info = ClassInfo->GetClassDefaultInfo(PlayerClass);
+	return Info.CharacterInfoWidgetClass;
+}
+
 void UDRAbilitySystemLibrary::InitializePlayerDefaultAttributes(
 	const UObject* WorldContextObject, EPlayerCharacterClass PlayerClass, float Level, UAbilitySystemComponent* ASC)
 {
@@ -352,16 +361,24 @@ AActor* UDRAbilitySystemLibrary::GetClosestCleanserSite(APawn* ControlledPawn)
 	if (!GameState) return nullptr;
 
 	TArray<ADRCleanserSite*> CleanserSites = GameState->GetCleanserSites();
+	if (CleanserSites.Num() == 0) return nullptr;
 
-	if (CleanserSites.Num() < 2) return nullptr;
-	if (!CleanserSites[0] || !CleanserSites[1]) return nullptr;
-	
-	const float Dist0 = FVector::Dist(CleanserSites[0]->GetActorLocation(), ControlledPawn->GetActorLocation());
-	const float Dist1 = FVector::Dist(CleanserSites[1]->GetActorLocation(), ControlledPawn->GetActorLocation());
+	const FVector PawnLocation = ControlledPawn->GetActorLocation();
+	ADRCleanserSite* Closest = nullptr;
+	float ClosestDistSq = TNumericLimits<float>::Max();
 
-	AActor* ClosestCleanserSite = Dist0 < Dist1 ? CleanserSites[0] : CleanserSites[1];
+	for (ADRCleanserSite* Site : CleanserSites)
+	{
+		if (!Site) continue;
+		const float DistSq = FVector::DistSquared(Site->GetActorLocation(), PawnLocation);
+		if (DistSq < ClosestDistSq)
+		{
+			ClosestDistSq = DistSq;
+			Closest = Site;
+		}
+	}
 
-	return ClosestCleanserSite;
+	return Closest;
 }
 
 bool UDRAbilitySystemLibrary::IsNotFriend(AActor* FirstActor, AActor* SecondActor)

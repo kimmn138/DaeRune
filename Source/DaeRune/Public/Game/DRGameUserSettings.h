@@ -39,4 +39,8 @@ public:
 
     UPROPERTY(Config, BlueprintReadWrite, Category = "Settings|Graphics")
     float Gamma = 80.0f;
+
+    /** Preferred UI culture code: "ko" (Korean) or "en" (English). Saved to GameUserSettings.ini. */
+    UPROPERTY(Config, BlueprintReadWrite, Category = "Settings|Localization")
+    FString PreferredCulture = TEXT("ko");
 };

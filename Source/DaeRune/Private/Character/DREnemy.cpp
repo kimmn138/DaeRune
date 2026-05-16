@@ -52,6 +52,11 @@ ADREnemy::ADREnemy()
 	GetCharacterMovement()->NetworkSimulatedSmoothLocationTime = 0.1f;
 	GetCharacterMovement()->NetworkSmoothingMode = ENetworkSmoothingMode::Exponential;
 
+	// RVO Avoidance - 적들이 같은 지점으로 몰릴 때 서로 비켜서 지나가도록
+	GetCharacterMovement()->bUseRVOAvoidance = true;
+	GetCharacterMovement()->AvoidanceConsiderationRadius = 500.f;
+	GetCharacterMovement()->AvoidanceWeight = 0.5f;
+
 	// 적 전용 어트리뷰트셋
 	AttributeSets = CreateDefaultSubobject<UDREnemyAttributeSet>("EnemyAttributeSet");
 
@@ -122,6 +127,10 @@ void ADREnemy::PossessedBy(AController* NewController)
 	// 블랙보드 초기화 및 비헤이비어 트리 실행
 	DRAIController->GetBlackboardComponent()->InitializeBlackboard(*BehaviorTree->BlackboardAsset);
 	DRAIController->RunBehaviorTree(BehaviorTree);
+	UE_LOG(LogTemp, Warning, TEXT("[DREnemy] BT Started: %s at %s | MoveMode=%d | HasAuth=%d"),
+		*GetName(), *GetActorLocation().ToString(),
+		GetCharacterMovement() ? static_cast<int32>(GetCharacterMovement()->MovementMode.GetValue()) : -1,
+		HasAuthority() ? 1 : 0);
 	// 초기 AI 상태 설정
 	DRAIController->GetBlackboardComponent()->SetValueAsBool(DRBlackboardKeys::HitReacting, false);
 	DRAIController->GetBlackboardComponent()->SetValueAsBool(DRBlackboardKeys::RangedAttacker, CharacterClass != ECharacterClass::Warrior);
@@ -280,7 +289,7 @@ bool ADREnemy::DropPart()
 	SpawnParams.SpawnCollisionHandlingOverride =
 		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	FVector SpawnLocation = GetActorLocation() + GetActorUpVector() * 10.f;
+	FVector SpawnLocation = GetActorLocation() + GetActorUpVector() * -10.f;
 	if (PartMeshComponent && PartMeshComponent->IsVisible())
 	{
 		SpawnLocation = PartMeshComponent->GetComponentLocation();
