@@ -1,461 +1,386 @@
-# Plan2 — 플레이어 사망 애니메이션 폴링 → 이벤트 기반 전이 (범위 축소판)
+# Plan2 — Phase3 웨이브 레벨 외곽선 머티리얼 상세 구성
 
-## 0. 한 줄 요약
-**플레이어 캐릭터(`ADRCharacter`)에 한정** 하여, ABP가 `IsDead`를 폴링하는 방식을 Character가 AnimMontage를 명시적으로 푸시(push)하는 이벤트 기반 방식으로 바꾼다. 적 코드/적 ABP는 **건드리지 않는다**.
+## 0. 개요
+
+### 목표
+페이즈3의 적이 어떤 웨이브 레벨에서 스폰됐는지 외곽선 색으로 즉시 구분 가능하게 함.
+
+### 레벨별 색 매핑
+| Wave Level | Custom Depth Stencil 값 | 외곽선 색 | RGB (Linear, 권장) |
+|---|---|---|---|
+| 1 | 1 | **없음** | — |
+| 2 | 2 | 초록 | (0.0, 1.0, 0.1) |
+| 3 | 3 | 노랑 | (1.0, 1.0, 0.0) |
+| 4 | 4 | 주황 | (1.0, 0.4, 0.0) |
+| 5 | 5 | 빨강 | (1.0, 0.0, 0.0) |
+
+> Wave 1 적도 C++에서 stencil 값 1이 찍히지만, **머티리얼 단에서 마스크로 걸러서 외곽선을 그리지 않음**.
+
+### 작업 산출물
+1. `M_PP_WaveOutline` (Material, Post Process Domain)
+2. `MI_PP_WaveOutline` (Material Instance, 디자이너용 색 조정)
+3. PostProcessVolume 액터에 인스턴스 연결
+
+### 저장 경로 권장
+- `Content/Materials/PostProcess/M_PP_WaveOutline.uasset`
+- `Content/Materials/PostProcess/MI_PP_WaveOutline.uasset`
 
 ---
 
-## 1. 작업 범위 (Scope Boundary)
+## 1. 사전 준비 (필수)
 
-### 1.1 포함 ✅
-- `ADRCharacterBase` C++ — `bDead`를 리플리케이트 + RepNotify로 전환 (베이스 클래스라 적도 자동으로 안전성 개선을 얻지만 동작 변경은 없음).
-- `ADRCharacter` C++ — 사망 몽타주 슬롯, 단일 재생 진입점, BP 이벤트, Mesh Tick 옵션 승격.
-- 플레이어 캐릭터 BP(`BP_GardenRobot`, `BP_VendingMachine`) — `DeathMontages` 배열에 몽타주 등록.
-- 플레이어 3P ABP(`ABP_Gardener`, `ABP_VendingMachine`) — EventGraph의 `IsDead` 폴링/Death State 전이 제거.
+### 프로젝트 세팅
+**Edit → Project Settings → Rendering → Postprocessing**
+- `Custom Depth-Stencil Pass` → **"Enabled with Stencil"**
+- 변경 후 에디터 재시작
 
-### 1.2 제외 ❌
-- 적 C++ 코드(`DREnemy`, `DRFlyingEnemy`, `DRArmadilloEnemy`).
-- 적 ABP(`ABP_Enemy`, `ABP_Armadillo_*`, `ABP_DragonFly`, `ABP_EliteBear`, `ABP_Dog_*`).
-- 1P ABP(`ABP_FP_Gardener`, `ABP_FP_VendingMachine`) — 1P 카메라는 사망 시 3P로 전환되므로 1P 사망 애니메이션 불필요.
-- 부활/리스폰 처리 — 현재 시스템은 사망 후 Destroy & 새 Pawn possess 패턴이라 1회성 사망 가정.
+이 설정이 없으면 `SceneTexture: CustomStencil` 노드의 출력이 항상 0이 됨.
 
-### 1.3 적이 코드 변경 영향 받는 부분 (무해함 검증)
-| 변경 | 적에게 일어나는 일 |
+---
+
+## 2. 머티리얼 본체 (M_PP_WaveOutline) 생성
+
+Content Browser → 우클릭 → **Material** → 이름 `M_PP_WaveOutline`.
+
+### 머티리얼 노드 (Main Output) Details
+| 속성 | 값 |
 |---|---|
-| 베이스 `bDead`가 `ReplicatedUsing=OnRep_Dead`로 바뀜 | 자동 적용. `OnRep_Dead` 베이스 구현은 **빈 함수** → 적은 영향 없음 |
-| 베이스에 `MulticastHandleDeath` 끝에서 `OnRep_Dead()`를 수동 호출하는 한 줄 추가 | 적의 `OnRep_Dead`는 빈 함수라 no-op |
-| 베이스에 `VisibilityBasedAnimTickOption` 강제 변경 코드 추가 | **플레이어 분기 안에만 넣어** 적은 영향 없음 |
+| Material Domain | **Post Process** |
+| Blendable Location | **Before Tonemapping** |
+| Blendable Priority | 0 (기본) |
+| Output Alpha | 체크 해제 |
 
-→ **적의 ABP/사망 처리는 한 글자도 안 건드린다.**
-
----
-
-## 2. 아키텍처
-
-### 2.1 책임 분리
-```
-ADRCharacterBase
-  ├─ bDead (ReplicatedUsing=OnRep_Dead)         [공통 상태]
-  ├─ OnRep_Dead() : virtual, empty default      [훅]
-  └─ MulticastHandleDeath_Implementation():
-       ... 기존 로직 ...
-       bDead = true
-       OnRep_Dead()    ← 서버에서 수동 호출 (RepNotify는 클라이언트에서만 자동 호출됨)
-       ... 기존 로직 ...
-
-ADRCharacter (플레이어 전용)
-  ├─ DeathMontages : TArray<UAnimMontage*>       [BP에서 채움]
-  ├─ DeathMontagePlayRate : float                [BP에서 조정]
-  ├─ DeathMontageIndex : int32 (Replicated)      [서버가 결정, 모두 동일 인덱스 재생]
-  ├─ bDeathMontagePlayed : bool                  [로컬 중복 방지]
-  ├─ OnRep_Dead() override                       [bDead=true면 PlayDeathMontage]
-  ├─ PlayDeathMontage_Internal()                 [실제 Montage_Play 호출]
-  ├─ K2_OnCharacterDied (BIE)                    [BP 추가 연출 훅]
-  └─ MulticastHandleDeath_Implementation() override:
-       Super::Multicast... (베이스 본체 실행 + bDead=true + OnRep_Dead 호출됨)
-       추가: 사망 몽타주 인덱스 결정(서버), Mesh Tick 옵션 승격
-```
-
-### 2.2 호출 흐름 (Server / Client / Listen Server Host)
-**서버 권위 발동 지점**: `UDRPlayerAttributeSet::ProcessCorruptedDamage` → `Die()` → `MulticastHandleDeath` (서버에서 트리거).
-
-```
-[Server / Listen Server Host]
-  MulticastHandleDeath_Implementation (override in ADRCharacter)
-    └ Super::Multicast... (베이스)
-         ├ if (bDead) return;
-         ├ bDead = true
-         ├ (기존) Camera/Cue/1P↔3P/충돌/이동/물리/표정/Dissolve/디버프
-         ├ OnRep_Dead()   ← 베이스에서 수동 호출
-         │    └ override(ADRCharacter::OnRep_Dead): PlayDeathMontage_Internal()
-         │         └ AnimInstance->Montage_Play(DeathMontages[DeathMontageIndex])
-         └ OnDeathDelegate.Broadcast(this)
-    └ (override 추가) DeathMontageIndex 결정 (서버)
-                       Mesh->VisibilityBasedAnimTickOption = AlwaysTickPoseAndRefreshBones
-
-[Remote Client] — 두 경로가 거의 동시에 들어옴, bDeathMontagePlayed로 중복 차단
-  경로 ①: MulticastHandleDeath_Implementation 도착
-    └ 동일한 흐름. bDead=true 직접 세팅, OnRep_Dead 수동 호출 → 몽타주 재생
-  경로 ②: bDead 리플리케이션 도착 (ReplicatedUsing)
-    └ OnRep_Dead 자동 호출 → bDeathMontagePlayed가 이미 true → no-op
-```
-
-### 2.3 왜 두 경로를 모두 두는가
-1. **Multicast 경로**: 모든 정상 케이스 처리. 가장 빠름.
-2. **RepNotify 경로(안전망)**: Relevancy 손실 후 회복, 늦은 조인, RPC drop, Channel close 같은 코너 케이스에서 `bDead` 상태를 일관되게 유지. `bDeathMontagePlayed` 플래그로 중복 호출 무해화.
+> Before Tonemapping을 쓰는 이유: Emissive로 색을 강하게 줄 때 톤매퍼가 적용되어 자연스러운 글로우/블룸으로 이어짐. After Tonemapping은 색이 정확하지만 LDR 클램프 때문에 빛나는 느낌이 약해짐.
 
 ---
 
-## 3. C++ 구현 — 상세 코드
+## 3. 파라미터 정의
 
-> 모든 코드는 그대로 붙여넣을 수 있도록 작성. 주석은 한국어 그대로 유지.
+머티리얼 그래프 빈 공간에 우클릭 → 검색 `Vector Parameter` / `Scalar Parameter`로 추가.
+**이름 정확히 일치 필수** (인스턴스 매칭됨).
 
-### 3.1 `Source/DaeRune/Public/Character/DRCharacterBase.h`
-
-#### 변경 ①: `bDead` 필드 (line 110-112)
-**기존**:
-```cpp
-protected:
-    // 사망 상태
-    bool bDead = false;
-```
-**변경 후**:
-```cpp
-public:
-    // 사망 상태 (서버에서 MulticastHandleDeath로 변경, OnRep_Dead로 클라 동기화)
-    UPROPERTY(ReplicatedUsing = OnRep_Dead, BlueprintReadOnly, Category = "Combat|Death")
-    bool bDead = false;
-
-    UFUNCTION()
-    virtual void OnRep_Dead();
-```
-
-> 접근 제어자 변경(public)으로 한 단계 노출. `bDead`를 외부에서 변경하는 코드는 없으므로 안전.
-
-#### 변경 ②: `OnRep_Stunned`/`OnRep_Burned` 선언 옆에 추가
-이미 `OnRep_Stunned`, `OnRep_Burned`가 line 78-82에 있음. `OnRep_Dead`는 `bDead` 선언 바로 아래에 둠(위 변경 ①에 포함).
-
-### 3.2 `Source/DaeRune/Private/Character/DRCharacterBase.cpp`
-
-#### 변경 ③: `GetLifetimeReplicatedProps`
-**기존** (line 49-57):
-```cpp
-void ADRCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-    // 디버프 상태들을 모든 클라이언트에 동기화
-    DOREPLIFETIME(ADRCharacterBase, bIsStunned);
-    DOREPLIFETIME(ADRCharacterBase, bIsBurned);
-    DOREPLIFETIME(ADRCharacterBase, bIsBeingShocked);
-}
-```
-**변경 후**:
-```cpp
-void ADRCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-    // 디버프 상태들을 모든 클라이언트에 동기화
-    DOREPLIFETIME(ADRCharacterBase, bIsStunned);
-    DOREPLIFETIME(ADRCharacterBase, bIsBurned);
-    DOREPLIFETIME(ADRCharacterBase, bIsBeingShocked);
-
-    // 사망 상태 (RepNotify 안전망)
-    DOREPLIFETIME(ADRCharacterBase, bDead);
-}
-```
-
-#### 변경 ④: `OnRep_Dead` 베이스 정의 (빈 구현)
-`OnRep_Burned` 정의(line 265-267) 바로 아래에 추가:
-```cpp
-void ADRCharacterBase::OnRep_Dead()
-{
-    // 기본 구현은 비어있음. 파생 클래스(ADRCharacter)에서 사망 애니메이션 재생.
-}
-```
-
-#### 변경 ⑤: `MulticastHandleDeath_Implementation` 끝에 수동 호출 + Mesh Tick 옵션
-**기존** (line 162-247) 핵심 부분:
-```cpp
-void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathImpulse)
-{
-    if (bDead) return;
-    bDead = true;
-    ... (기존 로직 그대로) ...
-
-    // 사망 이벤트 브로드캐스트
-    OnDeathDelegate.Broadcast(this);
-}
-```
-**변경 후** — `OnDeathDelegate.Broadcast(this);` 직전에 두 줄 삽입:
-```cpp
-void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathImpulse)
-{
-    if (bDead) return;
-    bDead = true;
-    ... (기존 로직 그대로) ...
-
-    // ★ RepNotify는 클라이언트에서만 자동 호출됨. 서버에서도 동일한 처리를 위해 수동 호출.
-    //    파생 클래스의 override가 호출되므로(virtual), ADRCharacter::OnRep_Dead가 몽타주 재생.
-    OnRep_Dead();
-
-    // ★ 사망 후 ABP가 계속 평가되도록 Mesh Tick 옵션 승격.
-    //    플레이어/적 모두 적용해도 무해(곧 소멸).
-    if (USkeletalMeshComponent* MeshComp = GetMesh())
-    {
-        MeshComp->VisibilityBasedAnimTickOption =
-            EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
-    }
-
-    // 사망 이벤트 브로드캐스트
-    OnDeathDelegate.Broadcast(this);
-}
-```
-
-> `OnRep_Dead()`는 `virtual`이므로 `ADRCharacter` 인스턴스에서는 override가 호출됨. 적 인스턴스에서는 빈 베이스 구현이 호출되어 영향 없음.
-
-### 3.3 `Source/DaeRune/Public/Character/DRCharacter.h`
-
-#### 변경 ⑥: 헤더에 포워드 선언 추가
-파일 상단의 `class UNiagaraSystem;` 인근에 추가:
-```cpp
-class UAnimMontage;
-```
-(이미 있을 가능성 높음. grep으로 확인 후 없으면 추가.)
-
-#### 변경 ⑦: 클래스 public 영역에 사망 몽타주 관련 필드/함수 추가
-`ADRCharacter` 클래스 안, "표정 컴포넌트 생성" 같은 다른 카테고리들 끝부분에 새 섹션 추가:
-```cpp
-public:
-    // ========== 사망 애니메이션 ==========
-
-    // 사망 시 재생할 몽타주들. 비어있으면 사망 몽타주 미재생(기존 동작).
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Death")
-    TArray<TObjectPtr<UAnimMontage>> DeathMontages;
-
-    // 사망 몽타주 재생 속도
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Death", meta = (ClampMin = "0.1"))
-    float DeathMontagePlayRate = 1.0f;
-
-    // 서버가 결정한 사망 몽타주 인덱스 (모든 머신에서 동일한 몽타주 재생)
-    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Combat|Death")
-    int32 DeathMontageIndex = INDEX_NONE;
-
-    // BP에서 사망 시점에 추가 연출을 붙이고 싶을 때 사용 (선택)
-    UFUNCTION(BlueprintImplementableEvent, Category = "Combat|Death", meta = (DisplayName = "On Character Died"))
-    void K2_OnCharacterDied();
-
-    /** Combat Interface / 사망 처리 override */
-    virtual void OnRep_Dead() override;
-    virtual void MulticastHandleDeath_Implementation(const FVector& DeathImpulse) override;
-
-protected:
-    // 사망 몽타주가 이미 재생되었는지 (로컬 중복 방지 — 멀티캐스트와 RepNotify가 둘 다 도착해도 1회만 재생)
-    bool bDeathMontagePlayed = false;
-
-    // 사망 몽타주 재생 실제 구현 (모든 머신에서 호출 가능)
-    virtual void PlayDeathMontage_Internal();
-```
-
-### 3.4 `Source/DaeRune/Private/Character/DRCharacter.cpp`
-
-#### 변경 ⑧: 헤더 include
-파일 상단의 include 블록에 추가(없을 경우):
-```cpp
-#include "Animation/AnimInstance.h"
-#include "Animation/AnimMontage.h"
-```
-
-#### 변경 ⑨: `GetLifetimeReplicatedProps`에 `DeathMontageIndex` 등록
-**기존**:
-```cpp
-void ADRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-    DOREPLIFETIME(ADRCharacter, bIsCarryingPart);
-    DOREPLIFETIME(ADRCharacter, CarriedPart);
-    DOREPLIFETIME(ADRCharacter, PlayerCharacterClass);
-
-    DOREPLIFETIME(ADRCharacter, bWaterPumpActive);
-    DOREPLIFETIME_CONDITION(ADRCharacter, WaterPumpBeamEndPoint, COND_SkipOwner);
-}
-```
-**변경 후** — 끝에 한 줄 추가:
-```cpp
-    DOREPLIFETIME(ADRCharacter, DeathMontageIndex);
-```
-
-#### 변경 ⑩: `MulticastHandleDeath_Implementation` override 추가
-파일 끝 또는 다른 함수 정의 근처에 추가:
-```cpp
-void ADRCharacter::MulticastHandleDeath_Implementation(const FVector& DeathImpulse)
-{
-    // 서버에서만 인덱스 결정 (Super 호출 전이어야 OnRep_Dead 수동 호출 시점에 인덱스가 채워져 있음)
-    if (HasAuthority() && DeathMontages.Num() > 0)
-    {
-        DeathMontageIndex = FMath::RandRange(0, DeathMontages.Num() - 1);
-    }
-
-    // 베이스 본체 실행: bDead=true, 충돌/이동/Dissolve/표정/디버프 정리, OnRep_Dead 수동 호출, Mesh Tick 옵션 승격
-    Super::MulticastHandleDeath_Implementation(DeathImpulse);
-
-    // 추가 BP 훅
-    K2_OnCharacterDied();
-}
-```
-
-#### 변경 ⑪: `OnRep_Dead` override
-```cpp
-void ADRCharacter::OnRep_Dead()
-{
-    Super::OnRep_Dead();
-
-    if (bDead)
-    {
-        PlayDeathMontage_Internal();
-    }
-}
-```
-
-#### 변경 ⑫: `PlayDeathMontage_Internal` 구현
-```cpp
-void ADRCharacter::PlayDeathMontage_Internal()
-{
-    // 중복 재생 방지: 멀티캐스트와 RepNotify가 둘 다 호출돼도 1회만 재생.
-    if (bDeathMontagePlayed) return;
-
-    if (DeathMontages.Num() == 0) return;
-
-    USkeletalMeshComponent* MeshComp = GetMesh();
-    if (!MeshComp) return;
-
-    UAnimInstance* AnimInst = MeshComp->GetAnimInstance();
-    if (!AnimInst) return;
-
-    // 서버 인덱스 결정이 아직 안 됐을 경우(이론상 RepNotify가 인덱스 도착보다 먼저 도착) 0번으로 폴백.
-    int32 Idx = DeathMontageIndex;
-    if (!DeathMontages.IsValidIndex(Idx))
-    {
-        Idx = 0;
-    }
-
-    UAnimMontage* Montage = DeathMontages[Idx];
-    if (!Montage) return;
-
-    // HitReact 같은 다른 몽타주가 진행 중이면 즉시 중단
-    AnimInst->StopAllMontages(0.1f);
-
-    const float PlayedLength = AnimInst->Montage_Play(Montage, DeathMontagePlayRate);
-    if (PlayedLength > 0.f)
-    {
-        bDeathMontagePlayed = true;
-    }
-}
-```
-
----
-
-## 4. Blueprint / 자산 작업 (편집기에서 수동)
-
-### 4.1 사망 몽타주 자산 준비
-- 위치: `Content/Blueprints/Character/PlayerCharacter/<Class>/Animations/AM_Death_<Class>.uasset`.
-- Slot Group: `DefaultGroup.DefaultSlot` (대상 ABP의 AnimGraph가 사용하는 슬롯과 일치).
-- Blend In: 0.1~0.25s, Blend Out: 0(또는 매우 길게).
-- 단일 Section 권장(`Default`만).
-- 임시로는 기존 캐릭터의 idle 몽타주 한 개로 동작 확인 가능.
-
-### 4.2 `BP_GardenRobot` 설정
-1. 더블클릭 열기 → Class Defaults.
-2. 검색창에 "death" 입력.
-3. **Death Montages** 배열에 `AM_Death_GardenRobot` 추가.
-4. **Death Montage Play Rate** 필요 시 조정(기본 1.0).
-
-### 4.3 `BP_VendingMachine` 설정
-- 위와 동일하게 `AM_Death_VendingMachine` 추가.
-
-### 4.4 `ABP_Gardener` (3P, `Content/Blueprints/Character/PlayerCharacter/GardenRobot/`) 수정
-1. **EventGraph 정리**
-   - `Update Animation` 그래프에서 `Try Get Pawn Owner → ICombatInterface::IsDead → bool 변수 캐싱` 노드 체인 **삭제**.
-   - 만약 다른 곳에서 `IsDead` 캐시 변수를 참조하면 그 참조부터 끊고 변수도 삭제.
-2. **AnimGraph 정리**
-   - 최종 출력 직전에 `Slot 'DefaultSlot'` 노드가 있는지 확인. 없으면 추가하고 기존 State Machine 출력을 그 슬롯의 Source로 연결.
-   - 기존 State Machine에서 "Death" 상태로의 전이/Death 상태 자체를 **삭제**(또는 ResearchOnly로 비활성). 사망은 이제 DefaultSlot이 위에서 오버라이드함.
-3. **컴파일 + 저장**.
-
-### 4.5 `ABP_VendingMachine` (3P) 수정
-- 위와 동일하게 처리.
-
-### 4.6 1P ABP는 손대지 않음
-- `ABP_FP_Gardener`, `ABP_FP_VendingMachine`은 1P 카메라용. 사망 시 1P 메시는 `SetVisibility(false)` 되고 3P로 전환(`DRCharacterBase.cpp:186-200`)이므로 1P ABP는 손댈 필요 없음.
-
-### 4.7 적 ABP는 손대지 않음 ✋
-- 적의 ABP가 현재 폴링 방식이라도 호스트에서 잘 보이므로 그대로 유지.
-
----
-
-## 5. 테스트 플랜
-
-### 5.1 PIE 시나리오 (Listen Server + Client 2)
-| # | 시나리오 | 확인 포인트 |
+### Vector Parameters (4개)
+| 이름 | Group | Default Value (R, G, B, A) |
 |---|---|---|
-| 1 | 클라이언트 A가 부패 상태에서 사망 | 호스트/클라B에서 A의 3P 사망 몽타주 재생 |
-| 2 | 클라이언트 B가 사망 | 호스트/클라A에서 B의 3P 사망 몽타주 재생 |
-| 3 | 호스트가 사망 | 클라A/B에서 호스트의 3P 사망 몽타주 재생, 호스트 본인 카메라는 3P 전환 후 사망 몽타주 재생 |
-| 4 | 사망 직전 HitReact 진행 중 | HitReact 즉시 중단, 사망 몽타주로 전환 |
-| 5 | 사망 후 3.5초 → Destroy | 메시 정상 제거, 메모리 누수 없음 |
-| 6 | 적이 사망하는 경우 | 기존과 동일하게 동작(회귀 없음) |
+| `Color_Lv2` | OutlineColors | (0.0, 1.0, 0.1, 1.0) — 초록 |
+| `Color_Lv3` | OutlineColors | (1.0, 1.0, 0.0, 1.0) — 노랑 |
+| `Color_Lv4` | OutlineColors | (1.0, 0.4, 0.0, 1.0) — 주황 |
+| `Color_Lv5` | OutlineColors | (1.0, 0.0, 0.0, 1.0) — 빨강 |
 
-### 5.2 임시 로그(작업 중에만)
-디버깅용으로 다음 위치에 한시적 로그 추가 가능:
-```cpp
-UE_LOG(LogTemp, Warning, TEXT("[Death] %s HasAuth=%d bDead=%d Idx=%d Played=%d Path=%s"),
-       *GetName(), HasAuthority(), bDead, DeathMontageIndex, bDeathMontagePlayed, TEXT(__FUNCTION__));
+> Wave1용 `Color_Lv1`은 필요 없음 (마스크에서 제외됨).
+
+### Scalar Parameters (2개)
+| 이름 | Group | Default | 설명 |
+|---|---|---|---|
+| `OutlineThickness` | OutlineSettings | 1.0 | 외곽선 두께 (픽셀 단위 배수) |
+| `OutlineIntensity` | OutlineSettings | 3.0 | Emissive 강도 (1=원색, 5+=빛남) |
+
+---
+
+## 4. 노드 그래프 (단계별 상세)
+
+### 전체 데이터 플로우
 ```
-- `ADRCharacterBase::MulticastHandleDeath_Implementation` 진입 시
-- `ADRCharacterBase::OnRep_Dead` 진입 시
-- `ADRCharacter::PlayDeathMontage_Internal`의 각 early-return 직전
-
-### 5.3 회귀 테스트
-- `Beam Spell` (`DRBeamSpell.cpp:62`)의 `OnDeathDelegate` 바인딩
-- `DRPhase1/2/3`의 `OnEnemyDeath` 호출 (적 사망에 의존)
-- `DRPlayerController::OnSpectatedPlayerDied` (관전 카메라 전환)
-- `ADREnemyAttributeSet::PostGameplayEffectExecute` → 적 사망 흐름
-
----
-
-## 6. 작업 순서 (Step-by-Step)
-
-1. **C++ 헤더 변경** — §3.1, §3.3 (5분).
-2. **C++ 구현 변경** — §3.2, §3.4 (10분).
-3. **Build** — Visual Studio에서 Development Editor 빌드. 컴파일 에러 0 확인.
-4. **에디터 실행 + Hot Reload**.
-5. **임시 몽타주 등록** — §4.1 임시판으로 일단 `AM_Death_*` 자리에 기존 임의 몽타주(예: idle pose 멈춤형)를 채워서 코드 동작 검증.
-6. **ABP의 폴링 제거** — §4.4, §4.5. 이 단계에서 사망 시 임시 몽타주가 재생됨을 PIE에서 확인.
-7. **정식 사망 몽타주 제작/등록** — 디자이너 협업 후 §4.2, §4.3.
-8. **테스트 §5.1 전체 수행**.
-9. **Dissolve 타이밍 조정 (필요 시)** — §7.
-10. **임시 로그 제거 + 커밋**.
+[① 픽셀 오프셋 계산]
+        ↓ TexelOffset (float2)
+[② 5방향 스텐실 샘플링 (Center, Up, Down, Left, Right)]
+        ↓ CenterStencil, NeighborMax (각 float, 0~5)
+[③ 외곽선 마스크 계산 (Wave1 제외)]
+        ↓ EdgeMask (float, 0 or 1)
+[④ NeighborMax → 색상 매핑]
+        ↓ SelectedColor (float3)
+[⑤ 원본 씬과 Lerp]
+        ↓ FinalColor → Emissive Color (Main Output)
+```
 
 ---
 
-## 7. Dissolve 타이밍 결정
+### ① 픽셀 오프셋 계산
 
-현재 `MulticastHandleDeath`는 `Dissolve()`를 즉시 호출(`DRCharacterBase.cpp:233`). 사망 몽타주 길이가 1.5~2초인 경우 메시가 사망 도중 사라질 수 있음.
+**목적**: 1픽셀 만큼의 UV 오프셋을 만들고, `OutlineThickness`로 스케일.
 
-**옵션**:
-- **(A) 추천**: Dissolve 시작을 타이머로 지연. 사망 몽타주 평균 길이만큼.
-  ```cpp
-  // MulticastHandleDeath에서 Dissolve() 호출을 다음으로 교체:
-  FTimerHandle DissolveDelayTimer;
-  GetWorld()->GetTimerManager().SetTimer(DissolveDelayTimer,
-      [WeakThis = TWeakObjectPtr<ADRCharacterBase>(this)]()
-      {
-          if (WeakThis.IsValid()) WeakThis->Dissolve();
-      }, 1.5f, false);
+#### 노드 A1: SceneTexture (참조용 — InvSize 얻기)
+- 노드 추가: 우클릭 → 검색 `SceneTexture`
+- Details 패널:
+  - **Scene Texture Id**: `CustomStencil`
+- 사용할 출력 핀: `InvSize` (float2) — Color/Size 핀은 미연결
+
+#### 노드 A2: Scalar Parameter `OutlineThickness`
+- §3에서 만든 파라미터를 그래프로 드래그 (또는 우클릭 → 검색 `Scalar Parameter`로 새로 만들고 이름 변경)
+
+#### 노드 A3: Multiply
+- 노드: `Multiply`
+- **A 입력** ← `SceneTexture (A1)`의 `InvSize`
+- **B 입력** ← `OutlineThickness (A2)` (float이 자동 broadcast됨)
+- **출력 (TexelOffset, float2)** — 이후 ②에서 재사용
+
+> 팁: 결과 핀 우클릭 → "Promote to Local" 대신, 선을 끌어 빈 공간에 놓고 `Reroute` 노드를 만들어 정리하면 그래프가 깔끔해짐.
+
+---
+
+### ② 5방향 스텐실 샘플링
+
+**목적**: 현재 픽셀(Center) 과 4방향 이웃(Up/Down/Left/Right)의 CustomStencil 값을 각각 읽어옴.
+
+#### 공통 노드 B0: TexCoord
+- 노드: `TextureCoordinate`
+- Details: `Coordinate Index = 0`
+- 출력 1개를 5군데에서 분기해서 사용
+
+#### B-Center: 중심 픽셀 (오프셋 없음)
+1. **SceneTexture** (Scene Texture Id = `CustomStencil`)
+   - UVs ← `TexCoord (B0)`
+2. **ComponentMask**
+   - Details: **R 체크**, GBA 해제
+   - 입력 ← SceneTexture의 `Color` 출력
+   - 출력 = **CenterStencil** (float)
+
+#### B-Right: 우측 1픽셀
+1. **Constant2Vector**: (X=1.0, Y=0.0)
+2. **Multiply**: A=Constant2Vector, B=TexelOffset (①의 A3) → DirOffset_R
+3. **Add**: A=TexCoord (B0), B=DirOffset_R → SampleUV_R
+4. **SceneTexture** (CustomStencil), UVs ← SampleUV_R
+5. **ComponentMask** (R) → **RightStencil**
+
+#### B-Left: 좌측 1픽셀
+1. **Constant2Vector**: (X=-1.0, Y=0.0)
+2~5. 동일 패턴 → **LeftStencil**
+
+#### B-Up: 위 1픽셀
+1. **Constant2Vector**: (X=0.0, Y=-1.0)  ※ UV는 Y 아래 방향이 +
+2~5. 동일 패턴 → **UpStencil**
+
+#### B-Down: 아래 1픽셀
+1. **Constant2Vector**: (X=0.0, Y=1.0)
+2~5. 동일 패턴 → **DownStencil**
+
+> **실작업 팁**: B-Right 한 세트를 만든 뒤 노드 5개를 통째로 복사(Ctrl+C / Ctrl+V) × 3, Constant2Vector 값만 변경하는 식으로 진행. 모든 SceneTexture는 `CustomStencil`, 모든 ComponentMask는 `R`만.
+
+#### 산출 변수 (다음 단계에서 사용)
+- `CenterStencil`, `UpStencil`, `DownStencil`, `LeftStencil`, `RightStencil` (각 float)
+
+---
+
+### ③ 외곽선 마스크 계산 (Wave1 제외 로직)
+
+**목적**: "외곽선을 그려야 할 픽셀"인지 0/1 마스크 산출.
+
+**판정 식**:
+```
+EdgeMask = (CenterStencil < 2) AND (NeighborMax >= 2)
+```
+- Wave 1 (stencil=1)은 "외곽선 대상 아님" 으로 취급 → 배경(0)과 같이 분류
+- Wave 2 이상 (stencil >= 2) 이 이웃에 있을 때만 외곽선
+
+#### 노드 C1: NeighborMax 계산
+- **Max** (#1): A=UpStencil, B=DownStencil → Max_UD
+- **Max** (#2): A=LeftStencil, B=RightStencil → Max_LR
+- **Max** (#3): A=Max_UD, B=Max_LR → **NeighborMax** (float, 0~5)
+
+#### 노드 C2: NeighborMask (NeighborMax >= 2)
+부동소수 비교를 안전하게 하려고 임계값 `1.5`로 잡음.
+- **Subtract**: A=NeighborMax, B=Constant `1.5` → diff (NeighborMax가 2 이상이면 양수)
+- **Saturate**: 입력=diff → satDiff (0~1로 클램프, 양수는 1로 수렴)
+- **Ceil**: 입력=satDiff → **NeighborMask** (0 또는 1)
+
+#### 노드 C3: CenterMask (CenterStencil < 2)
+- **Subtract**: A=Constant `1.5`, B=CenterStencil → diff2 (Center가 1 이하면 양수)
+- **Saturate**: 입력=diff2 → satDiff2
+- **Ceil**: 입력=satDiff2 → **CenterMask** (Center<=1이면 1, 아니면 0)
+
+#### 노드 C4: EdgeMask 결합
+- **Multiply**: A=CenterMask, B=NeighborMask → **EdgeMask** (0 or 1)
+
+> 비교 노드 대안: Material Editor의 **If** 노드를 써도 됨.
+> - `If`: A=NeighborMax, B=Constant(1.5), `A>B`=1, `A==B`=1, `A<B`=0 → NeighborMask
+> - 위 Subtract→Saturate→Ceil 트릭이 분기 노드 없이 더 단순함.
+
+---
+
+### ④ NeighborMax → 색상 매핑
+
+**목적**: NeighborMax 값(2, 3, 4, 5)에 따라 4개 색 중 하나 선택.
+
+#### 권장 방법: Custom HLSL 노드 1개
+
+##### 노드 D1: Custom
+- 노드 추가: 우클릭 → 검색 `Custom`
+- Details:
+  - **Output Type**: `CMOT Float 3`
+  - **Description**: `Pick outline color by wave level`
+- Inputs (좌측 + 버튼으로 추가. 이름·타입 정확히):
+  | Name | Type |
+  |---|---|
+  | `Level` | Float 1 |
+  | `C2` | Float 3 |
+  | `C3` | Float 3 |
+  | `C4` | Float 3 |
+  | `C5` | Float 3 |
+- Code (Details의 Code 필드에 입력):
+  ```hlsl
+  if (Level >= 4.5) return C5;
+  if (Level >= 3.5) return C4;
+  if (Level >= 2.5) return C3;
+  return C2;
   ```
-- (B) Dissolve 타임라인 자체 duration을 늘림(BP 작업).
-- (C) 현재대로 둠(빠른 페이드).
+- 연결:
+  - `Level` ← NeighborMax (③의 C1 결과)
+  - `C2` ← `Color_Lv2` VectorParameter (Vector4 → Float3 자동 변환)
+  - `C3` ← `Color_Lv3`
+  - `C4` ← `Color_Lv4`
+  - `C5` ← `Color_Lv5`
+- 출력 = **SelectedColor** (float3)
 
-본 1차 작업에선 **(C) 현재대로** 유지하고, 테스트 후 시각적으로 어색하면 (A)로 조정.
+> VectorParameter는 float4(RGBA)를 출력하지만 Custom 노드의 float3 입력에 바로 꽂으면 Alpha가 무시되며 자동 변환됨. 명시적으로 하고 싶으면 `ComponentMask(RGB)`로 감싸도 됨.
+
+#### 대체 방법: If 노드 3중첩 (Custom 안 쓰고 싶을 때)
+1. **If (#1)**: A=NeighborMax, B=Constant `4.5`
+   - `A>B` → Color_Lv5
+   - `A==B` → Color_Lv5
+   - `A<B` → If(#2) 결과
+2. **If (#2)**: A=NeighborMax, B=Constant `3.5`
+   - `A>B` / `A==B` → Color_Lv4
+   - `A<B` → If(#3) 결과
+3. **If (#3)**: A=NeighborMax, B=Constant `2.5`
+   - `A>B` / `A==B` → Color_Lv3
+   - `A<B` → Color_Lv2
+4. 최종 출력 = If(#1) 의 결과 → **SelectedColor**
+
+> Material Editor의 `If` 노드 슬롯: `A`, `B`, `A>B`, `A==B`, `A<B`. `A>B`와 `A==B`에 같은 값을 연결하면 `>=` 효과.
 
 ---
 
-## 8. 롤백 전략
+### ⑤ 최종 합성
 
-- 작업 브랜치: `feat/death-anim-event-based` (별도 분기).
-- 회귀 발생 시 단계별 롤백:
-  1. **ABP 변경만 롤백** → 폴링 복귀, C++ 변경은 안전망으로 남음.
-  2. **C++의 `MulticastHandleDeath` 끝에 추가한 두 줄 제거** → 기존 동작 완전 복원.
-  3. **헤더의 `UPROPERTY` 데코레이션만 제거** → `bDead`를 plain bool로 되돌림.
-- 최소 안전판: §3의 변경 ①(bDead 리플리케이트) + 변경 ⑤의 Mesh Tick 옵션 두 줄만 적용해도 현재 증상의 상당 부분 완화 가능성 있음.
+**목적**: 원본 씬 컬러 위에 SelectedColor를 EdgeMask에 따라 덧입힘.
+
+#### 노드 E1: 원본 씬 컬러 샘플
+- **SceneTexture** 노드
+- Details: **Scene Texture Id** = `PostProcessInput0`
+- 출력 `Color` (float4) → **ComponentMask (RGB)** 로 감싸 → **SceneColor** (float3)
+
+#### 노드 E2: 외곽선 색 × 강도
+- **Multiply**:
+  - A ← SelectedColor (④의 D1 결과, float3)
+  - B ← `OutlineIntensity` (Scalar Parameter, float이 broadcast됨)
+- 출력 = **OutlineColorBoosted** (float3)
+
+#### 노드 E3: Lerp (조건부 합성)
+- **LinearInterpolate** (Lerp) 노드:
+  - **A** ← SceneColor (E1)
+  - **B** ← OutlineColorBoosted (E2)
+  - **Alpha** ← EdgeMask (③의 C4 결과)
+- 출력 = **FinalColor** (float3)
+
+#### 노드 E4: Main Output 연결
+- `FinalColor` → **Emissive Color** 핀
+- 다른 출력 핀 (Base Color, Metallic, Roughness, …) 은 미연결 (Post Process Domain에서는 무시됨)
 
 ---
 
-## 9. 미해결 / 차후 결정 사항
-- [ ] **정식 사망 몽타주 자산** — 디자이너 확정 필요.
-- [ ] **Dissolve 타이밍** — §7 옵션 결정.
-- [ ] **사망 카메라 애니메이션과 몽타주 동기화** — `PlayDeathCameraAnimation()`(`DRCharacter.h:74`)이 BP 이벤트로 사망 카메라를 재생. 몽타주 길이와 맞지 않으면 BP에서 조정.
-- [ ] **본인 사망 시점 1P→3P 전환의 1프레임 깜빡임** — 사망 직전 1P 시점이 갑자기 3P로 바뀌어 어색할 수 있음. 카메라 트랜지션 부드럽게 처리(향후 별도 작업).
-- [ ] **`State_Corrupt` 미진입 사망 케이스** — 현재 `ADRCharacterBase::Die`는 부패 상태가 아닌 플레이어 사망에서 `MulticastHandleDeath`를 호출하지 않음(`DRCharacterBase.cpp:86-148`). 이 경로의 의도된 설계인지 확인 필요(범위 외).
+## 5. 머티리얼 컴파일 & 인스턴스 생성
+
+### 컴파일
+- 상단 툴바 **Apply** → **Save**
+- 좌하단 Stats 패널에서 에러 0 확인
+- 워닝 "Material is missing a Scene Texture node" 같은 건 정상 동작
+
+### 인스턴스 생성
+- Content Browser에서 `M_PP_WaveOutline` 우클릭 → **Create Material Instance**
+- 이름: `MI_PP_WaveOutline`
+- 더블클릭으로 열면 파라미터들이 그룹별로 정렬되어 보임:
+  - **OutlineColors** 그룹: 4개 색
+  - **OutlineSettings** 그룹: Thickness, Intensity
+- 각 파라미터 좌측 체크박스를 켜면 오버라이드 활성화 → 값 변경 가능
+
+### 권장 초기값 (인스턴스에서 오버라이드, HDR 포함)
+| 파라미터 | 값 |
+|---|---|
+| Color_Lv2 | (0.0, 1.5, 0.2) — 초록, HDR로 살짝 빛남 |
+| Color_Lv3 | (1.5, 1.5, 0.0) — 노랑, HDR |
+| Color_Lv4 | (2.0, 0.7, 0.0) — 주황, HDR |
+| Color_Lv5 | (3.0, 0.0, 0.0) — 빨강, 가장 강조 |
+| OutlineThickness | 1.5 |
+| OutlineIntensity | 3.0 |
+
+> HDR 색(>1)을 쓰면 Bloom과 어우러져 "빛나는 외곽선" 느낌이 강해짐. 톤은 디자이너 취향대로 조정.
+
+---
+
+## 6. PostProcessVolume 설정
+
+### 적용할 맵
+- `TestMap1.umap` (개발 테스트용)
+- 페이즈3가 실행되는 모든 정식 맵
+
+### 작업 순서
+1. World Outliner에서 기존 PostProcessVolume 확인 (있으면 재사용)
+2. 없으면 **Place Actors → Visual Effects → Post Process Volume** 드래그
+3. Details 패널:
+   - **Post Process Volume Settings → Infinite Extent (Unbound)** ✅ 체크
+   - **Priority**: 0 (또는 기존 볼륨보다 높게)
+4. **Rendering Features → Post Process Materials**:
+   - Array 옆 `+` 클릭 → 새 항목 추가
+   - 드롭다운에서 **Asset reference** 선택
+   - 우측 슬롯에 `MI_PP_WaveOutline` 할당
+   - Weight = 1.0 (기본)
+
+### 주의
+- **반드시 인스턴스(MI_)를 할당.** 본체 머티리얼을 넣으면 파라미터 기본값으로 그려지고 디자이너가 인스턴스에서 한 조정이 반영되지 않음.
+- 여러 PostProcessVolume이 겹치면 우선순위가 높은 것의 Material Stack이 합쳐짐. 외곽선은 거의 항상 켜져 있어야 하므로 Unbound 글로벌 볼륨에 넣는 게 안전.
+
+---
+
+## 7. 검증 체크리스트
+
+### 단일 PIE 테스트
+- [ ] 페이즈3 진입 → Wave 1 적 스폰됨 → **외곽선 없음** ✅ (의도)
+- [ ] CleanserSite 체력 50% 이하 → Wave 2 적 스폰 → **초록 외곽선**
+- [ ] 계속 진행 → Wave 3 적 스폰 → **노란 외곽선**
+- [ ] Wave 4 → **주황 외곽선**
+- [ ] Wave 5 → **빨간 외곽선**
+- [ ] Elite Boss도 현재 웨이브와 같은 색 외곽선
+- [ ] Wave 2 적이 살아있는 상태에서 Wave 3 진입 → 살아있던 적은 계속 **초록**, 새로 스폰되는 적만 **노랑** ✅
+
+### 멀티플레이 테스트 (Listen Server 2인)
+- [ ] 호스트 화면과 클라이언트 화면에서 **같은 색**으로 보임
+- [ ] 클라이언트 후입장 시에도 이미 스폰된 적의 외곽선 색 정상 (COND_InitialOnly 동작 확인)
+
+### 비페이즈3 적
+- [ ] 페이즈1/2의 적은 외곽선 없음 (`WaveOutlineLevel = 0` 기본값)
+- [ ] 튜토리얼 더미도 외곽선 없음
+
+### 시각 품질
+- [ ] 적이 벽/물체에 가려도 가려진 부분에 외곽선이 안 그려지는지 (CustomStencil은 가림 무시 — 필요하면 SceneDepth 비교 추가)
+- [ ] 두 적이 겹쳐 있을 때 서로 다른 레벨이면 경계가 어느 색으로 그려지는지 (NeighborMax가 더 큰 값 우선)
+- [ ] 카메라 거리가 멀어졌을 때 외곽선이 너무 굵게 보이지 않는지 (필요시 거리 기반 Thickness 감쇠 추가)
+
+---
+
+## 8. 트러블슈팅
+
+| 증상 | 원인 / 해결 |
+|---|---|
+| 외곽선이 전혀 안 보임 | Project Settings의 Custom Depth-Stencil Pass가 "Enabled with Stencil"인지 확인 |
+| 색은 보이는데 항상 같은 색 | NeighborMax 연결 누락 또는 Custom 노드의 If 분기 임계값 오타 |
+| Wave1 적에도 외곽선 보임 | ③의 CenterMask 또는 NeighborMask 비교 임계값이 `1.5` 아닌 `0.5`로 들어감 |
+| 클라이언트에서만 안 보임 | C++의 `OnRep_WaveOutlineLevel`이 호출되는지 로그 추가 / `ApplyWaveOutline`에서 GetMesh() null 체크 |
+| 외곽선이 깜빡임 | TAA 때문일 수 있음 — OutlineThickness를 1.5+로 올리거나 콘솔에서 `r.PostProcessAAQuality` 조정 |
+| 너무 굵음 | OutlineThickness를 0.5~1.0으로 낮춤 |
+| 너무 안 빛남 | OutlineIntensity 5~10으로 / 색 자체를 HDR(>1)로 |
+| 빨강만 보임 | Custom 노드 if 순서 오류 — `>= 4.5` 가 가장 위에 와야 함 |
+
+---
+
+## 9. 노드 총 개수 (대략)
+
+| 섹션 | 노드 수 |
+|---|---|
+| ① 픽셀 오프셋 | 3 (SceneTexture, ScalarParam, Multiply) |
+| ② 5방향 샘플링 | TexCoord 1 + (Constant2Vector + Multiply + Add + SceneTexture + ComponentMask) × 4 + Center 2 ≈ 23 |
+| ③ 마스크 계산 | Max 3 + (Subtract+Saturate+Ceil) × 2 + Constant 2 + Multiply 1 ≈ 12 |
+| ④ 색상 매핑 | Custom 1 + VectorParameter 4 = 5 |
+| ⑤ 최종 합성 | SceneTexture 1 + ComponentMask 1 + Multiply 1 + Lerp 1 + ScalarParam 1 = 5 |
+| **합계** | **약 48개** |
+
+If 노드 방식으로 ④를 구현하면 +3개. Reroute 노드로 정리하면 시각적으로는 훨씬 깔끔.

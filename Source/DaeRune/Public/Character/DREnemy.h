@@ -134,9 +134,14 @@ public:
 	bool HasPart() const { return bCarriesPart && PartMeshComponent && PartMeshComponent->IsVisible(); }
 
 	// 광폭화 시스템
-	
+
 	UPROPERTY(BlueprintReadWrite, Category = "Enemy|Phase")
 	bool bIsPhase3Enemy = false;
+
+	// 페이즈3 웨이브 외곽선 레벨 (0 = 외곽선 없음, 1~5 = 웨이브 레벨)
+	// 스폰 시 한 번만 세팅되며 살아있는 동안 변하지 않음
+	UFUNCTION(BlueprintCallable, Category = "Enemy|Phase")
+	void SetWaveOutlineLevel(uint8 NewLevel);
 
 	UPROPERTY(BlueprintReadOnly, Category = "Enemy|Combat")
 	bool bIsEnraged = false;
@@ -264,4 +269,16 @@ private:
 
 	UFUNCTION()
 	void OnRep_TargetRotation();
+
+protected:
+	// 외곽선 레벨 (초기 복제만 — 스폰 시 고정)
+	UPROPERTY(ReplicatedUsing = OnRep_WaveOutlineLevel)
+	uint8 WaveOutlineLevel = 0;
+
+	UFUNCTION()
+	void OnRep_WaveOutlineLevel();
+
+	// 메시에 Custom Depth Stencil 값을 적용 (포스트프로세스 외곽선용)
+	// 서브클래스에서 추가 메시(예: Armadillo BallFormMesh)에도 적용하려면 오버라이드
+	virtual void ApplyWaveOutline();
 };

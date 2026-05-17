@@ -172,7 +172,7 @@ protected:
 
 	TArray<FPoisonGasSpawnPointData> AllPoisonGasSpawnPoints;
 
-	float PoisonGasSpawnInterval = 10.0f;
+	float PoisonGasSpawnInterval = 4.0f;
 
 	// 엘리트 보스 스폰 위치를 찾을 때 사용할 태그
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|Config")

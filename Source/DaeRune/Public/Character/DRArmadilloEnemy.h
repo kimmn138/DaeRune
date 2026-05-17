@@ -108,6 +108,9 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount) override;
 
+	// 외곽선을 BallFormMesh에도 적용 (볼 폼일 때 기본 GetMesh()는 숨겨지므로)
+	virtual void ApplyWaveOutline() override;
+
 	// ===== Form Switching Config =====
 
 	/** Target state during form transition (true=transitioning to ball, false=transitioning to basic) */

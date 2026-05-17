@@ -135,6 +135,26 @@ void ADRArmadilloEnemy::UpdateMeshVisibility()
 	BallFormMesh->SetVisibility(bIsBallForm);
 }
 
+void ADRArmadilloEnemy::ApplyWaveOutline()
+{
+	// 기본 메시(GetMesh())에 stencil 적용
+	Super::ApplyWaveOutline();
+
+	// BallFormMesh에도 동일하게 적용 — 볼 폼일 때만 보이지만 stencil은 양쪽 다 세팅해두면
+	// SetVisibility로 가려진 쪽은 자동으로 CustomDepth 패스에서도 제외됨
+	if (!BallFormMesh) return;
+
+	if (WaveOutlineLevel > 0)
+	{
+		BallFormMesh->SetRenderCustomDepth(true);
+		BallFormMesh->SetCustomDepthStencilValue(static_cast<int32>(WaveOutlineLevel));
+	}
+	else
+	{
+		BallFormMesh->SetRenderCustomDepth(false);
+	}
+}
+
 // ===== Stun Override =====
 
 void ADRArmadilloEnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)

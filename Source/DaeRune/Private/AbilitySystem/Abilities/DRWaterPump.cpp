@@ -188,7 +188,8 @@ void UDRWaterPump::StartWaterPumpLoop()
     if (!OwnerCharacter) return;
 
     // 공통 초기화
-    DamageTickCounter = 0;
+    // 첫 틱에서 즉시 데미지가 적용되도록 카운터를 임계값 직전으로 초기화
+    DamageTickCounter = FMath::Max(0, DamageApplicationInterval - 1);
     CurrentTarget = nullptr;
     PreviousTarget = nullptr;
     CachedBeamEndPoint = FVector::ZeroVector;
@@ -353,9 +354,8 @@ void UDRWaterPump::PerformWaterPumpTick()
         {
             PreviousTarget = CurrentTarget;
             CurrentTarget = NewTarget;
-            DamageTickCounter = 0; // �� Ÿ���̸� ī���� ����
+            // 타겟 변경 시 카운터를 리셋하지 않음 (활성화 기준 주기 유지 → 스왑 익스플로잇 방지)
 
-            // ��������Ʈ �̺�Ʈ
             OnTargetChanged(PreviousTarget.Get(), CurrentTarget.Get());
         }
 
@@ -378,7 +378,7 @@ void UDRWaterPump::PerformWaterPumpTick()
         {
             PreviousTarget = CurrentTarget;
             CurrentTarget = nullptr;
-            DamageTickCounter = 0;
+            // 카운터 유지 (활성화 기준 주기)
 
             OnTargetChanged(PreviousTarget.Get(), nullptr);
         }

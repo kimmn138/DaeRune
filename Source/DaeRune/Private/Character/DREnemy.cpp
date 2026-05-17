@@ -104,11 +104,41 @@ void ADREnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 
 	DOREPLIFETIME(ADREnemy, ReplicatedTargetRotation);
 	DOREPLIFETIME(ADREnemy, bIsAggroed);
+	DOREPLIFETIME_CONDITION(ADREnemy, WaveOutlineLevel, COND_InitialOnly);
 }
 
 void ADREnemy::OnRep_TargetRotation()
 {
 	// Tick에서 보간 처리 - 여기서는 아무것도 안 함
+}
+
+void ADREnemy::SetWaveOutlineLevel(uint8 NewLevel)
+{
+	if (!HasAuthority()) return;
+
+	WaveOutlineLevel = FMath::Clamp<uint8>(NewLevel, 0, 5);
+	ApplyWaveOutline();
+}
+
+void ADREnemy::OnRep_WaveOutlineLevel()
+{
+	ApplyWaveOutline();
+}
+
+void ADREnemy::ApplyWaveOutline()
+{
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (!MeshComp) return;
+
+	if (WaveOutlineLevel > 0)
+	{
+		MeshComp->SetRenderCustomDepth(true);
+		MeshComp->SetCustomDepthStencilValue(static_cast<int32>(WaveOutlineLevel));
+	}
+	else
+	{
+		MeshComp->SetRenderCustomDepth(false);
+	}
 }
 
 void ADREnemy::PossessedBy(AController* NewController)
@@ -354,6 +384,10 @@ void ADREnemy::BeginPlay()
 
 	// 커스텀 히트박스 자동 수집 및 콜리전 설정
 	SetupHitboxComponents();
+
+	// 웨이브 외곽선 적용 (서버는 SetWaveOutlineLevel에서, 클라는 OnRep에서 호출되지만
+	// 컴포넌트 초기화 타이밍 이슈 방지용으로 BeginPlay에서도 한 번 재적용)
+	ApplyWaveOutline();
 
 	// GameBalanceConfig에서 밸런스 값 적용 (서버에서만)
 	if (HasAuthority())

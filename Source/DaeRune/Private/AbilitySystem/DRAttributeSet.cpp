@@ -46,7 +46,7 @@ void UDRAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute
 
 	if (Attribute == GetHealthAttribute())
 	{
-		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
+		NewValue = FMath::RoundToFloat(FMath::Clamp(NewValue, 0.f, GetMaxHealth()));
 	}
 	if (Attribute == GetWaterAttribute())
 	{
@@ -64,7 +64,7 @@ void UDRAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, fl
 
 	if (Attribute == GetHealthAttribute())
 	{
-		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
+		NewValue = FMath::RoundToFloat(FMath::Clamp(NewValue, 0.f, GetMaxHealth()));
 	}
 	if (Attribute == GetWaterAttribute())
 	{
@@ -87,7 +87,7 @@ void UDRAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 
 	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
-		SetHealth(FMath::Clamp(GetHealth(), 0.f, GetMaxHealth()));
+		SetHealth(FMath::RoundToFloat(FMath::Clamp(GetHealth(), 0.f, GetMaxHealth())));
 	}
 	if (Data.EvaluatedData.Attribute == GetWaterAttribute())
 	{

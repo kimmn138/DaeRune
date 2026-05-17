@@ -681,6 +681,7 @@ void UDRPhase3::SpawnMonsterByCycle()
 			{
 				SpawnedEnemy->SetLevel(CurrentWaveLevel);
 				SpawnedEnemy->bIsPhase3Enemy = true;
+				SpawnedEnemy->SetWaveOutlineLevel(static_cast<uint8>(CurrentWaveLevel));
 				if (CurrentWaveLevel >= 4)
 				{
 					SpawnedEnemy->EnrageHealthThreshold = HighLevelEnrageThreshold;
@@ -738,6 +739,7 @@ void UDRPhase3::SpawnEliteMonster(const FVector& SpawnLocation)
 		SpawnedEnemy->SetLevel(CurrentWaveLevel);
 
 		SpawnedEnemy->bIsPhase3Enemy = true;
+		SpawnedEnemy->SetWaveOutlineLevel(static_cast<uint8>(CurrentWaveLevel));
 		if (CurrentWaveLevel >= 4)
 		{
 			SpawnedEnemy->EnrageHealthThreshold = HighLevelEnrageThreshold;
@@ -1235,7 +1237,7 @@ void UDRPhase3::SpawnPoisonGasActor()
 
 		if (PoisonGas)
 		{
-			PoisonGas->SetLifeSpan(10.0f);  // 경고 3초 + 활성 7초
+			PoisonGas->SetLifeSpan(3.5f);  // 경고 3초 + 활성 0.5초
 
 			ToxicGasActors.Add(PoisonGas);
 			bAnySpawned = true;
