@@ -604,6 +604,15 @@ void ADRCharacter::OnRep_WaterPumpActive()
 
 	if (bWaterPumpActive)
 	{
+		// 빠른 토글로 OnRep이 false 분기를 건너뛰고 들어온 경우 이전 빔 누수 방지
+		if (WaterPumpThirdPersonBeam)
+		{
+			WaterPumpThirdPersonBeam->DeactivateImmediate();
+			WaterPumpThirdPersonBeam->DestroyComponent();
+			WaterPumpThirdPersonBeam = nullptr;
+		}
+		GetWorldTimerManager().ClearTimer(WaterPumpBeamUpdateTimer);
+
 		// 3P Niagara 빔 생성
 		USkeletalMeshComponent* ThirdPersonMesh = GetMesh();
 		if (WaterPumpEffectAsset && ThirdPersonMesh

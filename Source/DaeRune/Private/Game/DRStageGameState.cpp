@@ -13,6 +13,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
 #include "Components/AudioComponent.h"
+#include "Actor/DRBGMActor.h"
 
 ADRStageGameState::ADRStageGameState()
 {
@@ -301,6 +302,17 @@ void ADRStageGameState::Multicast_PlayWaveStartSound_Implementation()
 
 void ADRStageGameState::Multicast_PlayGameClearSound_Implementation()
 {
+    // BGM 정지
+    TArray<AActor*> FoundBGMActors;
+    UGameplayStatics::GetAllActorsOfClass(this, ADRBGMActor::StaticClass(), FoundBGMActors);
+    for (AActor* BGMActor : FoundBGMActors)
+    {
+        if (ADRBGMActor* BGM = Cast<ADRBGMActor>(BGMActor))
+        {
+            BGM->StopBGM(2.0f);
+        }
+    }
+
     // Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
     if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
     {
@@ -316,6 +328,17 @@ void ADRStageGameState::Multicast_PlayGameClearSound_Implementation()
 
 void ADRStageGameState::Multicast_PlayGameOverSound_Implementation()
 {
+    // BGM 정지
+    TArray<AActor*> FoundBGMActors;
+    UGameplayStatics::GetAllActorsOfClass(this, ADRBGMActor::StaticClass(), FoundBGMActors);
+    for (AActor* BGMActor : FoundBGMActors)
+    {
+        if (ADRBGMActor* BGM = Cast<ADRBGMActor>(BGMActor))
+        {
+            BGM->StopBGM(2.0f);
+        }
+    }
+
     // Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
     if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
     {

@@ -11,6 +11,7 @@ class ADRPoisonGasActor;
 class ADREnemy;
 class ADRCharacter;
 class ADRCleanserSite;
+class ADRBGMActor;
 class UNiagaraSystem;
 
 UENUM(BlueprintType)
@@ -259,6 +260,9 @@ private:
 	int32 CurrentSpawnCycleIndex = 0;
 
 	bool bEliteBossSpawned = false;
+
+	// 엘리트 보스 등장/종료 시 BGM 전환에 사용할 BGM 액터 캐시
+	TWeakObjectPtr<ADRBGMActor> CachedBGMActor;
 
 	// ========== VFX ==========
 	// 일반 적 스폰 포인트에 표시할 나이아가라 에셋

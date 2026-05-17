@@ -61,9 +61,23 @@ public:
     FGameplayAbilityTargetDataHandle MakeTargetDataHandleFromActors(AActor* TargetActor);
 
 protected:
+    virtual void EndAbility(
+        const FGameplayAbilitySpecHandle Handle,
+        const FGameplayAbilityActorInfo* ActorInfo,
+        const FGameplayAbilityActivationInfo ActivationInfo,
+        bool bReplicateEndAbility,
+        bool bWasCancelled) override;
+
     // Niagara System Asset
     UPROPERTY(EditDefaultsOnly, Category = "Effects")
     TObjectPtr<UNiagaraSystem> WaterCannonEffect;
+
+    // 채널링 중 자기 자신에게 적용되는 슬로우 GE (서버에서 적용/제거)
+    UPROPERTY(EditDefaultsOnly, Category = "Effects")
+    TSubclassOf<UGameplayEffect> SlowSelfEffectClass;
+
+    // 슬로우 GE 핸들 (Stop/EndAbility에서 제거하기 위해 보관)
+    FActiveGameplayEffectHandle ActiveSlowSelfHandle;
 
     // �߻� ���� �̸�
     UPROPERTY(EditDefaultsOnly, Category = "Effects")

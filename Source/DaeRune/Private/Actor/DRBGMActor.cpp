@@ -5,33 +5,42 @@
 #include "Sound/SoundBase.h"
 #include "Sound/SoundClass.h"
 #include "Net/UnrealNetwork.h"
-#include "GameFramework/GameStateBase.h"
+#include "Engine/AssetManager.h"
+#include "DRAssetManager.h"
+#include "Sound/DRSoundDataAsset.h"
 
 ADRBGMActor::ADRBGMActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	// 서버에서 생성되고 클라이언트에 복제됨
 	bReplicates = true;
 	bAlwaysRelevant = true;
 
-	// 루트 컴포넌트 생성
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 
-	// 오디오 컴포넌트 생성
+	// 메인 BGM (단일 트랙 또는 플레이리스트)
 	AudioComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("AudioComponent"));
 	AudioComponent->SetupAttachment(RootComponent);
 	AudioComponent->bAutoActivate = false;
-	AudioComponent->bIsUISound = true;  // 2D 사운드로 설정
-	AudioComponent->bAllowSpatialization = false;  // 공간 음향 비활성화
+	AudioComponent->bIsUISound = true;
+	AudioComponent->bAllowSpatialization = false;
 	AudioComponent->SetVolumeMultiplier(1.0f);
 
-	// BGM Sound Class 로드 및 설정 (설정창 볼륨 조절 적용)
+	// 보스 BGM 전용 (크로스페이드용 분리)
+	BossAudioComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("BossAudioComponent"));
+	BossAudioComponent->SetupAttachment(RootComponent);
+	BossAudioComponent->bAutoActivate = false;
+	BossAudioComponent->bIsUISound = true;
+	BossAudioComponent->bAllowSpatialization = false;
+	BossAudioComponent->SetVolumeMultiplier(1.0f);
+
+	// BGM Sound Class (설정창 볼륨 슬라이더 연동)
 	static ConstructorHelpers::FObjectFinder<USoundClass> BGMSoundClassFinder(
 		TEXT("/Game/Blueprints/Audio/SoundClasses/SC_BGM.SC_BGM"));
 	if (BGMSoundClassFinder.Succeeded())
 	{
 		AudioComponent->SoundClassOverride = BGMSoundClassFinder.Object;
+		BossAudioComponent->SoundClassOverride = BGMSoundClassFinder.Object;
 	}
 }
 
@@ -39,119 +48,236 @@ void ADRBGMActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME(ADRBGMActor, BGMStartServerTime);
+	DOREPLIFETIME(ADRBGMActor, CurrentTrackIndex);
+	DOREPLIFETIME(ADRBGMActor, bBossBGMActive);
 }
 
 void ADRBGMActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (bAutoPlay && BGMSound && AudioComponent)
+	LoadSoundsFromDataAsset();
+
+	// 플레이리스트 종료 시 다음 트랙 진행 (서버에서만 바인딩)
+	if (HasAuthority() && AudioComponent)
 	{
-		if (HasAuthority())
-		{
-			// 서버: BGM 시작 시간 설정 및 재생
-			PlayBGM();
-		}
-		else
-		{
-			// 클라이언트: 짧은 딜레이 후 바로 재생 (복잡한 시간 동기화 제거)
-			FTimerHandle TimerHandle;
-			GetWorld()->GetTimerManager().SetTimer(
-				TimerHandle,
-				[WeakThis = TWeakObjectPtr<ADRBGMActor>(this)]()
+		AudioComponent->OnAudioFinished.AddDynamic(this, &ADRBGMActor::OnAudioComponentFinished);
+	}
+
+	if (!bAutoPlay)
+	{
+		return;
+	}
+
+	if (HasAuthority())
+	{
+		PlayBGM();
+	}
+	else
+	{
+		// 클라: 짧은 딜레이 후 RepNotify가 아직 안 왔으면 로컬 재생
+		FTimerHandle TimerHandle;
+		GetWorld()->GetTimerManager().SetTimer(
+			TimerHandle,
+			[WeakThis = TWeakObjectPtr<ADRBGMActor>(this)]()
+			{
+				if (ADRBGMActor* StrongThis = WeakThis.Get())
 				{
-					if (ADRBGMActor* StrongThis = WeakThis.Get())
+					if (StrongThis->AudioComponent && !StrongThis->AudioComponent->IsPlaying() && !StrongThis->bBossBGMActive)
 					{
-						if (StrongThis->AudioComponent && !StrongThis->AudioComponent->IsPlaying())
+						if (StrongThis->BGMSlot == EDRBGMSlot::Stage)
 						{
-							// 단순하게 페이드인 재생
-							StrongThis->AudioComponent->SetSound(StrongThis->BGMSound);
-							StrongThis->AudioComponent->SetVolumeMultiplier(StrongThis->Volume);
-							StrongThis->AudioComponent->FadeIn(StrongThis->FadeInDuration);
+							const int32 Index = FMath::Max(0, StrongThis->CurrentTrackIndex);
+							StrongThis->PlayPlaylistTrackLocal(Index, StrongThis->FadeInDuration);
+						}
+						else
+						{
+							StrongThis->PlaySingleTrackLocal();
 						}
 					}
-				},
-				0.5f,
-				false
-			);
-		}
+				}
+			},
+			0.5f,
+			false
+		);
+	}
+}
+
+void ADRBGMActor::LoadSoundsFromDataAsset()
+{
+	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
+	if (!AssetManager) return;
+
+	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
+	if (!SoundData) return;
+
+	switch (BGMSlot)
+	{
+	case EDRBGMSlot::MainMenu: SingleTrackSound = SoundData->BGM_MainMenu; break;
+	case EDRBGMSlot::Lobby:    SingleTrackSound = SoundData->BGM_Lobby;    break;
+	case EDRBGMSlot::Tutorial: SingleTrackSound = SoundData->BGM_Tutorial; break;
+	case EDRBGMSlot::Stage:
+		StagePlaylist = SoundData->BGM_StagePlaylist;
+		BossSound = SoundData->BGM_Boss;
+		break;
+	default: break;
 	}
 }
 
 void ADRBGMActor::PlayBGM()
 {
-	if (!BGMSound)
-	{
-		return;
-	}
+	if (!HasAuthority()) return;
 
-	if (HasAuthority())
+	if (BGMSlot == EDRBGMSlot::Stage)
 	{
-		// 서버: 시작 시간 설정 (복제됨)
-		if (AGameStateBase* GS = GetWorld()->GetGameState())
-		{
-			BGMStartServerTime = GS->GetServerWorldTimeSeconds();
-		}
-		else
-		{
-			BGMStartServerTime = GetWorld()->GetTimeSeconds();
-		}
+		if (StagePlaylist.Num() == 0) return;
+		CurrentTrackIndex = 0;
+		PlayPlaylistTrackLocal(0, FadeInDuration);
 	}
-
-	// 로컬에서 재생
-	PlayBGMLocal();
+	else
+	{
+		if (!SingleTrackSound) return;
+		PlaySingleTrackLocal();
+	}
 }
 
-void ADRBGMActor::PlayBGMLocal()
+void ADRBGMActor::PlaySingleTrackLocal()
 {
-	if (!AudioComponent || !BGMSound)
-	{
-		return;
-	}
+	if (!AudioComponent || !SingleTrackSound) return;
+	if (AudioComponent->IsPlaying()) return;
 
-	// 이미 재생 중이면 스킵
-	if (AudioComponent->IsPlaying())
-	{
-		return;
-	}
-
-	AudioComponent->SetSound(BGMSound);
+	AudioComponent->SetSound(SingleTrackSound);
 	AudioComponent->SetVolumeMultiplier(Volume);
 	AudioComponent->FadeIn(FadeInDuration);
 }
 
+void ADRBGMActor::PlayPlaylistTrackLocal(int32 Index, float FadeIn)
+{
+	if (!AudioComponent) return;
+	if (!StagePlaylist.IsValidIndex(Index)) return;
+
+	USoundBase* Track = StagePlaylist[Index];
+	if (!Track) return;
+
+	// 현재 재생 중이면 페이드아웃 후 새 트랙 페이드인 (간단히 즉시 교체 + 페이드인)
+	if (AudioComponent->IsPlaying())
+	{
+		AudioComponent->FadeOut(TrackCrossfadeDuration, 0.0f);
+	}
+
+	AudioComponent->SetSound(Track);
+	AudioComponent->SetVolumeMultiplier(Volume);
+	AudioComponent->FadeIn(FadeIn);
+}
+
 void ADRBGMActor::StopBGM(float FadeOutDuration)
 {
-	if (!AudioComponent)
+	if (AudioComponent && AudioComponent->IsPlaying())
+	{
+		AudioComponent->FadeOut(FadeOutDuration, 0.0f);
+	}
+	if (BossAudioComponent && BossAudioComponent->IsPlaying())
+	{
+		BossAudioComponent->FadeOut(FadeOutDuration, 0.0f);
+	}
+
+	if (HasAuthority())
+	{
+		bBossBGMActive = false;
+	}
+}
+
+void ADRBGMActor::StartBossBGM()
+{
+	if (!HasAuthority()) return;
+	if (BGMSlot != EDRBGMSlot::Stage) return;
+	if (!BossSound) return;
+	if (bBossBGMActive) return;
+
+	bBossBGMActive = true;
+	PlayBossBGMLocal();
+}
+
+void ADRBGMActor::EndBossBGM()
+{
+	if (!HasAuthority()) return;
+	if (!bBossBGMActive) return;
+
+	bBossBGMActive = false;
+	StopBossBGMLocal();
+}
+
+void ADRBGMActor::PlayBossBGMLocal()
+{
+	if (!BossAudioComponent || !BossSound) return;
+
+	// 메인 페이드아웃
+	if (AudioComponent && AudioComponent->IsPlaying())
+	{
+		AudioComponent->FadeOut(BossCrossfadeDuration, 0.0f);
+	}
+
+	// 보스 페이드인
+	BossAudioComponent->SetSound(BossSound);
+	BossAudioComponent->SetVolumeMultiplier(Volume);
+	BossAudioComponent->FadeIn(BossCrossfadeDuration);
+}
+
+void ADRBGMActor::StopBossBGMLocal()
+{
+	if (!BossAudioComponent) return;
+
+	// 보스 페이드아웃
+	if (BossAudioComponent->IsPlaying())
+	{
+		BossAudioComponent->FadeOut(BossCrossfadeDuration, 0.0f);
+	}
+
+	// 플레이리스트 현재 인덱스 트랙을 처음부터 재생
+	if (BGMSlot == EDRBGMSlot::Stage && StagePlaylist.Num() > 0)
+	{
+		const int32 Index = FMath::Max(0, CurrentTrackIndex);
+		PlayPlaylistTrackLocal(Index, BossCrossfadeDuration);
+	}
+}
+
+void ADRBGMActor::OnAudioComponentFinished()
+{
+	// 서버에서만 호출. 클라는 RepNotify로 동기화.
+	if (!HasAuthority()) return;
+	if (BGMSlot != EDRBGMSlot::Stage) return;
+	if (bBossBGMActive) return;  // 보스 중에는 메인 페이드아웃 종료가 정상이므로 진행 안함
+	if (StagePlaylist.Num() == 0) return;
+
+	const int32 NextIndex = (CurrentTrackIndex + 1) % StagePlaylist.Num();
+	CurrentTrackIndex = NextIndex;
+	PlayPlaylistTrackLocal(NextIndex, TrackCrossfadeDuration);
+}
+
+void ADRBGMActor::OnRep_CurrentTrackIndex()
+{
+	if (BGMSlot != EDRBGMSlot::Stage) return;
+	if (bBossBGMActive) return;
+	if (!StagePlaylist.IsValidIndex(CurrentTrackIndex)) return;
+
+	// 같은 트랙이 이미 재생 중이면 스킵
+	if (AudioComponent && AudioComponent->IsPlaying() && AudioComponent->Sound == StagePlaylist[CurrentTrackIndex])
 	{
 		return;
 	}
 
-	AudioComponent->FadeOut(FadeOutDuration, 0.0f);
-
-	if (HasAuthority())
-	{
-		BGMStartServerTime = 0.0f;
-	}
+	const float FadeIn = (CurrentTrackIndex == 0 && !AudioComponent->IsPlaying()) ? FadeInDuration : TrackCrossfadeDuration;
+	PlayPlaylistTrackLocal(CurrentTrackIndex, FadeIn);
 }
 
-void ADRBGMActor::OnRep_BGMStartTime()
+void ADRBGMActor::OnRep_BossBGMActive()
 {
-	// 클라이언트: 서버에서 BGM 시작 신호가 오면 재생
-	// BeginPlay 타이머보다 이게 먼저 올 수도 있으므로 백업 역할
-	if (BGMStartServerTime > 0.0f && BGMSound && AudioComponent)
+	if (bBossBGMActive)
 	{
-		PlayBGMLocal();  // 내부에서 IsPlaying() 체크함
+		PlayBossBGMLocal();
 	}
-}
-
-float ADRBGMActor::GetBGMDuration() const
-{
-	if (!BGMSound)
+	else
 	{
-		return 0.0f;
+		StopBossBGMLocal();
 	}
-
-	return BGMSound->GetDuration();
 }

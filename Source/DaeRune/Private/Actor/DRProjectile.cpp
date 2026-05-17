@@ -15,10 +15,10 @@
 ADRProjectile::ADRProjectile()
 {
 	PrimaryActorTick.bCanEverTick = false;
-	// ¸ÖÆ¼ÇÃ·¹ÀÌ µ¿±âÈ­ È°¼ºÈ­
+	// ï¿½ï¿½Æ¼ï¿½Ã·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½È­ È°ï¿½ï¿½È­
 	bReplicates = true;
 
-	// Ãæµ¹ °¨Áö¿ë ±¸Ã¼ ÄÄÆ÷³ÍÆ® ¼³Á¤
+	// ï¿½æµ¹ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã¼ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 	Sphere = CreateDefaultSubobject<USphereComponent>("Sphere");
 	SetRootComponent(Sphere);
 	Sphere->SetCollisionObjectType(ECC_Projectile);
@@ -28,7 +28,7 @@ ADRProjectile::ADRProjectile()
 	Sphere->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Overlap);
 	Sphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-	// ¹ß»çÃ¼ ¹°¸® ÀÌµ¿ ¼³Á¤
+	// ï¿½ß»ï¿½Ã¼ ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½ ï¿½ï¿½ï¿½ï¿½
 	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>("ProjectileMovement");
 	ProjectileMovement->InitialSpeed = 550.f;
 	ProjectileMovement->MaxSpeed = 550.f;
@@ -39,26 +39,26 @@ void ADRProjectile::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	// ÀÚµ¿ ¼Ò¸ê Å¸ÀÌ¸Ó ¼³Á¤
+	// ï¿½Úµï¿½ ï¿½Ò¸ï¿½ Å¸ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½
 	SetLifeSpan(LifeSpan);
-	// ÀÌµ¿ µ¿±âÈ­ È°¼ºÈ­
+	// ï¿½Ìµï¿½ ï¿½ï¿½ï¿½ï¿½È­ È°ï¿½ï¿½È­
 	SetReplicateMovement(true);
-	// Ãæµ¹ ÀÌº¥Æ® ¹ÙÀÎµù
+	// ï¿½æµ¹ ï¿½Ìºï¿½Æ® ï¿½ï¿½ï¿½Îµï¿½
 	Sphere->OnComponentBeginOverlap.AddDynamic(this, &ADRProjectile::OnSphereOverlap);
 
-	// ºñÇà Áß ¹Ýº¹ »ç¿îµå Àç»ý
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ýºï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 	LoopingSoundComponent = UGameplayStatics::SpawnSoundAttached(LoopingSound, GetRootComponent());
 }
 
 void ADRProjectile::OnHit()
 {
-	// Ãæµ¹ ½Ã ÀÌÆåÆ® ¹× »ç¿îµå Àç»ý
+	// ï¿½æµ¹ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 	if (UWorld* World = GetWorld())
 	{
 		UGameplayStatics::PlaySoundAtLocation(World, ImpactSound, GetActorLocation(), FRotator::ZeroRotator);
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactEffect, GetActorLocation());
 	}
-	// ¹Ýº¹ »ç¿îµå Á¤¸®
+	// ï¿½Ýºï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (LoopingSoundComponent)
 	{
 		LoopingSoundComponent->Stop();
@@ -69,43 +69,44 @@ void ADRProjectile::OnHit()
 
 void ADRProjectile::Destroyed()
 {
-	// ¾×ÅÍ ÆÄ±« ½Ã »ç¿îµå ¸®¼Ò½º Á¤¸®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ä±ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ò½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (LoopingSoundComponent)
 	{
 		LoopingSoundComponent->Stop();
 		LoopingSoundComponent->DestroyComponent();
 	}
-	// Å¬¶óÀÌ¾ðÆ®¿¡¼­ ÆÄ±«µÉ ¶§ ÀÌÆåÆ® Àç»ý (¼­¹ö´Â OnHit¿¡¼­ Ã³¸®µÊ)
+	// Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½Ä±ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ OnHitï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½ï¿½ï¿½)
 	if (!bHit && !HasAuthority()) OnHit();
 	Super::Destroyed();
 }
 
 void ADRProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	// µ¥¹ÌÁö ¼Ò½º °ËÁõ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ò½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (DamageEffectParams.SourceAbilitySystemComponent == nullptr) return;
-	AActor* SourceAvatarActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor(); 
-	// ÀÚ±â ÀÚ½Å ¹«½Ã
+	AActor* SourceAvatarActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
+	if (!IsValid(SourceAvatarActor) || !IsValid(OtherActor)) return;
+	// ï¿½Ú±ï¿½ ï¿½Ú½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (SourceAvatarActor == OtherActor) return;
-	// ¾Æ±º ¹«½Ã
+	// ï¿½Æ±ï¿½ ï¿½ï¿½ï¿½ï¿½
 	if (!UDRAbilitySystemLibrary::IsNotFriend(SourceAvatarActor, OtherActor)) return;
-	// ÀÌÆåÆ® Àç»ý
+	// ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½
 	if (!bHit) OnHit();
 
-	// ¼­¹ö¿¡¼­¸¸ µ¥¹ÌÁö Ã³¸®
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 	if (HasAuthority())
 	{
 		if (UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(OtherActor))
 		{
-			// »ç¸Á ½Ã ³Ë¹é º¤ÅÍ ¼³Á¤
+			// ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ë¹ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 			const FVector DeathImpulse = GetActorForwardVector() * DamageEffectParams.DeathImpulseMagnitude; 
 			DamageEffectParams.DeathImpulse = DeathImpulse;
-			// ³Ë¹é È®·ü °è»ê ¹× Àû¿ë
+			// ï¿½Ë¹ï¿½ È®ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 			const bool bKnockback = FMath::RandRange(1, 100) < DamageEffectParams.KnockbackChance;
 			if (bKnockback)
 			{
 				FRotator Rotation = GetActorRotation();
-				// À§ÂÊÀ¸·Î ³Ë¹é
+				// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ë¹ï¿½
 				Rotation.Pitch = 45.f;
 
 				const FVector KnockbackDirection = Rotation.Vector();
@@ -113,14 +114,14 @@ void ADRProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AA
 				DamageEffectParams.KnockbackForce = KnockbackForce;
 			}
 
-			// GAS¸¦ ÅëÇÑ µ¥¹ÌÁö Àû¿ë
+			// GASï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 			DamageEffectParams.TargetAbilitySystemComponent = TargetASC; 
 			UDRAbilitySystemLibrary::ApplyDamageEffect(DamageEffectParams);
 		}
 
-		// ¼­¹ö¿¡¼­ ¹ß»çÃ¼ ÆÄ±«
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ß»ï¿½Ã¼ ï¿½Ä±ï¿½
 		Destroy();
 	}
-	// Å¬¶óÀÌ¾ðÆ®¿¡¼­´Â Å¸°Ý ÇÃ·¡±×¸¸ ¼³Á¤
+	// Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Å¸ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½×¸ï¿½ ï¿½ï¿½ï¿½ï¿½
 	else bHit = true;
 }

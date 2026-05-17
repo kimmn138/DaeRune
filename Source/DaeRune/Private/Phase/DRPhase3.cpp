@@ -12,7 +12,9 @@
 #include "AbilitySystem/DRCleanserSiteAttributeSet.h"
 #include "AbilitySystem/Data/GameBalanceConfig.h"
 #include "Actor/DRPoisonGasActor.h"
+#include "Actor/DRBGMActor.h"
 #include "Character/DRCharacter.h"
+#include "Kismet/GameplayStatics.h"
 
 // Phase3 런타임 상태를 초기화합니다.
 UDRPhase3::UDRPhase3()
@@ -79,6 +81,17 @@ void UDRPhase3::OnPhaseStart()
 		if (Site)
 		{
 			Site->MulticastStartOperatingSound();
+		}
+	}
+
+	// 엘리트 보스 BGM 전환용 BGM 액터 캐시 (월드에 1개만 있다고 가정)
+	if (UWorld* World = GameMode ? GameMode->GetWorld() : nullptr)
+	{
+		TArray<AActor*> FoundBGMActors;
+		UGameplayStatics::GetAllActorsOfClass(World, ADRBGMActor::StaticClass(), FoundBGMActors);
+		if (FoundBGMActors.Num() > 0)
+		{
+			CachedBGMActor = Cast<ADRBGMActor>(FoundBGMActors[0]);
 		}
 	}
 }
@@ -1279,16 +1292,23 @@ void UDRPhase3::RemoveToxicGas()
 	ToxicGasActors.Empty();
 }
 
-// 엘리트 보스 활성 시 적/아군 태그를 부여합니다.
+// 엘리트 보스 활성 시 보스 BGM으로 전환합니다.
 // 기존 글로벌 태그 시스템은 포효(Roar) 스킬의 범위 기반 오라 버프로 대체됨.
 void UDRPhase3::GrantEliteBossTag()
 {
+	if (ADRBGMActor* BGMActor = CachedBGMActor.Get())
+	{
+		BGMActor->StartBossBGM();
+	}
 }
 
-// 엘리트 보스 비활성 시 부여한 태그를 제거합니다.
-// 기존 글로벌 태그 시스템은 포효(Roar) 스킬의 범위 기반 오라 버프로 대체됨.
+// 엘리트 보스 비활성 시 스테이지 BGM으로 복귀합니다.
 void UDRPhase3::RemoveEliteBossTag()
 {
+	if (ADRBGMActor* BGMActor = CachedBGMActor.Get())
+	{
+		BGMActor->EndBossBGM();
+	}
 }
 
 

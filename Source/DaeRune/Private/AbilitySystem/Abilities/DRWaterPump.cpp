@@ -200,10 +200,29 @@ void UDRWaterPump::StartWaterPumpLoop()
         // GameplayCue는 서버에서만 관리 → ASC가 자동으로 클라이언트에 리플리케이트
         if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
         {
-            ASC->AddGameplayCue(
-                FDRGameplayTags::Get().GameplayCue_Skill_WaterPump,
-                FGameplayCueParameters()
-            );
+            // AddGameplayCue는 카운트 누적 방식 → 이전 Stop 누락 시 잔존하므로 먼저 제거
+            const FGameplayTag& WaterPumpCue = FDRGameplayTags::Get().GameplayCue_Skill_WaterPump;
+            ASC->RemoveGameplayCue(WaterPumpCue);
+            ASC->AddGameplayCue(WaterPumpCue, FGameplayCueParameters());
+
+            // 채널링 슬로우 GE 적용 (이전 핸들이 살아있다면 먼저 제거하여 스택 누적 방지)
+            if (SlowSelfEffectClass)
+            {
+                if (ActiveSlowSelfHandle.IsValid())
+                {
+                    ASC->RemoveActiveGameplayEffect(ActiveSlowSelfHandle);
+                    ActiveSlowSelfHandle.Invalidate();
+                }
+
+                FGameplayEffectContextHandle ContextHandle = ASC->MakeEffectContext();
+                ContextHandle.AddSourceObject(this);
+                const FGameplayEffectSpecHandle SpecHandle =
+                    ASC->MakeOutgoingSpec(SlowSelfEffectClass, GetAbilityLevel(), ContextHandle);
+                if (SpecHandle.IsValid())
+                {
+                    ActiveSlowSelfHandle = ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+                }
+            }
         }
 
         // 서버 전용 데미지 틱 타이머 (타겟 감지 + 데미지 적용)
@@ -293,6 +312,13 @@ void UDRWaterPump::StopWaterPumpLoop()
             ASC->RemoveGameplayCue(
                 FDRGameplayTags::Get().GameplayCue_Skill_WaterPump
             );
+
+            // 채널링 슬로우 GE 제거
+            if (ActiveSlowSelfHandle.IsValid())
+            {
+                ASC->RemoveActiveGameplayEffect(ActiveSlowSelfHandle);
+                ActiveSlowSelfHandle.Invalidate();
+            }
         }
 
         DamageTickCounter = 0;
@@ -423,6 +449,12 @@ return;
 return;
     }
 
+    // 직전 스폰이 정리되지 않은 경우(빠른 토글로 Stop 누락) 누수 방지
+    if (FirstPersonBeam)
+    {
+        StopBeamEffect();
+    }
+
     // 1P 빔만 생성 (IsLocallyControlled 분기에서 소유 클라이언트에서만 호출됨)
     // 3P 빔은 DRCharacter::OnRep_WaterPumpActive()에서 관리
     FirstPersonBeam = UNiagaraFunctionLibrary::SpawnSystemAttached(
@@ -511,6 +543,20 @@ void UDRWaterPump::StopBeamEffect()
         FirstPersonBeam->DestroyComponent();
         FirstPersonBeam = nullptr;
     }
+}
+
+void UDRWaterPump::EndAbility(
+    const FGameplayAbilitySpecHandle Handle,
+    const FGameplayAbilityActorInfo* ActorInfo,
+    const FGameplayAbilityActivationInfo ActivationInfo,
+    bool bReplicateEndAbility,
+    bool bWasCancelled)
+{
+    // BP의 EndAbility 이벤트가 실행되지 않는 캔슬 경로(다른 어빌리티의 강제 캔슬,
+    // 인풋 시퀀스 꼬임 등)에서도 cleanup이 보장되도록 C++에서 직접 호출
+    StopWaterPumpLoop();
+
+    Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
 bool UDRWaterPump::GetAimDirection(FVector& OutAimStart, FVector& OutAimDirection) const
