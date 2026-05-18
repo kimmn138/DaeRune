@@ -18,13 +18,16 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	FGameplayTag StartupInputTag;
 
-    // Water Cost ¼³Á¤ (ºí·çÇÁ¸°Æ®¿¡¼­ ¼³Á¤ °¡´É)
+    // Water Cost ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cost")
     float WaterCost = 0.f;
 
-    // Cost Ã¼Å© ¿À¹ö¶óÀÌµå
+    // Cost Ã¼Å© ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ìµï¿½
     virtual bool CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, FGameplayTagContainer* OptionalRelevantTags) const override;
 
-    // Cost Àû¿ë ¿À¹ö¶óÀÌµå  
+    // Cost ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ìµï¿½
     virtual void ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const override;
+
+    // ìŠ¤í‚¬ ì°¨ë‹¨ UI íŠ¸ë¦¬ê±°ë¥¼ ìœ„í•´ AbilityTags ë¥¼ ActivationOwnedTags ì— ìë™ ë¨¸ì§€
+    virtual void OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) override;
 };

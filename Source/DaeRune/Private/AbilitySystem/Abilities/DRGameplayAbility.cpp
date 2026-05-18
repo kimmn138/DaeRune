@@ -8,19 +8,19 @@
 
 bool UDRGameplayAbility::CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, FGameplayTagContainer* OptionalRelevantTags) const
 {
-    // ±âº» Cost Ã¼Å©
+    // ï¿½âº» Cost Ã¼Å©
     if (!Super::CheckCost(Handle, ActorInfo, OptionalRelevantTags))
     {
         return false;
     }
 
-    // Water Cost°¡ ¾øÀ¸¸é Åë°ú
+    // Water Costï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
     if (WaterCost <= 0.f)
     {
         return true;
     }
 
-    // AttributeSet °¡Á®¿À±â
+    // AttributeSet ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
     if (!ASC)
     {
@@ -37,23 +37,23 @@ bool UDRGameplayAbility::CheckCost(const FGameplayAbilitySpecHandle Handle, cons
     float CurrentWater = AttributeSet->GetWater();
     float CurrentHealth = AttributeSet->GetHealth();
 
-    // Water°¡ ÃæºĞÇÑ °æ¿ì
+    // Waterï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
     if (CurrentWater >= WaterCost)
     {
         return true;
     }
 
-    // Water°¡ ºÎÁ·ÇÑ °æ¿ì, Health·Î º¸Ãæ °¡´ÉÇÑÁö È®ÀÎ
+    // Waterï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½, Healthï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
     float WaterShortage = WaterCost - CurrentWater;
     float RequiredHealth = FMath::FloorToFloat(WaterShortage * 0.5f);
 
-    // Health°¡ ÃÖ¼Ò 1 ÀÌ»ó ³²À» ¼ö ÀÖ´ÂÁö È®ÀÎ
+    // Healthï¿½ï¿½ ï¿½Ö¼ï¿½ 1 ï¿½Ì»ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ö´ï¿½ï¿½ï¿½ È®ï¿½ï¿½
     return CurrentHealth > RequiredHealth;
 }
 
 void UDRGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
 {
-    // ±âº» Cost Àû¿ë
+    // ï¿½âº» Cost ï¿½ï¿½ï¿½ï¿½
     Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
 
     if (WaterCost <= 0.f || !HasAuthority(&ActivationInfo))
@@ -61,7 +61,7 @@ void UDRGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, cons
         return;
     }
 
-    // Cost GE°¡ ¼³Á¤µÇ¾î ÀÖÀ¸¸é SetByCaller·Î WaterCost Àü´Ş
+    // Cost GEï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ç¾ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ SetByCallerï¿½ï¿½ WaterCost ï¿½ï¿½ï¿½ï¿½
     if (GetCostGameplayEffect())
     {
         UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
@@ -77,6 +77,22 @@ void UDRGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, cons
 
                 ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
             }
+        }
+    }
+}
+
+void UDRGameplayAbility::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+    Super::OnGiveAbility(ActorInfo, Spec);
+
+    // ActivationOwnedTags ê°€ AbilityTags ë¥¼ ì „ë¶€ í¬í•¨í•˜ë„ë¡ ë³´ì¥.
+    // ì´ë ‡ê²Œ í•´ì•¼ owner ASC ì˜ íƒœê·¸ ì¹´ìš´íŠ¸ ì´ë²¤íŠ¸ê°€ ê³§ BlockAbilitiesWithTag ë³€í™”ì˜ íŠ¸ë¦¬ê±°ê°€ ë˜ì–´
+    // ìŠ¤í‚¬ì•„ì´ì½˜ ì°¨ë‹¨ UI ê°€ ì¦‰ì‹œ ê°±ì‹ ëœë‹¤.
+    for (const FGameplayTag& Tag : AbilityTags)
+    {
+        if (!ActivationOwnedTags.HasTagExact(Tag))
+        {
+            ActivationOwnedTags.AddTag(Tag);
         }
     }
 }

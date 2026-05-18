@@ -1160,8 +1160,8 @@ void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 		GetASC()->AbilityInputTagPressed(InputTag);
 	}
 
-	// 스킬 아이콘 UI 피드백 브로드캐스트 (로컬 컨트롤러만)
-	if (IsLocalController())
+	// 스킬 아이콘 UI 피드백 브로드캐스트 (로컬 컨트롤러만, 차단 중이면 발화 안 함)
+	if (IsLocalController() && !IsAbilityInputBlocked(InputTag))
 	{
 		if (ADRHUD* HUD = Cast<ADRHUD>(GetHUD()))
 		{
@@ -1183,8 +1183,8 @@ void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 	if (GetASC() == nullptr) return;
 	GetASC()->AbilityInputTagReleased(InputTag);
 
-	// 스킬 아이콘 UI 피드백 브로드캐스트 (로컬 컨트롤러만)
-	if (IsLocalController())
+	// 스킬 아이콘 UI 피드백 브로드캐스트 (로컬 컨트롤러만, 차단 중이면 발화 안 함)
+	if (IsLocalController() && !IsAbilityInputBlocked(InputTag))
 	{
 		if (ADRHUD* HUD = Cast<ADRHUD>(GetHUD()))
 		{
@@ -1210,6 +1210,30 @@ void ADRPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
 UDRAbilitySystemComponent* ADRPlayerController::GetASC()
 {
 	return Cast<UDRAbilitySystemComponent>(UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetPawn<APawn>()));
+}
+
+bool ADRPlayerController::IsAbilityInputBlocked(const FGameplayTag& InputTag) const
+{
+	UDRAbilitySystemComponent* ASC = const_cast<ADRPlayerController*>(this)->GetASC();
+	if (!ASC) return false;
+
+	// Carrying 중에는 모든 스킬 입력이 차단된 것으로 간주 (UI 피드백도 막음)
+	if (ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Carrying))
+	{
+		return true;
+	}
+
+	// InputTag → AbilitySpec → AbilityTag → 차단 카운터 검사
+	if (FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecByInputTag(InputTag))
+	{
+		const FGameplayTag AbilityTag = UDRAbilitySystemComponent::GetAbilityTagFromSpec(*Spec);
+		if (AbilityTag.IsValid() && ASC->IsAbilityTagBlocked(AbilityTag))
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void ADRPlayerController::ServerCheatSkipToNextPhase_Implementation()

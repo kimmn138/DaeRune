@@ -103,6 +103,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|GameplayMechanics")
 	static AActor* GetClosestCleanserSite(APawn* ControlledPawn);
 
+	// NavMesh 상에서 Asker가 Target까지 도달 가능한지 검사. Partial path는 불가로 간주.
+	// BT의 타깃 선정/검증에서 도달 불가 타깃을 거르는 용도.
+	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|AI")
+	static bool IsActorReachable(APawn* Asker, AActor* Target);
+
 	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayMechanics")
 	static bool IsNotFriend(AActor* FirstActor, AActor* SecondActor);
 

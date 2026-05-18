@@ -1,397 +1,389 @@
-# 로비 HUD/스테이지 HUD 분리 + 캐릭터별 Overlay 적용 구현 상세 계획
+# Plan — 스킬 차단(Block) 상태 시각화 (스킬아이콘 빨간색 처리)
 
-작성일: 2026-05-02  
-프로젝트: `DaeRune`  
-문서 목적: 기존 Overlay 계획을 `HUD 컨텍스트 분리(로비/스테이지)` 요구사항까지 반영하여 실행 가능한 수준으로 전면 수정
+## 0. 개요
 
----
+### 목적
+1. 특정 스킬이 활성화되어 있는 동안, 그 스킬이 차단하기로 지정한 다른 스킬들을 "차단 상태"로 표시(스킬 아이콘 빨간색)
+2. `State.Carrying` 태그가 owner에게 붙어 있는 동안에는 **모든 스킬 아이콘**을 빨간색으로 표시
+3. 차단이 풀리면 즉시 원래 색으로 복귀
 
-## 1) 요구사항 재정의
+### 예시 시나리오
+- `Abilities.GardenRobot.ClawSwipe` GA가 활성화 중일 때:
+  - 같은 캐릭터의 SkillSlot 중 다음 AbilityTag를 가진 슬롯이 빨갛게 변함
+    - `Abilities.GardenRobot.SeedCannon`
+    - `Abilities.GardenRobot.WaterPump`
+    - `State.Carrying`
+- 플레이어가 부품(Part)을 들어 `State.Carrying`이 ASC에 추가되면:
+  - GardenRobot의 모든 스킬 슬롯(ClawSwipe, WaterPump, SeedCannon 등)이 빨갛게 변함
 
-최종 요구사항은 아래 2개를 동시에 만족해야 한다.
+### 핵심 설계 결정
+- **GAS의 표준 메커니즘을 그대로 사용**한다. 즉:
+  - 각 GA의 `AbilityTags` 에 자기 식별 태그를 넣고 (이미 그렇게 되어 있음)
+  - 각 GA의 `ActivationOwnedTags` 에도 자기 식별 태그를 넣어, 활성화 동안 owner ASC에 태그가 추가되도록 한다.
+  - **"내가 활성화되면 X, Y, Z 태그를 가진 GA를 차단"** 은 GA의 `BlockAbilitiesWithTag` 에 그 태그들을 등록해 처리한다.
+- UI(WBP_SkillSlot)는 **owner ASC의 차단 카운터(BlockedAbilityTags) 변화를 구독**해서, "내 AbilityTag가 차단되어 있는가?"를 매번 다시 평가해 색을 갱신한다.
+- `State.Carrying` 은 GE 가 아닌 LooseGameplayTag로 붙고 있으므로, 동일한 UI 흐름이 자연스럽게 동작하도록 **태그 카운트 이벤트(`RegisterGameplayTagEvent`)** 도 함께 구독한다.
 
-1. 로비에서는 로비 HUD 체계로 로비 Overlay를 사용해야 한다.
-2. 스테이지에서는 스테이지 HUD 체계로 스테이지 Overlay를 사용해야 한다.
-
-추가로 기존 요청(캐릭터별 Overlay 분리)을 유지하므로, 실제 구조는 다음의 2단 분기여야 한다.
-
-1. 1차 분기: `어느 HUD 컨텍스트인가` (Lobby HUD / Stage HUD)
-2. 2차 분기: `해당 HUD 안에서 어떤 캐릭터 클래스인가` (GardenRobot / VendingMachineRobot)
-
----
-
-## 2) 현재 확인된 프로젝트 사실(로컬 코드/에셋 기준)
-
-아래는 이미 프로젝트에 존재하는 자산과 코드 기반 사실이다.
-
-1. HUD 블루프린트 존재
-- `Content/Blueprints/UI/HUD/BP_DRLobbyHUD.uasset`
-- `Content/Blueprints/UI/HUD/BP_DRStageHUD.uasset`
-- `Content/Blueprints/UI/HUD/BP_DRTutorialHUD.uasset`
-
-2. Overlay 블루프린트 존재
-- `Content/Blueprints/UI/Overlay/WBP_LobbyOverlay.uasset`
-- `Content/Blueprints/UI/Overlay/WBP_StageOverlay.uasset`
-- `Content/Blueprints/UI/Overlay/WBP_TutorialOverlay.uasset`
-- `Content/Blueprints/UI/Overlay/WBP_WaitingRoomOverlay.uasset`
-
-3. C++ HUD 베이스는 단일 클래스
-- `ADRHUD`만 존재 (`Source/DaeRune/Public/UI/HUD/DRHUD.h`)
-- 현재 `OverlayWidgetClass` 단일 프로퍼티로 `InitOverlay()`에서 바로 생성
-
-4. Overlay 초기화 호출 경로
-- `ADRCharacter::InitAbilityActorInfo()` -> `DRHUD->InitOverlay(...)`
-- `ADRPlayerController::InitOverlayForFreeRoam()` -> `DRHUD->InitOverlay(...)`
-
-5. 대기실(WaitingRoom) 전환 시 Overlay 제거 로직 존재
-- `ADRPlayerController::ClientSetWaitingRoomView_Implementation()`에서 `DRHUD->RemoveOverlay()` 호출
-
-즉, 자산 레벨에서는 로비/스테이지 분리 기반이 이미 있으나, C++ 초기화 로직은 “현재 HUD 인스턴스가 어떤 Overlay를 써야 하는지”를 더 정교하게 해석하지 않는다.
+### 작업 산출물
+1. C++ 변경
+   - `UDRAbilitySystemComponent`: 차단 상태 변경을 알리는 델리게이트 + 등록/해제 헬퍼
+   - `UOverlayWidgetController`: ASC 차단 델리게이트와 `State.Carrying` 태그 이벤트를 바인딩하고, UI로 재방송
+   - (선택) `UDRAbilitySystemLibrary`: "이 AbilityTag가 지금 차단 상태인가?" 정적 헬퍼
+2. Blueprint 변경
+   - 각 GA 블루프린트의 `ActivationOwnedTags`, `BlockAbilitiesWithTag` 설정
+   - `WBP_SkillSlot`: 차단 상태 바인딩 + 빨간색 색 전환 로직
+3. Gameplay Tag
+   - 기존 `Abilities.GardenRobot.*`, `State.Carrying` 만 사용. 신규 태그 추가 없음.
 
 ---
 
-## 3) 목표 아키텍처 (결정 완료)
+## 1. GAS 측 동작 정리 (왜 이 방식인가)
 
-## 3.1 기본 원칙
+`UGameplayAbility`는 활성화될 때 owner ASC 에 다음을 적용한다:
+- `ActivationOwnedTags` → owner의 GameplayTagContainer에 추가
+- `BlockAbilitiesWithTag` → owner의 **BlockedAbilityTags 카운터**에 추가
+- `CancelAbilitiesWithTag` → 매칭되는 다른 active ability를 즉시 취소
 
-1. HUD 컨텍스트 분리는 `HUD 클래스/블루프린트`가 책임진다.
-2. 캐릭터별 분기는 `각 HUD 내부의 캐릭터별 Overlay 매핑`으로 처리한다.
-3. 폴백은 “HUD별 기본 Overlay”를 사용한다.
+활성화가 끝나면(EndAbility) 둘 다 자동으로 빠진다. 즉 우리는 **추가 코드 없이** GAS 만으로 "ClawSwipe 활성 중에는 SeedCannon/WaterPump 가 활성화 시도 시 즉시 거부" 까지 보장된다. 우리가 해야 할 일은 두 가지:
 
-## 3.2 목표 분기 구조
-
-실행 시 Overlay 선택은 아래 순서로 결정된다.
-
-1. 현재 플레이어가 가진 HUD 인스턴스 확인
-- Lobby 맵이면 `BP_DRLobbyHUD` 인스턴스
-- Stage 맵이면 `BP_DRStageHUD` 인스턴스
-
-2. HUD 내부에서 캐릭터 클래스 확인
-- `ADRPlayerState::SelectedPlayerClass` 우선
-- 실패 시 `Pawn(ADRCharacter)::PlayerCharacterClass` 보조
-
-3. HUD별 캐릭터 매핑에서 Overlay 클래스 조회
-- 성공 시 해당 Overlay 사용
-- 실패 시 HUD별 기본 `OverlayWidgetClass` 사용
-
-이 구조면 “로비 Overlay와 스테이지 Overlay가 섞이지 않음”이 보장되고, 동시에 캐릭터별 변형도 수용 가능하다.
+1. **차단되고 있다는 사실을 UI 쪽에서 알 수 있게 노출** (`AreAbilityTagsBlocked` 호출 + 변경 시점 알림 델리게이트)
+2. `State.Carrying` 의 경우는 LooseGameplayTag이므로 GE 가 안 끼어들지만, **모든 스킬 슬롯이 본인이 "차단" 상태인지 다시 평가하도록 트리거**만 쳐 주면 된다.
 
 ---
 
-## 4) 설계 변경 상세
+## 2. C++ 작업
 
-## 4.1 ADRHUD C++ 확장
+### 2.1 `UDRAbilitySystemComponent` 확장
 
-대상 파일:
-- `Source/DaeRune/Public/UI/HUD/DRHUD.h`
-- `Source/DaeRune/Private/UI/HUD/DRHUD.cpp`
-
-### 4.1.1 신규 프로퍼티
-
-`ADRHUD`에 아래 프로퍼티를 추가한다.
-
-1. 캐릭터별 Overlay 맵
+#### Public 추가
 ```cpp
-UPROPERTY(EditAnywhere, Category = "Overlay")
-TMap<EPlayerCharacterClass, TSubclassOf<UDRUserWidget>> CharacterOverlayWidgetClasses;
+// AbilitySystem/DRAbilitySystemComponent.h
+
+// 차단된 AbilityTag 집합이 바뀔 때마다 호출 (인자 없음 — UI는 자기 AbilityTag 기준 재평가)
+DECLARE_MULTICAST_DELEGATE(FOnBlockedAbilityTagsChanged);
+
+UCLASS()
+class DAERUNE_API UDRAbilitySystemComponent : public UAbilitySystemComponent
+{
+    ...
+public:
+    /** BlockAbilitiesWithTag 카운터가 변경될 때 브로드캐스트. UI 슬롯이 자기 태그 기준으로 재평가. */
+    FOnBlockedAbilityTagsChanged OnBlockedAbilityTagsChanged;
+
+    /** ASC 외부에서 "지금 이 AbilityTag가 차단되어 있는가?" 를 묻기 위한 헬퍼 (단일 태그). */
+    bool IsAbilityTagBlocked(const FGameplayTag& AbilityTag) const;
 ```
 
-2. 캐릭터 분기 활성화 스위치
+#### Protected/내부
+- `UAbilitySystemComponent::BlockAbilitiesWithTags(const FGameplayTagContainer& Tags)` / `UnBlockAbilitiesWithTags(...)` 는 **virtual이 아니다**. 따라서 override가 안 된다.
+  대신 차단 카운터 변화를 감지하기 위해 **AbilityActorInfoSet 시점에 owner ASC의 모든 관심 태그들에 `RegisterGameplayTagEvent`** 를 건다. 단, 차단 카운터(BlockedAbilityTags)는 별도 컨테이너이므로 일반 GameplayTagEvent가 안 잡힌다.
+
+  실용적 해결: **ActivationOwnedTags 가 추가/제거되는 시점을 트리거로 삼는다.**
+  우리가 만드는 모든 "차단을 유발하는 GA" 는 자기 AbilityTag를 `ActivationOwnedTags`에도 넣는 규약을 강제하므로, owner ASC 의 그 태그 카운트가 바뀌는 순간 = BlockAbilitiesWithTag 도 같이 바뀌는 순간이다.
+
+  이 규약을 코드에서도 강제하기 위해, `UDRGameplayAbility` 의 `PostInitProperties` 또는 에디터 검증(`#if WITH_EDITOR` `IsDataValid`)에서:
+  - `AbilityTags`에 있는 태그가 `ActivationOwnedTags`에도 있는지 확인하고, 없으면 에디터 경고를 띄움.
+  - 권장: 런타임에서도 `AbilityTags`를 `ActivationOwnedTags`에 머지(머지 시점은 `OnGiveAbility` 가 안전).
+
+#### 등록 흐름 (의사 코드) — **캐릭터별 어빌리티에 자동 대응**
+
+핵심: 정적 `WatchedTags` 배열을 두지 않는다. 대신
+- **글로벌(캐릭터 무관) 태그** 만 정적으로 등록 (현재는 `State.Carrying` 만)
+- **각 GA 의 AbilityTags** 는 `AbilitiesGivenDelegate` 가 발화한 직후 부여된 어빌리티에서 자동 수집해 등록
+
+이 구조에서는 GardenRobot 이든 VendingMachine 이든 새 캐릭터든, **GA 만 잘 만들어 두면 C++ 수정 없이 모두 동작**한다.
+
 ```cpp
-UPROPERTY(EditAnywhere, Category = "Overlay")
-bool bUseCharacterSpecificOverlay = true;
+// 헤더에 추가
+protected:
+    void HandleWatchedTagChanged(const FGameplayTag Tag, int32 NewCount);
+    void RegisterAbilityTagEvents(); // AbilitiesGivenDelegate 콜백
+    TSet<FGameplayTag> RegisteredWatchedTags; // 중복 등록 방지
+
+// 구현
+void UDRAbilitySystemComponent::AbilityActorInfoSet()
+{
+    Super::AbilityActorInfoSet();
+
+    // (1) 글로벌 태그: 캐릭터 무관하게 항상 감시 대상
+    static const TArray<FGameplayTag> GlobalWatchedTags = {
+        FDRGameplayTags::Get().State_Carrying,
+        // (필요 시 캐릭터 무관 글로벌 태그를 추가)
+    };
+    for (const FGameplayTag& Tag : GlobalWatchedTags)
+    {
+        if (RegisteredWatchedTags.Contains(Tag)) continue;
+        RegisteredWatchedTags.Add(Tag);
+        RegisterGameplayTagEvent(Tag, EGameplayTagEventType::NewOrRemoved)
+            .AddUObject(this, &UDRAbilitySystemComponent::HandleWatchedTagChanged);
+    }
+
+    // (2) 어빌리티 부여 직후 자동 등록
+    //     AddCharacterAbilities 마지막에 AbilitiesGivenDelegate.Broadcast() 가 호출됨
+    AbilitiesGivenDelegate.AddUObject(this,
+        &UDRAbilitySystemComponent::RegisterAbilityTagEvents);
+}
+
+void UDRAbilitySystemComponent::RegisterAbilityTagEvents()
+{
+    // 현재 부여된 모든 어빌리티 스펙을 순회하며 AbilityTags 수집
+    for (const FGameplayAbilitySpec& Spec : GetActivatableAbilities())
+    {
+        if (!Spec.Ability) continue;
+        for (const FGameplayTag& Tag : Spec.Ability->AbilityTags)
+        {
+            if (RegisteredWatchedTags.Contains(Tag)) continue;
+            RegisteredWatchedTags.Add(Tag);
+
+            RegisterGameplayTagEvent(Tag, EGameplayTagEventType::NewOrRemoved)
+                .AddUObject(this, &UDRAbilitySystemComponent::HandleWatchedTagChanged);
+        }
+    }
+}
+
+void UDRAbilitySystemComponent::HandleWatchedTagChanged(const FGameplayTag, int32 NewCount)
+{
+    OnBlockedAbilityTagsChanged.Broadcast();
+}
+
+bool UDRAbilitySystemComponent::IsAbilityTagBlocked(const FGameplayTag& AbilityTag) const
+{
+    FGameplayTagContainer Single;
+    Single.AddTag(AbilityTag);
+    return AreAbilityTagsBlocked(Single);
+}
 ```
 
-설계 의도:
-- 같은 `ADRHUD` 기반이라도 `BP_DRLobbyHUD`와 `BP_DRStageHUD`가 서로 다른 맵 값을 가질 수 있다.
-- 결과적으로 “HUD 컨텍스트 분리 + 캐릭터 분기”가 동시에 가능하다.
+> **메모**: `AreAbilityTagsBlocked`는 `UAbilitySystemComponent`의 public 멤버다. 그 내부적으로 `BlockedAbilityTags.GetExplicitGameplayTags().HasAny(Tags)` 를 검사한다. 우리가 알림 트리거를 ActivationOwnedTags 변화로 묶었기 때문에, 같은 GA가 그 두 컨테이너에 동일 태그를 넣어 두면 `IsAbilityTagBlocked` 의 결과가 항상 최신 상태로 노출된다.
 
-### 4.1.2 신규 함수
+> **튜토리얼/동적 부여 케이스**: 튜토리얼 매니저처럼 `AbilitiesGivenDelegate` 와 별도로 어빌리티를 부여하는 경로가 있다면, 해당 경로에서도 `RegisterAbilityTagEvents()` 를 명시적으로 한 번 호출해 주거나, 부여 직후 직접 같은 등록 로직을 태워야 한다. (`UDRAbilitySystemComponent` 에 `AddToInputTagCache` 가 이미 있는 것처럼, `RegisterAbilityTagEvents` 도 외부에서 호출 가능한 public 헬퍼로 두는 것을 권장.)
 
-1. 캐릭터 클래스 해석
+#### 왜 AbilityTag 인가 (InputTag 안 쓰는 이유)
+- **GAS 의 차단 메커니즘 자체가 AbilityTag 기반**: `BlockAbilitiesWithTag` / `AreAbilityTagsBlocked` 모두 AbilityTag만 본다. InputTag 로는 GAS 차단을 표현 못 한다.
+- **InputTag 는 너무 거칠다**: LMB/RMB/Q/E 4종뿐이라 캐릭터마다 같은 키에 다른 스킬이 들어간다. "ClawSwipe 가 SeedCannon 을 차단" 같은 정밀 정책이 표현되지 않고 "LMB가 RMB 차단" 으로 뭉뚱그려진다.
+- **차후 확장에 막힌다**: 같은 InputTag 에 두 스킬이 매핑되거나, 새 입력 패턴이 들어오면 매핑이 깨진다.
+
+UI(WBP_SkillSlot) 가 본인을 식별하는 키는 `FDRAbilityInfo.AbilityTag` 이므로, 캐릭터가 바뀌어 스킬아이콘 위젯 클래스가 교체돼도(`OnSkillIconClassChanged` 경로) 본인 AbilityTag 로 `IsAbilityBlockedNow` 만 물어보면 동일하게 동작한다.
+
+#### `State.Carrying` 의 특수성
+- `State.Carrying`은 GE 가 아니라 `AddLooseGameplayTag` 로 추가된다 (`DRCleanserPart.cpp:99`, `DRCharacter.cpp:289`).
+- `RegisterGameplayTagEvent` 는 LooseGameplayTag 변경도 동일하게 잡아 준다(`AddLooseGameplayTag`는 내부적으로 GameplayTagCountContainer 를 거치므로).
+- 따라서 글로벌 WatchedTags 에 `State.Carrying` 만 포함해 두면 UI는 자동으로 갱신된다.
+- 단, "모든 스킬을 빨갛게" 하기 위한 차단 로직은 다음 절(2.2)에서 처리한다.
+
+### 2.2 "Carrying 중 전부 차단" 의 단일 진입점
+
+두 가지 후보:
+
+**(A) GA 측에서 처리 (권장)**
+- 모든 플레이어 사용 GA의 `ActivationBlockedTags` 또는 `SourceBlockedTags` 에 `State.Carrying` 을 추가.
+- 효과: Carrying 중에는 어떤 GA도 활성화 안 됨. (이미 게임 동작상 이렇게 되어 있다고 함.)
+- UI 측에서는 **WBP_SkillSlot 이 본인 평가 시 "owner ASC 가 State.Carrying을 가지면 무조건 빨강"** 으로 처리.
+
+**(B) 가상의 "MasterBlock" GE 또는 BlockAbilitiesWithTag 로 일괄 차단**
+- 별도 GA(예: `GA_CarryingBlocker`)를 만들어 Carrying 시작 시 자동 활성화, 종료 시 자동 종료. 그 GA의 `BlockAbilitiesWithTag` 에 모든 스킬 AbilityTag 를 등록.
+- 장점: UI가 일반 차단 로직만 보면 된다(특수 케이스 분기 불필요).
+- 단점: 운용 GA 가 늘어남.
+
+**채택**: 본 계획은 (A) 를 채택. UI 쪽 분기 한 줄이면 충분하고, 실제 게임 로직(activation block)은 이미 동작하는 상태이므로 변경 폭이 작다.
+
+### 2.3 `UOverlayWidgetController` 연동
+
+`OverlayWidgetController.h` 에 다음 추가:
 ```cpp
-bool ResolvePlayerCharacterClass(APlayerState* PS, APlayerController* PC, EPlayerCharacterClass& OutClass) const;
+// 한 슬롯이 자기 차단 상태를 재평가해야 함을 알리는 신호 (인자 없음)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAbilityBlockStateDirtySignature);
+
+UPROPERTY(BlueprintAssignable, Category = "GAS|SkillIcon")
+FOnAbilityBlockStateDirtySignature OnAbilityBlockStateDirty;
+
+UFUNCTION(BlueprintPure, Category = "GAS|SkillIcon")
+bool IsAbilityBlockedNow(FGameplayTag AbilityTag) const;
 ```
 
-2. 최종 Overlay 클래스 해석
+`OverlayWidgetController.cpp`:
 ```cpp
-TSubclassOf<UDRUserWidget> ResolveOverlayWidgetClass(APlayerState* PS, APlayerController* PC) const;
+void UOverlayWidgetController::BindCallbacksToDependencies()
+{
+    Super::BindCallbacksToDependencies();
+    ...
+    if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(AbilitySystemComponent))
+    {
+        DRASC->OnBlockedAbilityTagsChanged.AddUObject(this,
+            &UOverlayWidgetController::HandleBlockedTagsChanged);
+    }
+}
+
+void UOverlayWidgetController::HandleBlockedTagsChanged()
+{
+    OnAbilityBlockStateDirty.Broadcast(); // 모든 슬롯 위젯이 알아서 재평가
+}
+
+bool UOverlayWidgetController::IsAbilityBlockedNow(FGameplayTag AbilityTag) const
+{
+    if (!AbilitySystemComponent) return false;
+
+    const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+
+    // Carrying 중에는 모든 슬롯 차단으로 간주
+    if (AbilitySystemComponent->HasMatchingGameplayTag(Tags.State_Carrying))
+    {
+        return true;
+    }
+
+    // 일반 차단 카운터 검사
+    FGameplayTagContainer Single;
+    Single.AddTag(AbilityTag);
+    return AbilitySystemComponent->AreAbilityTagsBlocked(Single);
+}
 ```
 
-### 4.1.3 해석 규칙(고정)
-
-`ResolveOverlayWidgetClass()`는 반드시 아래 순서로 동작한다.
-
-1. `bUseCharacterSpecificOverlay == true`일 때 캐릭터 클래스 해석 시도
-2. 해석 성공 + 맵 키 존재 + 값 유효 -> 해당 클래스 반환
-3. 실패 시 HUD 기본값 `OverlayWidgetClass` 반환
-4. 기본값도 null이면 `checkf`로 즉시 오류 노출
-
-### 4.1.4 InitOverlay 변경
-
-현재 `InitOverlay()`의 다음 부분:
-- `CreateWidget(..., OverlayWidgetClass)`
-
-변경 후:
-- `CreateWidget(..., ResolveOverlayWidgetClass(PS, PC))`
-
-유지할 기존 동작:
-
-1. Overlay 중복 생성 방지 (`if (OverlayWidget) return;`)
-2. `OverlayWidgetControllerClass` check
-3. `SetWidgetController` -> `BroadcastInitialValues` -> `BroadcastAbilityInfo` -> `AddToViewport` 순서
-
-### 4.1.5 로그 정책
-
-경고 로그는 아래 상황에 남긴다.
-
-1. 캐릭터 클래스 해석 실패
-2. 캐릭터 클래스는 찾았지만 맵 엔트리 없음
-3. 맵 엔트리는 있으나 클래스 값 null
-4. fallback으로 전환됨
-
-로그 키 필드:
-- HUD 이름
-- PlayerState 이름
-- 캐릭터 enum 값(int)
-- 사용된 최종 Overlay 클래스명
+`UnbindAllDelegates()` 에 `OnBlockedAbilityTagsChanged` 해제 추가.
 
 ---
 
-## 4.2 HUD 블루프린트 세팅 전략
+## 3. Blueprint 작업
 
-## 4.2.1 BP_DRLobbyHUD
+### 3.1 각 GA 설정 (Class Defaults → Tags)
 
-1. 기본 `OverlayWidgetClass` = `WBP_LobbyOverlay`
-2. `CharacterOverlayWidgetClasses`:
-- GardenRobot -> `WBP_LobbyOverlay_GardenRobot` (있으면 지정)
-- VendingMachineRobot -> `WBP_LobbyOverlay_VendingMachineRobot` (있으면 지정)
-3. 캐릭터별 UI가 아직 없으면 맵을 비우고 기본값만 사용 (로비 공통 Overlay 유지)
+대상 GA: `GA_ClawSwipe`, `GA_WaterPump`, `GA_SeedCannon`, `GA_VendingMachineBasicAttack`, `GA_VendingMachineAttackSpeedBuff`, 및 향후 추가되는 모든 캐릭터의 GA.
 
-## 4.2.2 BP_DRStageHUD
+**공통 규칙 (캐릭터 무관)**
+- 모든 GA 의 `ActivationOwnedTags` 에 자기 `AbilityTags` 와 동일한 태그를 포함시킨다. (이것이 UI 트리거의 핵심 — §2.1 참조)
+- `UDRGameplayAbility::OnGiveAbility` 에서 자동 머지하므로 BP 에서 깜빡해도 안전하지만, 명시적으로 넣어 두는 것을 권장.
 
-1. 기본 `OverlayWidgetClass` = `WBP_StageOverlay`
-2. `CharacterOverlayWidgetClasses`:
-- GardenRobot -> `WBP_StageOverlay_GardenRobot`
-- VendingMachineRobot -> `WBP_StageOverlay_VendingMachineRobot`
-3. 스테이지는 능력/자원/Phase 정보 비중이 크므로 캐릭터별 변형 우선 적용
+**GardenRobot 예시**
+| GA | AbilityTags | ActivationOwnedTags | BlockAbilitiesWithTag |
+|---|---|---|---|
+| GA_ClawSwipe | `Abilities.GardenRobot.ClawSwipe` | 동일 | `Abilities.GardenRobot.SeedCannon`, `Abilities.GardenRobot.WaterPump`, `State.Carrying` |
+| GA_WaterPump | `Abilities.GardenRobot.WaterPump` | 동일 | `Abilities.GardenRobot.ClawSwipe`, `Abilities.GardenRobot.SeedCannon`, `State.Carrying` |
+| GA_SeedCannon | `Abilities.GardenRobot.SeedCannon` | 동일 | `Abilities.GardenRobot.ClawSwipe`, `Abilities.GardenRobot.WaterPump`, `State.Carrying` |
 
-## 4.2.3 BP_DRTutorialHUD
+**VendingMachine 예시**
+| GA | AbilityTags | ActivationOwnedTags | BlockAbilitiesWithTag |
+|---|---|---|---|
+| GA_VendingMachineBasicAttack | `Abilities.VendingMachine.BasicAttack` | 동일 | `Abilities.VendingMachine.AttackSpeedBuff`, `State.Carrying` |
+| GA_VendingMachineAttackSpeedBuff | `Abilities.VendingMachine.AttackSpeedBuff` | 동일 | `Abilities.VendingMachine.BasicAttack`, `State.Carrying` |
 
-1. 이번 요구사항 범위 외
-2. 기존 `WBP_TutorialOverlay` 유지
-3. 단, C++ 공통 변경 영향 없는지 회귀 테스트는 수행
+> **정책의 본질**: "어떤 스킬이 어떤 스킬을 막는가" 는 캐릭터별로 다를 수 있으므로 GA 블루프린트의 `BlockAbilitiesWithTag` 가 단일 진실 소스(SSOT)가 된다. C++/UI 는 이 정책에 종속되지 않는다.
 
----
+체크 포인트:
+- **ActivationOwnedTags 누락 시 UI가 갱신 안 됨** (2.1 의 트리거가 이 컨테이너 변화에 의존). 누락 방지를 위해 `UDRGameplayAbility::OnGiveAbility` 에서 `AbilityTags`를 `ActivationOwnedTags`로 머지하는 보호 코드 권장.
+- **CancelAbilitiesWithTag** 도 같은 태그 목록으로 함께 채우면, 이미 활성화된 다른 GA 가 새 GA 발동 시 즉시 취소된다(스킬 차단 정책에 맞게 선택).
+- **State.Carrying 의 단일 진입점**: 모든 캐릭터의 모든 GA 의 BlockAbilitiesWithTag 에 `State.Carrying` 을 동일하게 포함시키는 것을 약속(또는 2.2 의 옵션 B 처럼 별도 BlockerGA 로 통합).
 
-## 4.3 GameMode <-> HUD 연결 검증 계획
+### 3.2 `WBP_SkillSlot` 변경
+가정: 각 슬롯은 자기 `FDRAbilityInfo`를 가지고 있고, 그 안에 `AbilityTag` 가 있음(`AbilityInfo.h:18`).
 
-블루프린트 자산:
-- `BP_DRLobbyGameMode`
-- `BP_DRStageGameMode`
+추가 변수:
+- `MyAbilityTag : FGameplayTag` (이미 AbilityInfo에서 노출되어 있다면 그것 사용)
+- `IconImage : Image` (스킬 아이콘 이미지 위젯 참조)
+- `NormalColor : LinearColor` (예: 1,1,1,1)
+- `BlockedColor : LinearColor` (예: 1, 0.15, 0.15, 1)
 
-검증 항목:
+추가 함수: `RefreshBlockedState`
+```
+function RefreshBlockedState()
+    HUD = GetOwningPlayer().GetHUD() as ADRHUD
+    WC  = HUD.GetOverlayWidgetController(...)
+    bBlocked = WC.IsAbilityBlockedNow(MyAbilityTag)
+    if bBlocked:
+        IconImage.SetColorAndOpacity(BlockedColor)
+        // 선택: 호버 비활성, 클릭 비활성 등
+    else:
+        IconImage.SetColorAndOpacity(NormalColor)
+```
 
-1. `BP_DRLobbyGameMode`의 `HUDClass == BP_DRLobbyHUD`
-2. `BP_DRStageGameMode`의 `HUDClass == BP_DRStageHUD`
-3. Stage/Lobby 맵 World Settings 또는 GameMode Override가 위 BP를 참조하는지 확인
+이벤트 바인딩 (Construct/Initialize 시):
+```
+WC.OnAbilityBlockStateDirty.AddDynamic(self, RefreshBlockedState)
+RefreshBlockedState()   // 초기 1회
+```
 
-중요:
-- 코드 수정만으로는 적용되지 않으며, 맵/게임모드 세팅이 정확해야 컨텍스트 분리가 실제로 동작한다.
+Destruct 시 `RemoveDynamic` 으로 정리.
 
----
-
-## 4.4 상태별 Overlay 정책(명시)
-
-아래는 상태별로 Overlay가 무엇이어야 하는지 고정 정책이다.
-
-1. Lobby WaitingRoom
-- Gameplay Overlay 없음
-- WaitingRoom UI(`UDRWaitingRoomWidget`) 중심
-- 필요 시 `WBP_WaitingRoomOverlay`는 별도 계층으로 취급
-
-2. Lobby FreeRoam
-- `BP_DRLobbyHUD` 기반 Overlay 생성
-- 캐릭터 분기 활성 시 로비용 캐릭터별 Overlay 사용
-
-3. Stage InGame
-- `BP_DRStageHUD` 기반 Overlay 생성
-- 캐릭터 분기 활성 시 스테이지용 캐릭터별 Overlay 사용
-
-4. Tutorial
-- 기존 튜토리얼 HUD/Overlay 유지
-
----
-
-## 5) 구현 절차 (세부 단계)
-
-### Step 1. C++ HUD 확장
-
-1. `DRHUD.h`에 `CharacterOverlayWidgetClasses`, `bUseCharacterSpecificOverlay` 추가
-2. `ResolvePlayerCharacterClass`, `ResolveOverlayWidgetClass` 선언 추가
-3. `DRHUD.cpp`에 구현
-4. `InitOverlay()`를 해석 함수 기반으로 교체
-5. 로그 추가
-
-완료 기준:
-- 컴파일 성공
-- 기존 단일 Overlay 경로(fallback) 동작 유지
-
-### Step 2. HUD BP별 값 세팅
-
-1. `BP_DRLobbyHUD` 기본 Overlay = `WBP_LobbyOverlay`
-2. `BP_DRStageHUD` 기본 Overlay = `WBP_StageOverlay`
-3. 필요 시 캐릭터별 Overlay BP 생성 후 맵 입력
-
-완료 기준:
-- Lobby/Stage에서 서로 다른 기본 Overlay가 표시됨
-
-### Step 3. GameMode/HUD 연결 검증
-
-1. `BP_DRLobbyGameMode`의 HUDClass 점검
-2. `BP_DRStageGameMode`의 HUDClass 점검
-3. LobbyMap/Stage1 맵 오버라이드 점검
-
-완료 기준:
-- 맵 전환 시 HUD 인스턴스 타입이 의도대로 바뀜
-
-### Step 4. 전환 시나리오 점검
-
-1. WaitingRoom 진입 시 Overlay 제거 유지
-2. FreeRoam 진입 시 LobbyOverlay 생성
-3. Stage 이동 후 StageOverlay 생성
-4. ReturnToLobby 후 다시 LobbyOverlay 생성
-
-완료 기준:
-- 전환 과정에서 Overlay 혼선/중복/누락 없음
-
-### Step 5. 캐릭터별 Overlay 검증
-
-1. GardenRobot 로비/스테이지 각각 UI 확인
-2. VendingMachineRobot 로비/스테이지 각각 UI 확인
-3. 누락 시 fallback + 로그 확인
-
-완료 기준:
-- 클래스별 UI 분기 확인 + 안전한 폴백 확인
+쿨다운 색과 충돌 주의:
+- 기존 쿨다운 오버레이(회색/반투명)와 빨강이 동시에 들어갈 수 있다. 정책 명확화:
+  - 권장: **차단 빨강이 쿨다운보다 우선** (Z order 또는 색 합성). 차단 중에는 쿨다운 표시를 숨기거나, 빨강 틴트만 노출.
+- 입력 비활성:
+  - 클릭/누름으로 발동하는 슬롯이면 `IsAbilityBlockedNow == true` 일 때 OnClicked 무시.
 
 ---
 
-## 6) 테스트 매트릭스 (상세)
+## 4. 태그 정합성 점검 (필수)
 
-## 6.1 컨텍스트 분리 테스트
-
-1. LobbyMap 접속
-- 기대 HUD: `BP_DRLobbyHUD`
-- 기대 Overlay: 로비 계열(`WBP_LobbyOverlay*`)
-
-2. Stage1 이동
-- 기대 HUD: `BP_DRStageHUD`
-- 기대 Overlay: 스테이지 계열(`WBP_StageOverlay*`)
-
-3. Stage 종료 후 Lobby 복귀
-- 기대 HUD: 다시 `BP_DRLobbyHUD`
-- 기대 Overlay: 로비 계열 재생성
-
-## 6.2 캐릭터 분기 테스트
-
-1. GardenRobot
-- LobbyFreeRoam: 로비 Garden Overlay
-- Stage: 스테이지 Garden Overlay
-
-2. VendingMachineRobot
-- LobbyFreeRoam: 로비 Vending Overlay
-- Stage: 스테이지 Vending Overlay
-
-## 6.3 상태 전환 테스트
-
-1. WaitingRoom -> Transitioning -> FreeRoam
-- 기대: WaitingRoom에서 Overlay 없음, FreeRoam에서 로비 Overlay 생성
-
-2. Spectating 시작/종료
-- 기대: `UpdateOverlayForSpectating()` 호출 시 크래시/이벤트 누수 없음
-
-3. Seamless Travel
-- 기대: 캐릭터 선택값 유지 + 해당 컨텍스트 Overlay 생성
-
-## 6.4 폴백/오류 테스트
-
-1. 캐릭터 맵 엔트리 제거
-- 기대: HUD 기본 Overlay로 폴백
-- 기대: Warning 로그 출력
-
-2. HUD 기본 Overlay도 null
-- 기대: checkf로 즉시 실패(설정 오류 조기 발견)
-
-## 6.5 멀티플레이 테스트
-
-1. Listen Server Host(Garden), Client(Vending)
-- Host 로컬: 본인 클래스 + 현재 컨텍스트 Overlay
-- Client 로컬: 본인 클래스 + 현재 컨텍스트 Overlay
-- 서로의 UI가 섞이지 않음
-
-2. 로비에서 클래스 변경 후 FreeRoam/Stage 진입
-- 기대: 최신 선택 클래스 기준 Overlay 반영
+- `State.Carrying` 은 이미 정의되어 있으며(`DRGameplayTags.h:36`) LooseGameplayTag 로 동작 중이다.
+- `Abilities.GardenRobot.ClawSwipe/WaterPump/SeedCannon` 모두 이미 정의되어 있다(`DRGameplayTags.h:94-96`). 신규 태그 추가 없음.
 
 ---
 
-## 7) 리스크 및 대응
+## 5. 구현 순서 (체크리스트)
 
-### 리스크 1: HUDClass 세팅 불일치
-
-증상:
-- Lobby인데 StageOverlay가 뜨거나 그 반대
-
-대응:
-1. GameMode BP HUDClass 점검 체크리스트 필수화
-2. PIE 시작 로그에 현재 HUD 클래스명 출력
-
-### 리스크 2: OverlayWidgetController의 Stage 의존 로직
-
-증상:
-- LobbyOverlay에서 Stage용 delegate/데이터 접근 시 노이즈 발생 가능
-
-대응:
-1. 현재 코드도 null-check 기반이라 치명도는 낮음
-2. 필요 시 `OverlayWidgetController`를 Lobby/Stage 파생으로 분리하는 2차 개선 태스크 등록
-
-### 리스크 3: 캐릭터별 Overlay 자산 미완성
-
-증상:
-- 일부 클래스만 분기되고 일부는 공통 UI 표시
-
-대응:
-1. 의도적으로 fallback 허용
-2. 누락 로그로 빠르게 식별
+1. [ ] `UDRGameplayAbility::OnGiveAbility` 오버라이드: `AbilityTags` 의 모든 태그를 `ActivationOwnedTags` 에 머지 (방어 코드)
+2. [ ] `UDRAbilitySystemComponent`
+   - [ ] `OnBlockedAbilityTagsChanged` 델리게이트 추가
+   - [ ] `IsAbilityTagBlocked` 헬퍼 추가
+   - [ ] `AbilityActorInfoSet` 에서 `WatchedTags` 에 대해 `RegisterGameplayTagEvent` 바인딩
+3. [ ] `UOverlayWidgetController`
+   - [ ] `OnAbilityBlockStateDirty` 델리게이트 추가
+   - [ ] `IsAbilityBlockedNow(AbilityTag)` BlueprintPure 추가 (Carrying 우선 분기 포함)
+   - [ ] `BindCallbacksToDependencies` 에서 ASC 델리게이트 구독
+   - [ ] `UnbindAllDelegates` 에서 해제
+4. [ ] GA 블루프린트들 (`GA_ClawSwipe`, `GA_WaterPump`, `GA_SeedCannon`, ...)
+   - [ ] `ActivationOwnedTags` 에 자기 AbilityTag 추가
+   - [ ] `BlockAbilitiesWithTag` 에 정책에 맞는 차단 대상 태그 등록
+5. [ ] `WBP_SkillSlot`
+   - [ ] `IconImage`, `NormalColor`, `BlockedColor` 변수/디자이너 노출
+   - [ ] `RefreshBlockedState` 함수 구현
+   - [ ] `OnAbilityBlockStateDirty` 구독 + 초기 1회 호출
+   - [ ] (선택) 차단 중 클릭/입력 무시
+   - [ ] (선택) 쿨다운 시각화와의 우선순위 정리
+6. [ ] 테스트
+   - [ ] PIE: ClawSwipe 발동 → SeedCannon/WaterPump 슬롯이 즉시 빨강 → ClawSwipe 종료 시 원복
+   - [ ] PIE: 부품 픽업으로 `State.Carrying` 추가 → 모든 슬롯 빨강 → 부품 설치/드롭으로 원복
+   - [ ] 멀티플레이(리슨 서버 + 클라 1): 두 클라이언트 모두 정상 색 전환
+   - [ ] 쿨다운과 동시에 차단 발생 시 색 충돌 없음
 
 ---
 
-## 8) 롤백 계획
+## 6. 멀티플레이/네트워크 고려사항
 
-문제 발생 시 즉시 복구 절차:
-
-1. `BP_DRLobbyHUD`, `BP_DRStageHUD`의 `CharacterOverlayWidgetClasses`를 비움
-2. 각 HUD의 기본 `OverlayWidgetClass`만 사용
-3. 필요하면 `bUseCharacterSpecificOverlay = false`로 강제
-
-이 롤백은 코드 재배포 없이 BP 값만으로 가능하게 설계한다.
-
----
-
-## 9) 완료 체크리스트
-
-1. `DRHUD` C++에 캐릭터별 Overlay 맵/해석 함수가 추가되었는가
-2. `InitOverlay()`가 `ResolveOverlayWidgetClass()`를 사용하도록 변경되었는가
-3. `BP_DRLobbyHUD` 기본 Overlay가 로비 계열로 설정되었는가
-4. `BP_DRStageHUD` 기본 Overlay가 스테이지 계열로 설정되었는가
-5. Lobby/Stage GameMode HUDClass 연결이 올바른가
-6. WaitingRoom/FreeRoam/Stage/복귀 시 Overlay 정책이 모두 맞는가
-7. 캐릭터별 분기 성공 + 누락 폴백 로그 확인이 되었는가
-8. 멀티플레이 Host/Client에서 로컬 Overlay가 각각 올바른가
+- `BlockAbilitiesWithTag` 는 활성화 시 owner ASC 양측(서버/소유 클라)에서 동일 카운터로 동작 — 별도 RPC 불필요.
+- `ActivationOwnedTags` 도 양측에 적용 → `RegisterGameplayTagEvent` 가 양측에서 발화 → 양측 UI 모두 갱신.
+- `State.Carrying` 의 LooseGameplayTag 적용 경로:
+  - 서버: `DRCleanserPart.cpp:99` 에서 `AddLooseGameplayTag` (replicated 여부 확인 필요).
+  - 클라이언트: LooseGameplayTag는 기본적으로 **복제되지 않는다**. 해결책:
+    - (1) `AddReplicatedLooseGameplayTag` / `RemoveReplicatedLooseGameplayTag` 사용으로 전환 — UI가 정확히 동기되어 안전. **권장**.
+    - (2) 클라이언트에서도 `OnRep_CarriedPart` / `OnRep_bIsCarryingPart` 에서 같은 LooseGameplayTag 를 직접 추가/제거 (현재 코드가 이미 비슷한 RepNotify를 가짐). 이 경로를 유지한다면 RepNotify 안에서 ASC 의 LooseGameplayTag 도 미러링되는지 점검 필요.
+- UI 갱신은 모두 owning client 기준이므로, 위의 동기화만 보장되면 추가 RPC는 필요 없다.
 
 ---
 
-## 10) 최종 요약
+## 7. 확장 시 주의 (새 캐릭터 / 새 GA 추가)
 
-수정된 계획의 핵심은 “캐릭터 분기” 이전에 반드시 “HUD 컨텍스트 분리(로비 HUD vs 스테이지 HUD)”를 먼저 고정하는 것이다.  
-즉, `BP_DRLobbyHUD`는 로비 Overlay 계열만, `BP_DRStageHUD`는 스테이지 Overlay 계열만 책임지게 하고, 그 안에서 캐릭터별 Overlay 분기를 적용한다.  
-이렇게 하면 요구사항인 “로비는 로비 오버레이, 스테이지는 스테이지 오버레이”가 구조적으로 보장되며, 동시에 캐릭터별 UI 확장도 안전하게 달성할 수 있다.
+§2.1 의 동적 등록 구조 덕분에 **C++ 변경 없이** 새 캐릭터/스킬을 추가할 수 있다. 새 GA 를 만들 때 체크할 항목은 BP 측뿐이다:
+
+- [ ] `AbilityTags` 설정 (예: `Abilities.<Character>.<Skill>`)
+- [ ] `ActivationOwnedTags` 에 동일 태그 포함 (자동 머지 코드가 보호하지만 명시 권장)
+- [ ] `BlockAbilitiesWithTag` 에 차단 정책 명시 (해당 캐릭터의 같이 못 쓰는 스킬 태그 + `State.Carrying`)
+- [ ] (선택) `CancelAbilitiesWithTag` 에 동일 정책 적용해 활성 중 어빌리티도 강제 종료
+
+새 캐릭터 클래스를 추가할 때:
+- [ ] `FDRGameplayTags` 에 신규 AbilityTag 정의 (`InitializeNativeGameplayTags`)
+- [ ] `CharacterClassInfo` 의 StartupAbilities 에 GA 등록
+- [ ] `AbilityInfo` 데이터 에셋에 `FDRAbilityInfo` 항목 추가 (UI 슬롯이 AbilityTag → Icon 매핑 시 사용)
+
+> 동적 부여 경로(예: 튜토리얼)는 `RegisterAbilityTagEvents()` 를 한 번 호출하거나, 부여 직후 자동 호출되도록 헬퍼 안에서 트리거를 박아 두면 자동 대응된다.
+
+---
+
+## 8. 리스크 & 대안
+
+| 리스크 | 대응 |
+|---|---|
+| ActivationOwnedTags 누락으로 UI 가 갱신 안 됨 | `OnGiveAbility` 에서 AbilityTags → ActivationOwnedTags 자동 머지 |
+| LooseGameplayTag 복제 누락으로 클라 UI 가 Carrying 인식 못함 | `AddReplicatedLooseGameplayTag` 로 전환 |
+| 쿨다운/차단 색 충돌 | 슬롯에서 명시적 우선순위 정의 (차단 > 쿨다운 틴트) |
+| 새 캐릭터/스킬 추가 시 등록 누락 | `AbilitiesGivenDelegate` 기반 자동 수집으로 해결됨 (§2.1). 동적 부여 경로만 `RegisterAbilityTagEvents()` 호출 보장 |
+| `AreAbilityTagsBlocked` 호출 빈도 | 슬롯 수 × 이벤트 빈도 = 매우 낮음. 폴링 아님. 성능 영향 무시 가능 |
+| 캐릭터 전환 시 이전 캐릭터의 등록 태그가 남음 | `RegisteredWatchedTags` 는 ASC 단위로 유지되며, 캐릭터(GA) 가 빠지면 해당 태그는 이벤트가 더 발화하지 않아 무해. PlayerState 가 새로 만들어지는 흐름이라면 자연히 초기화됨 |

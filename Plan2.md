@@ -278,6 +278,158 @@ EdgeMask = (CenterStencil < 2) AND (NeighborMax >= 2)
 
 ---
 
+## 4.5. 가림(Occlusion) 처리 — 벽/다른 적 뒤에 있을 때 외곽선 숨기기
+
+### 4.5.0 개요
+
+**현재 상태**: §4까지의 그래프는 CustomStencil만으로 외곽선을 그리므로, 적이 벽이나 다른 오브젝트 뒤에 있어도 외곽선이 그대로 보인다 ("X-Ray" 효과).
+
+**목표**: 적이 다른 불투명 오브젝트(벽, 지형, 다른 적)에 가려져 있는 부분의 외곽선은 그리지 않게 한다.
+
+### 4.5.1 원리
+
+| 텍스처 | 의미 |
+|---|---|
+| `SceneTexture: CustomDepth` | 외곽선 대상(`RenderCustomDepth=true` 인 메쉬) 의 깊이만 저장. 가려짐 무시. |
+| `SceneTexture: SceneDepth` | 화면에 실제 보이는 픽셀의 깊이. 가장 앞 불투명 오브젝트의 깊이. |
+
+같은 UV에서 두 값을 비교:
+- `SceneDepth ≥ CustomDepth - ε` → 적이 장면에서 가장 앞에 있음 (또는 비슷한 위치) → **보임** → 외곽선 그림
+- `SceneDepth < CustomDepth - ε` → 적보다 앞에 무언가가 있음 → **가려짐** → 외곽선 숨김
+
+> ε(epsilon)은 깊이 정밀도 오차 보정용 작은 양수. UE 단위(cm) 기준 보통 1~10. 너무 크면 얇은 벽을 통과해서 보임, 너무 작으면 자기 자신을 가린 것으로 판정되어 깜빡임.
+
+### 4.5.2 추가할 파라미터 (§3에 추가)
+
+#### Scalar Parameter (1개 추가)
+| 이름 | Group | Default | 설명 |
+|---|---|---|---|
+| `OcclusionEpsilon` | OutlineSettings | 5.0 | 깊이 비교 허용 오차 (cm). 깜빡임 발생 시 ↑, 얇은 벽 통과 시 ↓ |
+
+### 4.5.3 수정해야 할 기존 노드 — §4-② 5방향 스텐실 샘플링
+
+§4-②의 **각 방향 샘플(B-Right, B-Left, B-Up, B-Down) 4세트**에 동일한 추가 작업을 한다. **B-Center는 수정하지 않음** (이유: §4.5.5).
+
+기존 B-Right 노드 체인 (수정 전):
+```
+Constant2Vector(1,0) → Multiply(×TexelOffset) → Add(+TexCoord) = SampleUV_R
+SampleUV_R → SceneTexture(CustomStencil) → ComponentMask(R) = RightStencil
+```
+
+수정 후 (B-Right 기준, 다른 방향도 동일 패턴):
+```
+                              ┌→ SceneTexture(CustomStencil) → ComponentMask(R) = Stencil_R
+SampleUV_R(기존) ─────────────┼→ SceneTexture(CustomDepth)   → ComponentMask(R) = CustomDepth_R
+                              └→ SceneTexture(SceneDepth)    → ComponentMask(R) = SceneDepth_R
+
+[가림 판정]
+Subtract: A=SceneDepth_R + OcclusionEpsilon, B=CustomDepth_R → DepthDiff_R
+Saturate(DepthDiff_R) → satDD_R
+Ceil(satDD_R) → VisibilityMask_R   (보이면 1, 가려지면 0)
+
+[기존 Stencil_R에 가림 마스크 곱하기]
+Multiply: A=Stencil_R, B=VisibilityMask_R → RightStencil   (이름은 그대로 유지)
+```
+
+#### 단계별 노드 추가 (B-Right 예시)
+
+기존 노드는 그대로 두고, **SampleUV_R 핀에서 분기**해서 다음을 추가:
+
+1. **SceneTexture #2** (방향마다 1개씩 추가)
+   - Details: **Scene Texture Id** = `CustomDepth`
+   - UVs ← SampleUV_R (기존 Add 노드의 출력)
+2. **ComponentMask** (R 체크)
+   - 입력 ← 위 SceneTexture #2 의 `Color`
+   - 출력 = **CustomDepth_R** (float)
+
+3. **SceneTexture #3** (방향마다 1개씩 추가)
+   - Details: **Scene Texture Id** = `SceneDepth`
+   - UVs ← SampleUV_R
+4. **ComponentMask** (R 체크)
+   - 입력 ← 위 SceneTexture #3 의 `Color`
+   - 출력 = **SceneDepth_R** (float)
+
+5. **Add**
+   - A ← SceneDepth_R
+   - B ← `OcclusionEpsilon` (Scalar Parameter)
+   - 출력 = SceneDepthBiased_R
+
+6. **Subtract**
+   - A ← SceneDepthBiased_R
+   - B ← CustomDepth_R
+   - 출력 = DepthDiff_R  (보이면 양수, 가려지면 음수)
+
+7. **Saturate**
+   - 입력 ← DepthDiff_R
+   - 출력 = satDD_R  (0~1로 클램프)
+
+8. **Ceil**
+   - 입력 ← satDD_R
+   - 출력 = **VisibilityMask_R**  (0 또는 1)
+
+9. **Multiply** (기존 ComponentMask(R) → RightStencil 사이에 끼워넣기)
+   - 기존: `Stencil_R(ComponentMask R 출력) → (이후 ③의 Max 체인으로)`
+   - 수정: `Stencil_R → Multiply(A=Stencil_R, B=VisibilityMask_R) → RightStencil → (이후 ③의 Max 체인으로)`
+   - **즉, 기존의 RightStencil 이름이 가리키는 핀이 Multiply의 출력으로 바뀜.** ③ 이후 그래프는 수정 불필요.
+
+#### 4방향 전체 작업
+
+위 B-Right 작업을 **B-Left / B-Up / B-Down 에도 동일하게 반복**. 각 방향에 추가되는 노드:
+- SceneTexture × 2 (CustomDepth, SceneDepth)
+- ComponentMask × 2
+- Add × 1 (epsilon bias)
+- Subtract × 1
+- Saturate × 1
+- Ceil × 1
+- Multiply × 1
+
+= 방향당 **9개**, 4방향 = **36개** 추가.
+
+> 실작업 팁: B-Right에서 9개 노드 세트를 만들고 통째로 복사해서 3방향에 붙여넣기. 연결만 각 방향의 SampleUV / Stencil 핀으로 다시 잡아주면 됨.
+
+### 4.5.4 ③·④·⑤ 단계는 수정 불필요
+
+기존 ③ 마스크 계산은 `UpStencil/DownStencil/LeftStencil/RightStencil` 이름의 핀을 그대로 받음. 위 수정에서 각 방향의 최종 출력 이름은 그대로 `XxxStencil` 이므로 **③ 이후의 그래프는 한 줄도 손대지 않아도 됨**.
+
+NeighborMax 계산 시 가려진 방향의 stencil이 0이 되므로, 가려진 적의 외곽선은 그 가려진 부분에서만 자연스럽게 사라진다.
+
+### 4.5.5 왜 Center는 수정하지 않는가
+
+**EdgeMask = (CenterStencil < 2) AND (NeighborMax >= 2)** 에서 Center는 "배경(stencil=0 또는 1)이어야 한다"는 조건이다.
+
+- 외곽선이 그려질 픽셀의 Center는 항상 배경(벽/지형) 위에 있다. 즉 그 픽셀의 CustomDepth는 무효(이 픽셀에는 CustomDepth가 기록되지 않음, 기본값은 매우 큼).
+- Center에 visibility를 적용하면 의미 있는 정보가 안 나옴.
+- 가림 판정은 "이웃 픽셀(적 실루엣) 이 실제 보이는가" 로 판단하면 충분하다.
+
+### 4.5.6 엣지 케이스 동작 정리
+
+| 상황 | 동작 | 이유 |
+|---|---|---|
+| 적이 벽 뒤 완전히 가려짐 | 모든 방향 VisibilityMask=0 → NeighborMax=0 → EdgeMask=0 → 외곽선 없음 | 의도 |
+| 적의 절반만 벽 뒤 | 가려진 쪽 픽셀에서만 외곽선 사라짐, 노출된 쪽은 정상 | 의도 |
+| 적 A가 적 B 앞에 있음 (둘 다 stencil) | B의 가려진 부분은 외곽선 없음. A는 정상. | 정상 — A의 CustomDepth가 SceneDepth와 같음 |
+| 반투명 오브젝트(유리, 파티클) 뒤 | 가림 처리 **안 됨** (외곽선 보임) | 반투명은 SceneDepth에 기록 안 됨. 의도된 한계. |
+| 같은 적의 같은 픽셀에 자기 자신 | OcclusionEpsilon 덕에 ≈동일 깊이로 판정, VisibilityMask=1 | epsilon이 너무 작으면 자기 자신을 가린 것으로 오판 → 깜빡임 |
+
+### 4.5.7 튜닝 가이드
+
+- **외곽선이 깜빡임 (자기 자신을 가린 것으로 판정)**: `OcclusionEpsilon` 을 5 → 10~20 으로 올림
+- **얇은 벽 너머가 그대로 보임**: `OcclusionEpsilon` 을 5 → 2 로 낮춤
+- **카메라가 멀리 있을 때 깜빡임 심함**: depth precision이 떨어지는 거리 — epsilon을 거리 기반으로 만들거나 `PixelDepth` 사용 검토 (지금은 과한 작업)
+- **VisibilityMask 디버깅**: ⑤의 Emissive 핀에 임시로 `VisibilityMask_R` 만 흑백으로 출력해서 가림 판정이 맞는지 시각 확인
+
+### 4.5.8 노드 추가 개수 요약
+
+| 추가/수정 | 개수 |
+|---|---|
+| ScalarParameter `OcclusionEpsilon` | +1 |
+| 4방향 가림 판정 노드 세트 (방향당 9개) | +36 |
+| **합계** | **+37** |
+
+§9의 총 노드 수가 약 48 → **약 85개**가 된다. 복사-붙여넣기로 작업하면 실제 손은 방향당 9노드 1세트만 만들면 됨.
+
+---
+
 ## 5. 머티리얼 컴파일 & 인스턴스 생성
 
 ### 컴파일
@@ -351,7 +503,10 @@ EdgeMask = (CenterStencil < 2) AND (NeighborMax >= 2)
 - [ ] 튜토리얼 더미도 외곽선 없음
 
 ### 시각 품질
-- [ ] 적이 벽/물체에 가려도 가려진 부분에 외곽선이 안 그려지는지 (CustomStencil은 가림 무시 — 필요하면 SceneDepth 비교 추가)
+- [ ] 적이 벽에 완전히 가려지면 외곽선 사라짐 (§4.5 가림 처리 동작 확인)
+- [ ] 적의 절반만 벽 뒤에 있으면 그 부분만 외곽선이 끊어짐
+- [ ] 적 A가 적 B 앞에 있을 때, B의 가려진 부분만 외곽선 없음
+- [ ] 외곽선이 깜빡이지 않는지 (깜빡이면 `OcclusionEpsilon` 상향)
 - [ ] 두 적이 겹쳐 있을 때 서로 다른 레벨이면 경계가 어느 색으로 그려지는지 (NeighborMax가 더 큰 값 우선)
 - [ ] 카메라 거리가 멀어졌을 때 외곽선이 너무 굵게 보이지 않는지 (필요시 거리 기반 Thickness 감쇠 추가)
 
@@ -369,6 +524,10 @@ EdgeMask = (CenterStencil < 2) AND (NeighborMax >= 2)
 | 너무 굵음 | OutlineThickness를 0.5~1.0으로 낮춤 |
 | 너무 안 빛남 | OutlineIntensity 5~10으로 / 색 자체를 HDR(>1)로 |
 | 빨강만 보임 | Custom 노드 if 순서 오류 — `>= 4.5` 가 가장 위에 와야 함 |
+| 가림 처리 후 외곽선 깜빡임 | `OcclusionEpsilon`을 5 → 10~20으로 상향 (자기 자신 가림 오판 방지) |
+| 벽 뒤 적의 외곽선이 그대로 보임 | §4.5.3 Multiply 연결 누락 — VisibilityMask가 Stencil에 곱해지지 않음. 4방향 전부 확인 |
+| 얇은 벽 뒤 적이 보임 | `OcclusionEpsilon`을 5 → 1~2로 낮춤 |
+| 가림은 잘 되는데 적 자기 자신이 외곽선 안 그림 | epsilon이 음수가 됐거나 Add/Subtract A,B가 뒤바뀜 — `SceneDepth + ε ≥ CustomDepth` 식 확인 |
 
 ---
 

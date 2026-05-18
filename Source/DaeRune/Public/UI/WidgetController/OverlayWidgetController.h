@@ -58,6 +58,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnVendingMachineAttackSpeedBuffSign
 // 스킬 입력 키 Press/Release UI 피드백용 델리게이트 (WBP가 자기 InputTag와 비교해 자기 차례만 반응)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAbilityInputPressedSignature,  FGameplayTag, InputTag);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAbilityInputReleasedSignature, FGameplayTag, InputTag);
+// 스킬 슬롯 차단 상태 재평가 트리거 (각 슬롯이 자기 AbilityTag 기준으로 IsAbilityBlockedNow 호출)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAbilityBlockStateDirtySignature);
 
 /**
  * ���� ���� UI �������̸� �����ϴ� ��Ʈ�ѷ�
@@ -156,10 +158,21 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "GAS|SkillIcon")
 	FOnAbilityInputReleasedSignature OnAbilityInputReleased;
 
+	// 스킬 슬롯 차단 상태가 변했을 가능성을 알리는 신호 (WBP_SkillSlot 이 자기 AbilityTag 로 재평가)
+	UPROPERTY(BlueprintAssignable, Category = "GAS|SkillIcon")
+	FOnAbilityBlockStateDirtySignature OnAbilityBlockStateDirty;
+
+	// 슬롯이 호출: "지금 이 AbilityTag 가 차단 상태인가?" (State.Carrying 중에는 무조건 true)
+	UFUNCTION(BlueprintPure, Category = "GAS|SkillIcon")
+	bool IsAbilityBlockedNow(FGameplayTag AbilityTag) const;
+
 	// 캐릭터 클래스에 맞는 스킬아이콘 위젯 클래스를 브로드캐스트
 	void BroadcastSkillIconWidgetClass();
 
 private:
+	// 차단 카운터 변화 콜백 → OnAbilityBlockStateDirty 재방송
+	void HandleBlockedTagsChanged();
+
 	void HandlePhaseObjectiveChanged();
 	void BindPhaseObjectiveDelegate();
 	void BindWaveTimerDelegate();

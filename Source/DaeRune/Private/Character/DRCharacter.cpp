@@ -283,7 +283,7 @@ void ADRCharacter::DropCarriedPart()
 	const float TimeSincePickup = CurrentTime - LastPartPickupTime;
 	if (TimeSincePickup < PartDropCooldown) return;
 
-	// State_Carrying �±� ����
+	// State_Carrying �±� ���� (서버 측. 클라 측은 OnRep_bIsCarryingPart 에서)
 	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(GetAbilitySystemComponent()))
 	{
 		DRASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
@@ -724,6 +724,23 @@ void ADRCharacter::OnRep_bIsCarryingPart()
 {
 	// 클라이언트(소유 컨트롤러)에서 부품 보유 상태가 바뀐 직후 주변 상호작용 UI 재평가
 	RefreshNearbyInteractions();
+
+	// 클라 측 ASC 의 owned tag 컨테이너에 직접 State.Carrying 토글
+	// (서버는 DRCleanserPart/DRCharacter::TryDropPart 에서 이미 처리. 클라는 ReplicatedLoose 의
+	//  RepNotify 경로가 RegisterGameplayTagEvent 를 100% 보장하지 않아 명시 토글 필요)
+	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(GetAbilitySystemComponent()))
+	{
+		const FGameplayTag CarryingTag = FDRGameplayTags::Get().State_Carrying;
+		const bool bHasTag = DRASC->HasMatchingGameplayTag(CarryingTag);
+		if (bIsCarryingPart && !bHasTag)
+		{
+			DRASC->AddLooseGameplayTag(CarryingTag);
+		}
+		else if (!bIsCarryingPart && bHasTag)
+		{
+			DRASC->RemoveLooseGameplayTag(CarryingTag);
+		}
+	}
 }
 
 void ADRCharacter::OnRep_CarriedPart()

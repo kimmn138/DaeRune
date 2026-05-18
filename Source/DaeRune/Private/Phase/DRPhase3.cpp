@@ -54,15 +54,15 @@ void UDRPhase3::OnPhaseStart()
 		// 일반 적 스폰 포인트 VFX 활성화
 		if (GameState && EnemySpawnPointNiagaraSystem)
 		{
-			TArray<FVector> SpawnPointLocations;
+			TArray<FTransform> SpawnPointTransforms;
 			for (const TObjectPtr<AActor>& SpawnPoint : EnemySpawnPoints)
 			{
 				if (SpawnPoint)
 				{
-					SpawnPointLocations.Add(SpawnPoint->GetActorLocation());
+					SpawnPointTransforms.Add(SpawnPoint->GetActorTransform());
 				}
 			}
-			GameState->Multicast_ActivateEnemySpawnPointVFX(SpawnPointLocations, EnemySpawnPointNiagaraSystem);
+			GameState->Multicast_ActivateEnemySpawnPointVFX(SpawnPointTransforms, EnemySpawnPointNiagaraSystem);
 		}
 
 		DefenseStartTime = World->GetTimeSeconds();
@@ -309,31 +309,31 @@ void UDRPhase3::StartNextWave()
 	{
 		if (CleanserSites.Num() > 0 && CleanserSites[0])
 		{
-			// 보스 스폰 포인트 위치 수집
-			TArray<FVector> BossSpawnLocations;
+			// 보스 스폰 포인트 트랜스폼 수집
+			TArray<FTransform> BossSpawnTransforms;
 			for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 			{
 				AActor* BossSpawnPoint = *It;
 				if (BossSpawnPoint && BossSpawnPoint->ActorHasTag(BossSpawnPointTag))
 				{
-					BossSpawnLocations.Add(BossSpawnPoint->GetActorLocation());
+					BossSpawnTransforms.Add(BossSpawnPoint->GetActorTransform());
 				}
 			}
 
 			// 엘리트 스폰 포인트 VFX 활성화
-			if (GameState && EliteSpawnPointNiagaraSystem && BossSpawnLocations.Num() > 0)
+			if (GameState && EliteSpawnPointNiagaraSystem && BossSpawnTransforms.Num() > 0)
 			{
-				GameState->Multicast_ActivateEliteSpawnPointVFX(BossSpawnLocations, EliteSpawnPointNiagaraSystem);
+				GameState->Multicast_ActivateEliteSpawnPointVFX(BossSpawnTransforms, EliteSpawnPointNiagaraSystem);
 			}
 
 			// 엘리트 보스 스폰
-			for (const FVector& Location : BossSpawnLocations)
+			for (const FTransform& BossSpawnTransform : BossSpawnTransforms)
 			{
-				SpawnEliteMonster(Location);
+				SpawnEliteMonster(BossSpawnTransform.GetLocation());
 			}
 
 			// 일정 시간 후 엘리트 VFX 비활성화
-			if (GameState && BossSpawnLocations.Num() > 0)
+			if (GameState && BossSpawnTransforms.Num() > 0)
 			{
 				if (UWorld* SpawnWorld = GetWorld())
 				{

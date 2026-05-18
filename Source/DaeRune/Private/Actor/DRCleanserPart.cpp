@@ -92,7 +92,7 @@ void ADRCleanserPart::PickupPart(ADRCharacter* Character)
 
 	MulticastPlayPickupSound();
 
-	// ĳ���Ϳ��� �±� ����
+	// ĳ���Ϳ��� �±� ���� (서버 측. 클라 측은 ADRCharacter::OnRep_bIsCarryingPart 에서 별도 토글)
 	UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(CarryingCharacter->GetAbilitySystemComponent());
 	if (DRASC)
 	{
@@ -153,7 +153,7 @@ void ADRCleanserPart::InstallPart()
 		CarryingCharacter->HideThirdPersonPart();
 	}
 
-	// ĳ���Ϳ��� �±� ����
+	// ĳ���Ϳ��� �±� ���� (서버 측. 클라 측은 OnRep_bIsCarryingPart 에서)
 	if (CarryingCharacter)
 	{
 		UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(CarryingCharacter->GetAbilitySystemComponent());

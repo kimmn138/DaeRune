@@ -519,11 +519,6 @@ void UDRSettingsManager::BuildDefinitions()
         KoreanOpt.DisplayText = FText::FromString(TEXT("한국어"));
         Def.Options.Add(KoreanOpt);
 
-        FDRSettingsOption EnglishOpt;
-        EnglishOpt.OptionId = FName("English");
-        EnglishOpt.DisplayText = FText::FromString(TEXT("영어"));
-        Def.Options.Add(EnglishOpt);
-
         Def.DefaultValue = UDRSettingsFunctionLibrary::MakeNameValue(FName("Korean"), 0);
 
         Definitions.Add(Def);

@@ -188,6 +188,30 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 			// ���� �ο����� �ʾҴٸ� �ο� �Ϸ� ������ ��ε�ĳ��Ʈ�ϵ��� ��������Ʈ ���ε�
 			GetDRASC()->AbilitiesGivenDelegate.AddUObject(this, &UOverlayWidgetController::BroadcastAbilityInfo);
 		}
+
+		// 스킬 차단 카운터 변화 → UI 재방송
+		GetDRASC()->OnBlockedAbilityTagsChanged.AddUObject(this, &UOverlayWidgetController::HandleBlockedTagsChanged);
+
+		// GA 활성화/종료 시 InputTag 기반 Pressed/Released 재방송
+		// (PlayerController 직접 broadcast 는 차단 중 게이트로 막히는데, 큐잉되어 나중에 발동된 GA 의 시각 피드백을 여기서 보강)
+		GetDRASC()->OnAbilityActivatedWithInputTag.AddLambda(
+			[WeakThis](const FGameplayTag InputTag)
+			{
+				if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+				{
+					StrongThis->OnAbilityInputPressed.Broadcast(InputTag);
+				}
+			}
+		);
+		GetDRASC()->OnAbilityEndedWithInputTag.AddLambda(
+			[WeakThis](const FGameplayTag InputTag)
+			{
+				if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+				{
+					StrongThis->OnAbilityInputReleased.Broadcast(InputTag);
+				}
+			}
+		);
 	}
 
 	// GameState 페이즈 목표 델리게이트 바인딩
@@ -461,6 +485,28 @@ void UOverlayWidgetController::OnPhaseChanged(int32 NewPhaseIndex)
 
 		CachedPhaseNumber = NewPhaseIndex;
 	}
+}
+
+void UOverlayWidgetController::HandleBlockedTagsChanged()
+{
+	OnAbilityBlockStateDirty.Broadcast();
+}
+
+bool UOverlayWidgetController::IsAbilityBlockedNow(FGameplayTag AbilityTag) const
+{
+	if (!AbilitySystemComponent) return false;
+
+	// Carrying 중에는 어떤 스킬도 못 쓰므로 모든 슬롯 차단으로 간주
+	if (AbilitySystemComponent->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Carrying))
+	{
+		return true;
+	}
+
+	if (!AbilityTag.IsValid()) return false;
+
+	FGameplayTagContainer Single;
+	Single.AddTag(AbilityTag);
+	return AbilitySystemComponent->AreAbilityTagsBlocked(Single);
 }
 
 void UOverlayWidgetController::BroadcastSkillIconWidgetClass()

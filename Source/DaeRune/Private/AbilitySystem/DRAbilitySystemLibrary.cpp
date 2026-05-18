@@ -19,6 +19,8 @@
 #include "Engine/OverlapResult.h"
 #include "Game/DRStageGameState.h"
 #include "GameFramework/Character.h"
+#include "NavigationSystem.h"
+#include "NavigationPath.h"
 
 bool UDRAbilitySystemLibrary::MakeWidgetControllerParams(const UObject* WorldContextObject, FWidgetControllerParams& OutWCParams, ADRHUD*& OutDRHUD)
 {
@@ -379,6 +381,25 @@ AActor* UDRAbilitySystemLibrary::GetClosestCleanserSite(APawn* ControlledPawn)
 	}
 
 	return Closest;
+}
+
+bool UDRAbilitySystemLibrary::IsActorReachable(APawn* Asker, AActor* Target)
+{
+	if (!IsValid(Asker) || !IsValid(Target)) return false;
+
+	UWorld* World = Asker->GetWorld();
+	if (!World) return false;
+
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
+	if (!NavSys) return false;
+
+	UNavigationPath* Path = NavSys->FindPathToLocationSynchronously(
+		World,
+		Asker->GetActorLocation(),
+		Target->GetActorLocation(),
+		Asker);
+
+	return Path && Path->IsValid() && !Path->IsPartial();
 }
 
 bool UDRAbilitySystemLibrary::IsNotFriend(AActor* FirstActor, AActor* SecondActor)

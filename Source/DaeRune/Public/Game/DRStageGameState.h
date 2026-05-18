@@ -195,7 +195,7 @@ public:
 
     // 일반 적 스폰 포인트 VFX 활성화
     UFUNCTION(NetMulticast, Reliable)
-    void Multicast_ActivateEnemySpawnPointVFX(const TArray<FVector>& SpawnPointLocations, UNiagaraSystem* NiagaraAsset);
+    void Multicast_ActivateEnemySpawnPointVFX(const TArray<FTransform>& SpawnPointTransforms, UNiagaraSystem* NiagaraAsset);
 
     // 일반 적 스폰 포인트 VFX 비활성화
     UFUNCTION(NetMulticast, Reliable)
@@ -203,7 +203,7 @@ public:
 
     // 엘리트 보스 스폰 포인트 VFX 활성화
     UFUNCTION(NetMulticast, Reliable)
-    void Multicast_ActivateEliteSpawnPointVFX(const TArray<FVector>& SpawnPointLocations, UNiagaraSystem* NiagaraAsset);
+    void Multicast_ActivateEliteSpawnPointVFX(const TArray<FTransform>& SpawnPointTransforms, UNiagaraSystem* NiagaraAsset);
 
     // 엘리트 보스 스폰 포인트 VFX 비활성화
     UFUNCTION(NetMulticast, Reliable)

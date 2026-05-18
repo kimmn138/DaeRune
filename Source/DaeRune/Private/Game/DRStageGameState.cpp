@@ -426,7 +426,7 @@ void ADRStageGameState::NotifyPoisonGasDeactivated()
 // ========== Phase3 스폰 포인트 VFX ==========
 
 void ADRStageGameState::Multicast_ActivateEnemySpawnPointVFX_Implementation(
-    const TArray<FVector>& SpawnPointLocations, UNiagaraSystem* NiagaraAsset)
+    const TArray<FTransform>& SpawnPointTransforms, UNiagaraSystem* NiagaraAsset)
 {
     if (!NiagaraAsset) return;
 
@@ -440,13 +440,13 @@ void ADRStageGameState::Multicast_ActivateEnemySpawnPointVFX_Implementation(
     }
     EnemySpawnPointVFXComponents.Empty();
 
-    for (const FVector& Location : SpawnPointLocations)
+    for (const FTransform& SpawnTransform : SpawnPointTransforms)
     {
         UNiagaraComponent* NewComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
             this,
             NiagaraAsset,
-            Location,
-            FRotator::ZeroRotator,
+            SpawnTransform.GetLocation(),
+            SpawnTransform.GetRotation().Rotator(),
             FVector(1.f),
             false,
             true,
@@ -475,7 +475,7 @@ void ADRStageGameState::Multicast_DeactivateEnemySpawnPointVFX_Implementation()
 }
 
 void ADRStageGameState::Multicast_ActivateEliteSpawnPointVFX_Implementation(
-    const TArray<FVector>& SpawnPointLocations, UNiagaraSystem* NiagaraAsset)
+    const TArray<FTransform>& SpawnPointTransforms, UNiagaraSystem* NiagaraAsset)
 {
     if (!NiagaraAsset) return;
 
@@ -489,13 +489,13 @@ void ADRStageGameState::Multicast_ActivateEliteSpawnPointVFX_Implementation(
     }
     EliteSpawnPointVFXComponents.Empty();
 
-    for (const FVector& Location : SpawnPointLocations)
+    for (const FTransform& SpawnTransform : SpawnPointTransforms)
     {
         UNiagaraComponent* NewComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
             this,
             NiagaraAsset,
-            Location,
-            FRotator::ZeroRotator,
+            SpawnTransform.GetLocation(),
+            SpawnTransform.GetRotation().Rotator(),
             FVector(1.f),
             false,
             true,
