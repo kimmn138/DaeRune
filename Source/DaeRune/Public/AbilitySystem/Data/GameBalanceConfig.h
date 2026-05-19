@@ -34,7 +34,7 @@ struct FPlayerCombatConfig
 
 	// 전투 이탈 판정 대기 시간 (초)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "1.0", ClampMax = "30.0"))
-	float CombatExitDelay = 10.0f;
+	float CombatExitDelay = 5.0f;
 
 	// 파트 드롭 쿨다운 (초)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Part System", meta = (ClampMin = "0.0", ClampMax = "5.0"))
@@ -55,7 +55,7 @@ struct FEnemyCombatConfig
 
 	// 사망 후 생존 시간 (초)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "0.0", ClampMax = "10.0"))
-	float LifeSpan = 3.f;
+	float LifeSpan = 2.f;
 
 	// 파트 드롭 힘
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Part System", meta = (ClampMin = "0.0", ClampMax = "1000.0"))

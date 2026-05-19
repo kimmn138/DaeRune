@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 #pragma once
 
@@ -27,8 +27,8 @@ enum class ECharacterClass : uint8
 UENUM(BlueprintType)
 enum class EPlayerCharacterClass : uint8
 {
-	GardenRobot,
-	VendingMachineRobot
+	Gardener,
+	VendingMachine
 };
 
 USTRUCT(BlueprintType)

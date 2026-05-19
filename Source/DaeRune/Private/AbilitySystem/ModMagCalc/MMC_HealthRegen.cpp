@@ -21,29 +21,29 @@ UMMC_HealthRegen::UMMC_HealthRegen()
 
 float UMMC_HealthRegen::CalculateBaseMagnitude_Implementation(const FGameplayEffectSpec& Spec) const
 {
-    // È¸º¹·® »ó¼ö
-    constexpr float NORMAL_HEAL_PER_TICK = 5.f;
+    // È¸ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
+    constexpr float NORMAL_HEAL_PER_TICK = 10.f;
 
-    // ¼Ò½º¡¤Å¸°ÙÀÇ Gameplay Tag ÄÁÅ×ÀÌ³Ê °¡Á®¿À±â
+    // ï¿½Ò½ï¿½ï¿½ï¿½Å¸ï¿½ï¿½ï¿½ï¿½ Gameplay Tag ï¿½ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     const FGameplayTagContainer* SourceTags = Spec.CapturedSourceTags.GetAggregatedTags();
     const FGameplayTagContainer* TargetTags = Spec.CapturedTargetTags.GetAggregatedTags();
 
-    // ÅÂ±× ±â¹Ý ÇÊÅÍ¸µ¡¤Á¶°Ç Àû¿ë ½Ã »ç¿ëÇÒ EvaluationParameters ¼³Á¤
+    // ï¿½Â±ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Í¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ EvaluationParameters ï¿½ï¿½ï¿½ï¿½
     FAggregatorEvaluateParameters EvaluationParameters;
     EvaluationParameters.SourceTags = SourceTags;
     EvaluationParameters.TargetTags = TargetTags;
 
-    // Health °ª Ä¸Ã³ (¼Ó¼º Ä¸Ã³ ¹æ½Ä)
+    // Health ï¿½ï¿½ Ä¸Ã³ (ï¿½Ó¼ï¿½ Ä¸Ã³ ï¿½ï¿½ï¿½)
     float CurrentHealth = 0.f;
     GetCapturedAttributeMagnitude(HealthDef, Spec, EvaluationParameters, CurrentHealth);
 
     float MaxHealth = 0.f;
     GetCapturedAttributeMagnitude(MaxHealthDef, Spec, EvaluationParameters, MaxHealth);
 
-    // Ã¼·ÂÀÌ ÀÌ¹Ì ÃÖ´ëÄ¡¸é È¸º¹ ºÒÇÊ¿ä
+    // Ã¼ï¿½ï¿½ï¿½ï¿½ ï¿½Ì¹ï¿½ ï¿½Ö´ï¿½Ä¡ï¿½ï¿½ È¸ï¿½ï¿½ ï¿½ï¿½ï¿½Ê¿ï¿½
     if (CurrentHealth >= MaxHealth) return 0.f;
 
-    // AttributeSet °¡Á®¿À±â
+    // AttributeSet ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     const UAbilitySystemComponent* TargetASC = nullptr;
     if (Spec.GetContext().GetInstigatorAbilitySystemComponent())
     {
@@ -57,24 +57,24 @@ float UMMC_HealthRegen::CalculateBaseMagnitude_Implementation(const FGameplayEff
 
     if (!PlayerAS) return 0.f;
 
-    // ºÎÆÐ »óÅÂ È®ÀÎ
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
     if (PlayerAS->IsCorrupted())
     {
-        return 0.f; // ºÎÆÐ »óÅÂ¿¡¼­´Â ÀÚ¿¬ È¸º¹ ¾øÀ½
+        return 0.f; // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Â¿ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ú¿ï¿½ È¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     }
 
-    // ÇöÀç ÄÁÅ×ÀÌ³Ê °è»ê
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½ï¿½ï¿½
     const int32 ContainerIndex = PlayerAS->GetCurrentContainerIndex();
     const float ContainerHealth = PlayerAS->GetContainerHealth();
     const float ContainerMax = (ContainerIndex + 1) * ContainerHealth;
 
-    // ÇöÀç ÄÁÅ×ÀÌ³Ê°¡ °¡µæ Â÷¸é È¸º¹ ÁßÁö
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì³Ê°ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ È¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (FMath::IsNearlyEqual(CurrentHealth, ContainerMax, 0.1f))
     {
         return 0.f;
     }
 
-    // È¸º¹ °¡´É·® °è»ê (ÇöÀç ÄÁÅ×ÀÌ³Ê ÃÖ´ëÄ¡±îÁö¸¸)
+    // È¸ï¿½ï¿½ ï¿½ï¿½ï¿½É·ï¿½ ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½Ö´ï¿½Ä¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
     const float PossibleHeal = ContainerMax - CurrentHealth;
     return FMath::Min(NORMAL_HEAL_PER_TICK, PossibleHeal);
 }

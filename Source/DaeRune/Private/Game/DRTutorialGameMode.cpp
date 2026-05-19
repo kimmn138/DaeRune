@@ -100,7 +100,7 @@ void ADRTutorialGameMode::NotifyAllPlayersTutorialComplete()
 	{
 		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
 		{
-			PC->Client_ShowGameClearUI();
+			PC->Client_ShowTutorialClearUI();
 		}
 	}
 }

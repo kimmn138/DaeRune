@@ -685,9 +685,6 @@ bool ADRPlayerController::CanShowCharacterInfo() const
 	// 게임 레벨/튜토리얼/로비에서만 허용 (메인메뉴 차단)
 	if (!IsInGameLevel() && !IsInTutorial() && !IsInLobby()) return false;
 
-	// 로비의 캐릭터 선택창(대기실)은 차단 — 캐릭터를 아직 확정/소유하지 않은 상태
-	if (bIsInWaitingRoom) return false;
-
 	// 설정창 열려있으면 차단
 	if (bIsSettingsMenuOpen) return false;
 
@@ -1053,7 +1050,11 @@ void ADRPlayerController::RestoreDefaultInputMode()
 		if (LGS && (LGS->GetLobbyState() == ELobbyState::WaitingRoom
 				  || LGS->GetLobbyState() == ELobbyState::Transitioning))
 		{
-			SetInputMode(FInputModeUIOnly());
+			// TEST: 대기실은 GameAndUI로 통일 (ClientSetWaitingRoomView와 일치)
+			FInputModeGameAndUI InputMode;
+			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			InputMode.SetHideCursorDuringCapture(false);
+			SetInputMode(InputMode);
 			SetShowMouseCursor(true);
 		}
 		else
@@ -1144,6 +1145,19 @@ void ADRPlayerController::Client_ShowGameClearUI_Implementation()
 	if (CurrentResultWidget)
 	{
 		// 酉고룷?몄뿉 異붽?
+		CurrentResultWidget->AddToViewport(100);
+	}
+}
+
+void ADRPlayerController::Client_ShowTutorialClearUI_Implementation()
+{
+	if (CurrentResultWidget) return;
+
+	if (!TutorialGameClearWidgetClass) return;
+
+	CurrentResultWidget = CreateWidget<UUserWidget>(this, TutorialGameClearWidgetClass);
+	if (CurrentResultWidget)
+	{
 		CurrentResultWidget->AddToViewport(100);
 	}
 }
@@ -1342,7 +1356,14 @@ void ADRPlayerController::ClientSetWaitingRoomView_Implementation(
 	SetViewTargetWithBlend(CameraActor, 0.f);
 
 	// UI Only 紐⑤뱶 (留덉슦??而ㅼ꽌 ON)
-	SetInputMode(FInputModeUIOnly());
+	// TEST: GameAndUI mode for waiting room (Tab/ESC focus issue test)
+	// Revert: change block back to SetInputMode(FInputModeUIOnly());
+	{
+		FInputModeGameAndUI InputMode;
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		InputMode.SetHideCursorDuringCapture(false);
+		SetInputMode(InputMode);
+	}
 	SetShowMouseCursor(true);
 
 	// ?뚯쑀 Pawn??硫붿떆 媛?쒖꽦 ?꾪솚 (1P ?④린湲? 3P 蹂댁씠湲?

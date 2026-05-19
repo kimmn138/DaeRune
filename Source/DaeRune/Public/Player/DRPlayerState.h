@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 #pragma once
 
@@ -99,7 +99,7 @@ protected:
 
 	// 캐릭터 클래스 선택
 	UPROPERTY(ReplicatedUsing = OnRep_SelectedPlayerClass, BlueprintReadOnly, Category = "Character Selection")
-	EPlayerCharacterClass SelectedPlayerClass = EPlayerCharacterClass::GardenRobot;
+	EPlayerCharacterClass SelectedPlayerClass = EPlayerCharacterClass::Gardener;
 
 	// 리플리케이션 콜백
 	UFUNCTION()
@@ -120,7 +120,7 @@ private:
 
 	// ���� ���� ��� �ð�
 	UPROPERTY(EditDefaultsOnly, Category = "Combat")
-	float CombatExitDelay = 10.0f;
+	float CombatExitDelay = 5.0f;
 
 	// ü�� ȸ�� �ý���
 	UPROPERTY(EditDefaultsOnly, Category = "Gameplay Effects")

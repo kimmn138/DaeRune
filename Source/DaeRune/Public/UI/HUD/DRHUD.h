@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 #pragma once
 
@@ -74,6 +74,6 @@ private:
 	TObjectPtr<UUserWidget> CharacterInfoWidget;
 
 	// 현재 캐싱된 위젯이 어떤 캐릭터 클래스용인지 추적 (클래스 변경 시 재생성)
-	EPlayerCharacterClass CachedCharacterInfoClass = EPlayerCharacterClass::GardenRobot;
+	EPlayerCharacterClass CachedCharacterInfoClass = EPlayerCharacterClass::Gardener;
 	bool bHasCachedCharacterInfoClass = false;
 };

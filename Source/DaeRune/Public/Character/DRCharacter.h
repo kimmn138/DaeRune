@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 #pragma once
 
@@ -29,7 +29,7 @@ public:
 
 	// 플레이어 캐릭터 클래스 (EPlayerCharacterClass)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category = "Character Class Defaults")
-	EPlayerCharacterClass PlayerCharacterClass = EPlayerCharacterClass::GardenRobot;
+	EPlayerCharacterClass PlayerCharacterClass = EPlayerCharacterClass::Gardener;
 
 	// �������� ��Ʈ�ѷ��� ���ǵ� �� ȣ�� (������ GAS �ʱ�ȭ)
 	virtual void PossessedBy(AController* NewController) override;

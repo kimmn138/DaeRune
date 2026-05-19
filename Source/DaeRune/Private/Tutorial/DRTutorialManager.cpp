@@ -87,7 +87,7 @@ void ADRTutorialManager::Tick(float DeltaTime)
 		WaterPumpAccumulatedTime += DeltaTime;
 
 		UpdateObjectiveUI(
-			NSLOCTEXT("Tutorial", "Obj2", "훈련 봇에게 물대포 3초 공격 (우클릭 유지)"),
+			NSLOCTEXT("Tutorial", "Obj2", "훈련 봇에게 물대포 3초 공격"),
 			NSLOCTEXT("Tutorial", "Obj2Fmt", "초"),
 			FMath::FloorToInt(WaterPumpAccumulatedTime),
 			FMath::FloorToInt(RequiredWaterPumpSeconds)
@@ -189,7 +189,7 @@ void ADRTutorialManager::TransitionToObjective(ECombatObjective NewObjective)
 		GrantAbilityToPlayer(ClawSwipeAbilityClass);
 		MeleeHitCount = 0;
 		UpdateObjectiveUI(
-			NSLOCTEXT("Tutorial", "Obj1", "훈련 봇에게 기본 공격 5회 진행 (좌클릭)"),
+			NSLOCTEXT("Tutorial", "Obj1", "훈련 봇에게 기본 공격 5회 진행"),
 			NSLOCTEXT("Tutorial", "Obj1Fmt", "적중"),
 			0, RequiredMeleeHits
 		);
@@ -200,7 +200,7 @@ void ADRTutorialManager::TransitionToObjective(ECombatObjective NewObjective)
 		GrantAbilityToPlayer(WaterPumpAbilityClass);
 		WaterPumpAccumulatedTime = 0.f;
 		UpdateObjectiveUI(
-			NSLOCTEXT("Tutorial", "Obj2", "훈련 봇에게 물대포 3초 공격 (우클릭 유지)"),
+			NSLOCTEXT("Tutorial", "Obj2", "훈련 봇에게 물대포 3초 공격"),
 			NSLOCTEXT("Tutorial", "Obj2Fmt", "초"),
 			0, FMath::FloorToInt(RequiredWaterPumpSeconds)
 		);
@@ -219,7 +219,7 @@ void ADRTutorialManager::TransitionToObjective(ECombatObjective NewObjective)
 		// SeedCannon 어빌리티 부여 (UI에 아이콘 표시)
 		GrantAbilityToPlayer(SeedCannonAbilityClass);
 		UpdateObjectiveUI(
-			NSLOCTEXT("Tutorial", "Obj3", "씨앗 폭탄으로 훈련 봇을 맞추시오 (E)"),
+			NSLOCTEXT("Tutorial", "Obj3", "씨앗 폭탄으로 훈련 봇을 맞추시오"),
 			NSLOCTEXT("Tutorial", "Obj3Fmt", "적중"),
 			0, RequiredSimultaneousHits
 		);
@@ -258,7 +258,7 @@ void ADRTutorialManager::ReportDamageHit(const FGameplayTagContainer& AbilityTag
 
 		MeleeHitCount++;
 		UpdateObjectiveUI(
-			NSLOCTEXT("Tutorial", "Obj1", "훈련 봇에게 기본 공격 5회 진행 (좌클릭)"),
+			NSLOCTEXT("Tutorial", "Obj1", "훈련 봇에게 기본 공격 5회 진행"),
 			NSLOCTEXT("Tutorial", "Obj1Fmt", "적중"),
 			MeleeHitCount, RequiredMeleeHits
 		);
@@ -282,7 +282,7 @@ void ADRTutorialManager::ReportSeedCannonHits(int32 HitCount)
 	{
 		// 실패 시 현재 적중 수 표시 (재시도 유도)
 		UpdateObjectiveUI(
-			NSLOCTEXT("Tutorial", "Obj3", "씨앗 폭탄으로 훈련 봇을 맞추시오 (E)"),
+			NSLOCTEXT("Tutorial", "Obj3", "씨앗 폭탄으로 훈련 봇을 맞추시오"),
 			NSLOCTEXT("Tutorial", "Obj3Fmt", "적중"),
 			HitCount, RequiredSimultaneousHits
 		);
@@ -508,6 +508,8 @@ void ADRTutorialManager::UpdateObjectiveUI(const FText& Title, const FText& Prog
 	// 스테이지와 동일한 형식: Title + ProgressFormat(라벨), 숫자는 별도 전달
 	WC->OnObjectiveTextChanged.Broadcast(Title, ProgressFormat);
 	WC->OnObjectiveProgressChanged.Broadcast(Current, Max);
+	// Max==0인 경우(진행 숫자가 무의미한 단계) 진행도 텍스트 숨김
+	WC->OnObjectiveProgressVisibilityChanged.Broadcast(Max > 0);
 }
 
 UOverlayWidgetController* ADRTutorialManager::GetOverlayWidgetController() const

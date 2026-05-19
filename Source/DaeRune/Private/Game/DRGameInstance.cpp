@@ -84,7 +84,7 @@ void UDRGameInstance::SavePlayerClassSelection(const FString& PlayerName, EPlaye
 EPlayerCharacterClass UDRGameInstance::LoadPlayerClassSelection(const FString& PlayerName) const
 {
 	const EPlayerCharacterClass* Found = PlayerClassSelections.Find(PlayerName);
-	return Found ? *Found : EPlayerCharacterClass::GardenRobot;
+	return Found ? *Found : EPlayerCharacterClass::Gardener;
 }
 
 void UDRGameInstance::SaveAllPlayerSelections(UWorld* World)

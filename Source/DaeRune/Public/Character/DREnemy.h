@@ -98,7 +98,7 @@ public:
 
 	// 사망 후 생존 시간
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
-	float LifeSpan = 3.f;
+	float LifeSpan = 2.f;
 
 	// 넉백 상태 설정/해제
 	UFUNCTION(BlueprintCallable, Category = "Combat")

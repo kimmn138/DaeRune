@@ -21,6 +21,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "MainMenu")
 	void StartTutorial();
 
+	// 튜토리얼 스킵: 완료 플래그를 저장하고 메인 메뉴를 재로드 → 로비 프리뷰로 전환
+	UFUNCTION(BlueprintCallable, Category = "MainMenu")
+	void SkipTutorialAndReloadMenu();
+
 	// QA: 튜토리얼 진행 상태를 리셋하고 메인 메뉴를 재로드
 	UFUNCTION(BlueprintCallable, Category = "MainMenu|QA")
 	void ResetTutorialAndReloadMenu();

@@ -278,24 +278,27 @@ void ADREnemy::ActivateDeathAbilities()
 
 void ADREnemy::ReduceWaterReward()
 {
-	if (!HasAuthority() || !WaterReductionEffectClass) return;
+	//if (!HasAuthority() || !WaterReductionEffectClass) return;
 
-	// 현재 물이 없으면 감소시키지 않음
-	const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets);
-	if (!DRAS || DRAS->GetWater() <= 0.f) return;
+	//// 현재 물이 없으면 감소시키지 않음
+	//const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets);
+	//if (!DRAS || DRAS->GetWater() <= 0.f) return;
 
-	// 헬퍼 함수로 간소화된 GE 생성 및 적용
-	FGameplayEffectSpecHandle SpecHandle = UDRAbilitySystemLibrary::CreateEffectSpec(
-		AbilitySystemComponent, WaterReductionEffectClass, this);
+	//// TEMP: 공격당 물 감소 비활성화 (테스트용, 되돌릴 때 이 라인 제거)
+	//return;
 
-	if (SpecHandle.IsValid())
-	{
-		UDRAbilitySystemLibrary::ApplyEffectSpecWithSetByCaller(
-			AbilitySystemComponent,
-			SpecHandle,
-			FDRGameplayTags::Get().Water_SetByCaller_Reduction,
-			WaterReductionPerAttack);
-	}
+	//// 헬퍼 함수로 간소화된 GE 생성 및 적용
+	//FGameplayEffectSpecHandle SpecHandle = UDRAbilitySystemLibrary::CreateEffectSpec(
+	//	AbilitySystemComponent, WaterReductionEffectClass, this);
+
+	//if (SpecHandle.IsValid())
+	//{
+	//	UDRAbilitySystemLibrary::ApplyEffectSpecWithSetByCaller(
+	//		AbilitySystemComponent,
+	//		SpecHandle,
+	//		FDRGameplayTags::Get().Water_SetByCaller_Reduction,
+	//		WaterReductionPerAttack);
+	//}
 }
 
 void ADREnemy::SetKnockbackState(bool bInKnockback)

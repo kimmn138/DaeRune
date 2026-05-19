@@ -86,6 +86,9 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_BossBGMActive)
 	bool bBossBGMActive = false;
 
+	// StopBGM으로 의도적으로 정지된 상태 (게임 클리어/오버 시 다음 트랙으로 넘어가지 않도록)
+	bool bStoppedExplicitly = false;
+
 	UFUNCTION()
 	void OnRep_CurrentTrackIndex();
 

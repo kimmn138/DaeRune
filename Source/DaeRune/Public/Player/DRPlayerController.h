@@ -192,6 +192,9 @@ public:
 	void Client_ShowGameClearUI();
 
 	UFUNCTION(Client, Reliable)
+	void Client_ShowTutorialClearUI();
+
+	UFUNCTION(Client, Reliable)
 	void ClientStopAllAudio();
 
 	// 레벨 이동 전 설정창 닫기 (서버에서 호출)
@@ -295,6 +298,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "UI|GameResult")
 	TSubclassOf<UUserWidget> GameClearWidgetClass;
 
+	// 튜토리얼 클리어 위젯 클래스
+	UPROPERTY(EditDefaultsOnly, Category = "UI|GameResult")
+	TSubclassOf<UUserWidget> TutorialGameClearWidgetClass;
+
 	// ���� ǥ�� ���� ��� ����
 	UPROPERTY()
 	TObjectPtr<UUserWidget> CurrentResultWidget;
@@ -315,6 +322,13 @@ protected:
 	// 현재 대기실 위젯 인스턴스
 	UPROPERTY()
 	TObjectPtr<UDRWaitingRoomWidget> WaitingRoomWidget;
+
+public:
+	// 현재 대기실 위젯 반환 (Blueprint에서 설정창 등이 참조 획득용)
+	UFUNCTION(BlueprintPure, Category = "UI|Lobby")
+	UDRWaitingRoomWidget* GetWaitingRoomWidget() const { return WaitingRoomWidget; }
+
+protected:
 
 	// LobbyState 변경 시 UI 처리
 	UFUNCTION()
@@ -435,7 +449,7 @@ private:
 	TSubclassOf<UDamageTextComponent> DamageTextComponentClass;
 
 	// Seamless Travel 시 캐릭터 클래스 보존 (PlayerController는 Travel에서 생존)
-	EPlayerCharacterClass CachedSelectedClass = EPlayerCharacterClass::GardenRobot;
+	EPlayerCharacterClass CachedSelectedClass = EPlayerCharacterClass::Gardener;
 
 	// ����Ʈ���̽� Ȱ��ȭ ����
 	bool bPartDetectionEnabled = false;

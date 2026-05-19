@@ -122,7 +122,7 @@ void ADRHUD::ShowCharacterInfo(EPlayerCharacterClass CharacterClass)
 
 		CachedCharacterInfoClass = CharacterClass;
 		bHasCachedCharacterInfoClass = true;
-		CharacterInfoWidget->AddToViewport();
+		CharacterInfoWidget->AddToViewport(100);
 	}
 	else
 	{

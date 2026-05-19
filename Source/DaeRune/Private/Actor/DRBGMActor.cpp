@@ -128,6 +128,8 @@ void ADRBGMActor::PlayBGM()
 {
 	if (!HasAuthority()) return;
 
+	bStoppedExplicitly = false;
+
 	if (BGMSlot == EDRBGMSlot::Stage)
 	{
 		if (StagePlaylist.Num() == 0) return;
@@ -172,6 +174,9 @@ void ADRBGMActor::PlayPlaylistTrackLocal(int32 Index, float FadeIn)
 
 void ADRBGMActor::StopBGM(float FadeOutDuration)
 {
+	// FadeOut 완료 시 OnAudioFinished가 발화되어 다음 트랙으로 넘어가는 것을 막기 위한 플래그
+	bStoppedExplicitly = true;
+
 	if (AudioComponent && AudioComponent->IsPlaying())
 	{
 		AudioComponent->FadeOut(FadeOutDuration, 0.0f);
@@ -247,6 +252,7 @@ void ADRBGMActor::OnAudioComponentFinished()
 	if (!HasAuthority()) return;
 	if (BGMSlot != EDRBGMSlot::Stage) return;
 	if (bBossBGMActive) return;  // 보스 중에는 메인 페이드아웃 종료가 정상이므로 진행 안함
+	if (bStoppedExplicitly) return;  // StopBGM으로 정지된 경우 다음 트랙으로 넘어가지 않음
 	if (StagePlaylist.Num() == 0) return;
 
 	const int32 NextIndex = (CurrentTrackIndex + 1) % StagePlaylist.Num();

@@ -43,6 +43,7 @@ void UDRPhase3::OnPhaseStart()
 	GameState->SetCurrentWaveNumber(0);
 	GameState->SetCurrentWaveLevel(0);
 	GameState->SetTotalWaves(5);
+	BroadcastAliveEnemyObjective();
 	
 	InitializeCleanserSite();
 	
@@ -64,14 +65,6 @@ void UDRPhase3::OnPhaseStart()
 			}
 			GameState->Multicast_ActivateEnemySpawnPointVFX(SpawnPointTransforms, EnemySpawnPointNiagaraSystem);
 		}
-
-		DefenseStartTime = World->GetTimeSeconds();
-		World->GetTimerManager().SetTimer(
-			DefenseTimerHandle,
-			this,
-			&UDRPhase3::CheckVictoryConditions,
-			DefenseDuration,
-			false);
 	}
 	
 	StartNextWave();
@@ -169,6 +162,7 @@ void UDRPhase3::OnEliteEnemyDeath(AActor* DeadEnemy)
 		RemoveEliteBossTag();
 	}
 
+	BroadcastAliveEnemyObjective();
 	CheckWaveCompletion();
 }
 
@@ -177,7 +171,25 @@ void UDRPhase3::OnEnemyDeath(AActor* DeadEnemy)
 {
 	Super::OnEnemyDeath(DeadEnemy);
 
+	BroadcastAliveEnemyObjective();
 	CheckWaveCompletion();
+}
+
+// 현재 살아있는 일반 적 + 엘리트 보스 수를 페이즈 목표 UI에 전달합니다.
+void UDRPhase3::BroadcastAliveEnemyObjective()
+{
+	if (!GameState) return;
+
+	int32 AliveEliteCount = 0;
+	for (const TWeakObjectPtr<AActor>& Elite : EliteBosses)
+	{
+		if (Elite.IsValid())
+		{
+			++AliveEliteCount;
+		}
+	}
+
+	GameState->UpdatePhaseObjectiveProgress(GetAliveEnemyCount() + AliveEliteCount);
 }
 
 // 이번 웨이브의 모든 몬스터가 스폰 완료되고 모두 처치되면 즉시 웨이브를 종료합니다.
@@ -361,7 +373,7 @@ void UDRPhase3::StartNextWave()
 void UDRPhase3::EndCurrentWave()
 {
 	if (!GameMode) return;
-	
+
 	if (UWorld* World = GameMode->GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(SpawnTimerHandle);
@@ -372,7 +384,20 @@ void UDRPhase3::EndCurrentWave()
 	if (GameState)
 	{
 		GameState->SetIsToxicGasWave(false);
-		GameState->UpdatePhaseObjectiveProgress(CurrentWaveNumber);
+	}
+
+	// 마지막 웨이브가 끝났다면 휴식 시간 없이 즉시 승패 판정
+	if (CurrentWaveNumber >= 5)
+	{
+		if (UWorld* World = GameMode->GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(WaveTimerHandle);
+			World->GetTimerManager().ClearTimer(WaveTimerUpdateHandle);
+		}
+
+		CurrentWaveState = EWaveState::Completed;
+		CheckVictoryConditions();
+		return;
 	}
 
 	StartRestTime();
@@ -499,7 +524,6 @@ void UDRPhase3::SkipToNextWave()
 	{
 		GameState->Multicast_DeactivateEliteSpawnPointVFX();
 		GameState->SetIsToxicGasWave(false);
-		GameState->UpdatePhaseObjectiveProgress(CurrentWaveNumber);
 	}
 
 	// 마지막 웨이브였다면 페이즈 자체를 종료
@@ -694,7 +718,6 @@ void UDRPhase3::SpawnMonsterByCycle()
 			{
 				SpawnedEnemy->SetLevel(CurrentWaveLevel);
 				SpawnedEnemy->bIsPhase3Enemy = true;
-				SpawnedEnemy->SetWaveOutlineLevel(static_cast<uint8>(CurrentWaveLevel));
 				if (CurrentWaveLevel >= 4)
 				{
 					SpawnedEnemy->EnrageHealthThreshold = HighLevelEnrageThreshold;
@@ -721,6 +744,7 @@ void UDRPhase3::SpawnMonsterByCycle()
 					// 기존 글로벌 Buff.Elite 태그 시스템은 포효(Roar) 오라로 대체됨
 
 					SpawnedEnemies.Add(SpawnedEnemy);
+					BroadcastAliveEnemyObjective();
 					CheckGameOverConditions();
 				}
 			}
@@ -752,7 +776,6 @@ void UDRPhase3::SpawnEliteMonster(const FVector& SpawnLocation)
 		SpawnedEnemy->SetLevel(CurrentWaveLevel);
 
 		SpawnedEnemy->bIsPhase3Enemy = true;
-		SpawnedEnemy->SetWaveOutlineLevel(static_cast<uint8>(CurrentWaveLevel));
 		if (CurrentWaveLevel >= 4)
 		{
 			SpawnedEnemy->EnrageHealthThreshold = HighLevelEnrageThreshold;
@@ -761,6 +784,7 @@ void UDRPhase3::SpawnEliteMonster(const FVector& SpawnLocation)
 		SpawnedEnemy->FinishSpawning(FTransform(FRotator::ZeroRotator, SpawnLocation));
 		
 		EliteBosses.Add(SpawnedEnemy);
+		BroadcastAliveEnemyObjective();
 
 		if (!bEliteBossSpawned)
 		{
@@ -1093,14 +1117,15 @@ void UDRPhase3::OnCleanserSiteDestroyed(ADRCleanserSite* DestroyedSite) const
 // 클렌저 체력이 절반 이하가 되면 웨이브 레벨을 올립니다.
 void UDRPhase3::OnCleanserSiteHealthBelowHalf()
 {
-	if (!GameMode) return;
-	
-	IncreaseWaveLevel(1);
-	
-	if (GameState)
-	{
-		GameState->SetCurrentWaveLevel(CurrentWaveLevel);
-	}
+	// 임시 비활성화: 클렌저 체력 50% 이하 시 웨이브 레벨 증가 기능 주석 처리
+	// if (!GameMode) return;
+	//
+	// IncreaseWaveLevel(1);
+	//
+	// if (GameState)
+	// {
+	// 	GameState->SetCurrentWaveLevel(CurrentWaveLevel);
+	// }
 }
 
 // 클렌저 체력이 0이 되면 게임오버를 처리합니다.
@@ -1124,11 +1149,33 @@ void UDRPhase3::CheckGameOverConditions() const
 	}
 }
 
-// 방어 시간 종료 시 승리/패배 조건을 검사합니다.
+// 마지막 웨이브 종료 시 승리/패배 조건을 검사합니다.
 void UDRPhase3::CheckVictoryConditions()
 {
+	if (!GameMode) return;
+
+	// 페이즈3에서 스폰된 적이 한 명이라도 살아있으면 게임 오버
+	bool bAnyEnemyAlive = GetAliveEnemyCount() > 0;
+	if (!bAnyEnemyAlive)
+	{
+		for (const TWeakObjectPtr<AActor>& Elite : EliteBosses)
+		{
+			if (Elite.IsValid())
+			{
+				bAnyEnemyAlive = true;
+				break;
+			}
+		}
+	}
+
+	if (bAnyEnemyAlive)
+	{
+		GameMode->TriggerGameOver();
+		return;
+	}
+
+	// 모든 적이 처치된 상태에서 클렌저 사이트가 살아있으면 클리어
 	bool bAllSitesAlive = true;
-	
 	for (const TObjectPtr<ADRCleanserSite>& Site : ActiveCleanserSites)
 	{
 		if (!Site || !IsValid(Site))
@@ -1137,20 +1184,14 @@ void UDRPhase3::CheckVictoryConditions()
 			break;
 		}
 	}
-	
+
 	if (bAllSitesAlive)
 	{
-		if (GameMode)
-		{
-			GameMode->ValidatePhaseCompletion();
-		}
+		GameMode->ValidatePhaseCompletion();
 	}
 	else
 	{
-		if (GameMode)
-		{
-			GameMode->TriggerGameOver();
-		}
+		GameMode->TriggerGameOver();
 	}
 }
 

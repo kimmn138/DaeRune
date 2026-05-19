@@ -26,7 +26,7 @@ UClass* ADRStageGameMode::GetDefaultPawnClassForController_Implementation(AContr
 	if (APlayerController* PC = Cast<APlayerController>(InController))
 	{
 		// GameInstance?먯꽌 ??λ맂 ?좏깮 ?뺣낫 蹂듭썝 (留??꾪솚 諛⑹떇??愿怨꾩뾾???뺤떎??蹂댁〈??
-		EPlayerCharacterClass SelectedClass = EPlayerCharacterClass::GardenRobot;
+		EPlayerCharacterClass SelectedClass = EPlayerCharacterClass::Gardener;
 
 		if (ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
 		{

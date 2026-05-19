@@ -256,6 +256,9 @@ private:
 	int32 CurrentSpawnCount = 0;
 	int32 TotalSpawnCount = 0;
 
+	// 페이즈 목표 UI에 현재 살아있는 적 수(일반 + 엘리트)를 브로드캐스트한다.
+	void BroadcastAliveEnemyObjective();
+
 	// MonsterSpawnCycle에서 현재 읽을 인덱스
 	int32 CurrentSpawnCycleIndex = 0;
 

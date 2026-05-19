@@ -20,6 +20,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Tutorial")
 	void OnStartGameClicked();
 
+	// "Skip Tutorial" 버튼 클릭 시 호출
+	UFUNCTION(BlueprintCallable, Category = "Tutorial")
+	void OnSkipTutorialClicked();
+
 	// "Settings" 버튼 클릭 시 호출
 	UFUNCTION(BlueprintCallable, Category = "Tutorial")
 	void OnSettingsClicked();

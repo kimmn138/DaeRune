@@ -325,6 +325,7 @@ void UOverlayWidgetController::HandlePhaseObjectiveChanged()
 	
 	OnObjectiveTextChanged.Broadcast(ObjectiveData.ObjectiveTitle,ObjectiveData.ProgressFormat);
 	OnObjectiveProgressChanged.Broadcast(CurrentProgress,ObjectiveData.RequiredCount);
+	OnObjectiveProgressVisibilityChanged.Broadcast(ObjectiveData.RequiredCount > 0);
 }
 
 void UOverlayWidgetController::BindPhaseObjectiveDelegate()

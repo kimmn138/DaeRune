@@ -38,6 +38,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAttributeChangedSignature, float,
 // ��ǥ UI ������Ʈ�� ��������Ʈ
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveTextChangedSignature, const FText&, ObjectiveTitle, const FText&, ProgressText);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveProgressChangedSignature, int32, Current, int32, Max);
+// 목표 진행도(숫자) UI 표시/숨김 델리게이트 (Max==0이면 false로 브로드캐스트)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnObjectiveProgressVisibilityChangedSignature, bool, bShouldShow);
 // ����� ����� ��������Ʈ
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FStatusEffectWidgetSignature, const FEffectInfo&, EffectInfo);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FEffectTagRemovedSignature, FGameplayTag, EffectTag, bool, IsDebuff);
@@ -111,6 +113,10 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Objective")
 	FOnObjectiveProgressChangedSignature OnObjectiveProgressChanged;
+
+	// Max==0인 경우 숫자 표시(Progress 텍스트) 숨기기 위한 가시성 델리게이트
+	UPROPERTY(BlueprintAssignable, Category = "Phase|Objective")
+	FOnObjectiveProgressVisibilityChangedSignature OnObjectiveProgressVisibilityChanged;
 
 	// ����� ���� ��ε�ĳ��Ʈ ��������Ʈ
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Debuff")
