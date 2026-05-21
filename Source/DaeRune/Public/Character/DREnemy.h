@@ -131,7 +131,7 @@ public:
 	bool DropPart();
 
 	UFUNCTION(BlueprintPure, Category = "Part System")
-	bool HasPart() const { return bCarriesPart && PartMeshComponent && PartMeshComponent->IsVisible(); }
+	bool HasPart() const { return bCarriesPart && !bPartDropped; }
 
 	// 광폭화 시스템
 

@@ -115,6 +115,12 @@ private:
 	bool bCreateSessionOnDestroy{false};
 	int32 LastNumPublicConnections;
 
+	// Destroy 완료 후 보류된 Find/Join 재시도를 위한 상태
+	bool bFindSessionOnDestroy{false};
+	FString PendingFindRoomCode;
+	bool bJoinSessionOnDestroy{false};
+	TSharedPtr<FOnlineSessionSearchResult> PendingJoinResult;
+
 	// �ʴ밡 ����Ǿ� �ִ� ����
 	bool bInvitePending = false;
 	// JoinSession�� �̹� ����

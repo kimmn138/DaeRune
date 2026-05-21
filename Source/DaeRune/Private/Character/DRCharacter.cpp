@@ -843,8 +843,11 @@ void ADRCharacter::InitAbilityActorInfo()
 		}
 	}
 
-	// �⺻ �Ӽ� �ʱ�ȭ
-	InitializeDefaultAttributes();
+	// 기본 속성 초기화 (서버에서만 - 클라이언트는 복제로 받음)
+	if (HasAuthority())
+	{
+		InitializeDefaultAttributes();
+	}
 }
 
 void ADRCharacter::MulticastPlayHitReactFacial_Implementation()

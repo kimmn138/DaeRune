@@ -410,10 +410,7 @@ void ADRPlayerController::ClientStopAllAudio_Implementation()
 void ADRPlayerController::CheatSkipToNextPhase()
 {
 // 媛쒕컻 鍮뚮뱶?먯꽌留??숈옉?섎룄濡?泥댄겕
-#if !UE_BUILD_SHIPPING
 	ServerCheatSkipToNextPhase();
-#else
-#endif
 }
 
 void ADRPlayerController::BeginPlay()

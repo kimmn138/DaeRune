@@ -323,7 +323,7 @@ bool ADREnemy::DropPart()
 		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 	FVector SpawnLocation = GetActorLocation() + GetActorUpVector() * -10.f;
-	if (PartMeshComponent && PartMeshComponent->IsVisible())
+	if (PartMeshComponent)
 	{
 		SpawnLocation = PartMeshComponent->GetComponentLocation();
 	}

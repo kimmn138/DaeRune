@@ -88,6 +88,15 @@ void UMultiplayerSessionsSubsystem::FindSessionByRoomCode(const FString& RoomCod
 		return;
 	}
 
+	// 기존 세션이 남아있으면 먼저 정리 후 같은 룸코드로 재시도 (AlreadyInSession 실패 방지)
+	if (SessionInterface->GetNamedSession(NAME_GameSession) != nullptr)
+	{
+		bFindSessionOnDestroy = true;
+		PendingFindRoomCode = RoomCode;
+		DestroySession();
+		return;
+	}
+
 	SearchingRoomCode = RoomCode;
 
 	// 占쏙옙 占쌘듸옙占?占쏙옙占쏙옙 占싯삼옙
@@ -115,6 +124,15 @@ void UMultiplayerSessionsSubsystem::JoinSession(const FOnlineSessionSearchResult
 	if (!SessionInterface.IsValid())
 	{
 		MultiplayerOnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::UnknownError);
+		return;
+	}
+
+	// 기존 세션이 남아있으면 먼저 정리 후 같은 결과로 재시도 (AlreadyInSession 실패 방지)
+	if (SessionInterface->GetNamedSession(NAME_GameSession) != nullptr)
+	{
+		bJoinSessionOnDestroy = true;
+		PendingJoinResult = MakeShared<FOnlineSessionSearchResult>(SessionResult);
+		DestroySession();
 		return;
 	}
 
@@ -330,10 +348,39 @@ void UMultiplayerSessionsSubsystem::OnDestroySessionComplete(FName SessionName, 
 		SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegateHandle);
 	}
 
-	if (bWasSuccessful && bCreateSessionOnDestroy)
+	if (bWasSuccessful)
 	{
+		if (bCreateSessionOnDestroy)
+		{
+			bCreateSessionOnDestroy = false;
+			CreateSessionWithRoomCode(LastNumPublicConnections, "RoomCodeOnly");
+		}
+		else if (bFindSessionOnDestroy)
+		{
+			bFindSessionOnDestroy = false;
+			const FString RoomCode = PendingFindRoomCode;
+			PendingFindRoomCode.Empty();
+			FindSessionByRoomCode(RoomCode);
+		}
+		else if (bJoinSessionOnDestroy)
+		{
+			bJoinSessionOnDestroy = false;
+			if (PendingJoinResult.IsValid())
+			{
+				const FOnlineSessionSearchResult Result = *PendingJoinResult;
+				PendingJoinResult.Reset();
+				JoinSession(Result);
+			}
+		}
+	}
+	else
+	{
+		// Destroy 실패 시 보류 상태 정리하여 데드락 방지
 		bCreateSessionOnDestroy = false;
-		CreateSessionWithRoomCode(LastNumPublicConnections, "RoomCodeOnly");
+		bFindSessionOnDestroy = false;
+		bJoinSessionOnDestroy = false;
+		PendingFindRoomCode.Empty();
+		PendingJoinResult.Reset();
 	}
 
 	MultiplayerOnDestroySessionComplete.Broadcast(bWasSuccessful);
