@@ -113,23 +113,22 @@ ADRCleanserPart* ADRPlayerController::FindPartByLineTrace()
 	FVector Start = Camera->GetComponentLocation();
 	FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
 
-	// 占쏙옙占쏙옙트占쏙옙占싱쏙옙 占쏙옙占쏙옙
-	FHitResult HitResult;
+	// 멀티 라인트레이스: 사이트 메시 등에 가려져도 부품을 찾을 수 있도록 모든 히트를 검사
+	TArray<FHitResult> HitResults;
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(DRCharacter);
 
-	bool bHit = GetWorld()->LineTraceSingleByChannel(
-		HitResult,
+	GetWorld()->LineTraceMultiByChannel(
+		HitResults,
 		Start,
 		End,
 		ECC_Visibility,
 		QueryParams
 	);
 
-	// 占쏙옙품占쏙옙 占쏙옙트占쌩댐옙占쏙옙 확占쏙옙
-	if (bHit)
+	for (const FHitResult& Hit : HitResults)
 	{
-		ADRCleanserPart* HitPart = Cast<ADRCleanserPart>(HitResult.GetActor());
+		ADRCleanserPart* HitPart = Cast<ADRCleanserPart>(Hit.GetActor());
 		if (HitPart && HitPart->CanBePickedUp())
 		{
 			return HitPart;
