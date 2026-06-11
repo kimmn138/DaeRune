@@ -38,7 +38,8 @@ void UDRPhase3::OnPhaseStart()
 
 	LoadPhase3ConfigFromBalanceConfig();
 
-	SetupPhaseObjective(3);
+	// 페이즈 구조 개편: 기존 Phase3가 새 Phase2 역할로 표기됨
+	SetupPhaseObjective(2);
 	
 	GameState->SetCurrentWaveNumber(0);
 	GameState->SetCurrentWaveLevel(0);

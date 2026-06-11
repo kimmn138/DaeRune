@@ -222,8 +222,8 @@ void ADRStageGameMode::InitializePhaseSystem()
 {
 	if (!HasAuthority()) return;
 
-	// 클占쏙옙占쏙옙 占쏙옙占쏙옙트 占쏙옙효占쏙옙 占쏙옙占쏙옙
-	if (CleanserSites.Num() < 3) return;
+	// 페이즈 구조 개편: 사이트 맵 배치/활성화 모두 1개로 고정 (Phase1이 안전망으로 1개만 유지)
+	if (CleanserSites.Num() < 1) return;
 
 	// 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 占싸쏙옙占싹쏙옙 占쏙옙占쏙옙
 	PhaseInstances.Empty();
@@ -366,43 +366,24 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 	int32 CurrentPhaseIndex = CachedGameState->GetCurrentPhaseIndex();
 	bool bIsCompleted = false;
 
-	// 占쏙옙占쏙옙占쏘별 占싹뤄옙 占쏙옙占쏙옙 占쏙옙占쏙옙
+	// 페이즈 구조 개편 (2개 페이즈):
+	//   case 0 = New Phase1 (클렌저 확보 + 부품 회수 통합) → 부품 2개 설치 + 사이트 활성화
+	//   case 1 = New Phase2 (= 기존 Phase3, 방어) → 모든 웨이브 클리어
 	switch (CurrentPhaseIndex)
 	{
-	case 0: // Phase 1: 클占쏙옙占쏙옙 확占쏙옙
+	case 0: // New Phase1: 부품 2개 고정 설치 + 사이트 활성화
 	{
-		bool bAreaSecured = CachedGameState->IsCleanserAreaSecured();
-		int32 RemainingEnemies = CachedGameState->GetRemainingEnemiesInArea();
-
-		bIsCompleted = bAreaSecured && (RemainingEnemies == 0);
-	}
-	break;
-
-	case 1: // Phase 2: 占쏙옙품 회占쏙옙
-	{
-		int32 CollectedParts = CachedGameState->GetCollectedParts();
-		bool bActivated = CachedGameState->IsCleanserActivated();
-
-		// [임시] 1개 사이트 기준 (파츠 2개)
+		const int32 CollectedParts = CachedGameState->GetCollectedParts();
+		const bool bActivated = CachedGameState->IsCleanserActivated();
 		bIsCompleted = (CollectedParts >= 2) && bActivated;
-		// bIsCompleted = (CollectedParts >= 4) && bActivated;
 	}
 	break;
 
-	case 2: // Phase 3: 占쏙옙占?
+	case 1: // New Phase2 (= 기존 Phase3): 모든 웨이브 클리어
 	{
-		int32 CurrentWaveNumber = CachedGameState->GetCurrentWaveNumber();
-		int32 TotalWaves = CachedGameState->GetTotalWaves();
-
+		const int32 CurrentWaveNumber = CachedGameState->GetCurrentWaveNumber();
+		const int32 TotalWaves = CachedGameState->GetTotalWaves();
 		bIsCompleted = CurrentWaveNumber >= TotalWaves;
-	}
-	break;
-
-	case 3: // Phase 4: 占쏙옙占쏙옙
-	{
-		float BossHealth = CachedGameState->GetBossHealth();
-
-		bIsCompleted = BossHealth <= 0.0f;
 	}
 	break;
 

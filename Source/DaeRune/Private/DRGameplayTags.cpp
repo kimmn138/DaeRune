@@ -113,6 +113,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Armadillo is in ball form")
 	);
 
+	GameplayTags.State_Enemy_Phase1 = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.Enemy.Phase1"),
+		FString("Enemy belongs to New Phase1; deals 30% reduced damage to players.")
+	);
+
 	/*
 	 * �⺻ ������, Ÿ�� �� ������
 	 */

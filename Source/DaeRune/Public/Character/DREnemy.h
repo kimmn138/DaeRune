@@ -118,7 +118,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Part System")
 	TObjectPtr<UStaticMeshComponent> PartMeshComponent;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part System")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_bCarriesPart, Category = "Part System")
 	bool bCarriesPart = false;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Part System")
@@ -132,6 +132,13 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Part System")
 	bool HasPart() const { return bCarriesPart && !bPartDropped; }
+
+	// 서버 권위 setter — Phase1이 런타임에 부품 운반자 지정 시 호출
+	UFUNCTION(BlueprintCallable, Category = "Part System")
+	void SetCarriesPart(bool bNewCarriesPart);
+
+	UFUNCTION()
+	void OnRep_bCarriesPart();
 
 	// 광폭화 시스템
 

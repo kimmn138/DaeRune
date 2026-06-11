@@ -96,8 +96,8 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 				// 공격자가 플레이어인 경우에만 타겟 설정 (적끼리 공격 시 타겟팅 방지)
 				const bool bSourceIsPlayer = Props.SourceAvatarActor && Props.SourceAvatarActor->ActorHasTag(FName("Player"));
 
-				// FirstAttacker가 없고, 부품을 들고 도망치는 적이 아닌 경우에만 설정
-				if (bSourceIsPlayer && !BB->GetValueAsBool("HasFirstAttacker") && !Enemy->bCarriesPart)
+				// FirstAttacker가 없으면 설정 (부품 운반자도 공격 가능 — 도망 설계 폐기)
+				if (bSourceIsPlayer && !BB->GetValueAsBool("HasFirstAttacker"))
 				{
 					// 첫 공격자 설정
 					BB->SetValueAsObject("FirstAttacker", Props.SourceAvatarActor);

@@ -44,6 +44,9 @@ public:
 	FGameplayTag State_LockedDown;
 	FGameplayTag State_BallForm;
 
+	// Phase1 적 식별 태그 (플레이어에게 주는 대미지 30% 감소 트리거)
+	FGameplayTag State_Enemy_Phase1;
+
 	// �⺻ ������, Ÿ�� �� ������
 	FGameplayTag Damage;
 	FGameplayTag Damage_Fire;

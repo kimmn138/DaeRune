@@ -19,8 +19,6 @@
 #include "Engine/OverlapResult.h"
 #include "Game/DRStageGameState.h"
 #include "GameFramework/Character.h"
-#include "NavigationSystem.h"
-#include "NavigationPath.h"
 
 bool UDRAbilitySystemLibrary::MakeWidgetControllerParams(const UObject* WorldContextObject, FWidgetControllerParams& OutWCParams, ADRHUD*& OutDRHUD)
 {
@@ -390,16 +388,17 @@ bool UDRAbilitySystemLibrary::IsActorReachable(APawn* Asker, AActor* Target)
 	UWorld* World = Asker->GetWorld();
 	if (!World) return false;
 
-	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
-	if (!NavSys) return false;
+	// 벽/지형(WorldStatic)만 차단으로 간주. 다른 캐릭터/적은 무시.
+	const FVector Start = Asker->GetActorLocation();
+	const FVector End = Target->GetActorLocation();
 
-	UNavigationPath* Path = NavSys->FindPathToLocationSynchronously(
-		World,
-		Asker->GetActorLocation(),
-		Target->GetActorLocation(),
-		Asker);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(IsActorReachable), /*bTraceComplex=*/false);
+	Params.AddIgnoredActor(Asker);
+	Params.AddIgnoredActor(Target);
 
-	return Path && Path->IsValid() && !Path->IsPartial();
+	FHitResult Hit;
+	const bool bBlocked = World->LineTraceSingleByChannel(Hit, Start, End, ECC_WorldStatic, Params);
+	return !bBlocked;
 }
 
 bool UDRAbilitySystemLibrary::IsNotFriend(AActor* FirstActor, AActor* SecondActor)

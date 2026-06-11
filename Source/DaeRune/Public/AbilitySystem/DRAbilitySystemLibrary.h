@@ -103,8 +103,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|GameplayMechanics")
 	static AActor* GetClosestCleanserSite(APawn* ControlledPawn);
 
-	// NavMesh 상에서 Asker가 Target까지 도달 가능한지 검사. Partial path는 불가로 간주.
-	// BT의 타깃 선정/검증에서 도달 불가 타깃을 거르는 용도.
+	// Asker가 Target을 직접 시야로 볼 수 있는지 검사 (벽/지형이 사이를 가로막지 않는지).
+	// 비행 적이 벽 너머 플레이어를 타깃팅하지 않도록 BT의 타깃 선정/검증에서 사용.
+	// 지상 적의 NavMesh 도달 가능성이 아니라 "벽 너머 차단" 의미. 비행/지상 위치와 무관하게 작동.
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|AI")
 	static bool IsActorReachable(APawn* Asker, AActor* Target);
 

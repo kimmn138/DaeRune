@@ -104,7 +104,37 @@ void ADREnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 
 	DOREPLIFETIME(ADREnemy, ReplicatedTargetRotation);
 	DOREPLIFETIME(ADREnemy, bIsAggroed);
+	DOREPLIFETIME(ADREnemy, bCarriesPart);
 	DOREPLIFETIME_CONDITION(ADREnemy, WaveOutlineLevel, COND_InitialOnly);
+}
+
+void ADREnemy::SetCarriesPart(bool bNewCarriesPart)
+{
+	if (!HasAuthority()) return;
+	if (bCarriesPart == bNewCarriesPart) return;
+
+	bCarriesPart = bNewCarriesPart;
+
+	// 서버에서 즉시 가시화/숨김 (OnRep는 클라이언트에서만 호출됨)
+	if (PartMeshComponent)
+	{
+		PartMeshComponent->SetVisibility(bCarriesPart);
+	}
+
+	// 블랙보드에 부품 보유 상태 반영
+	if (DRAIController && DRAIController->GetBlackboardComponent())
+	{
+		DRAIController->GetBlackboardComponent()->SetValueAsBool(DRBlackboardKeys::HasPart, bCarriesPart);
+	}
+}
+
+void ADREnemy::OnRep_bCarriesPart()
+{
+	// 클라이언트: 메시 가시화 동기화
+	if (PartMeshComponent)
+	{
+		PartMeshComponent->SetVisibility(bCarriesPart);
+	}
 }
 
 void ADREnemy::OnRep_TargetRotation()
@@ -322,10 +352,32 @@ bool ADREnemy::DropPart()
 	SpawnParams.SpawnCollisionHandlingOverride =
 		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	FVector SpawnLocation = GetActorLocation() + GetActorUpVector() * -10.f;
+	// 시작점: PartMesh 위치(가능 시) 또는 액터 위치
+	FVector SpawnLocation = GetActorLocation();
 	if (PartMeshComponent)
 	{
 		SpawnLocation = PartMeshComponent->GetComponentLocation();
+	}
+
+	// 잠자리처럼 공중에서 죽는 경우 대비: 지면으로 라인트레이스 후 그 지점에 스폰
+	{
+		const FVector TraceStart = SpawnLocation + FVector(0.f, 0.f, 50.f);
+		const FVector TraceEnd = SpawnLocation - FVector(0.f, 0.f, 5000.f);
+		FHitResult GroundHit;
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(this);
+		if (GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, QueryParams))
+		{
+			SpawnLocation = GroundHit.ImpactPoint + FVector(0.f, 0.f, 10.f);
+		}
+		else
+		{
+			// 지면을 못 찾으면 액터 발 밑(캡슐 하단)으로 폴백
+			if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+			{
+				SpawnLocation = GetActorLocation() - FVector(0.f, 0.f, Capsule->GetScaledCapsuleHalfHeight());
+			}
+		}
 	}
 
 	AActor* DroppedPart = GetWorld()->SpawnActor<AActor>(
