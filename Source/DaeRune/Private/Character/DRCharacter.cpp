@@ -547,17 +547,17 @@ void ADRCharacter::BeginPlay()
 	UpdateMeshVisibility();
 
 	// 1��Ī ���� ��� �ϴ� ����Ʈ �߰�
-	if (IsLocallyControlled())
-	{
-		UPointLightComponent* Light = NewObject<UPointLightComponent>(this);
-		Light->SetupAttachment(FollowCamera);
-		Light->SetRelativeLocation(FVector(-14.2f, 0.f, 23.5f));
-		Light->SetIntensity(1500.f);
-		Light->SetAttenuationRadius(300.f);
-		Light->SetCastShadows(false);
-		Light->SetMobility(EComponentMobility::Movable);
-		Light->RegisterComponent();
-	}
+	//if (IsLocallyControlled())
+	//{
+	//	UPointLightComponent* Light = NewObject<UPointLightComponent>(this);
+	//	Light->SetupAttachment(FollowCamera);
+	//	Light->SetRelativeLocation(FVector(-14.2f, 0.f, 23.5f));
+	//	Light->SetIntensity(1500.f);
+	//	Light->SetAttenuationRadius(300.f);
+	//	Light->SetCastShadows(false);
+	//	Light->SetMobility(EComponentMobility::Movable);
+	//	Light->RegisterComponent();
+	//}
 
 	// 표정 시스템 초기화 (3P 메시에 적용)
 	if (FacialExpressionComponent)

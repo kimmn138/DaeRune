@@ -368,7 +368,7 @@ bool ADREnemy::DropPart()
 		QueryParams.AddIgnoredActor(this);
 		if (GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, QueryParams))
 		{
-			SpawnLocation = GroundHit.ImpactPoint + FVector(0.f, 0.f, 10.f);
+			SpawnLocation = GroundHit.ImpactPoint + FVector(0.f, 0.f, 80.f);
 		}
 		else
 		{
