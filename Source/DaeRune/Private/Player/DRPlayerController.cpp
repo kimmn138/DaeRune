@@ -1610,6 +1610,7 @@ void ADRPlayerController::RefreshWaitingRoomUI()
 		Info.PlayerName = PS->GetPlayerName();
 		Info.SelectedClass = DRPS->GetSelectedPlayerClass();
 		Info.bIsHost = GS->IsPlayerHost(PS);
+		Info.bIsReady = Info.bIsHost ? true : DRPS->IsReady(); // 호스트는 항상 준비 상태로 표시
 		Info.OwningPlayerState = PS;
 
 		// ?쒕쾭 沅뚯쐞 ?щ’ ?몃뜳???ъ슜
@@ -1693,6 +1694,33 @@ void ADRPlayerController::ServerRequestPowerOn_Implementation()
 	{
 		LobbyGM->PowerOn(this);
 	}
+}
+
+void ADRPlayerController::OnPowerOnButtonPressed()
+{
+	// 버튼 클릭 시 로컬에서 호출됨. 호스트(리슨 서버)면 PowerOn 시도, 원격 클라이언트면 준비 토글.
+	if (HasAuthority())
+	{
+		ServerRequestPowerOn();
+	}
+	else
+	{
+		ServerToggleReady();
+	}
+}
+
+void ADRPlayerController::ServerToggleReady_Implementation()
+{
+	// 클라이언트 요청 → 서버에서 실행. 호스트는 준비 토글 대상이 아님.
+	if (HasAuthority() && IsLocalController()) return;
+
+	ADRLobbyGameMode* LobbyGM = GetWorld()->GetAuthGameMode<ADRLobbyGameMode>();
+	if (!LobbyGM) return;
+
+	ADRPlayerState* PS = GetPlayerState<ADRPlayerState>();
+	if (!PS) return;
+
+	LobbyGM->SetPlayerReady(this, !PS->IsReady());
 }
 
 void ADRPlayerController::ServerRequestKickPlayer_Implementation(APlayerState* TargetPlayerState)

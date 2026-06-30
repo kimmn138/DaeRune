@@ -38,6 +38,7 @@ void ADRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(ADRPlayerState, bIsCorrupted);
     DOREPLIFETIME(ADRPlayerState, WaitingRoomSlotIndex);
     DOREPLIFETIME(ADRPlayerState, SelectedPlayerClass);
+    DOREPLIFETIME(ADRPlayerState, bIsReady);
 }
 
 void ADRPlayerState::CopyProperties(APlayerState* PlayerState)
@@ -346,6 +347,34 @@ void ADRPlayerState::OnRep_WaitingRoomSlotIndex()
 			if (DRPC->IsLocalController())
 			{
 				DRPC->RefreshWaitingRoomUI();
+			}
+		}
+	}
+}
+
+void ADRPlayerState::SetReady(bool bNewReady)
+{
+	if (!HasAuthority()) return;
+	if (bIsReady == bNewReady) return;
+
+	bIsReady = bNewReady;
+	ForceNetUpdate();
+
+	OnReadyStateChanged.Broadcast(bIsReady);
+}
+
+void ADRPlayerState::OnRep_IsReady()
+{
+	OnReadyStateChanged.Broadcast(bIsReady);
+
+	// 어떤 플레이어의 준비 상태가 바뀌든 이 클라이언트의 대기실 목록을 갱신
+	if (UWorld* World = GetWorld())
+	{
+		if (ADRPlayerController* LocalPC = Cast<ADRPlayerController>(World->GetFirstPlayerController()))
+		{
+			if (LocalPC->IsLocalController())
+			{
+				LocalPC->RefreshWaitingRoomUI();
 			}
 		}
 	}

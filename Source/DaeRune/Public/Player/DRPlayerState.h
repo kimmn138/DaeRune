@@ -19,6 +19,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCombatStateChangedSignature, bool
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCorruptedStateChangedSignature, bool, bIsCorrupted);
 // 캐릭터 클래스 변경 알림 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnPlayerClassChanged, ADRPlayerState*, PlayerState, EPlayerCharacterClass, NewClass);
+// 준비 상태 변경 알림 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnReadyStateChangedSignature, bool, bIsReady);
 
 /**
  * DaeRune �÷��̾��� ���� ���� ���� Ŭ����
@@ -63,6 +65,18 @@ public:
 
 	void SetWaitingRoomSlotIndex(int32 NewIndex);
 
+	// ========== 준비 상태 (대기실) ==========
+
+	UFUNCTION(BlueprintPure, Category = "Lobby")
+	bool IsReady() const { return bIsReady; }
+
+	// 준비 상태 설정 (서버 전용)
+	void SetReady(bool bNewReady);
+
+	// 준비 상태 변경 알림 (UI 바인딩용)
+	UPROPERTY(BlueprintAssignable, Category = "Lobby")
+	FOnReadyStateChangedSignature OnReadyStateChanged;
+
 	// ========== 캐릭터 클래스 선택 ==========
 
 	UFUNCTION(BlueprintCallable, Category = "Character Selection")
@@ -97,6 +111,10 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_WaitingRoomSlotIndex, BlueprintReadOnly, Category = "Lobby")
 	int32 WaitingRoomSlotIndex = -1;
 
+	// 준비 상태 (대기실, 클라이언트가 토글)
+	UPROPERTY(ReplicatedUsing = OnRep_IsReady, BlueprintReadOnly, Category = "Lobby")
+	bool bIsReady = false;
+
 	// 캐릭터 클래스 선택
 	UPROPERTY(ReplicatedUsing = OnRep_SelectedPlayerClass, BlueprintReadOnly, Category = "Character Selection")
 	EPlayerCharacterClass SelectedPlayerClass = EPlayerCharacterClass::Gardener;
@@ -110,6 +128,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_WaitingRoomSlotIndex();
+
+	UFUNCTION()
+	void OnRep_IsReady();
 
 	UFUNCTION()
 	void OnRep_SelectedPlayerClass();

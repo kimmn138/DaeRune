@@ -245,6 +245,14 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable)
 	void ServerRequestPowerOn();
 
+	// 대기실 PowerOn 버튼 클릭 시 호출 (호스트=PowerOn 시도, 클라이언트=준비 토글)
+	UFUNCTION(BlueprintCallable, Category = "Lobby")
+	void OnPowerOnButtonPressed();
+
+	// 클라이언트가 준비/준비 해제 토글 요청
+	UFUNCTION(Server, Reliable, BlueprintCallable)
+	void ServerToggleReady();
+
 	// 호스트가 Kick 클릭 시
 	UFUNCTION(Server, Reliable, BlueprintCallable)
 	void ServerRequestKickPlayer(APlayerState* TargetPlayerState);
