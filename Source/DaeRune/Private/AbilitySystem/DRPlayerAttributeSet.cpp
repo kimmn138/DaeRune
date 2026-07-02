@@ -172,6 +172,16 @@ void UDRPlayerAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		}
 	}
 
+	// 부품을 들고 있으면 데미지 1.5배 + 들고 있던 부품을 떨어뜨린다
+	if (ADRCharacter* TargetDRCharacter = Cast<ADRCharacter>(Props.TargetCharacter))
+	{
+		if (TargetDRCharacter->IsCarryingPart())
+		{
+			LocalIncomingDamage *= CarryingPartDamageModifier;
+			TargetDRCharacter->ForceDropCarriedPart();
+		}
+	}
+
 	// 로비/튜토리얼에서는 체력이 1 미만으로 내려가지 않도록 데미지 클램프
 	if (ShouldPreventDeath())
 	{

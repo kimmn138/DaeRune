@@ -1,616 +1,577 @@
-# DaeRune 페이즈 구조 개편 계획 (Plan.md)
+# Plan.md — 스팀 도전과제 기반 캐릭터/꾸밈 요소 해금 시스템
 
-## 1. 목표 요약
-
-| 항목 | 현재 (As-Is) | 변경 후 (To-Be) |
-|---|---|---|
-| 페이즈 수 | **3개** (Phase1: 클렌저 확보 / Phase2: 부품 회수 / Phase3: 방어) | **2개** (New Phase1: 클렌저 확보 + 부품 회수 통합 / New Phase2: 기존 Phase3 방어) |
-| 클렌저 사이트 주변 스폰 적 | `NormalEnemyClass` 1종(개)만 N마리 고정 | **`TArray<TSubclassOf<ADREnemy>> EnemiesToSpawn`** 배열로 명시. 배열 크기 = 스폰 수, 각 원소가 개·아르마딜로·잠자리 중 하나의 클래스 |
-| DREnemySpawnGroup(통로 적) 구성 | 개 1종으로 레벨에 직접 배치 | **개·아르마딜로·잠자리를 레벨 디자이너가 자유롭게 배치** (코드 변경 없이 BP 인스턴스를 다양화) |
-| Phase1 적 대미지 | 100% | **플레이어에게 주는 대미지 -30%** (즉 0.7배) — 사이트 주변 적과 통로 적 모두 |
-| 부품 운반 적 | Phase2 전용 `PartCarryingEnemyClass`가 별도 `Phase2SpawnPoint`에 스폰 | **각 DREnemySpawnGroup(통로)에서 아르마딜로를 제외한 적 중 무작위 1마리**가 부품 휴대 |
-| 부품 설치 후 흐름 | 사이트 2곳 × 부품 2개 = 4개 설치 → Phase3로 진행 | 사이트 1곳에 **부품 2개 고정** 설치 → New Phase2(방어)로 진행 |
-| 필요 부품 수 | `RequiredPartsCount = 2` (사이트당) | **`RequiredPartsCount = 2` 고정** (변경 없음). DREnemySpawnGroup도 **정확히 2개**로 운영하여 1:1 매칭 |
-| 클렌저 사이트 수 | 맵 배치 3개 + 활성화 2개 (현재 임시 코드로 1개 고정 중) | **맵 배치 1개 + 활성화 1개로 영구 고정** (정식 코드화) |
-
-핵심 방향:
-- 기존 `UDRPhase2` (부품 회수)를 `UDRPhase1` (클렌저 확보)에 통합 흡수하여 페이즈 클래스 1개 제거.
-- 통로 적(DREnemySpawnGroup)이 부품 운반 책임을 가짐. 사이트 주변 적은 부품 없음.
-- 사이트 주변 적 구성은 **배열 기반**으로 명시 (가중치 무작위 X). 통로 적 구성은 **레벨 배치 기반** (코드 무작위 X).
-- 임시로 들어가 있던 `IndexToKeep = 0` 류의 "1개 고정" 코드를 정식 코드로 승격.
+> 작성일: 2026-07-01
+> 대상: DaeRune (UE 5.5, GAS, OnlineSubsystemSteam)
+> 목적: 스팀 도전과제(Achievement) 달성 → 플레이어블 캐릭터 / 캐릭터 꾸밈 요소(코스메틱) 해금
 
 ---
 
-## 2. 영향받는 파일 매트릭스
+## 0. 한눈에 보기 (TL;DR)
 
-| 영역 | 파일 | 변경 유형 |
-|---|---|---|
-| 페이즈 통합 | `Source/DaeRune/Public/Phase/DRPhase1.h` | `EnemiesToSpawn` 배열, 부품/사이트 완료 로직, DREnemySpawnGroup 부품 운반자 선정 헬퍼 추가 |
-| 페이즈 통합 | `Source/DaeRune/Private/Phase/DRPhase1.cpp` | `SpawnEnemyGroupAtCleanserSite` 배열 기반 재구성, 통로 그룹 자동 수집·부품 운반자 선정, `OnPartInstalled` 흡수 |
-| 페이즈 삭제 | `Source/DaeRune/Public/Phase/DRPhase2.h` | 삭제 (한 사이클 dead-code로 둘 경우 deprecate 주석만) |
-| 페이즈 삭제 | `Source/DaeRune/Private/Phase/DRPhase2.cpp` | 삭제 |
-| 페이즈 인덱스 표기 | `Source/DaeRune/Public/Phase/DRPhase3.h` / `.cpp` | `SetupPhaseObjective(3)` → `SetupPhaseObjective(2)` 한 줄 변경. 로직 무변경 |
-| 게임 모드 흐름 | `Source/DaeRune/Public/Game/DRStageGameMode.h` | 변경 없음 (필요 시 헬퍼 추가) |
-| 게임 모드 흐름 | `Source/DaeRune/Private/Game/DRStageGameMode.cpp` | `InitializePhaseSystem`의 `CleanserSites.Num() < 3` → `< 1` / `ValidatePhaseCompletion` switch 케이스 재정렬 (Phase2 케이스 삭제, 기존 Phase3 케이스를 인덱스 1로 이동) |
-| 게임 스테이트 | `Source/DaeRune/Public/Game/DRStageGameState.h` / `.cpp` | 변경 없음. 기존 `CollectedParts`, `bCleanserActivated`, `bCleanserAreaSecured` 필드 재사용 |
-| 클렌저 사이트 | `Source/DaeRune/Public/Actor/DRCleanserSite.h` / `.cpp` | **변경 없음**. `RequiredPartsCount = 2` 기본값 그대로 사용 (런타임 동적 변경 X). `Phase1EnemySpawnOffsets`는 그대로 사용 (배열 인덱스가 `EnemiesToSpawn` 인덱스와 1:1 매칭) |
-| 스폰 그룹 | `Source/DaeRune/Public/Actor/DREnemySpawnGroup.h` / `.cpp` | 부품 운반자 선정 결과 노출 (`GetPartCarrierEnemy`), 그룹 내 등록된 적 조회 API 추가 |
-| 적 | `Source/DaeRune/Public/Character/DREnemy.h` / `.cpp` | `bCarriesPart` 복제 보장 (`ReplicatedUsing` 점검), 부품 휴대 setter 정비. **BP_Dog/Armadillo/Dragonfly의 PartMeshComponent에 부품 StaticMesh 에셋 사전 지정** (BP 작업) |
-| GAS 대미지 계산 | `Source/DaeRune/Private/AbilitySystem/ExecCalc/ExecCalc_Damage.cpp` | "Phase1 적 → 플레이어" 케이스에 0.7배 곱 |
-| 게임플레이 태그 | `Source/DaeRune/Public/DRGameplayTags.h` / `.cpp` | `State.Enemy.Phase1` 신규 태그 추가 |
-| BP 자산 | `BP_DRStageGameMode` (PhaseClasses 배열) | 인덱스 1의 `BP_DRPhase2` 제거, 인덱스 1 = `BP_DRPhase3`로 이동 |
-| BP 자산 | `BP_DRPhase1` 자식 BP | `EnemiesToSpawn` 배열 입력, Dog/Armadillo/Dragonfly 클래스 참조 설정 |
-| 데이터 자산 | `DT_PhaseObjective` | PhaseNumber=1 문구 통합, PhaseNumber=2 행 신규(또는 기존 3 → 2 이동) |
-| 레벨 데이터 | `Content/Maps/TestMap1.umap` (및 본 맵) | CleanserSite 1개만 남기고 제거 / 통로의 DREnemySpawnGroup에 개·아르마딜로·잠자리 BP 인스턴스 다양화 배치 / 사이트의 `Phase1EnemySpawnOffsets`(스폰 위치) 배열 수 = `EnemiesToSpawn` 배열 수와 일치하도록 정리 |
+- 스팀 백엔드의 **Achievement(도전과제)** 를 "진실의 원천(source of truth)"으로 사용한다.
+- 게임은 인게임 통계(`UDRStatTracker`)를 누적 → 조건 충족 시 **스팀 Achievement Unlock 호출** → 그 결과를 다시 읽어 **해금 상태(`Unlockable`) 평가** → **SaveGame + 스팀 클라우드**에 캐싱.
+- 해금 결과는 **캐릭터 선택 UI / 코스메틱 선택 UI**에서 잠금/해제 표시로 반영.
+- 멀티플레이에서 캐릭터/외형은 **이미 PlayerState·CharacterBP·SaveGame 경로로 복제**되므로, 해금은 **로컬(클라이언트) 판정 + 서버 검증** 구조로 붙인다.
+- 스팀이 오프라인/비가용일 때를 대비해 **로컬 SaveGame 폴백**을 항상 유지한다.
 
 ---
 
-## 3. 상세 설계
+## 1. 현재 코드베이스 기반 (이미 존재하는 것)
 
-### 3.1. 페이즈 인덱스 및 클래스 매핑
+설계는 새로 만드는 게 아니라 **기존 자산 위에 얹는다**. 관련 파일:
 
-**As-Is**:
+| 영역 | 파일 | 현재 역할 | 확장 포인트 |
+|---|---|---|---|
+| 저장 | `Source/DaeRune/Public/Game/DRSaveGame.h` | `bHasCompletedTutorial` 하나만 저장. 슬롯명 `DaeRunePlayerProgress` | **해금/통계 필드 추가** |
+| 게임 인스턴스 | `Source/DaeRune/Public/Game/DRGameInstance.h` | `SaveProgress/LoadProgress`, 캐릭터 선택 보존(`PlayerClassSelections`) | **도전과제·해금 매니저 소유** |
+| 캐릭터 클래스 | `Source/.../Data/CharacterClassInfo.h` | `EPlayerCharacterClass { Gardener, VendingMachine }`, `CharacterBPClasses` 맵 | **신규 플레이어블 enum 추가 + 해금 게이팅** |
+| 스팀 설정 | `Config/DefaultEngine.ini` | `[OnlineSubsystemSteam] bEnabled=true`, `SteamDevAppId=480` (테스트용) | **실제 AppId 교체, Achievement 매핑** |
+
+> ⚠️ **AppId 480 은 Spacewar(밸브 SDK 샘플)** 이다. 실제 스팀 도전과제는 **본인 앱 AppId** 가 발급되고 Steamworks 파트너 페이지에 도전과제를 등록해야만 동작한다. 그전까지는 로컬 폴백으로만 개발/검증 가능.
+
+---
+
+## 2. 목표 및 비목표
+
+### 목표
+1. 특정 도전과제 달성 시 **새 플레이어블 캐릭터 해금** (예: `Gardener`, `VendingMachine` 외 신규).
+2. 특정 도전과제 달성 시 **캐릭터 꾸밈 요소(코스메틱) 해금** — 스킨/색상/액세서리/이펙트 등.
+3. 해금 상태가 **재접속·재설치 후에도 유지**(스팀 클라우드 + 로컬 폴백).
+4. 캐릭터 선택 / 꾸미기 UI에서 잠금·해제 상태와 **해금 조건 안내** 표시.
+5. 멀티플레이에서 각 플레이어가 **자기 해금분 내에서만** 선택 가능하도록 서버 검증.
+
+### 비목표 (이번 범위 밖)
+- 유료 DLC / 마이크로트랜잭션.
+- 거래·인벤토리(Steam Inventory Service)·드롭 시스템.
+- 시즌패스/배틀패스류 진행도.
+- 서버 권위형 통계 저장(전적 DB). 통계는 로컬+스팀 stat으로 충분.
+
+---
+
+## 3. 아키텍처 개요
+
 ```
-PhaseInstances[0] = UDRPhase1 (확보)
-PhaseInstances[1] = UDRPhase2 (부품)
-PhaseInstances[2] = UDRPhase3 (방어)
+[게임플레이 이벤트]
+   (적 처치, 페이즈 클리어, 파트 설치, 보스 격파, 무피해 클리어 …)
+        │  BroadcastStatEvent(Tag, Value)
+        ▼
+[UDRStatTracker]  ← GameInstance가 소유 (세션 넘어 유지)
+   - 인게임 통계 누적 (TMap<FGameplayTag,int64>)
+   - 임계값 도달 시 → UDRAchievementSubsystem 통지
+        │
+        ▼
+[UDRAchievementSubsystem]  (UGameInstanceSubsystem)
+   - 스팀 IOnlineAchievements 래핑
+   - WriteAchievement / QueryAchievements
+   - 스팀 stat 동기화 (incremental 도전과제용)
+        │  (해금됨 콜백)
+        ▼
+[UDRUnlockManager]  (GameInstance 소유 or Subsystem)
+   - DataAsset(UDRUnlockData) 규칙 평가:
+       "Achievement X 달성 → Unlockable Y 해금"
+   - 결과를 UDRSaveGame에 기록 + 스팀 클라우드 저장
+        │  OnUnlockableUnlocked(FGameplayTag) 델리게이트
+        ▼
+[UI: 캐릭터 선택 / 코스메틱 선택 위젯]
+   - IsUnlocked(Tag) 조회 → 잠금/해제 표시, 신규 해금 토스트
+        │  플레이어가 선택
+        ▼
+[서버 검증]  ADRPlayerController / GameMode
+   - ServerRequestSelectCharacter(Class) / ServerRequestSetCosmetic(Id)
+   - 서버가 "해당 클라가 정말 해금했는가" 신뢰 검증 → 적용 → 복제
 ```
 
-**To-Be**:
+핵심 원칙:
+- **통계 누적은 클라이언트 로컬**(자기 캐릭터 기준)에서. 멀티에서 서버가 전수 집계할 필요 없음 — 도전과제는 "내 계정"의 진행도다.
+- **해금 판정도 클라이언트 로컬**. 단, 멀티 세션에서 **선택 권한**만 서버가 가볍게 검증.
+
+---
+
+## 4. 데이터 모델
+
+### 4.1 식별자 전략: GameplayTag 사용
+프로젝트가 이미 `FDRGameplayTags` 중심으로 태그를 관리하므로 일관성 있게 태그로 식별한다.
+
+`DRGameplayTags.h/.cpp` 에 신규 카테고리 추가:
+
 ```
-PhaseInstances[0] = UDRPhase1 (확보 + 부품 통합)
-PhaseInstances[1] = UDRPhase3 (방어, UI상 "페이즈 2"로 표기)
+Achievement.FirstBlood            // 첫 적 처치
+Achievement.PhaseMaster           // 페이즈3까지 클리어
+Achievement.Untouchable           // 무피해 클리어
+Achievement.WaterLord             // 누적 워터 N 획득
+Achievement.PartsCollector        // 파트 N개 설치
+Achievement.BossSlayer            // 엘리트 보스 격파
+...
+
+Unlockable.Character.Ranger       // 캐릭터 해금
+Unlockable.Character.Bear
+Unlockable.Cosmetic.Gardener.SkinGold
+Unlockable.Cosmetic.Gardener.HatLeaf
+Unlockable.Cosmetic.VendingMachine.SkinNeon
+...
+
+Stat.Kills
+Stat.WaterCollected
+Stat.PartsInstalled
+Stat.PhasesCleared
+Stat.DamagelessRuns
 ```
 
-- C++ 클래스 이름인 `UDRPhase3`는 그대로 둔다 (Wave/엘리트/독가스/BGM 로직 코드량이 많고 리네임 이득 < 리스크).
-- BP 측 `BP_DRStageGameMode::PhaseClasses` 배열에서 `BP_DRPhase2`를 제거하고 `BP_DRPhase3`를 인덱스 1로 이동.
-- UI에 표기되는 "페이즈 X" 번호는 `CurrentPhaseIndex`(0-based) + 1을 사용하므로 인덱스 재정렬만으로 자동 갱신.
-- `UDRPhase3::OnPhaseStart`에서 `SetupPhaseObjective(3)` 호출 인자를 `SetupPhaseObjective(2)`로 변경 → `DT_PhaseObjective`의 PhaseNumber=2 행을 참조.
+### 4.2 스팀 측 매핑 (`DefaultEngine.ini`)
+OnlineSubsystemSteam은 **스팀 파트너 페이지에 등록한 Achievement API Name** 으로 동작한다. 게임 태그 ↔ 스팀 API Name 매핑이 필요.
 
-### 3.2. New Phase1 (UDRPhase1) 상세
+```ini
+[OnlineSubsystemSteam]
+bEnabled=true
+SteamDevAppId=<실제_AppId>     ; 480(Spacewar)에서 교체 필수
+; Achievements는 코드에서 API Name 문자열로 직접 참조
+```
 
-#### 3.2.1. 책임
-1. 맵 배치 클렌저 사이트 1개를 활성화한다 (맵에 1개만 있다는 전제, 안전망으로 ≥2개일 경우 첫 번째만 유지).
-2. **사이트 주변 적**을 `EnemiesToSpawn` 배열에 따라 정확히 배열 길이만큼 스폰한다 (각 인덱스의 클래스를 `Phase1EnemySpawnOffsets[i]` 위치에 스폰).
-3. **통로 적**은 레벨 디자이너가 이미 DREnemySpawnGroup 액터의 `PrePlacedEnemies`/하위 ADREnemy 인스턴스로 다양하게 배치한 상태. 페이즈가 별도로 스폰하지 않는다.
-4. 사이트 주변 적과 모든 통로 적의 ASC에 `State.Enemy.Phase1` 루즈 태그를 부여 → `ExecCalc_Damage`에서 0.7배 곱.
-5. 각 DREnemySpawnGroup에서 `ArmadilloEnemyClass`가 아닌 적 중 1마리를 무작위로 선정하여 부품 휴대(`bCarriesPart = true`, `PartActorClass` 세팅, 부품 메시 가시화).
-6. 클렌저 사이트의 `RequiredPartsCount = 2` 고정. 본 페이즈는 사이트 값을 변경하지 않는다. 대신 **레벨에 정확히 2개의 DREnemySpawnGroup이 배치되어 있어야 한다는 전제**를 유지하여 1:1 매칭. (그룹 수가 2를 초과할 경우 §3.2.5의 fallback 정책 적용)
-7. `OnPartInstalled` 델리게이트를 직접 구독하여 설치 진행률 갱신 및 완료 시 `ValidatePhaseCompletion()` 호출.
+매핑은 ini가 아니라 **DataAsset(`UDRUnlockData`)** 에서 관리(아래 4.4).
 
-#### 3.2.2. 헤더 필드 변경 (`DRPhase1.h`)
-
-기존 `EliteEnemyClass`, `NormalEnemyClass`, `NormalEnemyCount`, `EliteSpawnOffset` 제거.
+### 4.3 `UDRSaveGame` 확장
+`Source/DaeRune/Public/Game/DRSaveGame.h` 에 필드 추가:
 
 ```cpp
-// ========== 사이트 주변 스폰 ==========
-// 클렌저 사이트 주변에 스폰할 적 클래스 배열.
-// 배열의 i번째 원소가 사이트의 Phase1EnemySpawnOffsets[i] 위치에 스폰된다.
-// 배열 크기와 사이트의 스폰 위치 수가 일치해야 한다.
-UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Spawn")
-TArray<TSubclassOf<ADREnemy>> EnemiesToSpawn;
-
-// ========== 통로(DREnemySpawnGroup) 부품 운반자 선정 ==========
-// 부품 휴대 대상에서 제외할 적 클래스(아르마딜로). 정확히 이 클래스(자식 포함) 인스턴스는 운반자 후보에서 제외된다.
-UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Parts")
-TSubclassOf<ADREnemy> ArmadilloEnemyClass;
-
-// 부품 운반자에게 세팅할 부품 액터 클래스 (DREnemy::PartActorClass와 동일하게 세팅)
-UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Parts")
-TSubclassOf<AActor> PartActorClass;
-
-// ========== 대미지 감소 태그 ==========
-UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Combat")
-FGameplayTag Phase1EnemyTag;  // 기본값 = State.Enemy.Phase1
-
-// ========== 런타임 캐시 ==========
-// 월드에서 자동 수집한 통로 스폰 그룹들
-UPROPERTY()
-TArray<TObjectPtr<ADREnemySpawnGroup>> SpawnGroups;
-
-// 그룹별 부품 운반자
-UPROPERTY()
-TMap<TObjectPtr<ADREnemySpawnGroup>, TWeakObjectPtr<ADREnemy>> PartCarrierByGroup;
-
-// 활성화된 단일 클렌저 사이트 (편의 캐시)
-UPROPERTY()
-TWeakObjectPtr<ADRCleanserSite> ActiveSite;
-```
-
-`DRPhase1.h`의 protected 함수:
-```cpp
-void KeepSingleCleanserSite();
-void SpawnEnemiesAroundCleanserSite(ADRCleanserSite* Site);
-void CollectSpawnGroups();
-void AssignPartCarriersForAllGroups();
-ADREnemy* PickPartCarrierFromGroup(ADREnemySpawnGroup* Group) const;
-void ApplyPhase1Tag(ADREnemy* Enemy) const;
-UFUNCTION() void OnPartInstalled(ADRCleanserSite* Site);
-```
-
-#### 3.2.3. OnPhaseStart 흐름
-
-```text
-OnPhaseStart()
-├── SetupPhaseObjective(1)
-├── GameState->SetCollectedParts(0)
-├── GameState->SetCleanserActivated(false)
-├── KeepSingleCleanserSite()
-│       └── CleanserSites 배열 중 인덱스 0만 남기고 나머지 Destroy + 배열에서 제거
-│       └── SelectedCleanserSites = CleanserSites
-│       └── SetActiveCleanserSites(SelectedCleanserSites)
-│       └── GameState->SetCleanserSites(SelectedCleanserSites)
-│       └── ActiveSite = CleanserSites[0]
-│       └── ActiveSite->ActivateSite()
-│       └── ActiveSite->OnPartInstalled.AddDynamic(this, &UDRPhase1::OnPartInstalled)
-├── SpawnEnemiesAroundCleanserSite(ActiveSite.Get())
-│       └── 사이트의 GetPhase1EnemySpawnLocations() 가져오기
-│       └── EnemiesToSpawn 배열과 위치 배열 중 작은 쪽 길이만큼 루프
-│       └── 각 인덱스 i: SpawnEnemy(EnemiesToSpawn[i], Locations[i])
-│       └── 스폰된 적 → SpawnedEnemies 등록, OnDeath 델리게이트 바인딩, ApplyPhase1Tag
-├── CollectSpawnGroups()
-│       └── TActorIterator<ADREnemySpawnGroup>로 월드 탐색
-│       └── 각 그룹 등록 + 그룹 내 PrePlacedEnemies(이미 BeginPlay에서 RegisterEnemy 완료)에 ApplyPhase1Tag
-├── AssignPartCarriersForAllGroups()
-│       └── for (Group : SpawnGroups) carrier = PickPartCarrierFromGroup(Group); PartCarrierByGroup.Add(Group, carrier)
-│       └── 그룹 수가 2가 아닐 경우 경고 로그 (사이트 RequiredPartsCount=2 고정과 불일치)
-└── GameState 진행률 초기화
-    └── FPhaseObjectiveData Obj = GameState->GetCurrentPhaseObjective();
-        Obj.RequiredCount = ActiveSite->RequiredPartsCount;   // = 2 (사이트 BP 기본값)
-        GameState->SetPhaseObjective(Obj);
-    └── GameState->UpdatePhaseObjectiveProgress(0)
-```
-
-#### 3.2.4. 사이트 주변 적 스폰 (배열 기반)
-
-요구사항: "배열로 해서 어떤 적을 배열의 수만큼 스폰시킬지 정하고 싶어"
-
-```cpp
-void UDRPhase1::SpawnEnemiesAroundCleanserSite(ADRCleanserSite* Site)
+UCLASS()
+class DAERUNE_API UDRSaveGame : public USaveGame
 {
-    if (!Site) return;
-
-    const TArray<FVector> Locations = Site->GetPhase1EnemySpawnLocations();
-    const int32 SpawnCount = FMath::Min(EnemiesToSpawn.Num(), Locations.Num());
-
-    if (EnemiesToSpawn.Num() != Locations.Num())
-    {
-        UE_LOG(LogTemp, Warning,
-            TEXT("Phase1: EnemiesToSpawn (%d) and CleanserSite spawn locations (%d) mismatch. Spawning %d."),
-            EnemiesToSpawn.Num(), Locations.Num(), SpawnCount);
-    }
-
-    for (int32 i = 0; i < SpawnCount; ++i)
-    {
-        TSubclassOf<ADREnemy> EnemyClass = EnemiesToSpawn[i];
-        if (!EnemyClass) continue;
-
-        AActor* SpawnedActor = SpawnEnemy(EnemyClass, Locations[i]);
-        if (ADREnemy* Spawned = Cast<ADREnemy>(SpawnedActor))
-        {
-            ApplyPhase1Tag(Spawned);
-        }
-    }
-}
-```
-
-- 배열 길이 ↔ 사이트 측 `Phase1EnemySpawnOffsets` 길이 미스매치 시 최소값만큼만 스폰하고 경고. (스폰 위치 부족 또는 배열 부족을 즉시 인지)
-- 사이트 주변 적은 부품을 휴대하지 않는다 (요구사항: 부품은 DREnemySpawnGroup의 통로 적에게서만 회수).
-
-#### 3.2.5. 통로 적 부품 운반자 선정
-
-레벨 디자이너가 DREnemySpawnGroup에 `PrePlacedEnemies`로 개·아르마딜로·잠자리 BP 인스턴스를 다양하게 배치한다는 전제. 그룹의 `BeginPlay`에서 이미 `RegisterEnemy` 호출이 이루어진다.
-
-```cpp
-ADREnemy* UDRPhase1::PickPartCarrierFromGroup(ADREnemySpawnGroup* Group) const
-{
-    if (!Group) return nullptr;
-
-    // 그룹 내 살아있는 적 목록 (DREnemySpawnGroup이 노출해야 함, §3.4 참조)
-    TArray<ADREnemy*> AliveEnemies = Group->GetRegisteredEnemies();
-
-    // 아르마딜로 제외 후보 추리기
-    TArray<ADREnemy*> Candidates;
-    Candidates.Reserve(AliveEnemies.Num());
-    for (ADREnemy* Enemy : AliveEnemies)
-    {
-        if (!Enemy || !IsValid(Enemy)) continue;
-        if (ArmadilloEnemyClass && Enemy->IsA(ArmadilloEnemyClass)) continue;
-        Candidates.Add(Enemy);
-    }
-
-    if (Candidates.Num() == 0)
-    {
-        UE_LOG(LogTemp, Warning,
-            TEXT("Phase1: SpawnGroup %s has no non-Armadillo carrier candidates. Skipping part assignment."),
-            *Group->GetName());
-        return nullptr;
-    }
-
-    const int32 PickedIndex = FMath::RandRange(0, Candidates.Num() - 1);
-    ADREnemy* Carrier = Candidates[PickedIndex];
-
-    if (Carrier)
-    {
-        Carrier->PartActorClass = PartActorClass;
-        Carrier->bCarriesPart = true;
-        if (Carrier->PartMeshComponent)
-        {
-            Carrier->PartMeshComponent->SetVisibility(true);
-        }
-        // Replication: bCarriesPart가 ReplicatedUsing이면 OnRep에서 클라이언트에서도 가시화
-    }
-    return Carrier;
-}
-```
-
-**부품 운반자 초기화 흐름 — 기존 Phase2와의 비교**:
-
-| 항목 | 기존 Phase2 (As-Is) | 새 Phase1 (To-Be) |
-|---|---|---|
-| 운반자 결정 시점 | `PartCarryingEnemyClass` BP를 spawn하는 순간 (스폰=운반자 1:1) | DREnemySpawnGroup 등록 적 중 런타임 무작위 선정 |
-| `bCarriesPart` 세팅 | BP 기본값에서 `true` 사전 설정 | C++ 런타임 setter (`Carrier->bCarriesPart = true`) |
-| `PartActorClass` 세팅 | BP 기본값에서 사전 설정 | C++ 런타임 setter (`Carrier->PartActorClass = PartActorClass`) |
-| `PartMeshComponent` StaticMesh 에셋 | BP에서 사전 지정 | **개·아르마딜로·잠자리 모든 BP의 PartMeshComponent에 동일한 부품 StaticMesh 에셋을 미리 지정** (BP 사전 설정) ★ |
-| 메시 가시화 | `BeginPlay`의 `if (bCarriesPart) SetVisibility(true)` 자동 처리 | Phase1 OnPhaseStart는 BeginPlay 이후에 실행되므로 자동 처리가 안 됨 → 운반자 선정 시 C++ 런타임에서 직접 `SetVisibility(true)` 호출. 클라이언트는 `OnRep_bCarriesPart`에서 동일하게 처리 |
-| 드롭 시 부품 액터 생성 | `DropPart()` → `PartActorClass`로 SpawnActor (기존 흐름) | **변경 없음** — 동일 흐름 유지. UDRPhase1이 `PartActorClass`만 정확히 주입하면 됨 |
-| 픽업/설치 | `ADRCleanserPart::PickupPart`/`InstallPart` (기존 흐름) | **변경 없음** |
-
-★ **PartMesh 에셋 정책 (결정됨)**: BP_Dog, BP_Armadillo, BP_Dragonfly 각각의 `PartMeshComponent`에 부품 StaticMesh 에셋(예: SM_CleanserPart)을 미리 지정해둔다. 가시성만 false로 유지하면 됨. 런타임에 `SetVisibility(true)`만 호출하면 메시가 즉시 보임.
-
-→ 이렇게 하면 기존 Phase2와 **시각적·기능적으로 동일한 결과**(부품 메시 표시 + DropPart 정상 동작 + Pickup/Install 정상 동작)를 보장한다. 차이는 "BP가 가지고 태어났느냐 vs 런타임에 부여받느냐"뿐이며, 부품 시스템(드롭, 픽업, 설치)은 기존 코드 경로를 그대로 사용한다.
-
-**중요 제약**:
-- 그룹 후보가 0이면 부품 미할당 → 레벨 디자이너 경고. 페이즈 완료 불가 상태가 되므로 레벨 검수 단계에서 차단해야 함.
-- 후보가 1마리라도 있으면 그 1마리에 부품 부여 (요구사항 충족).
-- BP_Dog/Armadillo/Dragonfly의 `PartMeshComponent`에 StaticMesh 에셋이 누락되면, `SetVisibility(true)` 호출에도 메시가 보이지 않음 → BP 검수 단계에서 차단해야 함.
-- **그룹 수 vs RequiredPartsCount 정합성**:
-  - 사이트 `RequiredPartsCount = 2` 고정이므로 그룹 수가 **정확히 2**일 때 가장 안전.
-  - 그룹 수 < 2: 부품 부족으로 페이즈 완료 불가 → 레벨 단계에서 차단.
-  - 그룹 수 > 2: 처음 2개 그룹만 부품 운반자를 가지도록 제한 (fallback 정책). 나머지 그룹은 일반 통로 적으로만 동작.
-  - 즉 `AssignPartCarriersForAllGroups` 내에서 `MaxCarrierGroups = ActiveSite->RequiredPartsCount` 만큼만 운반자 선정 루프를 돌린다.
-
-#### 3.2.6. Phase1 대미지 감소 태그 부여
-
-```cpp
-void UDRPhase1::ApplyPhase1Tag(ADREnemy* Enemy) const
-{
-    if (!Enemy) return;
-    if (UAbilitySystemComponent* ASC = Enemy->GetAbilitySystemComponent())
-    {
-        ASC->AddLooseGameplayTag(Phase1EnemyTag);
-        // 서버 권위 GAS이므로 ExecCalc는 서버에서만 실행. 단, 안전을 위해 Replicated Loose 사용 권장:
-        // ASC->AddReplicatedLooseGameplayTag(Phase1EnemyTag);
-    }
-}
-```
-
-- 사이트 주변 적: 스폰 직후 `ApplyPhase1Tag` 호출.
-- 통로 적: `CollectSpawnGroups` 단계에서 각 그룹의 등록된 모든 적에 호출 (아르마딜로 포함, 부품 운반자 여부 무관).
-
-#### 3.2.7. 사이트 1개 강제
-
-기존 임시 코드 (DRPhase1.cpp 83~94행):
-```cpp
-const int32 IndexToKeep = 0;
-for (int32 i = CleanserSites.Num() - 1; i >= 0; --i)
-{
-    if (i == IndexToKeep) continue;
-    /* Destroy + RemoveAt */
-}
-```
-
-→ `KeepSingleCleanserSite()` 함수로 분리하여 정식 함수로 승격. 주석/[임시] 표기 제거.
-
-**레벨 정책**:
-- TestMap1을 비롯한 모든 본 맵에서 사이트 액터는 1개만 배치한다.
-- 코드는 안전망으로만 동작 (2개 이상이면 첫 번째만 유지, 0개면 경고).
-
-**InitializePhaseSystem 가드** (`DRStageGameMode.cpp`):
-- 현재: `if (CleanserSites.Num() < 3) return;`
-- 변경: `if (CleanserSites.Num() < 1) return;`
-
-#### 3.2.8. 부품 설치 및 완료 처리
-
-기존 `UDRPhase2::OnPartInstalled` 로직을 그대로 흡수:
-
-```cpp
-void UDRPhase1::OnPartInstalled(ADRCleanserSite* Site)
-{
-    if (!Site || !GameState) return;
-
-    const int32 Installed = Site->GetInstalledPartsCount();
-    GameState->SetCollectedParts(Installed);
-    GameState->UpdatePhaseObjectiveProgress(Installed);
-
-    if (Site->IsPartInstallationComplete())
-    {
-        GameState->SetCleanserActivated(true);
-        if (GameMode) GameMode->ValidatePhaseCompletion();
-    }
-}
-```
-
-`OnPhaseEnd`:
-```cpp
-void UDRPhase1::OnPhaseEnd()
-{
-    if (ActiveSite.IsValid())
-    {
-        ActiveSite->OnPartInstalled.RemoveDynamic(this, &UDRPhase1::OnPartInstalled);
-    }
-    SpawnGroups.Empty();
-    PartCarrierByGroup.Empty();
-    if (ADRDoorManager* DoorMgr = GetDoorManager())
-    {
-        DoorMgr->OnPhase1Ended();
-    }
-    Super::OnPhaseEnd();
-}
-```
-
-`OnEnemyDeath`:
-- 기존 "모든 적 처치 = 페이즈 완료" 의미는 **삭제**. 페이즈 완료는 부품 설치로만 판정.
-- 다만 통로 그룹 적이 모두 죽으면 문이 부서지는 기존 동작은 DREnemySpawnGroup의 `OnAllEnemiesDead` 델리게이트가 처리하므로 이 페이즈 코드에서는 신경 쓰지 않는다.
-- 사이트 주변 적의 진행률은 더 이상 ObjectiveProgress로 표시하지 않는다 (ObjectiveProgress는 `CollectedParts`로 갱신).
-
-### 3.3. 대미지 -30% 적용 (`ExecCalc_Damage`)
-
-`ExecCalc_Damage::Execute_Implementation` 내, Damage 합산 직후·OutputModifier 직전에 추가:
-
-```cpp
-// New Phase1 적 → 플레이어 대미지 0.7배
-if (SourceASC && SourceASC->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Enemy_Phase1))
-{
-    if (TargetASC && TargetASC->HasAttributeSetForAttribute(UDRAttributeSet::GetIncomingDamageAttribute()))
-    {
-        Damage *= 0.7f;
-    }
-}
-```
-
-- 엘리트 룬 버프(`Buff.Elite.Roar` → ×1.2)와 곱셈 순서는 결과적으로 동일(모두 곱).
-- 타겟이 `UDRCleanserSiteAttributeSet` 보유(클렌저 사이트)인 경우에는 적용하지 않는다. → 요구사항 "플레이어에게 주는 대미지 30%감소"에 부합.
-- 만약 향후 "모든 타겟에 적용"으로 해석이 바뀌면 타겟 조건을 제거.
-
-**태그 정의** (`DRGameplayTags`):
-```cpp
-// .h
-FGameplayTag State_Enemy_Phase1;
-
-// .cpp InitializeNativeGameplayTags()
-GameplayTags.State_Enemy_Phase1 = UGameplayTagsManager::Get().AddNativeGameplayTag(
-    FName("State.Enemy.Phase1"),
-    FString("Enemy belongs to New Phase1; deals 30% reduced damage to players."));
-```
-
-### 3.4. DREnemySpawnGroup 보강
-
-요구사항: "다 죽으면 문이 부서지게 하던 그 적들" = 기존 PrePlacedEnemies 기반 통로 시스템 그대로 유지. 코드 신규 스폰 없음.
-
-추가 노출 API (`DREnemySpawnGroup.h`):
-```cpp
+    GENERATED_BODY()
 public:
-    // UDRPhase1이 부품 운반자 후보를 추리기 위해 사용
-    UFUNCTION(BlueprintCallable, Category = "SpawnGroup")
-    TArray<ADREnemy*> GetRegisteredEnemies() const;
+    UDRSaveGame();
 
-    // (선택) 운반자 캐시 — 디버깅/UI 연동용
-    UFUNCTION(BlueprintPure, Category = "SpawnGroup")
-    ADREnemy* GetPartCarrierEnemy() const { return PartCarrierEnemy.Get(); }
+    // 기존
+    UPROPERTY(VisibleAnywhere, Category="Progress")
+    bool bHasCompletedTutorial = false;
 
-    void SetPartCarrierEnemy(ADREnemy* Carrier) { PartCarrierEnemy = Carrier; }
+    // ── 신규: 누적 통계 (스팀 비가용 시에도 진행되도록 로컬 미러) ──
+    UPROPERTY(VisibleAnywhere, Category="Stats")
+    TMap<FGameplayTag, int64> StatCounters;
+
+    // ── 신규: 해금된 도전과제 (스팀 동기화 실패 대비 폴백 캐시) ──
+    UPROPERTY(VisibleAnywhere, Category="Achievements")
+    TSet<FGameplayTag> UnlockedAchievements;
+
+    // ── 신규: 해금된 콘텐츠 (캐릭터 + 코스메틱 통합) ──
+    UPROPERTY(VisibleAnywhere, Category="Unlocks")
+    TSet<FGameplayTag> UnlockedContent;
+
+    // ── 신규: 플레이어가 마지막으로 장착한 코스메틱 (캐릭터별) ──
+    UPROPERTY(VisibleAnywhere, Category="Cosmetics")
+    TMap<EPlayerCharacterClass, FDRLoadout> EquippedLoadouts;
+
+    // 버전 마이그레이션용
+    UPROPERTY(VisibleAnywhere, Category="Meta")
+    int32 SaveVersion = 1;
+
+    static const FString SaveSlotName;   // "DaeRunePlayerProgress"
+    static const int32 UserIndex;
+};
+```
+
+`FDRLoadout` 구조체(슬롯형 코스메틱):
+```cpp
+USTRUCT(BlueprintType)
+struct FDRLoadout
+{
+    GENERATED_BODY()
+    UPROPERTY() FGameplayTag SkinTag;   // Unlockable.Cosmetic.*.Skin*
+    UPROPERTY() FGameplayTag HatTag;
+    UPROPERTY() FGameplayTag TrailTag;  // 이펙트 등
+    // 슬롯은 필요에 따라 확장
+};
+```
+
+### 4.4 `UDRUnlockData` (DataAsset) — 규칙 정의
+모든 "조건 → 보상" 규칙을 한 곳에서 관리. 코드 수정 없이 디자이너가 편집 가능.
+
+```cpp
+USTRUCT(BlueprintType)
+struct FDRAchievementDef
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditDefaultsOnly) FGameplayTag AchievementTag;       // Achievement.*
+    UPROPERTY(EditDefaultsOnly) FString SteamApiName;              // 스팀 파트너 등록명
+
+    // 진행형(incremental) 도전과제일 때
+    UPROPERTY(EditDefaultsOnly) FGameplayTag DrivingStat;          // Stat.* (없으면 즉시형)
+    UPROPERTY(EditDefaultsOnly) int64 RequiredCount = 1;
+
+    UPROPERTY(EditDefaultsOnly) FText DisplayName;
+    UPROPERTY(EditDefaultsOnly) FText Description;                 // 해금 조건 안내문
+    UPROPERTY(EditDefaultsOnly) TSoftObjectPtr<UTexture2D> Icon;
+};
+
+USTRUCT(BlueprintType)
+struct FDRUnlockRule
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditDefaultsOnly) FGameplayTag UnlockableTag;        // Unlockable.*
+    // 이 도전과제들이 모두(또는 하나) 달성되면 해금
+    UPROPERTY(EditDefaultsOnly) TArray<FGameplayTag> RequiredAchievements;
+    UPROPERTY(EditDefaultsOnly) bool bRequireAll = true;           // AND/OR
+
+    UPROPERTY(EditDefaultsOnly) FText DisplayName;
+    UPROPERTY(EditDefaultsOnly) FText HowToUnlock;                 // UI 안내문
+};
+
+UCLASS()
+class DAERUNE_API UDRUnlockData : public UDataAsset
+{
+    GENERATED_BODY()
+public:
+    UPROPERTY(EditDefaultsOnly) TArray<FDRAchievementDef> Achievements;
+    UPROPERTY(EditDefaultsOnly) TArray<FDRUnlockRule> UnlockRules;
+
+    // 캐릭터 해금 태그 → EPlayerCharacterClass 매핑
+    UPROPERTY(EditDefaultsOnly) TMap<FGameplayTag, EPlayerCharacterClass> CharacterUnlockMap;
+
+    // 코스메틱 해금 태그 → 적용 데이터(메시/머티리얼/니아가라 등) 매핑
+    UPROPERTY(EditDefaultsOnly) TMap<FGameplayTag, FDRCosmeticDef> CosmeticMap;
+};
+```
+
+`FDRCosmeticDef` — 외형 적용 데이터:
+```cpp
+USTRUCT(BlueprintType)
+struct FDRCosmeticDef
+{
+    GENERATED_BODY()
+    UPROPERTY(EditDefaultsOnly) EPlayerCharacterClass OwnerClass;
+    UPROPERTY(EditDefaultsOnly) FGameplayTag SlotTag;             // Skin/Hat/Trail
+    UPROPERTY(EditDefaultsOnly) TSoftObjectPtr<USkeletalMesh> OverrideMesh;     // 선택
+    UPROPERTY(EditDefaultsOnly) TSoftObjectPtr<UMaterialInterface> OverrideMaterial;
+    UPROPERTY(EditDefaultsOnly) TSoftClassPtr<AActor> AttachmentActor;          // 모자/액세서리
+    UPROPERTY(EditDefaultsOnly) FName AttachSocket;
+    UPROPERTY(EditDefaultsOnly) TSoftObjectPtr<UNiagaraSystem> TrailEffect;
+};
+```
+
+> 에셋은 `TSoftObjectPtr/TSoftClassPtr` 로 두어 **선택 UI 미리보기에서만 로드**(메모리 절약). 기존 `DRAssetManager` 와 연계하여 비동기 로드.
+
+---
+
+## 5. 신규 C++ 클래스 명세
+
+### 5.1 `UDRStatTracker` (UObject, GameInstance 소유)
+역할: 인게임 이벤트 → 통계 누적 → 임계값 도달 통지.
+
+```cpp
+UCLASS()
+class DAERUNE_API UDRStatTracker : public UObject
+{
+    GENERATED_BODY()
+public:
+    void Init(UDRGameInstance* InGI, UDRUnlockData* InData);
+
+    // 게임플레이 코드에서 호출 (로컬 플레이어 기준)
+    UFUNCTION(BlueprintCallable)
+    void AddStat(FGameplayTag StatTag, int64 Delta = 1);
+
+    UFUNCTION(BlueprintCallable)
+    void SetStatIfGreater(FGameplayTag StatTag, int64 Value); // 최고기록형
+
+    int64 GetStat(FGameplayTag StatTag) const;
+
+    DECLARE_MULTICAST_DELEGATE_TwoParams(FOnStatChanged, FGameplayTag, int64);
+    FOnStatChanged OnStatChanged;
 
 private:
-    UPROPERTY()
-    TWeakObjectPtr<ADREnemy> PartCarrierEnemy;
+    void EvaluateAchievements(FGameplayTag ChangedStat); // 관련 도전과제 평가
+    UPROPERTY() TObjectPtr<UDRGameInstance> GI;
+    UPROPERTY() TObjectPtr<UDRUnlockData> UnlockData;
+};
 ```
 
-`GetRegisteredEnemies` 구현:
+**호출 지점 (게임플레이 후크)** — 기존 델리게이트에 바인딩:
+- 적 처치: `ADREnemy` 사망 멀티캐스트 / 페이즈의 enemy death 델리게이트 → `Stat.Kills++`, `Stat.WaterCollected += reward`.
+- 파트 설치: `ADRCleanserSite` 설치 완료 델리게이트 → `Stat.PartsInstalled++`.
+- 페이즈 클리어: `ADRStageGameMode::TransitionToNextPhase()` → `Stat.PhasesCleared` set-max.
+- 보스 격파: 엘리트 보스 사망 이벤트 → `Achievement.BossSlayer` 즉시형.
+- 무피해 클리어: 페이즈 완료 시 플레이어가 한 번도 컨테이너 피해 안 받음 검사 → `Stat.DamagelessRuns++`.
+
+> **로컬 플레이어만 카운트:** 클라이언트에서 `IsLocallyControlled()` 인 캐릭터 이벤트만 StatTracker로 보낸다. 서버/리슨서버에서 다른 플레이어 이벤트가 섞이지 않도록 주의.
+
+### 5.2 `UDRAchievementSubsystem` (UGameInstanceSubsystem)
+역할: 스팀 도전과제 R/W 캡슐화. OnlineSubsystem 추상화로 스팀 외 플랫폼/널 대응.
+
 ```cpp
-TArray<ADREnemy*> ADREnemySpawnGroup::GetRegisteredEnemies() const
+UCLASS()
+class DAERUNE_API UDRAchievementSubsystem : public UGameInstanceSubsystem
 {
-    TArray<ADREnemy*> Out;
-    Out.Reserve(RegisteredEnemies.Num());
-    for (const TWeakObjectPtr<ADREnemy>& Weak : RegisteredEnemies)
-    {
-        if (ADREnemy* E = Weak.Get())
-        {
-            Out.Add(E);
-        }
-    }
-    return Out;
-}
+    GENERATED_BODY()
+public:
+    virtual void Initialize(FSubsystemCollectionBase&) override;
+    virtual void Deinitialize() override;
+
+    // 로그인 후 호출: 스팀에서 현재 도전과제/통계 상태 읽어와 캐시
+    void QueryFromBackend();
+
+    // 도전과제 해금 (idempotent — 이미 해금이면 무시)
+    void UnlockAchievement(const FString& SteamApiName);
+
+    // 진행형 도전과제 진척도 기록 (스팀 stat write + StoreStats)
+    void WriteStat(const FString& StatApiName, int32 Value);
+
+    bool IsAchievementUnlocked(const FString& SteamApiName) const;
+
+    DECLARE_MULTICAST_DELEGATE_OneParam(FOnAchievementUnlocked, FString /*ApiName*/);
+    FOnAchievementUnlocked OnAchievementUnlocked;
+
+    bool IsBackendAvailable() const; // 스팀 온라인 여부
+
+private:
+    IOnlineAchievementsPtr AchievementsInterface; // OnlineSubsystem
+    IOnlineIdentityPtr IdentityInterface;
+    void OnQueryComplete(const FUniqueNetId&, const bool bWasSuccessful);
+    TMap<FString,bool> CachedAchievements;
+};
 ```
 
-- 기존 `PrePlacedEnemies`, `RegisterEnemy`, `OnAllEnemiesDead` 델리게이트, 문 부서지는 연동 로직은 **변경 없음**.
-- UDRPhase1이 `CollectSpawnGroups` 단계에서 그룹별 `GetRegisteredEnemies`를 호출하여 후보 선정에만 사용.
+구현 메모:
+- `IOnlineSubsystem::Get()->GetAchievementsInterface()` 사용. 스팀이면 자동으로 SteamUserStats로 매핑.
+- 도전과제는 **스팀 파트너 페이지에 미리 정의된 것만** 해금 가능. 코드에서 새로 만들 수 없음.
+- `WriteAchievements()` 호출 후 스팀이 내부적으로 `StoreStats` → 오버레이 토스트 표시.
+- **AppId 480 환경에서는 실제 해금이 안 되거나 Spacewar 도전과제로 뜬다** → 개발 중엔 `IsBackendAvailable()==false` 취급하고 로컬 폴백 경로로 테스트.
 
-### 3.5. CleanserSite 측 변경
+### 5.3 `UDRUnlockManager` (UObject, GameInstance 소유)
+역할: 도전과제 상태 → 해금 규칙 평가 → SaveGame 반영 → UI 통지.
 
-- **변경 없음**. `RequiredPartsCount = 2` 기본값 그대로. UDRPhase1은 사이트의 부품 수 값을 절대 변경하지 않는다.
-- `InstalledPartMesh1`, `InstalledPartMesh2` 두 슬롯 메시와 정확히 매칭되는 2개 부품 흐름이 변경 없이 유지된다.
-- 운영 전제: **레벨에 DREnemySpawnGroup이 정확히 2개 배치되어 있어야 한다**. (각 그룹이 부품 1개를 공급 → 사이트 2개 슬롯에 1:1)
-- `Phase1EnemySpawnOffsets` 필드는 그대로 사용. `EnemiesToSpawn` 배열 크기와 1:1 매칭.
-- `OnPartInstalled` 델리게이트는 UDRPhase1이 직접 구독.
+```cpp
+UCLASS()
+class DAERUNE_API UDRUnlockManager : public UObject
+{
+    GENERATED_BODY()
+public:
+    void Init(UDRGameInstance* GI, UDRUnlockData* Data,
+              UDRAchievementSubsystem* Ach, UDRSaveGame* Save);
 
-### 3.6. GameMode 변경
+    // 도전과제 상태 변동/로그인 시 전체 재평가
+    void ReevaluateAll();
 
-`DRStageGameMode.cpp`:
+    UFUNCTION(BlueprintPure)
+    bool IsUnlocked(FGameplayTag UnlockableTag) const;
 
-1. `InitializePhaseSystem`의 가드:
-   ```cpp
-   if (CleanserSites.Num() < 1) return;  // 기존: < 3
-   ```
+    UFUNCTION(BlueprintPure)
+    bool IsCharacterUnlocked(EPlayerCharacterClass Class) const;
 
-2. `ValidatePhaseCompletion` switch 케이스 재정렬:
-   ```cpp
-   switch (CurrentPhaseIndex)
-   {
-   case 0: // New Phase1: 부품 2개 설치 + 사이트 활성화
-   {
-       const int32 CollectedParts = CachedGameState->GetCollectedParts();
-       const bool bActivated = CachedGameState->IsCleanserActivated();
-       bIsCompleted = (CollectedParts >= 2) && bActivated;
-   }
-   break;
+    UFUNCTION(BlueprintPure)
+    TArray<FGameplayTag> GetUnlockedCosmetics(EPlayerCharacterClass Class) const;
 
-   case 1: // New Phase2 (= 기존 Phase3): 웨이브 종료
-   {
-       const int32 CurrentWaveNumber = CachedGameState->GetCurrentWaveNumber();
-       const int32 TotalWaves = CachedGameState->GetTotalWaves();
-       bIsCompleted = CurrentWaveNumber >= TotalWaves;
-   }
-   break;
+    // UI 안내: 아직 못 깬 해금 + 조건문
+    UFUNCTION(BlueprintPure)
+    FText GetUnlockHint(FGameplayTag UnlockableTag) const;
 
-   default:
-       break;
-   }
-   ```
-   - 기존 case 1 (부품) / case 2 (방어) / case 3 (보스) 모두 제거하고 위 두 케이스로 정리.
-   - 페이즈 수가 2이므로 보스 케이스는 본 PR에서 다루지 않는다.
+    DECLARE_MULTICAST_DELEGATE_OneParam(FOnUnlocked, FGameplayTag);
+    FOnUnlocked OnUnlockableUnlocked; // 신규 해금 시 토스트용
 
-3. 부품 필요 수는 **2 고정**(`CleanserSite::RequiredPartsCount` 기본값과 일치). UDRPhase1은 사이트의 값을 변경하지 않으며, `FPhaseObjectiveData::RequiredCount`도 사이트의 `RequiredPartsCount` 값을 읽어 동일하게 세팅한다.
+private:
+    bool EvaluateRule(const FDRUnlockRule& Rule) const;
+    void CommitUnlock(FGameplayTag Tag); // SaveGame 기록 + 저장 + 델리게이트
+    /* 참조들 ... */
+};
+```
 
-### 3.7. UI / DT_PhaseObjective
+평가 흐름:
+1. `ReevaluateAll()` 은 **로그인 직후**(스팀 query 완료 콜백) + **도전과제 해금 콜백** 시 호출.
+2. 각 `FDRUnlockRule` 에 대해 `RequiredAchievements` 를 (AND/OR)로 검사.
+3. 새로 충족된 규칙이 있으면 `CommitUnlock` → `SaveGame.UnlockedContent.Add` → `SaveProgress()` → `OnUnlockableUnlocked` 브로드캐스트.
+4. 이미 해금된 건 멱등 처리.
 
-- `DT_PhaseObjective`:
-  - PhaseNumber=1 행: 제목/문구를 통합 메시지로 수정. 예: "클렌저 부품을 회수해 사이트에 설치하라". `RequiredCount`는 런타임에서 그룹 수로 덮어쓰므로 기본값은 임의 값 가능.
-  - PhaseNumber=2 행: 기존 PhaseNumber=3 행의 내용(예: "5분간 방어하라" / 웨이브 수 등)을 옮긴다.
-  - PhaseNumber=3 행 삭제(또는 보존만).
-- `UDRPhase3::SetupPhaseObjective(3)` → `SetupPhaseObjective(2)`.
+### 5.4 `UDRGameInstance` 확장
+```cpp
+// 추가 멤버
+UPROPERTY() TObjectPtr<UDRStatTracker> StatTracker;
+UPROPERTY() TObjectPtr<UDRUnlockManager> UnlockManager;
+UPROPERTY(EditDefaultsOnly, Category="Unlock") TObjectPtr<UDRUnlockData> UnlockData;
 
-### 3.8. BP / 데이터 작업
+// 접근자
+UDRStatTracker* GetStatTracker() const;
+UDRUnlockManager* GetUnlockManager() const;
+UDRAchievementSubsystem* GetAchievements() const; // GetSubsystem 래퍼
+```
 
-- `BP_DRStageGameMode::PhaseClasses`
-  - 인덱스 0: `BP_DRPhase1` (그대로)
-  - 인덱스 1: `BP_DRPhase3` (`BP_DRPhase2`를 제거하고 이동)
-- `BP_DRPhase1` 자식 BP에서:
-  - `EnemiesToSpawn` 배열에 `[BP_Dog, BP_Armadillo, BP_Dragonfly, ...]` 등 원하는 구성을 입력 (배열 길이 = 사이트 측 `Phase1EnemySpawnOffsets` 길이). 사이트 주변 적 수는 부품 수(2)와 무관 — 자유롭게 설정 가능.
-  - `ArmadilloEnemyClass = BP_Armadillo`
-  - `PartActorClass = BP_CleanserPart`
-  - `Phase1EnemyTag = State.Enemy.Phase1`
-- `BP_CleanserSite`의 `Phase1EnemySpawnOffsets` 배열 길이를 `EnemiesToSpawn`와 동일하게 맞춤.
-- TestMap1:
-  - CleanserSite 인스턴스 1개만 남기기
-  - 통로 DREnemySpawnGroup을 **정확히 2개** 배치 (사이트 `RequiredPartsCount=2` 고정과 1:1 매칭)
-  - 각 그룹의 `PrePlacedEnemies`에 개·아르마딜로·잠자리 BP 인스턴스 다양화 배치
-  - 각 그룹에 비-아르마딜로 인스턴스가 최소 1개 이상 포함되도록 검수
+`Init()` 순서:
+1. `LoadProgress()` (SaveGame 로드 — 기존)
+2. `AchievementSubsystem` 은 GameInstanceSubsystem 이라 자동 생성됨
+3. `StatTracker->Init()`, `UnlockManager->Init()`
+4. 스팀 로그인 완료 델리게이트에 `Achievements->QueryFromBackend()` 바인딩
+5. query 완료 → `UnlockManager->ReevaluateAll()`
 
 ---
 
-## 4. 단계별 작업 순서 (Execution Plan)
+## 6. 멀티플레이 처리
 
-### Step 1 — 게임플레이 태그 + 대미지 감소 (독립적, 우선)
-1. `DRGameplayTags.h/.cpp`에 `State_Enemy_Phase1` 추가.
-2. `ExecCalc_Damage.cpp`에 SourceASC 태그 체크 → 0.7배 곱 (타겟이 `UDRAttributeSet` 보유 시).
-3. 빌드. 단일 적의 ASC에 콘솔로 태그 부여 후 PIE에서 대미지가 정확히 0.7배인지 확인.
+도전과제/해금은 **계정 단위 로컬 상태**다. 멀티에서 핵심은 "선택 시 검증".
 
-### Step 2 — DREnemySpawnGroup API 추가
-1. `GetRegisteredEnemies()`, `GetPartCarrierEnemy()`, `SetPartCarrierEnemy()` 추가.
-2. 빌드 + 기존 PrePlacedEnemies 흐름 회귀 테스트 (그룹 적 사망 → 문 부서짐 동작 유지).
+### 6.1 캐릭터 선택
+- 기존 캐릭터 선택은 `UDRGameInstance::SavePlayerClassSelection` + `ADRPlayerController`(추정)로 흐름.
+- 신규 게이팅:
+  - 선택 UI는 `UnlockManager->IsCharacterUnlocked()` 가 false면 잠금 표시.
+  - 클라가 `ServerRequestSelectCharacter(EPlayerCharacterClass)` 호출.
+  - **서버 검증 옵션 A (신뢰):** 협동 PvE이고 치팅 영향이 미미하므로, 서버는 클라가 보낸 "해금했다"는 주장을 신뢰하고 적용. 가장 단순.
+  - **서버 검증 옵션 B (검증):** 클라가 접속 시 자기 해금 목록을 서버로 1회 전송(`ServerReportUnlocks`), 서버가 캐싱해 선택 시 대조. 무결성↑, 구현↑.
+  - **권장: 옵션 A**. 협동 PvE + 해금은 "내 계정 자랑"이라 타인 피해 없음. 치팅은 자기 손해. 단, **잠긴 캐릭터로 선택 시도하면 서버가 기본 캐릭터로 폴백**하는 최소 가드만 둔다.
 
-### Step 3 — DREnemy 복제 점검 + PartMesh BP 사전 설정
-1. `bCarriesPart`가 `ReplicatedUsing=OnRep_bCarriesPart`인지 확인. 누락이면 추가.
-2. `OnRep_bCarriesPart`에서 `PartMeshComponent->SetVisibility(true)` 갱신이 일관되게 일어나는지 확인.
-3. **BP_Dog, BP_Armadillo, BP_Dragonfly 각각의 `PartMeshComponent`에 부품 StaticMesh 에셋을 미리 지정** (가시성 false 기본). 기존 PartCarrying BP에서 사용하던 동일 에셋을 재사용.
-4. 멀티플레이 PIE에서 서버가 `bCarriesPart=true`로 셋한 적이 클라이언트에서도 부품 메시를 보이는지 검증.
+### 6.2 코스메틱 동기화
+- 코스메틱은 **순수 외형** → 게임플레이 영향 0.
+- `ADRCharacter` 에 복제 프로퍼티 추가:
+  ```cpp
+  UPROPERTY(ReplicatedUsing=OnRep_Loadout) FDRLoadout ActiveLoadout;
+  UFUNCTION() void OnRep_Loadout(); // 메시/머티리얼/어태치/니아가라 적용
+  ```
+- 흐름: 클라 선택 → `ServerRequestSetLoadout(FDRLoadout)` → 서버가 `ActiveLoadout` 설정 → RepNotify로 전 클라가 외형 적용.
+- `OnRep_Loadout()` 에서 `DRAssetManager` 통해 소프트 레퍼런스 **비동기 로드 후 적용** (히치 방지).
+- 폰 소유 시점 타이밍: PossessedBy/OnRep_PlayerState 이후 SaveGame의 `EquippedLoadouts` 기본값을 서버로 전송.
 
-### Step 4 — UDRPhase1 전면 개편
-1. 헤더 변경: `EnemiesToSpawn`, `ArmadilloEnemyClass`, `PartActorClass`, `Phase1EnemyTag`, `SpawnGroups`, `PartCarrierByGroup`, `ActiveSite` 추가. 기존 Normal/Elite 관련 필드 제거.
-2. `KeepSingleCleanserSite()`, `SpawnEnemiesAroundCleanserSite()`, `CollectSpawnGroups()`, `AssignPartCarriersForAllGroups()`, `PickPartCarrierFromGroup()`, `ApplyPhase1Tag()`, `OnPartInstalled()` 구현.
-3. `OnPhaseStart` 흐름을 §3.2.3대로 재구성.
-4. `OnPhaseEnd`에서 델리게이트 해제 + 컬렉션 비움.
-5. `OnEnemyDeath`는 ObjectiveProgress와 무관하게 단순 호출(또는 빈 구현)로 변경.
-
-### Step 5 — UDRPhase2 제거
-1. `BP_DRStageGameMode::PhaseClasses` 인덱스 1에서 `BP_DRPhase2` 제거.
-2. C++ `UDRPhase2` 클래스 파일은 다음 PR에서 삭제 (BP 참조 잔재 정리 후). 본 PR에서는 헤더에 `UE_DEPRECATED` 주석만 추가하고 컴파일 가능한 상태로 둔다.
-
-### Step 6 — UDRPhase3 표기 정정 + BP 인덱스 이동
-1. `UDRPhase3::OnPhaseStart`의 `SetupPhaseObjective(3)` → `SetupPhaseObjective(2)`.
-2. `BP_DRStageGameMode::PhaseClasses` 인덱스 1 = `BP_DRPhase3` 세팅.
-
-### Step 7 — GameMode 검증/완료 케이스 재정렬
-1. `InitializePhaseSystem`의 `< 3` → `< 1`.
-2. `ValidatePhaseCompletion` switch를 §3.6대로 case 0, case 1만 남기도록 정리.
-
-### Step 8 — CleanserSite RequiredPartsCount 검증 (동적 설정 없음)
-1. 사이트 BP의 `RequiredPartsCount = 2` 기본값을 그대로 사용하고, UDRPhase1이 이 값을 변경하지 않는지 코드 리뷰로 재확인.
-2. 부품 2개 설치 시 `IsPartInstallationComplete()`가 true, 슬롯 메시 `InstalledPartMesh1/2` 두 개가 모두 시각적으로 채워지는지 확인.
-3. 레벨에 DREnemySpawnGroup이 정확히 2개 배치되어 있는지 검수. (그룹 수 ≠ 2이면 §3.2.5의 fallback 정책에 의해 정상 진행은 되지만 경고 로그가 떠야 함)
-
-### Step 9 — DT_PhaseObjective 및 BP 자산 정리
-1. PhaseNumber=1 문구 통합 메시지로 수정 (`RequiredCount`는 어차피 런타임 덮어쓰기).
-2. PhaseNumber=2 행 추가 (기존 PhaseNumber=3 내용 이동).
-3. `BP_DRPhase1` 자식 BP에 `EnemiesToSpawn`, `ArmadilloEnemyClass`, `PartActorClass`, `Phase1EnemyTag` 입력.
-
-### Step 10 — 레벨 작업 (TestMap1)
-1. CleanserSite 액터 1개만 남기고 나머지 제거.
-2. CleanserSite의 `Phase1EnemySpawnOffsets` 길이를 `EnemiesToSpawn` 길이와 일치시킴.
-3. 통로 DREnemySpawnGroup의 `PrePlacedEnemies`에 개·아르마딜로·잠자리 BP 인스턴스를 적절히 섞어 배치. 각 그룹에 비-아르마딜로 인스턴스가 최소 1개 이상 포함되도록.
-4. 그룹 수가 2가 되도록 정리 (사이트 슬롯 메시 2개와 매칭).
-
-### Step 11 — 통합 테스트 (Listen Server + Client 1)
-1. PIE 시작 → 페이즈 인덱스 0에서 UDRPhase1 동작 확인.
-2. 사이트 주변에 `EnemiesToSpawn` 배열의 클래스대로 정확한 위치에 스폰되는가?
-3. 사이트 주변 적과 통로 적 모두 플레이어 대상 대미지가 0.7배인가? (Health 로그 확인)
-4. 각 DREnemySpawnGroup에서 비-아르마딜로 적 정확히 1마리가 부품 메시를 표시하는가?
-5. 통로 적 전원 사망 시 문 부서짐이 여전히 동작하는가?
-6. 부품 픽업/설치 → 그룹 수만큼 설치 완료 시 New Phase2(웨이브) 진입.
-7. New Phase2 동안 웨이브/엘리트/독가스/사이트 체력 시스템이 종전대로 동작.
-8. HUD 페이즈 라벨이 "페이즈 1", "페이즈 2"로 표시.
-
-### Step 12 — 정리
-1. `UDRPhase2` C++ 클래스 파일 삭제 (다음 PR).
-2. 기존 임시 주석/`[임시]` 표기 제거.
-3. CLAUDE.md "Phase System" 섹션을 새 2-페이즈 구조로 갱신.
+### 6.3 리슨 서버 주의
+- 리슨 서버 호스트는 자기 자신이 클라이언트이기도 함 → StatTracker는 **`IsLocallyControlled` 기준**으로만 카운트해서 중복/타인 집계 방지.
 
 ---
 
-## 5. 리스크 및 결정 필요 항목
+## 7. UI 설계
 
-| 항목 | 리스크 | 권장 결정 |
+### 7.1 캐릭터 선택 화면 (대기실/로비)
+- 기존 `DRWaitingRoomCameraActor` / 캐릭터 선택 위젯 확장.
+- 각 캐릭터 카드:
+  - 해금됨: 정상 선택 가능.
+  - 잠김: 흑백/자물쇠 아이콘 + 호버 시 `GetUnlockHint()` 툴팁("Phase 3를 클리어하세요").
+- `UDRUserWidget` 패턴(컨트롤러→위젯 브로드캐스트) 유지. 신규 `UCharacterSelectWidgetController` 또는 기존 컨트롤러 확장.
+
+### 7.2 꾸미기(코스메틱) 화면
+- 캐릭터별 탭 → 슬롯(스킨/모자/트레일) → 항목 그리드.
+- 잠긴 항목은 조건 안내. 선택 시 `ServerRequestSetLoadout`.
+- 미리보기: 대기실 카메라 앞 프리뷰 폰에 즉시 반영(로컬 프리뷰는 서버 왕복 없이 표시 후, 확정 시 서버 전송).
+
+### 7.3 도전과제 목록 화면 (선택)
+- `UDRUnlockData.Achievements` 순회 → 달성/미달성 + 진행도 바(`Stat / RequiredCount`).
+- 스팀 오버레이가 토스트를 띄우지만, 인게임 진행도 표시는 별도 제공이 UX상 유리.
+
+### 7.4 해금 토스트
+- `OnUnlockableUnlocked` 구독 → 화면 토스트("새 캐릭터 해금: Ranger!"). 오버레이 위젯 컨트롤러에 델리게이트 추가(기존 상태효과 UI 패턴 재사용).
+
+---
+
+## 8. 스팀 백엔드 준비 (게임 외 작업)
+
+이 작업들은 코드와 별개로 **Steamworks 파트너 사이트**에서 선행되어야 실제 동작.
+
+1. 실제 **AppId 발급** (앱 등록). `Config/DefaultEngine.ini` 의 `SteamDevAppId=480` → 실제 ID 교체. `steam_appid.txt` 도 빌드 디렉터리에 배치.
+2. **Achievements 정의:** 각 도전과제의 API Name(영문 키), 표시명/설명/아이콘(잠금/해제 2종) 등록.
+3. **Stats 정의:** 진행형 도전과제용 누적 stat(INT) 등록 (예: `STAT_KILLS`).
+4. 도전과제 ↔ stat 연결(진행형) 설정.
+5. Steam Cloud(Auto-Cloud or Remote Storage) 활성화 — SaveGame 동기화. (UE SaveGame은 기본 로컬; 스팀 클라우드 경로 매핑 또는 ISteamRemoteStorage 사용 검토.)
+6. 빌드에 **Steamworks SDK** 포함 확인(OnlineSubsystemSteam 플러그인이 래핑).
+
+> 개발 중 검증은 **Spacewar(480)** 환경에서 OnlineSubsystem 인터페이스 호출까지만 확인 가능하고, 실제 도전과제 토스트/영속은 실 AppId 필요.
+
+---
+
+## 9. 폴백 & 엣지 케이스
+
+| 상황 | 처리 |
+|---|---|
+| 스팀 오프라인/미실행 | `IsBackendAvailable()==false` → StatTracker가 **SaveGame 로컬 통계로만** 누적, UnlockManager가 로컬 통계로 해금 판정. 온라인 복귀 시 스팀에 backfill write. |
+| 스팀에는 해금됐는데 로컬 SaveGame엔 없음 (재설치) | 로그인 query 후 `ReevaluateAll`로 SaveGame 재구성 (스팀이 진실의 원천). |
+| 로컬엔 해금됐는데 스팀엔 없음 (오프라인 달성 후) | 온라인 시 `UnlockAchievement` backfill. |
+| 진행형 도전과제 중복 카운트 | stat은 절대값 write(누적값) 또는 set-max로 멱등 처리. |
+| 멀티에서 타인 이벤트 집계 | `IsLocallyControlled` 가드. |
+| 소프트 레퍼런스 코스메틱 로드 히치 | `DRAssetManager` 비동기 로드 + 로드 완료 콜백에서 적용. |
+| SaveGame 버전 변경 | `SaveVersion` 필드로 마이그레이션 분기. |
+| 잠긴 캐릭터 선택 시도(치팅/버그) | 서버 최소 가드로 기본 캐릭터 폴백. |
+
+---
+
+## 10. 구현 단계 (마일스톤)
+
+### M1 — 토대 (백엔드 무관, 로컬만)
+- [ ] `DRGameplayTags` 에 `Achievement.*`, `Unlockable.*`, `Stat.*` 추가.
+- [ ] `UDRSaveGame` 필드 확장 + 마이그레이션.
+- [ ] `FDRLoadout`, `FDRCosmeticDef`, `FDRAchievementDef`, `FDRUnlockRule`, `UDRUnlockData` 정의.
+- [ ] `UDRStatTracker` 구현 + GameInstance 통합.
+- [ ] `UDRUnlockManager` 구현(로컬 통계 기반 평가).
+- [ ] 게임플레이 후크 바인딩(킬/파트/페이즈/보스/무피해).
+- ✅ 검증: PIE에서 적 처치 → 통계 누적 → 로컬 해금 → 로그 확인.
+
+### M2 — UI
+- [ ] 캐릭터 선택 잠금/해제 표시 + 조건 툴팁.
+- [ ] 코스메틱 선택 화면 + 프리뷰.
+- [ ] 해금 토스트.
+- [ ] (선택) 도전과제 진행도 화면.
+
+### M3 — 멀티플레이
+- [ ] `ADRCharacter` `ActiveLoadout` 복제 + `OnRep_Loadout` 외형 적용.
+- [ ] `ServerRequestSetLoadout` / `ServerRequestSelectCharacter` + 최소 가드.
+- [ ] `DRAssetManager` 비동기 코스메틱 로드.
+- ✅ 검증: 2인 PIE에서 서로 다른 캐릭터/스킨이 정확히 보임.
+
+### M4 — 스팀 연동
+- [ ] `UDRAchievementSubsystem` 구현(OnlineSubsystem 래핑).
+- [ ] StatTracker/UnlockManager ↔ Subsystem 연결.
+- [ ] 실제 AppId + Steamworks 도전과제/stat 등록.
+- [ ] Steam Cloud SaveGame 동기화.
+- ✅ 검증: 실 AppId 빌드에서 도전과제 토스트, 재설치 후 해금 복원.
+
+### M5 — 폴리시 & QA
+- [ ] 오프라인/온라인 전환 backfill.
+- [ ] 엣지 케이스 표 전수 테스트.
+- [ ] 콘텐츠 채우기(실제 캐릭터/코스메틱 에셋, 아이콘, 문구 현지화).
+
+---
+
+## 11. 신규 콘텐츠 정의 (콘텐츠팀 작업 — 채워넣기)
+
+### 11.1 해금 캐릭터 후보
+`EPlayerCharacterClass` 에 추가하고 `UPlayerCharacterClassInfo.CharacterBPClasses` / `CharacterUnlockMap` 등록:
+
+| 캐릭터 | 해금 도전과제 | 비고 |
 |---|---|---|
-| `EnemiesToSpawn` 길이 ≠ `Phase1EnemySpawnOffsets` 길이 | 일부 적 미스폰 or 일부 위치 미사용 | 런타임 경고 로그 + min(N,M)만큼만 스폰. 레벨 검수 단계에서 길이 일치를 보장 |
-| DREnemySpawnGroup이 전원 아르마딜로 | 부품 미할당 → 페이즈 완료 불가 | 레벨 디자이너에게 "각 그룹에 비-아르마딜로 ≥1마리" 룰 명시. 코드는 경고만 |
-| `bCarriesPart` 복제 누락 | 클라이언트에 부품 메시 미표시 | Step 3에서 점검 후 `ReplicatedUsing=OnRep_bCarriesPart` 보장 |
-| 그룹 수 ≠ 2 | 사이트 부품 수 2 고정과 불일치 | 레벨에 그룹 정확히 2개 배치. 3+ 경우 fallback으로 앞쪽 2개 그룹만 부품 운반자 선정. < 2면 경고 + 페이즈 완료 불가 |
-| `RequiredPartsCount` 의도치 않은 변경 | 사이트 BP 값과 다른 값으로 덮어쓰면 부품 흐름 깨짐 | UDRPhase1은 사이트 값을 **읽기만** 한다. 쓰기 금지를 코드 리뷰에서 강제 |
-| 루즈 태그 vs 복제 루즈 태그 | 서버만 동작하는 ExecCalc에서는 루즈 태그 OK. 그러나 클라이언트 UI에서 태그 조회 시 누락 가능 | `AddReplicatedLooseGameplayTag` 사용 권장 |
-| 임시 1개 코드의 정식화 | 다른 페이즈 (UDRPhase3 등)가 `ActiveCleanserSites.Num() == 2`를 가정하는 코드가 남아있을 수 있음 | DRPhase3의 `InitializeCleanserSite` / `InitializeActiveSpawnPoints`에서 사이트 수 가정 검증 후 1개 기준으로 동작하는지 점검 |
-| `ValidatePhaseCompletion` 인덱스 기반 switch | 페이즈 추가/제거 시 case 누락 위험 | 본 PR 범위에서는 그대로. 폴리모픽 디스패치 리팩터는 별도 PR |
-| `Phase1EnemySpawnOffsets` 의미 변경 | 기존 레벨 입력값이 새 의미(=배열 i번째 위치)와 어긋날 수 있음 | 레벨 작업 시 사이트별로 재정렬·재입력 |
+| (예) Ranger | `Achievement.PhaseMaster` | 페이즈3 클리어 |
+| (예) Bear | `Achievement.BossSlayer` | 엘리트 보스 격파 |
+| ... | ... | ECharacterClass에 Bear/Ranger 이미 존재 — 플레이어블 전환 여부 결정 필요 |
+
+> 참고: `ECharacterClass`에는 Ranger/Bear가 있으나 `EPlayerCharacterClass`에는 Gardener/VendingMachine만 있음. 신규 플레이어블은 **`EPlayerCharacterClass` 확장 + 전용 BP/어빌리티/스킬아이콘 위젯** 세트가 필요.
+
+### 11.2 코스메틱 슬롯/항목 (예시)
+- 슬롯: Skin(머티리얼/메시), Hat(어태치 액터), Trail(니아가라).
+- 캐릭터별 최소 1~2개 해금 항목으로 시작.
 
 ---
 
-## 6. 테스트 체크리스트
+## 12. 리스크 & 결정 필요 사항
 
-- [ ] PIE 시작 시 클렌저 사이트가 정확히 1개만 활성화된다 (다른 사이트는 Destroy됨).
-- [ ] 사이트 주변에 `EnemiesToSpawn` 배열의 각 원소 클래스가 `Phase1EnemySpawnOffsets[i]` 위치에 정확히 1마리씩 스폰된다.
-- [ ] 사이트 주변 적은 부품을 휴대하지 않는다 (부품 메시 비표시).
-- [ ] 각 DREnemySpawnGroup 내에서 아르마딜로가 아닌 적 정확히 1마리만 부품 메시를 표시한다.
-- [ ] 운반자 선정 직후 서버·클라이언트 양쪽에서 부품 메시가 즉시 보인다 (BP의 PartMesh 에셋 사전 지정 + OnRep_bCarriesPart 동작 확인).
-- [ ] 운반자가 사망하면 `DropPart()`가 `PartActorClass`로 부품 액터를 정확히 스폰한다 (기존 Phase2와 동일한 흐름 유지).
-- [ ] DREnemySpawnGroup 적 전원 사망 시 기존 문 부서짐 / `OnAllEnemiesDead` 동작이 유지된다.
-- [ ] 사이트 주변 적과 통로 적 모두 플레이어에게 주는 대미지가 0.7배다 (체력 로그 검증).
-- [ ] 0.7배는 엘리트 룬 버프(×1.2)와 곱셈 순서가 결과에 영향 없음 (×1.2×0.7 = ×0.84).
-- [ ] 0.7배는 클렌저 사이트(`UDRCleanserSiteAttributeSet`)에는 적용되지 않는다.
-- [ ] 부품 운반자 처치 → 부품 드롭 → 픽업 → 사이트 설치 흐름이 그룹 단위로 정상 동작한다.
-- [ ] 부품 정확히 2개 설치 시 `ValidatePhaseCompletion`이 즉시 true → New Phase2 진입.
-- [ ] 사이트의 `RequiredPartsCount`가 런타임에 변경되지 않는다 (항상 2 유지).
-- [ ] 레벨의 DREnemySpawnGroup 수가 정확히 2개일 때 정상 진행되며, 2개가 아니면 경고 로그가 출력된다.
-- [ ] New Phase2 진입 후 웨이브/엘리트/독가스/사이트 체력/BGM이 종전대로 동작한다.
-- [ ] HUD 페이즈 라벨이 "페이즈 1", "페이즈 2"로 표시되고 진행률(`CollectedParts / RequiredCount`)이 정확히 갱신된다.
-- [ ] 멀티플레이 환경(서버 + 1~2 클라이언트)에서 부품 메시 가시화, 부품 픽업 권한, 사이트 슬롯 메시 표시가 모든 머신에서 일관된다.
+1. **AppId**: 실제 발급 전까지 스팀 도전과제 실동작 불가. → M1~M3는 로컬 폴백으로 선행 개발 가능.
+2. **신규 플레이어블 캐릭터 비용**: 캐릭터 1종 = BP + 어빌리티 세트 + 애니메이션 + UI. 코스메틱보다 비쌈. → 초기엔 **코스메틱 위주**로 해금을 채우고 캐릭터 해금은 1~2종으로 제한 권장.
+3. **서버 검증 강도(옵션 A vs B)**: 협동 PvE이므로 옵션 A(신뢰) 권장. PvP 추가 시 재검토.
+4. **Steam Cloud vs 로컬 SaveGame**: 스팀이 진실의 원천이되 SaveGame을 항상 미러로 유지하는 이중화 채택.
+5. **enum 확장 호환성**: `EPlayerCharacterClass` 중간 삽입 금지(SaveGame의 enum 직렬화 깨짐). **반드시 끝에 추가**.
 
 ---
 
-## 7. 범위 밖 (Out of Scope)
+## 13. 영향받는 파일 요약
 
-- 페이즈 클래스 C++ 리네이밍(`UDRPhase3` → `UDRPhase2`)
-- `ValidatePhaseCompletion` 인덱스 기반 switch → 폴리모픽 디스패치 리팩터링
-- DREnemySpawnGroup 수를 3 이상으로 늘리기 위한 CleanserSite 슬롯 메시 컴포넌트 확장 (현재 2 고정 유지)
-- 사이트 `RequiredPartsCount`를 2 이외 값으로 변경하는 런타임 로직
-- 아르마딜로/잠자리 적 자체의 AI/Ability 신규 구현 (기존 BP 자산 사용 전제)
-- 신규 페이즈(보스 등) 추가
+신규:
+- `Public/Game/DRStatTracker.h` / `Private/.../DRStatTracker.cpp`
+- `Public/Game/DRAchievementSubsystem.h` / `.cpp`
+- `Public/Game/DRUnlockManager.h` / `.cpp`
+- `Public/Data/DRUnlockData.h` / `.cpp` (+ DataAsset 인스턴스 `DA_UnlockData`)
+- UI 위젯/컨트롤러 (캐릭터선택·코스메틱·도전과제·토스트)
+
+수정:
+- `DRGameplayTags.h/.cpp` (태그 추가)
+- `DRSaveGame.h/.cpp` (필드 확장)
+- `DRGameInstance.h/.cpp` (매니저 소유·초기화·로그인 후킹)
+- `CharacterClassInfo.h` (`EPlayerCharacterClass` 확장, 신규 캐릭터)
+- `ADRCharacter` (Loadout 복제 + 외형 적용)
+- `ADRPlayerController` (Server RPC: 선택/로드아웃)
+- `ADRStageGameMode` / 페이즈 / `ADREnemy` / `ADRCleanserSite` (StatTracker 후킹)
+- `Config/DefaultEngine.ini` (실 AppId)
+
+---
+
+## 14. 다음 행동
+1. 위 계획 중 **해금 대상(캐릭터 몇 종 / 코스메틱 슬롯 구성)** 확정.
+2. **서버 검증 강도(옵션 A/B)** 확정.
+3. 확정되면 **M1(토대)** 부터 착수 — 백엔드 없이도 로컬 폴백으로 전 기능 개발·검증 가능.

@@ -39,6 +39,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Debuff")
 	float EliteDebuffModifier = 1.5f;
 
+	// 부품을 들고 있을 때 받는 데미지 배율 (1.5배). 피격 시 부품을 떨어뜨린다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Part System")
+	float CarryingPartDamageModifier = 1.5f;
+
 private:
 	void ProcessCorruptedDamage(const FEffectProperties& Props, float Damage);
 	void ProcessNormalDamage(const FEffectProperties& Props, float Damage);

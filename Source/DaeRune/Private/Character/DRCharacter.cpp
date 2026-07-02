@@ -283,6 +283,23 @@ void ADRCharacter::DropCarriedPart()
 	const float TimeSincePickup = CurrentTime - LastPartPickupTime;
 	if (TimeSincePickup < PartDropCooldown) return;
 
+	DoDropCarriedPart();
+}
+
+void ADRCharacter::ForceDropCarriedPart()
+{
+	// 서버 권한에서만 실행
+	if (!HasAuthority()) return;
+
+	// 부품을 들고 있지 않으면 무시
+	if (!bIsCarryingPart || !CarriedPart) return;
+
+	// 피격으로 인한 강제 드롭은 쿨다운을 무시한다
+	DoDropCarriedPart();
+}
+
+void ADRCharacter::DoDropCarriedPart()
+{
 	// State_Carrying �±� ���� (서버 측. 클라 측은 OnRep_bIsCarryingPart 에서)
 	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(GetAbilitySystemComponent()))
 	{

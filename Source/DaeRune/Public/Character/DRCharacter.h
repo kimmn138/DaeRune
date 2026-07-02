@@ -92,6 +92,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void DropCarriedPart();
 
+	// 피격 등으로 인한 강제 드롭 (드롭 쿨다운을 무시하고 즉시 부품을 내려놓음)
+	void ForceDropCarriedPart();
+
 	// 부품 보유 상태가 바뀐 직후 현재 오버랩 중인 CleanserSite/CleanserPart 들의 UI/감지를 재평가
 	// (오버랩 영역 안에서 집어들기/내려놓기 시 UI가 갱신되지 않는 문제 해결)
 	void RefreshNearbyInteractions();
@@ -233,6 +236,9 @@ protected:
 	virtual float GetMoveSpeed() override;
 
 private:
+	// 부품 드롭 실제 구현 (쿨다운 검사 없음, 권한/보유 검사는 호출부에서 수행)
+	void DoDropCarriedPart();
+
 	// ========== WaterPump 3P 빔 (내부) ==========
 
 	// 비소유 클라이언트에서 관리하는 3P Niagara 빔 컴포넌트
