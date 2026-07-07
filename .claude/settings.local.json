@@ -42,7 +42,37 @@
       "Bash(python *)",
       "PowerShell($ue = \"C:\\\\Program Files\\\\Epic Games\\\\UE_5.5\\\\Engine\\\\Build\\\\BatchFiles\\\\Build.bat\"; if \\(Test-Path $ue\\) { & $ue DaeRuneEditor Win64 Development -Project=\"C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject\" -WaitMutex } else { \"Build.bat not found at $ue\" })",
       "PowerShell($paths = @\\(\"C:\\\\Program Files\\\\Epic Games\\\\UE_5.5\\\\Engine\\\\Build\\\\BatchFiles\\\\Build.bat\",\"D:\\\\Epic Games\\\\UE_5.5\\\\Engine\\\\Build\\\\BatchFiles\\\\Build.bat\",\"D:\\\\Program Files\\\\Epic Games\\\\UE_5.5\\\\Engine\\\\Build\\\\BatchFiles\\\\Build.bat\",\"E:\\\\Epic Games\\\\UE_5.5\\\\Engine\\\\Build\\\\BatchFiles\\\\Build.bat\"\\); foreach \\($p in $paths\\) { if \\(Test-Path $p\\) { \"FOUND: $p\" } }; Get-ChildItem \"C:\\\\Program Files\\\\Epic Games\" -ErrorAction SilentlyContinue | Select-Object Name)",
-      "PowerShell(& \"D:\\\\UE_5.5\\\\Engine\\\\Build\\\\BatchFiles\\\\Build.bat\" DaeRuneEditor Win64 Development -Project=\"C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject\" -WaitMutex)"
+      "PowerShell(& \"D:\\\\UE_5.5\\\\Engine\\\\Build\\\\BatchFiles\\\\Build.bat\" DaeRuneEditor Win64 Development -Project=\"C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject\" -WaitMutex)",
+      "Bash(/d/UE_5.5/Engine/Build/BatchFiles/Build.bat DaeRuneEditor *)",
+      "Bash(perl *)",
+      "Bash(py --version)",
+      "Bash(uv --version)",
+      "Bash(git --version)",
+      "Bash(pip --version)",
+      "Bash(claude mcp *)",
+      "WebFetch(domain:github.com)",
+      "Read(//c/Users/OWNER/AppData/Local/Temp/claude/C--Users-OWNER-Documents-Unreal-Projects-DaeRune/50226dfe-1995-4861-a1c8-c8d3c4dfb522/scratchpad/unreal-mcp/MCPGameProject/Plugins/**)",
+      "Read(//c/Users/OWNER/AppData/Local/Temp/claude/C--Users-OWNER-Documents-Unreal-Projects-DaeRune/50226dfe-1995-4861-a1c8-c8d3c4dfb522/scratchpad/unreal-mcp/MCPGameProject/Plugins/UnrealMCP/**)",
+      "Read(//c/Users/OWNER/AppData/Local/Temp/claude/C--Users-OWNER-Documents-Unreal-Projects-DaeRune/50226dfe-1995-4861-a1c8-c8d3c4dfb522/scratchpad/unreal-mcp/Python/**)",
+      "Read(//c/Users/OWNER/AppData/Local/Temp/claude/C--Users-OWNER-Documents-Unreal-Projects-DaeRune/50226dfe-1995-4861-a1c8-c8d3c4dfb522/scratchpad/unreal-mcp/**)",
+      "Bash([ -d \"$DEST\" ])",
+      "Bash(cp -r /c/Users/OWNER/AppData/Local/Temp/claude/C--Users-OWNER-Documents-Unreal-Projects-DaeRune/50226dfe-1995-4861-a1c8-c8d3c4dfb522/scratchpad/unreal-mcp '/c/Users/OWNER/Documents/Unreal Projects/unreal-mcp')",
+      "Bash(mkdir -p '/c/Users/OWNER/Documents/Unreal Projects/DaeRune/Plugins')",
+      "Bash([ -d \"$PROJ/Plugins/UnrealMCP\" ])",
+      "Bash(cp -r '/c/Users/OWNER/Documents/Unreal Projects/unreal-mcp/MCPGameProject/Plugins/UnrealMCP' '/c/Users/OWNER/Documents/Unreal Projects/DaeRune/Plugins/UnrealMCP')",
+      "Read(//c/Users/OWNER/Documents/Unreal Projects/unreal-mcp/Python/**)",
+      "Bash(exit 1)",
+      "Bash(\".venv/Scripts/python.exe\" -m pip install --upgrade pip -q)",
+      "Bash(\".venv/Scripts/python.exe\" -m pip install \"mcp[cli]>=1.4.1\" \"fastmcp>=0.2.0\" uvicorn fastapi \"pydantic>=2.6.1\" requests)",
+      "Bash(\".venv/Scripts/python.exe\" -m pip show mcp fastmcp)",
+      "Bash(grep -nA2 '^name = \"mcp\"' '/c/Users/OWNER/Documents/Unreal Projects/unreal-mcp/Python/uv.lock')",
+      "Bash(grep -nA2 '^name = \"fastmcp\"' '/c/Users/OWNER/Documents/Unreal Projects/unreal-mcp/Python/uv.lock')",
+      "Bash(grep -nA2 '^name = \"pydantic\"' '/c/Users/OWNER/Documents/Unreal Projects/unreal-mcp/Python/uv.lock')",
+      "Bash(tasklist)",
+      "mcp__unrealMCP__get_actors_in_level"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "unrealMCP"
+  ]
 }

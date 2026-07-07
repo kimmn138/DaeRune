@@ -21,7 +21,9 @@ ADRPlayerState::ADRPlayerState()
 	AttributeSet = CreateDefaultSubobject<UDRPlayerAttributeSet>("AttributeSet");
 	
     // ���� ������Ʈ �󵵷� �ǽð� ����ȭ
-	NetUpdateFrequency = 100.f;
+	// (ASC/어트리뷰트 복제 채널 - UI 표시용이라 100Hz는 과도, 50Hz로 충분)
+	SetNetUpdateFrequency(50.f);
+	SetMinNetUpdateFrequency(10.f);
 }
 
 UAbilitySystemComponent* ADRPlayerState::GetAbilitySystemComponent() const
@@ -39,6 +41,14 @@ void ADRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(ADRPlayerState, WaitingRoomSlotIndex);
     DOREPLIFETIME(ADRPlayerState, SelectedPlayerClass);
     DOREPLIFETIME(ADRPlayerState, bIsReady);
+    DOREPLIFETIME(ADRPlayerState, bIsHost);
+}
+
+void ADRPlayerState::SetIsHost(bool bNewIsHost)
+{
+	if (!HasAuthority()) return;
+
+	bIsHost = bNewIsHost;
 }
 
 void ADRPlayerState::CopyProperties(APlayerState* PlayerState)
@@ -49,6 +59,7 @@ void ADRPlayerState::CopyProperties(APlayerState* PlayerState)
 	{
 		DRPS->SelectedPlayerClass = SelectedPlayerClass;
 		DRPS->WaitingRoomSlotIndex = WaitingRoomSlotIndex;
+		DRPS->bIsHost = bIsHost;
 	}
 }
 
@@ -340,14 +351,17 @@ void ADRPlayerState::SetWaitingRoomSlotIndex(int32 NewIndex)
 
 void ADRPlayerState::OnRep_WaitingRoomSlotIndex()
 {
-	if (APlayerController* PC = Cast<APlayerController>(GetOwner()))
+	RefreshLocalWaitingRoomUI();
+}
+
+// 로컬 플레이어의 대기실 UI 갱신 (어느 PlayerState의 복제 콜백에서든 공용)
+void ADRPlayerState::RefreshLocalWaitingRoomUI() const
+{
+	if (UWorld* World = GetWorld())
 	{
-		if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
+		if (ADRPlayerController* LocalPC = Cast<ADRPlayerController>(World->GetFirstPlayerController()))
 		{
-			if (DRPC->IsLocalController())
-			{
-				DRPC->RefreshWaitingRoomUI();
-			}
+			LocalPC->RefreshWaitingRoomUI();
 		}
 	}
 }
@@ -368,16 +382,7 @@ void ADRPlayerState::OnRep_IsReady()
 	OnReadyStateChanged.Broadcast(bIsReady);
 
 	// 어떤 플레이어의 준비 상태가 바뀌든 이 클라이언트의 대기실 목록을 갱신
-	if (UWorld* World = GetWorld())
-	{
-		if (ADRPlayerController* LocalPC = Cast<ADRPlayerController>(World->GetFirstPlayerController()))
-		{
-			if (LocalPC->IsLocalController())
-			{
-				LocalPC->RefreshWaitingRoomUI();
-			}
-		}
-	}
+	RefreshLocalWaitingRoomUI();
 }
 
 void ADRPlayerState::SetSelectedPlayerClass(EPlayerCharacterClass NewClass)

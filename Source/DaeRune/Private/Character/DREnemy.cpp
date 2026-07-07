@@ -20,6 +20,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/ShapeComponent.h"
 #include "DRAbilityTypes.h"
+#include "Game/DRGameStateBase.h"
 #include "DaeRune/DaeRune.h"
 #include "Net/UnrealNetwork.h"
 
@@ -31,7 +32,8 @@ ADREnemy::ADREnemy()
 	// 메시 가시성 충돌 설정
 	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
-	NetPriority = 3.0f;
+	// 폰 기본값(3.0)이면 적 100마리가 플레이어와 동순위로 경쟁 - 낮춰서 대역폭 포화 시 플레이어 갱신 보호
+	NetPriority = 2.0f;
 	NetUpdateFrequency = 30.0f;
 	MinNetUpdateFrequency = 15.0f;
 
@@ -48,8 +50,9 @@ ADREnemy::ADREnemy()
 	GetCharacterMovement()->bUseControllerDesiredRotation = false;  // 회전은 직접 처리
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 500.f, 0.f);
 
-	// 클라이언트 네트워크 스무딩 설정 (위치만)
+	// 클라이언트 네트워크 스무딩 설정 (위치/회전)
 	GetCharacterMovement()->NetworkSimulatedSmoothLocationTime = 0.1f;
+	GetCharacterMovement()->NetworkSimulatedSmoothRotationTime = 0.1f;
 	GetCharacterMovement()->NetworkSmoothingMode = ENetworkSmoothingMode::Exponential;
 
 	// RVO Avoidance - 적들이 같은 지점으로 몰릴 때 서로 비켜서 지나가도록
@@ -82,18 +85,11 @@ void ADREnemy::Tick(float DeltaTime)
 
 	if (HasAuthority())
 	{
-		// 서버: ControlRotation(SetFocus)을 향해 직접 회전 + 복제용 저장
+		// 서버: ControlRotation(SetFocus)을 향해 직접 회전
+		// (클라이언트는 ReplicatedMovement의 Rotation + CharacterMovement 회전 스무딩으로 따라가므로 별도 복제 불필요)
 		FRotator CurrentControlRot = GetControlRotation();
 		FRotator CurrentActorRot = GetActorRotation();
 		FRotator NewRotation = FMath::RInterpTo(CurrentActorRot, CurrentControlRot, DeltaTime, 10.0f);
-		SetActorRotation(FRotator(0.f, NewRotation.Yaw, 0.f));
-		ReplicatedTargetRotation = CurrentControlRot;
-	}
-	else if (GetLocalRole() == ROLE_SimulatedProxy)
-	{
-		// 클라이언트: ReplicatedTargetRotation을 향해 직접 회전
-		FRotator CurrentActorRot = GetActorRotation();
-		FRotator NewRotation = FMath::RInterpTo(CurrentActorRot, ReplicatedTargetRotation, DeltaTime, 10.0f);
 		SetActorRotation(FRotator(0.f, NewRotation.Yaw, 0.f));
 	}
 }
@@ -102,7 +98,6 @@ void ADREnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME(ADREnemy, ReplicatedTargetRotation);
 	DOREPLIFETIME(ADREnemy, bIsAggroed);
 	DOREPLIFETIME(ADREnemy, bCarriesPart);
 	DOREPLIFETIME_CONDITION(ADREnemy, WaveOutlineLevel, COND_InitialOnly);
@@ -135,11 +130,6 @@ void ADREnemy::OnRep_bCarriesPart()
 	{
 		PartMeshComponent->SetVisibility(bCarriesPart);
 	}
-}
-
-void ADREnemy::OnRep_TargetRotation()
-{
-	// Tick에서 보간 처리 - 여기서는 아무것도 안 함
 }
 
 void ADREnemy::SetWaveOutlineLevel(uint8 NewLevel)
@@ -187,10 +177,6 @@ void ADREnemy::PossessedBy(AController* NewController)
 	// 블랙보드 초기화 및 비헤이비어 트리 실행
 	DRAIController->GetBlackboardComponent()->InitializeBlackboard(*BehaviorTree->BlackboardAsset);
 	DRAIController->RunBehaviorTree(BehaviorTree);
-	UE_LOG(LogTemp, Warning, TEXT("[DREnemy] BT Started: %s at %s | MoveMode=%d | HasAuth=%d"),
-		*GetName(), *GetActorLocation().ToString(),
-		GetCharacterMovement() ? static_cast<int32>(GetCharacterMovement()->MovementMode.GetValue()) : -1,
-		HasAuthority() ? 1 : 0);
 	// 초기 AI 상태 설정
 	DRAIController->GetBlackboardComponent()->SetValueAsBool(DRBlackboardKeys::HitReacting, false);
 	DRAIController->GetBlackboardComponent()->SetValueAsBool(DRBlackboardKeys::RangedAttacker, CharacterClass != ECharacterClass::Warrior);
@@ -718,12 +704,14 @@ void ADREnemy::GrantWaterToPlayers()
 
 	if (bIsBoss)
 	{
-		// 보스: 맵 전체 플레이어에게 지급
-		UGameplayStatics::GetAllActorsOfClass(
-			GetWorld(),
-			ADRCharacter::StaticClass(),
-			PlayersToGrant
-		);
+		// 보스: 맵 전체 플레이어에게 지급 (월드 전체 액터 순회 대신 GameState 플레이어 목록 사용)
+		if (const ADRGameStateBase* GS = GetWorld()->GetGameState<ADRGameStateBase>())
+		{
+			for (ADRCharacter* Player : GS->GetAlivePlayers())
+			{
+				PlayersToGrant.Add(Player);
+			}
+		}
 	}
 	else
 	{

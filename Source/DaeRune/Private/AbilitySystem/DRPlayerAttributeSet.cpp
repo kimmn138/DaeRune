@@ -160,18 +160,6 @@ void UDRPlayerAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		}
 	}
 
-	if (ADRPlayerState* PS = Cast<ADRPlayerState>(Props.TargetAvatarActor))
-	{
-		if(UAbilitySystemComponent* ASC = PS->GetAbilitySystemComponent())
-		{
-			if (ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Debuff_Elite))
-			{
-				LocalIncomingDamage *= EliteDebuffModifier;
-				FMath::RoundToFloat(LocalIncomingDamage);
-			}
-		}
-	}
-
 	// 부품을 들고 있으면 데미지 1.5배 + 들고 있던 부품을 떨어뜨린다
 	if (ADRCharacter* TargetDRCharacter = Cast<ADRCharacter>(Props.TargetCharacter))
 	{

@@ -2,6 +2,7 @@
 
 #include "Character/DRArmadilloEnemy.h"
 #include "Character/DRCharacter.h"
+#include "Game/DRGameStateBase.h"
 #include "DRAssetManager.h"
 #include "DRGameplayTags.h"
 #include "AI/DRAIController.h"
@@ -182,9 +183,12 @@ void ADRArmadilloEnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 New
 
 AActor* ADRArmadilloEnemy::FindRollTarget() const
 {
-	// 1. Collect all players in world
-	TArray<AActor*> AllPlayers;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ADRCharacter::StaticClass(), AllPlayers);
+	// 1. GameState의 플레이어 목록에서 생존 플레이어 수집 (월드 전체 액터 순회 방지)
+	TArray<ADRCharacter*> AllPlayers;
+	if (const ADRGameStateBase* GS = GetWorld()->GetGameState<ADRGameStateBase>())
+	{
+		AllPlayers = GS->GetAlivePlayers();
+	}
 
 	// 2. Filter by distance and line-of-sight
 	TArray<AActor*> ValidTargets;

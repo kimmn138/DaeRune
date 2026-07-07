@@ -36,6 +36,15 @@ struct FPoisonGasSpawnPointData
 	FName LinkedCleanserTag = NAME_None;
 };
 
+// 몬스터 스폰 타입 (FWaveLevelModifier::MonsterSpawnCycle 의 int 값 매핑)
+// 기존 DataTable/BP 데이터 보존을 위해 프로퍼티 타입은 int32 를 유지하고, 코드에서만 이 enum으로 해석한다
+enum class EMonsterSpawnType : int32
+{
+	Normal = 1,
+	Rush = 2,
+	Stealth = 3
+};
+
 UENUM(BlueprintType)
 enum class EWaveState : uint8
 {
@@ -91,9 +100,16 @@ class DAERUNE_API UDRPhase3 : public UDRPhaseBase
 public:
 	UDRPhase3();
 
+	// 총 웨이브 수 (GameState의 TotalWaves 로도 전달됨)
+	static constexpr int32 TotalWaveCount = 5;
+
+	// 한 배치에 동시 스폰하는 몬스터 수 (= 사용하는 스폰 포인트 수)
+	static constexpr int32 SpawnBatchSize = 4;
+
 	virtual void OnPhaseStart() override;
 	virtual void OnPhaseEnd() override;
 	virtual void OnEnemyDeath(AActor* DeadEnemy) override;
+	virtual bool IsCompleted() const override;
 
 	// 치트: 현재 웨이브에서 스폰된 적을 모두 제거하고 다음 웨이브로 즉시 진행. 마지막 웨이브였다면 페이즈 종료.
 	void SkipToNextWave();
@@ -106,6 +122,9 @@ public:
 
 protected:
 	virtual void BeginDestroy() override;
+
+	// 페이즈가 관리하는 모든 타이머 해제 (OnPhaseEnd/BeginDestroy 공용)
+	void ClearAllPhaseTimers();
 
 	UFUNCTION()
 	void StartNextWave();
@@ -137,6 +156,10 @@ protected:
 	FWaveLevelModifier GetDefaultWaveLevelModifier(int32 WaveLevel) const;
 	FWaveData GetWaveData(int32 WaveNumber) const;
 	FWaveData GetDefaultWaveData(int32 WaveNumber) const;
+
+	// 웨이브 시작 시 1회 계산해 캐시 (스폰 틱마다 DataTable 조회 + 정규화 재수행 방지)
+	FWaveData CachedWaveData;
+	FWaveLevelModifier CachedWaveModifier;
 
 	void LoadPhase3ConfigFromBalanceConfig();
 
@@ -285,7 +308,4 @@ private:
 	TMap<TObjectPtr<ADRCleanserSite>, bool> CleanserSiteHalfHealthTriggered;
 
 	float DefenseStartTime = 0.0f;
-	FTimerHandle WaveTimerUpdateHandle;
-	float WaveTimeRemaining = 0.0f;
-	float RestTimeRemaining = 0.0f;
 };

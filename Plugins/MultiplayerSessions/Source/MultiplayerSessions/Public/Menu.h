@@ -9,6 +9,7 @@
 
 class UButton;
 class UEditableTextBox;
+class UTextBlock;
 class UMultiplayerSessionsSubsystem;
 
 /**
@@ -34,8 +35,6 @@ protected:
 	void OnJoinSession(EOnJoinSessionCompleteResult::Type Result);
 	UFUNCTION()
 	void OnDestroySession(bool bWasSuccessful);
-	UFUNCTION()
-	void OnStartSession(bool bWasSuccessful);
 
 private:
 	UPROPERTY(meta = (BindWidget))
@@ -46,6 +45,14 @@ private:
 
 	UPROPERTY(meta = (BindWidget))
 	UEditableTextBox* RoomCodeInputBox;
+
+	// 룸코드 검증/참가 실패 피드백용 (위젯 BP에 없으면 null - 선택 바인딩)
+	UPROPERTY(meta = (BindWidgetOptional))
+	UTextBlock* ErrorText;
+
+	// 에러 텍스트 표시/숨김 (ErrorText 미바인딩 시 무시)
+	void ShowError(const FText& Message);
+	void ClearError();
 
 	UFUNCTION()
 	void HostButtonClicked();

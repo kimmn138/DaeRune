@@ -51,9 +51,16 @@ void UDRPhase1::OnPhaseStart()
 
 	// 5) GameState 진행률 초기화 (CleanserSite::RequiredPartsCount = 2 고정)
 	FPhaseObjectiveData PhaseObjective = GameState->GetCurrentPhaseObjective();
-	PhaseObjective.RequiredCount = 2;
+	PhaseObjective.RequiredCount = RequiredPartsToComplete;
 	GameState->SetPhaseObjective(PhaseObjective);
 	GameState->UpdatePhaseObjectiveProgress(0);
+}
+
+bool UDRPhase1::IsCompleted() const
+{
+	// 부품 설치 완료 + 클렌저 활성화 시 페이즈 완료
+	if (!GameState) return false;
+	return GameState->GetCollectedParts() >= RequiredPartsToComplete && GameState->IsCleanserActivated();
 }
 
 void UDRPhase1::OnPhaseEnd()

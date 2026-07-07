@@ -25,6 +25,16 @@ class ADRWaitingRoomCameraActor;
 class UDRWaitingRoomWidget;
 enum class ELobbyState : uint8;
 
+// 현재 레벨 컨텍스트 (레벨 진입 시 1회 판별해 캐시 - 매 프레임 맵 이름 문자열 연산 방지)
+enum class EDRLevelContext : uint8
+{
+	Unknown,
+	MainMenu,
+	Lobby,
+	Tutorial,
+	GameLevel
+};
+
 /**
  * DaeRune �÷��̾��� �Է� ó�� �� UI ���� Ŭ����
  */
@@ -41,7 +51,8 @@ public:
 	virtual void SetGenericTeamId(const FGenericTeamId& NewTeamId) override { TeamId = NewTeamId; }
 	
 	// ������ ��ġ ǥ��
-	UFUNCTION(Client, Reliable)
+	// (코스메틱이라 한두 개 유실돼도 무방 - Unreliable로 reliable 큐 부담 제거)
+	UFUNCTION(Client, Unreliable)
 	void ShowDamageNumber(float DamageAmount, ACharacter* TargetCharacter);
 
 	// ���� ���� ���� ó��
@@ -70,14 +81,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	ADRCleanserPart* FindPartByLineTrace();
 
-	UFUNCTION(Server, Reliable)
-	void ServerNotifyLineTraceDetected(ADRCleanserPart* Part);
-
-	UFUNCTION(Server, Reliable)
-	void ServerNotifyLineTraceLost(ADRCleanserPart* Part);
-
+	// 현재 감지(라인트레이스) 중인 사이트 (IDRInteractable 구현 액터)
 	UPROPERTY()
-	TObjectPtr<ADRCleanserSite> CurrentOverlappedSite;
+	TObjectPtr<AActor> CurrentOverlappedSite;
 
 	// 사이트 감지 활성화/비활성화 (사이트 박스 오버랩에서 호출)
 	UFUNCTION(BlueprintCallable, Category = "Part System")
@@ -87,14 +93,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	ADRCleanserSite* FindSiteByLineTrace();
 
+	// 상호작용 요청 통합 RPC (부품 획득 / 사이트 설치)
+	// 서버는 클라이언트가 보낸 포인터를 신뢰하지 않고 거리/상태를 검증한다
 	UFUNCTION(Server, Reliable)
-	void ServerNotifySiteDetected(ADRCleanserSite* Site);
+	void ServerRequestInteract(AActor* Interactable);
 
-	UFUNCTION(Server, Reliable)
-	void ServerNotifySiteLost(ADRCleanserSite* Site);
-
-	UFUNCTION(Server, Reliable)
-	void ServerRequestInstallPartToSite(ADRCleanserSite* Site);
+	// 부품 획득 요청의 서버 측 최대 허용 거리
+	// (감지 반경 300 + 라인트레이스 250 + 이동/지연 여유)
+	UPROPERTY(EditDefaultsOnly, Category = "Part System|Config")
+	float MaxInteractDistance = 800.f;
 
 	// ��ǰ ȹ�� �� UI ǥ��
 	UFUNCTION(BlueprintImplementableEvent, Category = "Part System")
@@ -320,8 +327,18 @@ protected:
 	UPROPERTY()
 	TWeakObjectPtr<ADRWaitingRoomCameraActor> CachedWaitingRoomCamera;
 
-	// ClientStartCameraTransitionToCharacter에서 Pawn 대기용 재시도 타이머
+	// ClientStartCameraTransitionToCharacter에서 Pawn 대기 폴백 타이머
 	FTimerHandle CameraTransitionRetryHandle;
+
+	// Pawn 복제 도착 이벤트 처리 (타이머 재시도 대체)
+	UFUNCTION()
+	void HandlePossessedPawnChanged(APawn* PreviousPawn, APawn* NewPawn);
+
+	// Pawn 도착 시 ViewTarget 복원 대기 여부
+	bool bPendingViewTargetRestore = false;
+
+	// Pawn 도착 시 카메라 전환 실행 대기 여부
+	bool bPendingCameraTransition = false;
 
 	// 대기실 위젯 클래스 (블루프린트에서 설정)
 	UPROPERTY(EditDefaultsOnly, Category = "UI|Lobby")
@@ -447,14 +464,39 @@ private:
 	UPROPERTY()
 	TObjectPtr<UDRAbilitySystemComponent> DRAbilitySystemComponent;
 
-	UDRAbilitySystemComponent* GetASC();
+	UDRAbilitySystemComponent* GetASC() const;
 
 	// 해당 InputTag 의 어빌리티가 지금 차단 상태인지 (Carrying 중이거나 BlockedAbilityTags 에 걸린 상태)
 	bool IsAbilityInputBlocked(const FGameplayTag& InputTag) const;
 
+	// 이 컨트롤러가 리슨 서버의 호스트인지 (서버에서 실행 중인 로컬 컨트롤러)
+	bool IsListenServerHost() const { return HasAuthority() && IsLocalController(); }
+
+	// 마우스 감도 캐시 (Look()이 매 입력마다 Subsystem 체인을 타지 않도록)
+	float CachedMouseSensitivity = 1.0f;
+
+	UFUNCTION()
+	void HandleMouseSensitivityChanged(float NewSensitivity);
+
+	// 레벨 컨텍스트 캐시 (Unknown이면 다음 조회 때 재판별 - GameState 복제 지연 대비)
+	mutable EDRLevelContext CachedLevelContext = EDRLevelContext::Unknown;
+
+	// 캐시된 레벨 컨텍스트 조회
+	EDRLevelContext GetLevelContext() const;
+
+	// 맵 이름/GameState 타입으로 현재 레벨 컨텍스트 판별
+	EDRLevelContext DetermineLevelContext() const;
+
 	// ������ �ؽ�Ʈ ������Ʈ Ŭ����
 	UPROPERTY(EditDefaultsOnly)
 	TSubclassOf<UDamageTextComponent> DamageTextComponentClass;
+
+	// 표시 중인 데미지 텍스트 추적 (BP 애니메이션 종료 시 자체 파괴되므로 위크 포인터)
+	TArray<TWeakObjectPtr<UDamageTextComponent>> ActiveDamageTexts;
+
+	// 데미지 텍스트 동시 표시 상한 (AoE 다중 타격 시 컴포넌트 생성 스파이크 방지)
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Damage")
+	int32 MaxConcurrentDamageTexts = 30;
 
 	// Seamless Travel 시 캐릭터 클래스 보존 (PlayerController는 Travel에서 생존)
 	EPlayerCharacterClass CachedSelectedClass = EPlayerCharacterClass::Gardener;
@@ -465,9 +507,17 @@ private:
 	// 사이트 라인트레이스 감지 활성화 여부 (사이트 박스 오버랩 중일 때 true)
 	bool bSiteDetectionEnabled = false;
 
-	// 박스 오버랩 중인 사이트 (감지 후보)
-	UPROPERTY()
-	TObjectPtr<ADRCleanserSite> NearbySite;
+	// 박스 오버랩 중인 사이트 집합 (감지 후보, 여러 사이트 동시 오버랩 대응)
+	TSet<TWeakObjectPtr<AActor>> OverlappedSites;
+
+	// ========== 상호작용 감지 공통 처리 (Part/Site 공용) ==========
+
+	// 오버랩 집합 등록/해제 + 감지 플래그 갱신 + 이탈 시 UI 정리
+	void SetInteractableDetectionEnabled(bool bEnabled, AActor* Interactable,
+		TSet<TWeakObjectPtr<AActor>>& OverlapSet, bool& bDetectionFlag, TObjectPtr<AActor>& CurrentDetected);
+
+	// 현재 감지 대상 전환 + 상호작용 UI 위젯 토글 (IDRInteractable)
+	void SetCurrentDetectedInteractable(AActor* NewDetected, TObjectPtr<AActor>& CurrentDetected);
 
 	// ���� �÷��̾ �׾����� ����
 
@@ -475,16 +525,11 @@ private:
 	float LineTraceTimer = 0.f;
 
 	// ���� ��ó�� �ִ� ��ǰ
-	UPROPERTY()
-	TObjectPtr<ADRCleanserPart> NearbyPart;
+	TSet<TWeakObjectPtr<AActor>> OverlappedParts;
 
-	// ���� ������ ��ǰ
+	// 현재 감지(라인트레이스) 중인 부품 (IDRInteractable 구현 액터)
 	UPROPERTY()
-	TObjectPtr<ADRCleanserPart> CurrentDetectedPart;
-
-	// ��ǰ ȹ�� ��û
-	UFUNCTION(Server, Reliable)
-	void ServerRequestPickupPart(ADRCleanserPart* Part);
+	TObjectPtr<AActor> CurrentDetectedPart;
 
 	// ��ǰ ��� ��û
 	UFUNCTION(Server, Reliable)

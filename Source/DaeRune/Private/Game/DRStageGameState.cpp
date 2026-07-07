@@ -34,7 +34,7 @@ ADRStageGameState::ADRStageGameState()
     CurrentWaveLevel = 0;
     TotalWaves = 5; // �⺻��
     CleanserHealth = 1000.0f;
-    WaveRemainingTime = 0.0f;
+    WaveTimerEndServerTime = 0.0f;
     bIsWaveRestTime = false;
     bIsToxicGasWave = false;
 
@@ -68,9 +68,14 @@ void ADRStageGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ADRStageGameState, CurrentWaveLevel);
     DOREPLIFETIME(ADRStageGameState, TotalWaves);
     DOREPLIFETIME(ADRStageGameState, CleanserHealth);
-    DOREPLIFETIME(ADRStageGameState, WaveRemainingTime);
+    DOREPLIFETIME(ADRStageGameState, WaveTimerEndServerTime);
     DOREPLIFETIME(ADRStageGameState, bIsWaveRestTime);
     DOREPLIFETIME(ADRStageGameState, bIsToxicGasWave);
+    DOREPLIFETIME(ADRStageGameState, bPoisonGasLoopActive);
+    DOREPLIFETIME(ADRStageGameState, EnemySpawnPointVFXLocations);
+    DOREPLIFETIME(ADRStageGameState, EnemySpawnPointVFXAsset);
+    DOREPLIFETIME(ADRStageGameState, EliteSpawnPointVFXLocations);
+    DOREPLIFETIME(ADRStageGameState, EliteSpawnPointVFXAsset);
 
     // Phase 4
     DOREPLIFETIME(ADRStageGameState, BossHealth);
@@ -176,13 +181,13 @@ void ADRStageGameState::SetCleanserHealth(float Health)
     }   
 }
 
-void ADRStageGameState::SetWaveRemainingTime(float Time)
+void ADRStageGameState::StartWaveTimer(float DurationSeconds)
 {
     if (HasAuthority())
     {
-        WaveRemainingTime = FMath::Max(0.0f, Time);
-        // 서버에서만 직접 브로드캐스트
-        OnWaveTimerChangedDelegate.Broadcast(CurrentWaveNumber, WaveRemainingTime, bIsWaveRestTime);
+        // 종료 시각만 1회 복제 - 남은 시간은 각 머신이 서버 월드 시간으로 로컬 계산
+        WaveTimerEndServerTime = static_cast<float>(GetServerWorldTimeSeconds()) + FMath::Max(0.0f, DurationSeconds);
+        StartLocalWaveTimerTick();
     }
 }
 
@@ -192,7 +197,7 @@ void ADRStageGameState::SetIsWaveRestTime(bool bIsRest)
     {
         bIsWaveRestTime = bIsRest;
         // 서버에서만 직접 브로드캐스트
-        OnWaveTimerChangedDelegate.Broadcast(CurrentWaveNumber, WaveRemainingTime, bIsWaveRestTime);
+        OnWaveTimerChangedDelegate.Broadcast(CurrentWaveNumber, GetWaveRemainingTime(), bIsWaveRestTime);
     }
 }
 
@@ -252,16 +257,33 @@ void ADRStageGameState::OnRep_CurrentObjectiveProgress()
     OnPhaseObjectiveChangedDelegate.Broadcast();
 }
 
-void ADRStageGameState::OnRep_WaveRemainingTime()
+void ADRStageGameState::OnRep_WaveTimerEndServerTime()
 {
-    // 클라이언트에서 Replicated 변수 변경 시 델리게이트 브로드캐스트
-    OnWaveTimerChangedDelegate.Broadcast(CurrentWaveNumber, WaveRemainingTime, bIsWaveRestTime);
+    // 클라이언트: 새 종료 시각 도착 시 로컬 1초 틱 시작
+    StartLocalWaveTimerTick();
+}
+
+void ADRStageGameState::StartLocalWaveTimerTick()
+{
+    OnWaveTimerChangedDelegate.Broadcast(CurrentWaveNumber, GetWaveRemainingTime(), bIsWaveRestTime);
+    GetWorldTimerManager().SetTimer(WaveTimerLocalTickHandle, this, &ADRStageGameState::BroadcastWaveTimerTick, 1.0f, true);
+}
+
+void ADRStageGameState::BroadcastWaveTimerTick()
+{
+    const float Remaining = GetWaveRemainingTime();
+    OnWaveTimerChangedDelegate.Broadcast(CurrentWaveNumber, Remaining, bIsWaveRestTime);
+
+    if (Remaining <= 0.0f)
+    {
+        GetWorldTimerManager().ClearTimer(WaveTimerLocalTickHandle);
+    }
 }
 
 void ADRStageGameState::OnRep_IsWaveRestTime()
 {
     // 클라이언트에서 Replicated 변수 변경 시 델리게이트 브로드캐스트
-    OnWaveTimerChangedDelegate.Broadcast(CurrentWaveNumber, WaveRemainingTime, bIsWaveRestTime);
+    OnWaveTimerChangedDelegate.Broadcast(CurrentWaveNumber, GetWaveRemainingTime(), bIsWaveRestTime);
 }
 
 void ADRStageGameState::OnRep_IsToxicGasWave()
@@ -270,34 +292,29 @@ void ADRStageGameState::OnRep_IsToxicGasWave()
     OnToxicGasWarningDelegate.Broadcast(bIsToxicGasWave);
 }
 
-void ADRStageGameState::Multicast_PlayPhaseStartSound_Implementation()
+// Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
+void ADRStageGameState::PlaySound2DFromSoundData(TObjectPtr<USoundBase> UDRSoundDataAsset::* SoundMember)
 {
-    // Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
     if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
     {
         if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
         {
-            if (SoundData->PhaseStartSound)
+            if (USoundBase* Sound = SoundData->*SoundMember)
             {
-                UGameplayStatics::PlaySound2D(this, SoundData->PhaseStartSound);
+                UGameplayStatics::PlaySound2D(this, Sound);
             }
         }
     }
 }
 
+void ADRStageGameState::Multicast_PlayPhaseStartSound_Implementation()
+{
+    PlaySound2DFromSoundData(&UDRSoundDataAsset::PhaseStartSound);
+}
+
 void ADRStageGameState::Multicast_PlayWaveStartSound_Implementation()
 {
-    // Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
-    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
-    {
-        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
-        {
-            if (SoundData->WaveStartSound)
-            {
-                UGameplayStatics::PlaySound2D(this, SoundData->WaveStartSound);
-            }
-        }
-    }
+    PlaySound2DFromSoundData(&UDRSoundDataAsset::WaveStartSound);
 }
 
 void ADRStageGameState::Multicast_PlayGameClearSound_Implementation()
@@ -313,17 +330,7 @@ void ADRStageGameState::Multicast_PlayGameClearSound_Implementation()
         }
     }
 
-    // Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
-    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
-    {
-        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
-        {
-            if (SoundData->GameClearSound)
-            {
-                UGameplayStatics::PlaySound2D(this, SoundData->GameClearSound);
-            }
-        }
-    }
+    PlaySound2DFromSoundData(&UDRSoundDataAsset::GameClearSound);
 }
 
 void ADRStageGameState::Multicast_PlayGameOverSound_Implementation()
@@ -339,65 +346,50 @@ void ADRStageGameState::Multicast_PlayGameOverSound_Implementation()
         }
     }
 
-    // Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
-    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
-    {
-        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
-        {
-            if (SoundData->GameOverSound)
-            {
-                UGameplayStatics::PlaySound2D(this, SoundData->GameOverSound);
-            }
-        }
-    }
+    PlaySound2DFromSoundData(&UDRSoundDataAsset::GameOverSound);
 }
 
 void ADRStageGameState::Multicast_PlayPoisonGasWarningSound_Implementation()
 {
-    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
+    PlaySound2DFromSoundData(&UDRSoundDataAsset::PoisonGasWarningSound);
+}
+
+void ADRStageGameState::UpdatePoisonGasLoopSound()
+{
+    if (bPoisonGasLoopActive)
     {
-        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
+        // 이미 재생 중이면 무시 (멱등 처리)
+        if (PoisonGasLoopAudioComponent && PoisonGasLoopAudioComponent->IsPlaying())
         {
-            if (SoundData->PoisonGasWarningSound)
+            return;
+        }
+
+        if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
+        {
+            if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
             {
-                UGameplayStatics::PlaySound2D(this, SoundData->PoisonGasWarningSound);
+                if (SoundData->PoisonGasActiveLoopSound)
+                {
+                    PoisonGasLoopAudioComponent = UGameplayStatics::SpawnSound2D(
+                        this,
+                        SoundData->PoisonGasActiveLoopSound,
+                        1.0f, 1.0f, 0.0f,
+                        nullptr, false, false
+                    );
+                }
             }
         }
     }
-}
-
-void ADRStageGameState::Multicast_StartPoisonGasLoopSound_Implementation()
-{
-    // 이미 재생 중이면 무시 (멱등 처리)
-    if (PoisonGasLoopAudioComponent && PoisonGasLoopAudioComponent->IsPlaying())
-    {
-        return;
-    }
-
-    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
-    {
-        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
-        {
-            if (SoundData->PoisonGasActiveLoopSound)
-            {
-                PoisonGasLoopAudioComponent = UGameplayStatics::SpawnSound2D(
-                    this,
-                    SoundData->PoisonGasActiveLoopSound,
-                    1.0f, 1.0f, 0.0f,
-                    nullptr, false, false
-                );
-            }
-        }
-    }
-}
-
-void ADRStageGameState::Multicast_StopPoisonGasLoopSound_Implementation()
-{
-    if (PoisonGasLoopAudioComponent)
+    else if (PoisonGasLoopAudioComponent)
     {
         PoisonGasLoopAudioComponent->Stop();
         PoisonGasLoopAudioComponent = nullptr;
     }
+}
+
+void ADRStageGameState::OnRep_PoisonGasLoopActive()
+{
+    UpdatePoisonGasLoopSound();
 }
 
 void ADRStageGameState::NotifyPoisonGasActivated()
@@ -407,7 +399,8 @@ void ADRStageGameState::NotifyPoisonGasActivated()
     ++ActivePoisonGasCount;
     if (ActivePoisonGasCount == 1)
     {
-        Multicast_StartPoisonGasLoopSound();
+        bPoisonGasLoopActive = true;
+        UpdatePoisonGasLoopSound();
     }
 }
 
@@ -419,17 +412,56 @@ void ADRStageGameState::NotifyPoisonGasDeactivated()
     if (ActivePoisonGasCount <= 0)
     {
         ActivePoisonGasCount = 0;
-        Multicast_StopPoisonGasLoopSound();
+        bPoisonGasLoopActive = false;
+        UpdatePoisonGasLoopSound();
     }
 }
 
 // ========== Phase3 스폰 포인트 VFX ==========
 
-void ADRStageGameState::Multicast_ActivateEnemySpawnPointVFX_Implementation(
-    const TArray<FTransform>& SpawnPointTransforms, UNiagaraSystem* NiagaraAsset)
+void ADRStageGameState::SetEnemySpawnPointVFX(const TArray<FVector_NetQuantize>& Locations, UNiagaraSystem* NiagaraAsset)
 {
-    if (!NiagaraAsset) return;
+    if (!HasAuthority()) return;
 
+    EnemySpawnPointVFXLocations = Locations;
+    EnemySpawnPointVFXAsset = NiagaraAsset;
+
+    // 리슨 서버 호스트 로컬 반영 (클라이언트는 OnRep에서)
+    RefreshEnemySpawnPointVFX();
+}
+
+void ADRStageGameState::ClearEnemySpawnPointVFX()
+{
+    SetEnemySpawnPointVFX(TArray<FVector_NetQuantize>(), nullptr);
+}
+
+void ADRStageGameState::SetEliteSpawnPointVFX(const TArray<FVector_NetQuantize>& Locations, UNiagaraSystem* NiagaraAsset)
+{
+    if (!HasAuthority()) return;
+
+    EliteSpawnPointVFXLocations = Locations;
+    EliteSpawnPointVFXAsset = NiagaraAsset;
+
+    RefreshEliteSpawnPointVFX();
+}
+
+void ADRStageGameState::ClearEliteSpawnPointVFX()
+{
+    SetEliteSpawnPointVFX(TArray<FVector_NetQuantize>(), nullptr);
+}
+
+void ADRStageGameState::OnRep_EnemySpawnPointVFXLocations()
+{
+    RefreshEnemySpawnPointVFX();
+}
+
+void ADRStageGameState::OnRep_EliteSpawnPointVFXLocations()
+{
+    RefreshEliteSpawnPointVFX();
+}
+
+void ADRStageGameState::RefreshEnemySpawnPointVFX()
+{
     for (UNiagaraComponent* Comp : EnemySpawnPointVFXComponents)
     {
         if (Comp && IsValid(Comp))
@@ -440,13 +472,15 @@ void ADRStageGameState::Multicast_ActivateEnemySpawnPointVFX_Implementation(
     }
     EnemySpawnPointVFXComponents.Empty();
 
-    for (const FTransform& SpawnTransform : SpawnPointTransforms)
+    if (!EnemySpawnPointVFXAsset) return;
+
+    for (const FVector_NetQuantize& Location : EnemySpawnPointVFXLocations)
     {
         UNiagaraComponent* NewComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
             this,
-            NiagaraAsset,
-            SpawnTransform.GetLocation(),
-            SpawnTransform.GetRotation().Rotator(),
+            EnemySpawnPointVFXAsset,
+            Location,
+            FRotator::ZeroRotator,
             FVector(1.f),
             false,
             true,
@@ -461,24 +495,8 @@ void ADRStageGameState::Multicast_ActivateEnemySpawnPointVFX_Implementation(
     }
 }
 
-void ADRStageGameState::Multicast_DeactivateEnemySpawnPointVFX_Implementation()
+void ADRStageGameState::RefreshEliteSpawnPointVFX()
 {
-    for (UNiagaraComponent* Comp : EnemySpawnPointVFXComponents)
-    {
-        if (Comp && IsValid(Comp))
-        {
-            Comp->DeactivateImmediate();
-            Comp->DestroyComponent();
-        }
-    }
-    EnemySpawnPointVFXComponents.Empty();
-}
-
-void ADRStageGameState::Multicast_ActivateEliteSpawnPointVFX_Implementation(
-    const TArray<FTransform>& SpawnPointTransforms, UNiagaraSystem* NiagaraAsset)
-{
-    if (!NiagaraAsset) return;
-
     for (UNiagaraComponent* Comp : EliteSpawnPointVFXComponents)
     {
         if (Comp && IsValid(Comp))
@@ -489,13 +507,15 @@ void ADRStageGameState::Multicast_ActivateEliteSpawnPointVFX_Implementation(
     }
     EliteSpawnPointVFXComponents.Empty();
 
-    for (const FTransform& SpawnTransform : SpawnPointTransforms)
+    if (!EliteSpawnPointVFXAsset) return;
+
+    for (const FVector_NetQuantize& Location : EliteSpawnPointVFXLocations)
     {
         UNiagaraComponent* NewComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
             this,
-            NiagaraAsset,
-            SpawnTransform.GetLocation(),
-            SpawnTransform.GetRotation().Rotator(),
+            EliteSpawnPointVFXAsset,
+            Location,
+            FRotator::ZeroRotator,
             FVector(1.f),
             false,
             true,
@@ -508,17 +528,4 @@ void ADRStageGameState::Multicast_ActivateEliteSpawnPointVFX_Implementation(
             EliteSpawnPointVFXComponents.Add(NewComp);
         }
     }
-}
-
-void ADRStageGameState::Multicast_DeactivateEliteSpawnPointVFX_Implementation()
-{
-    for (UNiagaraComponent* Comp : EliteSpawnPointVFXComponents)
-    {
-        if (Comp && IsValid(Comp))
-        {
-            Comp->DeactivateImmediate();
-            Comp->DestroyComponent();
-        }
-    }
-    EliteSpawnPointVFXComponents.Empty();
 }

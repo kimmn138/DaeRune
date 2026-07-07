@@ -28,6 +28,8 @@ bool UDRAbilitySystemLibrary::MakeWidgetControllerParams(const UObject* WorldCon
 		if (OutDRHUD)
 		{
 			ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>();
+			if (!PS) return false; // 클라이언트 초기화 중 PlayerState 복제 전이면 실패 처리
+
 			UAbilitySystemComponent* ASC = PS->GetAbilitySystemComponent();
 			UAttributeSet* AS = PS->GetAttributeSet();
 			
@@ -360,7 +362,7 @@ AActor* UDRAbilitySystemLibrary::GetClosestCleanserSite(APawn* ControlledPawn)
 	ADRStageGameState* GameState = Cast<ADRStageGameState>(World->GetGameState());
 	if (!GameState) return nullptr;
 
-	TArray<ADRCleanserSite*> CleanserSites = GameState->GetCleanserSites();
+	const TArray<TObjectPtr<ADRCleanserSite>>& CleanserSites = GameState->GetCleanserSites();
 	if (CleanserSites.Num() == 0) return nullptr;
 
 	const FVector PawnLocation = ControlledPawn->GetActorLocation();

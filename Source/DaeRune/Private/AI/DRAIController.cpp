@@ -106,48 +106,6 @@ void ADRAIController::BeginPlay()
 		AIPerceptionComponent->OnTargetPerceptionUpdated.AddDynamic(this, &ADRAIController::OnTargetPerceptionUpdated);
 	}
 
-	// [DEBUG] 매 1초마다 AI 상태 로깅 (서버 + Possess 후에만)
-	GetWorld()->GetTimerManager().SetTimer(DebugStateLogTimerHandle, this,
-		&ADRAIController::DebugStateLog, 1.0f, true, 1.0f);
-}
-
-void ADRAIController::DebugStateLog()
-{
-	if (!HasAuthority()) return;
-	APawn* MyPawn = GetPawn();
-	if (!MyPawn) return;
-
-	ACharacter* MyChar = Cast<ACharacter>(MyPawn);
-	UCharacterMovementComponent* CMC = MyChar ? MyChar->GetCharacterMovement() : nullptr;
-
-	FString TargetName = TEXT("NULL");
-	FVector TargetLoc = FVector::ZeroVector;
-	bool bHasPlayerInRange = false;
-	FString BTNodeName = TEXT("?");
-	if (Blackboard)
-	{
-		if (UObject* TargetObj = Blackboard->GetValueAsObject(FName("TargetCleanserSite")))
-		{
-			TargetName = TargetObj->GetName();
-		}
-		TargetLoc = Blackboard->GetValueAsVector(FName("TargetCleanserSiteLocation"));
-		bHasPlayerInRange = Blackboard->GetValueAsBool(FName("HasPlayerInRange"));
-	}
-	if (BehaviorTreeComponent)
-	{
-		BTNodeName = BehaviorTreeComponent->DescribeActiveTasks();
-	}
-
-	UE_LOG(LogTemp, Warning,
-		TEXT("[AITick] %s | Loc=%s | Vel=%.0f | MoveMode=%d | Target=%s | TargetLoc=%s | HasPlayer=%d | BT=%s"),
-		*MyPawn->GetName(),
-		*MyPawn->GetActorLocation().ToString(),
-		MyPawn->GetVelocity().Size(),
-		CMC ? static_cast<int32>(CMC->MovementMode.GetValue()) : -1,
-		*TargetName,
-		*TargetLoc.ToString(),
-		bHasPlayerInRange ? 1 : 0,
-		*BTNodeName);
 }
 
 void ADRAIController::OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)

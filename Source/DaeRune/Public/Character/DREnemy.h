@@ -270,13 +270,6 @@ private:
 
 	bool bPartDropped = false;
 
-	// 클라이언트 회전 보간용 (서버에서 복제)
-	UPROPERTY(ReplicatedUsing = OnRep_TargetRotation)
-	FRotator ReplicatedTargetRotation;
-
-	UFUNCTION()
-	void OnRep_TargetRotation();
-
 protected:
 	// 외곽선 레벨 (초기 복제만 — 스폰 시 고정)
 	UPROPERTY(ReplicatedUsing = OnRep_WaveOutlineLevel)

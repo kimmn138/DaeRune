@@ -66,7 +66,8 @@ ADRCleanserSite::ADRCleanserSite()
 	// GAS ������Ʈ ����
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetIsReplicated(true);
-	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
+	// 플레이어 소유가 아닌 액터라 GE/큐 전체 복제가 불필요 - 어트리뷰트만 복제되는 Minimal이면 충분
+	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
 
 	AttributeSet = CreateDefaultSubobject<UDRCleanserSiteAttributeSet>(TEXT("AttributeSet"));
 
@@ -286,7 +287,7 @@ void ADRCleanserSite::UpdateWaterMeshScale(float HealthRatio)
 
 	// �� ��ġ ���
 	const float ScaleChange = InitialWaterMeshScale.Z - NewScale.Z;
-	const float LocationOffset = ScaleChange * 9.0f;
+	const float LocationOffset = ScaleChange * WaterMeshScaleToOffsetRatio;
 	FVector NewLocation = InitialWaterMeshLocation;
 	NewLocation.Z = InitialWaterMeshLocation.Z + LocationOffset;
 
@@ -375,12 +376,9 @@ void ADRCleanserSite::RefreshOverlapStateFor(ADRCharacter* Character)
 	PC->SetSiteDetectionEnabled(bShouldDetect, this);
 }
 
-void ADRCleanserSite::MulticastShowInteractionUI_Implementation(ADRPlayerController* PlayerController, bool bShow)
+void ADRCleanserSite::SetInteractionUIVisible(bool bShow)
 {
-	if (!PlayerController) return;
-
-	// 해당 플레이어의 로컬 컨트롤러에서만 UI 표시/숨김
-	if (PlayerController->IsLocalController() && InteractionWidget)
+	if (InteractionWidget)
 	{
 		InteractionWidget->SetVisibility(bShow);
 	}

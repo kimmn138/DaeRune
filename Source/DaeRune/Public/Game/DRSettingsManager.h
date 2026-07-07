@@ -30,6 +30,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSettingsReset, EDRSettingsTab, Ta
 // 언어 변경 델리게이트 (CultureCode: "ko", "en")
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLanguageChanged, const FString&, CultureCode);
 
+// 마우스 감도 변경 델리게이트 (PlayerController의 감도 캐시 갱신용)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMouseSensitivityChanged, float, NewSensitivity);
+
 /**
  * 설정 관리 매니저 - 기존 오디오/그래픽 적용 로직 유지 + 데이터 주도 관리 레이어
  */
@@ -178,6 +181,10 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "Settings|Localization")
     FOnLanguageChanged OnLanguageChanged;
 
+    /** 마우스 감도가 바뀔 때 발행. Look()이 매 입력마다 Subsystem을 조회하지 않도록 캐시 갱신에 사용 */
+    UPROPERTY(BlueprintAssignable, Category = "Settings|Gameplay")
+    FOnMouseSensitivityChanged OnMouseSensitivityChanged;
+
     /** Gameplay.Language OptionId(FName: "Korean", "English") → 컬처 코드(FString: "ko", "en"). 없으면 빈 문자열. */
     static FString LanguageOptionIdToCulture(FName OptionId);
 
@@ -197,6 +204,9 @@ public:
     TObjectPtr<UUserWidget> ActiveDropdownWidget;
 
 private:
+    // 현재 감도 값으로 OnMouseSensitivityChanged 발행
+    void BroadcastMouseSensitivity();
+
     // SoundMix 볼륨 적용 함수
     void ApplySoundMixToWorld(UWorld* World);
 

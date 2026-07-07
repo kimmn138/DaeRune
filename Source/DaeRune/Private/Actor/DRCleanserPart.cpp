@@ -2,8 +2,6 @@
 
 
 #include "Actor/DRCleanserPart.h"
-#include "DRGameplayTags.h"
-#include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "Character/DRCharacter.h"
 #include "Net/UnrealNetwork.h"
 #include "Components/SphereComponent.h"
@@ -92,12 +90,7 @@ void ADRCleanserPart::PickupPart(ADRCharacter* Character)
 
 	MulticastPlayPickupSound();
 
-	// ĳ���Ϳ��� �±� ���� (서버 측. 클라 측은 ADRCharacter::OnRep_bIsCarryingPart 에서 별도 토글)
-	UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(CarryingCharacter->GetAbilitySystemComponent());
-	if (DRASC)
-	{
-		DRASC->AddLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
-	}
+	// State.Carrying 태그 토글은 ADRCharacter::SetCarryingState 에서 일괄 처리
 }
 
 void ADRCleanserPart::OnRep_CarryingCharacter()
@@ -153,15 +146,7 @@ void ADRCleanserPart::InstallPart()
 		CarryingCharacter->HideThirdPersonPart();
 	}
 
-	// ĳ���Ϳ��� �±� ���� (서버 측. 클라 측은 OnRep_bIsCarryingPart 에서)
-	if (CarryingCharacter)
-	{
-		UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(CarryingCharacter->GetAbilitySystemComponent());
-		if (DRASC)
-		{
-			DRASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
-		}
-	}
+	// State.Carrying 태그 해제는 ADRCharacter::SetCarryingState 에서 일괄 처리
 
 	// ���� �ı�
 	Destroy();
@@ -219,16 +204,9 @@ void ADRCleanserPart::MulticastPlayPickupSound_Implementation()
 	}
 }
 
-void ADRCleanserPart::MulticastShowInteractionUI_Implementation(ADRPlayerController* PlayerController, bool bShow)
+void ADRCleanserPart::SetInteractionUIVisible(bool bShow)
 {
-	// ��� Ŭ���̾�Ʈ���� �����
-	if (!PlayerController) return;
-
-	// �ش� �÷��̾��� ���� ��Ʈ�ѷ������� UI ǥ��/����
-	if (PlayerController->IsLocalController())
-	{
-		InteractionWidget->SetVisibility(bShow);
-	}
+	InteractionWidget->SetVisibility(bShow);
 }
 
 void ADRCleanserPart::BeginPlay()

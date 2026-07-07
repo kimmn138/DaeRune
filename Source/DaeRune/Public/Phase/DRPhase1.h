@@ -26,9 +26,13 @@ class DAERUNE_API UDRPhase1 : public UDRPhaseBase
 	GENERATED_BODY()
 
 public:
+	// 페이즈 완료에 필요한 설치 부품 수
+	static constexpr int32 RequiredPartsToComplete = 2;
+
 	virtual void OnPhaseStart() override;
 	virtual void OnPhaseEnd() override;
 	virtual void OnEnemyDeath(AActor* DeadEnemy) override;
+	virtual bool IsCompleted() const override;
 
 protected:
 	// ========== 사이트 1개 강제 ==========

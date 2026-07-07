@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "AbilitySystemInterface.h"
+#include "Interaction/DRInteractable.h"
 #include "UI/WidgetController/OverlayWidgetController.h"
 #include "DRCleanserSite.generated.h"
 
@@ -44,7 +45,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCleanserSiteHealthHalf, ADRCleans
  * - Phase4: ������ ���
  */
 UCLASS()
-class DAERUNE_API ADRCleanserSite : public AActor, public IAbilitySystemInterface
+class DAERUNE_API ADRCleanserSite : public AActor, public IAbilitySystemInterface, public IDRInteractable
 {
 	GENERATED_BODY()
 	
@@ -74,9 +75,8 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastShowInstalledPart(int32 SlotIndex);
 
-	// 라인트레이스 감지에 의한 상호작용 UI 표시/숨김 (요청한 컨트롤러의 로컬 머신에서만 표시)
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastShowInteractionUI(ADRPlayerController* PlayerController, bool bShow);
+	// 상호작용 UI 표시/숨김 (IDRInteractable - 로컬에서 직접 호출)
+	virtual void SetInteractionUIVisible(bool bShow) override;
 
 	// Phase3 클린저 작동 사운드 (루프 - 시작/종료 시 한 번씩만 호출)
 	UFUNCTION(NetMulticast, Reliable)
@@ -187,6 +187,11 @@ protected:
 	// Ŭ���� �� �޽�
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent> WaterMesh;
+
+	// 물 메시 Z 스케일 감소량 → 위치 보정 계수
+	// (스케일 축소 시 수면이 아래로 내려가 보이도록 메시 형태에 맞춰 조정)
+	UPROPERTY(EditDefaultsOnly, Category = "CleanserSite|Water")
+	float WaterMeshScaleToOffsetRatio = 9.0f;
 
 	// ��ǰ ��ġ �� �� �޽�
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mesh Assets")

@@ -88,66 +88,66 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 	// 플레이어 캐릭터의 경우 특별 처리
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
-		// ���� �������� Ȯ��
-		if (AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Corrupt))
+		// 의도된 디자인: 플레이어는 corrupt 상태에서만 실제로 사망한다
+		// (비-corrupt 상태의 체력 고갈은 corrupt 전환으로 이어질 뿐, 여기서 사망 처리하지 않음)
+		const bool bIsCorrupt = AbilitySystemComponent &&
+			AbilitySystemComponent->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Corrupt);
+		if (!bIsCorrupt)
 		{
-			// ���� ���¿��� ������ ��¥ ���
-			Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
-			MulticastHandleDeath(DeathImpulse);
+			return;
+		}
 
-			// �÷��̾ ��ǰ�� ��� ������ ����߸���
-			if (ADRCharacter* DRCharacter = Cast<ADRCharacter>(this))
+		// corrupt 상태에서 죽으면 진짜 사망 처리
+		Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
+		MulticastHandleDeath(DeathImpulse);
+
+		// 플레이어가 부품을 들고 있었으면 떨어트리기
+		if (ADRCharacter* DRCharacter = Cast<ADRCharacter>(this))
+		{
+			if (DRCharacter->IsCarryingPart())
 			{
-				if (DRCharacter->IsCarryingPart())
-				{
-					DRCharacter->DropCarriedPart();
-				}
+				// 사망 시에는 드롭 쿨다운을 무시해야 부품이 캐릭터와 함께 파괴되지 않는다
+				DRCharacter->ForceDropCarriedPart();
 			}
+		}
 
-			// GameMode�� �÷��̾� ��� �˸� (���� üũ)
-			if (ADRGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRGameModeBase>())
+		// GameMode에 플레이어 사망 알림 (전멸 체크)
+		if (ADRGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRGameModeBase>())
+		{
+			APlayerState* PS = GetPlayerState();
+			if (PS)
 			{
-				APlayerState* PS = GetPlayerState();
-				if (PS)
-				{
-					GameMode->OnPlayerDied(PS);
-				}
+				GameMode->OnPlayerDied(PS);
 			}
+		}
 
-			// ���� ����
-			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
-			{
-				// ������ �� ���� ��� ��ȯ
-				FTimerHandle SpectatorTimerHandle;
-				GetWorld()->GetTimerManager().SetTimer(
-					SpectatorTimerHandle,
-					[DRPC]()
-					{
-						if (IsValid(DRPC))
-						{
-							DRPC->ClientStartSpectating();
-						}
-					},
-					2.5f,
-					false
-				);
-			}
-
-			// ĳ���� ���� �ı�
-			FTimerHandle DestroyTimerHandle;
+		// 관전 시작
+		if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
+		{
+			// 딜레이 후 관전 모드 전환
+			FTimerHandle SpectatorTimerHandle;
 			GetWorld()->GetTimerManager().SetTimer(
-			   DestroyTimerHandle,
-			   [this]()
-			   {
-				  if (IsValid(this))
-				  {
-					 Destroy();
-				  }
-			   },
-			   2.2f,
-			   false
+				SpectatorTimerHandle,
+				FTimerDelegate::CreateWeakLambda(DRPC, [DRPC]()
+				{
+					DRPC->ClientStartSpectating();
+				}),
+				2.5f,
+				false
 			);
 		}
+
+		// 캐릭터 액터 파괴
+		FTimerHandle DestroyTimerHandle;
+		GetWorld()->GetTimerManager().SetTimer(
+		   DestroyTimerHandle,
+		   FTimerDelegate::CreateWeakLambda(this, [this]()
+		   {
+			  Destroy();
+		   }),
+		   2.2f,
+		   false
+		);
 	}
 	else
 	{
@@ -350,7 +350,7 @@ UNiagaraSystem* ADRCharacterBase::GetBloodEffect_Implementation()
 
 FTaggedMontage ADRCharacterBase::GetTaggedMontageByTag_Implementation(const FGameplayTag& MontageTag)
 {
-	for (FTaggedMontage TaggedMontage : AttackMontages)
+	for (const FTaggedMontage& TaggedMontage : AttackMontages)
 	{
 		if (TaggedMontage.MontageTag == MontageTag)
 		{

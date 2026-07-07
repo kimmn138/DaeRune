@@ -41,7 +41,14 @@
 		},
 		{
 			"Name": "MultiplayerSessions",
-			"Enabled": true 
+			"Enabled": true
+		},
+		{
+			"Name": "UnrealMCP",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
 		}
 	]
 }

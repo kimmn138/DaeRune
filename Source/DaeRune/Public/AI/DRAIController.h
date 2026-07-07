@@ -72,8 +72,4 @@ private:
 
 	// �÷��̾� ����
 	void RemovePlayer(AActor* Player);
-
-	// [DEBUG] Phase3 멈춘 적 추적용 주기 로그
-	FTimerHandle DebugStateLogTimerHandle;
-	void DebugStateLog();
 };

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Interaction/DRInteractable.h"
 #include "DRCleanserPart.generated.h"
 
 class ADRCharacter;
@@ -16,7 +17,7 @@ class ADRPlayerController;
  * Phase2���� �÷��̾ �����Ͽ� Ŭ���� ����Ʈ�� ��ġ�ϴ� ��ǰ
  */
 UCLASS()
-class DAERUNE_API ADRCleanserPart : public AActor
+class DAERUNE_API ADRCleanserPart : public AActor, public IDRInteractable
 {
 	GENERATED_BODY()
 	
@@ -52,9 +53,8 @@ public:
 
 	// ========== ����Ʈ���̽� �ݹ� ========== 
 
-	// UI ǥ��/���� (��Ƽĳ��Ʈ - ��� Ŭ���̾�Ʈ ����)
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastShowInteractionUI(ADRPlayerController* PlayerController, bool bShow);
+	// 상호작용 UI 표시/숨김 (IDRInteractable - 로컬에서 직접 호출)
+	virtual void SetInteractionUIVisible(bool bShow) override;
 
 	// 캐릭터의 현재 오버랩 + 부품 보유 상태를 재평가하여 라인트레이스 감지를 갱신
 	// (오버랩 도중 부품을 집어들거나 내려놓을 때 호출)

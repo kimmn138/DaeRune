@@ -28,7 +28,9 @@ UENUM(BlueprintType)
 enum class EPlayerCharacterClass : uint8
 {
 	Gardener,
-	VendingMachine
+	VendingMachine,
+
+	Count UMETA(Hidden) // 클래스 개수 계산용 - 항상 마지막에 유지
 };
 
 USTRUCT(BlueprintType)

@@ -238,6 +238,9 @@ void UDRWaterPump::StartWaterPumpLoop()
         // 3P 빔 리플리케이트 상태 활성화
         if (ADRCharacter* DRChar = Cast<ADRCharacter>(OwnerCharacter))
         {
+            // 3P 빔 길이 정규화가 1P와 같은 사거리를 쓰도록 동기화
+            DRChar->WaterPumpWeaponRange = WeaponRange;
+
             // 활성화 전에 초기 끝지점 계산 (비소유 클라이언트에서 유효한 끝지점으로 3P 빔 생성)
             if (OwnerCharacter->Implements<UCombatInterface>())
             {
@@ -364,9 +367,14 @@ void UDRWaterPump::PerformWaterPumpTick()
     FVector BeamEndPoint = CalculateWaterBeamEndPoint(WeaponSocketLocation, bHitObstacle, HitResult);
 
     // 캐릭터의 리플리케이트 빔 끝점 갱신 (비소유 클라이언트에서 3P 빔 위치 업데이트에 사용)
+    // 일정 거리 이상 움직였을 때만 대입해서 정지 조준 시 프로퍼티가 dirty되지 않도록 함
     if (ADRCharacter* DRChar = Cast<ADRCharacter>(OwnerCharacter))
     {
-        DRChar->WaterPumpBeamEndPoint = BeamEndPoint;
+        constexpr float BeamEndPointUpdateThresholdSq = 25.f * 25.f;
+        if (FVector::DistSquared(DRChar->WaterPumpBeamEndPoint, BeamEndPoint) > BeamEndPointUpdateThresholdSq)
+        {
+            DRChar->WaterPumpBeamEndPoint = BeamEndPoint;
+        }
     }
 
     // BoxOverlap으로 타겟 감지

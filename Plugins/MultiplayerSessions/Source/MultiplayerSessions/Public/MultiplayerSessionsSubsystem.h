@@ -13,7 +13,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnCreateSessionComplete,
 DECLARE_MULTICAST_DELEGATE_TwoParams(FMultiplayerOnFindSessionsComplete, const TArray<FOnlineSessionSearchResult>& SessionResults, bool bWasSuccessful);
 DECLARE_MULTICAST_DELEGATE_OneParam(FMultiplayerOnJoinSessionComplete, EOnJoinSessionCompleteResult::Type Result);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnDestroySessionComplete, bool, bWasSuccessful);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnStartSessionComplete, bool, bWasSuccessful);
 // �� �ڵ� ���� �Ϸ� ��������Ʈ
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnRoomCodeGenerated, const FString&, RoomCode);
 
@@ -42,7 +41,6 @@ public:
 	void FindSessionByRoomCode(const FString& RoomCode);
 	void JoinSession(const FOnlineSessionSearchResult& SessionResult);
 	void DestroySession();
-	void StartSession();
 	UFUNCTION(BlueprintCallable, Category = "Multiplayer Sessions")
 	void UpdateSessionJoinability(bool bAllowJoin);
 	UFUNCTION()
@@ -62,7 +60,6 @@ public:
 	FMultiplayerOnFindSessionsComplete MultiplayerOnFindSessionsComplete;
 	FMultiplayerOnJoinSessionComplete MultiplayerOnJoinSessionComplete;
 	FMultiplayerOnDestroySessionComplete MultiplayerOnDestroySessionComplete;
-	FMultiplayerOnStartSessionComplete MultiplayerOnStartSessionComplete;
 	FMultiplayerOnRoomCodeGenerated MultiplayerOnRoomCodeGenerated;
 
 protected:
@@ -72,7 +69,6 @@ protected:
 	void OnFindSessionsComplete(bool bWasSuccessful);
 	void OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
 	void OnDestroySessionComplete(FName SessionName, bool bWasSuccessful);
-	void OnStartSessionComplete(FName SessionName, bool bWasSuccessful);
 	void OnUpdateSessionComplete(FName SessionName, bool bWasSuccessful);
 	void OnSessionUserInviteAccepted(const bool bWasSuccessful, const int32 ControllerId, FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& InviteResult);
 
@@ -90,6 +86,10 @@ private:
 	FString SearchingRoomCode;
 	bool bIsCreatingWithRoomCode{false};
 
+	// 룸코드 충돌 재시도 상한 (검색이 계속 결과를 반환하는 이상 동작에서 무한 검색 루프 방지)
+	static constexpr int32 MaxRoomCodeRetries = 5;
+	int32 RoomCodeRetryCount{0};
+
 	// �� �ڵ� ���� �Լ�
 	FString GenerateRoomCode();
 	void ValidateAndCreateSessionWithCode();
@@ -105,21 +105,22 @@ private:
 	FDelegateHandle JoinSessionCompleteDelegateHandle;
 	FOnDestroySessionCompleteDelegate DestroySessionCompleteDelegate;
 	FDelegateHandle DestroySessionCompleteDelegateHandle;
-	FOnStartSessionCompleteDelegate StartSessionCompleteDelegate;
-	FDelegateHandle StartSessionCompleteDelegateHandle;
 	FOnUpdateSessionCompleteDelegate UpdateSessionCompleteDelegate;
 	FDelegateHandle UpdateSessionCompleteDelegateHandle;
 	FOnSessionUserInviteAcceptedDelegate SessionUserInviteAcceptedDelegate;
 	FDelegateHandle SessionUserInviteAcceptedDelegateHandle;
 
 	bool bCreateSessionOnDestroy{false};
-	int32 LastNumPublicConnections;
+	int32 LastNumPublicConnections{0};
 
 	// Destroy 완료 후 보류된 Find/Join 재시도를 위한 상태
 	bool bFindSessionOnDestroy{false};
 	FString PendingFindRoomCode;
 	bool bJoinSessionOnDestroy{false};
 	TSharedPtr<FOnlineSessionSearchResult> PendingJoinResult;
+
+	// LeaveServer: 세션 파괴 완료 콜백에서 메인메뉴로 이동 (떠나는 월드 기준 콜백 발화 방지)
+	bool bTravelToMainMenuOnDestroy{false};
 
 	// �ʴ밡 ����Ǿ� �ִ� ����
 	bool bInvitePending = false;

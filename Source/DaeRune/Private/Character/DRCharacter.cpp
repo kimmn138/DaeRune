@@ -119,6 +119,7 @@ void ADRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	// WaterPump 3P 빔 리플리케이트
 	DOREPLIFETIME(ADRCharacter, bWaterPumpActive);
 	DOREPLIFETIME_CONDITION(ADRCharacter, WaterPumpBeamEndPoint, COND_SkipOwner);
+	DOREPLIFETIME(ADRCharacter, WaterPumpWeaponRange);
 
 	// 사망 몽타주 인덱스 (서버 결정, 모든 클라이언트 동일 인덱스 재생)
 	DOREPLIFETIME(ADRCharacter, DeathMontageIndex);
@@ -234,10 +235,7 @@ bool ADRCharacter::PickupPart(ADRCleanserPart* Part)
 	// ��ǰ ȹ�� ó��
 	Part->PickupPart(this);
 
-	// ���� ������Ʈ
-	bIsCarryingPart = true;
-	CarriedPart = Part;
-	RefreshCarriedPartVisuals();
+	SetCarryingState(true, Part);
 
 	// ȹ�� �ð� ���
 	LastPartPickupTime = GetWorld()->GetTimeSeconds();
@@ -247,9 +245,6 @@ bool ADRCharacter::PickupPart(ADRCleanserPart* Part)
 	{
 		PC->ClientShowPartPickupUI();
 	}
-
-	// 리슨 서버 로컬 캐릭터: OnRep이 호출되지 않으므로 여기서 즉시 재평가
-	RefreshNearbyInteractions();
 
 	return true;
 }
@@ -261,13 +256,7 @@ void ADRCharacter::InstallCarriedPart()
 	// ��ǰ ��ġ ó��
 	CarriedPart->InstallPart();
 
-	// ���� �ʱ�ȭ
-	bIsCarryingPart = false;
-	CarriedPart = nullptr;
-	RefreshCarriedPartVisuals();
-
-	// 리슨 서버 로컬 캐릭터: 설치 직후 주변 부품/사이트 UI 재평가
-	RefreshNearbyInteractions();
+	SetCarryingState(false);
 }
 
 void ADRCharacter::DropCarriedPart()
@@ -300,21 +289,38 @@ void ADRCharacter::ForceDropCarriedPart()
 
 void ADRCharacter::DoDropCarriedPart()
 {
-	// State_Carrying �±� ���� (서버 측. 클라 측은 OnRep_bIsCarryingPart 에서)
-	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(GetAbilitySystemComponent()))
-	{
-		DRASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
-	}
-
 	// ��ǰ���� ��������� ��û
 	CarriedPart->DropFromCarrier();
 
-	// ĳ���� ���¸� �ʱ�ȭ
-	bIsCarryingPart = false;
-	CarriedPart = nullptr;
+	SetCarryingState(false);
+}
+
+void ADRCharacter::SetCarryingState(bool bNewCarrying, ADRCleanserPart* Part)
+{
+	if (!HasAuthority()) return;
+
+	bIsCarryingPart = bNewCarrying;
+	CarriedPart = bNewCarrying ? Part : nullptr;
+
+	// State.Carrying 태그 토글 (서버 측. 클라 측은 OnRep_bIsCarryingPart 에서)
+	// LooseGameplayTag는 카운트가 누적되므로 현재 태그 보유 여부를 확인 후 토글
+	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(GetAbilitySystemComponent()))
+	{
+		const FGameplayTag CarryingTag = FDRGameplayTags::Get().State_Carrying;
+		const bool bHasTag = DRASC->HasMatchingGameplayTag(CarryingTag);
+		if (bNewCarrying && !bHasTag)
+		{
+			DRASC->AddLooseGameplayTag(CarryingTag);
+		}
+		else if (!bNewCarrying && bHasTag)
+		{
+			DRASC->RemoveLooseGameplayTag(CarryingTag);
+		}
+	}
+
 	RefreshCarriedPartVisuals();
 
-	// 리슨 서버 로컬 캐릭터: 드롭 직후 주변 부품/사이트 UI 재평가
+	// 리슨 서버 로컬 캐릭터: OnRep이 호출되지 않으므로 여기서 즉시 재평가
 	RefreshNearbyInteractions();
 }
 
@@ -460,11 +466,8 @@ void ADRCharacter::SetWaitingRoomVisibility(bool bInWaitingRoom)
 
 void ADRCharacter::SetOverheadWidgetVisibility(bool bVisible)
 {
-	// 블루프린트에서 추가된 WidgetComponent를 검색하여 가시성 제어
-	TArray<UWidgetComponent*> WidgetComponents;
-	GetComponents<UWidgetComponent>(WidgetComponents);
-
-	for (UWidgetComponent* WidgetComp : WidgetComponents)
+	// BeginPlay에서 1회 수집한 캐시 사용 (호출마다 컴포넌트 검색 방지)
+	for (const TObjectPtr<UWidgetComponent>& WidgetComp : CachedOverheadWidgets)
 	{
 		if (WidgetComp)
 		{
@@ -559,6 +562,17 @@ void ADRCharacter::MulticastPlayVendingSkillUse_Implementation(uint8 NewStacks)
 void ADRCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 블루프린트에서 추가된 오버헤드 WidgetComponent 1회 수집 (SetOverheadWidgetVisibility에서 사용)
+	{
+		TArray<UWidgetComponent*> WidgetComponents;
+		GetComponents<UWidgetComponent>(WidgetComponents);
+		CachedOverheadWidgets.Reset(WidgetComponents.Num());
+		for (UWidgetComponent* WidgetComp : WidgetComponents)
+		{
+			CachedOverheadWidgets.Add(WidgetComp);
+		}
+	}
 
 	// �޽� ���ü� ������Ʈ
 	UpdateMeshVisibility();
@@ -712,10 +726,8 @@ void ADRCharacter::UpdateWaterPumpThirdPersonBeam()
 	FVector BeamDir = BeamVector / BeamLength;
 	const FRotator BeamRotation = BeamDir.Rotation();
 
-	// 1인칭과 같은 방식으로 길이 정규화
-	// WeaponRange는 1인칭에서 쓰는 값과 동일하게 맞춰야 함
-	const float WeaponRange = 1000.0f; // 예시값, 네 실제 값으로 바꿔
-	const float NormalizedLength = BeamLength / WeaponRange;
+	// 1인칭과 같은 방식으로 길이 정규화 (어빌리티가 동기화한 사거리 사용)
+	const float NormalizedLength = BeamLength / FMath::Max(WaterPumpWeaponRange, KINDA_SMALL_NUMBER);
 
 	const float XValue = FMath::Clamp(NormalizedLength * 1000.0f, 0.0f, 1000.0f);
 	const float ZScale = FMath::Clamp(NormalizedLength * 5.0f, 0.0f, 5.0f);
@@ -743,7 +755,7 @@ void ADRCharacter::OnRep_bIsCarryingPart()
 	RefreshNearbyInteractions();
 
 	// 클라 측 ASC 의 owned tag 컨테이너에 직접 State.Carrying 토글
-	// (서버는 DRCleanserPart/DRCharacter::TryDropPart 에서 이미 처리. 클라는 ReplicatedLoose 의
+	// (서버는 SetCarryingState 에서 이미 처리. 클라는 ReplicatedLoose 의
 	//  RepNotify 경로가 RegisterGameplayTagEvent 를 100% 보장하지 않아 명시 토글 필요)
 	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(GetAbilitySystemComponent()))
 	{

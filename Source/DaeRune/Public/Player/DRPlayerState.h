@@ -65,6 +65,14 @@ public:
 
 	void SetWaitingRoomSlotIndex(int32 NewIndex);
 
+	// ========== 호스트 여부 ==========
+
+	UFUNCTION(BlueprintPure, Category = "Lobby")
+	bool IsHost() const { return bIsHost; }
+
+	// 호스트 여부 설정 (서버 전용)
+	void SetIsHost(bool bNewIsHost);
+
 	// ========== 준비 상태 (대기실) ==========
 
 	UFUNCTION(BlueprintPure, Category = "Lobby")
@@ -115,6 +123,10 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_IsReady, BlueprintReadOnly, Category = "Lobby")
 	bool bIsReady = false;
 
+	// 호스트 여부 (서버가 접속 시 확정, PlayerId 순서에 의존하지 않음)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Lobby")
+	bool bIsHost = false;
+
 	// 캐릭터 클래스 선택
 	UPROPERTY(ReplicatedUsing = OnRep_SelectedPlayerClass, BlueprintReadOnly, Category = "Character Selection")
 	EPlayerCharacterClass SelectedPlayerClass = EPlayerCharacterClass::Gardener;
@@ -134,6 +146,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_SelectedPlayerClass();
+
+	// 로컬 플레이어의 대기실 UI 갱신 (대기실 관련 OnRep 공용 헬퍼)
+	void RefreshLocalWaitingRoomUI() const;
 
 private:
 	// ���� ���� Ÿ�̸� ����

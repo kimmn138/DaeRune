@@ -256,17 +256,9 @@ void ADRStageGameMode::InitializePhaseSystem()
 	// 泥?踰덉㎏ ?섏씠利??쒖옉 (?대씪?댁뼵??珥덇린???湲곕? ?꾪븳 ?쒕젅??
 	if (PhaseInstances.Num() > 0)
 	{
-		// ?대씪?댁뼵?멸? SeamlessTravel ???ㅻ뵒??UI ?쒖뒪?쒖쓣 珥덇린?뷀븷 ?쒓컙??以?
-		FTimerHandle PhaseStartTimer;
-		GetWorldTimerManager().SetTimer(
-			PhaseStartTimer,
-			[this]()
-			{
-				StartPhase(0);
-			},
-			1.0f,  // 1珥??쒕젅??
-			false
-		);
+		// 목표 데이터(FPhaseObjectiveData)는 복제 프로퍼티이므로 지연 없이 시작해도
+		// 늦게 초기화된 클라이언트는 OnRep으로 따라잡는다
+		StartPhase(0);
 	}
 }
 
@@ -363,33 +355,8 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 	// Phase ?꾪솚 以묒씠嫄곕굹 寃뚯엫 醫낅즺 泥섎━ 以묒씠硫?以묐났 ?몄텧 諛⑹?
 	if (bIsTransitioningPhase || bIsWipeoutInProgress) return false;
 
-	int32 CurrentPhaseIndex = CachedGameState->GetCurrentPhaseIndex();
-	bool bIsCompleted = false;
-
-	// 페이즈 구조 개편 (2개 페이즈):
-	//   case 0 = New Phase1 (클렌저 확보 + 부품 회수 통합) → 부품 2개 설치 + 사이트 활성화
-	//   case 1 = New Phase2 (= 기존 Phase3, 방어) → 모든 웨이브 클리어
-	switch (CurrentPhaseIndex)
-	{
-	case 0: // New Phase1: 부품 2개 고정 설치 + 사이트 활성화
-	{
-		const int32 CollectedParts = CachedGameState->GetCollectedParts();
-		const bool bActivated = CachedGameState->IsCleanserActivated();
-		bIsCompleted = (CollectedParts >= 2) && bActivated;
-	}
-	break;
-
-	case 1: // New Phase2 (= 기존 Phase3): 모든 웨이브 클리어
-	{
-		const int32 CurrentWaveNumber = CachedGameState->GetCurrentWaveNumber();
-		const int32 TotalWaves = CachedGameState->GetTotalWaves();
-		bIsCompleted = CurrentWaveNumber >= TotalWaves;
-	}
-	break;
-
-	default:
-		break;
-	}
+	// 완료 판정은 각 페이즈가 스스로 수행 (인덱스 switch 하드코딩 제거)
+	const bool bIsCompleted = CurrentPhase->IsCompleted();
 
 	if (bIsCompleted)
 	{

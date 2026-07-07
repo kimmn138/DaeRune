@@ -218,6 +218,15 @@ void UDRSettingsManager::SetMouseSensitivity(float NewSensitivity)
     if (UDRGameUserSettings* Settings = GetSettings())
     {
         Settings->MouseSensitivity = FMath::Clamp(NewSensitivity, 0.1f, 5.0f);
+        BroadcastMouseSensitivity();
+    }
+}
+
+void UDRSettingsManager::BroadcastMouseSensitivity()
+{
+    if (UDRGameUserSettings* Settings = GetSettings())
+    {
+        OnMouseSensitivityChanged.Broadcast(Settings->MouseSensitivity);
     }
 }
 
@@ -243,6 +252,7 @@ void UDRSettingsManager::ResetToDefaults()
     {
         Settings->SetToDefaults();
         ApplyAndSaveAllSettings();
+        BroadcastMouseSensitivity();
     }
 }
 
@@ -783,6 +793,7 @@ void UDRSettingsManager::SaveToGameUserSettings()
     {
         float Normalized = Val->FloatValue / 100.f;
         Settings->MouseSensitivity = FMath::Lerp(0.1f, 5.0f, Normalized);
+        BroadcastMouseSensitivity();
     }
 
     // Gameplay.Language: OptionId -> Culture, store on GameUserSettings.

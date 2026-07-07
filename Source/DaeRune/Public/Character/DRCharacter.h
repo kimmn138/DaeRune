@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Character/DRCharacterBase.h"
 #include "AbilitySystem/Data/CharacterClassInfo.h"
+#include "Engine/NetSerialization.h"
 #include "DRCharacter.generated.h"
 
 class UWidgetComponent;
@@ -111,9 +112,15 @@ public:
 	UPROPERTY(ReplicatedUsing=OnRep_WaterPumpActive, BlueprintReadOnly, Category = "Effects")
 	bool bWaterPumpActive = false;
 
-	// 물대포 빔 끝점 (서버에서 0.1초마다 갱신, 비소유 클라이언트에서 3P 빔 위치 업데이트용)
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Effects")
-	FVector WaterPumpBeamEndPoint = FVector::ZeroVector;
+	// 물대포 빔 끝점 (서버에서 갱신, 비소유 클라이언트에서 3P 빔 위치 업데이트용)
+	// VFX 끝점이라 0.1 정밀도 양자화로 충분 (NetQuantize 계열은 BlueprintType이 아니므로 BP 노출 제외)
+	UPROPERTY(Replicated)
+	FVector_NetQuantize10 WaterPumpBeamEndPoint = FVector::ZeroVector;
+
+	// 물대포 사거리 (어빌리티 활성화 시 서버가 UDRWaterPump::WeaponRange 값으로 동기화)
+	// 1P/3P 빔 길이 정규화가 같은 값을 쓰게 해서 타 플레이어 시점의 빔 길이 왜곡 방지
+	UPROPERTY(Replicated)
+	float WaterPumpWeaponRange = 1000.f;
 
 	// Niagara 에셋 (블루프린트 기본값에서 설정 - WaterPump 어빌리티의 WaterCannonEffect와 동일 에셋 지정)
 	UPROPERTY(EditDefaultsOnly, Category = "Effects")
@@ -159,6 +166,10 @@ public:
 
 	// 오버헤드 닉네임 위젯 가시성 제어 (WaitingRoom에서는 숨김, FreeRoam부터 표시)
 	void SetOverheadWidgetVisibility(bool bVisible);
+
+	// 오버헤드 위젯 컴포넌트 캐시 (호출마다 GetComponents 검색 방지, BeginPlay에서 1회 수집)
+	UPROPERTY()
+	TArray<TObjectPtr<UWidgetComponent>> CachedOverheadWidgets;
 
 	// ========== 표정 시스템 ==========
 
@@ -238,6 +249,11 @@ protected:
 private:
 	// 부품 드롭 실제 구현 (쿨다운 검사 없음, 권한/보유 검사는 호출부에서 수행)
 	void DoDropCarriedPart();
+
+	// 부품 보유 상태 전환 통합 처리 (서버 전용)
+	// bIsCarryingPart + State.Carrying 태그 + 비주얼 + 주변 상호작용 재평가를 한곳에서 수행
+	// (클라 측 태그 토글은 OnRep_bIsCarryingPart 에서)
+	void SetCarryingState(bool bNewCarrying, ADRCleanserPart* Part = nullptr);
 
 	// ========== WaterPump 3P 빔 (내부) ==========
 
