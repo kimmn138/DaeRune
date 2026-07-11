@@ -40,6 +40,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveTextChangedSignature, c
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveProgressChangedSignature, int32, Current, int32, Max);
 // 목표 진행도(숫자) UI 표시/숨김 델리게이트 (Max==0이면 false로 브로드캐스트)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnObjectiveProgressVisibilityChangedSignature, bool, bShouldShow);
+// 목표 클리어 연출 델리게이트 (클리어 애니메이션 → 시작 애니메이션 시퀀스 트리거)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnObjectiveCompletedSignature);
 // ����� ����� ��������Ʈ
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FStatusEffectWidgetSignature, const FEffectInfo&, EffectInfo);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FEffectTagRemovedSignature, FGameplayTag, EffectTag, bool, IsDebuff);
@@ -117,6 +119,10 @@ public:
 	// Max==0인 경우 숫자 표시(Progress 텍스트) 숨기기 위한 가시성 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Objective")
 	FOnObjectiveProgressVisibilityChangedSignature OnObjectiveProgressVisibilityChanged;
+
+	// 목표 클리어 시 1회 발화 (위젯: 클리어 애니 재생 → 종료 후 새 목표 텍스트 적용 + 시작 애니 재생)
+	UPROPERTY(BlueprintAssignable, Category = "Phase|Objective")
+	FOnObjectiveCompletedSignature OnObjectiveCompleted;
 
 	// ����� ���� ��ε�ĳ��Ʈ ��������Ʈ
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Debuff")
@@ -201,6 +207,7 @@ private:
 
 	// ��������Ʈ �ڵ� ����� ����
 	FDelegateHandle PhaseObjectiveDelegateHandle;
+	FDelegateHandle ObjectiveCompletedDelegateHandle;
 	FDelegateHandle WaveTimerDelegateHandle;
 
 	// ASC 델리게이트 핸들 (안전한 정리를 위해)

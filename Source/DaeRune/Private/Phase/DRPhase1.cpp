@@ -6,6 +6,7 @@
 #include "AbilitySystemComponent.h"
 #include "DRGameplayTags.h"
 #include "EngineUtils.h"
+#include "TimerManager.h"
 #include "AbilitySystem/DRAttributeSet.h"
 #include "Actor/DRCleanserSite.h"
 #include "Actor/DRDoorManager.h"
@@ -46,8 +47,26 @@ void UDRPhase1::OnPhaseStart()
 	SpawnEnemiesAroundCleanserSite(ActiveSite.Get());
 
 	// 4) 통로 DREnemySpawnGroup 자동 수집 + 그룹별 부품 운반자 선정
-	CollectSpawnGroups();
-	AssignPartCarriersForAllGroups();
+	// 주의: 이 페이즈는 GameMode::BeginPlay 안에서 동기 실행되는데, 레벨에 배치된
+	// DREnemySpawnGroup 액터들의 BeginPlay(= PrePlacedEnemies 등록)는 UE의 액터 BeginPlay
+	// 순서 보장이 없어 아직 실행되지 않았을 수 있다. 이 시점에 바로 수집하면 RegisteredEnemies가
+	// 비어 있어 부품 운반자 선정 및 Phase1 태그 부여가 모두 실패한다.
+	// → 모든 액터 BeginPlay가 끝난 다음 틱으로 지연시킨다. (bCarriesPart는 복제 + OnRep로
+	//    동기화되므로 1프레임 지연은 시각적으로 무해하다.)
+	if (UWorld* World = GameMode->GetWorld())
+	{
+		World->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			CollectSpawnGroups();
+			AssignPartCarriersForAllGroups();
+		}));
+	}
+	else
+	{
+		// 월드를 못 얻는 예외 상황: 즉시 실행(기존 동작 폴백)
+		CollectSpawnGroups();
+		AssignPartCarriersForAllGroups();
+	}
 
 	// 5) GameState 진행률 초기화 (CleanserSite::RequiredPartsCount = 2 고정)
 	FPhaseObjectiveData PhaseObjective = GameState->GetCurrentPhaseObjective();

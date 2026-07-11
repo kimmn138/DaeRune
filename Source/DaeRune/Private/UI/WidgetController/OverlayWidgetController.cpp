@@ -304,6 +304,13 @@ void UOverlayWidgetController::UnbindAllDelegates()
 		PhaseObjectiveDelegateHandle.Reset();
 	}
 
+	// ObjectiveCompleted 델리게이트 언바인딩
+	if (ObjectiveCompletedDelegateHandle.IsValid())
+	{
+		DRGameState->OnObjectiveCompletedDelegate.Remove(ObjectiveCompletedDelegateHandle);
+		ObjectiveCompletedDelegateHandle.Reset();
+	}
+
 	// WaveTimer 델리게이트 언바인딩
 	if (WaveTimerDelegateHandle.IsValid())
 	{
@@ -322,6 +329,10 @@ void UOverlayWidgetController::HandlePhaseObjectiveChanged()
 
     const FPhaseObjectiveData ObjectiveData = DRGameState->GetCurrentPhaseObjective();
     int32 CurrentProgress = DRGameState->GetCurrentObjectiveProgress();
+
+	// PhaseNumber 0 = 실제 목표가 설정되기 전 준비 상태 (생성자 기본값 "Preparing...")
+	// 위젯이 placeholder를 첫 목표로 오인해 진짜 첫 목표를 Pending으로 잡아버리는 것을 방지
+	if (ObjectiveData.PhaseNumber == 0) return;
 	
 	OnObjectiveTextChanged.Broadcast(ObjectiveData.ObjectiveTitle,ObjectiveData.ProgressFormat);
 	OnObjectiveProgressChanged.Broadcast(CurrentProgress,ObjectiveData.RequiredCount);
@@ -344,6 +355,17 @@ void UOverlayWidgetController::BindPhaseObjectiveDelegate()
 			{
 				StrongThis->HandlePhaseObjectiveChanged();
 				StrongThis->CheckAndBindWaveTimer();
+			}
+		}
+	);
+
+	// 목표 클리어 델리게이트 바인딩 (Multicast RPC → 클리어 애니메이션 트리거)
+	ObjectiveCompletedDelegateHandle = DRGameState->OnObjectiveCompletedDelegate.AddLambda(
+		[WeakThis]()
+		{
+			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+			{
+				StrongThis->OnObjectiveCompleted.Broadcast();
 			}
 		}
 	);

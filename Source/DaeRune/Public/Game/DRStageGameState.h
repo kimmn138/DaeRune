@@ -23,6 +23,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPhaseChangedSignature, int32, New
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnWaveTimerChanged, int32 /*WaveNumber*/, float /*RemainingTime*/, bool /*bIsRestTime*/);
 // 독가스 경고 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnToxicGasWarningSignature, bool, bIsToxicGasWave);
+// 목표 클리어 델리게이트 (Multicast RPC로 서버/클라 공통 발화)
+DECLARE_MULTICAST_DELEGATE(FOnObjectiveCompleted);
 
 // ������ ���� ������
 UENUM(BlueprintType)
@@ -161,6 +163,14 @@ public:
     
     void SetPhaseObjective(const FPhaseObjectiveData& ObjectiveData);
     void UpdatePhaseObjectiveProgress(int32 NewCount);
+
+    // 목표 클리어 알림 (서버에서 호출 - 1회성 주요 연출이므로 Reliable)
+    // 진행도 복제와 달리 클리어 순간을 클라이언트가 확실히 수신하도록 명시적 RPC 사용
+    UFUNCTION(NetMulticast, Reliable)
+    void Multicast_ObjectiveCompleted();
+
+    // 목표 클리어 델리게이트 (위젯 컨트롤러가 바인딩)
+    FOnObjectiveCompleted OnObjectiveCompletedDelegate;
 
     FPhaseObjectiveData GetCurrentPhaseObjective() const { return CurrentPhaseObjective; }
     int32 GetCurrentObjectiveProgress() const { return CurrentObjectiveProgress; }

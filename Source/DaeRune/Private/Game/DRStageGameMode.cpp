@@ -317,6 +317,9 @@ void ADRStageGameMode::EndCurrentPhase()
 	// ?섏씠利??꾨즺 ?곹깭濡?蹂寃?
 	CachedGameState->SetCurrentPhaseState(EPhaseState::Completed);
 
+	// 목표 클리어 연출 알림 (모든 클라이언트 - 마지막 페이즈 클리어도 이 경로를 거침)
+	CachedGameState->Multicast_ObjectiveCompleted();
+
 	// 占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙 처占쏙옙
 	if (CurrentPhase)
 	{

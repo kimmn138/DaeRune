@@ -69,7 +69,8 @@
       "Bash(grep -nA2 '^name = \"fastmcp\"' '/c/Users/OWNER/Documents/Unreal Projects/unreal-mcp/Python/uv.lock')",
       "Bash(grep -nA2 '^name = \"pydantic\"' '/c/Users/OWNER/Documents/Unreal Projects/unreal-mcp/Python/uv.lock')",
       "Bash(tasklist)",
-      "mcp__unrealMCP__get_actors_in_level"
+      "mcp__unrealMCP__get_actors_in_level",
+      "PowerShell(Get-Content *)"
     ]
   },
   "enabledMcpjsonServers": [

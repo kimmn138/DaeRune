@@ -236,6 +236,11 @@ void ADRStageGameState::UpdatePhaseObjectiveProgress(int32 NewCount)
     OnPhaseObjectiveChangedDelegate.Broadcast();
 }
 
+void ADRStageGameState::Multicast_ObjectiveCompleted_Implementation()
+{
+    OnObjectiveCompletedDelegate.Broadcast();
+}
+
 void ADRStageGameState::OnRep_CurrentPhaseIndex()
 {
     OnPhaseChangedDelegate.Broadcast(CurrentPhaseIndex);
