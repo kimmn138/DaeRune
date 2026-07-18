@@ -70,7 +70,16 @@
       "Bash(grep -nA2 '^name = \"pydantic\"' '/c/Users/OWNER/Documents/Unreal Projects/unreal-mcp/Python/uv.lock')",
       "Bash(tasklist)",
       "mcp__unrealMCP__get_actors_in_level",
-      "PowerShell(Get-Content *)"
+      "PowerShell(Get-Content *)",
+      "PowerShell(Get-Process *)",
+      "Bash(break)",
+      "Bash(D:/UE_5.5/Engine/Build/BatchFiles/Build.bat DaeRuneEditor *)",
+      "mcp__unrealMCP__find_blueprint_nodes",
+      "PowerShell(python \"C:\\\\Users\\\\OWNER\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-OWNER-Documents-Unreal-Projects-DaeRune\\\\86883be1-3d03-44ff-9ede-efb8ad26ea01\\\\scratchpad\\\\bpprops.py\")",
+      "PowerShell(python \"C:\\\\Users\\\\OWNER\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-OWNER-Documents-Unreal-Projects-DaeRune\\\\86883be1-3d03-44ff-9ede-efb8ad26ea01\\\\scratchpad\\\\bpprops2.py\")",
+      "PowerShell(& \"C:\\\\Program Files\\\\Epic Games\\\\UE_5.5\\\\Engine\\\\Build\\\\BatchFiles\\\\Build.bat\" DaeRuneEditor Win64 Development -Project=\"C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject\" -WaitMutex)",
+      "PowerShell($key = Get-ItemProperty \"HKLM:\\\\SOFTWARE\\\\EpicGames\\\\Unreal Engine\\\\5.5\" -ErrorAction SilentlyContinue; if \\($key\\) { $key.InstalledDirectory } else { Get-ChildItem \"HKLM:\\\\SOFTWARE\\\\EpicGames\\\\Unreal Engine\" -ErrorAction SilentlyContinue | ForEach-Object { \\(Get-ItemProperty $_.PSPath\\).InstalledDirectory } })",
+      "PowerShell($proj = Get-Content \"C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject\" -Raw | ConvertFrom-Json; $proj.EngineAssociation; $reg = Get-ItemProperty \"HKLM:\\\\SOFTWARE\\\\EpicGames\\\\Unreal Engine\\\\5.5\" -ErrorAction SilentlyContinue; if \\($reg\\) { $reg.InstalledDirectory } else { Get-ChildItem \"HKLM:\\\\SOFTWARE\\\\EpicGames\\\\Unreal Engine\" -ErrorAction SilentlyContinue | ForEach-Object { \\(Get-ItemProperty $_.PSPath\\).InstalledDirectory } })"
     ]
   },
   "enabledMcpjsonServers": [

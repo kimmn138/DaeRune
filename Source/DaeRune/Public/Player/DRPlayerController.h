@@ -21,6 +21,7 @@ class UDRInputConfig;
 class UDRAbilitySystemComponent;
 class ADRCleanserPart;
 class ADRCleanserSite;
+class ADRRobotVacuumCharacter;
 class ADRWaitingRoomCameraActor;
 class UDRWaitingRoomWidget;
 enum class ELobbyState : uint8;
@@ -102,6 +103,28 @@ public:
 	// (감지 반경 300 + 라인트레이스 250 + 이동/지연 여유)
 	UPROPERTY(EditDefaultsOnly, Category = "Part System|Config")
 	float MaxInteractDistance = 800.f;
+
+	// ========== 탑승 시스템 (Plan3 Phase B) ==========
+
+	// 청소기 감지 활성화/비활성화 (청소기 MountDetectionSphere 오버랩에서 호출)
+	UFUNCTION(BlueprintCallable, Category = "Mount System")
+	void SetMountDetectionEnabled(bool bEnabled, ADRRobotVacuumCharacter* Mount);
+
+	// 시점 라인트레이스로 탑승 가능한 청소기 찾기
+	UFUNCTION(BlueprintCallable, Category = "Mount System")
+	ADRRobotVacuumCharacter* FindMountByLineTrace();
+
+	// 하차 요청 (점프키 → 서버 검증 후 DismountRider)
+	UFUNCTION(Server, Reliable)
+	void ServerRequestDismount();
+
+	// 탑승 중 좌우 회전 동기화: MOVE_None에선 CMC 무브 패킷이 안 나가 서버가 클라 요를 모르므로 직접 전송
+	UFUNCTION(Server, Unreliable)
+	void ServerSetMountedYaw(float NewYaw);
+
+	// 지속 돌진 중 S 브레이크 → GA_VacuumDash에 GameplayEvent(Event.Dash.Brake) 전송 (Plan3 §8.2)
+	UFUNCTION(Server, Reliable)
+	void ServerRequestDashBrake();
 
 	// ��ǰ ȹ�� �� UI ǥ��
 	UFUNCTION(BlueprintImplementableEvent, Category = "Part System")
@@ -510,6 +533,16 @@ private:
 	// 박스 오버랩 중인 사이트 집합 (감지 후보, 여러 사이트 동시 오버랩 대응)
 	TSet<TWeakObjectPtr<AActor>> OverlappedSites;
 
+	// 청소기 탑승 감지 활성화 여부 (MountDetectionSphere 오버랩 중일 때 true)
+	bool bMountDetectionEnabled = false;
+
+	// 오버랩 중인 청소기 집합 (탑승 감지 후보)
+	TSet<TWeakObjectPtr<AActor>> OverlappedMounts;
+
+	// 현재 감지(라인트레이스) 중인 청소기 (IDRInteractable 구현 액터)
+	UPROPERTY()
+	TObjectPtr<AActor> CurrentDetectedMount;
+
 	// ========== 상호작용 감지 공통 처리 (Part/Site 공용) ==========
 
 	// 오버랩 집합 등록/해제 + 감지 플래그 갱신 + 이탈 시 UI 정리
@@ -519,10 +552,17 @@ private:
 	// 현재 감지 대상 전환 + 상호작용 UI 위젯 토글 (IDRInteractable)
 	void SetCurrentDetectedInteractable(AActor* NewDetected, TObjectPtr<AActor>& CurrentDetected);
 
+	// 사이트 감지 변화를 조준선 UI(OverlayWidgetController)에 전달 (로컬 전용)
+	void NotifyCrosshairSiteDetected(bool bDetected);
+
 	// ���� �÷��̾ �׾����� ����
 
 	// ����Ʈ���̽� Ÿ�̸�
 	float LineTraceTimer = 0.f;
+
+	// 탑승 요 동기화 전송 간격 타이머 / 마지막 전송 값 (클라 전용)
+	float MountedYawSyncTimer = 0.f;
+	float LastSentMountedYaw = 0.f;
 
 	// ���� ��ó�� �ִ� ��ǰ
 	TSet<TWeakObjectPtr<AActor>> OverlappedParts;

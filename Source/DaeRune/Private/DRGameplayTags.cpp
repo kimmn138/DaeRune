@@ -84,6 +84,16 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("VendingMachine Jackpot stacks reached max")
 	);
 
+	GameplayTags.State_Riding = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.Riding"),
+		FString("Player is riding on a RobotVacuum")
+	);
+
+	GameplayTags.State_RobotVacuum_SustainedDash = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.RobotVacuum.SustainedDash"),
+		FString("RobotVacuum is in sustained dash (auto forward)")
+	);
+
 	/*
 	 * 적 상태
 	 */
@@ -152,6 +162,12 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Bite Damage Type")
 	);
 
+	// 탑승 공유 데미지 식별 태그 — 데미지 "타입"이 아니므로 DamageTypeTags/DamageTypesToDebuffs에 넣지 않는다
+	GameplayTags.Damage_MountShared = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Damage.MountShared"),
+		FString("Mount-shared damage marker (prevents re-propagation)")
+	);
+
 	/*
 	 * �⺻ ��
 	 */
@@ -178,6 +194,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Buff_VendingMachine_AttackSpeed = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Buff.VendingMachine.AttackSpeed"),
 		FString("VendingMachine Attack Speed Buff")
+	);
+
+	GameplayTags.Buff_RobotVacuum_DashSpeed = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.RobotVacuum.DashSpeed"),
+		FString("RobotVacuum Dash Move Speed Buff (stackable)")
 	);
 	
 	/*
@@ -282,6 +303,15 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
+	 * 게임플레이 이벤트 (GA 통지용)
+	 */
+
+	GameplayTags.Event_Dash_Brake = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Event.Dash.Brake"),
+		FString("Sent to GA_VacuumDash when the rider presses backward input during sustained dash")
+	);
+
+	/*
 	 * �����Ƽ �з�
 	 */
 
@@ -349,6 +379,21 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("VendingMachine Attack Speed Buff Ability Tag")
 	);
 
+	GameplayTags.Abilities_RobotVacuum_AirShot = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.RobotVacuum.AirShot"),
+		FString("RobotVacuum Air Shot Ability Tag")
+	);
+
+	GameplayTags.Abilities_RobotVacuum_JetJump = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.RobotVacuum.JetJump"),
+		FString("RobotVacuum Jet Jump Ability Tag")
+	);
+
+	GameplayTags.Abilities_RobotVacuum_Dash = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.RobotVacuum.Dash"),
+		FString("RobotVacuum Dash Ability Tag")
+	);
+
 
 	/*
 	 * Ÿ�� ����
@@ -385,6 +430,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Cooldown_Fire_FireBolt = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Cooldown.Fire.FireBolt"),
 		FString("FireBolt Cooldown Tag")
+	);
+
+	GameplayTags.Cooldown_RobotVacuum_JetJump = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Cooldown.RobotVacuum.JetJump"),
+		FString("RobotVacuum JetJump Cooldown Tag - Q 홀드 연속 발동 방지 (Plan3 §15.6)")
 	);
 
 	GameplayTags.Cooldown_Armadillo_RollCharge = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -511,5 +561,20 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.GameplayCue_Skill_ClawSwipe = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("GameplayCue.Skill.ClawSwipe"),
 		FString("ClawSwipe Effect")
+	);
+
+	GameplayTags.GameplayCue_Skill_VacuumAirShot = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Skill.VacuumAirShot"),
+		FString("RobotVacuum Air Shot Effect")
+	);
+
+	GameplayTags.GameplayCue_Skill_VacuumJetJump = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Skill.VacuumJetJump"),
+		FString("RobotVacuum Jet Jump Water Spray Effect")
+	);
+
+	GameplayTags.GameplayCue_Skill_VacuumDash = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Skill.VacuumDash"),
+		FString("RobotVacuum Dash Effect")
 	);
 }

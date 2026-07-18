@@ -249,6 +249,15 @@ FVector UDRAbilitySystemLibrary::GetKnockbackForce(const FGameplayEffectContextH
 	return FVector::ZeroVector;
 }
 
+FGameplayTagContainer UDRAbilitySystemLibrary::GetSourceAbilityTags(const FGameplayEffectContextHandle& EffectContextHandle)
+{
+	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	{
+		return DREffectContext->GetSourceAbilityTags();
+	}
+	return FGameplayTagContainer();
+}
+
 void UDRAbilitySystemLibrary::SetIsSuccessfulDebuff(UPARAM(ref)FGameplayEffectContextHandle& EffectContextHandle, bool bInSuccessfulDebuff)
 {
 	if (FDRGameplayEffectContext* DREffectContext = static_cast<FDRGameplayEffectContext*>(EffectContextHandle.Get()))

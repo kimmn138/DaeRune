@@ -249,6 +249,16 @@ void UDRAbilitySystemComponent::ClientVendingMachineStacksChanged_Implementation
 	OnVendingMachineStacksChanged.Broadcast(CurrentStacks, MaxStacks);
 }
 
+void UDRAbilitySystemComponent::NotifyVacuumDashGaugeChanged(int32 CurrentGauge, int32 MaxGauge)
+{
+	ClientVacuumDashGaugeChanged(CurrentGauge, MaxGauge);
+}
+
+void UDRAbilitySystemComponent::ClientVacuumDashGaugeChanged_Implementation(int32 CurrentGauge, int32 MaxGauge)
+{
+	OnVacuumDashGaugeChanged.Broadcast(CurrentGauge, MaxGauge);
+}
+
 bool UDRAbilitySystemComponent::IsAbilityTagBlocked(const FGameplayTag& AbilityTag) const
 {
 	if (!AbilityTag.IsValid()) return false;

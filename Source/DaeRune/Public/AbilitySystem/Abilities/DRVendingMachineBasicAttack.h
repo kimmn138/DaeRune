@@ -112,5 +112,5 @@ private:
 
 	void FireShotAndScheduleNext();
 	void ExecuteShot();
-	FVector CalculateTargetLocation() const;
+	// CalculateTargetLocation()은 UDRProjectileSpell 공용 유틸로 승격됨 (Plan3 §6.1)
 };

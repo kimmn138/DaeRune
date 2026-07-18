@@ -36,6 +36,8 @@ public:
 	FGameplayTag State_Carrying;
 	FGameplayTag State_InCombat;
 	FGameplayTag State_VendingMachine_JackpotReady;
+	FGameplayTag State_Riding;
+	FGameplayTag State_RobotVacuum_SustainedDash;
 
 	// 적 상태
 	FGameplayTag State_Enraged;
@@ -55,6 +57,9 @@ public:
 	FGameplayTag Damage_Physical;
 	FGameplayTag Damage_Bite;
 
+	// 탑승 공유 데미지 식별 (재전파 방지용 — DamageTypeTags에는 포함하지 않음)
+	FGameplayTag Damage_MountShared;
+
 	// �⺻ ��
 	FGameplayTag Heal;
 
@@ -62,6 +67,7 @@ public:
 	FGameplayTag Buff_Elite;
 	FGameplayTag Buff_Elite_Roar;
 	FGameplayTag Buff_VendingMachine_AttackSpeed;
+	FGameplayTag Buff_RobotVacuum_DashSpeed;
 	
 	// ����� ȿ��
 	FGameplayTag Debuff_Burn; 
@@ -84,6 +90,9 @@ public:
 	FGameplayTag Water_SetByCaller_Reduction;
 	FGameplayTag Water_SetByCaller_Grant;
 
+	// 게임플레이 이벤트 (GA 통지용)
+	FGameplayTag Event_Dash_Brake;
+
 	// �����Ƽ �з�
 	FGameplayTag Abilities_Attack;
 	FGameplayTag Abilities_Death;
@@ -99,6 +108,9 @@ public:
 	FGameplayTag Abilities_GardenRobot_SeedCannon;
 	FGameplayTag Abilities_VendingMachine_BasicAttack;
 	FGameplayTag Abilities_VendingMachine_AttackSpeedBuff;
+	FGameplayTag Abilities_RobotVacuum_AirShot;
+	FGameplayTag Abilities_RobotVacuum_JetJump;
+	FGameplayTag Abilities_RobotVacuum_Dash;
 
 	// Ÿ�� ����
 	FGameplayTag Abilities_HitReact;
@@ -110,6 +122,7 @@ public:
 
 	// �����Ƽ ��Ÿ��
 	FGameplayTag Cooldown_Fire_FireBolt;
+	FGameplayTag Cooldown_RobotVacuum_JetJump;
 	FGameplayTag Cooldown_Armadillo_RollCharge;
 	FGameplayTag Cooldown_Elite_Sweep;
 	FGameplayTag Cooldown_Elite_Roar;
@@ -145,6 +158,9 @@ public:
 	FGameplayTag GameplayCue_Cleanser_Damage;
 	FGameplayTag GameplayCue_Skill_WaterPump;
 	FGameplayTag GameplayCue_Skill_ClawSwipe;
+	FGameplayTag GameplayCue_Skill_VacuumAirShot;
+	FGameplayTag GameplayCue_Skill_VacuumJetJump;
+	FGameplayTag GameplayCue_Skill_VacuumDash;
 
 private:
 	static FDRGameplayTags GameplayTags;

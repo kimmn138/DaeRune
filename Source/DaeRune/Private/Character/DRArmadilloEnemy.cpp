@@ -6,6 +6,8 @@
 #include "DRAssetManager.h"
 #include "DRGameplayTags.h"
 #include "AI/DRAIController.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -25,6 +27,23 @@ ADRArmadilloEnemy::ADRArmadilloEnemy()
 	BallFormMesh->SetupAttachment(GetRootComponent());
 	BallFormMesh->SetVisibility(false); // BasicForm is default
 	BallFormMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// 폼 체인지 전환 몽타주 기본값 (BP에서 오버라이드 가능)
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBallBasicFinder(
+		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/BasicForm/AM_Armadillo_FormChangeBtoD"));
+	if (ToBallBasicFinder.Succeeded()) FormChangeToBallMontage_Basic = ToBallBasicFinder.Object;
+
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBallBallFinder(
+		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/RollForm/AM_Armadillo_Ball_FormChangeBtoD"));
+	if (ToBallBallFinder.Succeeded()) FormChangeToBallMontage_Ball = ToBallBallFinder.Object;
+
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBasicBasicFinder(
+		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/BasicForm/AM_Armadillo_FormChangeDtoB"));
+	if (ToBasicBasicFinder.Succeeded()) FormChangeToBasicMontage_Basic = ToBasicBasicFinder.Object;
+
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBasicBallFinder(
+		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/RollForm/AM_Armadillo_Ball_FormChangeDtoB"));
+	if (ToBasicBallFinder.Succeeded()) FormChangeToBasicMontage_Ball = ToBasicBallFinder.Object;
 }
 
 void ADRArmadilloEnemy::BeginPlay()
@@ -60,6 +79,12 @@ void ADRArmadilloEnemy::Tick(float DeltaTime)
 
 		TickRollCharge(DeltaTime);
 	}
+	else if (!HasAuthority() && bIsRolling)
+	{
+		// CurrentRollSpeed는 서버 전용 값(비복제)인데 볼 폼 ABP가 이 값으로 PlayRate를 계산함.
+		// 클라이언트에서는 복제된 이동 속도로 갱신해 애니메이션 재생 속도를 맞춘다 (추가 복제 비용 없음).
+		CurrentRollSpeed = GetVelocity().Size2D();
+	}
 }
 
 void ADRArmadilloEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -88,10 +113,7 @@ void ADRArmadilloEnemy::MulticastHandleDeath_Implementation(const FVector& Death
 	if (bIsBallForm)
 	{
 		bIsBallForm = false;
-		UpdateMeshVisibility();
-
-		// Restore default capsule size
-		GetCapsuleComponent()->SetCapsuleSize(DefaultCapsuleRadius, DefaultCapsuleHalfHeight);
+		OnRep_BallForm(); // 메시 가시성 + 캡슐 크기 복원
 	}
 
 	// 3. Parent handles death animation, dissolve, etc.
@@ -105,28 +127,61 @@ void ADRArmadilloEnemy::StartFormChange(bool bToBallForm)
 	if (!HasAuthority()) return;
 	bPendingBallForm = bToBallForm;
 	// Transition animation is played by GA -> AnimNotify calls FinishFormChange()
+
+	// GA의 PlayMontage는 서버 로컬 재생이므로 원격 클라이언트에는 별도로 브로드캐스트
+	MulticastPlayFormChangeMontage(bToBallForm);
+}
+
+void ADRArmadilloEnemy::MulticastPlayFormChangeMontage_Implementation(bool bToBallForm)
+{
+	// 서버(리슨서버 호스트 포함)는 GA가 직접 재생하므로 스킵 — 이중 재생 방지
+	if (HasAuthority()) return;
+
+	UAnimMontage* BasicMontage = bToBallForm ? FormChangeToBallMontage_Basic : FormChangeToBasicMontage_Basic;
+	UAnimMontage* BallMontage = bToBallForm ? FormChangeToBallMontage_Ball : FormChangeToBasicMontage_Ball;
+
+	// 몽타주의 AnimNotify가 클라이언트에서 발화해도 FinishFormChange()는 권한 체크로 무시됨
+	if (BasicMontage)
+	{
+		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+		{
+			AnimInstance->Montage_Play(BasicMontage);
+		}
+	}
+
+	if (BallMontage && BallFormMesh)
+	{
+		if (UAnimInstance* BallAnimInstance = BallFormMesh->GetAnimInstance())
+		{
+			BallAnimInstance->Montage_Play(BallMontage);
+		}
+	}
 }
 
 void ADRArmadilloEnemy::FinishFormChange()
 {
 	if (!HasAuthority()) return;
 	bIsBallForm = bPendingBallForm;
-	OnRep_BallForm(); // Update server local as well
-
-	// Adjust capsule size
-	if (bIsBallForm)
-	{
-		GetCapsuleComponent()->SetCapsuleSize(BallFormCapsuleRadius, BallFormCapsuleHalfHeight);
-	}
-	else
-	{
-		GetCapsuleComponent()->SetCapsuleSize(DefaultCapsuleRadius, DefaultCapsuleHalfHeight);
-	}
+	OnRep_BallForm(); // 서버 로컬 갱신 (클라이언트는 bIsBallForm 복제로 동일 경로 실행)
 }
 
 void ADRArmadilloEnemy::OnRep_BallForm()
 {
 	UpdateMeshVisibility();
+	ApplyFormCapsuleSize();
+}
+
+void ADRArmadilloEnemy::ApplyFormCapsuleSize()
+{
+	if (bIsBallForm)
+	{
+		GetCapsuleComponent()->SetCapsuleSize(BallFormCapsuleRadius, BallFormCapsuleHalfHeight);
+	}
+	else if (DefaultCapsuleHalfHeight > 0.f)
+	{
+		// BeginPlay에서 기본 크기를 저장하기 전(초기 복제 등)에는 복원하지 않음
+		GetCapsuleComponent()->SetCapsuleSize(DefaultCapsuleRadius, DefaultCapsuleHalfHeight);
+	}
 }
 
 void ADRArmadilloEnemy::UpdateMeshVisibility()
@@ -171,8 +226,7 @@ void ADRArmadilloEnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 New
 	{
 		bIsBallForm = false;
 		bPendingBallForm = false;
-		OnRep_BallForm(); // Update visibility
-		GetCapsuleComponent()->SetCapsuleSize(DefaultCapsuleRadius, DefaultCapsuleHalfHeight);
+		OnRep_BallForm(); // 메시 가시성 + 캡슐 크기 복원
 	}
 
 	// Call parent stun handling (updates BB, bIsStunned, etc.)

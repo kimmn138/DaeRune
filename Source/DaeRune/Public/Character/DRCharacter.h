@@ -10,11 +10,13 @@
 
 class UWidgetComponent;
 class ADRCleanserPart;
+class ADRRobotVacuumCharacter;
 class UNiagaraComponent;
 class UNiagaraSystem;
 class UStaticMesh;
 class UDRFacialExpressionComponent;
 class UAnimMontage;
+struct FGameplayEffectContextHandle;
 
 /**
  * �÷��̾� ĳ���� Ŭ����
@@ -99,6 +101,41 @@ public:
 	// 부품 보유 상태가 바뀐 직후 현재 오버랩 중인 CleanserSite/CleanserPart 들의 UI/감지를 재평가
 	// (오버랩 영역 안에서 집어들기/내려놓기 시 UI가 갱신되지 않는 문제 해결)
 	void RefreshNearbyInteractions();
+
+	// ========== 탑승 시스템 (라이더 측) ==========
+
+	// 내가 타고 있는 로봇 청소기 (nullptr = 미탑승). 서버가 설정, RepNotify로 클라 attach/이동모드 보정.
+	UPROPERTY(ReplicatedUsing = OnRep_MountedOn, BlueprintReadOnly, Category = "Mount")
+	TObjectPtr<ADRRobotVacuumCharacter> MountedOn;
+
+	UFUNCTION()
+	void OnRep_MountedOn();
+
+	UFUNCTION(BlueprintCallable, Category = "Mount")
+	bool IsMounted() const { return MountedOn != nullptr; }
+
+	// 내 메시에서 탑승 접점(발바닥 등)이 되는 소켓 이름 (CombatSocket처럼 BP에서 지정).
+	// 탑승 높이 결정에 이 소켓의 액터 공간 Z만 사용 — 좌우 회전 시 공전을 막기 위해 XY는 무시.
+	// None이거나 소켓이 없으면 캡슐 바닥(반높이)이 탑승 소켓 위에 오도록 올린다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mount")
+	FName MountAlignSocketName = NAME_None;
+
+	// 마운트에 attach (서버 MountRider + 클라 OnRep_MountedOn 공용).
+	// 부모는 기울지 않는 청소기 캡슐(루트) — 본 소켓에 직접 붙이면 본 회전이 매 프레임
+	// 라이더 회전에 합성돼 자세가 오염되므로, 소켓은 위치 기준으로만 쓴다
+	// (매 프레임 위치 추적은 ADRRobotVacuumCharacter::Tick).
+	void AttachToMountSocket(ADRRobotVacuumCharacter* Mount);
+
+	// 탑승 시 소켓 위치에서 루트를 올릴 수직 오프셋 — 발(접점)이 소켓 위에 오게 한다.
+	// MountAlignSocketName 소켓이 있으면 그 소켓의 액터 공간 높이, 없으면 캡슐 반높이.
+	float GetMountZOffset() const;
+
+	// 서버 전용: 피격 데미지를 마운트 링크(위/아래 1홉)로 전파 (Damage.MountShared 태그로 재전파 방지)
+	void PropagateSharedDamage(float Damage, const FGameplayEffectContextHandle& SourceContext);
+
+	// 탑승 공유 데미지에 사용할 GE (기존 공용 GE_Damage 지정 — BP에서 설정)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mount")
+	TSubclassOf<UGameplayEffect> MountSharedDamageEffectClass;
 
 	// ========== ī�޶� ==========
 

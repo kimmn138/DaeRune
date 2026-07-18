@@ -76,6 +76,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayEffects")
 	static FVector GetKnockbackForce(const FGameplayEffectContextHandle& EffectContextHandle);
 
+	// 소스 어빌리티 AssetTags 조회 (탑승 공유 데미지 재전파 방지 판정 등)
+	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayEffects")
+	static FGameplayTagContainer GetSourceAbilityTags(const FGameplayEffectContextHandle& EffectContextHandle);
+
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|GameplayEffects")
 	static void SetIsSuccessfulDebuff(UPARAM(ref) FGameplayEffectContextHandle& EffectContextHandle, bool bInSuccessfulDebuff);
 

@@ -13,6 +13,7 @@ class ADRCharacter;
 // UDRUserWidget forward declaration (TSubclassOf only needs forward decl in UE5.5 with UHT)
 class UDRUserWidget;
 class UUserWidget;
+class UTexture2D;
 
 UENUM(BlueprintType)
 enum class ECharacterClass : uint8
@@ -29,6 +30,7 @@ enum class EPlayerCharacterClass : uint8
 {
 	Gardener,
 	VendingMachine,
+	RobotVacuum,
 
 	Count UMETA(Hidden) // 클래스 개수 계산용 - 항상 마지막에 유지
 };
@@ -57,6 +59,14 @@ struct FCharacterClassDefaultInfo
 	// Tab 키로 띄우는 캐릭터 설명창 위젯 클래스
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UUserWidget> CharacterInfoWidgetClass;
+
+	// 캐릭터 전용 기본 조준선 텍스처
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Crosshair")
+	TObjectPtr<UTexture2D> CrosshairTexture;
+
+	// 부품 운반 중 사이트 조준 시(설치 가능) 캐릭터 전용 조준선 텍스처
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Crosshair")
+	TObjectPtr<UTexture2D> CrosshairInstallReadyTexture;
 };
 
 /**
@@ -95,6 +105,10 @@ public:
 	// 클래스별 캐릭터 BP 매핑 (외형은 BP에서 전부 설정)
 	UPROPERTY(EditDefaultsOnly, Category = "Character Blueprint")
 	TMap<EPlayerCharacterClass, TSubclassOf<ADRCharacter>> CharacterBPClasses;
+
+	// 부품 운반 중(공격 불가) 조준선 텍스처 - 모든 플레이어 캐릭터 공통
+	UPROPERTY(EditDefaultsOnly, Category = "Common Class Defaults")
+	TObjectPtr<UTexture2D> CrosshairDisabledTexture;
 
 	FCharacterClassDefaultInfo GetClassDefaultInfo(EPlayerCharacterClass CharacterClass);
 };

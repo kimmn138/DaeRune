@@ -8,6 +8,7 @@
 
 class USphereComponent;
 class UAudioComponent;
+class UAnimMontage;
 
 /**
  * Rolling impact result data - collected by C++ collision detection, passed to GA (Blueprint).
@@ -124,6 +125,31 @@ protected:
 	UFUNCTION()
 	void OnRep_BallForm();
 
+	// ===== Form Change Transition Montages =====
+	// GA의 PlayMontage 노드는 서버(호스트)에서만 재생되므로, 원격 클라이언트에는
+	// StartFormChange()에서 MulticastPlayFormChangeMontage()로 동일 몽타주를 재생해준다.
+	// 두 메시(기본/볼) 모두 동시에 재생 — 전환 중 bIsBallForm 복제로 가시성이 바뀌어도 포즈가 이어지도록.
+
+	/** Basic mesh: Basic -> Ball transition montage */
+	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Form")
+	TObjectPtr<UAnimMontage> FormChangeToBallMontage_Basic;
+
+	/** Ball mesh: Basic -> Ball transition montage */
+	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Form")
+	TObjectPtr<UAnimMontage> FormChangeToBallMontage_Ball;
+
+	/** Basic mesh: Ball -> Basic transition montage */
+	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Form")
+	TObjectPtr<UAnimMontage> FormChangeToBasicMontage_Basic;
+
+	/** Ball mesh: Ball -> Basic transition montage */
+	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Form")
+	TObjectPtr<UAnimMontage> FormChangeToBasicMontage_Ball;
+
+	/** 원격 클라이언트에서 폼 체인지 전환 몽타주 재생 (서버는 GA가 직접 재생하므로 스킵) */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayFormChangeMontage(bool bToBallForm);
+
 	/** Ball form capsule radius */
 	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Form")
 	float BallFormCapsuleRadius = 40.f;
@@ -133,10 +159,14 @@ protected:
 	float BallFormCapsuleHalfHeight = 40.f;
 
 	/** Default capsule radius (saved in BeginPlay) */
-	float DefaultCapsuleRadius;
+	float DefaultCapsuleRadius = 0.f;
 
 	/** Default capsule half height (saved in BeginPlay) */
-	float DefaultCapsuleHalfHeight;
+	float DefaultCapsuleHalfHeight = 0.f;
+
+	/** 현재 폼(bIsBallForm)에 맞는 캡슐 크기 적용. 캡슐 크기는 복제되지 않으므로
+	    서버/클라이언트 모두 OnRep_BallForm 경로에서 이 함수로 동기화한다. */
+	void ApplyFormCapsuleSize();
 
 	// ===== Rolling Charge Config =====
 

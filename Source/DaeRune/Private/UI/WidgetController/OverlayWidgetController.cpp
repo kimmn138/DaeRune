@@ -37,6 +37,9 @@ void UOverlayWidgetController::BroadcastInitialValues()
 	{
 		OnPhase3TimerVisibilityChanged.Broadcast(false);
 	}
+
+	// 조준선 초기 상태 (현재 Carrying 태그 기준으로 강제 브로드캐스트)
+	UpdateCrosshairState(true);
 }
 
 void UOverlayWidgetController::BindCallbacksToDependencies()
@@ -191,6 +194,10 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 
 		// 스킬 차단 카운터 변화 → UI 재방송
 		GetDRASC()->OnBlockedAbilityTagsChanged.AddUObject(this, &UOverlayWidgetController::HandleBlockedTagsChanged);
+
+		// State.Carrying 태그 변화 → 조준선 상태 재계산 (서버는 SetCarryingState, 클라는 OnRep 의 Loose 태그 토글로 발화)
+		AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().State_Carrying, EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &UOverlayWidgetController::HandleCarryingTagChanged);
 
 		// GA 활성화/종료 시 InputTag 기반 Pressed/Released 재방송
 		// (PlayerController 직접 broadcast 는 차단 중 게이트로 막히는데, 큐잉되어 나중에 발동된 GA 의 시각 피드백을 여기서 보강)
@@ -547,6 +554,58 @@ void UOverlayWidgetController::BroadcastSkillIconWidgetClass()
 	{
 		OnSkillIconClassChanged.Broadcast(DefaultInfo.SkillIconWidgetClass);
 	}
+}
+
+void UOverlayWidgetController::BroadcastCrosshairImages()
+{
+	ADRPlayerState* PS = GetDRPS();
+	if (!PS) return;
+
+	UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(GetWorld());
+	if (!ClassInfo) return;
+
+	const FCharacterClassDefaultInfo DefaultInfo = ClassInfo->GetClassDefaultInfo(PS->GetSelectedPlayerClass());
+	OnCrosshairImagesChanged.Broadcast(
+		DefaultInfo.CrosshairTexture,
+		ClassInfo->CrosshairDisabledTexture,
+		DefaultInfo.CrosshairInstallReadyTexture);
+}
+
+void UOverlayWidgetController::NotifyCrosshairEnemyHit()
+{
+	OnCrosshairHitConfirmed.Broadcast();
+}
+
+void UOverlayWidgetController::SetCrosshairSiteDetected(bool bDetected)
+{
+	if (bCrosshairSiteDetected == bDetected) return;
+
+	bCrosshairSiteDetected = bDetected;
+	UpdateCrosshairState();
+}
+
+void UOverlayWidgetController::HandleCarryingTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
+{
+	// 부품을 내려놓으면(설치/드롭/사망) 사이트 감지 상태도 함께 초기화
+	if (NewCount <= 0)
+	{
+		bCrosshairSiteDetected = false;
+	}
+	UpdateCrosshairState();
+}
+
+void UOverlayWidgetController::UpdateCrosshairState(bool bForceBroadcast)
+{
+	EDRCrosshairState NewState = EDRCrosshairState::Normal;
+	if (AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Carrying))
+	{
+		NewState = bCrosshairSiteDetected ? EDRCrosshairState::InstallReady : EDRCrosshairState::Disabled;
+	}
+
+	if (!bForceBroadcast && NewState == CachedCrosshairState) return;
+
+	CachedCrosshairState = NewState;
+	OnCrosshairStateChanged.Broadcast(NewState);
 }
 
 void UOverlayWidgetController::BindCleanserSite(ADRCleanserSite* FirstCleanserSite,ADRCleanserSite* SecondCleanserSite)

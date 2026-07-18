@@ -11,6 +11,7 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FEffectRemovedSignature, const FGameplayTagC
 DECLARE_MULTICAST_DELEGATE(FAbilitiesGiven);
 DECLARE_DELEGATE_OneParam(FForEachAbility, const FGameplayAbilitySpec&);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnVendingMachineStacksChanged, int32 /*CurrentStacks*/, int32 /*MaxStacks*/);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnVacuumDashGaugeChanged, int32 /*CurrentGauge*/, int32 /*MaxGauge*/);
 // 차단된 AbilityTag 집합이 바뀌었음을 알리는 신호 (UI 슬롯이 각자 자기 태그 기준으로 재평가)
 DECLARE_MULTICAST_DELEGATE(FOnBlockedAbilityTagsChanged);
 // 어빌리티 활성화/종료 시 그 어빌리티의 InputTag 를 전달 (UI Pressed/Released 시각 피드백 보조용)
@@ -31,6 +32,7 @@ public:
 	FEffectRemovedSignature EffectRemovedDelegate;
 	FAbilitiesGiven AbilitiesGivenDelegate;
 	FOnVendingMachineStacksChanged OnVendingMachineStacksChanged;
+	FOnVacuumDashGaugeChanged OnVacuumDashGaugeChanged;
 	// BlockAbilitiesWithTag 카운터가 바뀌었을 가능성이 있을 때 발화 (UI 재평가용)
 	FOnBlockedAbilityTagsChanged OnBlockedAbilityTagsChanged;
 	// GA 가 실제로 활성화될 때 그 어빌리티의 InputTag 와 함께 발화 (큐잉된 입력 활성화 시 UI 피드백 보강용)
@@ -68,6 +70,9 @@ public:
 
 	void NotifyVendingMachineStacksChanged(int32 CurrentStacks, int32 MaxStacks);
 
+	// 청소기 돌진 게이지 변경 통지 (서버 GA → 소유 클라 UI, Plan3 §9.2)
+	void NotifyVacuumDashGaugeChanged(int32 CurrentGauge, int32 MaxGauge);
+
 protected:
 	// InputTag → AbilitySpecHandle 캐시 (성능 최적화)
 	UPROPERTY()
@@ -99,4 +104,8 @@ protected:
 	// 자판기 잭팟 스택 변경을 클라이언트에 전달
 	UFUNCTION(Client, Reliable)
 	void ClientVendingMachineStacksChanged(int32 CurrentStacks, int32 MaxStacks);
+
+	// 청소기 돌진 게이지 변경을 클라이언트에 전달
+	UFUNCTION(Client, Reliable)
+	void ClientVacuumDashGaugeChanged(int32 CurrentGauge, int32 MaxGauge);
 };

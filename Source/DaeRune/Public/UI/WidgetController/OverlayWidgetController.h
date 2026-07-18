@@ -65,6 +65,22 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAbilityInputReleasedSignature, FG
 // 스킬 슬롯 차단 상태 재평가 트리거 (각 슬롯이 자기 AbilityTag 기준으로 IsAbilityBlockedNow 호출)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAbilityBlockStateDirtySignature);
 
+// 조준선 상태 (상태별 텍스처는 OnCrosshairImagesChanged 로 전달)
+UENUM(BlueprintType)
+enum class EDRCrosshairState : uint8
+{
+	Normal,			// 기본 (캐릭터 전용 조준선)
+	Disabled,		// 부품 운반 중 - 공격 불가 (전 캐릭터 공통 이미지)
+	InstallReady	// 부품 운반 중 + 설치 가능한 사이트 조준 중 (캐릭터 전용 이미지)
+};
+
+// 조준선 텍스처 세트 전달 델리게이트 (캐릭터 클래스 확정/변경 시 1회 브로드캐스트)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnCrosshairImagesChangedSignature, UTexture2D*, NormalTexture, UTexture2D*, DisabledTexture, UTexture2D*, InstallReadyTexture);
+// 조준선 상태 변경 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCrosshairStateChangedSignature, EDRCrosshairState, NewState);
+// 적 타격 확인 델리게이트 (위젯이 히트마커 이미지 표시 + 애니메이션 재생)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCrosshairHitConfirmedSignature);
+
 /**
  * ���� ���� UI �������̸� �����ϴ� ��Ʈ�ѷ�
  */
@@ -181,7 +197,42 @@ public:
 	// 캐릭터 클래스에 맞는 스킬아이콘 위젯 클래스를 브로드캐스트
 	void BroadcastSkillIconWidgetClass();
 
+	// ========== 조준선 ==========
+
+	// 조준선 텍스처 세트 (기본=캐릭터 전용, 비활성=공통, 설치 가능=캐릭터 전용)
+	UPROPERTY(BlueprintAssignable, Category = "UI|Crosshair")
+	FOnCrosshairImagesChangedSignature OnCrosshairImagesChanged;
+
+	// 조준선 상태 변경 (Normal / Disabled / InstallReady)
+	UPROPERTY(BlueprintAssignable, Category = "UI|Crosshair")
+	FOnCrosshairStateChangedSignature OnCrosshairStateChanged;
+
+	// 적 타격 확인 (위젯: 히트마커 표시 + 애니메이션 재생)
+	UPROPERTY(BlueprintAssignable, Category = "UI|Crosshair")
+	FOnCrosshairHitConfirmedSignature OnCrosshairHitConfirmed;
+
+	// 캐릭터 클래스에 맞는 조준선 텍스처 세트를 브로드캐스트 (HUD 초기화 시 호출)
+	void BroadcastCrosshairImages();
+
+	// 적 타격 확인 알림 (PlayerController 의 데미지 확인 Client RPC 에서 호출)
+	void NotifyCrosshairEnemyHit();
+
+	// 설치 가능 사이트 라인트레이스 감지 변화 알림 (PlayerController 로컬 감지에서 호출)
+	void SetCrosshairSiteDetected(bool bDetected);
+
 private:
+	// State.Carrying 태그 변화 콜백 (부품 픽업/드롭/설치 시 조준선 상태 재계산)
+	void HandleCarryingTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+
+	// 현재 조건으로 조준선 상태 재계산 후 변경 시에만 브로드캐스트
+	void UpdateCrosshairState(bool bForceBroadcast = false);
+
+	// 부품 운반 중 설치 가능한 사이트를 조준하고 있는지 (로컬 라인트레이스 결과)
+	bool bCrosshairSiteDetected = false;
+
+	// 마지막으로 브로드캐스트한 조준선 상태 (중복 방송 방지)
+	EDRCrosshairState CachedCrosshairState = EDRCrosshairState::Normal;
+
 	// 차단 카운터 변화 콜백 → OnAbilityBlockStateDirty 재방송
 	void HandleBlockedTagsChanged();
 

@@ -16,6 +16,8 @@
 #include "Actor/DRWaitingRoomCameraActor.h"
 #include "Tutorial/DRTutorialManager.h"
 #include "Character/DRCharacter.h"
+#include "Character/DREnemy.h"
+#include "Character/DRRobotVacuumCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "Game/DRStageGameMode.h"
 #include "Phase/DRPhase3.h"
@@ -53,6 +55,19 @@ void ADRPlayerController::CorruptedStateChanged(bool bIsStateChanged)
 
 void ADRPlayerController::ShowDamageNumber_Implementation(float DamageAmount, ACharacter* TargetCharacter)
 {
+	// 내가 적을 타격한 경우 조준선 히트마커 표시
+	// (타겟이 플레이어인 경우는 내가 피격당한 폴백 경로이므로 제외)
+	if (IsValid(TargetCharacter) && IsLocalController() && Cast<ADREnemy>(TargetCharacter))
+	{
+		if (ADRHUD* DRHUD = GetHUD<ADRHUD>())
+		{
+			if (UOverlayWidgetController* OverlayWC = DRHUD->GetOverlayWidgetControllerCached())
+			{
+				OverlayWC->NotifyCrosshairEnemyHit();
+			}
+		}
+	}
+
 	if (IsValid(TargetCharacter) && DamageTextComponentClass && IsLocalController())
 	{
 		// 만료된(BP 애니메이션 종료 후 파괴된) 항목 정리
@@ -142,6 +157,26 @@ void ADRPlayerController::SetCurrentDetectedInteractable(AActor* NewDetected, TO
 	{
 		NewInteractable->SetInteractionUIVisible(true);
 	}
+
+	// 사이트 감지 슬롯의 변화면 조준선 상태 갱신 (설치 가능 조준선 표시/해제)
+	// 라인트레이스 갱신/오버랩 이탈 등 모든 감지 변경 경로가 이 함수를 지나므로 여기서 일괄 처리
+	if (&CurrentDetected == &CurrentOverlappedSite)
+	{
+		NotifyCrosshairSiteDetected(CurrentDetected != nullptr);
+	}
+}
+
+void ADRPlayerController::NotifyCrosshairSiteDetected(bool bDetected)
+{
+	if (!IsLocalController()) return;
+
+	if (ADRHUD* DRHUD = GetHUD<ADRHUD>())
+	{
+		if (UOverlayWidgetController* OverlayWC = DRHUD->GetOverlayWidgetControllerCached())
+		{
+			OverlayWC->SetCrosshairSiteDetected(bDetected);
+		}
+	}
 }
 
 ADRCleanserPart* ADRPlayerController::FindPartByLineTrace()
@@ -193,6 +228,96 @@ void ADRPlayerController::ClientShowPartPickupUI_Implementation()
 void ADRPlayerController::SetSiteDetectionEnabled(bool bEnabled, ADRCleanserSite* Site)
 {
 	SetInteractableDetectionEnabled(bEnabled, Site, OverlappedSites, bSiteDetectionEnabled, CurrentOverlappedSite);
+}
+
+void ADRPlayerController::SetMountDetectionEnabled(bool bEnabled, ADRRobotVacuumCharacter* Mount)
+{
+	if (!Mount) return;
+
+	if (bEnabled)
+	{
+		LineTraceTimer = 0.f;
+	}
+	SetInteractableDetectionEnabled(bEnabled, Mount, OverlappedMounts, bMountDetectionEnabled, CurrentDetectedMount);
+}
+
+ADRRobotVacuumCharacter* ADRPlayerController::FindMountByLineTrace()
+{
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter) return nullptr;
+
+	// 부품 소지 중에는 탑승 불가(F키 의미 충돌), 이미 탑승 중이면 감지 불필요
+	if (DRCharacter->IsCarryingPart() || DRCharacter->IsMounted()) return nullptr;
+
+	UCameraComponent* Camera = DRCharacter->GetFollowCamera();
+	if (!Camera) return nullptr;
+
+	const FVector Start = Camera->GetComponentLocation();
+	const FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
+
+	// 멀티 라인트레이스: 다른 액터에 일부 가려져도 청소기를 찾을 수 있도록 모든 히트 검사.
+	// 채널(Visibility) 트레이스는 캐릭터를 못 맞춘다 — 캡슐(Pawn 프리셋)은 Visibility를 Ignore하고,
+	// 스켈레탈 메시 히트는 피직스 에셋 유무에 좌우된다. Pawn "오브젝트 타입" 쿼리는 응답 설정과
+	// 무관하게 캡슐을 맞추므로 청소기 감지가 메시 콜리전 세팅에 의존하지 않는다.
+	TArray<FHitResult> HitResults;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(DRCharacter);
+
+	FCollisionObjectQueryParams ObjectParams;
+	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
+
+	GetWorld()->LineTraceMultiByObjectType(
+		HitResults,
+		Start,
+		End,
+		ObjectParams,
+		QueryParams
+	);
+
+	for (const FHitResult& Hit : HitResults)
+	{
+		ADRRobotVacuumCharacter* HitVacuum = Cast<ADRRobotVacuumCharacter>(Hit.GetActor());
+		if (HitVacuum &&
+			OverlappedMounts.Contains(HitVacuum) &&
+			!HitVacuum->bDead &&
+			HitVacuum->RiderOnTop == nullptr) // 이미 라이더가 있으면 프롬프트도 안 띄움 (서버가 최종 검증)
+		{
+			return HitVacuum;
+		}
+	}
+
+	return nullptr;
+}
+
+void ADRPlayerController::ServerRequestDismount_Implementation()
+{
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter || !DRCharacter->IsMounted()) return;
+	if (!IsValid(DRCharacter->MountedOn)) return;
+
+	DRCharacter->MountedOn->DismountRider(true);
+}
+
+void ADRPlayerController::ServerSetMountedYaw_Implementation(float NewYaw)
+{
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter || !DRCharacter->IsMounted()) return;
+
+	// 서버 액터 요 갱신 → AttachmentReplication 상대 회전으로 다른 클라이언트에 전파
+	DRCharacter->SetActorRotation(FRotator(0.f, NewYaw, 0.f));
+}
+
+void ADRPlayerController::ServerRequestDashBrake_Implementation()
+{
+	// 서버 재검증: 실제 지속 돌진 중인 청소기만 브레이크 이벤트 전달
+	ADRRobotVacuumCharacter* Vacuum = GetPawn<ADRRobotVacuumCharacter>();
+	if (!Vacuum || !Vacuum->bSustainedDash || Vacuum->bDead) return;
+
+	FGameplayEventData EventData;
+	EventData.Instigator = Vacuum;
+	EventData.Target = Vacuum;
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+		Vacuum, FDRGameplayTags::Get().Event_Dash_Brake, EventData);
 }
 
 ADRCleanserSite* ADRPlayerController::FindSiteByLineTrace()
@@ -271,6 +396,19 @@ void ADRPlayerController::ServerRequestInteract_Implementation(AActor* Interacta
 		if (!Site->IsOverlappingActor(DRCharacter)) return;
 
 		Site->InstallPart(DRCharacter);
+		return;
+	}
+
+	// 로봇 청소기 탑승 요청 (Plan3 §5.2)
+	if (ADRRobotVacuumCharacter* Mount = Cast<ADRRobotVacuumCharacter>(Interactable))
+	{
+		// 서버 측 검증: 라이더 유무/중복 탑승/순환/사망/부품/스턴 (CanBeMountedBy) + 거리
+		if (!Mount->CanBeMountedBy(DRCharacter)) return;
+
+		const float DistSq = FVector::DistSquared(DRCharacter->GetActorLocation(), Mount->GetActorLocation());
+		if (DistSq > FMath::Square(MaxInteractDistance)) return;
+
+		Mount->MountRider(DRCharacter);
 	}
 }
 
@@ -490,8 +628,25 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 	// 로컬 컨트롤러에서만 라인트레이스 실행
 	if (!IsLocalController()) return;
 
-	// 둘 다 비활성화면 스킵
-	if (!bPartDetectionEnabled && !bSiteDetectionEnabled) return;
+	// 탑승 중 요 동기화: MOVE_None이라 CMC 무브가 요를 서버로 안 나르므로 주기적으로 직접 전송 (클라 전용)
+	if (!HasAuthority())
+	{
+		const ADRCharacter* MountedChar = GetPawn<ADRCharacter>();
+		if (MountedChar && MountedChar->IsMounted())
+		{
+			MountedYawSyncTimer += DeltaTime;
+			const float ControlYaw = GetControlRotation().Yaw;
+			if (MountedYawSyncTimer >= 0.1f && !FMath::IsNearlyEqual(ControlYaw, LastSentMountedYaw, 0.5f))
+			{
+				MountedYawSyncTimer = 0.f;
+				LastSentMountedYaw = ControlYaw;
+				ServerSetMountedYaw(ControlYaw);
+			}
+		}
+	}
+
+	// 전부 비활성화면 스킵
+	if (!bPartDetectionEnabled && !bSiteDetectionEnabled && !bMountDetectionEnabled) return;
 
 	LineTraceTimer += DeltaTime;
 	if (LineTraceTimer >= LineTraceUpdateInterval)
@@ -508,6 +663,12 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 		if (bSiteDetectionEnabled)
 		{
 			SetCurrentDetectedInteractable(FindSiteByLineTrace(), CurrentOverlappedSite);
+		}
+
+		// 청소기 탑승 라인트레이스
+		if (bMountDetectionEnabled)
+		{
+			SetCurrentDetectedInteractable(FindMountByLineTrace(), CurrentDetectedMount);
 		}
 	}
 }
@@ -665,7 +826,14 @@ void ADRPlayerController::HandleCharacterInfoPressed()
 
 	// 입력 모드는 변경하지 않음 — GameOnly 유지로 Tab Hold 중에도 이동/조작 가능.
 	// 위젯 자체도 IsFocusable=false로 두어 Tab 키 이벤트가 컨트롤러로 그대로 흐르게 함.
-	DRHUD->ShowCharacterInfo(GetCachedSelectedClass());
+	// CachedSelectedClass는 서버에서만 갱신되는 비복제 캐시이므로 클라이언트 UI 소스로 쓸 수 없음.
+	// 복제되는 PlayerState 값을 우선 사용하고, PlayerState 미도착 시에만 캐시로 폴백.
+	EPlayerCharacterClass SelectedClass = GetCachedSelectedClass();
+	if (const ADRPlayerState* DRPS = GetPlayerState<ADRPlayerState>())
+	{
+		SelectedClass = DRPS->GetSelectedPlayerClass();
+	}
+	DRHUD->ShowCharacterInfo(SelectedClass);
 	bIsCharacterInfoVisible = true;
 
 	// 튜토리얼 중에는 매니저에 보고
@@ -856,6 +1024,21 @@ void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 	// 占쏙옙占쏙옙 占싱듸옙 占쌉뤄옙 占쏙옙占쏙옙
 	if (APawn* ControlledPawn = GetPawn<APawn>())
 	{
+		// 탑승 중 이동 차단 (시점 회전은 Look에서 계속 허용, Plan3 §5.2)
+		if (ADRCharacter* DRChar = Cast<ADRCharacter>(ControlledPawn))
+		{
+			if (DRChar->IsMounted()) return;
+		}
+
+		// 지속 돌진 중 후진 입력 = 브레이크 요청 (Plan3 §8.2 — 서버가 재검증 후 GA에 이벤트 전달)
+		if (ADRRobotVacuumCharacter* Vacuum = Cast<ADRRobotVacuumCharacter>(ControlledPawn))
+		{
+			if (Vacuum->bSustainedDash && InputAxisVector.Y < -0.5f)
+			{
+				ServerRequestDashBrake();
+			}
+		}
+
 		ControlledPawn->AddMovementInput(ForwardDirection, InputAxisVector.Y);
 		ControlledPawn->AddMovementInput(RightDirection, InputAxisVector.X);
 	}
@@ -881,6 +1064,16 @@ void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
 {
 	if (bIsSpectating) return;
 	
+	// 탑승 중이면 점프키 = 하차 (Plan3 §5.3)
+	if (ADRCharacter* DRChar = GetPawn<ADRCharacter>())
+	{
+		if (DRChar->IsMounted())
+		{
+			ServerRequestDismount();
+			return;
+		}
+	}
+
 	// 占쏙옙占쏙옙 占쏙옙占쏙옙
 	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>()))
 	{
@@ -902,10 +1095,13 @@ void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 void ADRPlayerController::HandleInteract()
 {
 	if (bIsSpectating) return;
-	
+
 	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
 	if (!DRCharacter) return;
-	
+
+	// 이미 탑승 중이면 F키 무시 (하차는 점프키, Plan3 §5.1)
+	if (DRCharacter->IsMounted()) return;
+
 	// 遺?덉쓣 ?ㅺ퀬 ?덉? ?딆쓣 ?뚮쭔 遺???띾뱷 ?쒕룄
 	if (!DRCharacter->IsCarryingPart() && CurrentDetectedPart)
 	{
@@ -929,7 +1125,14 @@ void ADRPlayerController::HandleInteract()
 			return;
 		}
 	}
-	
+
+	// 부품 미소지 && 탑승 후보 감지 → 탑승 요청 (Plan3 §5.1)
+	if (!DRCharacter->IsCarryingPart() && CurrentDetectedMount)
+	{
+		ServerRequestInteract(CurrentDetectedMount);
+		return;
+	}
+
 	OnInteractPressed.Broadcast();
 }
 
@@ -1406,6 +1609,22 @@ void ADRPlayerController::ExecuteCameraTransitionToCharacter()
 void ADRPlayerController::HandlePossessedPawnChanged(APawn* PreviousPawn, APawn* NewPawn)
 {
 	if (!NewPawn) return;
+
+	// 캐릭터별 상하 시야각 제한 — 청소기만 ±ViewPitchLimit(기본 30도), 그 외 캐릭터는 기본값 복원.
+	// OnPossessedPawnChanged는 서버·소유 클라 양쪽에서 발화하고, 카메라 클램프는 로컬 카메라 매니저에만 의미가 있다.
+	if (PlayerCameraManager)
+	{
+		if (const ADRRobotVacuumCharacter* Vacuum = Cast<ADRRobotVacuumCharacter>(NewPawn))
+		{
+			PlayerCameraManager->ViewPitchMin = -Vacuum->ViewPitchLimit;
+			PlayerCameraManager->ViewPitchMax = Vacuum->ViewPitchLimit;
+		}
+		else
+		{
+			PlayerCameraManager->ViewPitchMin = -ViewPitchMin;
+			PlayerCameraManager->ViewPitchMax = ViewPitchMax;
+		}
+	}
 
 	// ViewTarget 복원 대기 중이었으면 즉시 복원 (기존 0.5초 재시도 타이머 대체)
 	if (bPendingViewTargetRestore)

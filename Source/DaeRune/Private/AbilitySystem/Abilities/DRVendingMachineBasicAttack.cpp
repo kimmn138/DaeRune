@@ -189,32 +189,3 @@ float UDRVendingMachineBasicAttack::GetCurrentFireInterval() const
 	const float SpeedMultiplier = 1.0f + (BuffStacks * 0.2f);
 	return BaseFireInterval / SpeedMultiplier;
 }
-
-FVector UDRVendingMachineBasicAttack::CalculateTargetLocation() const
-{
-	const AActor* AvatarActor = GetAvatarActorFromActorInfo();
-	if (!AvatarActor) return FVector::ZeroVector;
-
-	const APawn* AvatarPawn = Cast<APawn>(AvatarActor);
-	if (!AvatarPawn) return AvatarActor->GetActorLocation() + AvatarActor->GetActorForwardVector() * 5000.f;
-
-	const APlayerController* PC = Cast<APlayerController>(AvatarPawn->GetController());
-	if (!PC) return AvatarActor->GetActorLocation() + AvatarActor->GetActorForwardVector() * 5000.f;
-
-	FVector CameraLocation;
-	FRotator CameraRotation;
-	PC->GetPlayerViewPoint(CameraLocation, CameraRotation);
-
-	const FVector TraceEnd = CameraLocation + CameraRotation.Vector() * 10000.f;
-
-	FHitResult HitResult;
-	FCollisionQueryParams Params;
-	Params.AddIgnoredActor(AvatarActor);
-
-	if (GetWorld()->LineTraceSingleByChannel(HitResult, CameraLocation, TraceEnd, ECC_Visibility, Params))
-	{
-		return HitResult.ImpactPoint;
-	}
-
-	return TraceEnd;
-}

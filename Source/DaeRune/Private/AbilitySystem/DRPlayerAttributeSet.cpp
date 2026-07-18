@@ -194,6 +194,13 @@ void UDRPlayerAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 	{
 		Debuff(Props);
 	}
+
+	// 탑승 데미지 공유 (Plan3 §5.4): 마운트 링크 위/아래 1홉으로 전파.
+	// MountShared 태그가 붙은 데미지는 PropagateSharedDamage 내부에서 재전파가 차단된다.
+	if (ADRCharacter* MountLinkedCharacter = Cast<ADRCharacter>(Props.TargetAvatarActor))
+	{
+		MountLinkedCharacter->PropagateSharedDamage(LocalIncomingDamage, Props.EffectContextHandle);
+	}
 }
 
 void UDRPlayerAttributeSet::ProcessCorruptedDamage(const FEffectProperties& Props, float Damage)

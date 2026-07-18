@@ -28,6 +28,8 @@
 #include "Game/DRLobbyGameState.h"
 #include "Game/DRTutorialGameMode.h"
 #include "Character/DRFacialExpressionComponent.h"
+#include "Character/DRRobotVacuumCharacter.h"
+#include "DRAbilityTypes.h"
 #include "DRAssetManager.h"
 #include "Sound/DRSoundDataAsset.h"
 #include "Kismet/GameplayStatics.h"
@@ -37,6 +39,10 @@
 
 ADRCharacter::ADRCharacter()
 {
+	// 아군 판정용 액터 태그 — UDRAbilitySystemLibrary::IsNotFriend가 "Player" 태그 쌍으로 아군을 판정한다.
+	// BP마다 수동 추가에 의존하면 새 클래스(BP_DRVacuumCleaner 등)에서 누락 시 아군 오사(誤射)가 발생 (Plan3 §15.4)
+	Tags.AddUnique(FName("Player"));
+
 	// �̵� �������� ȸ�� ����
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 400.f, 0.f);
@@ -116,6 +122,9 @@ void ADRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ADRCharacter, CarriedPart);
 	DOREPLIFETIME(ADRCharacter, PlayerCharacterClass);
 
+	// 탑승 시스템 (라이더 측)
+	DOREPLIFETIME(ADRCharacter, MountedOn);
+
 	// WaterPump 3P 빔 리플리케이트
 	DOREPLIFETIME(ADRCharacter, bWaterPumpActive);
 	DOREPLIFETIME_CONDITION(ADRCharacter, WaterPumpBeamEndPoint, COND_SkipOwner);
@@ -123,6 +132,126 @@ void ADRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 
 	// 사망 몽타주 인덱스 (서버 결정, 모든 클라이언트 동일 인덱스 재생)
 	DOREPLIFETIME(ADRCharacter, DeathMontageIndex);
+}
+
+void ADRCharacter::OnRep_MountedOn()
+{
+	// 클라이언트 보정: 액터 attach는 AttachmentReplication으로 복제되지만
+	// CMC를 가진 Character는 클라 CMC가 위치를 덮어쓸 수 있어 이동모드/attach를 직접 맞춘다 (Plan3 §5.2)
+	if (MountedOn)
+	{
+		GetCharacterMovement()->SetMovementMode(MOVE_None);
+		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+
+		if (GetAttachParentActor() != MountedOn)
+		{
+			AttachToMountSocket(MountedOn);
+		}
+	}
+	else
+	{
+		if (GetAttachParentActor())
+		{
+			DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		}
+
+		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+
+		// 하차 후 이동 복구 (서버는 DismountRider에서 MOVE_Falling 설정)
+		if (GetCharacterMovement()->MovementMode == MOVE_None)
+		{
+			GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+		}
+	}
+}
+
+void ADRCharacter::AttachToMountSocket(ADRRobotVacuumCharacter* Mount)
+{
+	if (!Mount || !Mount->GetMesh()) return;
+
+	if (!Mount->GetMesh()->DoesSocketExist(Mount->RideSocketName))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ADRCharacter::AttachToMountSocket: 마운트 메시에 '%s' 소켓이 없습니다 — 메시 루트에 부착됩니다."),
+			*Mount->RideSocketName.ToString());
+	}
+
+	// 부모 = 청소기 캡슐(루트). 캐릭터 캡슐은 요만 돌고 절대 기울지 않으므로
+	// 본 소켓을 부모로 삼을 때처럼 애니메이션 회전이 라이더 자세에 새어들 수 없다.
+	// 지상과 동일하게 bUseControllerRotationYaw가 몸의 좌우 회전을 소유한다.
+	AttachToComponent(Mount->GetCapsuleComponent(), FAttachmentTransformRules::KeepWorldTransform);
+
+	// 탑승 자세 초기화: 피치/롤 제거, 요만 유지 (똑바로 서기)
+	SetActorRotation(FRotator(0.f, GetActorRotation().Yaw, 0.f));
+
+	// 발이 소켓 위에 오도록 초기 위치 세팅 — 이후는 청소기 Tick이 매 프레임 소켓 위치로 갱신
+	SetActorLocation(Mount->GetMesh()->GetSocketLocation(Mount->RideSocketName) + FVector(0.f, 0.f, GetMountZOffset()));
+}
+
+float ADRCharacter::GetMountZOffset() const
+{
+	// 정렬 소켓이 있으면 그 소켓의 액터 공간 높이로 탑승 높이 결정 (예: 발바닥 소켓 Z=-88 → 88만큼 올림).
+	// XY는 무시 — 회전축(캡슐 수직축)이 항상 좌석 위에 있어야 제자리 회전이 된다.
+	if (GetMesh() && !MountAlignSocketName.IsNone() && GetMesh()->DoesSocketExist(MountAlignSocketName))
+	{
+		return -GetMesh()->GetSocketTransform(MountAlignSocketName, RTS_Actor).GetLocation().Z;
+	}
+	return GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+}
+
+void ADRCharacter::PropagateSharedDamage(float Damage, const FGameplayEffectContextHandle& SourceContext)
+{
+	if (!HasAuthority() || Damage <= 0.f) return;
+
+	// 재전파 방지: 이미 마운트 공유로 들어온 데미지는 다시 퍼뜨리지 않는다 (Plan3 §5.4)
+	if (UDRAbilitySystemLibrary::GetSourceAbilityTags(SourceContext).HasTag(FDRGameplayTags::Get().Damage_MountShared))
+	{
+		return;
+	}
+
+	// 전파 대상 = 직접 연결된 위/아래 1홉 (내가 탄 청소기 + 내 위의 라이더)
+	TArray<ADRCharacter*> LinkedCharacters;
+	if (IsValid(MountedOn))
+	{
+		LinkedCharacters.Add(MountedOn);
+	}
+	if (const ADRRobotVacuumCharacter* SelfVacuum = Cast<ADRRobotVacuumCharacter>(this))
+	{
+		if (IsValid(SelfVacuum->RiderOnTop))
+		{
+			LinkedCharacters.Add(SelfVacuum->RiderOnTop);
+		}
+	}
+	if (LinkedCharacters.IsEmpty()) return;
+
+	if (!MountSharedDamageEffectClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PropagateSharedDamage: MountSharedDamageEffectClass 미설정 (%s BP에서 GE_Damage 지정 필요)"), *GetName());
+		return;
+	}
+
+	UAbilitySystemComponent* SelfASC = GetAbilitySystemComponent();
+	if (!SelfASC) return;
+
+	const FDRGameplayTags& DRTags = FDRGameplayTags::Get();
+	for (ADRCharacter* Linked : LinkedCharacters)
+	{
+		if (Linked->bDead) continue;
+
+		UAbilitySystemComponent* LinkedASC = Linked->GetAbilitySystemComponent();
+		if (!LinkedASC) continue;
+
+		// Source = 원 피격자 ASC (플레이어→플레이어라 물 보상/킬크레딧 왜곡 없음)
+		FDamageEffectParams Params;
+		Params.WorldContextObject = this;
+		Params.DamageGameplayEffectClass = MountSharedDamageEffectClass;
+		Params.SourceAbilitySystemComponent = SelfASC;
+		Params.TargetAbilitySystemComponent = LinkedASC;
+		Params.BaseDamage = Damage;
+		Params.DamageType = DRTags.Damage_Physical;
+		Params.SourceAbilityTags.AddTag(DRTags.Damage_MountShared);
+
+		UDRAbilitySystemLibrary::ApplyDamageEffect(Params);
+	}
 }
 
 void ADRCharacter::PossessedBy(AController* NewController)
@@ -610,6 +739,12 @@ void ADRCharacter::BeginPlay()
 
 void ADRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	// 탑승 중 레벨 전환/파괴 시 마운트 링크 정리 (Plan3 §5.5)
+	if (HasAuthority() && IsMounted() && IsValid(MountedOn))
+	{
+		MountedOn->DismountRider(false);
+	}
+
 	// 타이머 정리 (메모리 누수 방지)
 	if (UWorld* World = GetWorld())
 	{
@@ -891,6 +1026,12 @@ void ADRCharacter::MulticastPlayHitReactFacial_Implementation()
 
 void ADRCharacter::MulticastHandleDeath_Implementation(const FVector& DeathImpulse)
 {
+	// 탑승 중 사망: 죽기 전에 마운트 링크 해제 (서버 경로에서만, Plan3 §5.5)
+	if (HasAuthority() && IsMounted() && IsValid(MountedOn))
+	{
+		MountedOn->DismountRider(false);
+	}
+
 	// 서버에서만 사망 몽타주 인덱스 결정.
 	// Super 호출 전이어야 OnRep_Dead 수동 호출 시점에 인덱스가 채워져 있음.
 	if (HasAuthority() && DeathMontages.Num() > 0)

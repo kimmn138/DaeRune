@@ -96,6 +96,7 @@ UDRGameplayAbility            (StartupInputTag, WaterCost, CheckCost/ApplyCost �
 - `WBP_SkillIcons_RobotVacuum`, `WBP_CharacterInfo_RobotVacuum` (Tab 설명창), 탑승 프롬프트 위젯(WBP_InteractionPrompt 재사용)
 - 사운드/나이아가라: 충전 루프, 발사(단계별), 물 분사 점프, 돌진 루프, 충돌 임팩트
 - **애니메이션**: `ABP_VacuumCleaner`, `BS_VC_Walk`, `AO_VC_Aim`, 몽타주 5종(`AM_VC_HitReact` / `AM_VC_Death` / `AM_VC_EnhancedAttack` / `AM_VC_Dash_Stop` / `AM_VC_Dash_Crush`) — **상세 설계는 §13**
+- **라이더 착석 애니메이션**: 탑승자 하체 착석 표현 — 기존 클래스 ABP(`ABP_Gardener`, `ABP_VendingMachine`) 수정 + 착석 루프 시퀀스 — **상세 설계는 §14**
 
 ---
 
@@ -451,8 +452,8 @@ private:
 ```
 - **충전 (서버 타이머, 0.5초)** `TickCharge()`:
   1. `Gauge >= MaxGauge`면 대기(추가 소모 없음).
-  2. 물 20 확인: `UDRAttributeSet::GetWater() >= WaterPerGauge` — 부족하면 충전 일시 정지(게이지 유지, 다음 틱 재시도).
-  3. 충분하면 `ApplyEffectSpecWithSetByCaller(ASC, WaterCostSpec, Water_SetByCaller_Reduction, -20)` (기존 물 감소 GE 재사용), `Gauge++`, `OnGaugeChanged` + ASC 노티파이(§9.2).
+  2. 지불 가능 확인: 물이 20 미만이면 부족분 ×0.5를 체력으로 대납(`ExecCalc_WaterCost` 규칙). 체력마저 부족하면(지불 시 0 이하 — `CheckCost`와 동일 판정) 충전 일시 정지(게이지 유지, 다음 틱 재시도).
+  3. 지불 가능하면 `ApplyEffectSpecWithSetByCaller(ASC, ChargeCostSpec, Cost_Water, +20)` — `ChargeCostEffect`(ExecCalc_WaterCost 실행 GE, `GE_Cost_*` 관례)가 물/체력 배분을 처리, `Gauge++`, `OnGaugeChanged` + ASC 노티파이(§9.2).
   - 충전 중 이동 제한 없음(요구사항). 이동속도 페널티도 없음.
 - **해소** `ReleaseGauge()` (서버):
   - `Gauge == 0` → 그냥 `EndAbility`.
@@ -722,6 +723,123 @@ FOnVacuumGaugeChanged OnVacuumChargeStageChanged;
 - **Death는 SM 상태로 만들지 않는다.** `PlayDeathMontage_Internal()`이 `StopAllMontages(0.1)` 후 몽타주를 재생하고(`DRCharacter.cpp:946-948`), 베이스가 `VisibilityBasedAnimTickOption = AlwaysTickPoseAndRefreshBones`로 바꿔 오프스크린에서도 재생을 보장한다. 몽타주 종료 후는 Dissolve → Destroy 흐름이라 SM 복귀 상태가 필요 없음. `bDead` 동안 `AimAlpha = 0`으로 조준만 차단.
 - Walk의 4방향 커버리지: `Direction`이 대각(-45° 등)일 때 블렌드스페이스가 Forward/Left를 자동 보간. 후방 대각(±135°)은 Backward와 L/R 사이 보간 — 어색하면 샘플 위치를 ±150으로 조정.
 
+#### 13.4.3 노드 단위 구성 가이드 ★ (2026-07-14 에셋 실측 기반 — 13.4.1~2와 충돌 시 이 절이 우선)
+
+> `ABP_Gardener`·VC 애님 에셋들의 실제 내부 구조(uasset 파싱)를 기준으로 작성. **현재 `ABP_VacuumCleaner`는 Event Graph(변수 수집)까지 완성, AnimGraph는 Output Pose 노드만 있는 빈 상태**다. 이 절만 보고 AnimGraph를 끝까지 배선할 수 있게 쓴다.
+
+##### (0) 실측으로 확정된 사실 — 13.4.1~2 원안에서 바뀌는 것
+
+| 항목 | 원안(§13.2/13.4) | 실측 (실제 에셋) | 결론 |
+|---|---|---|---|
+| 걷기 블렌드스페이스 | `BS_VC_Walk` 1D, 축 `Direction`[-180,180], 샘플 5개 | **`BC_VC_Walk` 2D** (`/Script/Engine.BlendSpace`), 축 `MoveForward` / `MoveRight`, 샘플 4개(F/B/L/R) — **Gardener `BS_Walk`와 동일 구성** | 2D 그대로 사용. Walk 상태에서 X/Y 핀에 `RightDirection`/`ForwardDirection` 바인딩 (Gardener 방식) |
+| 걷기 입력 변수 | `Speed`+`Direction`(Calculate Direction) | ABP에 이미 `ForwardDirection`/`RightDirection` 구현됨 — `Dot(Normal(Velocity), GetActorForwardVector/RightVector)` ∈ [-1,1] | 그대로 사용. `Calculate Direction` 불필요 |
+| 낙하 변수 | `bIsFalling` | 이미 **`bIsInAir`** 라는 이름으로 구현됨 | 전이 조건에 `bIsInAir` 사용 |
+| 탑승 변수 | `bIsBoarded` | 이미 **`bIsBordered`** 라는 이름으로 구현됨 (`RiderOnTop != nullptr`, NotEqual 노드 확인) | 오타지만 동작 무관 — 그대로 사용 (이름 바꾸면 바인딩 재작업) |
+| AimOffset | 사전작업 필요(Additive 설정) | **설정 완료**: `AO_VC_Aim`(1D, 축 `Pitch`) + 시퀀스 3종 `AAT_RotationOffsetMeshSpace` / `ABPT_RefPose` | 사전작업 없음. 바로 노드 배치 |
+| AimAlpha | float 변수 + FInterpTo(5.0) | Gardener는 AO 노드의 **Alpha Input Type=Bool + AlphaBoolBlend**(내장 블렌드) 사용 | Bool 방식 채택 — float 변수/보간 로직 불필요 (아래 (2)) |
+| 몽타주 5종 | 생성 예정 | **5종 모두 생성 완료** (`AM_VC_*`, 슬롯 DefaultSlot, `TP/` 폴더) | 등록만 하면 됨 |
+| 스켈레톤 소켓 | `Muzzle`/`TestPartHand` 추가 예정 | **둘 다 추가 완료** | §13.8-1 소켓 작업 완료 처리 |
+| 머리 체인 루트 본 | 에디터에서 확인 필요 | 본 계층 실측: `Armature_ProxyTrueRootJoint → Body → { Arm_L, Arm_R, Head → {Ear_L, Ear_R}, BodyDoorController, CleanerHead → {CleanerHead_002_L/R} }` | Boarding 브랜치 본 = **`Head`** (귀 2개 포함). `CleanerHead`는 전방 흡입부라 제외 |
+| 에셋 폴더 | `Content/DaeRuneAssets/Characters/VacuumCleaner/` | 실제는 하위 **`…/VacuumCleaner/TP/`** | 경로 참조 시 주의 |
+
+참고 — `ABP_Gardener` 실측 구조 (따라할 관례): 스테이트머신 "Main States"(Idle/Walk/Jump/FallLoop/Land/Stun + **State Alias `ToFalling`/`ToStun`**) → Save Cached Pose → Layered Blend Per Bone ×2 (브랜치 본 `Arm_001_L`/`Arm_001_R`, 부품들기 `Gardener_HoldingClenserPart`·`Gardener_WaterBlast_Hold` 유지포즈) → Slot(DefaultSlot) → AO_Gardener → Output. Idle은 Random Sequence Player(Idle1/2/3). 전이 조건은 이벤트그래프 변수 + Property Access 혼용.
+
+##### (1) Event Graph 보완 — 변수 3개 추가
+
+기존 수집 변수(`ForwardDirection`, `RightDirection`, `AimPitch`, `bIsInAir`, `bIsStunned`, `bIsBordered`, `bIsCarryingPart`, `bIsDashCharging`, `bIsJetJumping`, `bSustainedDash`)에 아래를 추가한다 (`Event Blueprint Update Animation` 체인 끝에):
+
+| 변수 | 타입 | 계산 | 용도 |
+|---|---|---|---|
+| `Speed` | float | `VSizeXY(GetVelocity())` — 이미 그래프에 있는 VSizeXY 노드 출력을 변수 저장으로 분기 | Idle↔Walk 전이, WalkPlayRate |
+| `WalkPlayRate` | float | `FClamp(Speed / 250.0, 0.6, 2.5)` (250 = BaseWalkSpeed 수동 일치) | Walk 재생속도 — 대쉬 이속버프·부품 감속 자동 반영(§13.1) |
+| `bAimEnabled` | bool | `NOT(bDead OR bIsStunned OR bIsBordered OR bSustainedDash)` — **`bDead` 수집도 이때 추가** (`OwnerVacuum.bDead`, `DRCharacterBase.h:113`) | AO 노드 Bool Alpha 입력 (블렌드는 노드 내장 AlphaBoolBlend가 처리) |
+| `BoardingWeight` | float | `FInterpTo(BoardingWeight, bIsBordered ? 1.0 : 0.0, DeltaTimeX, 8.0)` | Layered Blend Per Bone의 Blend Weights — 탑승/하차 스냅 방지 |
+
+- `bIsCarryingPart`는 **현재 AnimGraph에서 미사용** (VC 전용 부품들기 시퀀스가 없음). 추후 애니 제작 시 Gardener처럼 `Arm_L`/`Arm_R` 브랜치 Layered Blend 추가에 사용 — 변수는 이미 수집 중이므로 삭제하지 말 것.
+
+##### (2) AnimGraph 배선 — 노드 5개, 이 순서로
+
+```
+[State Machine "Locomotion"] → [DefaultSlot] → [AO_VC_Aim] → [Layered blend per bone] → [Output Pose]
+```
+
+| # | 노드 (팔레트 검색어) | 디테일 설정 | 핀 바인딩 |
+|---|---|---|---|
+| 1 | **State Machine** — 이름 `Locomotion` | 기본값 (Max Transitions Per Frame 1) | 내부는 (3) |
+| 2 | **Slot 'DefaultSlot'** | Slot Name = `DefaultGroup.DefaultSlot` (기본값 그대로) | Source ← SM 출력 |
+| 3 | **AO_VC_Aim** (에셋 드래그 = Rotation Offset Blend Space 노드) | **Alpha Input Type = `Bool`**, Blend Settings(AlphaBoolBlend): Blend In Time `0.25` / Blend Out Time `0.25` | `Pitch` 핀 ← `AimPitch`, `bEnabled`(Alpha bool) 핀 ← `bAimEnabled` |
+| 4 | **Layered blend per bone** | Blend Mode = `Branch Filter`, Layer Setup → Branch Filters [0]: Bone Name = **`Head`**, Blend Depth = `0` · **Mesh Space Rotation Blend = ✔** | Base Pose ← AO 출력, Blend Poses 0 ← **Sequence Player `VC_Boarding`** (Loop ✔), Blend Weights 0 ← `BoardingWeight` |
+| 5 | Output Pose | — | Result ← 4번 출력 |
+
+- Save/Use Cached Pose는 **만들지 않는다** — Gardener가 캐시를 쓰는 이유는 로코모션 출력을 Layered Blend 2개(양팔)에 재사용하기 위함인데, VC는 SM 출력을 한 곳에서만 소비한다. VC 부품들기 애니가 생기면 그때 같은 패턴으로 리팩터.
+- Slot이 AO/Boarding **앞**인 이유는 §13.4.1 그대로 (몽타주 중 조준·머리눌림 유지).
+- 4번에서 `Head` 브랜치가 실제 "눌리는 머리"인지 1회 검증: 스켈레톤 에디터에서 `VC_Boarding` 재생 → 움직이는 본이 `Head`(+귀)인지 확인. 만약 Body까지 움직이면 Branch를 `Body`로 올리는 대신 §13.4.1의 Additive 대안으로 전환.
+
+##### (3) Locomotion SM — 상태 11개 + State Alias 3개
+
+**상태 노드와 내부 재생 노드** (상태 이름은 그대로 지정 — 디버깅·전이표 대조용):
+
+| 상태 | 내부 노드 | 노드 디테일 |
+|---|---|---|
+| `Idle` (Entry 연결) | **Random Sequence Player** | Entries 3개: `VC_Idle_1` Chance `0.85` / `VC_Idle_2` `0.075` / `VC_Idle_3` `0.075`, 전부 BlendTime `0.25`, Shuffle Mode ☐ |
+| `Walk` | **BC_VC_Walk** (Blendspace Player) | Loop ✔. 핀: `MoveForward` ← `ForwardDirection`, `MoveRight` ← `RightDirection`, `PlayRate` ← `WalkPlayRate` |
+| `Jump_Start` | Sequence Player `VC_Jump_Start` | Loop ☐ |
+| `Jump_Loop` | Sequence Player `VC_Jump_Loop` | Loop ✔ |
+| `Jump_Land` | Sequence Player `VC_Jump_Land` | Loop ☐ |
+| `DJ_Start` | Sequence Player `VC_DoubleJump_Start` | Loop ☐ |
+| `DJ_Loop` | Sequence Player `VC_DoubleJump_Loop` | Loop ✔ |
+| `DJ_Land` | Sequence Player `VC_DoubleJump_Land` | Loop ☐ |
+| `Dash_Charge` | Sequence Player `VC_Dash_Charge` | Loop ☐ (논루프 시퀀스는 종료 후 마지막 프레임 유지 = 만충 홀드 포즈). **PlayRate = 시퀀스 길이 ÷ 2.5s** — 에디터에서 실제 길이 확인 후 계산(원안 가정 5s → 2.0). 상태 재진입 시 처음부터 재생됨(상태 진입 = 노드 리셋, 기본 동작) |
+| `Dash_Start` | Sequence Player `VC_Dash_Start` | Loop ☐ |
+| `Dash_Loop` | Sequence Player `VC_Dash_Loop` | Loop ✔ |
+| `Stunned` | Sequence Player `VC_Stun` | Loop ✔ |
+
+**State Alias 3개** (우클릭 → Add State Alias — Gardener의 `ToFalling`/`ToStun` 관례):
+
+| Alias 이름 | 커버 상태 (체크박스) | 나가는 전이 |
+|---|---|---|
+| `ToStun` | **전체** (Stunned 제외) | → `Stunned` |
+| `ToFalling` | `Idle`, `Walk`, `Dash_Charge` | → `Jump_Start` |
+| `ToDJ` | `Idle`, `Walk`, `Jump_Start`, `Jump_Loop`, `Jump_Land`, `Dash_Charge` | → `DJ_Start` (지상 Q + 공중 Q + 충전 중 Q 전부 커버) |
+
+**전이표** — 조건식은 전부 ABP 변수만 사용(Result 핀에 직결, 함수 호출 없음 → 스레드세이프·경고 없음). Priority Order는 **숫자가 작을수록 먼저 평가**:
+
+| 전이 | 조건 (Result 핀) | Blend | Priority | 비고 |
+|---|---|---|---|---|
+| ToStun → Stunned | `bIsStunned` | 0.1 | **1** | 최우선 — 대쉬/점프 중에도 즉시 |
+| ToDJ → DJ_Start | `bIsJetJumping AND bIsInAir` | 0.1 | **2** | 일반 점프 전이보다 먼저 평가돼야 지상 Q가 Jump_Start로 새지 않음 |
+| ToFalling → Jump_Start | `bIsInAir AND NOT bIsJetJumping` | 0.1 | 3 | 점프·낙하 공용 |
+| Idle → Walk | `Speed > 3` | 0.15 | 3 | |
+| Walk → Idle | `Speed <= 3` | 0.2 | 3 | |
+| Idle → Dash_Charge | `bIsDashCharging AND NOT bIsInAir` | 0.2 | 3 | |
+| Walk → Dash_Charge | `bIsDashCharging AND NOT bIsInAir` | 0.2 | 3 | |
+| Jump_Start → Jump_Loop | **Automatic Rule** ✔ (조건 노드 없음) | 0.15 | 3 | 전이 디테일 "Automatic Rule Based on Sequence Player in State" 체크 |
+| Jump_Loop → Jump_Land | `NOT bIsInAir` | 0.1 | 3 | |
+| Jump_Land → Walk | `Speed > 3` | 0.2 | 3 | 조기 탈출(착지 직후 이동 반응성) |
+| Jump_Land → Idle | Automatic Rule ✔ | 0.2 | 4 | Walk 조기탈출보다 뒤 |
+| DJ_Start → DJ_Loop | Automatic Rule ✔ | 0.15 | 3 | |
+| DJ_Loop → DJ_Land | `NOT bIsInAir` | 0.1 | 3 | **`bIsJetJumping`을 조건에 쓰지 않는다**(§13.4.2 레이스 회피) |
+| DJ_Land → Walk | `Speed > 3` | 0.2 | 3 | |
+| DJ_Land → Idle | Automatic Rule ✔ | 0.2 | 4 | |
+| Dash_Charge → Dash_Start | `bSustainedDash` | 0.1 | 3 | 5칸 만충 해소 |
+| Dash_Charge → Walk | `NOT bIsDashCharging AND NOT bSustainedDash AND Speed > 3` | 0.25 | 4 | 조기 해소 = 일반 돌진 → 가속 Walk 복귀 |
+| Dash_Charge → Idle | `NOT bIsDashCharging AND NOT bSustainedDash` | 0.25 | 5 | |
+| Dash_Start → Dash_Loop | Automatic Rule ✔ | 0.15 | 3 | |
+| Dash_Loop → Walk | `NOT bSustainedDash AND Speed > 3` | 0.2 | 3 | 실제 연출은 Stop/Crush 몽타주가 슬롯에서 덮음 |
+| Dash_Loop → Idle | `NOT bSustainedDash` | 0.2 | 4 | |
+| Stunned → Walk | `NOT bIsStunned AND Speed > 3` | 0.25 | 3 | |
+| Stunned → Idle | `NOT bIsStunned` | 0.25 | 4 | |
+
+- Dash_Charge 중 점프/낙하는 별도 전이 불필요 — `ToFalling` alias가 Dash_Charge를 커버한다(위 표). 착지 후 충전이 유지 중이면 Jump_Land → Idle/Walk → Dash_Charge로 자동 재진입(조건이 계속 참).
+- Stunned 진입이 alias `ToStun` 하나로 끝나는 대신, **DJ/Jump 상태에서 스턴 → 해제 시 공중이면** Stunned → Idle 후 `ToFalling`이 즉시 Jump_Start로 끌고 간다 — 별도 처리 불필요.
+
+##### (4) 컴파일 검증 (Gardener에서 실제로 발견된 실수 예방)
+
+1. 컴파일 후 경고 0 확인 — `ABP_Gardener` 에셋에는 **"Idle to Walk will never be taken, please connect something to Can Enter Transition"** 경고가 저장된 이력이 있다. 전이 그래프에서 조건을 Result 핀에 연결하지 않은 채 저장한 흔적 — Automatic Rule을 쓰는 전이 외에는 반드시 Result에 조건이 연결돼야 한다.
+2. Automatic Rule 전이는 Result 연결이 필요 없다(체크박스가 조건을 대체) — 여기에 조건까지 이중으로 걸지 말 것.
+3. AnimGraph 노드에 우클릭 → Disable 상태(반투명)로 남은 노드가 없는지 확인 — Gardener에는 Disabled 노드(구버전 SM "Main States" 외 `Locomotion` SM 잔재)가 남아 있다. VC는 깨끗하게.
+4. PIE 검증 항목은 §13.8 그대로.
+
 ### 13.5 몽타주 5종 상세 명세
 
 #### 공통: GAS 몽타주 복제 경로
@@ -783,6 +901,8 @@ public:
 
 ### 13.8 에디터 작업 체크리스트 (순서대로)
 
+> 애님 파트 한정 체크리스트. **BP/GE/GA/DA를 포함한 전체 에디터 작업 순서는 §13.10이 총괄**한다.
+
 1. **스켈레톤 준비** (`VecuumCleaner_v0_1_1_Skeleton`):
    - 소켓 추가: 발사구 소켓(예: `Muzzle`) → BP에서 `WeaponTipSocketName`에 지정 (`SpawnProjectile(TargetLocation, SocketTag)`가 `GetCombatSocketLocation`으로 조회, §6.1의 `FireSocketTag = CombatSocket.Weapon` 경로), 부품 파지 소켓(기존 관례 `TestPartHand`, `DRCharacter.cpp:84` — 3인칭 부품 메시 부착용)
    - 머리 체인 루트 본 이름 확인 (§13.4.1 Layered Blend Branch용)
@@ -808,3 +928,466 @@ public:
 | A6 | Boarding 합성 방식 | **Layered Blend Per Bone (머리 체인)** | 눌린 채 주행 가능해야 함. 스켈레톤이 단순해 브랜치 분리가 안 예쁘면 Additive 방식으로 교체(§13.4.1) |
 | A7 | 지속 돌진 중 에임오프셋 | **차단 (AimAlpha 0)** | 돌진 조향은 몸통 회전(컨트롤러 yaw)이 담당 — 머리만 따로 움직이면 어색 |
 | A8 | 충돌 자해 50의 HitReact가 Crush를 덮는 문제 | **1차는 방치** | 둘 다 충격 모션이라 위화감 적음. 필요 시 자해 GE 태그 예외(§13.5-⑤) |
+
+### 13.10 에디터 통합 작업 가이드 ★ — BP/GE/GA/DA 전체 (이 순서대로 진행)
+
+> C++ 구현(Phase A~E + §13.5/13.6 애님 훅)이 **모두 빌드 완료된 상태** 기준. 아래 순서는 의존성 순서다 — 각 단계는 이전 단계 산출물을 참조한다. 중간의 ✅ **검증 게이트**에서 PIE로 확인하고 넘어갈 것.
+>
+> **경로 관례** (기존 클래스 폴더 구조를 따름):
+> - 캐릭터: `Content/Blueprints/Character/PlayerCharacter/VacuumCleaner/`
+> - 어빌리티/GE: `Content/Blueprints/AbilitySystem/Player/VacuumCleaner/…` (GardenRobot / VendingMachine 폴더와 나란히)
+> - 참고용 기존 에셋: `BP_GardenRobot`, `BP_VendingMachine`, `ABP_Gardener`, `ABP_VendingMachine`, `DA_PlayerCharacterClassInfo`(`Content/Blueprints/AbilitySystem/Data/`)
+
+#### 0단계 — 사전 확인 (5분)
+
+| 확인 | 방법 |
+|---|---|
+| C++ 클래스 5종이 에디터에 보이는지 | BP 생성 다이얼로그에서 부모 검색: `DRRobotVacuumCharacter`, `DRVacuumAirShot`, `DRVacuumJetJump`, `DRVacuumDash`, `DRVacuumAirProjectile` |
+| 태그 등록 확인 | 프로젝트 세팅 → GameplayTags: `State.Riding`, `State.RobotVacuum.SustainedDash`, `Buff.RobotVacuum.DashSpeed`, `Abilities.RobotVacuum.*` 3종, `GameplayCue.Skill.Vacuum*` 3종, `Event.Dash.Brake`, `Damage.MountShared` |
+| 애님 시퀀스 24종 | `Content/DaeRuneAssets/Characters/VacuumCleaner/` — `VC_*` + `VecuumCleaner_v0_1_1`(+`_Skeleton`, `_PhysicsAsset`) |
+
+#### 1단계 — 스켈레톤 준비 + 애님 에셋 (§13.8-1~4 상세)
+
+1. **소켓 2개 추가** — `VecuumCleaner_v0_1_1_Skeleton` 열기 → 본 트리 우클릭 → Add Socket:
+   - `Muzzle` (발사구 본에 부착, 노즐 끝으로 이동) — §6.1 `CombatSocket.Weapon` → `GetCombatSocketLocation()` 조회 경로
+   - `TestPartHand` (부품 파지 관례 소켓명, `DRCharacter.cpp:84`) — 부품 3인칭 부착용
+   - 이때 **머리 체인 루트 본 이름**을 메모 (§13.4.1 Layered Blend Branch + §14와 무관하게 청소기 Boarding용)
+2. **임포트 설정 일괄 확인** — `VC_*` 24종 전체: 디테일 → `EnableRootMotion = false` (특히 `VC_Dash_Start/Loop/Crush`). `VC_AimOffset_Down/Front/Up` 3종만: `Additive Anim Type = Mesh Space`, `Base Pose Type = Selected animation frame`, `Base Pose Animation = VC_AimOffset_Front`
+3. **`AO_VC_Aim`** (Aim Offset 1D, 스켈레톤 지정 생성): Horizontal Axis 이름 `Pitch`, 범위 [-90, 90], 샘플 3개 배치(Down=-90 / Front=0 / Up=+90)
+4. **`BS_VC_Walk`** (Blend Space 1D): 축 이름 `Direction`, 범위 [-180, 180], 샘플 5개: `VC_Walk_Backward`(-180) / `VC_Walk_Left`(-90) / `VC_Walk_Forward`(0) / `VC_Walk_Right`(+90) / `VC_Walk_Backward`(+180)
+5. **몽타주 5종** — 시퀀스 우클릭 → Create → Create AnimMontage, 전부 슬롯 `DefaultGroup.DefaultSlot`:
+
+| 몽타주 | 원본 | Blend In / Out | 비고 |
+|---|---|---|---|
+| `AM_VC_HitReact` | `VC_HitReact` | 0.1 / 0.2 | |
+| `AM_VC_Death` | `VC_Death` | 0.1 / **0.0** | 끝 포즈 유지 → Dissolve 연계 |
+| `AM_VC_EnhancedAttack` | `VC_EnhancedAttack` | 0.1 / 0.2 | (선택) 총구 VFX AnimNotify — 코스메틱만(§13.0-3) |
+| `AM_VC_Dash_Stop` | `VC_Dash_Stop` | **0.05** / 0.2 | 급정거 스냅감 |
+| `AM_VC_Dash_Crush` | `VC_Dash_Crush` | **0.05** / 0.2 | |
+
+#### 2단계 — `ABP_VacuumCleaner` 생성
+
+`Content/Blueprints/Character/PlayerCharacter/VacuumCleaner/`에 Animation Blueprint 생성 (스켈레톤 `VecuumCleaner_v0_1_1_Skeleton`).
+- **Event Graph**: §13.3 표 그대로 — `Initialize`에서 `TryGetPawnOwner → Cast to DRRobotVacuumCharacter → OwnerVacuum` 캐싱, `Update`에서 12개 변수 수집 (`bIsBoarded = IsValid(RiderOnTop)` 주의 — §14.4의 라이더용 `bIsRiding`과 혼동 금지)
+- **AnimGraph**: §13.4.1 파이프라인(SM → Slot → AO → Layered Blend Per Bone(머리 체인, `bIsBoarded`) → Output) + §13.4.2 스테이트머신/전이표 그대로
+- Dash_Charge PlayRate 2.0(§13.4.2 표), Idle Random Sequence Player 가중치 0.85/0.075/0.075
+
+#### 3단계 — `BP_RobotVacuumCharacter` 생성 (디테일 전체)
+
+부모 `ADRRobotVacuumCharacter`, 위치 `…/PlayerCharacter/VacuumCleaner/`.
+
+| 항목 | 설정 | 근거 |
+|---|---|---|
+| Mesh → Skeletal Mesh | `VecuumCleaner_v0_1_1` | |
+| Mesh → Location/Rotation | Z = -캡슐 HalfHeight, Yaw = -90° | 표준 관례 (BP_GardenRobot 값 참고) |
+| Mesh → Anim Class | `ABP_VacuumCleaner` | 2단계 산출물 |
+| Mesh → Physics Asset | `VecuumCleaner_v0_1_1_PhysicsAsset` 자동 확인 | |
+| Capsule Half Height / Radius | 메시에 맞게 축소 (낮고 넓은 로봇 — 예: 55 / 45에서 시작) | 캡슐이 곧 돌진 충돌체(§8.3) |
+| Class Defaults → `PlayerCharacterClass` | `Robot Vacuum` | 어트리뷰트 초기화 클래스 키 |
+| Combat → `WeaponTipSocketName` | `Muzzle` | 1단계 소켓 |
+| Combat → `HitReactMontages` | `[AM_VC_HitReact]` | §13.5-① (코드 작업 0) |
+| Combat\|Death → `DeathMontages` | `[AM_VC_Death]` | §13.5-② |
+| Mount → `RideAttachPoint` 위치 | Z를 메시 상단으로 (기본 90 → 캡슐/메시 보고 조정) | 라이더 발이 뚫거나 뜨면 §14.7-4처럼 미세조정 |
+| Mount → `MountPromptWidget` → Widget Class | `WBP_PartInteraction` 복제 → `WBP_MountInteraction` ("F 탑승" 텍스트) | 로컬 코스메틱(§5.1) |
+| Mount → `MountSharedDamageEffectClass` | `GE_Damage` | §5.4 — 미설정 시 경고 로그 + 공유 무시 |
+| Dash → `DashImpactSound` | 임팩트 사운드 (임시로 기존 Armadillo 것 재사용 가능) | Phase E 멀티캐스트 |
+| Dash → `DashImpactMinSpeed` | 700 기본 유지 | §8.3 |
+| SpringArm/Camera | BP_GardenRobot 값 복사 후 로봇 높이에 맞게 Z 조정 | |
+| FirstPersonMesh | **미지정** (1차 3인칭 완결) | §13.7 |
+
+#### 4단계 — GE 4종 생성 (`…/AbilitySystem/Player/VacuumCleaner/Effects/`)
+
+| GE | 만드는 법 | 핵심 설정 |
+|---|---|---|
+| `GE_PrimaryAttributes_RobotVacuum` | `GE_DRPrimaryAttributes`(Player/Effects) 복제 | Instant. Modifier: `MaxHealth` / `MaxWater` / `MoveSpeed` Override — 기존 클래스 값 복사 후 **MoveSpeed만 상향** (빠른 기동 콘셉트, 밸런스는 §9.4) |
+| `GE_VitalAttributes_RobotVacuum` | `GE_VitalAttributes` 복제 | Instant. `Health = MaxHealth`, `Water = MaxWater` (Attribute Based) — 원본 그대로면 복제만 |
+| `GE_VacuumDashSpeedBuff` | 신규 | **Infinite**. Modifier: `MoveSpeed`, Op **Multiply**, Magnitude **1.2** (GAS 곱연산 합산 규칙: 5스택 = ×(1+0.2×5) = ×2.0). Stacking: **Aggregate by Target, Stack Limit 5**. Asset Tag(태그 컴포넌트): `Buff.RobotVacuum.DashSpeed` — 공기탄 무반동 판정(`HasDashBuff`)이 이 태그로 조회 |
+| `GE_VacuumDashSelfDamage` | 신규 | Instant. Modifier: `IncomingDamage`, Op Add, Magnitude **50** — 메타 어트리뷰트 경유라 컨테이너 파이프라인(`HandleIncomingDamage`)을 그대로 탄다. ※ 부수효과: HitReact 발동(§13.9-A8 — 1차 방치), 라이더 데미지 공유 1홉 전파(§5.4 스펙상 자연스러움) |
+
+**신규 코스트 GE 2건 추가** — 둘 다 기존 `GE_Cost_WaterPump`(GardenRobot/Skill2) 복제 (Instant, Executions에 `ExecCalc_WaterCost`, SetByCaller 태그 `Cost.Water` — 값은 코드가 주입). 물 부족 시 부족분 ×0.5 체력 대납이 ExecCalc에서 자동 처리된다:
+- `GE_Cost_VacuumJetJump` → `GA_VacuumJetJump`의 **Cost Gameplay Effect Class**에 지정 (7단계 ②) — 미지정 시 `CheckCost`는 통과해도 `ApplyCost`가 no-op이라 물 30이 안 깎인다(`DRGameplayAbility.cpp:65`)
+- `GE_Cost_VacuumDashCharge` → `GA_VacuumDash`의 **Charge Cost Effect**에 지정 (7단계 ③, §8.2 틱 충전용)
+
+(구버전 계획의 `GE_WaterReduction` 재사용은 폐기 — 체력 대납 없이 물만 깎는 방식이었음)
+
+#### 5단계 — `DA_PlayerCharacterClassInfo` 등록
+
+`Content/Blueprints/AbilitySystem/Data/DA_PlayerCharacterClassInfo` 열기:
+1. `Character Class Information` 맵에 키 **`Robot Vacuum`** 추가:
+   - `PrimaryAttributes = GE_PrimaryAttributes_RobotVacuum`, `VitalAttributes = GE_VitalAttributes_RobotVacuum`
+   - `StartupAbilities = []` (7단계에서 채움), `DeathAbilities` = 기존 클래스 항목 복사
+   - `SkillIconWidgetClass` / `CharacterInfoWidgetClass` = **임시로 기존 것**(예: Gardener) 지정 — 전용 위젯은 Phase F
+2. `Character BP Classes` 맵에 **`Robot Vacuum` → `BP_RobotVacuumCharacter`** 추가
+3. `Common Abilities`에 `GA_HitReact` 포함 확인 (§13.5-①)
+4. (선택) `DA_TutorialPlayerCharacterClassInfo`에도 동일 등록 — 튜토리얼에서 선택 가능하게 하려면
+
+> ✅ **검증 게이트 1 (§4.4)**: PIE 2인 → 로비에서 클래스 순환에 RobotVacuum 등장 → 선택 후 스테이지 스폰 → 이동/점프/카메라/이속 정상, 상대 화면에서 걷기 애니(§13 로코모션) 재생.
+
+#### 6단계 — `BP_VacuumAirProjectile` 생성
+
+부모 `ADRVacuumAirProjectile`, 위치 `…/VacuumCleaner/Abilities/BasicAttack/`.
+- 컴포넌트: Sphere(루트, 반경 ~15–25) 자식으로 StaticMesh 또는 Niagara(공기탄 외형, **Collision = NoCollision**)
+- 디테일: `ActiveDuration = 2.0` / `FadeDuration = 0.5` 확인, `ImpactEffect`(나이아가라) / `ImpactSound` 지정, `LoopingSound`(선택)
+- 이벤트 그래프: **Event OnFadeStarted** → 타임라인 0.5초 → 머티리얼 Opacity / 나이아가라 스케일 페이드아웃 (서버·클라 각자 로컬 재생 — RepNotify 경로로 이미 호출됨)
+- (선택) Event BeginPlay에서 `bEnhanced` 분기 → 강화탄 크기/색 강조
+
+#### 7단계 — GA 3종 생성 (`…/VacuumCleaner/Abilities/…`)
+
+**공통 클래스 설정** (3종 모두): `Instancing Policy = Instanced Per Actor` (**필수** — C++이 멤버 타이머/게이지 상태 사용), `Net Execution Policy = Local Predicted` (자판기 GA 관례와 동일하게).
+
+**① `GA_VacuumAirShot`** (부모 `UDRVacuumAirShot`, `…/BasicAttack/`)
+
+| 프로퍼티 | 값 |
+|---|---|
+| Startup Input Tag | `InputTag.LMB` |
+| Ability Tags | `Abilities.RobotVacuum.AirShot` |
+| Fire Socket Tag | `CombatSocket.Weapon` |
+| Projectile Class | `BP_VacuumAirProjectile` |
+| Damage Effect Class / Damage Type | `GE_Damage` / `Damage.Physical` |
+| Stages | 4개 기본값(10/15/22/35, 1500~2600) 확인 — 밸런스 조정처 |
+| Charge Interval / Recoil Impulse / Enhanced Knockback Force | 0.5 / 1200 / 1000 |
+| Enhanced Attack Montage | `AM_VC_EnhancedAttack` |
+
+이벤트 그래프: `Event ActivateAbility` → `StartCharging` → **`Wait Input Release`** 태스크 → `ReleaseAndFire` (EndAbility는 C++ 내부에서 호출 — BP에서 부르지 말 것). `OnChargeStageChanged` 이벤트는 비워두거나 `IsLocallyControlled` 분기 후 충전 SFX(Phase F).
+
+**② `GA_VacuumJetJump`** (부모 `UDRVacuumJetJump`, `…/Skill1_JetJump/`)
+
+| 프로퍼티 | 값 |
+|---|---|
+| Startup Input Tag | `InputTag.Q` |
+| Ability Tags | `Abilities.RobotVacuum.JetJump` |
+| Damage Effect Class / Damage Type | `GE_Damage` / `Damage.Physical` |
+| Water Cost | 30 (C++ 기본값 확인만) |
+| **Costs → Cost Gameplay Effect Class** | **`GE_Cost_VacuumJetJump`** (4단계 생성) — **누락 시 물이 안 깎임**: `CommitAbility`의 `ApplyCost`가 이 GE를 통해서만 차감한다(`DRGameplayAbility.cpp:65`) |
+| Jump Impulse Z / Inner·Outer Radius / Inner·Outer Damage | 900 / 200·400 / 20·5 |
+
+이벤트 그래프: **비워둔다** — C++ `ActivateAbility`가 전부 처리(즉발). BP에서 ActivateAbility 이벤트를 추가하지 말 것.
+코스트 동작(§ExecCalc_WaterCost 공통 규칙): 물 30 미만이면 부족분 ×0.5를 체력으로 대납. 체력마저 부족하면(지불 후 0 이하) `CheckCost`가 **발동 자체를 차단**(`DRGameplayAbility.cpp:40-51`).
+
+**③ `GA_VacuumDash`** (부모 `UDRVacuumDash`, `…/Skill2_Dash/`)
+
+| 프로퍼티 | 값 |
+|---|---|
+| Startup Input Tag | `InputTag.RMB` |
+| Ability Tags | `Abilities.RobotVacuum.Dash` |
+| Activation Blocked Tags | `Debuff.Stun` (§8.2 — 스턴 중 발동 차단) |
+| Max Gauge / Charge·Decay Interval / Water Per Gauge | 5 / 0.5·1.0 / 20 |
+| Speed Buff Effect / Self Damage Effect / Charge Cost Effect | `GE_VacuumDashSpeedBuff` / `GE_VacuumDashSelfDamage` / `GE_Cost_VacuumDashCharge` |
+| Enemy·Player Damage Per Gauge | 10 / 5 |
+| Dash Stop·Crush Montage | `AM_VC_Dash_Stop` / `AM_VC_Dash_Crush` |
+| Damage Effect Class / Damage Type | `GE_Damage` / `Damage.Physical` (충돌 데미지 파라미터의 기반) |
+
+이벤트 그래프: `Event ActivateAbility` → `StartChargingGauge` → 병렬 2개: ① `Wait Input Release` → `ReleaseGauge` ② `Wait Gameplay Event`(Tag=`Event.Dash.Brake`, Only Trigger Once=false) → `OnBrakePressed`. `OnGaugeChanged`는 Phase F까지 비워둠.
+코스트 동작: **Costs → Cost Gameplay Effect Class는 비워둔다** (Water Cost도 0 유지) — 대쉬는 발동 시 1회 지불이 아니라 `TickCharge()`가 0.5초마다 `Charge Cost Effect`(`GE_Cost_VacuumDashCharge`)로 20씩 지불한다. 물 부족 시 부족분 ×0.5 체력 대납(ExecCalc), **물·체력 모두 부족하면 그 틱은 충전 일시 정지**(게이지 유지, 다음 틱 재시도 — `DRVacuumDash.cpp TickCharge`).
+스턴 시 **진행 중 취소**까지 원하면: 기존 스턴 처리(`GE_Debuff_Stun` / 스턴 어빌리티)가 `Abilities.RobotVacuum.Dash`를 Cancel 하는 경로 확인 후 태그 추가(§8.2).
+
+#### 8단계 — `GC_VacuumJetJump` 게임플레이 큐
+
+기존 `GameplayCue_Skill_WaterPump` 노티파이 에셋과 같은 위치/방식으로 **GameplayCueNotify_Burst** 생성:
+- Gameplay Cue Tag: `GameplayCue.Skill.VacuumJetJump`
+- Burst Effects: 물 분사 나이아가라 + 점프 SFX, 스폰 위치 = Cue Parameters `Location` (C++이 시전 위치를 넣어줌, §7.1-5)
+- (`GameplayCue.Skill.VacuumAirShot` / `VacuumDash` 큐는 Phase F에서)
+
+#### 9단계 — 마무리 등록 + 기존 BP 3건 수정
+
+1. `DA_PlayerCharacterClassInfo` → RobotVacuum `StartupAbilities = [GA_VacuumAirShot, GA_VacuumJetJump, GA_VacuumDash]`
+2. **`BP_GardenRobot` / `BP_VendingMachine`**: `Mount → MountSharedDamageEffectClass = GE_Damage` (라이더 측 데미지 공유 — 미설정 시 경고 로그)
+3. (§14 병행 시) `ABP_Gardener` / `ABP_VendingMachine` 착석 레이어 + `GR_Sit_Loop`/`VM_Sit_Loop` — §14.7 체크리스트
+
+> ✅ **검증 게이트 2 (스킬)**: §6.3(공기탄: 즉발/홀드 단계/2초 페이드/강화 넉백·반동·로켓점프) → §7.2(더블점프: 물 30/공중 1회/2D AoE) → §8.4(돌진: 게이지/버프/충돌/지속/브레이크) 순서로 PIE 2인 확인.
+> ✅ **검증 게이트 3 (탑승, §5.6)**: F 탑승/점프 하차/탑쌓기 3-2-1/부품 소지 차단/데미지 공유/사망 하차 — 클라 화면 위치 동기화 중점.
+> ✅ **검증 게이트 4 (애니)**: §13.8 PIE 항목 (a)~(h) + (§14 적용 시) §14.8 — 전부 **상대 클라이언트 화면**에서.
+
+#### 자주 하는 실수 (사전 경고)
+
+- GA `Instancing Policy`를 기본값(Non-Instanced)으로 두면 **충전/게이지가 전혀 동작하지 않음** (멤버 상태 사용 불가)
+- `MountSharedDamageEffectClass` 누락 → 데미지 공유만 조용히 빠짐 (로그 경고 확인)
+- AimOffset 시퀀스를 Additive로 안 바꾸면 `AO_VC_Aim`에서 포즈 폭발
+- `BS_VC_Walk` 축 범위를 [0,360]으로 만들면 `Calculate Direction`([-180,180])과 불일치 → 후진 시 뒤집힘
+- 몽타주 슬롯을 새로 만들면 ABP Slot 노드(`DefaultSlot`)와 안 맞아 재생 안 됨
+- `DA_PlayerCharacterClassInfo`의 `CharacterBPClasses` 누락 → 로비에서 선택은 되지만 스폰 시 폴백(스폰 안 됨/기본 클래스) — `Find()` 널체크 폴백 경로
+
+---
+
+## 14. 탑승자(라이더) 착석 애니메이션 설계
+
+> 로봇 청소기에 탄 **라이더의 하체를 앉은 자세로** 표현하는 설계.
+> §13이 청소기 본체(마운트 측)의 애니라면, §14는 **그 위에 탄 다른 캐릭터(라이더 측)**의 애니다.
+> 코드 의존은 Phase B 완료분(`MountedOn` 복제)뿐이므로 Phase B 이후 언제든 병행 가능한 순수 코스메틱 작업.
+
+### 14.0 요구사항과 설계 전제 (코드 근거)
+
+**요구**: 탑승 중 라이더의 **하체 = 앉은 자세 고정**, **상체 = 기존 동작 유지** (Idle/에임/공격 몽타주). 탑승 중 어빌리티 사용이 허용되는 "이동 포탑" 컨셉(§10-1)이므로 상체가 착석에 묶이면 안 된다.
+
+**전제** (전부 기존 코드에서 검증된 사실):
+1. **탑승 중 라이더의 로코모션 SM은 Idle에 고정된다.** `MountRider()`가 `SetMovementMode(MOVE_None)`을 걸고(§5.2, Phase B 구현 완료), `ACharacter::GetVelocity()`는 CMC Velocity를 반환하므로 탑승 중 `Speed = 0` → 어떤 클래스 ABP든 Walk/Jump 상태로 새지 않는다. 착석 레이어의 베이스가 항상 Idle이라는 보장.
+2. **라이더 몸통은 탑승 중에도 마우스를 따라 회전한다.** `bUseControllerRotationYaw = true`(`DRCharacter.cpp:101`)는 attach 상태에서도 액터 회전을 갱신한다 — 포탑 조준의 시각적 근거. 착석 애니는 이 yaw 회전과 독립(인플레이스 루프).
+3. **로컬 플레이어는 자기 3인칭을 못 본다**(§13.0-1). 이 작업의 수혜자는 타 플레이어 시점·대기실·사망캠이며, 검증도 상대 클라이언트 화면에서 한다. 본인 1인칭(FP)은 변화 없음.
+4. **게임플레이 판정 없음.** 순수 연출 — AnimNotify에 판정을 두지 않는 원칙(§13.0-3) 그대로.
+5. **신호는 이미 복제되어 있다.** `ADRCharacter::MountedOn`(RepNotify, `DOREPLIFETIME`)이 Phase B에서 구현 완료 — 서버/소유 클라/시뮬 프록시 모두에서 매 프레임 폴링 가능. **신규 C++ 작업 0.**
+
+### 14.1 신호 소스 선택: `MountedOn` 폴링 (State.Riding 태그 아님)
+
+| 후보 | 채택 | 근거 |
+|---|---|---|
+| `MountedOn != nullptr` 폴링 | **O** | 이미 전 머신에 복제된 프로퍼티. `bIsStunned`/`RiderOnTop` 폴링과 동일 패턴(§13.3). RepNotify 도착 순서 의존 없음 |
+| `State.Riding` 태그 조회 | X | ASC가 PlayerState에 있어 ABP에서 조회 체인이 김(Pawn→PlayerState→ASC). 태그는 GA 차단용(§10-1) 용도로 유지 |
+| 신규 복제 bool 추가 | X | `MountedOn`과 중복 — 상태 이원화만 발생 |
+
+- ABP에서 읽는 법: `TryGetPawnOwner → Cast to ADRCharacter`(각 ABP의 기존 오너 캐싱 관례) → `MountedOn` 프로퍼티(`BlueprintReadOnly`) `IsValid` 검사. `IsMounted()`(BlueprintCallable const → BP에서 pure 노드)를 써도 동일.
+
+### 14.2 합성 방식 — 최종단 Layered Blend Per Bone (핵심 설계)
+
+각 라이더 ABP의 **Output Pose 직전(최종단)**에 삽입:
+
+```
+[기존 파이프라인: Locomotion SM → Slot 'DefaultSlot' → AimOffset → ...]
+  → [Layered Blend Per Bone]
+       Base Pose   = 기존 파이프라인 결과
+       Blend Pose 0 = Sit_Loop (Sequence Player, 루프)
+       Branch Filters = 좌/우 다리 체인 루트 본 2개 (Blend Depth 0)
+       Blend Weights 0 = SitBlendWeight (0↔1 보간 변수)
+       Mesh Space Rotation Blend = true
+  → [Output Pose]
+```
+
+**설계 결정의 이유**:
+- **왜 최종단(Slot·AimOffset 뒤)인가**: 어빌리티 몽타주는 DefaultSlot에서 **풀바디**로 재생된다(§13.2 — 슬롯 1개 원칙). 착석 레이어가 슬롯보다 뒤에 있어야 몽타주가 재생돼도 **하체는 착석을 유지**하고 상체만 몽타주를 따른다. §13.4.1에서 Boarding 레이어를 Slot 뒤에 둔 것과 같은 논리.
+- **왜 브랜치가 thigh(양쪽 다리 체인)이고 pelvis가 아닌가**: pelvis는 spine의 부모라서 pelvis를 브랜치로 잡으면 전신이 착석 포즈로 덮여 상체 유지 요구가 깨진다. 좌/우 대퇴 본 2개(Blend Depth 0 = 해당 본+자식 전부)만 교체하면 다리만 접힌다.
+- **왜 상체 전용 슬롯 방식이 아닌가**: "풀바디 착석 상태 + UpperBody 슬롯" 구조로 바꾸면 기존 모든 GA 몽타주의 슬롯 재지정이 필요 — 기존 두 클래스의 완성된 몽타주 파이프라인(§13.0-5)을 건드리게 됨. 기각 (결정 B1).
+- **블렌드 보간**: `SitBlendWeight`를 이벤트그래프에서 `FInterpTo(현재, 목표, DeltaTimeX, 8.0)`로 갱신 — 탑승/하차 순간 스냅 방지 (§13.4.1 Boarding 가중치와 동일 수치).
+- **IK 미사용**: 발-시트 접지는 IK 대신 `RideAttachPoint` 위치 튜닝으로 해결(코드 기본 Z=90, `BP_RobotVacuumCharacter`에서 조정). 청소기 윗면은 평평한 단일 시트라 정적 오프셋으로 충분.
+
+### 14.3 신규 애님 에셋 (클래스별)
+
+| 라이더 클래스 | 시퀀스 | 적용 | 비고 |
+|---|---|---|---|
+| Gardener | `GR_Sit_Loop` | **O** | 다리 체인 존재 전제. 인플레이스, 루프, 루트모션 off |
+| VendingMachine | `VM_Sit_Loop` | **O (다리 유무 확인 후)** | 스켈레톤에 다리 체인이 없으면 미적용(B3 유사 처리) — 자판기 형태 특성상 "기울어 얹힘" 어디티브로 대체 검토 |
+| RobotVacuum (청소기가 라이더인 경우 — 탑쌓기) | 없음 | **X (미적용)** | 바퀴 로봇이라 착석 개념 없음. `MOVE_None → Speed 0 → Idle` 루프가 자연스러운 "정지 탑재" 표현(결정 B3). 필요 시 서스펜션 눌림 어디티브로 확장 |
+
+- **임포트 설정**: `EnableRootMotion = false`, Loop 활성, **Additive 아님(Override)** — 다리 본을 통째로 교체하는 방식이므로.
+- `Sit_Start` / `Sit_End` 전이 시퀀스는 1차 미사용 — FInterpTo(8.0) 블렌드가 전이를 담당 (결정 B2).
+
+### 14.4 ABP별 수정 절차 (공통 패턴)
+
+대상: `ABP_Gardener`, `ABP_VendingMachine` (`Content/Blueprints/Character/PlayerCharacter/<클래스>/`). `ABP_VacuumCleaner`는 착석 미적용(14.3)이므로 수정 없음. (`ABP_DRCharacter`(기본 캐릭터)를 실제 플레이에 쓰고 있다면 동일 절차 적용.)
+
+1. **Event Graph** — 변수 2개 추가:
+   | 변수 | 타입 | 계산식 |
+   |---|---|---|
+   | `bIsRiding` | bool | `IsValid(OwnerCharacter.MountedOn)` (오너 캐스팅 캐시는 각 ABP 기존 관례 재사용) |
+   | `SitBlendWeight` | float | `FInterpTo(SitBlendWeight, bIsRiding ? 1.0 : 0.0, DeltaTimeX, 8.0)` |
+2. **AnimGraph** — Output Pose 직전에 §14.2 구성의 Layered Blend Per Bone 삽입. Blend Pose 0에 해당 클래스 `*_Sit_Loop` Sequence Player 연결.
+3. 컴파일 → 각 클래스로 PIE 검증(14.7).
+
+**혼동 주의** — 청소기 ABP의 두 플래그는 서로 다른 것:
+- `bIsBoarded`(§13.3) = `RiderOnTop != nullptr` — **내 위에 누가 탐** → 머리 눌림 레이어 (마운트 측)
+- `bIsRiding`(§14) = `MountedOn != nullptr` — **내가 남 위에 탐** → 착석 레이어 (라이더 측, 청소기는 미적용)
+
+### 14.5 상호작용 매트릭스 (몽타주/스턴/사망/하차)
+
+| 상황 | 동작 | 근거/처리 |
+|---|---|---|
+| 탑승 중 공격/스킬 몽타주 | 상체만 몽타주, 하체 착석 유지 | 착석 레이어가 Slot 뒤(§14.2) — 추가 처리 불필요 |
+| 탑승 중 HitReact | 상체 반동만, 하체 착석 유지 | 동일 |
+| 탑승 중 스턴 | 상체 스턴 표현, 하체 착석 유지 | 라이더는 청소기 위에 그대로 있으므로 착석 유지가 자연스러움 (결정 B4). 전신 스턴이 필요하면 `bIsStunned`일 때 SitBlendWeight 목표 0 조건 1개 추가 |
+| 탑승 중 사망 | 하차 → 착석 해제 → 사망 몽타주 | `MulticastHandleDeath`가 사망 처리 **전에** `DismountRider(false)` 호출(Phase B 구현) → `MountedOn` null 복제 → bIsRiding false. 복제가 1~2프레임 늦어도 사망 몽타주가 상체를 덮고 하체는 블렌드아웃 — 허용 오차 |
+| 점프키 하차 | 착석 해제 + 점프/낙하 전이 자연 발생 | 서버 `MOVE_Falling` + Launch(§5.3) → `bIsFalling` true → 각 ABP 기존 점프 상태 진입. SitBlendWeight 0 보간과 짧게 겹치지만 블렌드가 흡수 |
+| 탑승 중 넉백 피격 | 착석 유지 (움직이지 않음) | 라이더는 MOVE_None이라 LaunchCharacter 무효(§5.5) — 데미지 공유만 적용 |
+| 탑쌓기 위층 청소기 | 착석 애니 없음 (Idle) | 14.3 결정 B3 |
+| 대기실/사망캠 | 정상 표시 | 대기실엔 탑승 없음. 사망캠은 위 사망 행과 동일 흐름 |
+
+### 14.6 리플리케이션/성능 근거
+
+- `MountedOn`은 Phase B에서 `DOREPLIFETIME` 등록 완료 — 서버·소유 클라·시뮬 프록시 전부에서 값이 보인다. ABP는 **매 프레임 값 폴링**만 하므로 RepNotify 도착 순서/유실에 의존하지 않는다 (§13.4.2 DJ_Loop 탈출 조건과 같은 레이스 회피 원칙).
+- 폴링 비용 = 포인터 유효성 검사 1회/프레임 — 무시 가능. Thread Safe Update Animation으로 이전할 경우 Property Access로 `MountedOn`을 직접 읽으면 됨.
+- 리슨 서버 호스트: 서버에서 `MountRider()`가 직접 값을 세팅하므로 호스트 화면도 같은 프레임에 반영.
+
+### 14.7 에디터 작업 체크리스트 (순서대로)
+
+1. **스켈레톤 확인**: Gardener/VendingMachine 스켈레톤 트리에서 **좌/우 다리 체인 루트 본 이름** 확인·기록 (§13.8-1의 머리 체인 확인과 동일 요령). VendingMachine에 다리 체인이 없으면 14.3의 대체 방침 결정
+2. 착석 시퀀스 임포트: `GR_Sit_Loop`, `VM_Sit_Loop` — 루트모션 off, 루프 on, Override
+3. `ABP_Gardener` 수정 (14.4 절차) → 컴파일
+4. `ABP_VendingMachine` 수정 → 컴파일
+5. `BP_RobotVacuumCharacter`의 `RideAttachPoint` 위치 튜닝 — 착석한 라이더의 발/엉덩이가 청소기 윗면에 맞도록 (Z 기본 90에서 조정)
+6. (선택) 클래스별 앉은키 차이가 크면: `MountRider()`에서 라이더 클래스별 attach 오프셋을 주는 C++ 확장 — 1차 미구현 (결정 B6)
+
+### 14.8 PIE 2인 검증 항목 (전부 상대 클라이언트 화면에서)
+
+- (a) F 탑승 → 하체가 ~0.2초에 걸쳐 착석으로 블렌드 인, 상체는 Idle 유지
+- (b) 청소기 주행 중 라이더 착석 유지 + 라이더 마우스 회전 시 몸통(yaw)이 따라 도는지 (포탑 조준)
+- (c) 탑승 중 공격 → 상체만 몽타주 재생, 하체 착석 유지
+- (d) 탑승 중 상하 에임 → 상체 에임오프셋 정상 (착석 레이어와 간섭 없음)
+- (e) 점프키 하차 → 착석 해제 + 점프/착지 전이 자연스러움
+- (f) 청소기 탑쌓기 → 위층 청소기는 착석 없이 Idle
+- (g) 탑승 중 피격 HitReact 상체 반동 / 탑승 중 사망 → 하차 후 사망 몽타주
+- (h) 리슨 서버 호스트 시점과 원격 클라 시점의 착석 상태 동일성
+
+### 14.9 설계 결정사항 (구현 전 확인 권장)
+
+| # | 항목 | 제안 기본값 | 근거 |
+|---|---|---|---|
+| B1 | 합성 방식 | **최종단 Layered Blend Per Bone (양쪽 thigh 브랜치)** | 풀바디 착석 상태 + 상체 슬롯 방식은 기존 전 GA 몽타주의 슬롯 재작업 유발(§13.2 DefaultSlot 단일 원칙과 충돌) |
+| B2 | Sit_Start/End 전이 애니 | **없음 — FInterpTo(8.0) 블렌드** | 탑승/하차가 즉각적 동작이라 0.2초 블렌드로 충분. 어색하면 시퀀스 추가 |
+| B3 | RobotVacuum 라이더(탑쌓기) 착석 | **미적용 (Idle 유지)** | 바퀴 로봇에 착석 개념 없음. 필요 시 서스펜션 눌림 어디티브 |
+| B4 | 스턴 중 착석 | **유지** | 물리적으로 청소기 위에 있으므로. 전신 스턴 연출 필요 시 가중치 목표 0 조건 1줄 |
+| B5 | 골반(pelvis) 포함 여부 | **미포함 (thigh 체인만)** | pelvis는 spine의 부모 — 포함 시 상체까지 덮임. 앉음새가 어색하면 어디티브 pelvis lean 보조 |
+| B6 | 클래스별 시트 오프셋 | **단일 RideAttachPoint (1차)** | 클래스 간 체형 차가 크면 MountRider에서 클래스별 오프셋 확장 |
+| B7 | FP(1인칭) 처리 | **변화 없음** | 본인 시점에선 자기 몸이 안 보임(§13.0-1). 몰입 연출 원하면 탑승 중 FP 카메라 높이 보정만 별도 검토 |
+
+---
+
+## 15. 플레이 테스트 이슈 트러블슈팅 ★ (2026-07-14 PIE 2인 테스트에서 발견)
+
+> 발견된 문제 6건의 원인 분석과 해결책. **§15.2 / §15.4 / §15.6의 C++ 수정은 이미 적용 완료** — 에디터 작업(GE/BP/ABP)만 남은 항목에는 ☐ 표시. 각 항목 끝의 "검증"대로 재테스트할 것.
+
+### 15.0 전제 — 애니메이션 "안 보임" 판정 전에 반드시 확인할 것
+
+**본인 화면에서는 본인 3인칭 애니메이션이 원래 안 보인다.** `GetMesh()->SetOwnerNoSee(true)`(`DRCharacter.cpp:73`, §13.0-1) 때문에 시전자 화면에는 자기 메시 자체가 렌더되지 않는다. 따라서:
+- 호스트가 돌진하며 자기 화면을 보는 것 → 아무 애니도 안 보이는 게 **정상**
+- 클라가 더블점프하며 자기 화면을 보는 것 → 안 보이는 게 **정상**
+- **올바른 관찰 방법**: A가 스킬 사용 → **B의 화면에서 A의 캐릭터**를 관찰 (§13.8 검증 항목 전부 이 방식). 또는 임시로 `SetOwnerNoSee(false)`로 끄고 셀프 뷰 확인 후 되돌리기.
+
+§15.3(크러시)·§15.5(DJ/대쉬 시작) 증상 중 일부는 이 관찰 방법 문제일 가능성이 있으므로, 아래 수정 후 반드시 상대 화면 기준으로 재검증한다.
+
+### 15.1 이슈 요약표
+
+| # | 증상 | 근본 원인 | 상태 |
+|---|---|---|---|
+| 1 | 지속 돌진이 클라 캐릭터만 제자리 | `Tick`의 전진 입력이 `HasAuthority()` 조건 — 원격 클라 폰은 CMC ServerMove가 서버 입력을 덮음 | ✅ C++ 수정 완료 (§15.2) |
+| 2 | DJ AoE가 아군 플레이어에게 데미지 | `BP_DRVacuumCleaner`에 액터 태그 `Player` 누락 → `IsNotFriend`가 아군 판정 실패 | ✅ C++ 수정 완료 + ☐ BP 확인 (§15.4) |
+| 3 | Q 한 번 눌렀는데 2회 발동 | `AbilityInputTagHeld`가 홀드 중 매 프레임 `TryActivateAbility` — 즉발 스킬이 다음 프레임 재발동 | ✅ 태그 추가 완료 + ☐ GE 생성/지정 (§15.6) |
+| 4 | Dash_Start 애니 양쪽 다 안 보임 | ABP SM 배선 문제(실측: 미연결 전이 경고가 에셋에 저장돼 있음) + 관찰 방법(§15.0) 가능성 | ☐ ABP 수정 (§15.5) |
+| 5 | DJ 애니 전혀 안 보임 | 동일 — ABP 전이 조건/알리아스 배선 문제 유력 | ☐ ABP 수정 (§15.5) |
+| 6 | 돌진 충돌(Crush) 몽타주가 클라 화면에서만 안 보임 | GAS 몽타주 복제 경로 문제 또는 관찰 방법. 진단 후 필요 시 Multicast 재생으로 전환 | ☐ 진단 → 필요 시 C++ (§15.3) |
+
+### 15.2 [수정 완료] 지속 돌진 — 클라이언트 캐릭터가 제자리에 서 있음
+
+**원인**: `ADRRobotVacuumCharacter::Tick`이 `if (HasAuthority() && bSustainedDash ...)` 조건으로 `AddMovementInput`을 주입했다. CMC(CharacterMovementComponent)의 클라이언트 예측 구조에서 **플레이어가 조종하는 폰의 이동 입력 원천은 소유 클라이언트**다: 클라가 매 프레임 자기 입력을 `ServerMove` RPC로 보내고, 서버는 그것을 재생/검증한다. 서버에서 원격 클라 폰에 `AddMovementInput`을 해봤자 다음 `ServerMove`가 도착하는 순간 "클라 입력에는 전진이 없었다"로 덮여버려 실제로 움직이지 않는다. 리슨 서버 호스트 폰은 서버=소유 클라라서 정상 동작했던 것 — 정확히 관찰된 증상과 일치.
+
+**수정 (적용됨, `DRRobotVacuumCharacter.cpp` Tick)**:
+```cpp
+// 변경 전: if (HasAuthority() && bSustainedDash && !bDead)
+// 변경 후:
+if (bSustainedDash && !bDead && IsLocallyControlled())
+{
+    AddMovementInput(GetActorForwardVector(), 1.f);
+}
+```
+- `IsLocallyControlled()` = 리슨 호스트 본인 + 원격 소유 클라 양쪽 커버, 시뮬 프록시 제외.
+- `bSustainedDash`는 복제 프로퍼티(§4.2)라 소유 클라에도 도착한다. 해소 직후 ~1 RTT 지연은 체감 무시 가능.
+- 충돌 판정(`OnCapsuleHit`)·데미지·게이지는 여전히 전부 서버 전용 — 치트 표면 증가 없음.
+
+**검증**: 클라이언트로 5칸 만충 → 해소 → 자동 전진 + 마우스 조향 확인. 호스트 화면에서도 클라 캐릭터가 전진하는지 확인(CMC 이동 복제).
+
+### 15.3 돌진 충돌(Crush) 몽타주 — 클라이언트 화면에서만 안 보임
+
+**전제 확인**: "클라이언트에서 안 보인다"가 **시전한 클라 본인 화면**이라면 §15.0에 의해 정상이다. 문제가 되는 케이스는 "**호스트가 충돌했는데 클라 화면에서 호스트 캐릭터의 Crush가 안 나옴**" (시뮬레이티드 프록시 방향 복제 실패)뿐이다.
+
+**구조 리마인드**: `FinishDash()`는 서버에서만 실행되고(`HandleDashImpact`/`OnBrakePressed` 모두 `HasAuthority()` 가드), 몽타주는 서버 GA 인스턴스의 `PlayMontageAndWait`로 재생된다. 이때 ASC의 `ReplicatedAnimMontage` 경로로 시뮬 프록시에 자동 전파되는 것이 §13.5의 설계 전제였다. 전파 전제 조건: ① 서버 ASC에서 `PlayMontage` 호출(✓), ② 각 클라에서 해당 플레이어의 `InitAbilityActorInfo` 완료 — ActorInfo가 아바타 메시/AnimInstance를 알아야 함(`OnRep_PlayerState`에서 호출, `DRCharacter.cpp:250-257` — 시뮬 프록시 포함 전 클라에서 실행됨 ✓), ③ ABP에 Slot 노드 존재(✓ — 서버 화면에서는 보이므로).
+
+**진단 절차** (§15.0 확인 후에도 재현되면):
+1. 서버 로그에서 `[VacuumDash] 돌진 종료 — 사유: 충돌, 몽타주: AM_VC_Dash_Crush` 확인 (기존 추가 로그).
+2. 같은 상황에서 클라 화면에 `HitReact` 몽타주는 보이는지 비교 — **HitReact가 보이면** 복제 인프라는 정상이고 Crush 경로만 문제, **HitReact도 안 보이면** ②의 초기화 타이밍 문제(공통 인프라).
+3. 유력 후보: 몽타주 재생 직후 같은 프레임의 `EndAbility` 조합(fire-and-forget + 즉시 종료)은 "재생 후 대기"하는 HitReact류 GA와 다른 유일한 구조적 차이점.
+
+**해결책 (진단 결과와 무관하게 확실한 방법)** ☐: GAS 몽타주 복제 의존을 버리고 **캐릭터 Multicast RPC로 전환** — 프로젝트에 이미 같은 패턴의 선례가 있다(`MulticastPlayDashImpactSound`, `MulticastHandleDeath`).
+
+```cpp
+// DRRobotVacuumCharacter.h (public)
+UFUNCTION(NetMulticast, Unreliable)
+void MulticastPlayFinishMontage(UAnimMontage* Montage);
+
+// DRRobotVacuumCharacter.cpp
+void ADRRobotVacuumCharacter::MulticastPlayFinishMontage_Implementation(UAnimMontage* Montage)
+{
+    if (GetNetMode() == NM_DedicatedServer || !Montage) return;
+    if (UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+    {
+        AnimInstance->Montage_Play(Montage);
+    }
+}
+
+// DRVacuumDash.cpp FinishDash() — PlayMontageAndWait 블록을 통째로 교체:
+if (FinishMontage && Vacuum)
+{
+    Vacuum->MulticastPlayFinishMontage(FinishMontage);
+}
+```
+- 전 머신(호스트+전 클라)에서 재생 — 시전 클라 본인도 재생되지만 OwnerNoSee라 화면에 안 보일 뿐 무해.
+- Unreliable로 충분(1회성 코스메틱). Montage 인자는 GA BP에 지정된 에셋 레퍼런스라 전 클라에 로드돼 있음.
+- 같은 증상이 `AM_VC_EnhancedAttack`(AirShot 3단계)에서도 확인되면 동일 헬퍼로 교체(§13.5-③의 "GAS 복제로 충분" 전제를 §15에서 정정).
+
+**검증**: 호스트 돌진-충돌 → 클라 화면에서 호스트 캐릭터 Crush 재생 / 클라 돌진-충돌 → 호스트 화면에서 재생 / 3인 테스트 시 제3자 화면에서도 재생.
+
+### 15.4 [수정 완료] 더블 점프 AoE — 아군 플레이어 오폭
+
+**원인**: 아군 판정 `UDRAbilitySystemLibrary::IsNotFriend()`(`DRAbilitySystemLibrary.cpp:415-422`)는 **두 액터가 모두 액터 태그 `"Player"`를 갖고 있으면 아군**으로 판정한다. 이 태그는 C++이 아니라 **각 캐릭터 BP의 디테일 → Actor → Tags에 수동 입력**돼 있었다(uasset 실측: `BP_GardenRobot`에는 `Player` 태그 있음, **`BP_DRVacuumCleaner`에는 없음**). 청소기에 태그가 없으니 `IsNotFriend(청소기, 다른 플레이어) == true` → JetJump AoE의 아군 필터를 통과해 아군이 맞았다.
+
+**파급 범위 (같은 원인으로 잘못 동작하던 것들 — 태그 수정으로 일괄 해결)**:
+- 돌진 충돌 데미지의 적/아군 구분(`HandleDashImpact`의 `bEnemy`): 아군 플레이어가 G×5가 아닌 **G×10(적 배율)**을 맞고 있었음
+- 적 처치 시 물 보상의 플레이어 판정(`DREnemyAttributeSet.cpp:97`의 `bSourceIsPlayer`): 청소기가 적을 잡으면 **물 보상이 지급되지 않았을 가능성** — 수정 후 확인
+- 적 AI/투사체 등 `IsNotFriend`·`"Player"` 태그를 쓰는 모든 경로
+
+**수정 (적용됨, `DRCharacter.cpp` 생성자)**: BP 수동 태그에 의존하지 않도록 플레이어 베이스 클래스가 태그를 보장한다.
+```cpp
+ADRCharacter::ADRCharacter()
+{
+    Tags.AddUnique(FName("Player"));   // IsNotFriend 아군 판정용 — BP 누락 사고 원천 차단
+    ...
+}
+```
+- 기존 BP(`BP_GardenRobot` 등)에 이미 있는 `Player`와 중복돼도 `ActorHasTag` 판정에 무해.
+- ☐ **주의 1**: BP가 Tags 배열을 에디터에서 한 번이라도 수정했다면 BP 저장값이 C++ 기본값을 통째로 덮는다. 컴파일 후 `BP_DRVacuumCleaner` 디테일에서 Tags에 `Player`가 보이는지 1회 확인하고, 안 보이면 BP에 수동 추가.
+- ☐ **주의 2**: 반대로 태그 배열에 오타 값(예: `player` 소문자)이 있으면 정리.
+
+**검증**: PIE 2인 → 아군 옆에서 Q — 로그 확인: `[VacuumJetJump] AoE 판정 종료 — 후보 N / 적중 0` (아군만 있을 때). 적 스폰 후에는 적만 적중 로그에 나와야 함. 돌진으로 아군 충돌 시 `[VacuumDash] 충돌 — ... (플레이어), 데미지 G×5` 확인.
+
+### 15.5 Dash_Start·더블점프 애니메이션 미재생 — ABP 배선 점검
+
+**실측 근거** (`ABP_VacuumCleaner.uasset` 파싱, 07-14 17:45 저장본):
+1. 상태들은 존재한다: `Idle / Walk / Jump / FallLoop / Land / Stun / DJ_Start / DJ_Loop / DJ_Land / Dash_Charge / Dash_Start / Dash_Loop` + 알리아스 `ToStun / ToFalling / ToDJ / ToLand / ToDJLand`. (점프 계열이 §13.4.3의 `Jump_Start/Loop/Land` 대신 Gardener식 `Jump/FallLoop/Land` 이름 — 동작에는 무관)
+2. **스테이트머신이 2개다**: `AnimGraphNode_StateMachine_0 "Main States"` + `AnimGraphNode_StateMachine_1 "Locomotion"`, 그리고 **Disabled 노드 흔적**(`ENodeEnabledState::Disabled`)이 저장돼 있다 — ABP_Gardener를 복제해 시작한 흔적. **새 상태(DJ_*/Dash_*)를 Output에 연결 안 된 쪽 SM에 만들었을 가능성이 가장 유력한 원인.**
+3. **미연결 전이 경고가 에셋에 저장돼 있다**: "`ToStun to Stun will never be taken, please connect something to Can Enter Transition`" — 최소 1개 전이가 조건 미연결 상태로 저장됐다. 같은 실수가 DJ/Dash 전이에도 있을 수 있다(§13.4.3-(4)에서 예고한 바로 그 실수).
+
+**수정 체크리스트** ☐ (순서대로):
+1. **AnimGraph 정리**: Output Pose에서 역추적해 실제 연결된 SM이 어느 것인지 확인 → **연결 안 된 SM은 삭제**, Disabled 노드 전부 삭제. 남은 SM 하나에 모든 상태가 있어야 한다. 없으면 §13.4.3-(3) 표대로 이설.
+2. **컴파일 경고 0**: "`... will never be taken`" 경고가 하나라도 있으면 해당 전이 그래프에서 조건을 Result 핀에 연결. Automatic Rule 전이(Jump→FallLoop류, DJ_Start→DJ_Loop, Dash_Start→Dash_Loop, *_Land→Idle)는 전이 디테일 "Automatic Rule Based on Sequence Player in State" 체크로 대체(조건 연결 불필요).
+3. **전이 조건 실제 값 대조** (§13.4.3-(3) 표 기준, ABP 실제 변수명 사용):
+   - `ToDJ` alias → `DJ_Start`: `bIsJetJumping AND bIsInAir`, **Priority가 일반 점프(ToFalling)보다 앞**(숫자 작게). alias 커버 상태에 `Jump/FallLoop/Land/Dash_Charge` 포함 확인 — 빠지면 공중 Q에서 DJ 재생 안 됨.
+   - `Dash_Charge → Dash_Start`: `bSustainedDash`. `Dash_Charge → Idle/Walk` 탈출 조건은 `NOT bIsDashCharging AND NOT bSustainedDash` — **`NOT bSustainedDash`가 빠져 있으면 만충 해소 프레임에 Idle로 새서 Dash_Start를 건너뛴다** (Dash_Start 미재생의 전형적 원인).
+   - `Idle/Walk → Dash_Charge`: `bIsDashCharging AND NOT bIsInAir` — 이 전이가 없으면 SM이 Dash_Charge 상태에 있지 않아 Dash_Start 진입 경로 자체가 없다.
+4. **상태 내부 시퀀스 확인**: `DJ_Start=VC_DoubleJump_Start(루프☐)`, `DJ_Loop=VC_DoubleJump_Loop(루프✔)`, `DJ_Land=VC_DoubleJump_Land(루프☐)`, `Dash_Start=VC_Dash_Start(루프☐)`, `Dash_Loop=VC_Dash_Loop(루프✔)`. 시퀀스 미지정(빈 상태)이면 스킵/T포즈처럼 보인다.
+5. **플래그 값 자체 검증** (ABP 수정 전 5분 진단): PIE에서 콘솔 `ShowDebug Animation` — 현재 SM 상태와 ABP 변수 값이 화면에 표시된다. Q 사용 순간 `bIsJetJumping`이 true로 바뀌는지, 만충 해소 순간 `bSustainedDash`가 true인지 확인. **true인데 상태가 안 바뀌면 100% 전이 배선 문제**, false면 C++/복제 문제(그 경우만 코드 재조사).
+
+**검증**: §15.0 방식(상대 화면)으로 — 지상 Q: DJ 3단 재생 / 공중 Q: 낙하 중에도 DJ 재생 / 만충 해소: Dash_Charge 클라이맥스 → **Dash_Start 1회 재생** → Dash_Loop 루프 → 충돌 시 Crush 몽타주가 Loop를 덮음.
+
+### 15.6 [태그 추가 완료] Q 홀드 시 더블 점프 2연발
+
+**원인**: 입력 시스템이 홀드 중 **매 프레임** 활성화를 시도한다 — `UDRAbilitySystemComponent::AbilityInputTagHeld()`(`DRAbilitySystemComponent.cpp:88-103`)가 `if (!AbilitySpec->IsActive()) TryActivateAbility(...)`. JetJump는 즉발(같은 프레임에 EndAbility)이라 다음 프레임엔 이미 `IsActive()==false` → 재활성화. 첫 발동으로 공중에 뜬 상태라 두 번째 활성화도 통과(`CanActivateAbility`: 공중 + `bAirJumpUsed==false`) → 공중 점프까지 즉시 소모. "한 번 눌렀는데 2번"의 정체는 **지상 점프 + 다음 프레임 공중 점프**다.
+
+**해결책: 쿨다운 GE (GAS 표준 경로 — 추가 C++ 코드 0)**. `CommitAbility()`가 이미 있으므로(`DRVacuumJetJump.cpp:45`) Cooldown GE만 지정하면 커밋 시 자동 적용되고, 쿨다운 태그가 살아있는 동안 `CanActivateAbility`가 자동 차단한다.
+
+- ✅ 네이티브 태그 추가 완료: `Cooldown.RobotVacuum.JetJump` (`DRGameplayTags.h/.cpp` — `Cooldown_Fire_FireBolt` 관례)
+- ☐ **GE 생성**: `GE_Cooldown_VacuumJetJump` (위치: `…/VacuumCleaner/Abilities/Skill1_JetJump/`)
+  - Duration Policy = **Has Duration**, Duration Magnitude = **0.3**
+  - Components → Target Tags Gameplay Effect Component(구 Granted Tags) → Add Tags: **`Cooldown.RobotVacuum.JetJump`**
+  - Modifier 없음 (태그 부여가 전부)
+- ☐ **GA 지정**: `GA_VacuumJetJump` → Class Defaults → Costs → **Cooldown Gameplay Effect Class = `GE_Cooldown_VacuumJetJump`**
+- 수치 근거: 0.3초는 홀드 스팸(매 프레임)을 확실히 끊으면서, 의도된 콤보 "지상 Q → 정점 부근 공중 Q"(점프 정점까지 보통 0.4초+)를 방해하지 않는다. 콤보가 답답하면 0.2까지 낮춰 조정.
+- 참고(차선책, 미채택): `AbilityInputTagHeld`에서 즉발형 어빌리티를 Pressed 전용으로 분리하는 입력 구조 개편 — LMB 충전형과 정책 분기가 필요해 수정 범위가 커서 쿨다운 방식 우선.
+
+**검증**: Q 꾹 누르기 → 로그에 `[VacuumJetJump] 발동` 1회만 + 물 30만 차감. 지상 Q → 정점에서 Q 콤보(2회째)는 여전히 되는지 확인 (0.3초 경과 후 공중 1회는 스펙).
+
+### 15.7 수정 후 통합 재검증 순서
+
+1. **C++ 빌드** (에디터 종료 후 Build.bat, 또는 에디터에서 Live Coding Ctrl+Alt+F11) — §15.2/15.4/15.6 반영
+2. **에디터 작업**: `GE_Cooldown_VacuumJetJump` 생성·지정(§15.6) → `BP_DRVacuumCleaner` Tags에 `Player` 확인(§15.4) → ABP SM 정리·전이 수정(§15.5)
+3. **PIE 2인**(리슨 서버 + 클라), 관찰은 항상 **상대 화면**(§15.0):
+   - (a) 클라 지속 돌진: 전진 + 마우스 조향 (§15.2)
+   - (b) 아군 옆 Q: `적중 0` 로그 (§15.4)
+   - (c) Q 홀드: 1회만 발동 (§15.6)
+   - (d) DJ 3단 애니 (§15.5)
+   - (e) 만충 해소: Dash_Charge → Dash_Start → Dash_Loop (§15.5)
+   - (f) 충돌 Crush가 상대 화면에서 재생 (§15.3 — 안 되면 Multicast 전환 적용)
