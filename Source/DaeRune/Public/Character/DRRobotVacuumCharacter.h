@@ -7,6 +7,7 @@
 #include "Interaction/DRInteractable.h"
 #include "DRRobotVacuumCharacter.generated.h"
 
+class UAnimMontage;
 class USphereComponent;
 class USoundBase;
 class UWidgetComponent;
@@ -105,8 +106,39 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Animation")
 	bool bIsJetJumping = false;
 
+	// 제트 점프 발동 횟수 카운터 (서버 전용 증가, 랩어라운드 무해).
+	// FP ABP가 값 "변화"를 엣지로 감지해 Jump_Start 재진입 — bIsJetJumping은 착지까지 true 유지라
+	// "지상 Q → 공중 Q" 2연속에서 엣지가 안 생기므로 이 카운터가 필요 (Plan5 §4.6)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Animation")
+	uint8 JetJumpCounter = 0;
+
 	void SetDashCharging(bool bNew);   // 서버 전용
 	void SetJetJumping(bool bNew);     // 서버 전용
+
+	// ========== FP 애니메이션 (Plan5 §5.2) ==========
+
+	// 돌진 종료 FP 몽타주 — S 브레이크 급정거 (BP_DRVacuumCleaner에서 AM_FP_VC_Dash_Stop 지정)
+	UPROPERTY(EditDefaultsOnly, Category = "Dash|Animation")
+	TObjectPtr<UAnimMontage> FPDashStopMontage;
+
+	// 돌진 충돌 FP 몽타주 — 일반/지속 돌진 충돌 공통 (AM_FP_VC_Crush 지정)
+	UPROPERTY(EditDefaultsOnly, Category = "Dash|Animation")
+	TObjectPtr<UAnimMontage> FPDashCrushMontage;
+
+	// 서버(GA FinishDash) → 소유 클라: FP 메시에 돌진 종료 몽타주 재생.
+	// Reliable — 1회성 저빈도 연출이지만 유실 시 FP만 뻣뻣하게 남아 눈에 띔
+	UFUNCTION(Client, Reliable)
+	void ClientPlayDashEndFPMontage(bool bFromImpact);
+
+	// ========== FP 기준 발사 (Plan5 §6) ==========
+
+	// 공기탄 발사 기준 소켓 — FP 메시의 총구
+	UPROPERTY(EditDefaultsOnly, Category = "Combat")
+	FName FPMuzzleSocketName = FName("Muzzle");
+
+	// CombatSocket.LeftHand(GA_VacuumAirShot의 FireSocketTag) 요청을 FP 메시 Muzzle로 라우팅
+	// — 발사 위치/반동 기준을 1인칭 모델에 맞춤
+	virtual FVector GetCombatSocketLocation_Implementation(const FGameplayTag& MontageTag) override;
 
 protected:
 	virtual void BeginPlay() override;
@@ -141,9 +173,11 @@ protected:
 	// 서버: 돌진 버프 활성 중에만 충돌 판정 (1회 발화 후 스스로 해제)
 	bool bDashCollisionArmed = false;
 
-	// 돌진 충돌 오판 방지 최소 속도 (벽 스침/저속 접촉 제외)
+	// 돌진 충돌 오판 방지 최소 속도 — 벽/지형(수직면)에만 적용. Pawn(적/타 플레이어) 충돌은
+	// armed(돌진 중)만으로 유효하므로 이 값의 영향을 받지 않는다 (OnCapsuleHit 참고).
+	// 기본 이속 550 · 최소 돌진(1칸) 순항 660 기준, 충돌 순간 감속을 흡수하도록 충분히 낮게 설정.
 	UPROPERTY(EditDefaultsOnly, Category = "Dash")
-	float DashImpactMinSpeed = 700.f;
+	float DashImpactMinSpeed = 350.f;
 
 	// 돌진 충돌 임팩트 사운드 (BP에서 지정)
 	UPROPERTY(EditDefaultsOnly, Category = "Dash")

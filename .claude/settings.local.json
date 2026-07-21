@@ -79,7 +79,15 @@
       "PowerShell(python \"C:\\\\Users\\\\OWNER\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-OWNER-Documents-Unreal-Projects-DaeRune\\\\86883be1-3d03-44ff-9ede-efb8ad26ea01\\\\scratchpad\\\\bpprops2.py\")",
       "PowerShell(& \"C:\\\\Program Files\\\\Epic Games\\\\UE_5.5\\\\Engine\\\\Build\\\\BatchFiles\\\\Build.bat\" DaeRuneEditor Win64 Development -Project=\"C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject\" -WaitMutex)",
       "PowerShell($key = Get-ItemProperty \"HKLM:\\\\SOFTWARE\\\\EpicGames\\\\Unreal Engine\\\\5.5\" -ErrorAction SilentlyContinue; if \\($key\\) { $key.InstalledDirectory } else { Get-ChildItem \"HKLM:\\\\SOFTWARE\\\\EpicGames\\\\Unreal Engine\" -ErrorAction SilentlyContinue | ForEach-Object { \\(Get-ItemProperty $_.PSPath\\).InstalledDirectory } })",
-      "PowerShell($proj = Get-Content \"C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject\" -Raw | ConvertFrom-Json; $proj.EngineAssociation; $reg = Get-ItemProperty \"HKLM:\\\\SOFTWARE\\\\EpicGames\\\\Unreal Engine\\\\5.5\" -ErrorAction SilentlyContinue; if \\($reg\\) { $reg.InstalledDirectory } else { Get-ChildItem \"HKLM:\\\\SOFTWARE\\\\EpicGames\\\\Unreal Engine\" -ErrorAction SilentlyContinue | ForEach-Object { \\(Get-ItemProperty $_.PSPath\\).InstalledDirectory } })"
+      "PowerShell($proj = Get-Content \"C:\\\\Users\\\\OWNER\\\\Documents\\\\Unreal Projects\\\\DaeRune\\\\DaeRune.uproject\" -Raw | ConvertFrom-Json; $proj.EngineAssociation; $reg = Get-ItemProperty \"HKLM:\\\\SOFTWARE\\\\EpicGames\\\\Unreal Engine\\\\5.5\" -ErrorAction SilentlyContinue; if \\($reg\\) { $reg.InstalledDirectory } else { Get-ChildItem \"HKLM:\\\\SOFTWARE\\\\EpicGames\\\\Unreal Engine\" -ErrorAction SilentlyContinue | ForEach-Object { \\(Get-ItemProperty $_.PSPath\\).InstalledDirectory } })",
+      "Bash(grep -aoE \"[ -~]{6,}\" \"Blueprints/AbilitySystem/Player/VendingMachine/Abilities/Skill1/GA_VendingMachineBasicAttack.uasset\")",
+      "Bash(grep -aoE \"[ -~]{5,}\" \"Blueprints/Character/PlayerCharacter/VendingMachine/ABP_FP_VendingMachine.uasset\")",
+      "Bash(grep -aoE \"[ -~]{4,}\" \"Blueprints/Character/PlayerCharacter/VendingMachine/ABP_FP_VendingMachine.uasset\")",
+      "Bash(grep -aE \"^\\(b[A-Z][A-Za-z]+|Speed|Direction|Forward|Right|Owner[A-Za-z]*|Is[A-Z][A-Za-z]+|.*Direction\\)$\")",
+      "Bash(grep -aoE \"[ -~]{4,}\" \"DaeRuneAssets/Characters/GardenRobot_v3/FP/Gardener_FP_v0_1_0_Skeleton.uasset\")",
+      "Bash(grep -aoE \"[ -~]{4,}\" \"DaeRuneAssets/Characters/VendingMachine/FP/VendingMachine_FP_v0_1_0_Skeleton.uasset\")",
+      "PowerShell(Get-ChildItem \"C:\\\\Program Files\\\\Epic Games\" -ErrorAction SilentlyContinue | Select-Object Name; \\(Get-Content \"DaeRune.uproject\" -Raw | ConvertFrom-Json\\).EngineAssociation)",
+      "PowerShell(try { \\(Get-ItemProperty \"HKLM:\\\\SOFTWARE\\\\EpicGames\\\\Unreal Engine\\\\5.5\" -ErrorAction Stop\\).InstalledDirectory } catch { \"registry miss\" }; try { Get-ItemProperty \"HKCU:\\\\SOFTWARE\\\\Epic Games\\\\Unreal Engine\\\\Builds\" -ErrorAction Stop | Format-List } catch { \"no source builds\" })"
     ]
   },
   "enabledMcpjsonServers": [

@@ -75,7 +75,7 @@ enum class EDRCrosshairState : uint8
 };
 
 // 조준선 텍스처 세트 전달 델리게이트 (캐릭터 클래스 확정/변경 시 1회 브로드캐스트)
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnCrosshairImagesChangedSignature, UTexture2D*, NormalTexture, UTexture2D*, DisabledTexture, UTexture2D*, InstallReadyTexture);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnCrosshairImagesChangedSignature, UTexture2D*, NormalTexture, UTexture2D*, DisabledTexture, UTexture2D*, InstallReadyTexture, FVector2D, CrosshairSize);
 // 조준선 상태 변경 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCrosshairStateChangedSignature, EDRCrosshairState, NewState);
 // 적 타격 확인 델리게이트 (위젯이 히트마커 이미지 표시 + 애니메이션 재생)

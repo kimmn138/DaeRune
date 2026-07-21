@@ -6,10 +6,21 @@
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Character/DRCharacter.h"
 #include "Character/DRRobotVacuumCharacter.h"
+#include "Components/BoxComponent.h"
 #include "Components/SphereComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
+
+ADRVacuumAirProjectile::ADRVacuumAirProjectile()
+{
+	// 가로형 판정 박스 (Plan5 §7) — 루트 Sphere는 비균등 스케일이 불가능하므로 박스로 판정 이관.
+	// 콜리전 프로파일/Extent는 BP_VacuumAirProjectile에서 설정 (기본 NoCollision)
+	WideCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("WideCollision"));
+	WideCollision->SetupAttachment(GetRootComponent());   // 루트 = Sphere
+	WideCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WideCollision->OnComponentBeginOverlap.AddDynamic(this, &ADRVacuumAirProjectile::OnSphereOverlap);
+}
 
 void ADRVacuumAirProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -45,6 +56,7 @@ void ADRVacuumAirProjectile::StartFade()
 	bFading = true;
 
 	Sphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	if (WideCollision) WideCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	ProjectileMovement->StopMovementImmediately();
 
 	// 리슨서버 로컬 연출 (클라는 RepNotify 경로)

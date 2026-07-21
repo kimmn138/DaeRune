@@ -3,7 +3,10 @@
 
 #include "Character/DRRobotVacuumCharacter.h"
 #include "AbilitySystemComponent.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/WidgetComponent.h"
 #include "DRGameplayTags.h"
@@ -133,6 +136,7 @@ void ADRRobotVacuumCharacter::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 	// 애님 전용 플래그 (ABP가 매 프레임 폴링 — RepNotify 불필요)
 	DOREPLIFETIME(ADRRobotVacuumCharacter, bIsDashCharging);
 	DOREPLIFETIME(ADRRobotVacuumCharacter, bIsJetJumping);
+	DOREPLIFETIME(ADRRobotVacuumCharacter, JetJumpCounter);
 }
 
 void ADRRobotVacuumCharacter::Landed(const FHitResult& Hit)
@@ -343,13 +347,15 @@ void ADRRobotVacuumCharacter::OnCapsuleHit(UPrimitiveComponent* HitComponent, AA
 	// 탑 상태에서 서로 충돌 판정 금지
 	if (OtherActor == RiderOnTop || OtherActor == MountedOn) return;
 
-	// 기본 이속보다 확실히 빠를 때만 (벽 스침 오판 방지)
-	if (GetVelocity().Size2D() < DashImpactMinSpeed) return;
-
 	// Pawn(적/타 플레이어) 또는 수직면(벽/지형지물 — 바닥 착지는 노말 Z가 커서 제외)
 	const bool bHitPawn = Cast<APawn>(OtherActor) != nullptr;
 	const bool bHitVerticalSurface = !bHitPawn && Hit.ImpactNormal.Z < 0.7f;
 	if (!bHitPawn && !bHitVerticalSurface) return;
+
+	// 속도 게이트는 벽/지형(수직면)에만 적용. Pawn 충돌은 armed(돌진 중)만으로 유효 판정 —
+	// 충돌 프레임에서 CMC가 블로킹을 해소하며 GetVelocity가 순항 속도보다 저평가돼
+	// 적/플레이어 타격이 간헐적으로 누락되던 문제를 제거한다.
+	if (!bHitPawn && GetVelocity().Size2D() < DashImpactMinSpeed) return;
 
 	// 중복 발화 방지: 1회 브로드캐스트 후 해제 (GA가 FinishDash에서 재확인)
 	bDashCollisionArmed = false;
@@ -368,4 +374,37 @@ void ADRRobotVacuumCharacter::SetJetJumping(bool bNew)
 {
 	if (!HasAuthority()) return;
 	bIsJetJumping = bNew;
+
+	if (bNew)
+	{
+		// 발동 1회당 1 증가 — bIsJetJumping이 이미 true여도 변화가 생겨
+		// FP ABP가 "지상 Q → 공중 Q" 2연속에서도 엣지를 감지할 수 있다 (Plan5 §4.6.2)
+		++JetJumpCounter;
+	}
+}
+
+// ========== FP 애니메이션 (Plan5 §5.2) ==========
+
+void ADRRobotVacuumCharacter::ClientPlayDashEndFPMontage_Implementation(bool bFromImpact)
+{
+	// 소유 클라(리슨 호스트 포함)에서만 도착. FP 메시가 안 보이는 상태(사망 등)면 생략
+	UAnimMontage* Montage = bFromImpact ? FPDashCrushMontage.Get() : FPDashStopMontage.Get();
+	if (!Montage || !FirstPersonMesh || !FirstPersonMesh->IsVisible()) return;
+
+	if (UAnimInstance* AnimInst = FirstPersonMesh->GetAnimInstance())
+	{
+		AnimInst->Montage_Play(Montage);
+	}
+}
+
+// ========== FP 기준 발사 (Plan5 §6) ==========
+
+FVector ADRRobotVacuumCharacter::GetCombatSocketLocation_Implementation(const FGameplayTag& MontageTag)
+{
+	if (MontageTag.MatchesTagExact(FDRGameplayTags::Get().CombatSocket_LeftHand)
+		&& FirstPersonMesh && FirstPersonMesh->DoesSocketExist(FPMuzzleSocketName))
+	{
+		return FirstPersonMesh->GetSocketLocation(FPMuzzleSocketName);
+	}
+	return Super::GetCombatSocketLocation_Implementation(MontageTag);
 }

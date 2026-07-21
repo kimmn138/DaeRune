@@ -257,6 +257,13 @@ void UDRVacuumDash::FinishDash(bool bFromImpact, AActor* HitActor)
 		}
 	}
 
+	// FP 미러 (Plan5 §5.2): 충돌 = Crush(일반/지속 공통), S 브레이크(지속) = Stop, 자연 감쇠 = 없음.
+	// TP 선택 규칙(위 삼항식)과 동일한 조건 — FP 몽타주는 소유 클라 로컬 재생이므로 Client RPC로 통지
+	if (Vacuum && (bFromImpact || bWasSustained))
+	{
+		Vacuum->ClientPlayDashEndFPMontage(bFromImpact);
+	}
+
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 

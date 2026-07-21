@@ -67,6 +67,10 @@ struct FCharacterClassDefaultInfo
 	// 부품 운반 중 사이트 조준 시(설치 가능) 캐릭터 전용 조준선 텍스처
 	UPROPERTY(EditDefaultsOnly, Category = "UI|Crosshair")
 	TObjectPtr<UTexture2D> CrosshairInstallReadyTexture;
+
+	// 캐릭터 전용 조준선 표시 크기 (0,0 이면 위젯에서 텍스처 원본 크기 사용)
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Crosshair")
+	FVector2D CrosshairSize = FVector2D(32.f, 32.f);
 };
 
 /**
