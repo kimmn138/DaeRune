@@ -2,8 +2,40 @@
 
 > 작성일: 2026-07-01
 > 대상 브랜치: `feat/PlayExpo` (작업은 별도 `feat/CharacterProgression` 브랜치 권장)
-> 작성 목적: 스팀 계정마다, 플레이어 캐릭터(정원로봇 / 자판기)마다 독립적인 경험치·레벨을 누적하고,
+> 작성 목적: 스팀 계정마다, 플레이어 캐릭터(정원로봇 / 자판기 / 청소기)마다 독립적인 경험치·레벨을 누적하고,
 > 레벨업 시 해당 캐릭터의 능력치(AttributeSet)와 스킬 데미지가 상승하도록 하는 기능의 상세 구현 계획.
+
+---
+
+## 0. 구현 현황 (Implementation Status)
+
+> 마지막 갱신: 2026-07-22 — **M1(데이터/저장 토대) 코드까지 구현됨.** 기존 게임플레이 경로는 무변경(순수 추가).
+
+| 마일스톤 | 상태 | 비고 |
+|---|---|---|
+| **M1. 데이터/저장 토대** | ✅ **코드 완료** | 신규 타입/Config/세이브 확장/GameInstance API. 아래 상세 참조 |
+| M2. 레벨→능력치/스킬 스케일 | ⬜ 미착수 | 코드(Level 파라미터화) + 콘텐츠(커브) 모두 남음 |
+| M3. 서버↔클라 레벨 운반 | ⬜ 미착수 | PlayerState/PlayerController/스폰 SetLevel |
+| M4. 스테이지 종료 지급 파이프라인 | ⬜ 미착수 | GameMode ClearedCount + Client_GrantStageExp |
+| M5. UI | ⬜ 미착수 | 로비 레벨 표시, 결과창 연출 |
+| M6. 스팀 키잉(선택) | ⬜ 미착수 | UniqueNetId 슬롯명, 클램프/로깅 |
+
+### M1에서 실제로 구현된 것 (틀만 — 아직 게임플레이에 연결 안 됨)
+- ✅ 신규 `Source/DaeRune/Public/Game/DRProgressionTypes.h` — `FDRCharacterProgress`, `FDRStageProgressResult`.
+- ✅ 신규 `Source/DaeRune/Public/Game/DRProgressionConfig.h` + `Private/Game/DRProgressionConfig.cpp`
+  — `UDRProgressionConfig` DataAsset. `GetXpToNextLevel()`(커브 없으면 폴백), `CalcStageXp()` 구현.
+- ✅ `DRSaveGame.h/.cpp` 확장 — `TMap<EPlayerCharacterClass, FDRCharacterProgress> CharacterProgress`,
+  `int32 SaveVersion` + `static constexpr int32 CurrentSaveVersion` 추가. (`.cpp` 로직 변경 없음, 기본 초기화만.)
+- ✅ `DRGameInstance.h/.cpp` 확장 — `ProgressionConfig` 프로퍼티 + 진행도 API:
+  `GetCharacterProgress / GetCharacterLevel / GetAllClassLevels / ApplyStageResult`,
+  `LoadProgress`에서 `EnsureProgressInitialized()`(누락 클래스 키 lazy 초기화 + SaveVersion 마이그레이션 스텁) 호출.
+
+### M1에서 아직 안 한 것 (연결/콘텐츠는 다음 마일스톤)
+- ⬜ 콘텐츠: `DA_ProgressionConfig` 인스턴스 생성, `XpToNextLevelCurve` 연결, GameInstance BP에 `ProgressionConfig` 지정.
+- ⬜ `ApplyStageResult`를 실제 호출하는 경로(M4에서 `Client_GrantStageExp`가 호출) — 지금은 API만 존재.
+- ⬜ 레벨→능력치/스킬 반영(M2~M3) — `SetLevel`/`GivePlayerStartupAbilities(Level)` 등 스폰 경로 연결 전혀 안 됨.
+- ✅ **컴파일 검증 완료**: `DaeRuneEditor` Development 빌드 통과(2026-07-22, exit 0). 신규/수정 3파일 무경고 컴파일.
+- ⚠️ **런타임 검증 대기**: 세이브 라운드트립(`ApplyStageResult` → 재시작 → 레벨 유지) 런타임 테스트 미실시. API가 아직 호출되는 경로가 없어 M4 연결 후 검증 예정.
 
 ---
 
@@ -12,8 +44,8 @@
 사용자가 요청한 기능을 분해하면 다음과 같다.
 
 1. **스팀 계정 단위 저장**: 진행도(경험치/레벨)는 스팀 계정(= 해당 PC의 로컬 세이브)에 귀속된다.
-2. **캐릭터(클래스) 단위 분리**: `EPlayerCharacterClass`(현재 `Gardener` 정원로봇, `VendingMachine` 자판기)마다
-   서로 독립된 경험치/레벨을 가진다. 정원로봇만 플레이하면 정원로봇 경험치만 오르고 자판기는 그대로.
+2. **캐릭터(클래스) 단위 분리**: `EPlayerCharacterClass`(현재 `Gardener` 정원로봇, `VendingMachine` 자판기, `RobotVacuum` 청소기)마다
+   서로 독립된 경험치/레벨을 가진다. 정원로봇만 플레이하면 정원로봇 경험치만 오르고 자판기·청소기는 그대로.
 3. **경험치 지급 시점**: 하나의 스테이지가 끝났을 때 1회 지급. **게임오버/게임클리어 무관**하게 지급한다.
 4. **경험치 양 = 클리어한 페이즈 수에 비례**: 그 스테이지에서 도달/클리어한 페이즈 수가 많을수록 더 많은 경험치.
 5. **레벨업 → 능력치 상승**: AttributeSet 스탯(MaxHealth, MaxWater, MoveSpeed 등)과 스킬 데미지가 레벨에 따라 상승.
@@ -61,7 +93,9 @@
 
 ### 2.4 클래스 선택 / 플레이어 식별
 - 선택 클래스는 `ADRPlayerState::SelectedPlayerClass`(복제, RepNotify). (`DRPlayerState.h:118-120`)
-- `EPlayerCharacterClass { Gardener, VendingMachine }` (`CharacterClassInfo.h:27-32`).
+- `EPlayerCharacterClass { Gardener, VendingMachine, RobotVacuum, Count UMETA(Hidden) }` (`CharacterClassInfo.h:29-36`).
+  - **주의**: 현재 플레이 가능 클래스는 **3개**(정원로봇/자판기/청소기). 마지막 `Count`는 개수 계산용 센티넬(Hidden)이며 실제 클래스가 아니다.
+  - 배열/맵 크기는 하드코딩하지 말고 `(int32)EPlayerCharacterClass::Count`로 산정하면 이후 클래스 추가에 자동 대응된다(10장 엣지케이스 #6이 이 센티넬로 자연 해결됨).
 - GameMode가 스폰 시 선택 클래스에 맞는 BP 폰을 고른다.
   (`DRStageGameMode::GetDefaultPawnClassForController_Implementation`, `DRStageGameMode.cpp:24-55`)
 
@@ -88,7 +122,7 @@
 ```
 [클라이언트 로컬 세이브 (스팀 계정별, 권위적 진행도)]
         UDRSaveGame
-        └─ TMap<EPlayerCharacterClass, FDRCharacterProgress>   // 클래스별 {Level, CurrentXP}
+        └─ TMap<EPlayerCharacterClass, FDRCharacterProgress>   // 클래스별 {Level, CurrentXP} (3클래스)
                 │  (로비 진입/접속 시)
                 ▼  ClientReportLevels → ServerRPC
 [서버: ADRPlayerState]
@@ -223,7 +257,9 @@ PlayerState 추가:
 UPROPERTY(Replicated) TArray<int32> ReportedClassLevels;
 int32 GetReportedLevel(EPlayerCharacterClass C) const; // 범위 밖이면 1 반환
 ```
-- TMap 복제 회피 위해 enum 개수만큼 고정 크기 배열 사용(현재 2개) — 단순/안전.
+- TMap 복제 회피 위해 enum 개수만큼 고정 크기 배열 사용 — 단순/안전.
+- 크기는 `(int32)EPlayerCharacterClass::Count`(현재 3: 정원로봇/자판기/청소기)로 초기화(예: `ReportedClassLevels.Init(1, (int32)EPlayerCharacterClass::Count)`). 하드코딩 금지.
+- `GetReportedLevel`은 `(int32)C`가 `[0, Count)` 범위이고 배열 크기 내일 때만 값 반환, 아니면 1.
 
 ### 6.2 스폰 시 레벨 적용 지점
 - `ADRCharacter::InitAbilityActorInfo()`에서 이미 `PlayerCharacterClass = PS->GetSelectedPlayerClass()` 수행.
@@ -392,7 +428,7 @@ Server → ReturnToLobby (ServerTravel)
 3. **호스트(리슨 서버) 플레이어**: 호스트도 클라 컨트롤러를 가지므로 `Client_GrantStageExp`가 동일 동작(로컬 GameInstance 저장). 검증 필요.
 4. **중도 접속/이탈**: Join-in-progress 차단됨(`BlockJoinInProgress`). 종료 시점 존재 PC에게만 지급.
 5. **세이브 손상/마이그레이션**: `SaveVersion` 불일치 시 안전 초기화/변환. 로드 실패 시 기본 진행도.
-6. **클래스 enum 추가 시**: `ReportedClassLevels` 크기/세이브 맵 키를 enum 개수 기반으로 자동 확장.
+6. **클래스 enum 추가 시**: `ReportedClassLevels` 크기/세이브 맵 키를 `EPlayerCharacterClass::Count` 기반으로 자동 확장(하드코딩 금지). 센티넬이 이미 존재하므로 새 클래스는 열거자만 추가하면 됨.
 7. **스테이지 도중 클래스 변경 금지 전제**: 변경 허용 시 5장 "지급 대상 클래스" 규칙 재설계.
 8. **튜토리얼/메인메뉴**: 진행도 지급 없음. 튜토리얼 게임모드는 XP 흐름에서 제외.
 
@@ -421,7 +457,7 @@ Server → ReturnToLobby (ServerTravel)
 - **M4. 스테이지 종료 지급 파이프라인**
   - GameMode `ClearedCount` 계산 + `Client_GrantStageExp`(7.8, 7.6).
   - 클라 수신 → `ApplyStageResult` → 저장.
-  - 검증: 게임오버/클리어 각각 도달 페이즈별 지급량/레벨업 정확성. 정원로봇만 오르고 자판기 불변 확인.
+  - 검증: 게임오버/클리어 각각 도달 페이즈별 지급량/레벨업 정확성. 플레이한 클래스만 오르고 나머지 2클래스 불변 확인.
 
 - **M5. UI**
   - 로비 레벨 표시(9.1), 결과창 XP/레벨업 연출(9.3).
@@ -435,7 +471,7 @@ Server → ReturnToLobby (ServerTravel)
 
 ### 12.1 단일/로컬
 - 세이브 라운드트립: 지급 → 재시작 → 레벨 유지.
-- 클래스 독립성: 정원로봇 플레이 후 자판기 레벨 0 변화 확인.
+- 클래스 독립성: 한 클래스(예: 청소기) 플레이 후 나머지 2클래스(정원로봇/자판기) 레벨 0 변화 확인.
 - 레벨업 경계: XP가 정확히 임계치/초과 시 다중 레벨업 처리.
 
 ### 12.2 멀티플레이어 (PIE 2+ 인스턴스, 리슨 서버)
@@ -461,17 +497,17 @@ Server → ReturnToLobby (ServerTravel)
 ## 14. 변경 파일 요약 체크리스트
 
 신규:
-- [ ] `Source/DaeRune/Public/Game/DRProgressionTypes.h`
-- [ ] `Source/DaeRune/Public/Game/DRProgressionConfig.h` + `Private/.../DRProgressionConfig.cpp`
-- [ ] 콘텐츠: `DA_ProgressionConfig`, XP 커브, 능력치/스킬 레벨 커브
+- [x] `Source/DaeRune/Public/Game/DRProgressionTypes.h` — **M1 완료**
+- [x] `Source/DaeRune/Public/Game/DRProgressionConfig.h` + `Private/Game/DRProgressionConfig.cpp` — **M1 완료**
+- [ ] 콘텐츠: `DA_ProgressionConfig`, XP 커브, 능력치/스킬 레벨 커브 — (M2/콘텐츠)
 
 수정:
-- [ ] `DRSaveGame.h/.cpp` — CharacterProgress 맵, SaveVersion
-- [ ] `DRGameInstance.h/.cpp` — ProgressionConfig, 진행도 API, 마이그레이션
-- [ ] `DRPlayerState.h/.cpp` — ReportedClassLevels(복제) + CopyProperties
-- [ ] `DRPlayerController.h/.cpp` — ServerReportCharacterLevels, Client_GrantStageExp
-- [ ] `DRCharacter.cpp` — 스폰 시 SetLevel(ReportedLevel), GivePlayerStartupAbilities에 Level 전달
-- [ ] `DRAbilitySystemComponent.h/.cpp` — AddCharacterAbilities(Level)
-- [ ] `DRAbilitySystemLibrary.h/.cpp` — GivePlayerStartupAbilities(Level)
-- [ ] `DRStageGameMode.cpp` — ClearedCount 계산 + Client_GrantStageExp 전송 (+ PhaseClasses 접근)
-- [ ] UI 위젯들 — 로비 레벨 표시, 결과창 XP/레벨업
+- [x] `DRSaveGame.h/.cpp` — CharacterProgress 맵, SaveVersion — **M1 완료**
+- [x] `DRGameInstance.h/.cpp` — ProgressionConfig, 진행도 API, 마이그레이션 스텁 — **M1 완료**
+- [ ] `DRPlayerState.h/.cpp` — ReportedClassLevels(복제) + CopyProperties — (M3)
+- [ ] `DRPlayerController.h/.cpp` — ServerReportCharacterLevels, Client_GrantStageExp — (M3/M4)
+- [ ] `DRCharacter.cpp` — 스폰 시 SetLevel(ReportedLevel), GivePlayerStartupAbilities에 Level 전달 — (M2/M3)
+- [ ] `DRAbilitySystemComponent.h/.cpp` — AddCharacterAbilities(Level) — (M2)
+- [ ] `DRAbilitySystemLibrary.h/.cpp` — GivePlayerStartupAbilities(Level) — (M2)
+- [ ] `DRStageGameMode.cpp` — ClearedCount 계산 + Client_GrantStageExp 전송 (+ PhaseClasses 접근) — (M4)
+- [ ] UI 위젯들 — 로비 레벨 표시, 결과창 XP/레벨업 — (M5)
