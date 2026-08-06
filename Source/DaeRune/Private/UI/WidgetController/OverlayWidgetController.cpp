@@ -568,7 +568,8 @@ void UOverlayWidgetController::BroadcastCrosshairImages()
 	OnCrosshairImagesChanged.Broadcast(
 		DefaultInfo.CrosshairTexture,
 		ClassInfo->CrosshairDisabledTexture,
-		DefaultInfo.CrosshairInstallReadyTexture);
+		DefaultInfo.CrosshairInstallReadyTexture,
+		DefaultInfo.CrosshairSize);
 }
 
 void UOverlayWidgetController::NotifyCrosshairEnemyHit()

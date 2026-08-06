@@ -6,6 +6,8 @@
 #include "Actor/DRProjectile.h"
 #include "DRVacuumAirProjectile.generated.h"
 
+class UBoxComponent;
+
 /**
  * 로봇 청소기 공기탄 투사체 (Plan3 §6.2)
  * - 부모 LifeSpan 대신 자체 타이머: ActiveDuration 경과 시 페이드(콜리전 off + 정지) 후 파괴
@@ -17,11 +19,18 @@ class DAERUNE_API ADRVacuumAirProjectile : public ADRProjectile
 	GENERATED_BODY()
 
 public:
+	ADRVacuumAirProjectile();
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// 3단계 강화탄 여부 (스폰 시 서버가 주입, 클라 연출 구분용으로 복제)
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (ExposeOnSpawn = true), Category = "AirShot")
 	bool bEnhanced = false;
+
+	// 가로형 판정 박스 (Plan5 §7) — 루트 Sphere는 비균등 스케일 불가라 별도 박스로 판정.
+	// 기본 NoCollision — BP_VacuumAirProjectile에서 프로파일/Extent 설정 (Sphere 세팅 미러)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AirShot")
+	TObjectPtr<UBoxComponent> WideCollision;
 
 protected:
 	virtual void BeginPlay() override;
