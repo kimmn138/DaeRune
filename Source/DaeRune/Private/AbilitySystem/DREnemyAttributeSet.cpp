@@ -7,6 +7,7 @@
 #include "DRGameplayTags.h"
 #include "GameFramework/Character.h"
 #include "Character/DREnemy.h"
+#include "Player/DRPlayerState.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "AI/DRAIController.h"
 #include "Tutorial/DRTutorialManager.h"
@@ -140,6 +141,15 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		const bool bFatal = NewHealth <= 0.f;
 		if (bFatal)
 		{
+			// 처치 크레딧: 막타를 친 플레이어 1명 (업적 판정 / 결과창 표시용, 재화 환산 없음)
+			if (Props.SourceController)
+			{
+				if (ADRPlayerState* KillerPS = Props.SourceController->GetPlayerState<ADRPlayerState>())
+				{
+					KillerPS->AddStageKill();
+				}
+			}
+
 			ICombatInterface* CombatInterface = Cast<ICombatInterface>(Props.TargetAvatarActor);
 			if (CombatInterface)
 			{

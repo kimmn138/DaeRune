@@ -90,6 +90,17 @@ public:
 	FGameplayTag Water_SetByCaller_Reduction;
 	FGameplayTag Water_SetByCaller_Grant;
 
+	// 업그레이드 칩 SetByCaller (GE_Upgrade_Stats: Flat = 합연산, Mult = 1 + Percent)
+	FGameplayTag Data_Upgrade_MaxHealth_Flat;
+	FGameplayTag Data_Upgrade_MaxHealth_Mult;
+	FGameplayTag Data_Upgrade_MaxWater_Flat;
+	FGameplayTag Data_Upgrade_MaxWater_Mult;
+	FGameplayTag Data_Upgrade_MoveSpeed_Flat;
+	FGameplayTag Data_Upgrade_MoveSpeed_Mult;
+
+	// 어빌리티 쿨다운 Duration SetByCaller (업그레이드로 보정된 쿨다운 주입)
+	FGameplayTag Data_Cooldown;
+
 	// 게임플레이 이벤트 (GA 통지용)
 	FGameplayTag Event_Dash_Brake;
 

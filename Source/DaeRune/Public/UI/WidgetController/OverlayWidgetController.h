@@ -59,6 +59,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSkillIconClassChangedSignature, T
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnVendingMachineStackCountChangedSignature, int32, CurrentStacks, int32, MaxStacks);
 // 자판기 공격속도 버프 스택 변경 델리게이트 (스킬 아이콘 스택 표시용, 만료 시 0 브로드캐스트)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnVendingMachineAttackSpeedBuffSignature, int32, StackCount);
+// 로봇 청소기 일반 공격(공기탄) 충전 게이지 변경 델리게이트 (3칸, 0 = 빈 게이지)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnRobotVacuumAirShotGaugeChangedSignature, int32, CurrentGauge, int32, MaxGauge);
+// 로봇 청소기 돌진 게이지 변경 델리게이트 (5칸, 5칸 = 지속 돌진)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnRobotVacuumDashGaugeChangedSignature, int32, CurrentGauge, int32, MaxGauge);
 // 스킬 입력 키 Press/Release UI 피드백용 델리게이트 (WBP가 자기 InputTag와 비교해 자기 차례만 반응)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAbilityInputPressedSignature,  FGameplayTag, InputTag);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAbilityInputReleasedSignature, FGameplayTag, InputTag);
@@ -177,6 +181,14 @@ public:
 	// 자판기 공격속도 버프 스택 변경 델리게이트 (스킬 아이콘 스택 표시용, 만료 시 0)
 	UPROPERTY(BlueprintAssignable, Category = "GAS|VendingMachine")
 	FOnVendingMachineAttackSpeedBuffSignature OnVendingMachineAttackSpeedBuff;
+
+	// 로봇 청소기 일반 공격(공기탄) 충전 게이지 (3칸) — LMB 스킬 아이콘 게이지 표시용
+	UPROPERTY(BlueprintAssignable, Category = "GAS|RobotVacuum")
+	FOnRobotVacuumAirShotGaugeChangedSignature OnRobotVacuumAirShotGaugeChanged;
+
+	// 로봇 청소기 돌진 게이지 (5칸) — RMB 스킬 아이콘 게이지 표시용
+	UPROPERTY(BlueprintAssignable, Category = "GAS|RobotVacuum")
+	FOnRobotVacuumDashGaugeChangedSignature OnRobotVacuumDashGaugeChanged;
 
 	// 스킬 버튼이 눌렸을 때 (InputTag 전달, WBP가 자기 것과 비교)
 	UPROPERTY(BlueprintAssignable, Category = "GAS|SkillIcon")

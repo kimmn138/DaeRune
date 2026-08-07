@@ -76,3 +76,8 @@ FVector UDRProjectileSpell::CalculateTargetLocation() const
 
 	return TraceEnd;
 }
+
+int32 UDRProjectileSpell::GetEffectiveNumProjectiles() const
+{
+	return GetUpgradedInt(EDRUpgradeStat::SkillProjectileCount, NumProjectiles, 1);
+}

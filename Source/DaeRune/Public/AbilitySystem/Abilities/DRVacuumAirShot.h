@@ -48,6 +48,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "AirShot")
 	int32 GetChargeStage() const;
 
+	// 스킬 아이콘 게이지 칸 수 = 충전 단계 수 - 1 (0단계는 빈 게이지, 기본 4단계 → 3칸)
+	UFUNCTION(BlueprintPure, Category = "AirShot")
+	int32 GetMaxGauge() const { return FMath::Max(0, Stages.Num() - 1); }
+
 	// 충전 단계 변경 시 (BP: UI/SFX — 로컬 연출)
 	UFUNCTION(BlueprintImplementableEvent, Category = "AirShot")
 	void OnChargeStageChanged(int32 NewStage);
@@ -89,6 +93,8 @@ private:
 	FTimerHandle ChargeUITimerHandle;
 
 	void TickChargeUI();
+	// OnChargeStageChanged + ASC 게이지 노티파이 (값이 바뀔 때만 1회)
+	void NotifyGauge(int32 Stage);
 	// 서버에서 투사체 스폰 + 최종 단계 반동
 	void FireShot(int32 Stage);
 	// 돌진 이속버프(Buff.RobotVacuum.DashSpeed) 활성 여부

@@ -8,6 +8,7 @@
 #include "Interfaces/OnlineIdentityInterface.h"
 #include "GenericTeamAgentInterface.h"
 #include "AbilitySystem/Data/CharacterClassInfo.h"
+#include "Game/DRProgressionTypes.h"
 #include "DRPlayerController.generated.h"
 
 // ��ȣ�ۿ� ��������Ʈ
@@ -256,6 +257,9 @@ public:
 	/** Pawn 리플리케이션 시 엔진의 ViewTarget 자동 변경을 대기실에서 차단 */
 	virtual void OnRep_Pawn() override;
 
+	/** PlayerState 복제 도착 시점 — 클라이언트가 장착 칩을 서버에 보고하는 최초 경로 */
+	virtual void OnRep_PlayerState() override;
+
 	// 서버 → 클라이언트: 킥 당했음을 알림
 	UFUNCTION(Client, Reliable)
 	void ClientKicked(const FString& Reason);
@@ -301,6 +305,42 @@ public:
 	EPlayerCharacterClass GetCachedSelectedClass() const { return CachedSelectedClass; }
 	void SetCachedSelectedClass(EPlayerCharacterClass InClass) { CachedSelectedClass = InClass; }
 
+	// ========== 업그레이드 칩 (Plan2.md 7.1 / 8.4) ==========
+
+	// 로컬 세이브의 장착 목록을 서버에 보고 (로컬 컨트롤러 전용)
+	void ReportUpgradeLoadout();
+
+	// 클라이언트 신고 → 서버가 클래스 일치 확인 + 정화 후 PlayerState 에 싣는다
+	UFUNCTION(Server, Reliable)
+	void ServerReportUpgradeLoadout(EPlayerCharacterClass ForClass, const TArray<FName>& Chips);
+
+	// 서버 → 클라: 스테이지 성과 통지. 클라가 로컬 세이브에 재화를 반영한다.
+	UFUNCTION(Client, Reliable)
+	void Client_GrantStageReward(const FDRStageRewardReport& Report);
+
+	// 마지막으로 반영된 보상 결과 (결과창 위젯이 조회)
+	UFUNCTION(BlueprintPure, Category = "Progression|Reward")
+	const FDRStageRewardResult& GetLastStageRewardResult() const { return LastStageRewardResult; }
+
+	// ========== 로비 업그레이드 화면 ==========
+
+	// 업그레이드 장치 상호작용으로 호출 (로컬 UI — RPC 없음)
+	UFUNCTION(BlueprintCallable, Category = "Upgrade")
+	void OpenUpgradeScreen();
+
+	UFUNCTION(BlueprintCallable, Category = "Upgrade")
+	void CloseUpgradeScreen();
+
+	UFUNCTION(BlueprintPure, Category = "Upgrade")
+	bool IsUpgradeScreenOpen() const { return bIsUpgradeScreenOpen; }
+
+	// 블루프린트에서 업그레이드 위젯을 생성/제거한다
+	UFUNCTION(BlueprintImplementableEvent, Category = "Upgrade")
+	void OnUpgradeScreenOpened();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Upgrade")
+	void OnUpgradeScreenClosed();
+
 	// ========== 치트/디버그 모드 ==========
 
     // �׽�Ʈ�� ������ ��ŵ (��������Ʈ���� ȣ��)
@@ -344,6 +384,13 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UUserWidget> CurrentResultWidget;
 
+	// 마지막 스테이지 보상 반영 결과 (결과창 연출용)
+	UPROPERTY(BlueprintReadOnly, Category = "Progression|Reward")
+	FDRStageRewardResult LastStageRewardResult;
+
+	// 업그레이드 화면 표시 여부
+	bool bIsUpgradeScreenOpen = false;
+
 	// ========== 대기실 UI ==========
 
 	// 대기실 카메라 캐시 (ClientRestart에서 재고정에 사용)
@@ -375,6 +422,12 @@ public:
 	// 현재 대기실 위젯 반환 (Blueprint에서 설정창 등이 참조 획득용)
 	UFUNCTION(BlueprintPure, Category = "UI|Lobby")
 	UDRWaitingRoomWidget* GetWaitingRoomWidget() const { return WaitingRoomWidget; }
+
+	// 해당 InputTag 키를 지금 물리적으로 누르고 있는지.
+	// OverlayWidgetController 가 "GA 종료발 Released 재방송"을 억제할지 판단하는 데 쓴다 —
+	// 즉발 어빌리티(GA_VacuumJetJump)는 활성화와 같은 프레임에 EndAbility 하므로,
+	// 그 종료를 Released 로 그대로 방송하면 키를 누르고 있는데도 눌림 이미지가 1프레임 만에 풀린다.
+	bool IsInputTagHeld(const FGameplayTag& InputTag) const { return HeldInputTags.Contains(InputTag); }
 
 protected:
 
@@ -491,6 +544,10 @@ private:
 
 	// 해당 InputTag 의 어빌리티가 지금 차단 상태인지 (Carrying 중이거나 BlockedAbilityTags 에 걸린 상태)
 	bool IsAbilityInputBlocked(const FGameplayTag& InputTag) const;
+
+	// 현재 눌려 있는 스킬 InputTag 집합 (IsInputTagHeld 의 백킹 데이터).
+	// Pressed/Released 최상단에서 갱신하고, 폰 교체 시 비운다 (키를 누른 채 폰이 바뀌면 Released 가 유실될 수 있음)
+	TSet<FGameplayTag> HeldInputTags;
 
 	// 이 컨트롤러가 리슨 서버의 호스트인지 (서버에서 실행 중인 로컬 컨트롤러)
 	bool IsListenServerHost() const { return HasAuthority() && IsLocalController(); }

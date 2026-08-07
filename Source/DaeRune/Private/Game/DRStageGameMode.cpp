@@ -198,10 +198,43 @@ void ADRStageGameMode::NotifyAllPlayersGameEnd(bool bIsGameClear)
 	if (!HasAuthority()) return;
 
 	// ?⑥씪 ?쒗쉶濡?UI ?쒖떆 + ?ㅻ뵒???뺣━ ?섑뻾
+	// 완료한 페이즈 수: 클리어면 전체, 아니면 진행 중이던 페이즈 이전까지 (표시용 — 재화로 환산하지 않는다)
+	const int32 TotalPhases = PhaseClasses.Num();
+	const int32 ClearedPhaseCount = bIsGameClear
+		? TotalPhases
+		: (CachedGameState ? FMath::Max(0, CachedGameState->GetCurrentPhaseIndex()) : 0);
+
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
 		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
 		{
+			// 재화 보상 통지를 결과 UI 표시보다 먼저 보낸다 (결과창이 반영된 지갑을 읽도록)
+			FDRStageRewardReport Report;
+			Report.StageId = StageId;
+			Report.bGameClear = bIsGameClear;
+			Report.ClearedPhaseCount = ClearedPhaseCount;
+
+			if (const ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
+			{
+				Report.PlayedClass = PS->GetSelectedPlayerClass();
+				Report.KillCount = PS->GetStageKillCount();
+			}
+
+			// 업적/클리어 조건은 클리어를 전제로 한다 (Plan2.md 12-2)
+			if (bIsGameClear)
+			{
+				Report.AchievementIds = GlobalPendingAchievements;
+				if (const TArray<FName>* PlayerAchievements = PendingAchievements.Find(PC))
+				{
+					for (const FName& Id : *PlayerAchievements)
+					{
+						Report.AchievementIds.AddUnique(Id);
+					}
+				}
+			}
+
+			PC->Client_GrantStageReward(Report);
+
 			// UI ?쒖떆
 			if (bIsGameClear)
 			{
@@ -370,3 +403,18 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 }
 
 
+
+void ADRStageGameMode::GrantStageAchievement(FName AchievementId, ADRPlayerController* PC)
+{
+	if (!HasAuthority() || AchievementId.IsNone()) return;
+
+	// 스테이지 종료 시 일괄 전송된다. 같은 Id 중복 보고는 여기서 걸러진다.
+	if (PC)
+	{
+		PendingAchievements.FindOrAdd(PC).AddUnique(AchievementId);
+	}
+	else
+	{
+		GlobalPendingAchievements.AddUnique(AchievementId);
+	}
+}

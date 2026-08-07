@@ -26,6 +26,7 @@ public:
 
 protected:
 	virtual bool Initialize() override;
+	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
 	// Callbacks for the custom delegates on the MultiplayerSessionsSubsystem
@@ -53,6 +54,12 @@ private:
 	// 에러 텍스트 표시/숨김 (ErrorText 미바인딩 시 무시)
 	void ShowError(const FText& Message);
 	void ClearError();
+
+	// 언어 변경 시 디자이너에 박힌 텍스트를 현재 컬처로 다시 밀어넣는다.
+	// 플러그인이라 게임 모듈의 SettingsManager(OnLanguageChanged)에 의존할 수 없어 엔진 이벤트를 직접 구독한다.
+	void RefreshLocalizedText();
+
+	FDelegateHandle TextRevisionHandle;
 
 	UFUNCTION()
 	void HostButtonClicked();

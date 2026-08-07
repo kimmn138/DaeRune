@@ -9,7 +9,7 @@
 void UDRDamageGameplayAbility::CauseDamage(AActor* TargetActor)
 {
 	FGameplayEffectSpecHandle DamageSpecHandle = MakeOutgoingGameplayEffectSpec(DamageEffectClass, 1.f);
-	const float ScaledDamage = Damage.GetValueAtLevel(GetAbilityLevel());
+	const float ScaledDamage = GetUpgradedDamage();
 	UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(DamageSpecHandle, DamageType, ScaledDamage);
 	GetAbilitySystemComponentFromActorInfo()->ApplyGameplayEffectSpecToTarget(*DamageSpecHandle.Data.Get(), UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor));
 }
@@ -21,7 +21,7 @@ FDamageEffectParams UDRDamageGameplayAbility::MakeDamageEffectParamsFromClassDef
 	Params.DamageGameplayEffectClass = DamageEffectClass;
 	Params.SourceAbilitySystemComponent = GetAbilitySystemComponentFromActorInfo();
 	Params.TargetAbilitySystemComponent = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
-	Params.BaseDamage = Damage.GetValueAtLevel(GetAbilityLevel());
+	Params.BaseDamage = GetUpgradedDamage();
 	Params.AbilityLevel = GetAbilityLevel();
 	Params.DamageType = DamageType;
 	Params.DebuffChance = DebuffChance;
@@ -44,7 +44,12 @@ FDamageEffectParams UDRDamageGameplayAbility::MakeDamageEffectParamsFromClassDef
 
 float UDRDamageGameplayAbility::GetDamageAtLevel() const
 {
-	return Damage.GetValueAtLevel(GetAbilityLevel());
+	return GetUpgradedDamage();
+}
+
+float UDRDamageGameplayAbility::GetUpgradedDamage() const
+{
+	return GetUpgradedFloat(EDRUpgradeStat::SkillDamage, Damage.GetValueAtLevel(GetAbilityLevel()));
 }
 
 FTaggedMontage UDRDamageGameplayAbility::GetRandomTaggedMontageFromArray(const TArray<FTaggedMontage>& TaggedMontages) const

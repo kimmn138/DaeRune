@@ -19,7 +19,7 @@ void UDRFireBolt::SpawnProjectiles(const FVector& ProjectileTargetLocation, cons
 
 	const FVector Forward = Rotation.Vector();
 	
-	TArray<FRotator> Rotations = UDRAbilitySystemLibrary::EvenlySpacedRotators(Forward, FVector::UpVector, ProjectileSpread, NumProjectiles);
+	TArray<FRotator> Rotations = UDRAbilitySystemLibrary::EvenlySpacedRotators(Forward, FVector::UpVector, ProjectileSpread, GetEffectiveNumProjectiles());
 
 	for (const FRotator& Rot : Rotations)
 	{
