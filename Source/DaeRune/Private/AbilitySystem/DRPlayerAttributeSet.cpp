@@ -170,6 +170,16 @@ void UDRPlayerAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		}
 	}
 
+	// 업그레이드 칩의 "받는 피해" 배율 (돌파 칩의 단점/방어 효과). 0 하한 — 회복으로 뒤집히지 않게 한다.
+	if (Props.TargetController)
+	{
+		if (const ADRPlayerState* TargetPS = Props.TargetController->GetPlayerState<ADRPlayerState>())
+		{
+			LocalIncomingDamage = FMath::Max(0.f,
+				TargetPS->GetUpgradeRuntime().Apply(EDRUpgradeStat::DamageTaken, LocalIncomingDamage));
+		}
+	}
+
 	// 로비/튜토리얼에서는 체력이 1 미만으로 내려가지 않도록 데미지 클램프
 	if (ShouldPreventDeath())
 	{

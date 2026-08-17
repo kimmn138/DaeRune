@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "Game/DRStageGameState.h"
@@ -14,6 +14,8 @@
 #include "NiagaraComponent.h"
 #include "Components/AudioComponent.h"
 #include "Actor/DRBGMActor.h"
+
+#define LOCTEXT_NAMESPACE "DRPhase"
 
 ADRStageGameState::ADRStageGameState()
 {
@@ -42,8 +44,8 @@ ADRStageGameState::ADRStageGameState()
     BossHealth = 1000.0f;
 
     CurrentPhaseObjective.PhaseNumber = 0;  // 0은 "준비 중" 의미
-    CurrentPhaseObjective.ObjectiveTitle = FText::FromString("Preparing...");
-    CurrentPhaseObjective.ProgressFormat = FText::FromString("Progress");
+    CurrentPhaseObjective.ObjectiveTitle = LOCTEXT("Phase_PreparingTitle", "준비 중...");
+    CurrentPhaseObjective.ProgressFormat = LOCTEXT("Phase_DefaultProgress", "진행도");
     CurrentPhaseObjective.RequiredCount = 0;
 }
 
@@ -534,3 +536,5 @@ void ADRStageGameState::RefreshEliteSpawnPointVFX()
         }
     }
 }
+
+#undef LOCTEXT_NAMESPACE

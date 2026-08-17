@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "UI/WidgetController/OverlayWidgetController.h"
@@ -14,8 +14,11 @@
 #include "Game/DRStageGameState.h"
 #include "Phase/DRPhase3.h"
 #include "Phase/DRPhaseBase.h"
+#include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
 #include "UI/Widget/DRUserWidget.h"
+
+#define LOCTEXT_NAMESPACE "DROverlay"
 
 void UOverlayWidgetController::BroadcastInitialValues()
 {
@@ -103,6 +106,28 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 				if (UOverlayWidgetController* StrongThis = WeakThis.Get())
 				{
 					StrongThis->OnVendingMachineStackCountChanged.Broadcast(CurrentStacks, MaxStacks);
+				}
+			}
+		);
+
+		// 로봇 청소기 일반 공격(공기탄) 충전 게이지 변경 델리게이트 바인딩 (3칸)
+		GetDRASC()->OnVacuumAirShotGaugeChanged.AddLambda(
+			[WeakThis](int32 CurrentGauge, int32 MaxGauge)
+			{
+				if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+				{
+					StrongThis->OnRobotVacuumAirShotGaugeChanged.Broadcast(CurrentGauge, MaxGauge);
+				}
+			}
+		);
+
+		// 로봇 청소기 돌진 게이지 변경 델리게이트 바인딩 (5칸)
+		GetDRASC()->OnVacuumDashGaugeChanged.AddLambda(
+			[WeakThis](int32 CurrentGauge, int32 MaxGauge)
+			{
+				if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+				{
+					StrongThis->OnRobotVacuumDashGaugeChanged.Broadcast(CurrentGauge, MaxGauge);
 				}
 			}
 		);
@@ -213,10 +238,21 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 		GetDRASC()->OnAbilityEndedWithInputTag.AddLambda(
 			[WeakThis](const FGameplayTag InputTag)
 			{
-				if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+				UOverlayWidgetController* StrongThis = WeakThis.Get();
+				if (!StrongThis) return;
+
+				// 키를 아직 누르고 있으면 여기서 Released 를 방송하지 않는다 —
+				// 즉발 어빌리티(GA_VacuumJetJump)는 활성화와 같은 프레임에 EndAbility 하므로
+				// 그대로 방송하면 홀드 중인데도 눌림 이미지가 즉시 풀려버린다.
+				// 이 경우 Released 는 실제 키를 뗄 때 ADRPlayerController::AbilityInputTagReleased 가 담당한다.
+				// (충전형 LMB/RMB 는 키를 뗄 때 GA 가 끝나므로 이 게이트에 걸리지 않고,
+				//  큐잉되어 늦게 발동한 GA 도 그 시점엔 키가 이미 떨어져 있어 기존대로 보강된다)
+				if (const ADRPlayerController* DRPC = StrongThis->GetDRPC())
 				{
-					StrongThis->OnAbilityInputReleased.Broadcast(InputTag);
+					if (DRPC->IsInputTagHeld(InputTag)) return;
 				}
+
+				StrongThis->OnAbilityInputReleased.Broadcast(InputTag);
 			}
 		);
 	}
@@ -493,16 +529,16 @@ void UOverlayWidgetController::OnPhaseChanged(int32 NewPhaseIndex)
 		switch (NewPhaseIndex)
 		{
 		case 0:
-			PhaseText = FText::FromString(TEXT("페이즈 1: 확보"));
+			PhaseText = LOCTEXT("Phase_Alarm_1", "페이즈 1: 확보");
 			break;
 		case 1:
-			PhaseText = FText::FromString(TEXT("페이즈 2: 수집"));
+			PhaseText = LOCTEXT("Phase_Alarm_2", "페이즈 2: 수집");
 			break;
 		case 2:
-			PhaseText = FText::FromString(TEXT("페이즈 3: 방어"));
+			PhaseText = LOCTEXT("Phase_Alarm_3", "페이즈 3: 방어");
 			break;
 		default:
-			PhaseText = FText::FromString(TEXT("알 수 없는 페이즈"));
+			PhaseText = LOCTEXT("Phase_Alarm_Unknown", "알 수 없는 페이즈");
 			break;
 		}
 
@@ -676,4 +712,6 @@ void UOverlayWidgetController::BindCleanserSite(ADRCleanserSite* FirstCleanserSi
 	OnSecondCleanserHealthChanged.Broadcast(SecondSiteAs->GetHealth());
 	OnSecondCleanserMaxHealthChanged.Broadcast(SecondSiteAs->GetMaxHealth());
 }
+
+#undef LOCTEXT_NAMESPACE
 

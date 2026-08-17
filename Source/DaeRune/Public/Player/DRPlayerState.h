@@ -7,6 +7,7 @@
 #include "GameFramework/PlayerState.h"
 #include "GameplayEffectTypes.h"
 #include "AbilitySystem/Data/CharacterClassInfo.h"
+#include "Game/DRUpgradeTypes.h"
 #include "DRPlayerState.generated.h"
 
 class UAbilitySystemComponent;
@@ -95,6 +96,27 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Character Selection")
 	FOnPlayerClassChanged OnPlayerClassChanged;
 
+	// ========== 업그레이드 칩 (Plan2.md 7.1) ==========
+
+	// 이 플레이어가 장착한 칩 Id 목록 (클라이언트가 신고 → 서버가 정화 후 복제)
+	UFUNCTION(BlueprintPure, Category = "Upgrade")
+	const TArray<FName>& GetEquippedChips() const { return EquippedChips; }
+
+	// 장착 칩을 펼친 수치 캐시. 복제하지 않고 각 머신이 로컬로 구축한다.
+	// 비어 있으면 항등이므로 호출부는 칩 유무를 신경 쓰지 않아도 된다.
+	const FDRUpgradeRuntime& GetUpgradeRuntime() const { return CachedUpgradeRuntime; }
+
+	// 서버 전용: 정화된 장착 목록을 싣고 캐시를 재구축한다.
+	void SetEquippedChips(const TArray<FName>& InChips);
+
+	// ========== 스테이지 처치 수 (업적 판정 / 결과창 표시) ==========
+
+	UFUNCTION(BlueprintPure, Category = "Stage")
+	int32 GetStageKillCount() const { return StageKillCount; }
+
+	// 서버 전용. Seamless Travel 시 새 PlayerState 가 0에서 시작하므로 별도 리셋 경로는 두지 않는다.
+	void AddStageKill();
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -131,9 +153,20 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_SelectedPlayerClass, BlueprintReadOnly, Category = "Character Selection")
 	EPlayerCharacterClass SelectedPlayerClass = EPlayerCharacterClass::Gardener;
 
+	// 장착 칩 Id 목록 (서버가 클라 신고를 정화해 싣는다)
+	UPROPERTY(ReplicatedUsing = OnRep_EquippedChips, BlueprintReadOnly, Category = "Upgrade")
+	TArray<FName> EquippedChips;
+
+	// 이번 스테이지 처치 수 (스테이지 한정 값 — Seamless Travel 시 복사하지 않는다)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Stage")
+	int32 StageKillCount = 0;
+
 	// 리플리케이션 콜백
 	UFUNCTION()
 	void OnRep_IsInCombat();
+
+	UFUNCTION()
+	void OnRep_EquippedChips();
 
 	UFUNCTION()
 	void OnRep_IsCorrupted();
@@ -150,7 +183,16 @@ protected:
 	// 로컬 플레이어의 대기실 UI 갱신 (대기실 관련 OnRep 공용 헬퍼)
 	void RefreshLocalWaitingRoomUI() const;
 
+	// 복제된 EquippedChips + 선택 클래스로 수치 캐시를 다시 만들고, 폰에 갱신을 통지한다.
+	void RebuildUpgradeRuntime();
+
+	// 소유 클라이언트에서만: 현재 선택 클래스의 장착 목록을 서버에 보고
+	void ReportUpgradeLoadoutIfLocal();
+
 private:
+	// 장착 칩을 펼친 수치 캐시 (복제 안 함 — 서버/각 클라가 각자 구축)
+	FDRUpgradeRuntime CachedUpgradeRuntime;
+
 	// ���� ���� Ÿ�̸� ����
 	FTimerHandle CombatTimerHandle;
 

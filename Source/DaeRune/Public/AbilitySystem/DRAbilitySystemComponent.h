@@ -12,6 +12,7 @@ DECLARE_MULTICAST_DELEGATE(FAbilitiesGiven);
 DECLARE_DELEGATE_OneParam(FForEachAbility, const FGameplayAbilitySpec&);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnVendingMachineStacksChanged, int32 /*CurrentStacks*/, int32 /*MaxStacks*/);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnVacuumDashGaugeChanged, int32 /*CurrentGauge*/, int32 /*MaxGauge*/);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnVacuumAirShotGaugeChanged, int32 /*CurrentGauge*/, int32 /*MaxGauge*/);
 // 차단된 AbilityTag 집합이 바뀌었음을 알리는 신호 (UI 슬롯이 각자 자기 태그 기준으로 재평가)
 DECLARE_MULTICAST_DELEGATE(FOnBlockedAbilityTagsChanged);
 // 어빌리티 활성화/종료 시 그 어빌리티의 InputTag 를 전달 (UI Pressed/Released 시각 피드백 보조용)
@@ -33,6 +34,7 @@ public:
 	FAbilitiesGiven AbilitiesGivenDelegate;
 	FOnVendingMachineStacksChanged OnVendingMachineStacksChanged;
 	FOnVacuumDashGaugeChanged OnVacuumDashGaugeChanged;
+	FOnVacuumAirShotGaugeChanged OnVacuumAirShotGaugeChanged;
 	// BlockAbilitiesWithTag 카운터가 바뀌었을 가능성이 있을 때 발화 (UI 재평가용)
 	FOnBlockedAbilityTagsChanged OnBlockedAbilityTagsChanged;
 	// GA 가 실제로 활성화될 때 그 어빌리티의 InputTag 와 함께 발화 (큐잉된 입력 활성화 시 UI 피드백 보강용)
@@ -72,6 +74,11 @@ public:
 
 	// 청소기 돌진 게이지 변경 통지 (서버 GA → 소유 클라 UI, Plan3 §9.2)
 	void NotifyVacuumDashGaugeChanged(int32 CurrentGauge, int32 MaxGauge);
+
+	// 청소기 일반 공격(공기탄) 충전 게이지 변경 통지.
+	// 돌진과 달리 충전이 시간 기반이라 소유 클라 인스턴스가 같은 값을 로컬로 계산하므로 RPC 없이 즉시 방송한다.
+	// (반드시 소유 클라에서 도는 GA 인스턴스에서만 호출 — 서버 인스턴스까지 호출하면 값이 중복 방송된다)
+	void NotifyVacuumAirShotGaugeChanged(int32 CurrentGauge, int32 MaxGauge);
 
 protected:
 	// InputTag → AbilitySpecHandle 캐시 (성능 최적화)

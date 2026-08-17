@@ -25,7 +25,12 @@ public:
 
 	UFUNCTION(BlueprintPure)
 	float GetDamageAtLevel() const;
-	
+
+	// 업그레이드 칩(SkillDamage)이 반영된 피해량.
+	// 피해량 조회는 반드시 이 함수 하나만 쓴다 — 호출부가 흩어져 누락되는 것을 막기 위함. (Plan2.md 8.5)
+	UFUNCTION(BlueprintPure, Category = "Damage")
+	float GetUpgradedDamage() const;
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TSubclassOf<UGameplayEffect> DamageEffectClass;

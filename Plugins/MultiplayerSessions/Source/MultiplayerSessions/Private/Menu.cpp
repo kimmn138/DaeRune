@@ -2,9 +2,12 @@
 
 
 #include "Menu.h"
+#include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"
+#include "Components/RichTextBlock.h"
 #include "Components/TextBlock.h"
+#include "Internationalization/TextLocalizationManager.h"
 #include "MultiplayerSessionsSubsystem.h"
 #include "OnlineSessionSettings.h"
 #include "OnlineSubsystem.h"
@@ -66,11 +69,53 @@ bool UMenu::Initialize()
 	return true;
 }
 
+void UMenu::NativeConstruct()
+{
+	Super::NativeConstruct();
+
+	// 컬처가 바뀌면 엔진이 텍스트 리비전을 올린다. 그 시점에 텍스트를 다시 밀어넣어야
+	// 현재 컬처의 번역(번역이 없으면 원문)으로 재해석된다.
+	TextRevisionHandle = FTextLocalizationManager::Get().OnTextRevisionChangedEvent.AddUObject(this, &UMenu::RefreshLocalizedText);
+}
+
 void UMenu::NativeDestruct()
 {
+	if (TextRevisionHandle.IsValid())
+	{
+		FTextLocalizationManager::Get().OnTextRevisionChangedEvent.Remove(TextRevisionHandle);
+		TextRevisionHandle.Reset();
+	}
+
 	MenuTearDown();
 
 	Super::NativeDestruct();
+}
+
+void UMenu::RefreshLocalizedText()
+{
+	if (!WidgetTree)
+	{
+		return;
+	}
+
+	// 디자이너에 박힌 정적 텍스트는 컬처가 바뀌어도 Slate 캐시가 자동 갱신되지 않는다.
+	// SynchronizeProperties를 다시 태워 저장된 FText를 현재 컬처로 재해석시킨다.
+	WidgetTree->ForEachWidget([](UWidget* Widget)
+	{
+		if (UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
+		{
+			TextBlock->SynchronizeProperties();
+		}
+		else if (URichTextBlock* RichTextBlock = Cast<URichTextBlock>(Widget))
+		{
+			RichTextBlock->SynchronizeProperties();
+		}
+		else if (UEditableTextBox* EditableTextBox = Cast<UEditableTextBox>(Widget))
+		{
+			// HintText도 컬처 대상이라 같이 갱신.
+			EditableTextBox->SynchronizeProperties();
+		}
+	});
 }
 
 void UMenu::OnCreateSession(bool bWasSuccessful)
