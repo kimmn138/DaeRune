@@ -14,11 +14,27 @@ ADRGameModeBase::ADRGameModeBase()
 	bIsWipeoutInProgress = false;
 }
 
+void ADRGameModeBase::Logout(AController* Exiting)
+{
+	// 접속 종료를 현재 페이즈에 먼저 통지한다 (Plan6 §5.10).
+	// Super 호출 후에는 PlayerState 가 정리될 수 있으므로 순서가 중요하다.
+	if (HasAuthority() && Exiting && Exiting->PlayerState)
+	{
+		NotifyPhasePlayerLeft(Exiting->PlayerState);
+	}
+
+	Super::Logout(Exiting);
+}
+
 void ADRGameModeBase::OnPlayerDied(APlayerState* DeadPlayer)
 {
 	if (!HasAuthority()) return;
 
 	if (!DeadPlayer) return;
+
+	// 현재 페이즈에 사망 통지 (Plan6 §14.3.5-A)
+	// 전멸 처리와 무관하게 항상 전달한다.
+	NotifyPhasePlayerDied(DeadPlayer);
 
 	// �̹� ���� ó�� ���̸� ����
 	if (bIsWipeoutInProgress) return;

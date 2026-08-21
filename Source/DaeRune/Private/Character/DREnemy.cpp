@@ -90,7 +90,7 @@ void ADREnemy::Tick(float DeltaTime)
 		// (클라이언트는 ReplicatedMovement의 Rotation + CharacterMovement 회전 스무딩으로 따라가므로 별도 복제 불필요)
 		FRotator CurrentControlRot = GetControlRotation();
 		FRotator CurrentActorRot = GetActorRotation();
-		FRotator NewRotation = FMath::RInterpTo(CurrentActorRot, CurrentControlRot, DeltaTime, 10.0f);
+		FRotator NewRotation = FMath::RInterpTo(CurrentActorRot, CurrentControlRot, DeltaTime, RotationInterpSpeed);
 		SetActorRotation(FRotator(0.f, NewRotation.Yaw, 0.f));
 	}
 }

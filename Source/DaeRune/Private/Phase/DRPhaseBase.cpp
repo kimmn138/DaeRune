@@ -6,6 +6,7 @@
 #include "Game/DRStageGameState.h"
 #include "Actor/DRCleanserSite.h"
 #include "Interaction/CombatInterface.h"
+#include "DaeRune/DRLogChannels.h"
 
 void UDRPhaseBase::Initialize(ADRStageGameMode* InGameMode, ADRStageGameState* InGameState)
 {
@@ -84,13 +85,39 @@ int32 UDRPhaseBase::GetAliveEnemyCount() const
 
 void UDRPhaseBase::SetupPhaseObjective(int32 PhaseNumber)
 {
-	if (!PhaseObjectiveDataTable || !GameState) return;
+	// "Phase%d" 행 조회는 행 이름 기반 조회에 위임 (Plan6 §5.2)
+	SetupPhaseObjectiveByRow(FName(*FString::Printf(TEXT("Phase%d"), PhaseNumber)));
+}
 
-	FString RowName = FString::Printf(TEXT("Phase%d"), PhaseNumber);
-	FPhaseObjectiveData* ObjectiveData = PhaseObjectiveDataTable->FindRow<FPhaseObjectiveData>(FName(*RowName), TEXT(""));
-    
-	if (ObjectiveData)
+void UDRPhaseBase::SetupPhaseObjectiveByRow(FName RowName)
+{
+	if (!PhaseObjectiveDataTable || !GameState || RowName.IsNone()) return;
+
+	if (const FPhaseObjectiveData* ObjectiveData =
+		PhaseObjectiveDataTable->FindRow<FPhaseObjectiveData>(RowName, TEXT("SetupPhaseObjectiveByRow")))
 	{
 		GameState->SetPhaseObjective(*ObjectiveData);
+	}
+	else
+	{
+		UE_LOG(LogDR, Error, TEXT("[Phase] 목표 DataTable 에 행이 없습니다: %s"), *RowName.ToString());
+	}
+}
+
+void UDRPhaseBase::SetupPhaseObjectiveByRow(FName RowName, int32 OverrideRequiredCount)
+{
+	if (!PhaseObjectiveDataTable || !GameState || RowName.IsNone()) return;
+
+	if (const FPhaseObjectiveData* ObjectiveData =
+		PhaseObjectiveDataTable->FindRow<FPhaseObjectiveData>(RowName, TEXT("SetupPhaseObjectiveByRow")))
+	{
+		// 값 복사 후 진행도 분모만 런타임 값으로 교체
+		FPhaseObjectiveData Overridden = *ObjectiveData;
+		Overridden.RequiredCount = OverrideRequiredCount;
+		GameState->SetPhaseObjective(Overridden);
+	}
+	else
+	{
+		UE_LOG(LogDR, Error, TEXT("[Phase] 목표 DataTable 에 행이 없습니다: %s"), *RowName.ToString());
 	}
 }

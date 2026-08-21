@@ -83,13 +83,13 @@ const FDRUpgradeChipDefinition* UDRChipCatalog::FindChip(FName ChipId) const
 	return nullptr;
 }
 
-void UDRChipCatalog::GetChipsForClass(EPlayerCharacterClass CharacterClass, EDRChipCategory Category,
+void UDRChipCatalog::GetChipsForClass(EPlayerCharacterClass CharacterClass,
 	TArray<FDRUpgradeChipDefinition>& OutChips) const
 {
 	OutChips.Reset();
 	for (const FDRUpgradeChipDefinition& Chip : Chips)
 	{
-		if (Chip.OwnerClass == CharacterClass && Chip.Category == Category)
+		if (Chip.OwnerClass == CharacterClass)
 		{
 			OutChips.Add(Chip);
 		}
@@ -152,17 +152,15 @@ void UDRChipCatalog::ResolveLoadout(const TArray<FName>& EquippedChips, EPlayerC
 }
 
 bool UDRChipCatalog::SanitizeLoadout(TArray<FName>& InOutChips, EPlayerCharacterClass CharacterClass,
-	int32 MaxStatSlots, int32 MaxAscensionSlots) const
+	int32 MaxSlots) const
 {
 	bool bModified = false;
 
 	TArray<FName> Sanitized;
 	Sanitized.Reserve(InOutChips.Num());
 
-	// 카테고리별 남은 슬롯 예산 (서버는 클라의 해금 단계를 모르지만 구조적 상한은 안다)
-	int32 RemainingSlots[static_cast<int32>(EDRChipCategory::Count)] = { 0 };
-	RemainingSlots[static_cast<int32>(EDRChipCategory::Stat)] = FMath::Max(0, MaxStatSlots);
-	RemainingSlots[static_cast<int32>(EDRChipCategory::Ascension)] = FMath::Max(0, MaxAscensionSlots);
+	// 남은 슬롯 예산 — 슬롯에 종류 구분이 없으므로 단일 합산 하나로 끝난다.
+	int32 RemainingSlots = FMath::Max(0, MaxSlots);
 
 	TSet<FName> SeenIds;
 	for (const FName& ChipId : InOutChips)
@@ -181,22 +179,15 @@ bool UDRChipCatalog::SanitizeLoadout(TArray<FName>& InOutChips, EPlayerCharacter
 			continue;
 		}
 
-		const int32 CategoryIndex = static_cast<int32>(Chip->Category);
-		if (!ensure(CategoryIndex >= 0 && CategoryIndex < static_cast<int32>(EDRChipCategory::Count)))
-		{
-			bModified = true;
-			continue;
-		}
-
 		const int32 Required = FMath::Max(1, Chip->RequiredSlotCount);
-		if (RemainingSlots[CategoryIndex] < Required)
+		if (RemainingSlots < Required)
 		{
 			// 슬롯 총량 초과 → 위조이거나 카탈로그 개편 잔재
 			bModified = true;
 			continue;
 		}
 
-		RemainingSlots[CategoryIndex] -= Required;
+		RemainingSlots -= Required;
 		SeenIds.Add(ChipId);
 		Sanitized.Add(ChipId);
 	}
@@ -209,9 +200,11 @@ bool UDRChipCatalog::SanitizeLoadout(TArray<FName>& InOutChips, EPlayerCharacter
 	return bModified;
 }
 
-bool UDRChipCatalog::ValidateCatalog(int32 MaxStatSlots, int32 MaxAscensionSlots, TArray<FString>& OutErrors) const
+bool UDRChipCatalog::ValidateCatalog(int32 MaxSlots, TArray<FString>& OutErrors) const
 {
 	OutErrors.Reset();
+
+	const int32 SlotCap = FMath::Max(0, MaxSlots);
 
 	TSet<FName> SeenIds;
 	for (const FDRUpgradeChipDefinition& Chip : Chips)
@@ -230,20 +223,18 @@ bool UDRChipCatalog::ValidateCatalog(int32 MaxStatSlots, int32 MaxAscensionSlots
 		}
 		SeenIds.Add(Chip.ChipId);
 
-		const int32 MaxSlots = (Chip.Category == EDRChipCategory::Ascension) ? MaxAscensionSlots : MaxStatSlots;
-
-		if (Chip.RequiredSlotCount < 1 || Chip.RequiredSlotCount > MaxSlots)
+		if (Chip.RequiredSlotCount < 1 || Chip.RequiredSlotCount > SlotCap)
 		{
 			OutErrors.Add(FString::Printf(
 				TEXT("%s: RequiredSlotCount(%d) 가 1~%d 범위를 벗어나 장착이 불가능합니다."),
-				*IdString, Chip.RequiredSlotCount, MaxSlots));
+				*IdString, Chip.RequiredSlotCount, SlotCap));
 		}
 
-		if (Chip.RequiredSlotTier < 1 || Chip.RequiredSlotTier > MaxSlots)
+		if (Chip.RequiredSlotTier < 1 || Chip.RequiredSlotTier > SlotCap)
 		{
 			OutErrors.Add(FString::Printf(
 				TEXT("%s: RequiredSlotTier(%d) 가 1~%d 범위를 벗어나 영구히 잠깁니다."),
-				*IdString, Chip.RequiredSlotTier, MaxSlots));
+				*IdString, Chip.RequiredSlotTier, SlotCap));
 		}
 
 		// 필요 슬롯 수는 해금 단계 이하여야 한다 (단계 3에서만 열리는 3칸 칩은 정상)

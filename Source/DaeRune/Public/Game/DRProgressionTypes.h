@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UObject/Object.h"
 #include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "Game/DRUpgradeTypes.h"
 #include "DRProgressionTypes.generated.h"
@@ -10,10 +11,12 @@
 /**
  * 한 로봇(클래스)의 업그레이드 슬롯/장착 상태. (세이브 저장 단위)
  *
- * 슬롯은 카테고리별로 순차 해금한다(UnlockedStatSlots / UnlockedAscensionSlots).
- * 칸 배열(StatSlotChips / AscensionSlotChips)은 UI 의 01~06 칸과 1:1 대응하며,
- * 여러 칸을 점유하는 칩(RequiredSlotCount >= 2)은 같은 ChipId 가 여러 칸에 기록된다.
+ * 슬롯에는 종류 구분이 없다 — 구분 없는 통합 6칸을 앞에서부터 순차 해금한다.
+ * 칸 배열(SlotChips)은 UI 의 01~06 칸과 1:1 대응하며, 여러 칸을 점유하는 칩
+ * (RequiredSlotCount >= 2)은 같은 ChipId 가 여러 칸에 기록된다.
  * → 점유 칸 수 = 그 Id 의 등장 횟수. 자료구조만으로 정합성이 유지된다.
+ *
+ * 불변식: SlotChips[0 .. UnlockedSlots-1] 이 사용 가능 칸, 그 뒤는 잠긴 칸이다.
  * (Plan2.md 4.2 참조)
  */
 USTRUCT(BlueprintType)
@@ -21,65 +24,27 @@ struct FDRClassUpgradeState
 {
 	GENERATED_BODY()
 
-	// 해금한 스탯 슬롯 수 (0 .. MaxStatSlots)
+	// 해금한 슬롯 수 (0 .. MaxSlots). 카테고리 구분 없는 통합 해금 수.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Upgrade")
-	int32 UnlockedStatSlots = 0;
+	int32 UnlockedSlots = 0;
 
-	// 해금한 돌파 슬롯 수 (0 .. MaxAscensionSlots)
+	// 칸별 점유 칩 (길이 = MaxSlots, 빈 칸은 NAME_None)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Upgrade")
-	int32 UnlockedAscensionSlots = 0;
-
-	// 스탯 슬롯 칸별 점유 칩 (없으면 NAME_None)
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Upgrade")
-	TArray<FName> StatSlotChips;
-
-	// 돌파 슬롯 칸별 점유 칩 (없으면 NAME_None)
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Upgrade")
-	TArray<FName> AscensionSlotChips;
+	TArray<FName> SlotChips;
 
 	// 슬롯 해금에 지불한 총액 (환불 상한)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Upgrade")
 	int32 SpentCurrency = 0;
 
-	// ===== 카테고리 기반 접근 (호출부에 if (Category == Stat) 분기를 복제하지 않기 위한 헬퍼) =====
-
-	const TArray<FName>& GetSlotChips(EDRChipCategory Category) const
-	{
-		return Category == EDRChipCategory::Ascension ? AscensionSlotChips : StatSlotChips;
-	}
-
-	TArray<FName>& GetSlotChips(EDRChipCategory Category)
-	{
-		return Category == EDRChipCategory::Ascension ? AscensionSlotChips : StatSlotChips;
-	}
-
-	int32 GetUnlockedSlotCount(EDRChipCategory Category) const
-	{
-		return Category == EDRChipCategory::Ascension ? UnlockedAscensionSlots : UnlockedStatSlots;
-	}
-
-	void SetUnlockedSlotCount(EDRChipCategory Category, int32 NewCount)
-	{
-		if (Category == EDRChipCategory::Ascension)
-		{
-			UnlockedAscensionSlots = NewCount;
-		}
-		else
-		{
-			UnlockedStatSlots = NewCount;
-		}
-	}
-
 	// 해금된 칸 중 비어 있는 칸 수
-	int32 CountFreeSlots(EDRChipCategory Category) const
+	int32 CountFreeSlots() const
 	{
-		const TArray<FName>& Slots = GetSlotChips(Category);
-		const int32 Unlocked = FMath::Min(GetUnlockedSlotCount(Category), Slots.Num());
+		const int32 Unlocked = FMath::Min(UnlockedSlots, SlotChips.Num());
 
 		int32 Free = 0;
 		for (int32 Index = 0; Index < Unlocked; ++Index)
 		{
-			if (Slots[Index].IsNone())
+			if (SlotChips[Index].IsNone())
 			{
 				++Free;
 			}
@@ -88,12 +53,12 @@ struct FDRClassUpgradeState
 	}
 
 	// 그 칩이 점유한 칸 수 (0 = 미장착)
-	int32 CountOccupiedSlots(EDRChipCategory Category, FName ChipId) const
+	int32 CountOccupiedSlots(FName ChipId) const
 	{
 		if (ChipId.IsNone()) return 0;
 
 		int32 Count = 0;
-		for (const FName& Slot : GetSlotChips(Category))
+		for (const FName& Slot : SlotChips)
 		{
 			if (Slot == ChipId)
 			{
@@ -103,18 +68,11 @@ struct FDRClassUpgradeState
 		return Count;
 	}
 
-	// 카테고리 구분 없이 장착된 모든 칩 Id (중복 없이). 서버 보고/런타임 해석용.
+	// 장착된 모든 칩 Id (중복 없이). 서버 보고/런타임 해석용.
 	void GetEquippedChips(TArray<FName>& OutChips) const
 	{
 		OutChips.Reset();
-		for (const FName& Slot : StatSlotChips)
-		{
-			if (!Slot.IsNone())
-			{
-				OutChips.AddUnique(Slot);
-			}
-		}
-		for (const FName& Slot : AscensionSlotChips)
+		for (const FName& Slot : SlotChips)
 		{
 			if (!Slot.IsNone())
 			{
@@ -234,9 +192,18 @@ struct FDRChipViewModel
 	UPROPERTY(BlueprintReadOnly, Category = "Chip")
 	FText TargetSkillName;
 
-	// 이해하기 쉬운 효과 요약 (기본 표시)
+	// 이해하기 쉬운 효과 요약 (툴팁/목록의 한 줄 설명)
 	UPROPERTY(BlueprintReadOnly, Category = "Chip")
 	FText EffectSummary;
+
+	// 칩 카드에 크게 찍는 2행 짧은 라벨 ("이동 속도" / "+6%").
+	// EffectSummary 는 문장이라 120px 카드에 안 들어간다 — 카드는 이 두 줄만 쓴다.
+	// (슬롯 카드의 FDRSlotViewModel::ShortLabel* 과 같은 규칙으로 생성된다)
+	UPROPERTY(BlueprintReadOnly, Category = "Chip")
+	FText ShortLabelTop;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Chip")
+	FText ShortLabelBottom;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Chip")
 	FText Description;
@@ -283,4 +250,127 @@ struct FDRChipViewModel
 	// 돌파 칩 단점 — 토글과 무관하게 항상 표시
 	UPROPERTY(BlueprintReadOnly, Category = "Chip")
 	TArray<FText> DrawbackLines;
+};
+
+/**
+ * 슬롯 1칸을 그리는 데 필요한 모든 정보. (FDRChipViewModel 의 슬롯 버전)
+ *
+ * UI 가 GetSlotAssignments() + 카탈로그를 직접 조합하지 않게 하기 위한 뷰모델이다.
+ * 다중 칸 칩은 같은 ChipId 가 여러 칸에 나타나므로, 시각적으로 묶어 그릴 수 있도록
+ * GroupSize / GroupOrder 를 함께 채운다. (Plan2.md 21.1 참조)
+ */
+USTRUCT(BlueprintType)
+struct FDRSlotViewModel
+{
+	GENERATED_BODY()
+
+	// 0 .. MaxSlots-1 (UI 의 01~06 칸에 1:1 대응)
+	UPROPERTY(BlueprintReadOnly, Category = "Slot")
+	int32 SlotIndex = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Slot")
+	EDRSlotState State = EDRSlotState::Locked;
+
+	// ===== State == Occupied 일 때 채워진다 =====
+
+	UPROPERTY(BlueprintReadOnly, Category = "Slot")
+	FName ChipId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Slot")
+	FText ChipName;
+
+	// 슬롯 카드용 짧은 2행 라벨 (예: "ATK" / "+5")
+	UPROPERTY(BlueprintReadOnly, Category = "Slot")
+	FText ShortLabelTop;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Slot")
+	FText ShortLabelBottom;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Slot")
+	TObjectPtr<UTexture2D> ChipIcon;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Slot")
+	bool bHasDrawback = false;
+
+	// 이 칩이 점유한 총 칸 수 (= RequiredSlotCount). 1이면 묶음 표시가 필요 없다.
+	UPROPERTY(BlueprintReadOnly, Category = "Slot")
+	int32 GroupSize = 0;
+
+	// 묶음 안에서 이 칸이 몇 번째인가 (0-base). 칸이 흩어져 있어도 순서는 보존된다.
+	UPROPERTY(BlueprintReadOnly, Category = "Slot")
+	int32 GroupOrder = 0;
+
+	// ===== State == Locked 일 때 채워진다 =====
+
+	// 이 칸의 해금 비용 (-1 = 비용 미정/범위 밖)
+	UPROPERTY(BlueprintReadOnly, Category = "Slot")
+	int32 UnlockCost = -1;
+
+	// 순차 해금상 "지금 살 수 있는" 칸인가 (잠긴 칸 중 가장 앞)
+	UPROPERTY(BlueprintReadOnly, Category = "Slot")
+	bool bIsNextUnlockable = false;
+
+	// 해금 버튼 비활성 사유. bIsNextUnlockable == false 면 PreviousSlotLocked.
+	UPROPERTY(BlueprintReadOnly, Category = "Slot")
+	EDRUpgradeResult UnlockBlockReason = EDRUpgradeResult::Success;
+};
+
+/**
+ * "이 칩을 끼면/빼면 무엇이 얼마나 변하는가" 1줄. (Plan2.md 21.4 참조)
+ *
+ * 절대값(예: 최대 체력 400 → 480)이 아니라 ★증분(델타)★ 표기다.
+ * 절대값을 내려면 클래스별 PrimaryAttributes GE 의 기본값까지 해석해야 해서 비용이 크다.
+ */
+USTRUCT(BlueprintType)
+struct FDRStatPreviewLine
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Preview")
+	EDRUpgradeStat Stat = EDRUpgradeStat::ContainerHealth;
+
+	// 스킬 단위 스탯일 때 대상 스킬. 비어 있으면 캐릭터 전역.
+	UPROPERTY(BlueprintReadOnly, Category = "Preview")
+	FGameplayTag SkillTag;
+
+	// "컨테이너 체력" / "씨앗 대포 · 스킬 피해량"
+	UPROPERTY(BlueprintReadOnly, Category = "Preview")
+	FText Label;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Preview")
+	float CurrentFlat = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Preview")
+	float CurrentPercent = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Preview")
+	float PreviewFlat = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Preview")
+	float PreviewPercent = 0.f;
+
+	// "+12%" / "-15" / "+20, +12%"
+	UPROPERTY(BlueprintReadOnly, Category = "Preview")
+	FText DeltaText;
+
+	// 나빠지는 변화인가 (빨간색 표기용). DRIsLowerBetter() 를 반영한 판정이다.
+	UPROPERTY(BlueprintReadOnly, Category = "Preview")
+	bool bIsWorse = false;
+};
+
+/**
+ * ListView / TileView 로 칩 목록을 돌릴 때 쓰는 래퍼 오브젝트.
+ * (UMG 리스트 계열은 UObject* 만 아이템으로 받는다 — USTRUCT 는 못 넣는다.)
+ *
+ * 지금은 UniformGridPanel 로 직접 그려도 되지만, 칩이 늘어나 가상화가 필요해지면
+ * 이 클래스로 교체하는 비용이 1줄이 되도록 미리 정의해 둔다. (Plan2.md 19.6)
+ */
+UCLASS(BlueprintType)
+class DAERUNE_API UDRChipViewModelObject : public UObject
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(BlueprintReadOnly, Category = "Chip")
+	FDRChipViewModel Data;
 };

@@ -5,22 +5,21 @@
 #include "Game/DRChipCatalog.h"
 #include "DaeRune/DRLogChannels.h"
 
-int32 UDRProgressionConfig::GetMaxSlotCount(EDRChipCategory Category) const
+int32 UDRProgressionConfig::GetMaxSlotCount() const
 {
-	return FMath::Max(0, Category == EDRChipCategory::Ascension ? MaxAscensionSlots : MaxStatSlots);
+	return FMath::Max(0, MaxSlots);
 }
 
-int32 UDRProgressionConfig::GetSlotUnlockCost(EDRChipCategory Category, int32 SlotNumber) const
+int32 UDRProgressionConfig::GetSlotUnlockCost(int32 SlotNumber) const
 {
-	if (SlotNumber <= 0 || SlotNumber > GetMaxSlotCount(Category))
+	if (SlotNumber <= 0 || SlotNumber > GetMaxSlotCount())
 	{
 		return -1;
 	}
 
-	const TArray<int32>& Costs = (Category == EDRChipCategory::Ascension) ? AscensionSlotCosts : StatSlotCosts;
-	if (Costs.IsValidIndex(SlotNumber - 1))
+	if (SlotCosts.IsValidIndex(SlotNumber - 1))
 	{
-		return FMath::Max(0, Costs[SlotNumber - 1]);
+		return FMath::Max(0, SlotCosts[SlotNumber - 1]);
 	}
 
 	// 비용 미지정 시 선형 증가 폴백
@@ -72,15 +71,10 @@ int32 UDRProgressionConfig::GetSlotUnlockCostForClass() const
 {
 	int32 Total = 0;
 
-	const int32 CategoryCount = static_cast<int32>(EDRChipCategory::Count);
-	for (int32 CategoryIndex = 0; CategoryIndex < CategoryCount; ++CategoryIndex)
+	const int32 SlotCount = GetMaxSlotCount();
+	for (int32 SlotNumber = 1; SlotNumber <= SlotCount; ++SlotNumber)
 	{
-		const EDRChipCategory Category = static_cast<EDRChipCategory>(CategoryIndex);
-		const int32 MaxSlots = GetMaxSlotCount(Category);
-		for (int32 SlotNumber = 1; SlotNumber <= MaxSlots; ++SlotNumber)
-		{
-			Total += FMath::Max(0, GetSlotUnlockCost(Category, SlotNumber));
-		}
+		Total += FMath::Max(0, GetSlotUnlockCost(SlotNumber));
 	}
 
 	return Total;
@@ -162,7 +156,7 @@ bool UDRProgressionConfig::ValidateCurrencyBudget(TArray<FString>& OutErrors) co
 	else
 	{
 		TArray<FString> CatalogErrors;
-		ChipCatalog->ValidateCatalog(MaxStatSlots, MaxAscensionSlots, CatalogErrors);
+		ChipCatalog->ValidateCatalog(GetMaxSlotCount(), CatalogErrors);
 		OutErrors.Append(CatalogErrors);
 	}
 

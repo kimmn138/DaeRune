@@ -65,6 +65,7 @@ public:
 	// 현재 코드가 기대하는 세이브 포맷 버전.
 	// v1: 캐릭터별 경험치/레벨 (폐기)
 	// v2: 계정 공용 재화 + 랭크 구매형 업그레이드 (폐기)
-	// v3: 계정 공용 재화 + 슬롯 해금 / 칩 장착
-	static constexpr int32 CurrentSaveVersion = 3;
+	// v3: 슬롯 카테고리 분리 (스탯 3 + 돌파 3) (폐기)
+	// v4: 구분 없는 통합 슬롯 6칸 + 칩 장착
+	static constexpr int32 CurrentSaveVersion = 4;
 };

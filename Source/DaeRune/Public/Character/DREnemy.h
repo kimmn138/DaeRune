@@ -173,6 +173,12 @@ protected:
 
 	virtual float GetMoveSpeed() override;
 
+	// 액터 회전이 ControlRotation 을 따라잡는 보간 속도 (Tick 의 RInterpTo).
+	// 기본값 10.0 은 기존 하드코딩 값과 동일하므로 기존 적의 동작은 변하지 않는다.
+	// 두더지 보스처럼 "느리게 도는" 연출이 필요한 적만 BP 에서 낮춘다. (Plan7 §5.2)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "0.1"))
+	float RotationInterpSpeed = 10.f;
+
 	// AI 비헤이비어 트리
 	UPROPERTY(EditAnywhere, Category = "AI")
 	TObjectPtr<UBehaviorTree> BehaviorTree;

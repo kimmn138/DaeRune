@@ -31,10 +31,10 @@ void UOverlayWidgetController::BroadcastInitialValues()
 	// 페이즈 목표 초기값 추가
 	HandlePhaseObjectiveChanged();
 
-	// Phase3 타이머 UI 초기 표시 상태 (현재 페이즈 기준)
+	// 웨이브 방어 UI 초기 표시 상태 (GameState 복제 플래그 기준 - Plan6 §5.4)
 	if (ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>())
 	{
-		OnPhase3TimerVisibilityChanged.Broadcast(DRGameState->GetCurrentPhaseIndex() == 2);
+		OnPhase3TimerVisibilityChanged.Broadcast(DRGameState->IsWaveDefenseUIActive());
 	}
 	else
 	{
@@ -376,10 +376,39 @@ void UOverlayWidgetController::HandlePhaseObjectiveChanged()
 	// PhaseNumber 0 = 실제 목표가 설정되기 전 준비 상태 (생성자 기본값 "Preparing...")
 	// 위젯이 placeholder를 첫 목표로 오인해 진짜 첫 목표를 Pending으로 잡아버리는 것을 방지
 	if (ObjectiveData.PhaseNumber == 0) return;
-	
+
 	OnObjectiveTextChanged.Broadcast(ObjectiveData.ObjectiveTitle,ObjectiveData.ProgressFormat);
 	OnObjectiveProgressChanged.Broadcast(CurrentProgress,ObjectiveData.RequiredCount);
 	OnObjectiveProgressVisibilityChanged.Broadcast(ObjectiveData.RequiredCount > 0);
+
+	// ===== 페이즈 알람 배너 (Plan6 §5.4) =====
+	// 목표 데이터의 PhaseAlarmText를 우선 사용하고, 비어 있으면 레거시 문구로 폴백한다.
+	// 알람은 목표가 도착한 이 시점에 띄운다 (페이즈 인덱스 복제가 목표보다 먼저 도착하기 때문).
+	if (bPhaseAlarmPending)
+	{
+		FText AlarmText = ObjectiveData.PhaseAlarmText;
+		if (AlarmText.IsEmpty())
+		{
+			AlarmText = GetLegacyPhaseAlarmText(CachedPhaseNumber);
+		}
+
+		if (!AlarmText.IsEmpty())
+		{
+			OnPhaseAlarm.Broadcast(AlarmText);
+			bPhaseAlarmShown = true;
+			CachedAlarmText = AlarmText;
+		}
+		bPhaseAlarmPending = false;
+	}
+	else if (!ObjectiveData.PhaseAlarmText.IsEmpty()
+		&& !ObjectiveData.PhaseAlarmText.EqualTo(CachedAlarmText))
+	{
+		// 같은 페이즈 안에서 목표가 교체되는 경우(스테이지2 서브 목표):
+		// PhaseAlarmText가 채워진 행에서만 배너를 다시 띄운다. 빈 행은 배너 없이 목표만 교체된다.
+		OnPhaseAlarm.Broadcast(ObjectiveData.PhaseAlarmText);
+		bPhaseAlarmShown = true;
+		CachedAlarmText = ObjectiveData.PhaseAlarmText;
+	}
 }
 
 void UOverlayWidgetController::BindPhaseObjectiveDelegate()
@@ -453,14 +482,31 @@ void UOverlayWidgetController::BindPhaseAlarmDelegate()
 	CachedPhaseNumber = -1;
 	CachedWavePhaseNumber = -1;
 	bPhaseAlarmShown = false;
+	bPhaseAlarmPending = false;
+	CachedAlarmText = FText::GetEmpty();
 
 	DRGameState->OnPhaseChangedDelegate.AddDynamic(this, &UOverlayWidgetController::OnPhaseChanged);
+
+	// 웨이브 방어 UI 표시 플래그 구독 (Plan6 §5.4)
+	DRGameState->OnWaveDefenseUIActiveChangedDelegate.AddDynamic(
+		this, &UOverlayWidgetController::HandleWaveDefenseUIActiveChanged);
 
 	// 현재 페이즈 즉시 표시
 	int32 CurrentPhase = DRGameState->GetCurrentPhaseIndex();
 	if (CurrentPhase >= 0)
 	{
 		OnPhaseChanged(CurrentPhase);
+
+		// 바인딩 시점에 이미 목표가 설정되어 있다면(늦은 바인딩/재접속) 대기 중인 알람을 즉시 해소한다.
+		// 목표가 아직 없으면 PhaseNumber == 0 가드에 걸려 아무 일도 하지 않고,
+		// 이후 목표가 도착할 때 정상적으로 알람이 표시된다.
+		HandlePhaseObjectiveChanged();
+	}
+
+	// 늦게 접속한 클라이언트 대응: 이미 웨이브 방어 페이즈가 진행 중일 수 있다
+	if (DRGameState->IsWaveDefenseUIActive())
+	{
+		HandleWaveDefenseUIActiveChanged(true);
 	}
 }
 
@@ -488,11 +534,9 @@ void UOverlayWidgetController::CheckAndBindWaveTimer()
 	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
 	if (!DRGameState) return;
 
-	const int32 CurrentPhase = DRGameState->GetCurrentPhaseIndex();
-
-	// Phase 3일 때만 바인딩 (인덱스 2)
+	// 웨이브 방어 UI를 쓰는 페이즈일 때만 바인딩 (Plan6 §5.4 - 페이즈 인덱스 하드코딩 제거)
 	// CachedPhaseNumber가 아닌 별도의 CachedWavePhaseNumber 사용 (Phase 알람과 분리)
-	if (CurrentPhase == 2)
+	if (DRGameState->IsWaveDefenseUIActive())
 	{
 		// 이미 바인딩되었는지 체크
 		if (CachedWavePhaseNumber != 2)
@@ -503,7 +547,7 @@ void UOverlayWidgetController::CheckAndBindWaveTimer()
 	}
 	else
 	{
-		// Phase 3가 아니면 캐시 초기화
+		// 웨이브 방어 페이즈가 아니면 캐시 초기화
 		if (CachedWavePhaseNumber == 2)
 		{
 			CachedWavePhaseNumber = -1;
@@ -511,45 +555,57 @@ void UOverlayWidgetController::CheckAndBindWaveTimer()
 	}
 }
 
+void UOverlayWidgetController::HandleWaveDefenseUIActiveChanged(bool bIsActive)
+{
+	// 웨이브 타이머 UI 표시/숨김
+	OnPhase3TimerVisibilityChanged.Broadcast(bIsActive);
+
+	if (bIsActive)
+	{
+		// 클렌저 사이트 HP UI 바인딩 (기존에는 페이즈 인덱스 == 2 조건이었음)
+		BindCallbacksCleanserSiteToDependencies();
+
+		if (CachedWavePhaseNumber != 2)
+		{
+			CachedWavePhaseNumber = 2;
+			BindWaveTimerDelegate();
+		}
+	}
+	else
+	{
+		CachedWavePhaseNumber = -1;
+	}
+}
+
 void UOverlayWidgetController::OnPhaseChanged(int32 NewPhaseIndex)
 {
-	// Phase 3 (인덱스 2)로 변경되었을 때만 처리
-	if (NewPhaseIndex == 2)
+	// Plan6 §5.4: 웨이브 방어 UI(타이머 + 클렌저 HP)는 페이즈 인덱스가 아니라
+	// GameState의 bWaveDefenseUIActive 플래그가 담당한다 (HandleWaveDefenseUIActiveChanged).
+
+	// 알람 문구는 여기서 결정하지 않는다.
+	// GameMode가 페이즈 인덱스를 먼저 복제한 뒤 페이즈의 OnPhaseStart가 목표를 설정하므로,
+	// 이 시점의 CurrentPhaseObjective는 아직 이전 페이즈의 데이터다.
+	// 실제 브로드캐스트는 목표 데이터가 도착한 HandlePhaseObjectiveChanged에서 수행한다.
+	if (CachedPhaseNumber != NewPhaseIndex)
 	{
-		BindCallbacksCleanserSiteToDependencies();
-	}
-
-	// Phase 3 진입 시점에만 타이머 UI 표시, 그 외엔 숨김
-	// 매번 브로드캐스트해도 위젯 측에서 SetVisibility는 idempotent 하므로 안전
-	OnPhase3TimerVisibilityChanged.Broadcast(NewPhaseIndex == 2);
-
-	if (CachedPhaseNumber != NewPhaseIndex || !bPhaseAlarmShown)
-	{
-		FText PhaseText;
-		switch (NewPhaseIndex)
-		{
-		case 0:
-			PhaseText = LOCTEXT("Phase_Alarm_1", "페이즈 1: 확보");
-			break;
-		case 1:
-			PhaseText = LOCTEXT("Phase_Alarm_2", "페이즈 2: 수집");
-			break;
-		case 2:
-			PhaseText = LOCTEXT("Phase_Alarm_3", "페이즈 3: 방어");
-			break;
-		default:
-			PhaseText = LOCTEXT("Phase_Alarm_Unknown", "알 수 없는 페이즈");
-			break;
-		}
-
-		// 페이즈가 실제로 변경되었을 때만 알람 브로드캐스트
-		if (CachedPhaseNumber != NewPhaseIndex)
-		{
-			OnPhaseAlarm.Broadcast(PhaseText);
-			bPhaseAlarmShown = true;
-		}
-
 		CachedPhaseNumber = NewPhaseIndex;
+		bPhaseAlarmPending = true;
+	}
+}
+
+FText UOverlayWidgetController::GetLegacyPhaseAlarmText(int32 PhaseIndex) const
+{
+	// 목표 DataTable에 PhaseAlarmText가 채워지기 전까지 사용하는 폴백 (스테이지1 호환)
+	switch (PhaseIndex)
+	{
+	case 0:
+		return LOCTEXT("Phase_Alarm_1", "페이즈 1: 확보");
+	case 1:
+		return LOCTEXT("Phase_Alarm_2", "페이즈 2: 수집");
+	case 2:
+		return LOCTEXT("Phase_Alarm_3", "페이즈 3: 방어");
+	default:
+		return FText::GetEmpty();
 	}
 }
 

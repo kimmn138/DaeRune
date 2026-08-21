@@ -43,6 +43,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Progression")
 	TObjectPtr<UDRProgressionConfig> ProgressionConfig;
 
+	// 업그레이드 화면 색/브러시 SSOT. BP에서 DA_UpgradeUIStyle 지정. (Plan2.md 21.6)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Progression")
+	TObjectPtr<class UDRUpgradeUIStyle> UpgradeUIStyle;
+
+	// 위젯이 스타일을 읽는 단일 경로 (미지정이면 nullptr — 위젯은 자체 기본값으로 폴백한다)
+	UFUNCTION(BlueprintPure, Category = "Progression|UI")
+	UDRUpgradeUIStyle* GetUpgradeUIStyle() const;
+
 	// ========== 맵 전환 시 캐릭터 선택 보존 ==========
 
 	void SavePlayerClassSelection(const FString& PlayerName, EPlayerCharacterClass SelectedClass);
@@ -92,6 +100,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Progression|Upgrade")
 	void UnlockUpgradeSystem();
 
+	// ★치트/디버그 전용★ — 해금 상태를 임의로 되돌린다(잠김 UI 재확인용).
+	// 정식 해금 경로는 UnlockUpgradeSystem() 이고, 이 함수는 테스트 외에 부르지 않는다.
+	UFUNCTION(BlueprintCallable, Category = "Progression|Upgrade")
+	void DebugSetUpgradeSystemUnlocked(bool bUnlocked);
+
 	UPROPERTY(BlueprintAssignable, Category = "Progression|Upgrade")
 	FOnUpgradeSystemUnlockedSignature OnUpgradeSystemUnlocked;
 
@@ -100,39 +113,49 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Progression|Upgrade")
 	UDRChipCatalog* GetChipCatalog() const;
 
-	// ========== 슬롯 조회/해금 ==========
+	// ========== 슬롯 조회/해금 (카테고리 구분 없는 통합 6칸) ==========
 
 	UFUNCTION(BlueprintPure, Category = "Progression|Slot")
-	int32 GetMaxSlotCount(EDRChipCategory Category) const;
+	int32 GetMaxSlotCount() const;
 
 	UFUNCTION(BlueprintPure, Category = "Progression|Slot")
-	int32 GetUnlockedSlotCount(EPlayerCharacterClass CharacterClass, EDRChipCategory Category) const;
+	int32 GetUnlockedSlotCount(EPlayerCharacterClass CharacterClass) const;
 
 	// 다음 슬롯 해금 비용. 더 해금할 슬롯이 없으면 -1.
 	UFUNCTION(BlueprintPure, Category = "Progression|Slot")
-	int32 GetNextSlotUnlockCost(EPlayerCharacterClass CharacterClass, EDRChipCategory Category) const;
+	int32 GetNextSlotUnlockCost(EPlayerCharacterClass CharacterClass) const;
 
 	// 이 로봇에 슬롯 해금으로 지불한 총액 (환불 상한)
 	UFUNCTION(BlueprintPure, Category = "Progression|Slot")
 	int32 GetClassSpentCurrency(EPlayerCharacterClass CharacterClass) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Progression|Slot")
-	EDRUpgradeResult CanUnlockSlot(EPlayerCharacterClass CharacterClass, EDRChipCategory Category) const;
+	EDRUpgradeResult CanUnlockSlot(EPlayerCharacterClass CharacterClass) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Progression|Slot")
-	EDRUpgradeResult UnlockSlot(EPlayerCharacterClass CharacterClass, EDRChipCategory Category);
+	EDRUpgradeResult UnlockSlot(EPlayerCharacterClass CharacterClass);
 
 	// 마지막으로 해금한 슬롯을 환불한다(순차 해금의 역순). OutRefunded = 돌려받은 재화.
 	UFUNCTION(BlueprintCallable, Category = "Progression|Slot")
-	EDRUpgradeResult RefundSlot(EPlayerCharacterClass CharacterClass, EDRChipCategory Category, int32& OutRefunded);
+	EDRUpgradeResult RefundSlot(EPlayerCharacterClass CharacterClass, int32& OutRefunded);
 
 	// 칸별 점유 칩 목록 (길이 = MaxSlotCount, 빈 칸은 NAME_None). 업그레이드 화면 좌측.
 	UFUNCTION(BlueprintPure, Category = "Progression|Slot")
-	TArray<FName> GetSlotAssignments(EPlayerCharacterClass CharacterClass, EDRChipCategory Category) const;
+	TArray<FName> GetSlotAssignments(EPlayerCharacterClass CharacterClass) const;
+
+	// 업그레이드 화면 좌측 6칸을 그리는 ★단일 진입점★. 길이 = GetMaxSlotCount().
+	// UI 가 GetSlotAssignments() 와 카탈로그를 직접 조합하지 않게 한다.
+	UFUNCTION(BlueprintCallable, Category = "Progression|Slot")
+	void GetSlotViewModels(EPlayerCharacterClass CharacterClass, TArray<FDRSlotViewModel>& OutSlots) const;
+
+	// 특정 칸(0-base)의 해금 비용. 범위 밖이면 -1.
+	// 시안이 "모든 잠긴 칸에 비용 표시"라서 GetNextSlotUnlockCost() 만으로는 부족하다.
+	UFUNCTION(BlueprintPure, Category = "Progression|Slot")
+	int32 GetSlotUnlockCost(int32 SlotIndex) const;
 
 	// 해금된 칸 중 비어 있는 칸 수
 	UFUNCTION(BlueprintPure, Category = "Progression|Slot")
-	int32 GetFreeSlotCount(EPlayerCharacterClass CharacterClass, EDRChipCategory Category) const;
+	int32 GetFreeSlotCount(EPlayerCharacterClass CharacterClass) const;
 
 	// ========== 칩 조회/장착 ==========
 
@@ -148,7 +171,7 @@ public:
 	EDRUpgradeResult CanEquipChip(EPlayerCharacterClass CharacterClass, FName ChipId,
 		int32& OutRequiredSlots, int32& OutFreeSlots) const;
 
-	// 칩 장착. PreferredSlotIndex 는 드래그앤드롭한 칸(유효하지 않으면 앞에서부터 채운다).
+	// 칩 장착. PreferredSlotIndex(0..MaxSlots-1) 는 드래그앤드롭한 칸(유효하지 않으면 앞에서부터 채운다).
 	UFUNCTION(BlueprintCallable, Category = "Progression|Chip")
 	EDRUpgradeResult EquipChip(EPlayerCharacterClass CharacterClass, FName ChipId, int32 PreferredSlotIndex = -1);
 
@@ -156,13 +179,44 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Progression|Chip")
 	EDRUpgradeResult UnequipChip(EPlayerCharacterClass CharacterClass, FName ChipId);
 
-	// 특정 칸을 점유한 칩을 해제
+	// 특정 칸을 점유한 칩을 해제 (다중 칸 칩이면 그 칩의 모든 칸이 비워진다)
 	UFUNCTION(BlueprintCallable, Category = "Progression|Chip")
-	EDRUpgradeResult UnequipSlot(EPlayerCharacterClass CharacterClass, EDRChipCategory Category, int32 SlotIndex);
+	EDRUpgradeResult UnequipSlot(EPlayerCharacterClass CharacterClass, int32 SlotIndex);
 
-	// 업그레이드 화면 우측 칩 목록 (그리기에 필요한 모든 정보 포함)
+	// ========== 칸 단위 조작 (드래그앤드롭 전용) ==========
+	//
+	// CanEquipChip() 은 "어딘가에 넣을 수 있는가"만 본다. 드래그앤드롭은 ★특정 칸★ 판정이 필요하다.
+
+	// 이 칩을 "이 칸에" 놓을 수 있는가. 잠긴 칸 / 점유 칸(=교체 가능)까지 구분해 돌려준다.
+	// 점유 칸이어도 교체가 성립하면 Success 다 — 드롭 하이라이트가 그대로 쓰는 판정이다.
 	UFUNCTION(BlueprintCallable, Category = "Progression|Chip")
-	void GetChipViewModels(EPlayerCharacterClass CharacterClass, EDRChipCategory Category,
+	EDRUpgradeResult CanEquipChipAtSlot(EPlayerCharacterClass CharacterClass, FName ChipId, int32 SlotIndex,
+		int32& OutRequiredSlots, int32& OutFreeSlots) const;
+
+	// 빈 칸이면 장착, 점유 칸이면 기존 칩을 해제하고 교체한다.
+	// 실패 시 아무 것도 바꾸지 않는다(사본 작업 후 성공했을 때만 커밋).
+	UFUNCTION(BlueprintCallable, Category = "Progression|Chip")
+	EDRUpgradeResult SwapOrEquipChip(EPlayerCharacterClass CharacterClass, FName ChipId, int32 SlotIndex);
+
+	// 슬롯 → 슬롯 이동. 목적지가 점유돼 있으면 자리 교환한다.
+	// 다중 칸 칩은 통째로 재배치된다.
+	UFUNCTION(BlueprintCallable, Category = "Progression|Chip")
+	EDRUpgradeResult MoveChip(EPlayerCharacterClass CharacterClass, int32 FromSlotIndex, int32 ToSlotIndex);
+
+	// 이 칩을 이 칸에 놓으면 실제로 어느 칸들이 채워지는지 (하이라이트 미리보기).
+	// EquipChip() 과 ★같은 배정 함수★를 쓴다 — UI 가 자체 예측하면 실제 결과와 어긋난다.
+	UFUNCTION(BlueprintCallable, Category = "Progression|Chip")
+	void PreviewSlotAssignment(EPlayerCharacterClass CharacterClass, FName ChipId, int32 PreferredSlotIndex,
+		TArray<int32>& OutSlotIndices) const;
+
+	// 업그레이드 화면 우측 칩 목록 — 이 로봇의 칩 전체 (그리기에 필요한 모든 정보 포함)
+	UFUNCTION(BlueprintCallable, Category = "Progression|Chip")
+	void GetChipViewModels(EPlayerCharacterClass CharacterClass,
+		TArray<FDRChipViewModel>& OutViewModels) const;
+
+	// 위와 같지만 분류로 걸러낸 목록. Category 는 ★UI 필터★ 이지 장착 제한이 아니다.
+	UFUNCTION(BlueprintCallable, Category = "Progression|Chip")
+	void GetChipViewModelsByCategory(EPlayerCharacterClass CharacterClass, EDRChipCategory Category,
 		TArray<FDRChipViewModel>& OutViewModels) const;
 
 	UPROPERTY(BlueprintAssignable, Category = "Progression|Upgrade")
@@ -180,6 +234,13 @@ public:
 	// "이 칩을 끼면/빼면" 상태를 미리 펼친다 (스탯 미리보기용. NAME_None 이면 무시)
 	void BuildPreviewRuntime(EPlayerCharacterClass CharacterClass, FName AddChipId, FName RemoveChipId,
 		FDRUpgradeRuntime& OutRuntime) const;
+
+	// "이 칩을 끼면/빼면 무엇이 얼마나 변하는가"를 UI 가 쓸 수 있는 줄 목록으로 만든다.
+	// BuildUpgradeRuntime/BuildPreviewRuntime 은 BP 노출이 아니므로 이 래퍼가 필요하다.
+	// 변화가 있는 항목만 담는다. (Plan2.md 21.4)
+	UFUNCTION(BlueprintCallable, Category = "Progression|Upgrade")
+	void GetStatPreview(EPlayerCharacterClass CharacterClass, FName AddChipId, FName RemoveChipId,
+		TArray<FDRStatPreviewLine>& OutLines) const;
 
 	// ========== 스테이지 보상 ==========
 
@@ -204,6 +265,43 @@ private:
 
 	// 칩 정의 조회 (카탈로그 미지정 시 nullptr)
 	const struct FDRUpgradeChipDefinition* FindChip(FName ChipId) const;
+
+	// 칩 정의 1개 → 뷰모델 1개. GetChipViewModels* 두 경로가 공유한다(표시 로직 복제 방지).
+	void MakeChipViewModel(EPlayerCharacterClass CharacterClass, const struct FDRUpgradeChipDefinition& Chip,
+		FDRChipViewModel& OutViewModel) const;
+
+	/**
+	 * 칸 배정 규칙의 ★단일 구현★. RequiredSlots 개의 빈 칸을 골라 OutSlotIndices 에 담는다.
+	 *
+	 * 규칙(Plan2.md 6.4):
+	 *   1) PreferredSlotIndex 가 해금됐고 비어 있으면 그 칸을 먼저 쓴다 (= 드롭한 칸)
+	 *   2) 모자란 만큼 앞에서부터 빈 칸을 채운다
+	 *   3) 연속 칸을 요구하지 않는다
+	 *
+	 * EquipChip / SwapOrEquipChip / MoveChip / PreviewSlotAssignment 이 전부 이 함수만 쓴다.
+	 * 배정 로직이 복제되면 미리보기 하이라이트와 실제 결과가 어긋난다.
+	 *
+	 * @return 필요한 칸을 모두 확보했으면 true. false 면 OutSlotIndices 는 비어 있다.
+	 */
+	bool ComputeAssignment(const FDRClassUpgradeState& State, int32 RequiredSlots, int32 PreferredSlotIndex,
+		TArray<int32>& OutSlotIndices) const;
+
+	// 그 칩이 차지해야 하는 칸 수. 카탈로그에서 삭제된 고아 칩이면 현재 점유 칸 수로 폴백한다.
+	int32 GetChipSlotCount(const FDRClassUpgradeState& State, FName ChipId) const;
+
+	/**
+	 * 칩 아이콘 폴백을 ★한 곳에서★ 처리한다.
+	 *
+	 * 카탈로그에 Icon 을 안 넣은 칩이 흔하다. 폴백을 위젯마다 따로 하면
+	 * 어떤 위젯은 기본 아이콘이 뜨고 어떤 위젯은 흰 사각형이 되는 불일치가 생긴다
+	 * (칩 카드는 폴백하는데 드래그 비주얼은 안 해서 흰색으로 나오던 문제).
+	 * 여기서 한 번 해결하면 카드·슬롯·드래그 비주얼·툴팁이 전부 같은 그림을 받는다.
+	 */
+	UTexture2D* ResolveChipIcon(UTexture2D* ChipIcon) const;
+
+	// 미리보기 1줄 생성 헬퍼 (전역/스킬 공통). 변화가 없으면 false 를 돌려 줄을 버린다.
+	bool MakeStatPreviewLine(EDRUpgradeStat Stat, const FGameplayTag& SkillTag,
+		const FDRResolvedStat& Current, const FDRResolvedStat& Preview, FDRStatPreviewLine& OutLine) const;
 
 	// 배열 길이/해금 수 클램프 + 고아·잠긴·점유수 불일치 칩 정리. 변경이 있으면 true.
 	// OutReclaimedCurrency: 해금 수가 줄어들어 환급해야 하는 재화.

@@ -617,4 +617,28 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FName("GameplayCue.Skill.VacuumDash"),
 		FString("RobotVacuum Dash Effect")
 	);
+
+	/*
+	 * 스테이지2 두더지 보스 (Plan7 §5.5)
+	 */
+
+	GameplayTags.Abilities_MoleBoss_Claw = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.MoleBoss.Claw"),
+		FString("MoleBoss 120-degree 2-hit claw sweep")
+	);
+
+	GameplayTags.Abilities_MoleBoss_BurrowStrike = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.MoleBoss.BurrowStrike"),
+		FString("MoleBoss burrow -> warning -> erupt skill")
+	);
+
+	GameplayTags.Cooldown_MoleBoss_BurrowStrike = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Cooldown.MoleBoss.BurrowStrike"),
+		FString("MoleBoss BurrowStrike cooldown (segment dependent)")
+	);
+
+	GameplayTags.State_MoleBoss_Burrowed = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.MoleBoss.Burrowed"),
+		FString("MoleBoss is underground and invulnerable")
+	);
 }

@@ -22,7 +22,11 @@ enum class ECharacterClass : uint8
 	Warrior,
 	Ranger,
 	Bear,
-	PartEnemy
+	PartEnemy,
+
+	// 스테이지2 방6 두더지 보스 (Plan7). ★반드시 맨 뒤에 추가한다 —
+	// 앞에 끼워 넣으면 기존 에셋에 직렬화된 정수값이 다른 클래스로 밀린다.
+	MoleBoss
 };
 
 UENUM(BlueprintType)

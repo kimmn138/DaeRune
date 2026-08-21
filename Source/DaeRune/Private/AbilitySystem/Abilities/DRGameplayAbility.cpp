@@ -180,9 +180,13 @@ void UDRGameplayAbility::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, 
     const UGameplayEffect* CooldownGE = GetCooldownGameplayEffect();
     if (!CooldownGE) return;
 
-    // CooldownDuration 이 0이면 GE 의 고정 Duration 을 그대로 쓴다 (기존 어빌리티 하위 호환).
+    // 파생 클래스가 런타임 조건으로 쿨다운을 바꿀 수 있게 훅을 통해 읽는다 (Plan7 §5.4).
+    // 기본 구현은 CooldownDuration 을 그대로 돌려준다.
+    const float BaseCooldown = GetBaseCooldownDuration(ActorInfo);
+
+    // BaseCooldown 이 0이면 GE 의 고정 Duration 을 그대로 쓴다 (기존 어빌리티 하위 호환).
     // 단 GE Duration 이 SetByCaller 인데 값이 없으면 쿨다운이 조용히 0이 되므로 경고를 남긴다.
-    if (CooldownDuration <= 0.f)
+    if (BaseCooldown <= 0.f)
     {
         if (CooldownGE->DurationMagnitude.GetMagnitudeCalculationType() == EGameplayEffectMagnitudeCalculation::SetByCaller)
         {
@@ -199,7 +203,7 @@ void UDRGameplayAbility::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, 
     if (!SpecHandle.IsValid()) return;
 
     const float UpgradedCooldown = GetUpgradeRuntimeFor(ActorInfo)
-        .ApplySkill(GetUpgradeKeyTag(), EDRUpgradeStat::SkillCooldown, CooldownDuration);
+        .ApplySkill(GetUpgradeKeyTag(), EDRUpgradeStat::SkillCooldown, BaseCooldown);
     const float EffectiveCooldown = FMath::Max(MinCooldownDuration, UpgradedCooldown);
 
     SpecHandle.Data->SetSetByCallerMagnitude(FDRGameplayTags::Get().Data_Cooldown, EffectiveCooldown);

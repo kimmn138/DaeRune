@@ -43,6 +43,12 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cooldown", meta = (ClampMin = "0.01"))
     float MinCooldownDuration = 0.05f;
 
+    // 쿨다운 기본값 훅. 파생 클래스가 런타임 조건(보스 구간 등)에 따라 값을 바꿀 수 있게 한다. (Plan7 §5.4)
+    // 기본 구현은 CooldownDuration 을 그대로 돌려주므로 기존 어빌리티 동작은 변하지 않는다.
+    // ★ActorInfo 를 인자로 받는 이유는 아래 GetUpgradeRuntimeFor 주석과 같다 —
+    //   ApplyCooldown 은 CDO 에서 호출될 수 있어 GetCurrentActorInfo() 가 비어 있을 수 있다.
+    virtual float GetBaseCooldownDuration(const FGameplayAbilityActorInfo* ActorInfo) const { return CooldownDuration; }
+
     // 이 어빌리티의 업그레이드 키 태그 (GetAssetTags() 중 "Abilities" 접두 태그)
     UFUNCTION(BlueprintPure, Category = "Upgrade")
     FGameplayTag GetUpgradeKeyTag() const;

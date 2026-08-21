@@ -103,6 +103,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite|Phase2")
 	void InstallPart(class ADRCharacter* Character);
 
+	// 설치된 부품을 되돌린다 (Plan6 §5.12 - 스테이지2 방4 재시도용).
+	// 설치 카운트를 되돌리고 설치대 옆에 부품을 다시 스폰한다.
+	// 스테이지1은 이 함수를 호출하지 않는다.
+	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
+	class ADRCleanserPart* EjectInstalledPart(TSubclassOf<class ADRCleanserPart> PartClass, float EjectOffset = 150.f);
+
 	// ���� ��ġ�� ��ǰ ���� ��������
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite|Phase2")
 	int32 GetInstalledPartsCount() const { return InstalledPartsCount; }

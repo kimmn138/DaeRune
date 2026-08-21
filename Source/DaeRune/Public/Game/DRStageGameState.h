@@ -25,6 +25,8 @@ DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnWaveTimerChanged, int32 /*WaveNumber*/
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnToxicGasWarningSignature, bool, bIsToxicGasWave);
 // 목표 클리어 델리게이트 (Multicast RPC로 서버/클라 공통 발화)
 DECLARE_MULTICAST_DELEGATE(FOnObjectiveCompleted);
+// 웨이브 방어 UI(웨이브 타이머 + 클렌저 사이트 HP) 표시 여부 델리게이트 (Plan6 §5.4)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWaveDefenseUIActiveSignature, bool, bIsActive);
 
 // ������ ���� ������
 UENUM(BlueprintType)
@@ -178,6 +180,20 @@ public:
     UPROPERTY(ReplicatedUsing = OnRep_CurrentPhaseObjective)
     FPhaseObjectiveData CurrentPhaseObjective;
 
+    // ========== 웨이브 방어 UI 표시 플래그 (Plan6 §5.4) ==========
+    // 웨이브 타이머 UI + 클렌저 사이트 HP UI 를 띄울지 여부.
+    // 기존에는 OverlayWidgetController가 "페이즈 인덱스 == 2"로 판단했으나,
+    // 스테이지2에서는 인덱스 2가 다른 페이즈라 잘못된 UI가 표시되는 문제가 있었다.
+    // 이 UI를 사용하는 페이즈(UDRPhase3)가 직접 켜고 끈다.
+    UFUNCTION(BlueprintCallable, Category = "Phase|UI")
+    void SetWaveDefenseUIActive(bool bActive);
+
+    UFUNCTION(BlueprintCallable, Category = "Phase|UI")
+    bool IsWaveDefenseUIActive() const { return bWaveDefenseUIActive; }
+
+    UPROPERTY(BlueprintAssignable, Category = "Phase|UI")
+    FOnWaveDefenseUIActiveSignature OnWaveDefenseUIActiveChangedDelegate;
+
     // ========== 사운드 (Multicast RPC) ==========
 
     // 페이즈 시작 사운드 (1회성 주요 연출 - 유실 시 다시 재생할 기회가 없으므로 Reliable)
@@ -232,6 +248,9 @@ protected:
     
     UFUNCTION()
     void OnRep_CurrentObjectiveProgress();
+
+    UFUNCTION()
+    void OnRep_WaveDefenseUIActive();
 
     UFUNCTION()
     void OnRep_WaveTimerEndServerTime();
@@ -332,6 +351,10 @@ private:
     // ========== UI ������Ʈ ==========
     UPROPERTY(ReplicatedUsing = OnRep_CurrentObjectiveProgress)
     int32 CurrentObjectiveProgress = 0;
+
+    // 웨이브 방어 UI(타이머 + 클렌저 HP) 표시 여부 (Plan6 §5.4)
+    UPROPERTY(ReplicatedUsing = OnRep_WaveDefenseUIActive)
+    bool bWaveDefenseUIActive = false;
 
     // ========== Phase3 스폰 포인트 VFX 상태 (복제) ==========
     // 빈 배열 = VFX 꺼짐. VFX 끝점이라 양자화 벡터로 충분
