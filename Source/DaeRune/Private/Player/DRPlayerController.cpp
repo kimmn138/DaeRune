@@ -39,7 +39,6 @@
 #include "Kismet/GameplayStatics.h"
 #include "UI/Widget/DRWaitingRoomWidget.h"
 #include "UI/DRUpgradeUILibrary.h"
-#include "UI/Widget/DRUpgradeScreenWidget.h"
 #include "Game/DRLobbyGameMode.h"
 #include "Game/DRGameInstance.h"
 #include "Game/DRChipCatalog.h"
@@ -1436,28 +1435,7 @@ void ADRPlayerController::OpenUpgradeScreen()
 	SetInputMode(FInputModeUIOnly());
 	SetShowMouseCursor(true);
 
-	// ★위젯 생성/제거는 C++ 이 책임진다★
-	// 예전에는 BP 이벤트가 했는데, 제거 노드를 빠뜨리면 "ESC 를 눌러도 창이 안 닫힌다"가
-	// 조용히 발생한다(효과는 적용되므로 원인 짚기가 어렵다). 여기서 하면 잊을 수가 없다.
-	if (!UpgradeScreenWidget && UpgradeScreenWidgetClass)
-	{
-		UpgradeScreenWidget = CreateWidget<UDRUpgradeScreenWidget>(this, UpgradeScreenWidgetClass);
-		if (UpgradeScreenWidget)
-		{
-			UpgradeScreenWidget->AddToViewport(50);
-
-			// FInputModeUIOnly 에서 ESC/M 키를 위젯이 받으려면 포커스가 필요하다
-			UpgradeScreenWidget->SetUserFocus(this);
-		}
-	}
-
-	if (!UpgradeScreenWidgetClass)
-	{
-		UE_LOG(LogDR, Warning,
-			TEXT("[Upgrade] UpgradeScreenWidgetClass 가 지정되지 않았습니다 — BP_DRPlayerController 에서 WBP_UpgradeScreen 을 지정하세요."));
-	}
-
-	// BP 훅은 남겨 둔다 (열기 연출·사운드 등 부가 처리용). 위젯 생성은 하지 않는다.
+	// 블루프린트에서 위젯 생성 (설정 메뉴와 같은 구조 — OpenSettingsMenu 참조)
 	OnUpgradeScreenOpened();
 }
 
@@ -1563,14 +1541,8 @@ void ADRPlayerController::CloseUpgradeScreen()
 	if (!IsLocalController()) return;
 	if (!bIsUpgradeScreenOpen) return;
 
-	// BP 훅 먼저 (닫기 연출·사운드 등). 위젯 제거는 아래에서 C++ 이 한다.
+	// 블루프린트에서 위젯 제거 (설정 메뉴와 같은 구조 — CloseSettingsMenu 참조)
 	OnUpgradeScreenClosed();
-
-	if (UpgradeScreenWidget)
-	{
-		UpgradeScreenWidget->RemoveFromParent();
-		UpgradeScreenWidget = nullptr;
-	}
 
 	bIsUpgradeScreenOpen = false;
 	RestoreDefaultInputMode();

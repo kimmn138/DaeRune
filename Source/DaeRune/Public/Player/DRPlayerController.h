@@ -340,20 +340,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Upgrade")
 	bool IsUpgradeScreenOpen() const { return bIsUpgradeScreenOpen; }
 
-	// 화면이 ★열린/닫힌 뒤★ 불리는 BP 훅 (연출·사운드 등 부가 처리용).
-	// ★위젯 생성/제거는 C++ 이 한다★ — BP 에서 CreateWidget / RemoveFromParent 하지 말 것.
+	// ★블루프린트가 위젯을 생성/제거한다★ (설정 메뉴의 OnSettingsMenuOpened/Closed 와 같은 구조)
+	//  - Opened : CreateWidget → AddToViewport → SetKeyboardFocus
+	//  - Closed : RemoveFromParent
 	UFUNCTION(BlueprintImplementableEvent, Category = "Upgrade")
 	void OnUpgradeScreenOpened();
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Upgrade")
 	void OnUpgradeScreenClosed();
 
-	// 업그레이드 화면 위젯 클래스 (BP_DRPlayerController 에서 WBP_UpgradeScreen 지정 — 필수).
+	// 업그레이드 화면 위젯 클래스 (BP_DRPlayerController 에서 WBP_UpgradeScreen 지정).
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TSubclassOf<class UDRUpgradeScreenWidget> UpgradeScreenWidgetClass;
 
-	// 현재 열려 있는 화면 위젯. OpenUpgradeScreen 이 만들고 CloseUpgradeScreen 이 지운다.
-	UPROPERTY(BlueprintReadOnly, Transient, Category = "UI")
+	// BP 가 만든 화면 위젯을 여기 보관해 둔다 (디버그/치트에서 접근하기 위함).
+	// 소유권은 BP 에 있고, 여기서는 약한 참조처럼 쓴다.
+	UPROPERTY(BlueprintReadWrite, Transient, Category = "UI")
 	TObjectPtr<UDRUpgradeScreenWidget> UpgradeScreenWidget;
 
 	// ========== 치트/디버그 모드 ==========

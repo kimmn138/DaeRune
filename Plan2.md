@@ -3769,7 +3769,23 @@ Event On Upgrade Screen Closed
   설정창과 겹쳤을 때 커서가 사라진다.
 - `ZOrder 50` — 로딩 화면(`UDRLoadingScreenSubsystem`)보다 낮고 HUD 보다 높게.
 
-✅ **확인**: 로비에서 장치에 상호작용 → 화면이 뜨고 마우스가 나온다. ESC 로 닫힌다.
+> ★**설정 메뉴와 완전히 같은 구조다**★ — 헷갈리면 `WBP_SettingsScreen` / `BP_DRPlayerController` 를 보면 된다.
+>
+> | 단계 | 설정 | 업그레이드 |
+> |---|---|---|
+> | 키 입력 | `WBP_SettingsScreen` 의 **BP `OnKeyDown`** | `WBP_UpgradeScreen` 의 **BP `OnKeyDown`** |
+> | 닫기 요청 | `PC->CloseSettingsMenu()` | `PC->CloseUpgradeScreen()` |
+> | 위젯 제거 | `Event On Settings Menu Closed` (BP) | `Event On Upgrade Screen Closed` (BP) |
+> | C++ 이 하는 일 | 플래그 · 입력 모드 · BP 훅 호출 **뿐** | 〃 (+ 닫을 때 `ReportUpgradeLoadout()`) |
+>
+> **C++ 에는 `NativeOnKeyDown` 오버라이드가 없다.** 키는 전적으로 BP 소관이다 —
+> C++ 이 먼저 가로채면 BP 의 `OnKeyDown` 이 발화하지 않는다(BP 이벤트는 `Super` 안에서 불린다).
+>
+> ⚠️ **`Event On Upgrade Screen Closed` 에서 `RemoveFromParent()` 를 빠뜨리면**
+> ESC 를 눌러도 **창이 안 닫힌다.** 이때도 `CloseUpgradeScreen()` 은 정상 실행되므로
+> **칩 효과는 적용되는데 화면만 남는** 모습이 된다 — 원인을 짚기 어려운 증상이다.
+
+✅ **확인**: 로비에서 장치에 상호작용 → 화면이 뜨고 마우스가 나온다. ESC 로 **화면이 사라진다.**
 
 ### STEP 12. 로비 배치 & 장치
 
