@@ -6,6 +6,7 @@
 #include "Character/DRCharacterBase.h"
 #include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "Engine/NetSerialization.h"
+#include "GameplayEffectTypes.h"
 #include "DRCharacter.generated.h"
 
 class UWidgetComponent;
@@ -69,6 +70,15 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Camera")
 	UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+
+	// ========== 업그레이드 칩 반영 (Plan2.md 7.2 / 8.4) ==========
+
+	// 장착 칩 수치를 캐릭터에 반영한다. 멱등이라 몇 번 호출해도 안전하다.
+	//  - 모든 머신: 컨테이너 체력 재계산 (컨테이너 UI 가 클라에서도 맞아야 하므로)
+	//  - 서버: GE_Upgrade_Stats 재적용 (MaxHealth / MaxWater / MoveSpeed)
+	// 반드시 InitializeDefaultAttributes() 이후에 호출해야 한다
+	// (InitializePlayerDefaultAttributes 가 활성 GE 를 제거하고 BaseValue 를 0으로 리셋한다).
+	void RefreshUpgradeEffects();
 
 	// �����̳� �ý��� ����
 	UPROPERTY(EditDefaultsOnly, Category = "Container System")
@@ -253,6 +263,20 @@ protected:
 
 	// UPlayerCharacterClassInfo 기반 어트리뷰트 초기화
 	virtual void InitializeDefaultAttributes() const override;
+
+	// ========== 업그레이드 칩 ==========
+
+	// 업그레이드 스탯을 얹는 Infinite GE (SetByCaller). BP 에서 GE_Upgrade_Stats 지정.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade")
+	TSubclassOf<UGameplayEffect> UpgradeStatEffectClass;
+
+	// 업그레이드 적용 전후로 체력/물의 현재값 비율을 유지할지.
+	// 스폰 시점엔 만피라 그대로 만피가 되고, 중간 재적용에서 공짜 회복이 생기지 않는다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade")
+	bool bPreserveVitalRatioOnUpgradeApply = true;
+
+	// 현재 적용 중인 업그레이드 GE 핸들 (재적용 시 먼저 제거 — ASC 가 PlayerState 에 있어 리스폰 후에도 남는다)
+	FActiveGameplayEffectHandle UpgradeStatEffectHandle;
 
 	// ========== ��ǰ ���� ==========
 

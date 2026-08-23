@@ -36,6 +36,7 @@
 #include "Components/AudioComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "DaeRune/DRLogChannels.h"
 
 ADRCharacter::ADRCharacter()
 {
@@ -68,10 +69,14 @@ ADRCharacter::ADRCharacter()
 	// 1��Ī �޽� ����
 	FirstPersonMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonMesh"));
 	FirstPersonMesh->SetupAttachment(FollowCamera); 
-	FirstPersonMesh->SetOnlyOwnerSee(true); 
+	FirstPersonMesh->SetOnlyOwnerSee(true);
 	FirstPersonMesh->bCastDynamicShadow = false;
 	FirstPersonMesh->CastShadow = false;
 	FirstPersonMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// 뷰모델 depth 압축 머티리얼(WPO)이 정점을 카메라 쪽으로 당기므로,
+	// 원래 bounds 기준으로 프러스텀 컬링되면 카메라 회전 시 메시가 사라진다(pop).
+	// bounds를 넉넉히 키워 컬링을 방지한다.
+	FirstPersonMesh->BoundsScale = 4.f;
 
 	// 3인칭 메시 설정
 	GetMesh()->SetOwnerNoSee(true);
@@ -93,6 +98,8 @@ ADRCharacter::ADRCharacter()
 	FirstPersonPartMesh->CastShadow = false;
 	FirstPersonPartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	FirstPersonPartMesh->SetVisibility(false);
+	// FirstPersonMesh와 동일한 이유(뷰모델 depth 압축 WPO)로 bounds 확장
+	FirstPersonPartMesh->BoundsScale = 4.f;
 
 	// 3인칭 부품 메시 생성 (픽업 전에는 비활성)
 	ThirdPersonPartMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ThirdPersonPartMesh"));
@@ -918,6 +925,93 @@ void ADRCharacter::InitializeDefaultAttributes() const
 	UDRAbilitySystemLibrary::InitializePlayerDefaultAttributes(this, PlayerCharacterClass, Level, AbilitySystemComponent);
 }
 
+void ADRCharacter::RefreshUpgradeEffects()
+{
+	if (!AbilitySystemComponent) return;
+
+	const ADRPlayerState* DRPS = GetPlayerState<ADRPlayerState>();
+	if (!DRPS) return;
+
+	const FDRUpgradeRuntime& Runtime = DRPS->GetUpgradeRuntime();
+
+	// ===== 1) 컨테이너 체력 (모든 머신) =====
+	// 플레이어 체력은 컨테이너 시스템이라 MaxHealth 를 직접 올리면 컨테이너 인덱스 계산과
+	// 오염 해제 로직(NumContainers * ContainerHealth)이 깨진다. 칸 용량 자체를 올린다. (Plan2.md 2.2)
+	const float BaseContainerHealth = ContainerHealth;
+	const float UpgradedContainerHealth = FMath::Max(
+		1.f, Runtime.Apply(EDRUpgradeStat::ContainerHealth, BaseContainerHealth));
+
+	if (UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSets))
+	{
+		PlayerAS->SetContainerInfo(NumContainers, UpgradedContainerHealth);
+	}
+
+	// ===== 2) 스탯 GE (서버 전용) =====
+	if (!HasAuthority()) return;
+
+	// 재적용 전에 이전 핸들 제거 (클래스 변경 / 로드아웃 갱신 대응)
+	if (UpgradeStatEffectHandle.IsValid())
+	{
+		AbilitySystemComponent->RemoveActiveGameplayEffect(UpgradeStatEffectHandle);
+		UpgradeStatEffectHandle.Invalidate();
+	}
+
+	// 칩이 하나도 없으면 GE 자체를 얹지 않는다 → 업그레이드 도입 전과 완전히 동일한 수치
+	if (Runtime.IsEmpty()) return;
+
+	if (!UpgradeStatEffectClass)
+	{
+		UE_LOG(LogDR, Warning,
+			TEXT("[Upgrade] %s: UpgradeStatEffectClass 미지정 — 스탯 칩(체력/물/이속)이 반영되지 않습니다."),
+			*GetName());
+		return;
+	}
+
+	FGameplayEffectContextHandle ContextHandle = AbilitySystemComponent->MakeEffectContext();
+	ContextHandle.AddSourceObject(this);
+
+	const FGameplayEffectSpecHandle SpecHandle =
+		AbilitySystemComponent->MakeOutgoingSpec(UpgradeStatEffectClass, 1.f, ContextHandle);
+	if (!SpecHandle.IsValid()) return;
+
+	const FDRGameplayTags& UpgradeTags = FDRGameplayTags::Get();
+
+	// MaxHealth: 컨테이너 용량 증가분을 칸 수만큼 반영 (MaxHealth = NumContainers * ContainerHealth 불변식 유지)
+	const float MaxHealthFlat = (UpgradedContainerHealth - BaseContainerHealth) * static_cast<float>(NumContainers);
+	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxHealth_Flat, MaxHealthFlat);
+	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxHealth_Mult, 1.f);
+
+	const FDRResolvedStat WaterStat = Runtime.GetGlobalStat(EDRUpgradeStat::MaxWater);
+	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxWater_Flat, WaterStat.Flat);
+	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxWater_Mult, 1.f + WaterStat.Percent);
+
+	const FDRResolvedStat SpeedStat = Runtime.GetGlobalStat(EDRUpgradeStat::MoveSpeed);
+	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MoveSpeed_Flat, SpeedStat.Flat);
+	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MoveSpeed_Mult, 1.f + SpeedStat.Percent);
+
+	// 최대치 변화에 맞춰 현재값 비율을 유지한다.
+	// 스폰 시점엔 만피이므로 그대로 만피가 되고, 컨테이너 시스템에서는 "남은 컨테이너 수 유지"와 같다.
+	// (칩 목록이 스폰보다 늦게 도착해 재적용되는 경우에도 공짜 회복이 생기지 않는다)
+	UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets);
+	const bool bPreserveVitals = bPreserveVitalRatioOnUpgradeApply && DRAS != nullptr;
+
+	const float HealthRatio = (bPreserveVitals && DRAS->GetMaxHealth() > 0.f)
+		? DRAS->GetHealth() / DRAS->GetMaxHealth() : -1.f;
+	const float WaterRatio = (bPreserveVitals && DRAS->GetMaxWater() > 0.f)
+		? DRAS->GetWater() / DRAS->GetMaxWater() : -1.f;
+
+	UpgradeStatEffectHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+
+	if (HealthRatio >= 0.f)
+	{
+		DRAS->SetHealth(FMath::Clamp(HealthRatio * DRAS->GetMaxHealth(), 0.f, DRAS->GetMaxHealth()));
+	}
+	if (WaterRatio >= 0.f)
+	{
+		DRAS->SetWater(FMath::Clamp(WaterRatio * DRAS->GetMaxWater(), 0.f, DRAS->GetMaxWater()));
+	}
+}
+
 void ADRCharacter::InitializeMoveSpeedBinding()
 {
 	if (!AbilitySystemComponent || !AttributeSets) return;
@@ -1012,6 +1106,10 @@ void ADRCharacter::InitAbilityActorInfo()
 	{
 		InitializeDefaultAttributes();
 	}
+
+	// 업그레이드 칩 반영. 반드시 기본 속성 초기화 이후여야 한다 (Plan2.md 7.2)
+	// 컨테이너 체력은 클라이언트에서도 필요하므로 권한 분기 안에 넣지 않는다.
+	RefreshUpgradeEffects();
 }
 
 void ADRCharacter::MulticastPlayHitReactFacial_Implementation()

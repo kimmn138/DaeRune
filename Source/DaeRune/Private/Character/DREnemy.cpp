@@ -15,6 +15,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Character/DRCharacter.h"
+#include "Player/DRPlayerState.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "Engine/OverlapResult.h"
 #include "Components/CapsuleComponent.h"
@@ -763,6 +764,16 @@ void ADREnemy::GrantWaterToPlayers()
 			{
 				// 보스는 MaxWater까지 채워주기
 				WaterAmount = TargetAS->GetMaxWater() - TargetAS->GetWater();
+			}
+
+			// 업그레이드 칩의 "물 획득량" 배율 (대상 플레이어별로 다르다)
+			if (const APawn* TargetPawn = Cast<APawn>(Player))
+			{
+				if (const ADRPlayerState* TargetPS = TargetPawn->GetPlayerState<ADRPlayerState>())
+				{
+					WaterAmount = FMath::Max(0.f,
+						TargetPS->GetUpgradeRuntime().Apply(EDRUpgradeStat::WaterGain, WaterAmount));
+				}
 			}
 
 			// SetByCaller로 지급량 설정

@@ -778,3 +778,241 @@ FText::FromString(FString::Printf
 - [ ] STEP 8: 동적 포맷 문자열 → `FText::Format`
 - [ ] STEP 9: `OnLanguageChanged` 구독 → 활성 위젯 텍스트 갱신
 - [ ] STEP 10: QA 시나리오 9건 통과
+
+---
+
+## 10. 에디터 작업 완전 가이드 — C++ 이후, 실제 번역을 화면에 띄우기
+
+> **작성일 2026-07-24. 코드 실측 기반.** 이 섹션은 §1~§9 작성 이후 **실제로 구현이 진행된 상태**를 전제로 하며, 앞 섹션과 충돌하면 이 섹션이 우선한다.
+> §8이 "무엇을·왜"(개념적 마이그레이션)를 다뤘다면, 이 섹션은 **"에디터에서 실제로 어떤 버튼을 누르는가"**(구체 액션) + **"C++로는 못 쓰고 에디터에서만 작성되는 UI 텍스트를 어떻게 처리하는가"**를 다룬다.
+
+### 10.0 전제 — 지금까지 코드 측에서 완료된 것
+
+| 항목 | 상태 | 위치 |
+|---|---|---|
+| 언어 옵션(한/영) 복구 + 확장 SSOT | ✅ 완료 | `UDRSettingsManager::GetSupportedLanguages()` — 언어 추가는 이 배열 1줄 |
+| 영속화(`PreferredCulture`) + 부팅 적용 | ✅ 완료 | `DRGameUserSettings`, `DRGameInstance::Init` |
+| 컬처 전환 + `OnLanguageChanged` 발행 | ✅ 완료 | `UDRSettingsManager::ApplySingleSetting` |
+| Config (ko/en 스테이징 + `LocalizationPaths`) | ✅ 완료 | `DefaultGame.ini`, `DefaultEngine.ini` |
+| C++ 텍스트 `LOCTEXT`화 | ✅ 완료 | `OverlayWidgetController`(ns `DROverlay`), `DRStageGameState`(ns `DRPhase`), `DRSettingsManager`(ns `DRSettings`) |
+| 소스 인코딩 정규화(UTF-8 BOM) | ✅ 완료 | 위 파일들 |
+| 언어 변경 라이브 갱신 배선 | ✅ 완료 | `UDRUserWidget`이 `OnLanguageChanged` 구독 → 자식 Text 재동기화 + BP 이벤트 |
+
+→ **코드에 있는 텍스트는 이미 "번역 준비 완료".** 그런데도 화면엔 한국어만 나온다. 남은 두 가지 때문이며, **둘 다 C++이 아니라 에디터에서만** 처리된다:
+
+1. **번역 데이터(`.locres`)가 없다** — Gather/Compile을 한 번도 안 했다(`Content/Localization` 폴더 부재).
+2. **에디터에 박힌 위젯/DataTable 텍스트가 수집 대상인지 미확인** — 디자이너가 직접 입력한 텍스트는 코드로 못 바꾸고 에디터에서 처리해야 한다.
+
+이 섹션은 위 1·2를 끝내는 방법이다.
+
+---
+
+### 10.1 큰 그림 — 텍스트는 "두 세계"에서 나와 한 곳으로 모인다
+
+DaeRune의 UI 텍스트는 원천이 둘이다. **둘 다 최종적으로는 같은 `.archive`(번역본) → `.locres`(컴파일 결과)로 모인다.** 언어별로 에셋을 복제하지 않는다.
+
+```
+[세계 A] C++ 코드의 LOCTEXT  ──┐
+                              ├──►  Localization Dashboard "Gather"  ──►  Game.archive(ko/en)
+[세계 B] 에셋 내부 FText     ──┘        (ko=원문, en=번역 입력)
+   - WBP 디자이너에 입력한 TextBlock                                          │
+   - DataTable / DataAsset의 FText 컬럼                                     "Compile"
+                                                                             ▼
+                                                       Content/Localization/Game/{ko,en}/Game.locres
+                                                                             │
+                                              런타임: SetCurrentLanguageAndLocale("en") → .locres 조회
+```
+
+- **세계 A(코드)** 는 §5·§8.3에서 이미 처리됨(LOCTEXT). Gather 시 소스 파일(`*.cpp/*.h`)에서 자동 추출.
+- **세계 B(에셋)** 가 이 섹션의 핵심. **에디터에서 "Localizable"로 표시된 FText만** Gather 시 패키지에서 추출된다.
+
+즉 C++을 아무리 LOCTEXT화해도, **WBP에 직접 입력한 한국어는 에디터에서 별도로 "수집 가능" 상태로 만들지 않으면 영원히 번역되지 않는다.**
+
+---
+
+### 10.2 [에디터 작업 1] Localization Dashboard 타깃 생성 (최초 1회, 되돌아올 필요 없음)
+
+**목적**: `Game` 로컬리제이션 타깃을 만들어 Gather/Compile 파이프라인을 성립시키고 `Content/Localization/Game/...` 산출물을 생성.
+
+1. 에디터 상단 **Tools → Localization Dashboard** 실행. (메뉴에 안 보이면 Tools 메뉴에서 "Localization" 검색)
+2. **New Target** 클릭 → 이름 `Game` (관례. `+LocalizationTargets=Game`, `LocalizationPaths=.../Game` 와 반드시 일치).
+3. **Cultures 섹션**:
+   - **Native Culture = Korean (`ko`)** 로 지정. ← 우리 마스터(원문)가 한국어이기 때문. 이게 핵심 결정이며, 이후 모든 LOCTEXT/위젯의 소스 문자열이 "ko 원문"으로 취급된다.
+   - **Add New Culture → English (`en`)** 추가. (번역 대상)
+4. **Gather Text 설정 — Gather from Text Files** (세계 A: C++):
+   - Search Directories: `Source/DaeRune`
+   - File Extensions(Wildcards): `*.cpp`, `*.h`
+5. **Gather Text 설정 — Gather from Packages** (세계 B: 에셋):
+   - Include Paths(예): `Content/Blueprints/UI`, `Content/Blueprints/Phase/Data`, `Content/Blueprints/AbilitySystem/Data`
+   - (위젯·DataTable·DataAsset이 있는 디렉토리를 모두 포함. 넓게 `Content/Blueprints` 로 잡아도 됨 — 텍스트 없는 에셋은 그냥 안 걸림)
+6. 상단 **Gather Text** 실행 → 각 컬처의 `Game.archive` 와 `Game.manifest` 생성.
+7. `en` 행의 **연필(Edit translations)** 아이콘 → 수집된 각 원문(한국어)에 대응하는 **영어 번역 입력**. (개발 초기엔 임시로 `[en] 원문` 식으로 채워 파이프라인만 검증해도 됨)
+8. 상단 **Compile Text** → `Game.locres` 생성.
+9. **산출물 확인**: `Content/Localization/Game/ko/Game.archive`, `Content/Localization/Game/en/Game.archive`, 각 컬처 `Game.locres`, 루트 `Game.manifest`, `Game.locmeta`.
+10. 에디터 재생성 없이 바로 **PIE에서 설정 → 언어 → English** 선택 시, LOCTEXT/수집된 위젯 텍스트가 영어로 바뀌어야 한다.
+
+> **주의**: Dashboard가 최초 Gather 시 `Config/Localization/Game*.ini`(gather/import/export/compile 스텝 설정)를 자동 생성한다. 이 파일들이 있어야 §10.10의 커맨드릿 자동화가 가능하다. → **최초 1회는 Dashboard로 만드는 것이 가장 안전.**
+
+---
+
+### 10.3 [에디터 작업 2] 위젯(WBP) 텍스트를 "수집 가능"하게 만들기 — 이 계획의 실질 최대 작업
+
+이게 **"C++로는 못 쓰고 에디터에서만 되는 UI 텍스트"** 처리의 핵심이다.
+
+#### 10.3.1 원리 — 왜 그냥은 안 걸리나
+
+- UMG 디자이너에 직접 타이핑한 TextBlock 문자열은 **기본적으로 Localizable**이라 Gather 대상이다. 다만 다음이면 **누락**된다:
+  - 텍스트가 **Culture Invariant(문화 불변)** 로 표시됨 → 수집 제외.
+  - 텍스트를 **Blueprint의 `ToText(FString)` / `Append` 노드로 런타임 합성** → 그 시점엔 이미 문자열이라 수집 불가(세계 B가 아니라 "런타임 동적"이 됨. §8.1.4 함정 표 참조).
+  - 텍스트를 **C++/BP에서 `SetText`로 덮어씀** → 디자이너 값은 안 걸리고, 넣는 쪽(코드)의 LOCTEXT 여부가 관건.
+- 또한 자동 생성 **Key가 GUID** 라, 위젯 복붙/텍스트 수정 시 키가 바뀌어 **영어 번역 매칭이 끊긴다**(DataTable과 동일한 함정).
+
+#### 10.3.2 위젯 1개당 반복 절차
+
+각 `WBP_*` 에 대해:
+1. UMG 디자이너로 연다.
+2. **Hierarchy**에서 모든 `TextBlock` / `RichTextBlock`을 순회.
+3. 각 텍스트 위젯 선택 → **Details → Content → Text** 행의 우측 **아래 화살표(▼)** 클릭:
+   - **"Make Localizable"** 이 보이면 누른다(현재 Culture Invariant 상태라는 뜻).
+   - 이미 Localizable이면 **Namespace / Key / Source string** 이 보인다.
+4. **Key를 의미 기반으로 수동 지정** 권장(GUID 회피). 예: `WBP_LobbyOverlay`의 제목 → Namespace `WBP_LobbyOverlay`, Key `Title`.
+5. **런타임에 `SetText`로 채우는 빈/임시 텍스트**는 디자이너 값은 그냥 두고(또는 한국어 원문으로 채워두고), **넣는 코드/BP 쪽**에서 LOCTEXT를 쓰는지 확인(§10.7 (D) 참조).
+6. 저장 → 다음 위젯.
+
+#### 10.3.3 ★ D(라이브 갱신)와의 연결 — 위젯 부모 클래스가 관건
+
+이번에 `UDRUserWidget`에 **언어 변경 자동 갱신**을 심었다. 이 혜택을 받으려면:
+
+| 위젯의 부모 클래스 | 언어 변경 시 동작 | 작업 |
+|---|---|---|
+| **`UDRUserWidget` 파생** (대부분의 오버레이) | 디자이너에 박힌 정적 텍스트는 **자동 갱신**(내부에서 자식 TextBlock `SynchronizeProperties` 재호출) | 없음 — 단, 동적 `SetText` 텍스트는 아래 |
+| `UDRUserWidget` 파생인데 **동적 SetText** 사용 | 자동 갱신 안 됨(코드가 만든 값이라) | WBP에서 **`On Language Changed` 이벤트**(BlueprintImplementableEvent) 구현 → 그 안에서 SetText 재실행 |
+| **plain `UUserWidget` 파생**(DRUserWidget 미상속) | 아무 일도 안 일어남 | **부모를 `DRUserWidget`으로 Reparent**(File → Reparent Blueprint) 하거나, 개별로 SettingsManager의 `OnLanguageChanged`에 바인딩 |
+
+> 실무 규칙: **텍스트가 있는 WBP는 되도록 `UDRUserWidget`을 상속**시킨다. 그러면 정적 텍스트는 공짜로 즉시 갱신되고, 동적 텍스트만 `On Language Changed` 이벤트에서 처리하면 된다.
+
+#### 10.3.4 현재 프로젝트 위젯 전수 인벤토리 (실측 2026-07-24 — §8.1.3보다 완전판)
+
+**우선 1순위 — 항상/자주 보이는 텍스트 위젯 (반드시 점검)**
+- Overlay: `WBP_LobbyOverlay`, `WBP_StageOverlay`, `WBP_TutorialOverlay`, `WBP_WaitingRoomOverlay`, `WBP_GameClear`, `WBP_GameOver`, `WBP_TutorialClear`, `WBP_TutorialStartMenu`
+- TextUI(상호작용/알람 — 다수 한국어 하드코딩 예상): `WBP_CleanserSiteInteraction`, `WBP_PartInteraction`, `WBP_PickupCleanserPart`, `WBP_PhaseAlarm`, `WBP_PhaseObjective`, `WBP_ElectricAlarm`, `WBP_Phase3Timer`, `WBP_MountInteraction`, `WBP_StageSelectInteraction`, `WBP_RoomCode`
+
+**2순위 — 메뉴/설정 (일부는 C++ 라벨 사용 → 그건 이미 LOCTEXT됨)**
+- Settings: `WBP_SettingsScreen`, `WBP_SettingsPage_Graphics/Gameplay/Audio/Controls`, `WBP_SettingRow_Dropdown/Slider/Toggle`, `WBP_SettingsTabButton`, `WBP_Tutorial`
+- Settings 하위 컴포넌트: `WBP_SciFiDropdown/Option/OptionList`, `WBP_KeyHint / WBP_KeyHintBar / WBP_KeyHint_Wide`(키 힌트 라벨), `WBP_SciFiSlider/Toggle/ScrollBar`
+
+**3순위 — 인게임 컴포넌트 (텍스트 있는 것만)**
+- CharacterInfo(설명문 가능성 큼): `WBP_GardenInfo`, `WBP_VendingInfo`
+- Loading(팁/문구 가능성): `WBP_CreateRoomLoading`, `WBP_InRoomLoading`, `WBP_StageLoading`, `WBP_TutorialLoading`
+- Slot: `WBP_PlayerSlot`
+- SkillIcon(툴팁/이름 가능성): `WBP_SkillIcon_GardenRobot/VendingMachine/Tutorial`, `WBP_SkillSlot`, `WBP_SkillSlot_Tutorial1/2/3`
+
+**점검 대상 아님(비주얼/동적) — 확인만 하고 스킵**
+- 커서(`WBP_Cursor_*`, `WBP_CursorGrab`), 미니맵(`WBP_Minimap`, `WBP_MinimapIcon`), 체력/물 바·아이콘(`WBP_Container*`, `WBP_HealthWaterBar`, `WBP_ProgressBar`, `WBP_*HealthBar`), 힐 이펙트(`WBP_Heal*`, `WBP_DebuffBleed`)
+- **동적 숫자/이름**: `WBP_DamageText`(대미지 숫자), `WBP_OverheadWidget`(머리 위 — 코드에서 `SetText(FromString)`, 번역 예외)
+
+> **레벨업 UI 주의**: 최근 "레벨업 기능 틀 구현" 커밋 이후 생기는 XP/레벨 결과 표시 위젯이 있으면 이 인벤토리에 추가로 편입할 것. §8 작성 시점엔 없던 항목이다.
+
+---
+
+### 10.4 [에디터 작업 3] DataTable / DataAsset의 FText 텍스트
+
+세계 B의 나머지. 상세 절차는 **§8.2를 그대로 따르되**, 에디터 액션만 요약:
+
+- **`DT_PhaseObjective`** (`Content/Blueprints/Phase/Data`) — Row 구조체 `FPhaseObjectiveData`의 `ObjectiveTitle`/`ProgressFormat`는 **이미 `FText`**(코드 확인 완료). 에디터에서 각 행 셀의 FText에 **Namespace/Key 수동 지정**(자동 GUID 회피, §8.2.2) 후, Gather Path에 `Content/Blueprints/Phase/Data` 포함.
+- **DataAsset**(예: `DA_EnemyCharacterClassInfo`, 상태이상 `FEffectInfo::EffectName`) — FText 필드면 자동 수집 대상. Gather Path에 해당 폴더 포함.
+- **Format 토큰**: `"{Current}/{Required}"` 형태 + 코드 측 `FText::Format`/`FormatNamed` 사용 확인(§8.2.2 Step 3~4).
+
+---
+
+### 10.5 [에디터 작업 4] Gather → 번역 → Compile 워크플로우 (반복)
+
+1. **Gather Text** (Dashboard 상단 버튼) — 코드 LOCTEXT + Localizable 위젯/DataTable을 긁어 `.archive` 갱신.
+2. `en` **Edit translations** — 새로 걸린 원문(ko)에 영어 입력.
+3. **Compile Text** — `.locres` 재생성.
+4. PIE에서 언어 전환으로 확인.
+
+> 새 텍스트를 추가할 때마다 **1→3을 다시** 돌려야 반영된다(§10.9).
+
+---
+
+### 10.6 [에디터 작업 5] 폰트 / Composite Font (글자 깨짐 방지)
+
+- 마스터가 한국어이므로 **UI 기본 폰트는 한글 글리프를 포함**해야 한다(대개 이미 그럼).
+- 영어로 전환 시엔 Latin 글리프만 있으면 되므로 대개 문제 없음. 반대로 **영문 위주 폰트를 한글에 쓰면 `□`(두부) 발생** → 해당 폰트를 **Composite Font**로 만들어 한글 fallback(예: Noto Sans KR)을 등록.
+- 숫자/기호(`%`, 해상도 `1920 X 1080`)는 언어 무관이라 무시.
+
+---
+
+### 10.7 ★ 사용자 질문 직접 답변 — "에디터에서 작성되는 UI 텍스트"는 유형별로 이렇게
+
+| 유형 | 예시 | 처리 방법 | 언어 변경 즉시 반영 |
+|---|---|---|---|
+| **(A) WBP 디자이너 정적 텍스트** | `WBP_StageOverlay`에 타이핑한 "웨이브 시작" | 에디터에서 **Localizable 확인 + Key 안정화**(§10.3) → Gather에 걸림 | `UDRUserWidget` 파생이면 **자동**(D) |
+| **(B) DataTable/DataAsset FText** | `DT_PhaseObjective.ObjectiveTitle` | **FText 유지 + Key/Namespace 지정**(§10.4) → Gather에 걸림. 값 표시하는 위젯이 재조회하도록 | 위젯이 `On Language Changed`에서 재세팅 필요할 수 있음 |
+| **(C) 위젯이 코드/BP에서 `SetText`로 채우는 동적 텍스트** | "%d초 남음", 플레이어가 넣은 값 | **넣는 쪽에서 `LOCTEXT`+`FText::Format`** 사용(세계 A로 편입). 순수 사용자 입력/닉네임은 번역 예외 | WBP `On Language Changed`에서 SetText 재실행 |
+| **(D) 이미지(텍스처)에 그려진 글자** | 텍스트가 합쳐진 아이콘 | 언어 비의존 아이콘이면 그대로. 아니면 컬처별 텍스처(§5-D). **후순위** | 해당 없음 |
+
+**핵심 원칙(3줄 요약)**
+1. 에디터에서 작성한 텍스트는 **에셋에 그대로 두고(마스터=한국어)**, 번역은 `.archive`에만 넣는다 — **언어별 에셋 복제 금지.**
+2. 걸리게 하려면 **"Localizable"** 여야 한다(동적 합성/culture-invariant면 안 걸림).
+3. 즉시 갱신을 받으려면 위젯이 **`UDRUserWidget` 파생**이어야 하고, 동적 텍스트는 **`On Language Changed` 이벤트**에서 다시 세팅한다.
+
+---
+
+### 10.8 검증 시나리오 — 한→영 전환 시 무엇이 바뀌어야 하나
+
+| # | 확인 지점 | 기대 |
+|---|---|---|
+| 1 | 설정 → 언어 드롭다운 | **한국어 / English** 두 항목 |
+| 2 | English 선택 → 설정 화면 라벨 | "디스플레이 모드"→"Display Mode" 등 (C++ LOCTEXT, `.archive`에 en 입력 시) 즉시 변경 |
+| 3 | 페이즈 진입 알람 | "페이즈 1: 확보" → 영어 (OverlayWidgetController LOCTEXT) |
+| 4 | 페이즈 목표(HUD) | `DT_PhaseObjective` 번역본으로 |
+| 5 | TextUI 상호작용 프롬프트 | 위젯 Localizable 처리한 것만 영어로 |
+| 6 | 재시작 후 | English 유지(`PreferredCulture=en`) |
+| 7 | 인게임 중 전환 | `UDRUserWidget` 파생 위젯 즉시 갱신, 비파생은 재오픈 시 |
+| 8 | Gather 안 한 신규 텍스트 | 마스터(한국어)로 표시, 크래시 없음 |
+
+---
+
+### 10.9 새 텍스트 추가 시 반복 워크플로우 (팀 규칙)
+
+1. **코드 텍스트**: `LOCTEXT("Ns_Key", "한국어 원문")` 로 작성(절대 `FText::FromString` 금지, 동적/닉네임 제외).
+2. **위젯 텍스트**: 디자이너에 한국어로 입력 + **Localizable 확인** + 의미 기반 Key. 되도록 부모를 `UDRUserWidget`으로.
+3. **DataTable 텍스트**: `FText` 컬럼 + Key/Namespace 지정, RowName은 영문 식별자.
+4. Dashboard에서 **Gather → en 번역 → Compile**.
+5. PIE 한/영 토글로 확인.
+
+---
+
+### 10.10 (선택) 커맨드릿으로 Gather/Compile 자동화
+
+Dashboard로 최초 타깃을 만든 뒤 생성된 `Config/Localization/Game*.ini` 를 이용하면 CLI로 파이프라인을 돌릴 수 있다(빌드 자동화용):
+
+```bat
+"D:/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" ^
+  "C:/Users/OWNER/Documents/Unreal Projects/DaeRune/DaeRune.uproject" ^
+  -run=GatherText ^
+  -config="Config/Localization/Game.ini" ^
+  -SCCProvider=None -Unattended -LogLocalizationConflicts
+```
+
+- `Game.ini`는 Gather→(Import)→(Export)→Compile 스텝을 체이닝한다(Dashboard가 생성).
+- CI에 넣으면 "소스/에셋 변경 → 자동 Gather/Compile"이 가능하나, **번역 입력(en .archive)** 은 여전히 사람이 채워야 한다.
+
+---
+
+### 10.11 에디터 작업 체크리스트
+
+- [ ] Localization Dashboard에서 `Game` 타깃 생성 (Native=`ko`, +`en`)
+- [ ] Gather from Text Files: `Source/DaeRune` (`*.cpp`,`*.h`)
+- [ ] Gather from Packages: `Content/Blueprints/UI`, `.../Phase/Data`, `.../AbilitySystem/Data`
+- [ ] 1순위 위젯(오버레이+TextUI)의 모든 TextBlock **Localizable + Key 안정화**
+- [ ] 텍스트 있는 위젯을 되도록 `UDRUserWidget` 상속으로 통일(라이브 갱신 수혜)
+- [ ] 동적 `SetText` 위젯은 `On Language Changed` 이벤트 구현
+- [ ] `DT_PhaseObjective` 셀 FText Key/Namespace 수동 지정
+- [ ] Gather → `en` 번역 입력 → Compile → `Content/Localization/Game/{ko,en}/*.locres` 확인
+- [ ] PIE 한↔영 토글 검증(§10.8)
+- [ ] 2·3순위 위젯 순차 처리
+- [ ] (선택) Composite Font 한글 fallback 등록
+- [ ] (선택) 커맨드릿 자동화 구성

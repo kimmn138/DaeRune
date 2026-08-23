@@ -259,6 +259,12 @@ void UDRAbilitySystemComponent::ClientVacuumDashGaugeChanged_Implementation(int3
 	OnVacuumDashGaugeChanged.Broadcast(CurrentGauge, MaxGauge);
 }
 
+void UDRAbilitySystemComponent::NotifyVacuumAirShotGaugeChanged(int32 CurrentGauge, int32 MaxGauge)
+{
+	// 호출자(GA)가 이미 소유 클라 인스턴스임을 보장 → 그대로 로컬 방송
+	OnVacuumAirShotGaugeChanged.Broadcast(CurrentGauge, MaxGauge);
+}
+
 bool UDRAbilitySystemComponent::IsAbilityTagBlocked(const FGameplayTag& AbilityTag) const
 {
 	if (!AbilityTag.IsValid()) return false;

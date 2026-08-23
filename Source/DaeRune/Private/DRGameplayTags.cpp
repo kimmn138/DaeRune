@@ -303,6 +303,46 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
+	 * 업그레이드 칩 SetByCaller (GE_Upgrade_Stats / 쿨다운 GE)
+	 * Flat = 합연산 값, Mult = 곱연산 값(1 + Percent). Plan2.md 8.4 참조
+	 */
+
+	GameplayTags.Data_Upgrade_MaxHealth_Flat = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Upgrade.MaxHealth.Flat"),
+		FString("SetByCaller tag for upgraded MaxHealth additive amount")
+	);
+
+	GameplayTags.Data_Upgrade_MaxHealth_Mult = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Upgrade.MaxHealth.Mult"),
+		FString("SetByCaller tag for upgraded MaxHealth multiplier (1 + percent)")
+	);
+
+	GameplayTags.Data_Upgrade_MaxWater_Flat = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Upgrade.MaxWater.Flat"),
+		FString("SetByCaller tag for upgraded MaxWater additive amount")
+	);
+
+	GameplayTags.Data_Upgrade_MaxWater_Mult = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Upgrade.MaxWater.Mult"),
+		FString("SetByCaller tag for upgraded MaxWater multiplier (1 + percent)")
+	);
+
+	GameplayTags.Data_Upgrade_MoveSpeed_Flat = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Upgrade.MoveSpeed.Flat"),
+		FString("SetByCaller tag for upgraded MoveSpeed additive amount")
+	);
+
+	GameplayTags.Data_Upgrade_MoveSpeed_Mult = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Upgrade.MoveSpeed.Mult"),
+		FString("SetByCaller tag for upgraded MoveSpeed multiplier (1 + percent)")
+	);
+
+	GameplayTags.Data_Cooldown = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Cooldown"),
+		FString("SetByCaller tag for ability cooldown duration")
+	);
+
+	/*
 	 * 게임플레이 이벤트 (GA 통지용)
 	 */
 

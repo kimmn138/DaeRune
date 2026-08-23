@@ -35,6 +35,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "UI/Widget/DRWaitingRoomWidget.h"
 #include "Game/DRLobbyGameMode.h"
+#include "Game/DRGameInstance.h"
+#include "Game/DRChipCatalog.h"
+#include "DaeRune/DRLogChannels.h"
 #include "MultiplayerSessionsSubsystem.h"
 
 ADRPlayerController::ADRPlayerController()
@@ -740,6 +743,13 @@ void ADRPlayerController::OnLevelEntered()
 	}
 	bIsSettingsMenuOpen = false;
 
+	// 업그레이드 화면 상태 초기화 (레벨 이동 시 위젯이 남지 않게)
+	if (bIsUpgradeScreenOpen)
+	{
+		OnUpgradeScreenClosed();
+		bIsUpgradeScreenOpen = false;
+	}
+
 	// 愿???곹깭 珥덇린??(?몃━寃뚯씠???뺣━ ?ы븿)
 	if (CurrentSpectatedCharacter.IsValid())
 	{
@@ -795,11 +805,21 @@ void ADRPlayerController::OnLevelEntered()
 	// ?덈꺼??留욌뒗 湲곕낯 ?낅젰 紐⑤뱶濡?蹂듭썝
 	RestoreDefaultInputMode();
 
+	// 레벨 진입 시 장착 칩 보고 (호스트/이미 PlayerState 가 준비된 경로)
+	ReportUpgradeLoadout();
+
 	// BGM? ?덈꺼??諛곗튂??DRBGMActor媛 ?대떦
 }
 
 void ADRPlayerController::HandleToggleSettings()
 {
+	// 업그레이드 화면이 열려 있으면 ESC 로 그 화면을 먼저 닫는다
+	if (bIsUpgradeScreenOpen)
+	{
+		CloseUpgradeScreen();
+		return;
+	}
+
 	ToggleSettingsMenu();
 }
 
@@ -1186,6 +1206,111 @@ void ADRPlayerController::ClientCloseSettingsMenu_Implementation()
 	CloseSettingsMenu();
 }
 
+// ========================= 업그레이드 칩 (Plan2.md 7.1) =========================
+
+void ADRPlayerController::ReportUpgradeLoadout()
+{
+	if (!IsLocalController()) return;
+
+	const ADRPlayerState* DRPS = GetPlayerState<ADRPlayerState>();
+	if (!DRPS) return;
+
+	const UDRGameInstance* GI = Cast<UDRGameInstance>(GetGameInstance());
+	if (!GI) return;
+
+	const EPlayerCharacterClass SelectedClass = DRPS->GetSelectedPlayerClass();
+	ServerReportUpgradeLoadout(SelectedClass, GI->GetEquippedChips(SelectedClass));
+}
+
+void ADRPlayerController::ServerReportUpgradeLoadout_Implementation(EPlayerCharacterClass ForClass,
+	const TArray<FName>& Chips)
+{
+	ADRPlayerState* DRPS = GetPlayerState<ADRPlayerState>();
+	if (!DRPS) return;
+
+	// 경합/스푸핑 방어: 서버가 확정한 선택 클래스와 다른 보고는 폐기한다
+	if (ForClass != DRPS->GetSelectedPlayerClass()) return;
+
+	const UDRGameInstance* GI = Cast<UDRGameInstance>(GetGameInstance());
+	UDRChipCatalog* Catalog = GI ? GI->GetChipCatalog() : nullptr;
+	if (!Catalog)
+	{
+		// 카탈로그가 없으면 검증할 수 없다 — 아무 것도 싣지 않는다(잘못된 강화 방지)
+		DRPS->SetEquippedChips(TArray<FName>());
+		return;
+	}
+
+	TArray<FName> Sanitized = Chips;
+	const bool bModified = Catalog->SanitizeLoadout(
+		Sanitized, ForClass, GI->GetMaxSlotCount(EDRChipCategory::Stat), GI->GetMaxSlotCount(EDRChipCategory::Ascension));
+
+	if (bModified)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Upgrade] %s 의 장착 목록을 정화했습니다 (%d → %d)."),
+			*DRPS->GetPlayerName(), Chips.Num(), Sanitized.Num());
+	}
+
+	DRPS->SetEquippedChips(Sanitized);
+}
+
+void ADRPlayerController::Client_GrantStageReward_Implementation(const FDRStageRewardReport& Report)
+{
+	UDRGameInstance* GI = Cast<UDRGameInstance>(GetGameInstance());
+	if (!GI) return;
+
+	// 지갑 반영을 먼저 끝낸 뒤 결과창이 그 결과를 읽는다
+	LastStageRewardResult = GI->ApplyStageReward(Report);
+
+	UE_LOG(LogDR, Log, TEXT("[Progression] 스테이지 보상 반영: +%d (보유 %d → %d)"),
+		LastStageRewardResult.TotalGained,
+		LastStageRewardResult.CurrencyBefore,
+		LastStageRewardResult.CurrencyAfter);
+}
+
+// ========================= 로비 업그레이드 화면 =========================
+
+void ADRPlayerController::OpenUpgradeScreen()
+{
+	if (!IsLocalController()) return;
+	if (bIsUpgradeScreenOpen) return;
+
+	// 로비에서만 슬롯 해금/칩 교체가 가능하다.
+	// 화면을 닫을 때 서버로 재보고되고 그 즉시 스탯 GE 가 재적용되므로,
+	// 이 가드가 없으면 스테이지 도중 칩 교체가 실제로 반영돼 버린다.
+	if (!IsInLobby())
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Upgrade] 로비가 아닌 곳에서 업그레이드 화면 열기를 시도했습니다 — 무시합니다."));
+		return;
+	}
+
+	// 설정창이 열려 있으면 먼저 닫는다 (입력 모드 충돌 방지)
+	if (bIsSettingsMenuOpen)
+	{
+		CloseSettingsMenu();
+	}
+
+	bIsUpgradeScreenOpen = true;
+
+	SetInputMode(FInputModeUIOnly());
+	SetShowMouseCursor(true);
+
+	OnUpgradeScreenOpened();
+}
+
+void ADRPlayerController::CloseUpgradeScreen()
+{
+	if (!IsLocalController()) return;
+	if (!bIsUpgradeScreenOpen) return;
+
+	OnUpgradeScreenClosed();
+
+	bIsUpgradeScreenOpen = false;
+	RestoreDefaultInputMode();
+
+	// 변경된 장착 상태를 서버에 반영
+	ReportUpgradeLoadout();
+}
+
 void ADRPlayerController::RestoreDefaultInputMode()
 {
 	if (!IsLocalController()) return;
@@ -1327,6 +1452,13 @@ void ADRPlayerController::Client_ShowTutorialClearUI_Implementation()
 
 void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 {
+	// 홀드 추적은 아래 차단 게이트보다 먼저 — Pressed 만 걸리고 Released 는 통과하는 경우에도
+	// 집합이 어긋나지 않도록 (Released 쪽 Remove 도 동일하게 최상단에서 수행)
+	if (InputTag.IsValid())
+	{
+		HeldInputTags.Add(InputTag);
+	}
+
 	if (bIsSpectating) return;
 
 	// 占쌉뤄옙 占쏙옙占?확占쏙옙 占쏙옙 占쏙옙占쏙옙占싣?占쌉뤄옙 처占쏙옙
@@ -1352,6 +1484,10 @@ void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 
 void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 {
+	// 반드시 아래 early return 들보다 먼저 — 관전/Block.InputReleased 에 걸려 리턴하면
+	// 태그가 "눌린 채"로 영구히 남아 이후 GA 종료발 Released 재방송이 계속 억제된다
+	HeldInputTags.Remove(InputTag);
+
 	if (bIsSpectating) return;
 
 	// 占쌉뤄옙 占쏙옙占쏙옙 占쏙옙占?확占쏙옙
@@ -1608,6 +1744,10 @@ void ADRPlayerController::ExecuteCameraTransitionToCharacter()
 
 void ADRPlayerController::HandlePossessedPawnChanged(APawn* PreviousPawn, APawn* NewPawn)
 {
+	// 폰 교체(사망/리스폰/클래스 변경) 시 홀드 상태 초기화 —
+	// 키를 누른 채 폰이 바뀌면 Released 입력이 유실돼 태그가 눌린 채 남을 수 있다
+	HeldInputTags.Reset();
+
 	if (!NewPawn) return;
 
 	// 캐릭터별 상하 시야각 제한 — 청소기만 ±ViewPitchLimit(기본 30도), 그 외 캐릭터는 기본값 복원.
@@ -1659,6 +1799,15 @@ void ADRPlayerController::OnRep_Pawn()
 		bAutoManageActiveCameraTarget = false;
 		SetViewTargetWithBlend(CachedWaitingRoomCamera.Get(), 0.f);
 	}
+}
+
+void ADRPlayerController::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+
+	// 클라이언트가 자기 PlayerState 를 처음 알게 되는 시점 — 여기서 장착 칩을 보고한다.
+	// (PlayerState 의 BeginPlay 시점에는 컨트롤러 연결이 아직 없을 수 있다. Plan2.md 7.1)
+	ReportUpgradeLoadout();
 }
 
 void ADRPlayerController::ClientRestart_Implementation(APawn* NewPawn)
