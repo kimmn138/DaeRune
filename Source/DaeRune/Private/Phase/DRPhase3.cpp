@@ -12,7 +12,9 @@
 #include "AbilitySystem/DRCleanserSiteAttributeSet.h"
 #include "AbilitySystem/Data/GameBalanceConfig.h"
 #include "Actor/DRPoisonGasActor.h"
+#include "Actor/DRBGMActor.h"
 #include "Character/DRCharacter.h"
+#include "Kismet/GameplayStatics.h"
 
 // Phase3 런타임 상태를 초기화합니다.
 UDRPhase3::UDRPhase3()
@@ -22,8 +24,6 @@ UDRPhase3::UDRPhase3()
 	CurrentWaveState = EWaveState::Waiting;
 	CurrentSpawnCount = 0;
 	DefenseStartTime = 0.0f;
-	WaveTimeRemaining = 0.0f;
-	RestTimeRemaining = 0.0f;
 	bEliteBossSpawned = false;
 }
 
@@ -36,11 +36,17 @@ void UDRPhase3::OnPhaseStart()
 
 	LoadPhase3ConfigFromBalanceConfig();
 
-	SetupPhaseObjective(3);
-	
+	// 페이즈 구조 개편: 기존 Phase3가 새 Phase2 역할로 표기됨
+	SetupPhaseObjective(2);
+
+	// 웨이브 타이머 + 클렌저 사이트 HP UI 표시 요청 (Plan6 §5.4)
+	// 기존에는 위젯 컨트롤러가 "페이즈 인덱스 == 2"로 판단했으나, 이 UI를 쓰는 페이즈가 직접 켠다.
+	GameState->SetWaveDefenseUIActive(true);
+
 	GameState->SetCurrentWaveNumber(0);
 	GameState->SetCurrentWaveLevel(0);
-	GameState->SetTotalWaves(5);
+	GameState->SetTotalWaves(TotalWaveCount);
+	BroadcastAliveEnemyObjective();
 	
 	InitializeCleanserSite();
 	
@@ -49,10 +55,10 @@ void UDRPhase3::OnPhaseStart()
 		InitializeActiveSpawnPoints();
 		FindEnemySpawnPoints();
 
-		// 일반 적 스폰 포인트 VFX 활성화
+		// 일반 적 스폰 포인트 VFX 활성화 (위치 배열 1회 복제)
 		if (GameState && EnemySpawnPointNiagaraSystem)
 		{
-			TArray<FVector> SpawnPointLocations;
+			TArray<FVector_NetQuantize> SpawnPointLocations;
 			for (const TObjectPtr<AActor>& SpawnPoint : EnemySpawnPoints)
 			{
 				if (SpawnPoint)
@@ -60,16 +66,8 @@ void UDRPhase3::OnPhaseStart()
 					SpawnPointLocations.Add(SpawnPoint->GetActorLocation());
 				}
 			}
-			GameState->Multicast_ActivateEnemySpawnPointVFX(SpawnPointLocations, EnemySpawnPointNiagaraSystem);
+			GameState->SetEnemySpawnPointVFX(SpawnPointLocations, EnemySpawnPointNiagaraSystem);
 		}
-
-		DefenseStartTime = World->GetTimeSeconds();
-		World->GetTimerManager().SetTimer(
-			DefenseTimerHandle,
-			this,
-			&UDRPhase3::CheckVictoryConditions,
-			DefenseDuration,
-			false);
 	}
 	
 	StartNextWave();
@@ -79,6 +77,17 @@ void UDRPhase3::OnPhaseStart()
 		if (Site)
 		{
 			Site->MulticastStartOperatingSound();
+		}
+	}
+
+	// 엘리트 보스 BGM 전환용 BGM 액터 캐시 (월드에 1개만 있다고 가정)
+	if (UWorld* World = GameMode ? GameMode->GetWorld() : nullptr)
+	{
+		TArray<AActor*> FoundBGMActors;
+		UGameplayStatics::GetAllActorsOfClass(World, ADRBGMActor::StaticClass(), FoundBGMActors);
+		if (FoundBGMActors.Num() > 0)
+		{
+			CachedBGMActor = Cast<ADRBGMActor>(FoundBGMActors[0]);
 		}
 	}
 }
@@ -91,19 +100,14 @@ void UDRPhase3::OnPhaseEnd()
 	// 스폰 포인트 VFX 비활성화
 	if (GameState)
 	{
-		GameState->Multicast_DeactivateEnemySpawnPointVFX();
-		GameState->Multicast_DeactivateEliteSpawnPointVFX();
+		GameState->ClearEnemySpawnPointVFX();
+		GameState->ClearEliteSpawnPointVFX();
+
+		// 웨이브 방어 UI 숨김 (Plan6 §5.4) - 게임오버로 페이즈가 끝나는 경로도 여기를 지난다
+		GameState->SetWaveDefenseUIActive(false);
 	}
 
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(WaveTimerHandle);
-		World->GetTimerManager().ClearTimer(SpawnTimerHandle);
-		World->GetTimerManager().ClearTimer(DefenseTimerHandle);
-		World->GetTimerManager().ClearTimer(WaveTimerUpdateHandle);
-		World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
-		World->GetTimerManager().ClearTimer(EliteSpawnVFXTimerHandle);
-	}
+	ClearAllPhaseTimers();
 
 	for (const TObjectPtr<ADRCleanserSite>& Site : CleanserSites)
 	{
@@ -120,6 +124,26 @@ void UDRPhase3::OnPhaseEnd()
 		}
 	}
 	
+	// 엘리트 보스 제거 (SkipToNextWave와 동일한 정리, 정규 종료 경로에도 필요)
+	for (TWeakObjectPtr<AActor>& ElitePtr : EliteBosses)
+	{
+		if (ElitePtr.IsValid())
+		{
+			if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(ElitePtr.Get()))
+			{
+				CombatInterface->GetOnDeathDelegate().RemoveDynamic(this, &UDRPhase3::OnEliteEnemyDeath);
+			}
+			ElitePtr->Destroy();
+		}
+	}
+	EliteBosses.Empty();
+
+	if (bEliteBossSpawned)
+	{
+		bEliteBossSpawned = false;
+		RemoveEliteBossTag();
+	}
+
 	ActiveSpawnPointIndices.Empty();
 	ActiveBlueSpawnPointIndices.Empty();
 	EnemySpawnPoints.Empty();
@@ -130,24 +154,35 @@ void UDRPhase3::OnPhaseEnd()
 // 객체 소멸 직전에 남은 타이머를 안전하게 해제합니다.
 void UDRPhase3::BeginDestroy()
 {
+	ClearAllPhaseTimers();
+
+	Super::BeginDestroy();
+}
+
+bool UDRPhase3::IsCompleted() const
+{
+	// 모든 웨이브 클리어 시 페이즈 완료
+	return CurrentWaveNumber >= TotalWaveCount;
+}
+
+// 페이즈가 관리하는 모든 타이머를 해제합니다 (OnPhaseEnd/BeginDestroy 공용).
+void UDRPhase3::ClearAllPhaseTimers()
+{
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(WaveTimerHandle);
 		World->GetTimerManager().ClearTimer(SpawnTimerHandle);
 		World->GetTimerManager().ClearTimer(DefenseTimerHandle);
-		World->GetTimerManager().ClearTimer(WaveTimerUpdateHandle);
 		World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
 		World->GetTimerManager().ClearTimer(EliteSpawnVFXTimerHandle);
 	}
-
-	Super::BeginDestroy();
 }
 
 // 엘리트 보스 사망 상태를 추적하고 관련 태그를 정리합니다.
 void UDRPhase3::OnEliteEnemyDeath(AActor* DeadEnemy)
 {
 	if (!DeadEnemy || !bIsPhaseActive) return;
-	
+
 	EliteBosses.Remove(DeadEnemy);
 
 	if (EliteBosses.IsEmpty())
@@ -155,6 +190,58 @@ void UDRPhase3::OnEliteEnemyDeath(AActor* DeadEnemy)
 		bEliteBossSpawned = false;
 		RemoveEliteBossTag();
 	}
+
+	BroadcastAliveEnemyObjective();
+	CheckWaveCompletion();
+}
+
+// 일반 적 사망 시 웨이브 조기 종료 조건을 검사합니다.
+void UDRPhase3::OnEnemyDeath(AActor* DeadEnemy)
+{
+	Super::OnEnemyDeath(DeadEnemy);
+
+	BroadcastAliveEnemyObjective();
+	CheckWaveCompletion();
+}
+
+// 현재 살아있는 일반 적 + 엘리트 보스 수를 페이즈 목표 UI에 전달합니다.
+void UDRPhase3::BroadcastAliveEnemyObjective()
+{
+	if (!GameState) return;
+
+	int32 AliveEliteCount = 0;
+	for (const TWeakObjectPtr<AActor>& Elite : EliteBosses)
+	{
+		if (Elite.IsValid())
+		{
+			++AliveEliteCount;
+		}
+	}
+
+	GameState->UpdatePhaseObjectiveProgress(GetAliveEnemyCount() + AliveEliteCount);
+}
+
+// 이번 웨이브의 모든 몬스터가 스폰 완료되고 모두 처치되면 즉시 웨이브를 종료합니다.
+void UDRPhase3::CheckWaveCompletion()
+{
+	if (!bIsPhaseActive) return;
+	if (CurrentWaveState != EWaveState::InProgress) return;
+
+	// 예정된 스폰이 모두 완료되었는지 확인 (스폰 예정이 없는 웨이브는 타이머에 맡김)
+	if (TotalSpawnTick <= 0) return;
+	if (CurrentSpawnTick < TotalSpawnTick) return;
+	if (CurrentSpawnCount < TotalSpawnCount) return;
+
+	// 일반 적 생존자 확인
+	if (GetAliveEnemyCount() > 0) return;
+
+	// 엘리트 보스 생존자 확인
+	for (const TWeakObjectPtr<AActor>& Elite : EliteBosses)
+	{
+		if (Elite.IsValid()) return;
+	}
+
+	EndCurrentWave();
 }
 
 // 다음 웨이브를 시작하고 스폰 타이머를 설정합니다.
@@ -162,7 +249,7 @@ void UDRPhase3::StartNextWave()
 {
 	CurrentWaveNumber++;
 
-	if (CurrentWaveNumber > 5) return;
+	if (CurrentWaveNumber > TotalWaveCount) return;
 
 	if (CurrentWaveNumber > 1)
 	{
@@ -177,16 +264,19 @@ void UDRPhase3::StartNextWave()
 	CurrentSpawnCycleIndex = 0;
 	RemainingEnemySpawnPointIndices.Empty();
 
-	const FWaveData CurrentWave = GetWaveData(CurrentWaveNumber);
-	const FWaveLevelModifier Modifier = GetWaveLevelModifier(CurrentWaveLevel);
-	WaveTimeRemaining = CurrentWave.PlayDuration;
+	// 웨이브 시작 시 1회 계산해 캐시 - 이후 스폰 틱/휴식 전환은 캐시를 사용
+	CachedWaveData = GetWaveData(CurrentWaveNumber);
+	CachedWaveModifier = GetWaveLevelModifier(CurrentWaveLevel);
+	const FWaveData& CurrentWave = CachedWaveData;
+	const FWaveLevelModifier& Modifier = CachedWaveModifier;
 
 	if (GameState)
 	{
 		GameState->SetCurrentWaveNumber(CurrentWaveNumber);
 		GameState->SetCurrentWaveLevel(CurrentWaveLevel);
 		GameState->SetIsWaveRestTime(false);
-		GameState->SetWaveRemainingTime(WaveTimeRemaining);
+		// 종료 시각 1회 복제 - UI 카운트다운은 GameState가 각 머신에서 로컬 계산
+		GameState->StartWaveTimer(CurrentWave.PlayDuration);
 	}
 
 	if (GameMode && GameState)
@@ -226,25 +316,6 @@ void UDRPhase3::StartNextWave()
 				CurrentWave.PlayDuration,
 				false
 			);
-
-			TWeakObjectPtr<UDRPhase3> WeakThis(this);
-			World->GetTimerManager().SetTimer(
-				WaveTimerUpdateHandle,
-				[WeakThis]()
-				{
-					if (UDRPhase3* StrongThis = WeakThis.Get())
-					{
-						StrongThis->WaveTimeRemaining = FMath::Max(0.0f, StrongThis->WaveTimeRemaining - 1.0f);
-						if (StrongThis->GameState)
-						{
-							StrongThis->GameState->SetWaveRemainingTime(StrongThis->WaveTimeRemaining);
-						}
-					}
-				},
-				1.0f,
-				true,
-				0.0f
-			);
 		}
 	}
 
@@ -264,7 +335,7 @@ void UDRPhase3::StartNextWave()
 		if (CleanserSites.Num() > 0 && CleanserSites[0])
 		{
 			// 보스 스폰 포인트 위치 수집
-			TArray<FVector> BossSpawnLocations;
+			TArray<FVector_NetQuantize> BossSpawnLocations;
 			for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 			{
 				AActor* BossSpawnPoint = *It;
@@ -274,16 +345,16 @@ void UDRPhase3::StartNextWave()
 				}
 			}
 
-			// 엘리트 스폰 포인트 VFX 활성화
+			// 엘리트 스폰 포인트 VFX 활성화 (위치 배열 1회 복제)
 			if (GameState && EliteSpawnPointNiagaraSystem && BossSpawnLocations.Num() > 0)
 			{
-				GameState->Multicast_ActivateEliteSpawnPointVFX(BossSpawnLocations, EliteSpawnPointNiagaraSystem);
+				GameState->SetEliteSpawnPointVFX(BossSpawnLocations, EliteSpawnPointNiagaraSystem);
 			}
 
 			// 엘리트 보스 스폰
-			for (const FVector& Location : BossSpawnLocations)
+			for (const FVector_NetQuantize& BossSpawnLocation : BossSpawnLocations)
 			{
-				SpawnEliteMonster(Location);
+				SpawnEliteMonster(BossSpawnLocation);
 			}
 
 			// 일정 시간 후 엘리트 VFX 비활성화
@@ -300,7 +371,7 @@ void UDRPhase3::StartNextWave()
 						{
 							if (ADRStageGameState* GS = WeakGameState.Get())
 							{
-								GS->Multicast_DeactivateEliteSpawnPointVFX();
+								GS->ClearEliteSpawnPointVFX();
 							}
 						},
 						EliteSpawnVFXDuration,
@@ -315,7 +386,7 @@ void UDRPhase3::StartNextWave()
 void UDRPhase3::EndCurrentWave()
 {
 	if (!GameMode) return;
-	
+
 	if (UWorld* World = GameMode->GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(SpawnTimerHandle);
@@ -326,7 +397,19 @@ void UDRPhase3::EndCurrentWave()
 	if (GameState)
 	{
 		GameState->SetIsToxicGasWave(false);
-		GameState->UpdatePhaseObjectiveProgress(CurrentWaveNumber);
+	}
+
+	// 마지막 웨이브가 끝났다면 휴식 시간 없이 즉시 승패 판정
+	if (CurrentWaveNumber >= TotalWaveCount)
+	{
+		if (UWorld* World = GameMode->GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(WaveTimerHandle);
+		}
+
+		CurrentWaveState = EWaveState::Completed;
+		CheckVictoryConditions();
+		return;
 	}
 
 	StartRestTime();
@@ -335,45 +418,22 @@ void UDRPhase3::EndCurrentWave()
 // 휴식 시간을 시작하고 UI용 남은 시간을 갱신합니다.
 void UDRPhase3::StartRestTime()
 {
-	if (UWorld* World = GameMode->GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(WaveTimerUpdateHandle);
-	}
-
-	const FWaveData CurrentWave = GetWaveData(CurrentWaveNumber);
-	RestTimeRemaining = CurrentWave.RestDuration;
+	// 같은 웨이브 내 전환이므로 StartNextWave에서 계산한 캐시 사용
+	const FWaveData& CurrentWave = CachedWaveData;
 
 	if (GameState)
 	{
 		GameState->SetIsWaveRestTime(true);
-		GameState->SetWaveRemainingTime(RestTimeRemaining);
+		// 종료 시각 1회 복제 - UI 카운트다운은 GameState가 각 머신에서 로컬 계산
+		GameState->StartWaveTimer(CurrentWave.RestDuration);
 	}
-	
+
 	CurrentWaveState = EWaveState::Rest;
-	
+
 	if (GameMode)
 	{
 		if (const UWorld* World = GameMode->GetWorld())
 		{
-			TWeakObjectPtr<UDRPhase3> WeakThis(this);
-			World->GetTimerManager().SetTimer(
-				WaveTimerUpdateHandle,
-				[WeakThis]()
-				{
-					if (UDRPhase3* StrongThis = WeakThis.Get())
-					{
-						StrongThis->RestTimeRemaining = FMath::Max(0.0f, StrongThis->RestTimeRemaining - 1.0f);
-						if (StrongThis->GameState)
-						{
-							StrongThis->GameState->SetWaveRemainingTime(StrongThis->RestTimeRemaining);
-						}
-					}
-				},
-				1.0f,
-				true,
-				0.0f
-			);
-
 			World->GetTimerManager().SetTimer(
 				WaveTimerHandle,
 				this,
@@ -388,6 +448,84 @@ void UDRPhase3::StartRestTime()
 // 휴식 시간이 끝나면 다음 웨이브를 시작합니다.
 void UDRPhase3::EndRestTime()
 {
+	StartNextWave();
+}
+
+// 치트: 현재 웨이브를 즉시 종료하고 다음 웨이브로 진입합니다. 마지막 웨이브였다면 페이즈를 종료합니다.
+void UDRPhase3::SkipToNextWave()
+{
+	if (!bIsPhaseActive) return;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// 웨이브 관련 타이머 정리
+	World->GetTimerManager().ClearTimer(WaveTimerHandle);
+	World->GetTimerManager().ClearTimer(SpawnTimerHandle);
+	World->GetTimerManager().ClearTimer(PoisonGasSpawnTimerHandle);
+	World->GetTimerManager().ClearTimer(EliteSpawnVFXTimerHandle);
+
+	// 일반 적 제거 (사망 델리게이트는 분리하여 CheckWaveCompletion이 호출되지 않도록 함)
+	for (TWeakObjectPtr<AActor>& EnemyPtr : SpawnedEnemies)
+	{
+		if (EnemyPtr.IsValid())
+		{
+			if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(EnemyPtr.Get()))
+			{
+				CombatInterface->GetOnDeathDelegate().RemoveDynamic(this, &UDRPhaseBase::OnEnemyDeath);
+			}
+			EnemyPtr->Destroy();
+		}
+	}
+	SpawnedEnemies.Empty();
+
+	// 엘리트 보스 제거
+	for (TWeakObjectPtr<AActor>& ElitePtr : EliteBosses)
+	{
+		if (ElitePtr.IsValid())
+		{
+			if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(ElitePtr.Get()))
+			{
+				CombatInterface->GetOnDeathDelegate().RemoveDynamic(this, &UDRPhase3::OnEliteEnemyDeath);
+			}
+			ElitePtr->Destroy();
+		}
+	}
+	EliteBosses.Empty();
+
+	if (bEliteBossSpawned)
+	{
+		bEliteBossSpawned = false;
+		RemoveEliteBossTag();
+	}
+
+	// 독가스 정리
+	RemoveToxicGas();
+
+	// 웨이브 카운터 리셋 및 UI 상태 정리
+	CurrentSpawnCount = 0;
+	TotalSpawnCount = 0;
+	CurrentSpawnTick = 0;
+	TotalSpawnTick = 0;
+
+	if (GameState)
+	{
+		GameState->ClearEliteSpawnPointVFX();
+		GameState->SetIsToxicGasWave(false);
+	}
+
+	// 마지막 웨이브였다면 페이즈 자체를 종료
+	if (CurrentWaveNumber >= TotalWaveCount)
+	{
+		if (GameMode)
+		{
+			GameMode->ValidatePhaseCompletion();
+		}
+		return;
+	}
+
+	// 휴식 시간을 스킵하고 곧바로 다음 웨이브 시작
+	CurrentWaveState = EWaveState::Waiting;
 	StartNextWave();
 }
 
@@ -434,12 +572,12 @@ void UDRPhase3::FindEnemySpawnPoints()
 		}
 	}
 
-	if (EnemySpawnPoints.Num() < 4)
+	if (EnemySpawnPoints.Num() < SpawnBatchSize)
 	{
 }
-	else if (EnemySpawnPoints.Num() > 4)
+	else if (EnemySpawnPoints.Num() > SpawnBatchSize)
 	{
-EnemySpawnPoints.SetNum(4);
+EnemySpawnPoints.SetNum(SpawnBatchSize);
 	}
 
 	RemainingEnemySpawnPointIndices.Empty();
@@ -452,7 +590,7 @@ EnemySpawnPoints.SetNum(4);
 // 현재 배치에서 아직 사용하지 않은 스폰 포인트를 무작위로 선택합니다.
 AActor* UDRPhase3::SelectNextSpawnPoint()
 {
-	if (EnemySpawnPoints.Num() < 4)
+	if (EnemySpawnPoints.Num() < SpawnBatchSize)
 	{
 		return nullptr;
 	}
@@ -482,15 +620,15 @@ AActor* UDRPhase3::SelectNextSpawnPoint()
 	return EnemySpawnPoints[SpawnPointIndex].Get();
 }
 
-// 사이클 숫자(1/2/3)에 맞는 몬스터 클래스를 반환합니다.
+// 사이클 값(EMonsterSpawnType)에 맞는 몬스터 클래스를 반환합니다.
 TSubclassOf<ADREnemy> UDRPhase3::SelectMonsterClassByType(int32 MonsterType) const
 {
-	switch (MonsterType)
+	switch (static_cast<EMonsterSpawnType>(MonsterType))
 	{
-	case 2:
+	case EMonsterSpawnType::Rush:
 		if (RushMonsterClass) return RushMonsterClass;
 		break;
-	case 3:
+	case EMonsterSpawnType::Stealth:
 		if (StealthMonsterClass) return StealthMonsterClass;
 		break;
 	default:
@@ -500,19 +638,22 @@ TSubclassOf<ADREnemy> UDRPhase3::SelectMonsterClassByType(int32 MonsterType) con
 	return NormalMonsterClass;
 }
 
-// 현재 사이클 인덱스로 이번 스폰 타입(1/2/3)을 계산합니다.
+// 현재 사이클 인덱스로 이번 스폰 타입(EMonsterSpawnType 값)을 계산합니다.
 int32 UDRPhase3::GetCurrentCycleMonsterType(const FWaveLevelModifier& WaveModifier) const
 {
+	constexpr int32 DefaultType = static_cast<int32>(EMonsterSpawnType::Normal);
+
 	if (WaveModifier.MonsterSpawnCycle.Num() == 0)
 	{
-		return 1;
+		return DefaultType;
 	}
 
 	const int32 CycleIndex = CurrentSpawnCycleIndex % WaveModifier.MonsterSpawnCycle.Num();
 	const int32 MonsterType = WaveModifier.MonsterSpawnCycle[CycleIndex];
-	if (MonsterType < 1 || MonsterType > 3)
+	if (MonsterType < static_cast<int32>(EMonsterSpawnType::Normal) ||
+		MonsterType > static_cast<int32>(EMonsterSpawnType::Stealth))
 	{
-		return 1;
+		return DefaultType;
 	}
 
 	return MonsterType;
@@ -526,9 +667,9 @@ void UDRPhase3::SpawnMonsterByCycle()
 	UWorld* World = GameMode->GetWorld();
 	if (!World) return;
 
-	if (!NormalMonsterClass || EnemySpawnPoints.Num() < 4) return;
+	if (!NormalMonsterClass || EnemySpawnPoints.Num() < SpawnBatchSize) return;
 
-	const FWaveLevelModifier WaveModifier = GetWaveLevelModifier(CurrentWaveLevel);
+	const FWaveLevelModifier& WaveModifier = CachedWaveModifier;
 
 	RemainingEnemySpawnPointIndices.Empty();
 	for (int32 Index = 0; Index < EnemySpawnPoints.Num(); ++Index)
@@ -536,7 +677,7 @@ void UDRPhase3::SpawnMonsterByCycle()
 		RemainingEnemySpawnPointIndices.Add(Index);
 	}
 
-	for (int32 BatchSpawnIndex = 0; BatchSpawnIndex < 4; ++BatchSpawnIndex)
+	for (int32 BatchSpawnIndex = 0; BatchSpawnIndex < SpawnBatchSize; ++BatchSpawnIndex)
 	{
 		if (CurrentSpawnCount >= TotalSpawnCount)
 		{
@@ -587,6 +728,7 @@ void UDRPhase3::SpawnMonsterByCycle()
 					// 기존 글로벌 Buff.Elite 태그 시스템은 포효(Roar) 오라로 대체됨
 
 					SpawnedEnemies.Add(SpawnedEnemy);
+					BroadcastAliveEnemyObjective();
 					CheckGameOverConditions();
 				}
 			}
@@ -626,6 +768,7 @@ void UDRPhase3::SpawnEliteMonster(const FVector& SpawnLocation)
 		SpawnedEnemy->FinishSpawning(FTransform(FRotator::ZeroRotator, SpawnLocation));
 		
 		EliteBosses.Add(SpawnedEnemy);
+		BroadcastAliveEnemyObjective();
 
 		if (!bEliteBossSpawned)
 		{
@@ -811,23 +954,27 @@ void UDRPhase3::IncreaseWaveLevel(int32 Amount)
 // 활성 클렌저 사이트의 속성/델리게이트를 초기화합니다.
 void UDRPhase3::InitializeCleanserSite()
 {
-	if (ActiveCleanserSites.Num() != 2) return;
-	
+	// [임시] 1개 사이트 기준으로 검증
+	if (ActiveCleanserSites.Num() < 1) return;
+	// if (ActiveCleanserSites.Num() != 2) return;
+
 	CleanserSiteHalfHealthTriggered.Empty();
 
+	// [임시] 1개 사이트만 활성화: Second는 First와 동일한 사이트로 처리
 	ADRCleanserSite* FirstCleanserSite = ActiveCleanserSites[0].Get();
-	ADRCleanserSite* SecondCleanserSite = ActiveCleanserSites[1].Get();
+	ADRCleanserSite* SecondCleanserSite = ActiveCleanserSites.Num() >= 2 ? ActiveCleanserSites[1].Get() : FirstCleanserSite;
+	// ADRCleanserSite* FirstCleanserSite = ActiveCleanserSites[0].Get();
+	// ADRCleanserSite* SecondCleanserSite = ActiveCleanserSites[1].Get();
 	
 	for (ADRCleanserSite* Site : ActiveCleanserSites)
 	{
 		if (!Site || !IsValid(Site)) continue;
 		
 		CleanserSiteHalfHealthTriggered.Add(Site, false);
-		
-		if (UAbilitySystemComponent* SiteASC = Site->GetAbilitySystemComponent())
+
+		// ActorInfo는 ADRCleanserSite::BeginPlay에서 이미 초기화됨 - 여기서는 어트리뷰트만 적용
+		if (Site->GetAbilitySystemComponent())
 		{
-			SiteASC->InitAbilityActorInfo(Site, Site);
-			
 			Site->InitializeDefaultAttributes();
 		}
 		
@@ -953,14 +1100,15 @@ void UDRPhase3::OnCleanserSiteDestroyed(ADRCleanserSite* DestroyedSite) const
 // 클렌저 체력이 절반 이하가 되면 웨이브 레벨을 올립니다.
 void UDRPhase3::OnCleanserSiteHealthBelowHalf()
 {
-	if (!GameMode) return;
-	
-	IncreaseWaveLevel(1);
-	
-	if (GameState)
-	{
-		GameState->SetCurrentWaveLevel(CurrentWaveLevel);
-	}
+	// 임시 비활성화: 클렌저 체력 50% 이하 시 웨이브 레벨 증가 기능 주석 처리
+	// if (!GameMode) return;
+	//
+	// IncreaseWaveLevel(1);
+	//
+	// if (GameState)
+	// {
+	// 	GameState->SetCurrentWaveLevel(CurrentWaveLevel);
+	// }
 }
 
 // 클렌저 체력이 0이 되면 게임오버를 처리합니다.
@@ -984,11 +1132,33 @@ void UDRPhase3::CheckGameOverConditions() const
 	}
 }
 
-// 방어 시간 종료 시 승리/패배 조건을 검사합니다.
+// 마지막 웨이브 종료 시 승리/패배 조건을 검사합니다.
 void UDRPhase3::CheckVictoryConditions()
 {
+	if (!GameMode) return;
+
+	// 페이즈3에서 스폰된 적이 한 명이라도 살아있으면 게임 오버
+	bool bAnyEnemyAlive = GetAliveEnemyCount() > 0;
+	if (!bAnyEnemyAlive)
+	{
+		for (const TWeakObjectPtr<AActor>& Elite : EliteBosses)
+		{
+			if (Elite.IsValid())
+			{
+				bAnyEnemyAlive = true;
+				break;
+			}
+		}
+	}
+
+	if (bAnyEnemyAlive)
+	{
+		GameMode->TriggerGameOver();
+		return;
+	}
+
+	// 모든 적이 처치된 상태에서 클렌저 사이트가 살아있으면 클리어
 	bool bAllSitesAlive = true;
-	
 	for (const TObjectPtr<ADRCleanserSite>& Site : ActiveCleanserSites)
 	{
 		if (!Site || !IsValid(Site))
@@ -997,20 +1167,14 @@ void UDRPhase3::CheckVictoryConditions()
 			break;
 		}
 	}
-	
+
 	if (bAllSitesAlive)
 	{
-		if (GameMode)
-		{
-			GameMode->ValidatePhaseCompletion();
-		}
+		GameMode->ValidatePhaseCompletion();
 	}
 	else
 	{
-		if (GameMode)
-		{
-			GameMode->TriggerGameOver();
-		}
+		GameMode->TriggerGameOver();
 	}
 }
 
@@ -1090,6 +1254,8 @@ void UDRPhase3::SpawnPoisonGasActor()
 
 	if (SelectedIndices.Num() == 0) return;
 
+	bool bAnySpawned = false;
+
 	for (int32 Index : SelectedIndices)
 	{
 		if (!AllPoisonGasSpawnPoints.IsValidIndex(Index)) continue;
@@ -1108,9 +1274,19 @@ void UDRPhase3::SpawnPoisonGasActor()
 
 		if (PoisonGas)
 		{
-			PoisonGas->SetLifeSpan(10.0f);  // 경고 3초 + 활성 7초
+			PoisonGas->SetLifeSpan(3.5f);  // 경고 3초 + 활성 0.5초
 
 			ToxicGasActors.Add(PoisonGas);
+			bAnySpawned = true;
+		}
+	}
+
+	// 배치당 1회 경고 사운드
+	if (bAnySpawned)
+	{
+		if (ADRStageGameState* GS = World->GetGameState<ADRStageGameState>())
+		{
+			GS->Multicast_PlayPoisonGasWarningSound();
 		}
 	}
 }
@@ -1140,16 +1316,23 @@ void UDRPhase3::RemoveToxicGas()
 	ToxicGasActors.Empty();
 }
 
-// 엘리트 보스 활성 시 적/아군 태그를 부여합니다.
+// 엘리트 보스 활성 시 보스 BGM으로 전환합니다.
 // 기존 글로벌 태그 시스템은 포효(Roar) 스킬의 범위 기반 오라 버프로 대체됨.
 void UDRPhase3::GrantEliteBossTag()
 {
+	if (ADRBGMActor* BGMActor = CachedBGMActor.Get())
+	{
+		BGMActor->StartBossBGM();
+	}
 }
 
-// 엘리트 보스 비활성 시 부여한 태그를 제거합니다.
-// 기존 글로벌 태그 시스템은 포효(Roar) 스킬의 범위 기반 오라 버프로 대체됨.
+// 엘리트 보스 비활성 시 스테이지 BGM으로 복귀합니다.
 void UDRPhase3::RemoveEliteBossTag()
 {
+	if (ADRBGMActor* BGMActor = CachedBGMActor.Get())
+	{
+		BGMActor->EndBossBGM();
+	}
 }
 
 

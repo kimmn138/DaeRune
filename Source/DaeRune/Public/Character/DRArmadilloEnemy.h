@@ -7,6 +7,8 @@
 #include "DRArmadilloEnemy.generated.h"
 
 class USphereComponent;
+class UAudioComponent;
+class UAnimMontage;
 
 /**
  * Rolling impact result data - collected by C++ collision detection, passed to GA (Blueprint).
@@ -104,7 +106,11 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount) override;
+
+	// 외곽선을 BallFormMesh에도 적용 (볼 폼일 때 기본 GetMesh()는 숨겨지므로)
+	virtual void ApplyWaveOutline() override;
 
 	// ===== Form Switching Config =====
 
@@ -119,6 +125,31 @@ protected:
 	UFUNCTION()
 	void OnRep_BallForm();
 
+	// ===== Form Change Transition Montages =====
+	// GA의 PlayMontage 노드는 서버(호스트)에서만 재생되므로, 원격 클라이언트에는
+	// StartFormChange()에서 MulticastPlayFormChangeMontage()로 동일 몽타주를 재생해준다.
+	// 두 메시(기본/볼) 모두 동시에 재생 — 전환 중 bIsBallForm 복제로 가시성이 바뀌어도 포즈가 이어지도록.
+
+	/** Basic mesh: Basic -> Ball transition montage */
+	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Form")
+	TObjectPtr<UAnimMontage> FormChangeToBallMontage_Basic;
+
+	/** Ball mesh: Basic -> Ball transition montage */
+	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Form")
+	TObjectPtr<UAnimMontage> FormChangeToBallMontage_Ball;
+
+	/** Basic mesh: Ball -> Basic transition montage */
+	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Form")
+	TObjectPtr<UAnimMontage> FormChangeToBasicMontage_Basic;
+
+	/** Ball mesh: Ball -> Basic transition montage */
+	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Form")
+	TObjectPtr<UAnimMontage> FormChangeToBasicMontage_Ball;
+
+	/** 원격 클라이언트에서 폼 체인지 전환 몽타주 재생 (서버는 GA가 직접 재생하므로 스킵) */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayFormChangeMontage(bool bToBallForm);
+
 	/** Ball form capsule radius */
 	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Form")
 	float BallFormCapsuleRadius = 40.f;
@@ -128,16 +159,24 @@ protected:
 	float BallFormCapsuleHalfHeight = 40.f;
 
 	/** Default capsule radius (saved in BeginPlay) */
-	float DefaultCapsuleRadius;
+	float DefaultCapsuleRadius = 0.f;
 
 	/** Default capsule half height (saved in BeginPlay) */
-	float DefaultCapsuleHalfHeight;
+	float DefaultCapsuleHalfHeight = 0.f;
+
+	/** 현재 폼(bIsBallForm)에 맞는 캡슐 크기 적용. 캡슐 크기는 복제되지 않으므로
+	    서버/클라이언트 모두 OnRep_BallForm 경로에서 이 함수로 동기화한다. */
+	void ApplyFormCapsuleSize();
 
 	// ===== Rolling Charge Config =====
 
-	/** Rolling state (replicated) */
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Armadillo|Roll")
+	/** Rolling state (replicated). OnRep starts/stops the loop sound on remote clients;
+	    server-side StartRollCharge/StopRollCharge invoke OnRep_IsRolling() manually for parity. */
+	UPROPERTY(ReplicatedUsing = OnRep_IsRolling, BlueprintReadOnly, Category = "Armadillo|Roll")
 	bool bIsRolling = false;
+
+	UFUNCTION()
+	void OnRep_IsRolling();
 
 	/** Charge target location */
 	UPROPERTY(BlueprintReadOnly, Category = "Armadillo|Roll")
@@ -175,7 +214,34 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
 	float RollTargetSearchRange = 3000.f;
 
+	/** If movement during a roll stays below StuckMoveThreshold for this many seconds, treat as stuck and end the roll. */
+	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
+	float StuckTimeLimit = 3.f;
+
+	/** 2D distance (cm) below which we consider the armadillo to not be moving for stuck detection. */
+	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Roll")
+	float StuckMoveThreshold = 10.f;
+
+	FVector LastStuckCheckLocation = FVector::ZeroVector;
+	float StuckTimeAccumulator = 0.f;
+
 private:
+	// ===== Roll/Impact Sound (Plan2.md §6.2, §6.3) =====
+
+	/** Loop sound component (spawned on first roll, stopped on roll end / death / EndPlay). */
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> RollLoopComponent;
+
+	/** Start roll loop sound. Safe to call multiple times (skips if already playing). Skipped on dedicated server. */
+	void StartArmadilloRollLoop();
+
+	/** Stop roll loop sound. Safe to call multiple times. */
+	void StopArmadilloRollLoop();
+
+	/** Multicast impact sound (server -> all clients). Reliable: discrete impact event must not be dropped. */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayRollImpactSound(FVector_NetQuantize Location);
+
 	/** Tick processing during charge (movement + collision detection) */
 	void TickRollCharge(float DeltaTime);
 

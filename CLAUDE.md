@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-DaeRune is a multiplayer cooperative PvE action game built with Unreal Engine 5.5, using the Gameplay Ability System (GAS) for combat mechanics. The game features a 4-phase mission structure where players secure and defend Cleanser Sites against enemy waves.
+DaeRune is a multiplayer cooperative PvE action game built with Unreal Engine 5.5, using the Gameplay Ability System (GAS) for combat mechanics. The game features a 2-phase mission structure: players first secure a Cleanser Site and install parts, then defend it against enemy waves.
 
 ## Building and Running
 
@@ -28,11 +28,13 @@ DaeRune is a multiplayer cooperative PvE action game built with Unreal Engine 5.
 ### Phase System
 The game progresses through a phase-based mission structure managed by `ADRStageGameMode`:
 
-**Phase Hierarchy**:
+**Phase Hierarchy** (2 phases; class names are legacy and do NOT match runtime phase indices):
 - `UDRPhaseBase` (abstract) - Base class with lifecycle methods (`Initialize`, `OnPhaseStart`, `OnPhaseEnd`)
-- `UDRPhase1` - Secure 2 of 3 Cleanser Sites by eliminating enemies
-- `UDRPhase2` - Collect and install 4 parts (2 per active site)
-- `UDRPhase3` - Defend sites for 5 minutes through escalating waves
+- `UDRPhase1` (phase index 0) - Secure the single Cleanser Site AND collect/install 2 parts (secure + collect merged)
+- `UDRPhase3` (phase index 1) - Defend the site by clearing all waves (acts as the "new Phase 2")
+- `UDRPhase2` - Legacy, unused in the current 2-phase structure (part collection was merged into `UDRPhase1`)
+
+Completion conditions live in `ADRStageGameMode::ValidatePhaseCompletion()` (case 0: 2 parts installed + site activated, case 1: all waves cleared).
 
 **Key Patterns**:
 - GameMode orchestrates phase transitions via `TransitionToNextPhase()`
@@ -45,12 +47,12 @@ The game progresses through a phase-based mission structure managed by `ADRStage
 **Ownership Model**:
 - PlayerState owns `UAbilitySystemComponent` for players (persists through respawn)
 - Enemies own ASC directly on character
-- CleanserSites gain ASC in Phase 3 for health tracking
+- CleanserSites create ASC in constructor (Minimal replication mode); its AttributeSet is only used for health tracking in Phase 3
 
 **Attribute Sets**:
 - `UDRPlayerAttributeSet` - Container health system, corruption mechanics
 - `UDREnemyAttributeSet` - Enemy health, water rewards
-- `UDRCleanserSiteAttributeSet` - Cleanser Site health (Phase 3 only)
+- `UDRCleanserSiteAttributeSet` - Cleanser Site health (created at construction, used in Phase 3 only)
 
 **Custom Systems**:
 - Water resource parallel to health (used for ability costs via `ExecCalc_WaterCost`)
@@ -120,23 +122,24 @@ Tags are centrally managed in `FDRGameplayTags` singleton. Initialize via `Initi
 **State Machine**: Inactive → Active → PartsCollected → Operational → Completed
 
 **Phase-Specific Behavior**:
-- Phase 1: 2 of 3 sites randomly activated as enemy spawn points
-- Phase 2: Accept part installation (2 parts each), trigger completion delegates
-- Phase 3: Gain ASC + AttributeSet, become damageable, broadcast health thresholds
+- Secure phase (`UDRPhase1`): a single site is kept and the others are destroyed (`UDRPhase1::KeepSingleCleanserSite()`); the remaining site is used for enemy spawning and accepts part installation (2 parts), triggering completion delegates
+- Defense phase (`UDRPhase3`): Health attributes initialized (ASC exists from construction), become damageable, broadcast health thresholds
 
-### Part Collection System (Phase 2)
+### Part Collection System (secure phase, `UDRPhase1`)
 `ADRCleanserPart` lifecycle:
 1. Attached to enemy as PartMeshComponent
-2. Dropped on death with physics impulse
+2. On enemy death, spawned at a ground point found by downward line trace +80uu (`ADREnemy::DropPart()`, no physics impulse)
 3. Player detection via line trace (`PlayerController::FindPartByLineTrace()`)
 4. Server-authoritative pickup via `ServerRequestPickupPart()`
 5. Attached to player hand socket, disables move speed
 6. Installation at CleanserSite via overlap + interact key
 
+Carrying state (`bIsCarryingPart` + `State.Carrying` tag + visuals) is toggled server-side only through `ADRCharacter::SetCarryingState()`; clients sync the tag in `OnRep_bIsCarryingPart`. Part/Site interaction UI is local-only via the `IDRInteractable` interface (no RPCs).
+
 **Important**: Detection uses line trace, not collision, for precision.
 
-### Wave System (Phase 3)
-Dynamic difficulty scaling with wave levels (1-5) that increase when CleanserSite health drops below 50%.
+### Wave System (defense phase, `UDRPhase3`)
+The phase completes when all waves (`TotalWaves`) are cleared — there is no fixed defense timer. Wave levels (1-5) exist for difficulty scaling, but the escalation trigger (CleanserSite health below 50%) is currently commented out/disabled in `DRPhase3.cpp`.
 
 **Wave Data Structure**: `FWaveData` with PlayDuration, RestDuration, SpawnInterval, MonstersPerPlayer
 
@@ -201,16 +204,17 @@ Enemies can be stunned by knockback into walls:
 **Execution**: `ADREnemy::OnHit()` callback applies stun GE via ASC
 
 ### Character Class System
-Data-driven initialization via `UCharacterClassInfo` data asset:
+Two separate class enums (both in `AbilitySystem/Data/CharacterClassInfo.h`):
 
-**ECharacterClass**: Elementalist, Warrior, Ranger
+- **Players** use `EPlayerCharacterClass` (Gardener, VendingMachine), initialized via `UDRAbilitySystemLibrary::InitializePlayerDefaultAttributes()` with player class info data
+- **Enemies** use `ECharacterClass` (Elementalist, Warrior, Ranger, Bear, PartEnemy) with the `UCharacterClassInfo` data asset
 
 **Per-Class Data**:
 - Primary Attributes GE (MaxHealth, MaxWater, MoveSpeed)
 - Vital Attributes GE (initializes Health/Water)
 - StartupAbilities array
 
-**Initialization Flow**: `UDRAbilitySystemLibrary::InitializeDefaultAttributes()` → Lookup class info → Apply GEs → Grant abilities
+**Initialization Flow**: `UDRAbilitySystemLibrary::InitializeDefaultAttributes()` (enemies) / `InitializePlayerDefaultAttributes()` (players) → Lookup class info → Apply GEs → Grant abilities
 
 ### Input System
 Enhanced Input System with GAS integration:
@@ -325,7 +329,7 @@ Check `ADRStageGameMode::TransitionToNextPhase()` logs, verify phase completion 
 ### Cleanser Site Not Responding
 1. Verify actor has "CleanserSite" tag
 2. Check phase index and site state
-3. Verify ASC initialization in Phase 3
+3. Verify health attribute initialization in Phase 3 (ASC itself is created in the constructor)
 4. Check interaction box overlap events
 
 ### Widget Not Updating
@@ -336,6 +340,6 @@ Check `ADRStageGameMode::TransitionToNextPhase()` logs, verify phase completion 
 
 ## Development Branch Structure
 - `main` - Main development branch
-- `feat/Phase3` - Current feature branch (from git status)
+- Feature branches like `feat/PlayExpo` (current) are branched off `main`
 
 Use descriptive branch names like `feat/`, `fix/`, `refactor/` for clear intent.

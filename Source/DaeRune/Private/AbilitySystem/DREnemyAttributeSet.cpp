@@ -7,6 +7,7 @@
 #include "DRGameplayTags.h"
 #include "GameFramework/Character.h"
 #include "Character/DREnemy.h"
+#include "Player/DRPlayerState.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "AI/DRAIController.h"
 #include "Tutorial/DRTutorialManager.h"
@@ -93,8 +94,11 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			{
 				UBlackboardComponent* BB = AIController->GetBlackboardComponent();
 
-				// FirstAttacker가 없고, 부품을 들고 도망치는 적이 아닌 경우에만 설정
-				if (!BB->GetValueAsBool("HasFirstAttacker") && !Enemy->bCarriesPart)
+				// 공격자가 플레이어인 경우에만 타겟 설정 (적끼리 공격 시 타겟팅 방지)
+				const bool bSourceIsPlayer = Props.SourceAvatarActor && Props.SourceAvatarActor->ActorHasTag(FName("Player"));
+
+				// FirstAttacker가 없으면 설정 (부품 운반자도 공격 가능 — 도망 설계 폐기)
+				if (bSourceIsPlayer && !BB->GetValueAsBool("HasFirstAttacker"))
 				{
 					// 첫 공격자 설정
 					BB->SetValueAsObject("FirstAttacker", Props.SourceAvatarActor);
@@ -115,7 +119,10 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 						EnemyASC->AddLooseGameplayTag(FDRGameplayTags::Get().State_Aggroed);
 					}
 				}
-				BB->SetValueAsObject("AttackingPlayer", Props.SourceAvatarActor);
+				if (bSourceIsPlayer)
+				{
+					BB->SetValueAsObject("AttackingPlayer", Props.SourceAvatarActor);
+				}
 
 				if (NewHealth <= GetMaxHealth() * 0.3f)
 				{
@@ -134,6 +141,15 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		const bool bFatal = NewHealth <= 0.f;
 		if (bFatal)
 		{
+			// 처치 크레딧: 막타를 친 플레이어 1명 (업적 판정 / 결과창 표시용, 재화 환산 없음)
+			if (Props.SourceController)
+			{
+				if (ADRPlayerState* KillerPS = Props.SourceController->GetPlayerState<ADRPlayerState>())
+				{
+					KillerPS->AddStageKill();
+				}
+			}
+
 			ICombatInterface* CombatInterface = Cast<ICombatInterface>(Props.TargetAvatarActor);
 			if (CombatInterface)
 			{

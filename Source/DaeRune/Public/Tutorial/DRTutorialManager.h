@@ -11,6 +11,7 @@ class ADRTutorialPressurePlate;
 class ADRTutorialStartTile;
 class ADREnemy;
 class ADRCleanserSite;
+class ADRWaterSource;
 class UOverlayWidgetController;
 class UDRAbilitySystemComponent;
 class UGameplayAbility;
@@ -30,8 +31,10 @@ UENUM(BlueprintType)
 enum class ECombatObjective : uint8
 {
 	None,
+	Objective0_ReadCharacterInfo, // Tab 키로 캐릭터 설명창 확인
 	Objective1_MeleeAttack,    // 기본 공격 5회
 	Objective2_WaterPump,      // 물대포 3초
+	Objective2_5_WaterRefill,  // 수원지에서 물 회복
 	Objective3_SeedCannon,     // SeedCannon 동시 적중
 	AllComplete
 };
@@ -61,6 +64,10 @@ public:
 	void OnPressurePlateActivated(int32 SectionIndex);
 
 	// ========== 구간 2 전투 훈련 ==========
+
+	// Tab 키로 캐릭터 설명창 열림 보고 (목표 0)
+	UFUNCTION(BlueprintCallable, Category = "Tutorial|Combat")
+	void ReportCharacterInfoOpened();
 
 	// 샌드백 적에게 데미지 적중 시 호출 (AbilityTag로 어빌리티 구분)
 	UFUNCTION(BlueprintCallable, Category = "Tutorial|Combat")
@@ -118,6 +125,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config")
 	TSubclassOf<ADREnemy> DummyEnemyClass;
 
+	// 수원지 회복 목표 — 스폰될 수원지 클래스
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config")
+	TSubclassOf<ADRWaterSource> WaterSourceClass;
+
+	// 수원지 회복 목표 — 스폰 위치(레벨에 빈 액터 배치하여 지정)
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|References")
+	TObjectPtr<AActor> WaterSourceSpawnPoint;
+
 	// 구간 3 부품 적 (레벨에 미리 배치)
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|References")
 	TArray<TObjectPtr<ADREnemy>> PartEnemies;
@@ -146,7 +161,7 @@ protected:
 	float RequiredWaterPumpSeconds = 3.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config")
-	int32 RequiredSimultaneousHits = 5;
+	int32 RequiredSimultaneousHits = 1;
 
 private:
 	// ========== 상태 ==========
@@ -164,6 +179,9 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<ADREnemy>> SpawnedSeedCannonDummies;
 
+	UPROPERTY()
+	TObjectPtr<ADRWaterSource> SpawnedWaterSource;
+
 	// ========== 내부 함수 ==========
 
 	void TransitionToSection(ETutorialSection NewSection);
@@ -172,6 +190,13 @@ private:
 	void GrantAbilityToPlayer(TSubclassOf<UGameplayAbility> AbilityClass);
 	void SpawnSeedCannonDummies();
 	void CleanupSeedCannonDummies();
+
+	void DrainPlayerWater();
+	void SpawnTutorialWaterSource();
+	void CleanupTutorialWaterSource();
+
+	UFUNCTION()
+	void OnTutorialWaterSourceUsed(AActor* User);
 
 	void SetupDummyEnemy(ADREnemy* Enemy);
 	void StopPartEnemyAI();

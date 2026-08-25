@@ -46,7 +46,7 @@ void UDRAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute
 
 	if (Attribute == GetHealthAttribute())
 	{
-		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
+		NewValue = FMath::RoundToFloat(FMath::Clamp(NewValue, 0.f, GetMaxHealth()));
 	}
 	if (Attribute == GetWaterAttribute())
 	{
@@ -64,7 +64,7 @@ void UDRAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, fl
 
 	if (Attribute == GetHealthAttribute())
 	{
-		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
+		NewValue = FMath::RoundToFloat(FMath::Clamp(NewValue, 0.f, GetMaxHealth()));
 	}
 	if (Attribute == GetWaterAttribute())
 	{
@@ -87,7 +87,7 @@ void UDRAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 
 	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
-		SetHealth(FMath::Clamp(GetHealth(), 0.f, GetMaxHealth()));
+		SetHealth(FMath::RoundToFloat(FMath::Clamp(GetHealth(), 0.f, GetMaxHealth())));
 	}
 	if (Data.EvaluatedData.Attribute == GetWaterAttribute())
 	{
@@ -116,25 +116,25 @@ void UDRAttributeSet::Debuff(const FEffectProperties& Props)
 {
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 
-	// Context »ı¼º
+	// Context ï¿½ï¿½ï¿½ï¿½
 	FGameplayEffectContextHandle EffectContext = Props.SourceASC->MakeEffectContext();
 	EffectContext.AddSourceObject(Props.SourceAvatarActor);
 
-	// µğ¹öÇÁ °ü·Ã ÆÄ¶ó¹ÌÅÍ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ä¶ï¿½ï¿½ï¿½ï¿½
 	const FGameplayTag DamageType = UDRAbilitySystemLibrary::GetDamageType(Props.EffectContextHandle);
 	const float DebuffDamage = UDRAbilitySystemLibrary::GetDebuffDamage(Props.EffectContextHandle);
 	const float DebuffDuration = UDRAbilitySystemLibrary::GetDebuffDuration(Props.EffectContextHandle);
 
-	// µğ¹öÇÁ ¸ÅÇÎ (¿¹: È­¿° ¡æ ºÒÅ¸´Â µğ¹öÇÁ)
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½: È­ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½Å¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½)
 	const FGameplayTag DebuffTag = GameplayTags.DamageTypesToDebuffs[DamageType];
 
-	// AttributeSet¿¡ ¹Ì¸® ¼³Á¤µÈ DebuffEffectMap¿¡¼­ ÇØ´ç ÅÂ±×ÀÇ GE Å¬·¡½º¸¦ °¡Á®¿È
+	// AttributeSetï¿½ï¿½ ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ DebuffEffectMapï¿½ï¿½ï¿½ï¿½ ï¿½Ø´ï¿½ ï¿½Â±ï¿½ï¿½ï¿½ GE Å¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	if (!DebuffEffectMap.Contains(DebuffTag)) return;
 
 	TSubclassOf<UGameplayEffect> DebuffEffectClass = DebuffEffectMap[DebuffTag];
 	if (!DebuffEffectClass) return;
 
-	// GE ½ºÆå »ı¼º
+	// GE ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	FGameplayEffectSpecHandle SpecHandle = Props.SourceASC->MakeOutgoingSpec(DebuffEffectClass, 1.f, EffectContext);
 	if (!SpecHandle.IsValid()) return;
 
@@ -143,22 +143,22 @@ void UDRAttributeSet::Debuff(const FEffectProperties& Props)
 	    MutableSpec->SetSetByCallerMagnitude(GameplayTags.Debuff_Damage, DebuffDamage);
         MutableSpec->SetDuration(DebuffDuration, true);
 	
-		// Context¿¡ DamageType ¼³Á¤
+		// Contextï¿½ï¿½ DamageType ï¿½ï¿½ï¿½ï¿½
 		FDRGameplayEffectContext* DRContext = static_cast<FDRGameplayEffectContext*>(MutableSpec->GetContext().Get());
 		TSharedPtr<FGameplayTag> DebuffDamageType = MakeShareable(new FGameplayTag(DamageType));
 		DRContext->SetDamageType(DebuffDamageType);
 		
-		// ÃÖÁ¾ Àû¿ë
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		Props.TargetASC->ApplyGameplayEffectSpecToSelf(*MutableSpec);
 	}
 }
 
 void UDRAttributeSet::NotifyEnterCombat(const FEffectProperties& Props) const
 {
-	// ¼­¹ö¿¡¼­¸¸ Ã³¸®
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 	if (!Props.TargetAvatarActor || !Props.TargetAvatarActor->HasAuthority()) return;
 
-	// ¼Ò½º°¡ ÇÃ·¹ÀÌ¾îÀÎ °æ¿ì
+	// ï¿½Ò½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 	if (Props.SourceController && Props.SourceController->IsPlayerController())
 	{
 		if (ADRPlayerState* PS = Props.SourceController->GetPlayerState<ADRPlayerState>())
@@ -167,7 +167,7 @@ void UDRAttributeSet::NotifyEnterCombat(const FEffectProperties& Props) const
 		}
 	}
 
-	// Å¸°ÙÀÌ ÇÃ·¹ÀÌ¾îÀÎ °æ¿ì
+	// Å¸ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 	if (Props.TargetController && Props.TargetController->IsPlayerController())
 	{
 		if (ADRPlayerState* PS = Props.TargetController->GetPlayerState<ADRPlayerState>())
@@ -190,10 +190,12 @@ void UDRAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, f
 	{
 		SetWater(GetMaxWater());
 		bTopOffWater = false;
-
+	}
+	if (Attribute == GetWaterAttribute())
+	{
+		// Waterê°€ ì–‘ìˆ˜ì—ì„œ 0ìœ¼ë¡œ ë–¨ì–´ì§„ ìˆœê°„ ê³ ê°ˆ ê²½ê³  í ë°œë™
 		if (NewValue <= 0.f && OldValue > 0.f)
 		{
-			// ¹°ÀÌ ¹Ù´Ú³²
 			if (UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent())
 			{
 				FGameplayCueParameters CueParams;

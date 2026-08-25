@@ -71,7 +71,7 @@ struct FPhase3Config
 	float SpawnDistanceMax = 2000.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hazards", meta = (ClampMin = "1.0", ClampMax = "60.0"))
-	float PoisonGasSpawnInterval = 10.0f;
+	float PoisonGasSpawnInterval = 4.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Enrage", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float HighLevelEnrageThreshold = 0.25f;

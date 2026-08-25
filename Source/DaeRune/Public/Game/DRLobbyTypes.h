@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 #pragma once
 
@@ -20,9 +20,10 @@ struct FWaitingRoomPlayerInfo
 	GENERATED_BODY()
 
 	UPROPERTY(BlueprintReadOnly) FString PlayerName;
-	UPROPERTY(BlueprintReadOnly) EPlayerCharacterClass SelectedClass = EPlayerCharacterClass::GardenRobot;
+	UPROPERTY(BlueprintReadOnly) EPlayerCharacterClass SelectedClass = EPlayerCharacterClass::Gardener;
 	UPROPERTY(BlueprintReadOnly) bool bIsHost = false;
 	UPROPERTY(BlueprintReadOnly) bool bIsLocalPlayer = false;
+	UPROPERTY(BlueprintReadOnly) bool bIsReady = false;
 	UPROPERTY(BlueprintReadOnly) int32 SlotIndex = 0;
 
 	// PlayerState 참조 (킥 시 식별용)

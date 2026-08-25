@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "Tutorial/DRTutorialManager.h"
@@ -8,7 +8,9 @@
 #include "Character/DREnemy.h"
 #include "Character/DRCharacter.h"
 #include "Actor/DRCleanserSite.h"
+#include "Actor/DRWaterSource.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
+#include "AbilitySystem/DRAttributeSet.h"
 #include "AbilitySystem/Abilities/DRGameplayAbility.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "DRGameplayTags.h"
@@ -59,7 +61,7 @@ void ADRTutorialManager::BeginPlay()
 	GetWorldTimerManager().SetTimer(InitUITimer, [this]()
 	{
 		UpdateObjectiveUI(
-			NSLOCTEXT("Tutorial", "Obj_Section1", "장애물을 넘어 이동하세요"),
+			NSLOCTEXT("Tutorial", "Obj_Section1", "장애물을 넘어 다음 구역으로 가시오"),
 			FText::GetEmpty(), 0, 0
 		);
 	}, 0.5f, false);
@@ -85,7 +87,7 @@ void ADRTutorialManager::Tick(float DeltaTime)
 		WaterPumpAccumulatedTime += DeltaTime;
 
 		UpdateObjectiveUI(
-			NSLOCTEXT("Tutorial", "Obj2", "물대포를 발사하세요 (우클릭 유지)"),
+			NSLOCTEXT("Tutorial", "Obj2", "훈련 봇에게 물대포 3초 공격"),
 			NSLOCTEXT("Tutorial", "Obj2Fmt", "초"),
 			FMath::FloorToInt(WaterPumpAccumulatedTime),
 			FMath::FloorToInt(RequiredWaterPumpSeconds)
@@ -93,7 +95,7 @@ void ADRTutorialManager::Tick(float DeltaTime)
 
 		if (WaterPumpAccumulatedTime >= RequiredWaterPumpSeconds)
 		{
-			TransitionToObjective(ECombatObjective::Objective3_SeedCannon);
+			TransitionToObjective(ECombatObjective::Objective2_5_WaterRefill);
 		}
 	}
 }
@@ -147,8 +149,8 @@ void ADRTutorialManager::TransitionToSection(ETutorialSection NewSection)
 	switch (NewSection)
 	{
 	case ETutorialSection::Section2_Combat:
-		// 구간 2 진입 시 첫 목표(ClawSwipe)부터 시작 (어빌리티는 각 목표에서 개별 부여)
-		TransitionToObjective(ECombatObjective::Objective1_MeleeAttack);
+		// 구간 2 진입 시 캐릭터 설명창 확인 목표부터 시작 (Tab 누르면 첫 전투 목표로 진행)
+		TransitionToObjective(ECombatObjective::Objective0_ReadCharacterInfo);
 		break;
 
 	case ETutorialSection::Section3_PartCollect:
@@ -175,12 +177,19 @@ void ADRTutorialManager::TransitionToObjective(ECombatObjective NewObjective)
 
 	switch (NewObjective)
 	{
+	case ECombatObjective::Objective0_ReadCharacterInfo:
+		UpdateObjectiveUI(
+			NSLOCTEXT("Tutorial", "Obj_ReadInfo", "tab키를 눌러 설명창을 읽고 캐릭터를 숙지하시오"),
+			FText::GetEmpty(), 0, 0
+		);
+		break;
+
 	case ECombatObjective::Objective1_MeleeAttack:
 		// ClawSwipe 어빌리티 부여 (UI에 아이콘 표시)
 		GrantAbilityToPlayer(ClawSwipeAbilityClass);
 		MeleeHitCount = 0;
 		UpdateObjectiveUI(
-			NSLOCTEXT("Tutorial", "Obj1", "기본 공격으로 적을 공격하세요 (좌클릭)"),
+			NSLOCTEXT("Tutorial", "Obj1", "훈련 봇에게 기본 공격 5회 진행"),
 			NSLOCTEXT("Tutorial", "Obj1Fmt", "적중"),
 			0, RequiredMeleeHits
 		);
@@ -191,26 +200,33 @@ void ADRTutorialManager::TransitionToObjective(ECombatObjective NewObjective)
 		GrantAbilityToPlayer(WaterPumpAbilityClass);
 		WaterPumpAccumulatedTime = 0.f;
 		UpdateObjectiveUI(
-			NSLOCTEXT("Tutorial", "Obj2", "물대포를 발사하세요 (우클릭 유지)"),
+			NSLOCTEXT("Tutorial", "Obj2", "훈련 봇에게 물대포 3초 공격"),
 			NSLOCTEXT("Tutorial", "Obj2Fmt", "초"),
 			0, FMath::FloorToInt(RequiredWaterPumpSeconds)
+		);
+		break;
+
+	case ECombatObjective::Objective2_5_WaterRefill:
+		DrainPlayerWater();
+		SpawnTutorialWaterSource();
+		UpdateObjectiveUI(
+			NSLOCTEXT("Tutorial", "Obj_WaterRefill", "수원지에 다가가 물을 회복하시오"),
+			FText::GetEmpty(), 0, 0
 		);
 		break;
 
 	case ECombatObjective::Objective3_SeedCannon:
 		// SeedCannon 어빌리티 부여 (UI에 아이콘 표시)
 		GrantAbilityToPlayer(SeedCannonAbilityClass);
-		SpawnSeedCannonDummies();
 		UpdateObjectiveUI(
-			NSLOCTEXT("Tutorial", "Obj3", "시드캐논으로 모든 적을 한 번에 맞추세요 (Q)"),
-			NSLOCTEXT("Tutorial", "Obj3Fmt", "동시 적중"),
+			NSLOCTEXT("Tutorial", "Obj3", "씨앗 폭탄으로 훈련 봇을 맞추시오"),
+			NSLOCTEXT("Tutorial", "Obj3Fmt", "적중"),
 			0, RequiredSimultaneousHits
 		);
 		break;
 
 	case ECombatObjective::AllComplete:
 		bSection2Cleared = true;
-		CleanupSeedCannonDummies();
 		UpdateObjectiveUI(
 			NSLOCTEXT("Tutorial", "Obj_CombatDone", "전투 훈련 완료! 발판을 밟으세요"),
 			FText::GetEmpty(), 0, 0
@@ -220,6 +236,15 @@ void ADRTutorialManager::TransitionToObjective(ECombatObjective NewObjective)
 	default:
 		break;
 	}
+}
+
+void ADRTutorialManager::ReportCharacterInfoOpened()
+{
+	if (!HasAuthority()) return;
+
+	if (CurrentObjective != ECombatObjective::Objective0_ReadCharacterInfo) return;
+
+	TransitionToObjective(ECombatObjective::Objective1_MeleeAttack);
 }
 
 void ADRTutorialManager::ReportDamageHit(const FGameplayTagContainer& AbilityTags)
@@ -233,7 +258,7 @@ void ADRTutorialManager::ReportDamageHit(const FGameplayTagContainer& AbilityTag
 
 		MeleeHitCount++;
 		UpdateObjectiveUI(
-			NSLOCTEXT("Tutorial", "Obj1", "기본 공격으로 적을 공격하세요 (좌클릭)"),
+			NSLOCTEXT("Tutorial", "Obj1", "훈련 봇에게 기본 공격 5회 진행"),
 			NSLOCTEXT("Tutorial", "Obj1Fmt", "적중"),
 			MeleeHitCount, RequiredMeleeHits
 		);
@@ -257,8 +282,8 @@ void ADRTutorialManager::ReportSeedCannonHits(int32 HitCount)
 	{
 		// 실패 시 현재 적중 수 표시 (재시도 유도)
 		UpdateObjectiveUI(
-			NSLOCTEXT("Tutorial", "Obj3", "시드캐논으로 모든 적을 한 번에 맞추세요 (Q)"),
-			NSLOCTEXT("Tutorial", "Obj3Fmt", "동시 적중"),
+			NSLOCTEXT("Tutorial", "Obj3", "씨앗 폭탄으로 훈련 봇을 맞추시오"),
+			NSLOCTEXT("Tutorial", "Obj3Fmt", "적중"),
 			HitCount, RequiredSimultaneousHits
 		);
 	}
@@ -373,6 +398,58 @@ void ADRTutorialManager::CleanupSeedCannonDummies()
 	SpawnedSeedCannonDummies.Empty();
 }
 
+// ========== 수원지 회복 목표 ==========
+
+void ADRTutorialManager::DrainPlayerWater()
+{
+	UDRAbilitySystemComponent* ASC = GetPlayerASC();
+	if (!ASC) return;
+
+	const UDRAttributeSet* AS = Cast<UDRAttributeSet>(ASC->GetAttributeSet(UDRAttributeSet::StaticClass()));
+	if (!AS) return;
+
+	ASC->SetNumericAttributeBase(AS->GetWaterAttribute(), 0.f);
+}
+
+void ADRTutorialManager::SpawnTutorialWaterSource()
+{
+	if (!WaterSourceClass || !WaterSourceSpawnPoint) return;
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	SpawnedWaterSource = GetWorld()->SpawnActor<ADRWaterSource>(
+		WaterSourceClass,
+		WaterSourceSpawnPoint->GetActorLocation(),
+		WaterSourceSpawnPoint->GetActorRotation(),
+		SpawnParams
+	);
+
+	if (SpawnedWaterSource)
+	{
+		SpawnedWaterSource->OnWaterSourceUsedDelegate.AddDynamic(this, &ADRTutorialManager::OnTutorialWaterSourceUsed);
+	}
+}
+
+void ADRTutorialManager::CleanupTutorialWaterSource()
+{
+	if (IsValid(SpawnedWaterSource))
+	{
+		SpawnedWaterSource->OnWaterSourceUsedDelegate.RemoveDynamic(this, &ADRTutorialManager::OnTutorialWaterSourceUsed);
+		SpawnedWaterSource->Destroy();
+	}
+	SpawnedWaterSource = nullptr;
+}
+
+void ADRTutorialManager::OnTutorialWaterSourceUsed(AActor* User)
+{
+	if (!HasAuthority()) return;
+	if (CurrentObjective != ECombatObjective::Objective2_5_WaterRefill) return;
+
+	CleanupTutorialWaterSource();
+	TransitionToObjective(ECombatObjective::Objective3_SeedCannon);
+}
+
 // ========== 적 설정 ==========
 
 void ADRTutorialManager::SetupDummyEnemy(ADREnemy* Enemy)
@@ -389,6 +466,9 @@ void ADRTutorialManager::StopPartEnemyAI()
 	{
 		if (!Enemy) continue;
 
+		// 시작 타일 밟기 전까지 무적 처리 (데미지 받음 차단)
+		Enemy->bIsTutorialDummy = true;
+
 		if (AAIController* AIC = Cast<AAIController>(Enemy->GetController()))
 		{
 			if (UBrainComponent* Brain = AIC->GetBrainComponent())
@@ -404,6 +484,9 @@ void ADRTutorialManager::StartPartEnemyAI()
 	for (ADREnemy* Enemy : PartEnemies)
 	{
 		if (!Enemy) continue;
+
+		// 무적 해제 (정상 데미지 적용 가능)
+		Enemy->bIsTutorialDummy = false;
 
 		if (AAIController* AIC = Cast<AAIController>(Enemy->GetController()))
 		{
@@ -425,6 +508,8 @@ void ADRTutorialManager::UpdateObjectiveUI(const FText& Title, const FText& Prog
 	// 스테이지와 동일한 형식: Title + ProgressFormat(라벨), 숫자는 별도 전달
 	WC->OnObjectiveTextChanged.Broadcast(Title, ProgressFormat);
 	WC->OnObjectiveProgressChanged.Broadcast(Current, Max);
+	// Max==0인 경우(진행 숫자가 무의미한 단계) 진행도 텍스트 숨김
+	WC->OnObjectiveProgressVisibilityChanged.Broadcast(Max > 0);
 }
 
 UOverlayWidgetController* ADRTutorialManager::GetOverlayWidgetController() const

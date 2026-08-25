@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "AbilitySystemInterface.h"
+#include "Interaction/DRInteractable.h"
 #include "UI/WidgetController/OverlayWidgetController.h"
 #include "DRCleanserSite.generated.h"
 
@@ -44,7 +45,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCleanserSiteHealthHalf, ADRCleans
  * - Phase4: ������ ���
  */
 UCLASS()
-class DAERUNE_API ADRCleanserSite : public AActor, public IAbilitySystemInterface
+class DAERUNE_API ADRCleanserSite : public AActor, public IAbilitySystemInterface, public IDRInteractable
 {
 	GENERATED_BODY()
 	
@@ -74,6 +75,9 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastShowInstalledPart(int32 SlotIndex);
 
+	// 상호작용 UI 표시/숨김 (IDRInteractable - 로컬에서 직접 호출)
+	virtual void SetInteractionUIVisible(bool bShow) override;
+
 	// Phase3 클린저 작동 사운드 (루프 - 시작/종료 시 한 번씩만 호출)
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastStartOperatingSound();
@@ -99,6 +103,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite|Phase2")
 	void InstallPart(class ADRCharacter* Character);
 
+	// 설치된 부품을 되돌린다 (Plan6 §5.12 - 스테이지2 방4 재시도용).
+	// 설치 카운트를 되돌리고 설치대 옆에 부품을 다시 스폰한다.
+	// 스테이지1은 이 함수를 호출하지 않는다.
+	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
+	class ADRCleanserPart* EjectInstalledPart(TSubclassOf<class ADRCleanserPart> PartClass, float EjectOffset = 150.f);
+
 	// ���� ��ġ�� ��ǰ ���� ��������
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite|Phase2")
 	int32 GetInstalledPartsCount() const { return InstalledPartsCount; }
@@ -116,6 +126,9 @@ public:
 	// ���� ��ġ (����Ʈ�� ������ �߾�)
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	FVector GetSpawnLocation() const;
+
+	UFUNCTION(BlueprintCallable, Category = "CleanserSite|Phase1")
+	TArray<FVector> GetPhase1EnemySpawnLocations() const;
 
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	FVector GetClosestSurfacePoint(const FVector& FromLocation) const;
@@ -144,6 +157,10 @@ public:
 
 	void UpdateMeshByState();
 
+	// 캐릭터의 현재 오버랩 + 부품 보유 상태를 재평가하여 상호작용 UI를 갱신
+	// (오버랩 도중 부품을 집어들거나 내려놓을 때 호출)
+	void RefreshOverlapStateFor(class ADRCharacter* Character);
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -160,6 +177,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cleanser Site")
 	FName CleanserID = NAME_None;
 
+	// World locations used by Phase1 normal enemy spawning. The legacy property name is kept to preserve placed map data.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CleanserSite|Phase1|Spawn", meta = (DisplayName = "Phase1 Enemy Spawn World Locations"))
+	TArray<FVector> Phase1EnemySpawnOffsets;
+
 	// ========== Components ==========
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
@@ -172,6 +193,11 @@ protected:
 	// Ŭ���� �� �޽�
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent> WaterMesh;
+
+	// 물 메시 Z 스케일 감소량 → 위치 보정 계수
+	// (스케일 축소 시 수면이 아래로 내려가 보이도록 메시 형태에 맞춰 조정)
+	UPROPERTY(EditDefaultsOnly, Category = "CleanserSite|Water")
+	float WaterMeshScaleToOffsetRatio = 9.0f;
 
 	// ��ǰ ��ġ �� �� �޽�
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mesh Assets")

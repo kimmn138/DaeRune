@@ -75,11 +75,12 @@ void UExecCalc_Damage::Execute_Implementation(const FGameplayEffectCustomExecuti
 	// 타겟의 AttributeSet 타입에 따라 올바른 IncomingDamage Attribute 사용
 	UAbilitySystemComponent* TargetASC = ExecutionParams.GetTargetAbilitySystemComponent();
 	FGameplayAttribute IncomingDamageAttribute;
-	
+
 	if (TargetASC)
 	{
 		// 클렌저 사이트 AttributeSet 체크
-		if (TargetASC->HasAttributeSetForAttribute(UDRCleanserSiteAttributeSet::GetIncomingDamageAttribute()))
+		const bool bTargetIsCleanserSite = TargetASC->HasAttributeSetForAttribute(UDRCleanserSiteAttributeSet::GetIncomingDamageAttribute());
+		if (bTargetIsCleanserSite)
 		{
 			IncomingDamageAttribute = UDRCleanserSiteAttributeSet::GetIncomingDamageAttribute();
 		}
@@ -88,7 +89,15 @@ void UExecCalc_Damage::Execute_Implementation(const FGameplayEffectCustomExecuti
 		{
 			IncomingDamageAttribute = UDRAttributeSet::GetIncomingDamageAttribute();
 		}
-		
+
+		// New Phase1 적 → 플레이어/적 대미지 0.7배 (클렌저 사이트 제외)
+		if (!bTargetIsCleanserSite
+			&& SourceASC
+			&& SourceASC->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Enemy_Phase1))
+		{
+			Damage *= 0.7f;
+		}
+
 		const FGameplayModifierEvaluatedData EvaluatedData(IncomingDamageAttribute, EGameplayModOp::Additive, Damage);
 		OutExecutionOutput.AddOutputModifier(EvaluatedData);
 	}

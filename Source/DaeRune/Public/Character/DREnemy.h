@@ -98,7 +98,7 @@ public:
 
 	// 사망 후 생존 시간
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
-	float LifeSpan = 3.f;
+	float LifeSpan = 2.f;
 
 	// 넉백 상태 설정/해제
 	UFUNCTION(BlueprintCallable, Category = "Combat")
@@ -118,7 +118,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Part System")
 	TObjectPtr<UStaticMeshComponent> PartMeshComponent;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part System")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_bCarriesPart, Category = "Part System")
 	bool bCarriesPart = false;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Part System")
@@ -131,12 +131,24 @@ public:
 	bool DropPart();
 
 	UFUNCTION(BlueprintPure, Category = "Part System")
-	bool HasPart() const { return bCarriesPart && PartMeshComponent && PartMeshComponent->IsVisible(); }
+	bool HasPart() const { return bCarriesPart && !bPartDropped; }
+
+	// 서버 권위 setter — Phase1이 런타임에 부품 운반자 지정 시 호출
+	UFUNCTION(BlueprintCallable, Category = "Part System")
+	void SetCarriesPart(bool bNewCarriesPart);
+
+	UFUNCTION()
+	void OnRep_bCarriesPart();
 
 	// 광폭화 시스템
-	
+
 	UPROPERTY(BlueprintReadWrite, Category = "Enemy|Phase")
 	bool bIsPhase3Enemy = false;
+
+	// 페이즈3 웨이브 외곽선 레벨 (0 = 외곽선 없음, 1~5 = 웨이브 레벨)
+	// 스폰 시 한 번만 세팅되며 살아있는 동안 변하지 않음
+	UFUNCTION(BlueprintCallable, Category = "Enemy|Phase")
+	void SetWaveOutlineLevel(uint8 NewLevel);
 
 	UPROPERTY(BlueprintReadOnly, Category = "Enemy|Combat")
 	bool bIsEnraged = false;
@@ -160,6 +172,12 @@ protected:
 	virtual void StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount) override;
 
 	virtual float GetMoveSpeed() override;
+
+	// 액터 회전이 ControlRotation 을 따라잡는 보간 속도 (Tick 의 RInterpTo).
+	// 기본값 10.0 은 기존 하드코딩 값과 동일하므로 기존 적의 동작은 변하지 않는다.
+	// 두더지 보스처럼 "느리게 도는" 연출이 필요한 적만 BP 에서 낮춘다. (Plan7 §5.2)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "0.1"))
+	float RotationInterpSpeed = 10.f;
 
 	// AI 비헤이비어 트리
 	UPROPERTY(EditAnywhere, Category = "AI")
@@ -258,10 +276,15 @@ private:
 
 	bool bPartDropped = false;
 
-	// 클라이언트 회전 보간용 (서버에서 복제)
-	UPROPERTY(ReplicatedUsing = OnRep_TargetRotation)
-	FRotator ReplicatedTargetRotation;
+protected:
+	// 외곽선 레벨 (초기 복제만 — 스폰 시 고정)
+	UPROPERTY(ReplicatedUsing = OnRep_WaveOutlineLevel)
+	uint8 WaveOutlineLevel = 0;
 
 	UFUNCTION()
-	void OnRep_TargetRotation();
+	void OnRep_WaveOutlineLevel();
+
+	// 메시에 Custom Depth Stencil 값을 적용 (포스트프로세스 외곽선용)
+	// 서브클래스에서 추가 메시(예: Armadillo BallFormMesh)에도 적용하려면 오버라이드
+	virtual void ApplyWaveOutline();
 };

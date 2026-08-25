@@ -21,23 +21,33 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// ¿ÜºÎ¿¡¼­ È£ÃâÇÒ ÇÔ¼ö
+	// ï¿½ÜºÎ¿ï¿½ï¿½ï¿½ È£ï¿½ï¿½ï¿½ï¿½ ï¿½Ô¼ï¿½
 
-	// ±×·ì¿¡ Àû µî·Ï
+	// ï¿½×·ì¿¡ ï¿½ï¿½ ï¿½ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "SpawnGroup")
 	void RegisterEnemy(ADREnemy* Enemy);
 
-	// ±×·ìÀÇ ¸ğµç Àû È°¼ºÈ­
+	// ï¿½×·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ È°ï¿½ï¿½È­
 	UFUNCTION(BlueprintCallable, Category = "SpawnGroup")
 	void ActivateAllEnemies();
 
-	// ³²Àº Àû ¼ö ¹İÈ¯
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½È¯
 	UFUNCTION(BlueprintPure, Category = "SpawnGroup")
 	int32 GetAliveEnemyCount() const { return AliveEnemyCount; }
 
-	// Àü¸ê ¿©ºÎ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION(BlueprintPure, Category = "SpawnGroup")
 	bool AreAllEnemiesDead() const { return bAllEnemiesDead; }
+
+	// ë“±ë¡ëœ ì‚´ì•„ìˆëŠ” ì  ëª©ë¡ì„ ë°˜í™˜ (Phase1ì˜ ë¶€í’ˆ ìš´ë°˜ì í›„ë³´ ì¶”ë¦¬ê¸°ì— ì‚¬ìš©)
+	UFUNCTION(BlueprintCallable, Category = "SpawnGroup")
+	TArray<ADREnemy*> GetRegisteredEnemies() const;
+
+	// ë¶€í’ˆ ìš´ë°˜ì ìºì‹œ (ì„œë²„ì—ì„œë§Œ ì˜ë¯¸ ìˆìŒ; ë””ë²„ê¹…/UI ì—°ë™ìš©)
+	UFUNCTION(BlueprintPure, Category = "SpawnGroup")
+	ADREnemy* GetPartCarrierEnemy() const { return PartCarrierEnemy.Get(); }
+
+	void SetPartCarrierEnemy(ADREnemy* Carrier) { PartCarrierEnemy = Carrier; }
 
 	// Delegates
 	UPROPERTY(BlueprintAssignable, Category = "SpawnGroup")
@@ -49,17 +59,20 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
-	// ÄÄÆ÷³ÍÆ®
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USceneComponent> RootSceneComponent;
 
-	// ¹Ì¸® ¹èÄ¡µÈ Àû ÂüÁ¶
+	// ï¿½Ì¸ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SpawnGroup|PrePlaced")
 	TArray<TSoftObjectPtr<ADREnemy>> PrePlacedEnemies;
 
 private:
 	UPROPERTY()
 	TArray<TWeakObjectPtr<ADREnemy>> RegisteredEnemies;
+
+	// ì„œë²„ ê¶Œìœ„: Phase1ì´ ì„ ì •í•œ ë¶€í’ˆ ìš´ë°˜ì
+	TWeakObjectPtr<ADREnemy> PartCarrierEnemy;
 
 	UPROPERTY(Replicated)
 	int32 AliveEnemyCount = 0;

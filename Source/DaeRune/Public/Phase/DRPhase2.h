@@ -11,11 +11,14 @@ class ADRCleanserPart;
 class ADREnemy;
 
 /**
- * Phase 2: ºÎÇ° ¼öÁý ¹× ¼³Ä¡
- * - ¸ÊÀÇ 4°÷¿¡¼­ ºÎÇ°À» µé°í µµ¸ÁÄ¡´Â Àû ½ºÆù
- * - ÇÃ·¹ÀÌ¾î°¡ ºÎÇ°À» ¼öÁýÇÏ¿© Å¬·»Àú »çÀÌÆ®¿¡ ¼³Ä¡
- * - °¢ Å¬·»Àú »çÀÌÆ®¿¡ 2°³¾¿ ÃÑ 4°³ ¼³Ä¡ ½Ã ¿Ï·á
+ * Phase 2: ï¿½ï¿½Ç° ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½Ä¡
+ * - ï¿½ï¿½ï¿½ï¿½ 4ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+ * - ï¿½Ã·ï¿½ï¿½Ì¾î°¡ ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï¿ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½Ä¡
+ * - ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ 2ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ 4ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ ï¿½Ï·ï¿½
  */
+// [DEPRECATED] íŽ˜ì´ì¦ˆ êµ¬ì¡° ê°œíŽ¸(2026-06)ìœ¼ë¡œ ë³¸ í´ëž˜ìŠ¤ì˜ ì±…ìž„ì€ UDRPhase1ì— í†µí•©ë˜ì—ˆìŠµë‹ˆë‹¤.
+// BP_DRStageGameMode::PhaseClasses ë°°ì—´ì—ì„œ ë³¸ í´ëž˜ìŠ¤ ì°¸ì¡°ë¥¼ ì œê±°í•œ ë’¤, ë‹¤ìŒ ì •ë¦¬ PRì—ì„œ
+// ë³¸ .h/.cpp íŒŒì¼ì„ ì‚­ì œí•˜ì„¸ìš”. í´ëž˜ìŠ¤ ì´ë¦„ì„ ë³€ê²½í•˜ë©´ BP ì°¸ì¡°ê°€ ê¹¨ì§€ë¯€ë¡œ ì´ë¦„ì€ ìœ ì§€í•©ë‹ˆë‹¤.
 UCLASS(Blueprintable)
 class DAERUNE_API UDRPhase2 : public UDRPhaseBase
 {
@@ -26,46 +29,46 @@ public:
 	virtual void OnPhaseEnd() override;
 
 protected:
-	// ========== ½ºÆù ÇÔ¼ö ==========
+	// ========== ï¿½ï¿½ï¿½ï¿½ ï¿½Ô¼ï¿½ ==========
 
-	// ½ºÆù Æ÷ÀÎÆ® Ã£±â
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® Ã£ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Phase2")
 	void FindEnemySpawnPoints();
 
-	// ºÎÇ°À» µé°í µµ¸ÁÄ¡´Â Àû ½ºÆù
+	// ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Phase2")
 	void SpawnPartCarryingEnemies();
 
-	// Æ¯Á¤ À§Ä¡¿¡ Àû ½ºÆù
+	// Æ¯ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION(BlueprintCallable, Category = "Phase2")
 	ADREnemy* SpawnEnemyAtLocation(AActor* SpawnPoint);
 
-	// ========== ÀÌº¥Æ® Ã³¸® ==========
+	// ========== ï¿½Ìºï¿½Æ® Ã³ï¿½ï¿½ ==========
 
-	// ºÎÇ° ¼³Ä¡ ¿Ï·á ÀÌº¥Æ®
+	// ï¿½ï¿½Ç° ï¿½ï¿½Ä¡ ï¿½Ï·ï¿½ ï¿½Ìºï¿½Æ®
 	UFUNCTION()
 	void OnPartInstalled(ADRCleanserSite* Site);
 
-	// ÆäÀÌÁî ¿Ï·á Á¶°Ç Ã¼Å©
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã¼Å©
 	UFUNCTION(BlueprintCallable, Category = "Phase2")
 	void CheckPhaseCompletion();
 
-	// ========== ¼³Á¤ º¯¼ö ==========
+	// ========== ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ==========
 
-	// ºÎÇ°À» µé°í µµ¸ÁÄ¡´Â Àû Å¬·¡½º
+	// ï¿½ï¿½Ç°ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase2|Config")
 	TSubclassOf<ADREnemy> PartCarryingEnemyClass;
 
-	// ½ºÆù Æ÷ÀÎÆ®¸¦ Ã£À» ÅÂ±× ÀÌ¸§
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ Ã£ï¿½ï¿½ ï¿½Â±ï¿½ ï¿½Ì¸ï¿½
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase2|Config")
 	FName SpawnPointTag = "Phase2SpawnPoint";
 
-	// Àû ½ºÆù À§Ä¡ ¾×ÅÍµé (4°³)
+	// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½Íµï¿½ (4ï¿½ï¿½)
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Phase2|Config")
 	TArray<TObjectPtr<AActor>> EnemySpawnPoints;
 
 private:
-	// ¼³Ä¡ ¿Ï·áµÈ Å¬·»Àú »çÀÌÆ® ÃßÀû
+	// ï¿½ï¿½Ä¡ ï¿½Ï·ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY()
 	TSet<TObjectPtr<ADRCleanserSite>> CompletedSites;
 };

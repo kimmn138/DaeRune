@@ -12,7 +12,7 @@ class USphereComponent;
 class UProjectileMovementComponent;
 
 /**
- * ±âº» ¹ß»çÃ¼ Å¬·¡½º
+ * ï¿½âº» ï¿½ß»ï¿½Ã¼ Å¬ï¿½ï¿½ï¿½ï¿½
  */
 UCLASS()
 class DAERUNE_API ADRProjectile : public AActor
@@ -22,54 +22,54 @@ class DAERUNE_API ADRProjectile : public AActor
 public:
 	ADRProjectile();
 
-	// ¹ß»çÃ¼ ¹°¸® ÀÌµ¿ ÄÄÆ÷³ÍÆ®
+	// ï¿½ß»ï¿½Ã¼ ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UProjectileMovementComponent> ProjectileMovement;
 
-	// µ¥¹ÌÁö ¹× ÀÌÆåÆ® ÆÄ¶ó¹ÌÅÍ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½Ä¶ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(BlueprintReadWrite, meta = (ExposeOnSpawn = true))
 	FDamageEffectParams DamageEffectParams;
 
-	// À¯µµ ¹Ì»çÀÏ¿ë Å¸°Ù ÄÄÆ÷³ÍÆ®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ì»ï¿½ï¿½Ï¿ï¿½ Å¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY()
 	TObjectPtr<USceneComponent> HomingTargetSceneComponent;
 
 protected:
 	virtual void BeginPlay() override;
-	// Ãæµ¹/Å¸°Ý ½Ã ÀÌÆåÆ® Àç»ý ¹× Á¤¸®
+	// ï¿½æµ¹/Å¸ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	virtual void OnHit();
-	// ¾×ÅÍ ÆÄ±« ½Ã »ç¿îµå Á¤¸®
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½Ä±ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	virtual void Destroyed() override;
 
-	// Ãæµ¹ °¨Áö ¹× µ¥¹ÌÁö Àû¿ë
+	// ï¿½æµ¹ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UFUNCTION()
 	virtual void OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
-	// Ãæµ¹ °¨Áö¿ë ±¸Ã¼ ÄÄÆ÷³ÍÆ®
+	// ï¿½æµ¹ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã¼ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TObjectPtr<USphereComponent> Sphere;
 
+	// Å¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã·ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
+	bool bHit = false;
+
 private:
-	// ÀÚµ¿ ¼Ò¸ê ½Ã°£
+	// ï¿½Úµï¿½ ï¿½Ò¸ï¿½ ï¿½Ã°ï¿½
 	UPROPERTY(EditDefaultsOnly)
 	float LifeSpan = 15.f;
 
-	// Å¸°Ý »óÅÂ ÇÃ·¡±×
-	bool bHit = false;
-
-	// Ãæµ¹ ½Ã Àç»ýÇÒ ³ªÀÌ¾Æ°¡¶ó ÀÌÆåÆ®
+	// ï¿½æµ¹ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ì¾Æ°ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY(EditAnywhere)
 	TObjectPtr<UNiagaraSystem> ImpactEffect;
 
-	// Ãæµ¹ ½Ã Àç»ýÇÒ »ç¿îµå
+	// ï¿½æµ¹ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditAnywhere)
 	TObjectPtr<USoundBase> ImpactSound;
 
-	// ºñÇà Áß ¹Ýº¹ Àç»ýÇÒ »ç¿îµå
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ýºï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(EditAnywhere)
 	TObjectPtr<USoundBase> LoopingSound;
 
-	// ¹Ýº¹ »ç¿îµå ÄÄÆ÷³ÍÆ®
+	// ï¿½Ýºï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 	UPROPERTY()
 	TObjectPtr<UAudioComponent> LoopingSoundComponent;
 };

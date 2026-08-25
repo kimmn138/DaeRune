@@ -3,76 +3,94 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "Phase/DRPhaseBase.h"
 #include "DRPhase1.generated.h"
 
 class ADRCleanserSite;
 class ADRDoorManager;
+class ADREnemy;
+class ADREnemySpawnGroup;
 
 /**
- * Phase 1: Å¬·»Àú È®º¸
- * - 3°³ Å¬·»Àú ÁöÁ¡ Áß 2°÷ ·£´ı ¼±ÅÃ
- * - °¢ ÁöÁ¡¿¡ °­·ÂÇÑ ¸ó½ºÅÍ 1¸¶¸® + ÀÏ¹İ ¸ó½ºÅÍ 4¸¶¸® ½ºÆù
- * - ¸ğµç Àû Ã³Ä¡½Ã ¿Ï·á
+ * New Phase1: í´ë Œì € í™•ë³´ + ë¶€í’ˆ íšŒìˆ˜ í†µí•©
+ *  - ë§µì— ë°°ì¹˜ëœ í´ë Œì € ì‚¬ì´íŠ¸ 1ê°œë¥¼ í™œì„±í™”
+ *  - ì‚¬ì´íŠ¸ ì£¼ë³€ì— EnemiesToSpawn ë°°ì—´ë¡œ ëª…ì‹œëœ ì ë“¤ì„ ë°°ì—´ ê¸¸ì´ë§Œí¼ ìŠ¤í°
+ *  - í†µë¡œ(DREnemySpawnGroup)ì— ë¯¸ë¦¬ ë°°ì¹˜ëœ ì ë“¤ ì¤‘ ê·¸ë£¹ë³„ë¡œ ì•„ë¥´ë§ˆë”œë¡œ ì œì™¸ í›„ë³´ 1ë§ˆë¦¬ë¥¼ ë¬´ì‘ìœ„ë¡œ ë¶€í’ˆ ìš´ë°˜ìë¡œ ì§€ì •
+ *  - ëª¨ë“  Phase1 ì ì—ê²Œ State.Enemy.Phase1 íƒœê·¸ë¥¼ ë¶€ì—¬í•˜ì—¬ ExecCalc_Damageì—ì„œ 0.7ë°° ê³±
+ *  - í´ë Œì € ì‚¬ì´íŠ¸ì— ë¶€í’ˆ 2ê°œ(RequiredPartsCount, ì‚¬ì´íŠ¸ BP ê¸°ë³¸ê°’) ì„¤ì¹˜ ì‹œ í˜ì´ì¦ˆ ì™„ë£Œ
  */
 UCLASS(Blueprintable)
 class DAERUNE_API UDRPhase1 : public UDRPhaseBase
 {
 	GENERATED_BODY()
-	
+
 public:
+	// í˜ì´ì¦ˆ ì™„ë£Œì— í•„ìš”í•œ ì„¤ì¹˜ ë¶€í’ˆ ìˆ˜
+	static constexpr int32 RequiredPartsToComplete = 2;
+
 	virtual void OnPhaseStart() override;
 	virtual void OnPhaseEnd() override;
 	virtual void OnEnemyDeath(AActor* DeadEnemy) override;
+	virtual bool IsCompleted() const override;
 
 protected:
-	// ========== ½ºÆù ÇÔ¼ö ==========
+	// ========== ì‚¬ì´íŠ¸ 1ê°œ ê°•ì œ ==========
+	void KeepSingleCleanserSite();
 
-	// Å¬·»Àú »çÀÌÆ® ¼±ÅÃ ¹× Àû ½ºÆù
-	UFUNCTION(BlueprintCallable, Category = "Phase1")
-	void SpawnEnemiesAtCleanserSites();
-
-	// Æ¯Á¤ Å¬·»Àú »çÀÌÆ®¿¡ Àû ±×·ì ½ºÆù
-	UFUNCTION(BlueprintCallable, Category = "Phase1")
-	void SpawnEnemyGroupAtCleanserSite(ADRCleanserSite* CleanserSite);
-
-	// Àû ½ºÆù ÇïÆÛ
-	UFUNCTION(BlueprintCallable, Category = "Phase1")
+	// ========== ì‚¬ì´íŠ¸ ì£¼ë³€ ìŠ¤í° ==========
+	void SpawnEnemiesAroundCleanserSite(ADRCleanserSite* Site);
 	AActor* SpawnEnemy(TSubclassOf<AActor> EnemyClass, const FVector& Location);
 
-	// ========== ¼³Á¤ º¯¼ö ==========
+	// ========== í†µë¡œ ìŠ¤í° ê·¸ë£¹ / ë¶€í’ˆ ìš´ë°˜ì ==========
+	void CollectSpawnGroups();
+	void AssignPartCarriersForAllGroups();
+	ADREnemy* PickPartCarrierFromGroup(ADREnemySpawnGroup* Group) const;
+	void ConfigurePartCarrier(ADREnemy* Carrier) const;
 
-	// °­·ÂÇÑ ¸ó½ºÅÍ Å¬·¡½º
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Config")
-	TSubclassOf<AActor> EliteEnemyClass;
+	// ========== Phase1 íƒœê·¸ ë¶€ì—¬ ==========
+	void ApplyPhase1Tag(ADREnemy* Enemy) const;
 
-	// ÀÏ¹İ ¸ó½ºÅÍ Å¬·¡½º
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Config")
-	TSubclassOf<AActor> NormalEnemyClass;
+	// ========== ë¶€í’ˆ ì„¤ì¹˜ ì´ë²¤íŠ¸ ==========
+	UFUNCTION()
+	void OnPartInstalled(ADRCleanserSite* Site);
 
-	// ÀÏ¹İ ¸ó½ºÅÍ ½ºÆù ¼ö
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Config")
-	int32 NormalEnemyCount = 4;
+	// ========== ë„ì–´ ë§¤ë‹ˆì € ==========
+	ADRDoorManager* GetDoorManager();
 
-	// ¸ó½ºÅÍ ½ºÆù ¹İ°æ (Å¬·»Àú ÁÖº¯)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Config")
-	float SpawnRadius = 200.0f;
+protected:
+	// ========== ì‚¬ì´íŠ¸ ì£¼ë³€ ìŠ¤í° êµ¬ì„± ==========
+	// í´ë Œì € ì‚¬ì´íŠ¸ì˜ Phase1EnemySpawnOffsets[i] ìœ„ì¹˜ì— EnemiesToSpawn[i] í´ë˜ìŠ¤ì˜ ì ì„ 1ë§ˆë¦¬ ìŠ¤í°
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Spawn")
+	TArray<TSubclassOf<ADREnemy>> EnemiesToSpawn;
 
-	// ¿¤¸®Æ® ¸ó½ºÅÍ ¿ÀÇÁ¼Â (Å¬·»Àú Áß½É¿¡¼­ ¶³¾î¶ß¸± °Å¸®)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Config")
-	float EliteSpawnOffset = 100.0f;
+	// ========== ë¶€í’ˆ ìš´ë°˜ì ì„ ì • ==========
+	// ë¶€í’ˆ íœ´ëŒ€ ëŒ€ìƒì—ì„œ ì œì™¸í•  ì  í´ë˜ìŠ¤(ì•„ë¥´ë§ˆë”œë¡œ)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Parts")
+	TSubclassOf<ADREnemy> ArmadilloEnemyClass;
+
+	// ë¶€í’ˆ ìš´ë°˜ìì—ê²Œ ì„¸íŒ…í•  ë¶€í’ˆ ì•¡í„° í´ë˜ìŠ¤ (DREnemy::PartActorClassì™€ ë™ì¼)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Parts")
+	TSubclassOf<AActor> PartActorClass;
+
+	// ========== ëŒ€ë¯¸ì§€ ê°ì†Œ íƒœê·¸ ==========
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase1|Combat")
+	FGameplayTag Phase1EnemyTag;
 
 private:
-	// ÀÌ¹ø Phase¿¡¼­ ¼±ÅÃµÈ Å¬·»Àú »çÀÌÆ® 2°³
+	// í™œì„±í™”ëœ ë‹¨ì¼ í´ë Œì € ì‚¬ì´íŠ¸ ìºì‹œ
 	UPROPERTY()
-	TArray<TObjectPtr<ADRCleanserSite>> SelectedCleanserSites;
+	TWeakObjectPtr<ADRCleanserSite> ActiveSite;
 
-	// ÃÑ ½ºÆùµÈ Àû ¼ö
-	int32 TotalEnemyCount = 0;
+	// ì›”ë“œì—ì„œ ìë™ ìˆ˜ì§‘í•œ í†µë¡œ ìŠ¤í° ê·¸ë£¹
+	UPROPERTY()
+	TArray<TObjectPtr<ADREnemySpawnGroup>> SpawnGroups;
 
-	// Ä³½ÌµÈ DoorManager ÂüÁ¶
+	// ê·¸ë£¹ë³„ ë¶€í’ˆ ìš´ë°˜ì
+	UPROPERTY()
+	TMap<TObjectPtr<ADREnemySpawnGroup>, TWeakObjectPtr<ADREnemy>> PartCarrierByGroup;
+
+	// ìºì‹±ëœ DoorManager ì°¸ì¡°
 	UPROPERTY()
 	TObjectPtr<ADRDoorManager> CachedDoorManager;
-
-	ADRDoorManager* GetDoorManager();
 };

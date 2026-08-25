@@ -12,7 +12,6 @@ UMultiplayerSessionsSubsystem::UMultiplayerSessionsSubsystem():
 	FindSessionsCompleteDelegate(FOnFindSessionsCompleteDelegate::CreateUObject(this, &ThisClass::OnFindSessionsComplete)),
 	JoinSessionCompleteDelegate(FOnJoinSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnJoinSessionComplete)),
 	DestroySessionCompleteDelegate(FOnDestroySessionCompleteDelegate::CreateUObject(this, &ThisClass::OnDestroySessionComplete)),
-	StartSessionCompleteDelegate(FOnStartSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnStartSessionComplete)),
 	UpdateSessionCompleteDelegate(FOnUpdateSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnUpdateSessionComplete)),
 	SessionUserInviteAcceptedDelegate(FOnSessionUserInviteAcceptedDelegate::CreateUObject(this, &ThisClass::OnSessionUserInviteAccepted))
 {
@@ -50,6 +49,13 @@ void UMultiplayerSessionsSubsystem::Deinitialize()
 		GEngine->OnNetworkFailure().RemoveAll(this);
 	}
 
+	// Initialize에서 등록한 초대 수락 델리게이트 해제
+	if (SessionInterface.IsValid() && SessionUserInviteAcceptedDelegateHandle.IsValid())
+	{
+		SessionInterface->ClearOnSessionUserInviteAcceptedDelegate_Handle(SessionUserInviteAcceptedDelegateHandle);
+		SessionUserInviteAcceptedDelegateHandle.Reset();
+	}
+
 	SessionInterface = nullptr;
 	VoiceInterface = nullptr;
 }
@@ -76,6 +82,7 @@ void UMultiplayerSessionsSubsystem::CreateSessionWithRoomCode(int32 NumPublicCon
 	bIsCreatingWithRoomCode = true;
 	PendingRoomCode = GenerateRoomCode();
 	LastNumPublicConnections = NumPublicConnections;
+	RoomCodeRetryCount = 0;
 
 	ValidateAndCreateSessionWithCode();
 }
@@ -85,6 +92,15 @@ void UMultiplayerSessionsSubsystem::FindSessionByRoomCode(const FString& RoomCod
 	if (!SessionInterface.IsValid() || RoomCode.IsEmpty())
 	{
 		MultiplayerOnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::UnknownError);
+		return;
+	}
+
+	// 기존 세션이 남아있으면 먼저 정리 후 같은 룸코드로 재시도 (AlreadyInSession 실패 방지)
+	if (SessionInterface->GetNamedSession(NAME_GameSession) != nullptr)
+	{
+		bFindSessionOnDestroy = true;
+		PendingFindRoomCode = RoomCode;
+		DestroySession();
 		return;
 	}
 
@@ -101,8 +117,9 @@ void UMultiplayerSessionsSubsystem::FindSessionByRoomCode(const FString& RoomCod
 	LastSessionSearch->QuerySettings.Set(FName("RoomCode"), RoomCode, EOnlineComparisonOp::Equals);
 	LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
 
+	// 레벨 전환 타이밍에는 로컬 플레이어가 없을 수 있음
 	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
-	if (!SessionInterface->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), LastSessionSearch.ToSharedRef()))
+	if (!LocalPlayer || !SessionInterface->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), LastSessionSearch.ToSharedRef()))
 	{
 		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegateHandle);
 		SearchingRoomCode.Empty();
@@ -118,10 +135,20 @@ void UMultiplayerSessionsSubsystem::JoinSession(const FOnlineSessionSearchResult
 		return;
 	}
 
+	// 기존 세션이 남아있으면 먼저 정리 후 같은 결과로 재시도 (AlreadyInSession 실패 방지)
+	if (SessionInterface->GetNamedSession(NAME_GameSession) != nullptr)
+	{
+		bJoinSessionOnDestroy = true;
+		PendingJoinResult = MakeShared<FOnlineSessionSearchResult>(SessionResult);
+		DestroySession();
+		return;
+	}
+
 	JoinSessionCompleteDelegateHandle = SessionInterface->AddOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteDelegate);
 
+	// 레벨 전환 타이밍에는 로컬 플레이어가 없을 수 있음
 	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
-	if (!SessionInterface->JoinSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, SessionResult))
+	if (!LocalPlayer || !SessionInterface->JoinSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, SessionResult))
 	{
 		SessionInterface->ClearOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteDelegateHandle);
 
@@ -146,10 +173,6 @@ void UMultiplayerSessionsSubsystem::DestroySession()
 	}
 }
 
-void UMultiplayerSessionsSubsystem::StartSession()
-{
-}
-
 void UMultiplayerSessionsSubsystem::UpdateSessionJoinability(bool bAllowJoin)
 {
 	if (!SessionInterface.IsValid()) return;
@@ -172,8 +195,6 @@ void UMultiplayerSessionsSubsystem::UpdateSessionJoinability(bool bAllowJoin)
 
 void UMultiplayerSessionsSubsystem::LeaveServer()
 {
-	if(!SessionInterface.IsValid()) return;
-
 	UWorld* World = GetWorld();
 	if(!World) return;
 
@@ -182,25 +203,31 @@ void UMultiplayerSessionsSubsystem::LeaveServer()
 
 	StopVoiceChat();
 
-	if (PC->HasAuthority())
+	// 정리할 세션이 없으면 바로 메인메뉴로 이동
+	if (!SessionInterface.IsValid() || SessionInterface->GetNamedSession(NAME_GameSession) == nullptr)
 	{
-		if (DestroySessionCompleteDelegateHandle.IsValid())
-		{
-			SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegateHandle);
-			DestroySessionCompleteDelegateHandle.Reset();
-		}
-
-		DestroySessionCompleteDelegateHandle = SessionInterface->AddOnDestroySessionCompleteDelegate_Handle(FOnDestroySessionCompleteDelegate::CreateUObject(this, &UMultiplayerSessionsSubsystem::OnDestroySessionComplete));
-		
-		SessionInterface->DestroySession(NAME_GameSession);
-
 		PC->ClientTravel(TEXT("/Game/Maps/MainMenu"), TRAVEL_Absolute);
+		return;
 	}
-	else
-	{
-		PC->ClientTravel(TEXT("/Game/Maps/MainMenu"), TRAVEL_Absolute);
 
-		SessionInterface->DestroySession(NAME_GameSession);
+	// 세션 파괴 완료 콜백에서 메인메뉴로 이동 (호스트/클라 공통)
+	// 즉시 Travel하면 파괴 콜백이 떠나는 월드 기준으로 발화할 수 있어 콜백 기반으로 순서 표준화
+	if (DestroySessionCompleteDelegateHandle.IsValid())
+	{
+		SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegateHandle);
+		DestroySessionCompleteDelegateHandle.Reset();
+	}
+
+	bTravelToMainMenuOnDestroy = true;
+	DestroySessionCompleteDelegateHandle = SessionInterface->AddOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegate);
+
+	if (!SessionInterface->DestroySession(NAME_GameSession))
+	{
+		// 파괴 시작 자체가 실패하면 콜백이 오지 않으므로 즉시 이동
+		SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegateHandle);
+		DestroySessionCompleteDelegateHandle.Reset();
+		bTravelToMainMenuOnDestroy = false;
+		PC->ClientTravel(TEXT("/Game/Maps/MainMenu"), TRAVEL_Absolute);
 	}
 }
 
@@ -257,13 +284,22 @@ void UMultiplayerSessionsSubsystem::OnFindSessionsComplete(bool bWasSuccessful)
 
 		if (LastSessionSearch.IsValid() && LastSessionSearch->SearchResults.Num() > 0)
 		{
-			// 占싱뱄옙 占쏙옙占쏙옙占싹댐옙 占쏙옙 占쌘듸옙占?占쏙옙占쏙옙 占쏙옙占쏙옙
+			// 중복 룸코드 발견 - 새 코드를 생성해 재검사 (상한 초과 시 실패 브로드캐스트로 무한 루프 탈출)
+			if (++RoomCodeRetryCount >= MaxRoomCodeRetries)
+			{
+				RoomCodeRetryCount = 0;
+				CurrentRoomCode.Empty();
+				MultiplayerOnCreateSessionComplete.Broadcast(false);
+				return;
+			}
+
 			PendingRoomCode = GenerateRoomCode();
 			ValidateAndCreateSessionWithCode();
 		}
 		else
 		{
-			// 占쌩븝옙 占쏙옙占쏙옙占쏙옙 占쏙옙 占쌘듸옙占?占쏙옙占쏙옙 占쏙옙占쏙옙
+			// 중복 없음 - 이 룸코드로 세션 생성
+			RoomCodeRetryCount = 0;
 			CurrentRoomCode = PendingRoomCode;
 			CreateSessionInternal(LastNumPublicConnections);
 		}
@@ -330,17 +366,55 @@ void UMultiplayerSessionsSubsystem::OnDestroySessionComplete(FName SessionName, 
 		SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegateHandle);
 	}
 
-	if (bWasSuccessful && bCreateSessionOnDestroy)
+	if (bWasSuccessful)
 	{
+		if (bCreateSessionOnDestroy)
+		{
+			bCreateSessionOnDestroy = false;
+			CreateSessionWithRoomCode(LastNumPublicConnections, "RoomCodeOnly");
+		}
+		else if (bFindSessionOnDestroy)
+		{
+			bFindSessionOnDestroy = false;
+			const FString RoomCode = PendingFindRoomCode;
+			PendingFindRoomCode.Empty();
+			FindSessionByRoomCode(RoomCode);
+		}
+		else if (bJoinSessionOnDestroy)
+		{
+			bJoinSessionOnDestroy = false;
+			if (PendingJoinResult.IsValid())
+			{
+				const FOnlineSessionSearchResult Result = *PendingJoinResult;
+				PendingJoinResult.Reset();
+				JoinSession(Result);
+			}
+		}
+	}
+	else
+	{
+		// Destroy 실패 시 보류 상태 정리하여 데드락 방지
 		bCreateSessionOnDestroy = false;
-		CreateSessionWithRoomCode(LastNumPublicConnections, "RoomCodeOnly");
+		bFindSessionOnDestroy = false;
+		bJoinSessionOnDestroy = false;
+		PendingFindRoomCode.Empty();
+		PendingJoinResult.Reset();
 	}
 
 	MultiplayerOnDestroySessionComplete.Broadcast(bWasSuccessful);
-}
 
-void UMultiplayerSessionsSubsystem::OnStartSessionComplete(FName SessionName, bool bWasSuccessful)
-{
+	// LeaveServer 경로: 세션 정리가 끝난 뒤 메인메뉴로 이동 (성공/실패 무관 - 어차피 떠나는 중)
+	if (bTravelToMainMenuOnDestroy)
+	{
+		bTravelToMainMenuOnDestroy = false;
+		if (UWorld* World = GetWorld())
+		{
+			if (APlayerController* PC = World->GetFirstPlayerController())
+			{
+				PC->ClientTravel(TEXT("/Game/Maps/MainMenu"), TRAVEL_Absolute);
+			}
+		}
+	}
 }
 
 void UMultiplayerSessionsSubsystem::OnUpdateSessionComplete(FName SessionName, bool bWasSuccessful)
@@ -368,18 +442,13 @@ if (!bWasSuccessful) return;
 
 void UMultiplayerSessionsSubsystem::HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver, ENetworkFailure::Type FailureType, const FString& ErrorString)
 {
-	// 占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙占?占쏙옙占싱쏙옙 채占시듸옙 占쏙옙占쏙옙
+	// 네트워크 실패 시 보이스 채팅 정리
 	StopVoiceChat();
 
-	SessionInterface->DestroySession(NAME_GameSession);
-
-	if (FailureType == ENetworkFailure::Type::ConnectionLost || FailureType == ENetworkFailure::Type::FailureReceived)
+	// OnlineSubsystem이 없으면 SessionInterface가 설정되지 않은 채로 이 델리게이트가 발화할 수 있음
+	if (SessionInterface.IsValid())
 	{
-		if (World && World->GetFirstPlayerController())
-		{
-			// NOTE: crash 占쌩삼옙占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 Travel 占쌍쇽옙처占쏙옙. (占썩본 占쏙옙占쏙옙占쏙옙 占싱듸옙占싹니깍옙 占쌓놂옙 占쏙옙占쏙옙占쏙옙)
-			// World->GetFirstPlayerController()->ClientTravel(TEXT("/Game/VoiceChat/MainMenu"), TRAVEL_Absolute);
-		}
+		SessionInterface->DestroySession(NAME_GameSession);
 	}
 }
 
@@ -415,8 +484,9 @@ void UMultiplayerSessionsSubsystem::ValidateAndCreateSessionWithCode()
 	LastSessionSearch->QuerySettings.Set(FName("RoomCode"), PendingRoomCode, EOnlineComparisonOp::Equals);
 	LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
 
+	// 레벨 전환 타이밍에는 로컬 플레이어가 없을 수 있음
 	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
-	if (!SessionInterface->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), LastSessionSearch.ToSharedRef()))
+	if (!LocalPlayer || !SessionInterface->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), LastSessionSearch.ToSharedRef()))
 	{
 		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegateHandle);
 		bIsCreatingWithRoomCode = false;
@@ -446,8 +516,9 @@ void UMultiplayerSessionsSubsystem::CreateSessionInternal(int32 NumPublicConnect
 	// 占쏙옙 占쌘드를 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 占쌩곤옙
 	LastSessionSettings->Set(FName("RoomCode"), CurrentRoomCode, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
+	// 레벨 전환 타이밍에는 로컬 플레이어가 없을 수 있음
 	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
-	if (!SessionInterface->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, *LastSessionSettings))
+	if (!LocalPlayer || !SessionInterface->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, *LastSessionSettings))
 	{
 		SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegateHandle);
 		CurrentRoomCode.Empty();

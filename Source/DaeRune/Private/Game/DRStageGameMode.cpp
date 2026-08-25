@@ -11,6 +11,9 @@
 #include "Player/DRPlayerState.h"
 #include "Character/DRCharacter.h"
 #include "Game/DRGameInstance.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
+#include "AbilitySystem/Data/CharacterClassInfo.h"
+#include "DaeRune/DRLogChannels.h"
 
 ADRStageGameMode::ADRStageGameMode()
 {
@@ -24,7 +27,7 @@ UClass* ADRStageGameMode::GetDefaultPawnClassForController_Implementation(AContr
 	if (APlayerController* PC = Cast<APlayerController>(InController))
 	{
 		// GameInstance?먯꽌 ??λ맂 ?좏깮 ?뺣낫 蹂듭썝 (留??꾪솚 諛⑹떇??愿怨꾩뾾???뺤떎??蹂댁〈??
-		EPlayerCharacterClass SelectedClass = EPlayerCharacterClass::GardenRobot;
+		EPlayerCharacterClass SelectedClass = EPlayerCharacterClass::Gardener;
 
 		if (ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
 		{
@@ -39,9 +42,9 @@ UClass* ADRStageGameMode::GetDefaultPawnClassForController_Implementation(AContr
 			}
 		}
 
-		if (PlayerCharacterClassInfo)
+		if (UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this))
 		{
-			TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(SelectedClass);
+			TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(SelectedClass);
 			if (BPClassPtr && *BPClassPtr)
 			{
 				return *BPClassPtr;
@@ -196,10 +199,43 @@ void ADRStageGameMode::NotifyAllPlayersGameEnd(bool bIsGameClear)
 	if (!HasAuthority()) return;
 
 	// ?⑥씪 ?쒗쉶濡?UI ?쒖떆 + ?ㅻ뵒???뺣━ ?섑뻾
+	// 완료한 페이즈 수: 클리어면 전체, 아니면 진행 중이던 페이즈 이전까지 (표시용 — 재화로 환산하지 않는다)
+	const int32 TotalPhases = PhaseClasses.Num();
+	const int32 ClearedPhaseCount = bIsGameClear
+		? TotalPhases
+		: (CachedGameState ? FMath::Max(0, CachedGameState->GetCurrentPhaseIndex()) : 0);
+
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
 		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
 		{
+			// 재화 보상 통지를 결과 UI 표시보다 먼저 보낸다 (결과창이 반영된 지갑을 읽도록)
+			FDRStageRewardReport Report;
+			Report.StageId = StageId;
+			Report.bGameClear = bIsGameClear;
+			Report.ClearedPhaseCount = ClearedPhaseCount;
+
+			if (const ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
+			{
+				Report.PlayedClass = PS->GetSelectedPlayerClass();
+				Report.KillCount = PS->GetStageKillCount();
+			}
+
+			// 업적/클리어 조건은 클리어를 전제로 한다 (Plan2.md 12-2)
+			if (bIsGameClear)
+			{
+				Report.AchievementIds = GlobalPendingAchievements;
+				if (const TArray<FName>* PlayerAchievements = PendingAchievements.Find(PC))
+				{
+					for (const FName& Id : *PlayerAchievements)
+					{
+						Report.AchievementIds.AddUnique(Id);
+					}
+				}
+			}
+
+			PC->Client_GrantStageReward(Report);
+
 			// UI ?쒖떆
 			if (bIsGameClear)
 			{
@@ -216,12 +252,33 @@ void ADRStageGameMode::NotifyAllPlayersGameEnd(bool bIsGameClear)
 	}
 }
 
+void ADRStageGameMode::NotifyPhasePlayerDied(APlayerState* DeadPlayerState)
+{
+	if (CurrentPhase)
+	{
+		CurrentPhase->NotifyPlayerDied(DeadPlayerState);
+	}
+}
+
+void ADRStageGameMode::NotifyPhasePlayerLeft(APlayerState* LeftPlayerState)
+{
+	if (CurrentPhase)
+	{
+		CurrentPhase->NotifyPlayerLeft(LeftPlayerState);
+	}
+}
+
 void ADRStageGameMode::InitializePhaseSystem()
 {
 	if (!HasAuthority()) return;
 
-	// 클占쏙옙占쏙옙 占쏙옙占쏙옙트 占쏙옙효占쏙옙 占쏙옙占쏙옙
-	if (CleanserSites.Num() < 3) return;
+	// 페이즈 구조 개편: 사이트 맵 배치/활성화 모두 1개로 고정 (Phase1이 안전망으로 1개만 유지)
+	// Plan6 §5.1: 스테이지2는 방4 설치대 1개만 사용하며 맵 구성에 따라 사이트가 없을 수도 있다.
+	// 사이트 유무로 페이즈 시스템 자체를 막지 않고 경고만 남긴다 (사이트 의존 로직만 동작하지 않음).
+	if (CleanserSites.Num() < 1)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Phase] CleanserSite 가 하나도 없습니다. 사이트 의존 로직은 동작하지 않습니다."));
+	}
 
 	// 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 占싸쏙옙占싹쏙옙 占쏙옙占쏙옙
 	PhaseInstances.Empty();
@@ -254,17 +311,9 @@ void ADRStageGameMode::InitializePhaseSystem()
 	// 泥?踰덉㎏ ?섏씠利??쒖옉 (?대씪?댁뼵??珥덇린???湲곕? ?꾪븳 ?쒕젅??
 	if (PhaseInstances.Num() > 0)
 	{
-		// ?대씪?댁뼵?멸? SeamlessTravel ???ㅻ뵒??UI ?쒖뒪?쒖쓣 珥덇린?뷀븷 ?쒓컙??以?
-		FTimerHandle PhaseStartTimer;
-		GetWorldTimerManager().SetTimer(
-			PhaseStartTimer,
-			[this]()
-			{
-				StartPhase(0);
-			},
-			1.0f,  // 1珥??쒕젅??
-			false
-		);
+		// 목표 데이터(FPhaseObjectiveData)는 복제 프로퍼티이므로 지연 없이 시작해도
+		// 늦게 초기화된 클라이언트는 OnRep으로 따라잡는다
+		StartPhase(0);
 	}
 }
 
@@ -323,6 +372,9 @@ void ADRStageGameMode::EndCurrentPhase()
 	// ?섏씠利??꾨즺 ?곹깭濡?蹂寃?
 	CachedGameState->SetCurrentPhaseState(EPhaseState::Completed);
 
+	// 목표 클리어 연출 알림 (모든 클라이언트 - 마지막 페이즈 클리어도 이 경로를 거침)
+	CachedGameState->Multicast_ObjectiveCompleted();
+
 	// 占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙 처占쏙옙
 	if (CurrentPhase)
 	{
@@ -361,50 +413,8 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 	// Phase ?꾪솚 以묒씠嫄곕굹 寃뚯엫 醫낅즺 泥섎━ 以묒씠硫?以묐났 ?몄텧 諛⑹?
 	if (bIsTransitioningPhase || bIsWipeoutInProgress) return false;
 
-	int32 CurrentPhaseIndex = CachedGameState->GetCurrentPhaseIndex();
-	bool bIsCompleted = false;
-
-	// 占쏙옙占쏙옙占쏘별 占싹뤄옙 占쏙옙占쏙옙 占쏙옙占쏙옙
-	switch (CurrentPhaseIndex)
-	{
-	case 0: // Phase 1: 클占쏙옙占쏙옙 확占쏙옙
-	{
-		bool bAreaSecured = CachedGameState->IsCleanserAreaSecured();
-		int32 RemainingEnemies = CachedGameState->GetRemainingEnemiesInArea();
-
-		bIsCompleted = bAreaSecured && (RemainingEnemies == 0);
-	}
-	break;
-
-	case 1: // Phase 2: 占쏙옙품 회占쏙옙
-	{
-		int32 CollectedParts = CachedGameState->GetCollectedParts();
-		bool bActivated = CachedGameState->IsCleanserActivated();
-
-		bIsCompleted = (CollectedParts >= 4) && bActivated;
-	}
-	break;
-
-	case 2: // Phase 3: 占쏙옙占?
-	{
-		int32 CurrentWaveNumber = CachedGameState->GetCurrentWaveNumber();
-		int32 TotalWaves = CachedGameState->GetTotalWaves();
-
-		bIsCompleted = CurrentWaveNumber >= TotalWaves;
-	}
-	break;
-
-	case 3: // Phase 4: 占쏙옙占쏙옙
-	{
-		float BossHealth = CachedGameState->GetBossHealth();
-
-		bIsCompleted = BossHealth <= 0.0f;
-	}
-	break;
-
-	default:
-		break;
-	}
+	// 완료 판정은 각 페이즈가 스스로 수행 (인덱스 switch 하드코딩 제거)
+	const bool bIsCompleted = CurrentPhase->IsCompleted();
 
 	if (bIsCompleted)
 	{
@@ -415,3 +425,18 @@ bool ADRStageGameMode::ValidatePhaseCompletion()
 }
 
 
+
+void ADRStageGameMode::GrantStageAchievement(FName AchievementId, ADRPlayerController* PC)
+{
+	if (!HasAuthority() || AchievementId.IsNone()) return;
+
+	// 스테이지 종료 시 일괄 전송된다. 같은 Id 중복 보고는 여기서 걸러진다.
+	if (PC)
+	{
+		PendingAchievements.FindOrAdd(PC).AddUnique(AchievementId);
+	}
+	else
+	{
+		GlobalPendingAchievements.AddUnique(AchievementId);
+	}
+}

@@ -36,6 +36,8 @@ public:
 	FGameplayTag State_Carrying;
 	FGameplayTag State_InCombat;
 	FGameplayTag State_VendingMachine_JackpotReady;
+	FGameplayTag State_Riding;
+	FGameplayTag State_RobotVacuum_SustainedDash;
 
 	// 적 상태
 	FGameplayTag State_Enraged;
@@ -43,7 +45,9 @@ public:
 	FGameplayTag State_HitReacting;
 	FGameplayTag State_LockedDown;
 	FGameplayTag State_BallForm;
-	FGameplayTag Enemy_Detected;
+
+	// Phase1 적 식별 태그 (플레이어에게 주는 대미지 30% 감소 트리거)
+	FGameplayTag State_Enemy_Phase1;
 
 	// �⺻ ������, Ÿ�� �� ������
 	FGameplayTag Damage;
@@ -53,6 +57,9 @@ public:
 	FGameplayTag Damage_Physical;
 	FGameplayTag Damage_Bite;
 
+	// 탑승 공유 데미지 식별 (재전파 방지용 — DamageTypeTags에는 포함하지 않음)
+	FGameplayTag Damage_MountShared;
+
 	// �⺻ ��
 	FGameplayTag Heal;
 
@@ -60,6 +67,7 @@ public:
 	FGameplayTag Buff_Elite;
 	FGameplayTag Buff_Elite_Roar;
 	FGameplayTag Buff_VendingMachine_AttackSpeed;
+	FGameplayTag Buff_RobotVacuum_DashSpeed;
 	
 	// ����� ȿ��
 	FGameplayTag Debuff_Burn; 
@@ -82,6 +90,20 @@ public:
 	FGameplayTag Water_SetByCaller_Reduction;
 	FGameplayTag Water_SetByCaller_Grant;
 
+	// 업그레이드 칩 SetByCaller (GE_Upgrade_Stats: Flat = 합연산, Mult = 1 + Percent)
+	FGameplayTag Data_Upgrade_MaxHealth_Flat;
+	FGameplayTag Data_Upgrade_MaxHealth_Mult;
+	FGameplayTag Data_Upgrade_MaxWater_Flat;
+	FGameplayTag Data_Upgrade_MaxWater_Mult;
+	FGameplayTag Data_Upgrade_MoveSpeed_Flat;
+	FGameplayTag Data_Upgrade_MoveSpeed_Mult;
+
+	// 어빌리티 쿨다운 Duration SetByCaller (업그레이드로 보정된 쿨다운 주입)
+	FGameplayTag Data_Cooldown;
+
+	// 게임플레이 이벤트 (GA 통지용)
+	FGameplayTag Event_Dash_Brake;
+
 	// �����Ƽ �з�
 	FGameplayTag Abilities_Attack;
 	FGameplayTag Abilities_Death;
@@ -97,6 +119,9 @@ public:
 	FGameplayTag Abilities_GardenRobot_SeedCannon;
 	FGameplayTag Abilities_VendingMachine_BasicAttack;
 	FGameplayTag Abilities_VendingMachine_AttackSpeedBuff;
+	FGameplayTag Abilities_RobotVacuum_AirShot;
+	FGameplayTag Abilities_RobotVacuum_JetJump;
+	FGameplayTag Abilities_RobotVacuum_Dash;
 
 	// Ÿ�� ����
 	FGameplayTag Abilities_HitReact;
@@ -108,6 +133,7 @@ public:
 
 	// �����Ƽ ��Ÿ��
 	FGameplayTag Cooldown_Fire_FireBolt;
+	FGameplayTag Cooldown_RobotVacuum_JetJump;
 	FGameplayTag Cooldown_Armadillo_RollCharge;
 	FGameplayTag Cooldown_Elite_Sweep;
 	FGameplayTag Cooldown_Elite_Roar;
@@ -143,6 +169,15 @@ public:
 	FGameplayTag GameplayCue_Cleanser_Damage;
 	FGameplayTag GameplayCue_Skill_WaterPump;
 	FGameplayTag GameplayCue_Skill_ClawSwipe;
+	FGameplayTag GameplayCue_Skill_VacuumAirShot;
+	FGameplayTag GameplayCue_Skill_VacuumJetJump;
+	FGameplayTag GameplayCue_Skill_VacuumDash;
+
+	// ========== 스테이지2 두더지 보스 (Plan7 §5.5) ==========
+	FGameplayTag Abilities_MoleBoss_Claw;
+	FGameplayTag Abilities_MoleBoss_BurrowStrike;
+	FGameplayTag Cooldown_MoleBoss_BurrowStrike;
+	FGameplayTag State_MoleBoss_Burrowed;
 
 private:
 	static FDRGameplayTags GameplayTags;

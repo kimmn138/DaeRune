@@ -4,6 +4,8 @@
 #include "UI/HUD/DRHUD.h"
 #include "UI/Widget/DRUserWidget.h"
 #include "UI/WidgetController/OverlayWidgetController.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
+#include "Blueprint/UserWidget.h"
 
 UOverlayWidgetController* ADRHUD::GetOverlayWidgetController(const FWidgetControllerParams& WCParams)
 {
@@ -42,6 +44,10 @@ void ADRHUD::InitOverlay(APlayerController* PC, APlayerState* PS, UAbilitySystem
 	OverlayWidget->SetWidgetController(WidgetController);
 	// �ʱ� ������ UI�� ��ε�ĳ��Ʈ
 	WidgetController->BroadcastInitialValues();
+	// 캐릭터 클래스에 맞는 스킬아이콘 위젯 브로드캐스트
+	WidgetController->BroadcastSkillIconWidgetClass();
+	// 캐릭터 클래스에 맞는 조준선 텍스처 세트 브로드캐스트
+	WidgetController->BroadcastCrosshairImages();
 	// 어빌리티 아이콘 갱신 (위젯 컨트롤러 할당 후 호출하여 소실 방지)
 	WidgetController->BroadcastAbilityInfo();
 	// ȭ�鿡 ���� �߰�
@@ -68,6 +74,8 @@ void ADRHUD::UpdateOverlayForSpectating(APlayerController* PC, APlayerState* PS,
 	{
 		OverlayWidget->SetWidgetController(WidgetController);
 		WidgetController->BroadcastInitialValues();
+		WidgetController->BroadcastSkillIconWidgetClass();
+		WidgetController->BroadcastCrosshairImages();
 		WidgetController->BroadcastAbilityInfo();
 	}
 }
@@ -85,5 +93,50 @@ void ADRHUD::RemoveOverlay()
 		OverlayWidgetController->UnbindAllDelegates();
 		OverlayWidgetController->ConditionalBeginDestroy();
 		OverlayWidgetController = nullptr;
+	}
+
+	if (CharacterInfoWidget)
+	{
+		CharacterInfoWidget->RemoveFromParent();
+		CharacterInfoWidget = nullptr;
+	}
+	bHasCachedCharacterInfoClass = false;
+}
+
+void ADRHUD::ShowCharacterInfo(EPlayerCharacterClass CharacterClass)
+{
+	// 캐싱된 위젯이 다른 클래스용이면 제거 후 재생성
+	if (CharacterInfoWidget && bHasCachedCharacterInfoClass && CachedCharacterInfoClass != CharacterClass)
+	{
+		CharacterInfoWidget->RemoveFromParent();
+		CharacterInfoWidget = nullptr;
+	}
+
+	if (CharacterInfoWidget == nullptr)
+	{
+		TSubclassOf<UUserWidget> WidgetClass = UDRAbilitySystemLibrary::GetCharacterInfoWidgetClass(this, CharacterClass);
+		if (WidgetClass == nullptr) return;
+
+		APlayerController* PC = GetOwningPlayerController();
+		if (PC == nullptr) return;
+
+		CharacterInfoWidget = CreateWidget<UUserWidget>(PC, WidgetClass);
+		if (CharacterInfoWidget == nullptr) return;
+
+		CachedCharacterInfoClass = CharacterClass;
+		bHasCachedCharacterInfoClass = true;
+		CharacterInfoWidget->AddToViewport(100);
+	}
+	else
+	{
+		CharacterInfoWidget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	}
+}
+
+void ADRHUD::HideCharacterInfo()
+{
+	if (CharacterInfoWidget)
+	{
+		CharacterInfoWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }

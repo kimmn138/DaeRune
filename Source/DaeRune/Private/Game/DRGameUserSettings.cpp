@@ -46,4 +46,5 @@ void UDRGameUserSettings::SetToDefaults()
     SFXVolume = 1.0f;
     MouseSensitivity = 1.0f;
     Gamma = 80.0f;
+    PreferredCulture = TEXT("ko");
 }

@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "Character/DRCharacter.h"
 #include "Interaction/CombatInterface.h"
+#include "Player/DRPlayerState.h"
 
 ADRGameStateBase::ADRGameStateBase()
 {
@@ -32,6 +33,16 @@ void ADRGameStateBase::AddPlayerState(APlayerState* PlayerState)
 
 	if (HasAuthority())
 	{
+		// 리슨 서버에서 로컬 컨트롤러 소유의 PlayerState가 호스트
+		if (ADRPlayerState* DRPS = Cast<ADRPlayerState>(PlayerState))
+		{
+			const APlayerController* PC = Cast<APlayerController>(DRPS->GetOwner());
+			if (PC && PC->IsLocalController())
+			{
+				DRPS->SetIsHost(true);
+			}
+		}
+
 		UpdatePlayerCount();
 	}
 }
@@ -48,10 +59,11 @@ void ADRGameStateBase::RemovePlayerState(APlayerState* PlayerState)
 
 APlayerState* ADRGameStateBase::GetHostPlayer() const
 {
-	// ȣ��Ʈ�� ���� PlayerID�� 0
+	// 서버가 접속 시 확정해 복제한 bIsHost 플래그로 판별
 	for (APlayerState* PS : PlayerArray)
 	{
-		if (PS->GetPlayerId() == 0)
+		const ADRPlayerState* DRPS = Cast<ADRPlayerState>(PS);
+		if (DRPS && DRPS->IsHost())
 		{
 			return PS;
 		}

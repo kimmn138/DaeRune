@@ -57,6 +57,36 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Actor")
 	TObjectPtr<USoundBase> WaterGainSound;
 
+	// 자판기 로봇
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine")
+	TObjectPtr<USoundBase> VendingCoinShotSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine")
+	TObjectPtr<USoundBase> VendingJackpotPopSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine")
+	TObjectPtr<USoundBase> VendingGainSilverSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine")
+	TObjectPtr<USoundBase> VendingGainGoldSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine")
+	TObjectPtr<USoundBase> VendingSkillUseSound;
+
+	// 독가스 (Phase3)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "PoisonGas")
+	TObjectPtr<USoundBase> PoisonGasWarningSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "PoisonGas")
+	TObjectPtr<USoundBase> PoisonGasActiveLoopSound;
+
+	// 적(아르마딜로)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Enemy|Armadillo")
+	TObjectPtr<USoundBase> ArmadilloRollLoopSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Enemy|Armadillo")
+	TObjectPtr<USoundBase> ArmadilloImpactSound;
+
 	// BGM
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "BGM")
 	TObjectPtr<USoundBase> BGM_MainMenu;
@@ -65,7 +95,11 @@ public:
 	TObjectPtr<USoundBase> BGM_Lobby;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "BGM")
-	TObjectPtr<USoundBase> BGM_Stage;
+	TObjectPtr<USoundBase> BGM_Tutorial;
+
+	// 스테이지 BGM 플레이리스트 (순차 재생)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "BGM")
+	TArray<TObjectPtr<USoundBase>> BGM_StagePlaylist;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "BGM")
 	TObjectPtr<USoundBase> BGM_Boss;

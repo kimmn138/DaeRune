@@ -27,6 +27,28 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnHasPendingChangesChanged, bool, b
 // 탭 리셋 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSettingsReset, EDRSettingsTab, Tab);
 
+// 언어 변경 델리게이트 (CultureCode: "ko", "en")
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLanguageChanged, const FString&, CultureCode);
+
+// 마우스 감도 변경 델리게이트 (PlayerController의 감도 캐시 갱신용)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMouseSensitivityChanged, float, NewSensitivity);
+
+/**
+ * 지원 언어 1종을 기술하는 SSOT(단일 진실 소스) 엔트리.
+ * 새 언어 추가는 DRSettingsManager.cpp의 GetSupportedLanguages() 배열에 한 줄만 추가하면 된다.
+ */
+struct FDRLanguageInfo
+{
+    /** 영속화 키(GameUserSettings). 절대 번역/변경 금지. 예: "Korean", "English" */
+    FName OptionId;
+
+    /** 엔진 i18n 컬처 코드. CulturesToStage / Content/Localization/Game/<코드> 와 반드시 일치. 예: "ko", "en" */
+    FString CultureCode;
+
+    /** 드롭다운 표기. 관례상 해당 언어의 자기 명칭(endonym). 번역 대상이 아니므로 LOCTEXT가 아니다. */
+    FText DisplayText;
+};
+
 /**
  * 설정 관리 매니저 - 기존 오디오/그래픽 적용 로직 유지 + 데이터 주도 관리 레이어
  */
@@ -171,6 +193,29 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "Settings|DataDriven")
     FOnSettingsReset OnSettingsReset;
 
+    /** 언어가 실제로 적용된 직후 발행. UI는 이 시점에 LOCTEXT 기반 텍스트를 다시 갱신해야 한다. */
+    UPROPERTY(BlueprintAssignable, Category = "Settings|Localization")
+    FOnLanguageChanged OnLanguageChanged;
+
+    /** 마우스 감도가 바뀔 때 발행. Look()이 매 입력마다 Subsystem을 조회하지 않도록 캐시 갱신에 사용 */
+    UPROPERTY(BlueprintAssignable, Category = "Settings|Gameplay")
+    FOnMouseSensitivityChanged OnMouseSensitivityChanged;
+
+    /** Gameplay.Language OptionId(FName: "Korean", "English") → 컬처 코드(FString: "ko", "en"). 없으면 빈 문자열. */
+    static FString LanguageOptionIdToCulture(FName OptionId);
+
+    /** 컬처 코드 → OptionId 역변환. 없으면 NAME_None. */
+    static FName CultureToLanguageOptionId(const FString& CultureCode);
+
+    /** 지원 언어 목록(SSOT). 새 언어 추가 시 이 함수의 배열만 수정한다. */
+    static const TArray<FDRLanguageInfo>& GetSupportedLanguages();
+
+    /** 기본 언어(목록의 첫 항목). 미지/누락 컬처 값의 폴백 대상. */
+    static const FDRLanguageInfo& GetDefaultLanguage();
+
+    /** 해당 컬처 코드가 지원 목록에 있는지. 부팅 시 저장값 유효성 검사에 사용. */
+    static bool IsSupportedCulture(const FString& CultureCode);
+
     // ========== 데이터 접근 ==========
 
     UPROPERTY(BlueprintReadOnly, Category = "Settings|DataDriven")
@@ -184,6 +229,9 @@ public:
     TObjectPtr<UUserWidget> ActiveDropdownWidget;
 
 private:
+    // 현재 감도 값으로 OnMouseSensitivityChanged 발행
+    void BroadcastMouseSensitivity();
+
     // SoundMix 볼륨 적용 함수
     void ApplySoundMixToWorld(UWorld* World);
 

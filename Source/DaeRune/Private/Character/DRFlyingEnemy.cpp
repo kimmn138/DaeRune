@@ -8,6 +8,8 @@
 #include "AI/DRAIController.h"
 #include "BrainComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/AudioComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 
 ADRFlyingEnemy::ADRFlyingEnemy()
@@ -53,6 +55,39 @@ void ADRFlyingEnemy::BeginPlay()
 		FVector Loc = GetActorLocation();
 		Loc.Z = FixedAltitude;
 		SetActorLocation(Loc);
+	}
+
+	// ===== 비행 루프 사운드 (Plan2.md §5.2 방안 A) =====
+	// SoundCue 자체에 Looping=true, SoundAttenuation(SA_Medium), SoundConcurrency(CC_DragonFlyFlight, Max=1) 지정.
+	// Concurrency로 동시 인스턴스가 1개로 제한되며, Attenuation으로 멀리 있는 파리 소리는 자동 무음 처리됨.
+	// 데디케이티드 서버에서는 오디오 출력이 없으므로 컴포넌트를 만들지 않는다.
+	if (FlightSound && GetNetMode() != NM_DedicatedServer)
+	{
+		FlightLoopComponent = UGameplayStatics::SpawnSoundAttached(
+			FlightSound,
+			GetRootComponent(),
+			NAME_None,
+			FVector::ZeroVector,
+			EAttachLocation::SnapToTarget,
+			/*bStopWhenAttachedToDestroyed=*/true);
+	}
+}
+
+void ADRFlyingEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// 레벨 변경/월드 정리/Destroy 등 어떤 사유든 비행 루프 즉시 정지.
+	// (Death 경로에서 이미 호출되었더라도 StopFlightLoop는 중복 호출에 안전)
+	StopFlightLoop();
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void ADRFlyingEnemy::StopFlightLoop()
+{
+	if (IsValid(FlightLoopComponent))
+	{
+		FlightLoopComponent->Stop();
+		FlightLoopComponent = nullptr;
 	}
 }
 
@@ -163,6 +198,9 @@ void ADRFlyingEnemy::EndSkillLockdown()
 
 void ADRFlyingEnemy::MulticastHandleDeath_Implementation(const FVector& DeathImpulse)
 {
+	// 0. 비행 루프 사운드 정지 (모든 인스턴스에서 실행됨 - 서버+클라 동기화)
+	StopFlightLoop();
+
 	// 1. 타이머 정리
 	GetWorldTimerManager().ClearTimer(SkillLockdownTimerHandle);
 

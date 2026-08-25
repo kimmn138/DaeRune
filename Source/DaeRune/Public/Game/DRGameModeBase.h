@@ -8,9 +8,7 @@
 
 class UAbilityInfo;
 class UCharacterClassInfo;
-class UPlayerCharacterClassInfo;
 class UGameBalanceConfig;
-class ADRDetectionManager;
 
 /**
  * DaeRune �⺻ ���� ��� Ŭ����
@@ -27,10 +25,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Character Class Defaults")
 	TObjectPtr<UCharacterClassInfo> EnemyCharacterClassInfo;
 
-	// 플레이어 전용 CharacterClassInfo
-	UPROPERTY(EditDefaultsOnly, Category = "Character Class Defaults")
-	TObjectPtr<UPlayerCharacterClassInfo> PlayerCharacterClassInfo;
-
 	// �����Ƽ ���� ������ ����
 	UPROPERTY(EditDefaultsOnly, Category = "Ability Info")
 	TObjectPtr<UAbilityInfo> AbilityInfo;
@@ -44,9 +38,17 @@ public:
 
 	// �� ���� üũ
 	virtual bool CheckTeamWipeout();
-	
+
+	// 플레이어 접속 종료 (Plan6 §5.10)
+	// 프로젝트에 Logout 오버라이드가 없어 신규 추가한다.
+	virtual void Logout(AController* Exiting) override;
+
 protected:
 	virtual void BeginPlay() override;
+
+	// 사망/이탈을 현재 페이즈에 통지 (스테이지 게임모드가 오버라이드)
+	virtual void NotifyPhasePlayerDied(APlayerState* DeadPlayerState) {}
+	virtual void NotifyPhasePlayerLeft(APlayerState* LeftPlayerState) {}
 
 	// 전멸 시 처리
 	virtual void HandleWipeout();
@@ -63,15 +65,4 @@ protected:
 
 	// ���� ó�� ������ ����
 	bool bIsWipeoutInProgress = false;
-
-	// Ž�� �Ŵ��� Ŭ����
-	UPROPERTY(EditDefaultsOnly, Category = "Detection")
-	TSubclassOf<ADRDetectionManager> DetectionManagerClass;
-
-	// ������ Ž�� �Ŵ��� �ν��Ͻ�
-	UPROPERTY()
-	TObjectPtr<ADRDetectionManager> DetectionManager;
-
-	// Ž�� �Ŵ��� ����
-	void SpawnDetectionManager();
 };

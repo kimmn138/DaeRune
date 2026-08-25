@@ -11,6 +11,7 @@ class ADRPoisonGasActor;
 class ADREnemy;
 class ADRCharacter;
 class ADRCleanserSite;
+class ADRBGMActor;
 class UNiagaraSystem;
 
 UENUM(BlueprintType)
@@ -33,6 +34,15 @@ struct FPoisonGasSpawnPointData
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (EditCondition = "SpawnType == EPoisonGasSpawnPointType::CleanserLinked"))
 	FName LinkedCleanserTag = NAME_None;
+};
+
+// 몬스터 스폰 타입 (FWaveLevelModifier::MonsterSpawnCycle 의 int 값 매핑)
+// 기존 DataTable/BP 데이터 보존을 위해 프로퍼티 타입은 int32 를 유지하고, 코드에서만 이 enum으로 해석한다
+enum class EMonsterSpawnType : int32
+{
+	Normal = 1,
+	Rush = 2,
+	Stealth = 3
 };
 
 UENUM(BlueprintType)
@@ -90,8 +100,19 @@ class DAERUNE_API UDRPhase3 : public UDRPhaseBase
 public:
 	UDRPhase3();
 
+	// 총 웨이브 수 (GameState의 TotalWaves 로도 전달됨)
+	static constexpr int32 TotalWaveCount = 5;
+
+	// 한 배치에 동시 스폰하는 몬스터 수 (= 사용하는 스폰 포인트 수)
+	static constexpr int32 SpawnBatchSize = 4;
+
 	virtual void OnPhaseStart() override;
 	virtual void OnPhaseEnd() override;
+	virtual void OnEnemyDeath(AActor* DeadEnemy) override;
+	virtual bool IsCompleted() const override;
+
+	// 치트: 현재 웨이브에서 스폰된 적을 모두 제거하고 다음 웨이브로 즉시 진행. 마지막 웨이브였다면 페이즈 종료.
+	void SkipToNextWave();
 
 	UFUNCTION()
 	void OnEliteEnemyDeath(AActor* DeadEnemy);
@@ -101,6 +122,9 @@ public:
 
 protected:
 	virtual void BeginDestroy() override;
+
+	// 페이즈가 관리하는 모든 타이머 해제 (OnPhaseEnd/BeginDestroy 공용)
+	void ClearAllPhaseTimers();
 
 	UFUNCTION()
 	void StartNextWave();
@@ -117,6 +141,8 @@ protected:
 	UFUNCTION()
 	void ProcessWaveSpawn();
 
+	void CheckWaveCompletion();
+
 	// 적 스폰 시스템
 	void FindEnemySpawnPoints();
 	AActor* SelectNextSpawnPoint();
@@ -130,6 +156,10 @@ protected:
 	FWaveLevelModifier GetDefaultWaveLevelModifier(int32 WaveLevel) const;
 	FWaveData GetWaveData(int32 WaveNumber) const;
 	FWaveData GetDefaultWaveData(int32 WaveNumber) const;
+
+	// 웨이브 시작 시 1회 계산해 캐시 (스폰 틱마다 DataTable 조회 + 정규화 재수행 방지)
+	FWaveData CachedWaveData;
+	FWaveLevelModifier CachedWaveModifier;
 
 	void LoadPhase3ConfigFromBalanceConfig();
 
@@ -166,7 +196,7 @@ protected:
 
 	TArray<FPoisonGasSpawnPointData> AllPoisonGasSpawnPoints;
 
-	float PoisonGasSpawnInterval = 10.0f;
+	float PoisonGasSpawnInterval = 4.0f;
 
 	// 엘리트 보스 스폰 위치를 찾을 때 사용할 태그
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase3|Config")
@@ -249,10 +279,16 @@ private:
 	int32 CurrentSpawnCount = 0;
 	int32 TotalSpawnCount = 0;
 
+	// 페이즈 목표 UI에 현재 살아있는 적 수(일반 + 엘리트)를 브로드캐스트한다.
+	void BroadcastAliveEnemyObjective();
+
 	// MonsterSpawnCycle에서 현재 읽을 인덱스
 	int32 CurrentSpawnCycleIndex = 0;
 
 	bool bEliteBossSpawned = false;
+
+	// 엘리트 보스 등장/종료 시 BGM 전환에 사용할 BGM 액터 캐시
+	TWeakObjectPtr<ADRBGMActor> CachedBGMActor;
 
 	// ========== VFX ==========
 	// 일반 적 스폰 포인트에 표시할 나이아가라 에셋
@@ -272,7 +308,4 @@ private:
 	TMap<TObjectPtr<ADRCleanserSite>, bool> CleanserSiteHalfHealthTriggered;
 
 	float DefenseStartTime = 0.0f;
-	FTimerHandle WaveTimerUpdateHandle;
-	float WaveTimeRemaining = 0.0f;
-	float RestTimeRemaining = 0.0f;
 };

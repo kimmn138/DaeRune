@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 #pragma once
 
@@ -10,20 +10,33 @@ class UGameplayEffect;
 class UGameplayAbility;
 class ADRCharacter;
 
+// UDRUserWidget forward declaration (TSubclassOf only needs forward decl in UE5.5 with UHT)
+class UDRUserWidget;
+class UUserWidget;
+class UTexture2D;
+
 UENUM(BlueprintType)
 enum class ECharacterClass : uint8
 {
 	Elementalist,
 	Warrior,
 	Ranger,
-	Bear
+	Bear,
+	PartEnemy,
+
+	// 스테이지2 방6 두더지 보스 (Plan7). ★반드시 맨 뒤에 추가한다 —
+	// 앞에 끼워 넣으면 기존 에셋에 직렬화된 정수값이 다른 클래스로 밀린다.
+	MoleBoss
 };
 
 UENUM(BlueprintType)
 enum class EPlayerCharacterClass : uint8
 {
-	GardenRobot,
-	VendingMachineRobot
+	Gardener,
+	VendingMachine,
+	RobotVacuum,
+
+	Count UMETA(Hidden) // 클래스 개수 계산용 - 항상 마지막에 유지
 };
 
 USTRUCT(BlueprintType)
@@ -42,6 +55,26 @@ struct FCharacterClassDefaultInfo
 
 	UPROPERTY(EditDefaultsOnly, Category = "Class Defaults")
 	TArray<TSubclassOf<UGameplayAbility>> DeathAbilities;
+
+	// 해당 캐릭터 전용 스킬아이콘 위젯 클래스
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UDRUserWidget> SkillIconWidgetClass;
+
+	// Tab 키로 띄우는 캐릭터 설명창 위젯 클래스
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UUserWidget> CharacterInfoWidgetClass;
+
+	// 캐릭터 전용 기본 조준선 텍스처
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Crosshair")
+	TObjectPtr<UTexture2D> CrosshairTexture;
+
+	// 부품 운반 중 사이트 조준 시(설치 가능) 캐릭터 전용 조준선 텍스처
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Crosshair")
+	TObjectPtr<UTexture2D> CrosshairInstallReadyTexture;
+
+	// 캐릭터 전용 조준선 표시 크기 (0,0 이면 위젯에서 텍스처 원본 크기 사용)
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Crosshair")
+	FVector2D CrosshairSize = FVector2D(32.f, 32.f);
 };
 
 /**
@@ -80,6 +113,10 @@ public:
 	// 클래스별 캐릭터 BP 매핑 (외형은 BP에서 전부 설정)
 	UPROPERTY(EditDefaultsOnly, Category = "Character Blueprint")
 	TMap<EPlayerCharacterClass, TSubclassOf<ADRCharacter>> CharacterBPClasses;
+
+	// 부품 운반 중(공격 불가) 조준선 텍스처 - 모든 플레이어 캐릭터 공통
+	UPROPERTY(EditDefaultsOnly, Category = "Common Class Defaults")
+	TObjectPtr<UTexture2D> CrosshairDisabledTexture;
 
 	FCharacterClassDefaultInfo GetClassDefaultInfo(EPlayerCharacterClass CharacterClass);
 };

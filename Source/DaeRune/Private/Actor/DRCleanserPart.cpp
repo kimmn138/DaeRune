@@ -2,8 +2,6 @@
 
 
 #include "Actor/DRCleanserPart.h"
-#include "DRGameplayTags.h"
-#include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "Character/DRCharacter.h"
 #include "Net/UnrealNetwork.h"
 #include "Components/SphereComponent.h"
@@ -82,19 +80,61 @@ void ADRCleanserPart::PickupPart(ADRCharacter* Character)
 	AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
 
 	// 3P 부품은 다른 플레이어에게만 보이도록 설정
-	PartMesh->SetOwnerNoSee(true);
-	SetOwner(Character->GetOwner());
+	PartMesh->SetVisibility(false);
+	PartMesh->SetHiddenInGame(true);
+	PartMesh->SetOwnerNoSee(false);
+	SetOwner(Character);
 
 	// 캐릭터의 1인칭 부품 메시 활성화
-	Character->ShowFirstPersonPart(PartMesh->GetStaticMesh());
+	RefreshCarriedState();
 
 	MulticastPlayPickupSound();
 
-	// ĳ���Ϳ��� �±� ����
-	UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(CarryingCharacter->GetAbilitySystemComponent());
-	if (DRASC)
+	// State.Carrying 태그 토글은 ADRCharacter::SetCarryingState 에서 일괄 처리
+
+	// 획득 알림 (Plan6 §5.6) - 스테이지2 방2가 금고 부품 획득을 감지한다
+	OnPartPickedUp.Broadcast(this, Character);
+}
+
+void ADRCleanserPart::OnRep_CarryingCharacter()
+{
+	RefreshCarriedState();
+}
+
+void ADRCleanserPart::RefreshCarriedState()
+{
+	if (bIsCarried)
 	{
-		DRASC->AddLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
+		PartMesh->SetVisibility(false);
+		PartMesh->SetHiddenInGame(true);
+		PartMesh->SetOwnerNoSee(false);
+		PartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		DetectionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		InteractionWidget->SetVisibility(false);
+
+		if (CarryingCharacter)
+		{
+			if (USkeletalMeshComponent* CharacterMesh = CarryingCharacter->GetMesh())
+			{
+				AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
+			}
+		}
+	}
+	else
+	{
+		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		SetActorRotation(FRotator::ZeroRotator);
+
+		PartMesh->SetHiddenInGame(false);
+		PartMesh->SetVisibility(true);
+		PartMesh->SetOwnerNoSee(false);
+		PartMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		PartMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+		PartMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
+		DetectionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		DetectionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+		DetectionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	}
 }
 
@@ -106,14 +146,10 @@ void ADRCleanserPart::InstallPart()
 	if (CarryingCharacter)
 	{
 		CarryingCharacter->HideFirstPersonPart();
+		CarryingCharacter->HideThirdPersonPart();
 	}
 
-	// ĳ���Ϳ��� �±� ����
-	UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(CarryingCharacter->GetAbilitySystemComponent());
-	if (DRASC)
-	{
-		DRASC->RemoveLooseGameplayTag(FDRGameplayTags::Get().State_Carrying);
-	}
+	// State.Carrying 태그 해제는 ADRCharacter::SetCarryingState 에서 일괄 처리
 
 	// ���� �ı�
 	Destroy();
@@ -128,6 +164,7 @@ void ADRCleanserPart::DropFromCarrier()
 	if (CarryingCharacter)
 	{
 		CarryingCharacter->HideFirstPersonPart();
+		CarryingCharacter->HideThirdPersonPart();
 	}
 
 	// ĳ���Ϳ��� �и�
@@ -142,6 +179,7 @@ void ADRCleanserPart::DropFromCarrier()
 	// 바닥에 떨어진 부품은 모두에게 보이도록 OwnerNoSee 복원
 	PartMesh->SetOwnerNoSee(false);
 	SetOwner(nullptr);
+	RefreshCarriedState();
 
 	// �޽� �ݸ��� ��Ȱ��ȭ
 	PartMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
@@ -169,16 +207,9 @@ void ADRCleanserPart::MulticastPlayPickupSound_Implementation()
 	}
 }
 
-void ADRCleanserPart::MulticastShowInteractionUI_Implementation(ADRPlayerController* PlayerController, bool bShow)
+void ADRCleanserPart::SetInteractionUIVisible(bool bShow)
 {
-	// ��� Ŭ���̾�Ʈ���� �����
-	if (!PlayerController) return;
-
-	// �ش� �÷��̾��� ���� ��Ʈ�ѷ������� UI ǥ��/����
-	if (PlayerController->IsLocalController())
-	{
-		InteractionWidget->SetVisibility(bShow);
-	}
+	InteractionWidget->SetVisibility(bShow);
 }
 
 void ADRCleanserPart::BeginPlay()
@@ -199,42 +230,33 @@ void ADRCleanserPart::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 
 void ADRCleanserPart::OnDetectionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	// �̹� ��������� ����
-	if (bIsCarried) return;
-
-	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
-	if (!Character) return;
-
-	// �̹� ��ǰ�� ��� ������ ����
-	if (Character->IsCarryingPart()) return;
-
-	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
-	if (!PC) return;
-
-	// ���� ��Ʈ�ѷ������� ����Ʈ���̽� Ȱ��ȭ
-	if (PC->IsLocalController())
-	{
-		PC->SetPartDetectionEnabled(true, this);
-	}
+	RefreshOverlapStateFor(Cast<ADRCharacter>(OtherActor));
 }
 
 void ADRCleanserPart::OnDetectionSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
-	if (!Character) return;
-
-	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
-	if (!PC) return;
-
-	// ���� ��Ʈ�ѷ������� ����Ʈ���̽� ��Ȱ��ȭ
-	if (PC->IsLocalController())
-	{
-		PC->SetPartDetectionEnabled(false, this);
-	}
+	RefreshOverlapStateFor(Cast<ADRCharacter>(OtherActor));
 }
 
+void ADRCleanserPart::RefreshOverlapStateFor(ADRCharacter* Character)
+{
+	if (!Character || !DetectionSphere) return;
+
+	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
+	if (!PC || !PC->IsLocalController()) return;
+
+	const bool bIsOverlapping = DetectionSphere->IsOverlappingActor(Character);
+	const bool bShouldDetect =
+		bIsOverlapping &&
+		!bIsCarried &&
+		!Character->IsCarryingPart();
+
+	PC->SetPartDetectionEnabled(bShouldDetect, this);
+}
 void ADRCleanserPart::OnRep_bIsCarried()
 {
+	RefreshCarriedState();
+
 	// ��ǰ�� �ֿ� �� Ŭ���̾�Ʈ���� �ð��� ������Ʈ
 	if (bIsCarried && CarryingCharacter)
 	{
@@ -259,7 +281,7 @@ void ADRCleanserPart::OnRep_bIsCarried()
 		CarryingCharacter->ShowFirstPersonPart(PartMesh->GetStaticMesh());
 	}
 	// ��ǰ�� ����Ʈ�� ��
-	else
+	else if (!bIsCarried)
 	{
 		// ĳ���Ϳ��� �и�
 		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);

@@ -84,6 +84,16 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("VendingMachine Jackpot stacks reached max")
 	);
 
+	GameplayTags.State_Riding = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.Riding"),
+		FString("Player is riding on a RobotVacuum")
+	);
+
+	GameplayTags.State_RobotVacuum_SustainedDash = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.RobotVacuum.SustainedDash"),
+		FString("RobotVacuum is in sustained dash (auto forward)")
+	);
+
 	/*
 	 * 적 상태
 	 */
@@ -113,9 +123,9 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Armadillo is in ball form")
 	);
 
-	GameplayTags.Enemy_Detected = UGameplayTagsManager::Get().AddNativeGameplayTag(
-		FName("Enemy.Detected"),
-		FString("Enemy has been detected by player")
+	GameplayTags.State_Enemy_Phase1 = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.Enemy.Phase1"),
+		FString("Enemy belongs to New Phase1; deals 30% reduced damage to players.")
 	);
 
 	/*
@@ -152,6 +162,12 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("Bite Damage Type")
 	);
 
+	// 탑승 공유 데미지 식별 태그 — 데미지 "타입"이 아니므로 DamageTypeTags/DamageTypesToDebuffs에 넣지 않는다
+	GameplayTags.Damage_MountShared = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Damage.MountShared"),
+		FString("Mount-shared damage marker (prevents re-propagation)")
+	);
+
 	/*
 	 * �⺻ ��
 	 */
@@ -178,6 +194,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Buff_VendingMachine_AttackSpeed = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Buff.VendingMachine.AttackSpeed"),
 		FString("VendingMachine Attack Speed Buff")
+	);
+
+	GameplayTags.Buff_RobotVacuum_DashSpeed = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.RobotVacuum.DashSpeed"),
+		FString("RobotVacuum Dash Move Speed Buff (stackable)")
 	);
 	
 	/*
@@ -282,6 +303,55 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
+	 * 업그레이드 칩 SetByCaller (GE_Upgrade_Stats / 쿨다운 GE)
+	 * Flat = 합연산 값, Mult = 곱연산 값(1 + Percent). Plan2.md 8.4 참조
+	 */
+
+	GameplayTags.Data_Upgrade_MaxHealth_Flat = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Upgrade.MaxHealth.Flat"),
+		FString("SetByCaller tag for upgraded MaxHealth additive amount")
+	);
+
+	GameplayTags.Data_Upgrade_MaxHealth_Mult = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Upgrade.MaxHealth.Mult"),
+		FString("SetByCaller tag for upgraded MaxHealth multiplier (1 + percent)")
+	);
+
+	GameplayTags.Data_Upgrade_MaxWater_Flat = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Upgrade.MaxWater.Flat"),
+		FString("SetByCaller tag for upgraded MaxWater additive amount")
+	);
+
+	GameplayTags.Data_Upgrade_MaxWater_Mult = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Upgrade.MaxWater.Mult"),
+		FString("SetByCaller tag for upgraded MaxWater multiplier (1 + percent)")
+	);
+
+	GameplayTags.Data_Upgrade_MoveSpeed_Flat = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Upgrade.MoveSpeed.Flat"),
+		FString("SetByCaller tag for upgraded MoveSpeed additive amount")
+	);
+
+	GameplayTags.Data_Upgrade_MoveSpeed_Mult = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Upgrade.MoveSpeed.Mult"),
+		FString("SetByCaller tag for upgraded MoveSpeed multiplier (1 + percent)")
+	);
+
+	GameplayTags.Data_Cooldown = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Cooldown"),
+		FString("SetByCaller tag for ability cooldown duration")
+	);
+
+	/*
+	 * 게임플레이 이벤트 (GA 통지용)
+	 */
+
+	GameplayTags.Event_Dash_Brake = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Event.Dash.Brake"),
+		FString("Sent to GA_VacuumDash when the rider presses backward input during sustained dash")
+	);
+
+	/*
 	 * �����Ƽ �з�
 	 */
 
@@ -349,6 +419,21 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("VendingMachine Attack Speed Buff Ability Tag")
 	);
 
+	GameplayTags.Abilities_RobotVacuum_AirShot = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.RobotVacuum.AirShot"),
+		FString("RobotVacuum Air Shot Ability Tag")
+	);
+
+	GameplayTags.Abilities_RobotVacuum_JetJump = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.RobotVacuum.JetJump"),
+		FString("RobotVacuum Jet Jump Ability Tag")
+	);
+
+	GameplayTags.Abilities_RobotVacuum_Dash = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.RobotVacuum.Dash"),
+		FString("RobotVacuum Dash Ability Tag")
+	);
+
 
 	/*
 	 * Ÿ�� ����
@@ -385,6 +470,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Cooldown_Fire_FireBolt = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Cooldown.Fire.FireBolt"),
 		FString("FireBolt Cooldown Tag")
+	);
+
+	GameplayTags.Cooldown_RobotVacuum_JetJump = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Cooldown.RobotVacuum.JetJump"),
+		FString("RobotVacuum JetJump Cooldown Tag - Q 홀드 연속 발동 방지 (Plan3 §15.6)")
 	);
 
 	GameplayTags.Cooldown_Armadillo_RollCharge = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -511,5 +601,44 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.GameplayCue_Skill_ClawSwipe = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("GameplayCue.Skill.ClawSwipe"),
 		FString("ClawSwipe Effect")
+	);
+
+	GameplayTags.GameplayCue_Skill_VacuumAirShot = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Skill.VacuumAirShot"),
+		FString("RobotVacuum Air Shot Effect")
+	);
+
+	GameplayTags.GameplayCue_Skill_VacuumJetJump = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Skill.VacuumJetJump"),
+		FString("RobotVacuum Jet Jump Water Spray Effect")
+	);
+
+	GameplayTags.GameplayCue_Skill_VacuumDash = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.Skill.VacuumDash"),
+		FString("RobotVacuum Dash Effect")
+	);
+
+	/*
+	 * 스테이지2 두더지 보스 (Plan7 §5.5)
+	 */
+
+	GameplayTags.Abilities_MoleBoss_Claw = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.MoleBoss.Claw"),
+		FString("MoleBoss 120-degree 2-hit claw sweep")
+	);
+
+	GameplayTags.Abilities_MoleBoss_BurrowStrike = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.MoleBoss.BurrowStrike"),
+		FString("MoleBoss burrow -> warning -> erupt skill")
+	);
+
+	GameplayTags.Cooldown_MoleBoss_BurrowStrike = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Cooldown.MoleBoss.BurrowStrike"),
+		FString("MoleBoss BurrowStrike cooldown (segment dependent)")
+	);
+
+	GameplayTags.State_MoleBoss_Burrowed = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.MoleBoss.Burrowed"),
+		FString("MoleBoss is underground and invulnerable")
 	);
 }

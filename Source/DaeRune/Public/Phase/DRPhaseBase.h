@@ -19,18 +19,24 @@ struct FPhaseObjectiveData : public FTableRowBase
 	int32 PhaseNumber = 1;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FText ObjectiveTitle; // "Å¬·»Àú¸¦ È®º¸ÇÏ¼¼¿ä"
+	FText ObjectiveTitle; // "Å¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½ï¿½Ï¼ï¿½ï¿½ï¿½"
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FText ProgressFormat; // "È®º¸ÇÑ Å¬·»Àú"
+	FText ProgressFormat; // "È®ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½"
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 RequiredCount = 0;
+
+	// í˜ì´ì¦ˆ ì§„ì… ë°°ë„ˆ ë¬¸êµ¬ (Plan6 Â§5.3)
+	// ë¹„ì–´ ìˆìœ¼ë©´ ë°°ë„ˆë¥¼ ë„ìš°ì§€ ì•ŠëŠ”ë‹¤ - í•œ í˜ì´ì¦ˆ ì•ˆì—ì„œ ëª©í‘œë§Œ êµì²´í•˜ëŠ” ì„œë¸Œ ëª©í‘œ ì „í™˜ìš©.
+	// ë¹„ì–´ ìˆëŠ” ê²½ìš° OverlayWidgetControllerê°€ ë ˆê±°ì‹œ switch ë¬¸êµ¬ë¡œ í´ë°±í•œë‹¤.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FText PhaseAlarmText;
 };
 
 /**
- * ¸ğµç ÆäÀÌÁîÀÇ ±âº» Å¬·¡½º
- * °¢ ÆäÀÌÁîÀÇ °øÅë ·ÎÁ÷À» ´ã´ç
+ * ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½âº» Å¬ï¿½ï¿½ï¿½ï¿½
+ * ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
  */
 UCLASS(Blueprintable, Abstract)
 class DAERUNE_API UDRPhaseBase : public UObject
@@ -38,79 +44,101 @@ class DAERUNE_API UDRPhaseBase : public UObject
 	GENERATED_BODY()
 	
 public:
-	// ========== ÆäÀÌÁî »ı¸íÁÖ±â ==========
+	// ========== ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ö±ï¿½ ==========
 
-	// ÆäÀÌÁî ÃÊ±âÈ­ (GameMode°¡ »ı¼º ÈÄ È£Ãâ)
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­ (GameModeï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ È£ï¿½ï¿½)
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	virtual void Initialize(ADRStageGameMode* InGameMode, ADRStageGameState* InGameState);
 
-	// ÆäÀÌÁî ½ÃÀÛ (GameMode°¡ È£Ãâ)
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (GameModeï¿½ï¿½ È£ï¿½ï¿½)
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	virtual void OnPhaseStart();
 
-	// ÆäÀÌÁî Á¾·á (Á¤¸® ÀÛ¾÷)
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½Û¾ï¿½)
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	virtual void OnPhaseEnd();
 
-	// ========== Å¬·»Àú »çÀÌÆ® °ü¸® ==========
+	// ì´ í˜ì´ì¦ˆì˜ ì™„ë£Œ ì¡°ê±´ ì¶©ì¡± ì—¬ë¶€ (íŒŒìƒ í´ë˜ìŠ¤ê°€ êµ¬í˜„)
+	// GameModeì˜ ì¸ë±ìŠ¤ switch ëŒ€ì‹  ê° í˜ì´ì¦ˆê°€ ìŠ¤ìŠ¤ë¡œ ì™„ë£Œë¥¼ íŒì •í•œë‹¤
+	virtual bool IsCompleted() const { return false; }
 
-	// ÀüÃ¼ Å¬·»Àú »çÀÌÆ® ¼³Á¤ (GameMode°¡ ÃÊ±âÈ­ ½Ã È£Ãâ)
+	// ========== Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ==========
+
+	// ï¿½ï¿½Ã¼ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ (GameModeï¿½ï¿½ ï¿½Ê±ï¿½È­ ï¿½ï¿½ È£ï¿½ï¿½)
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	void SetCleanserSites(const TArray<ADRCleanserSite*>& InCleanserSites);
 
-	// ÀüÃ¼ Å¬·»Àú »çÀÌÆ® °¡Á®¿À±â
+	// ï¿½ï¿½Ã¼ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	const TArray<TObjectPtr<ADRCleanserSite>>& GetCleanserSites() const { return CleanserSites; }
 
-	// Phase1¿¡¼­ ¼±ÅÃµÈ È°¼º Å¬·»Àú »çÀÌÆ® ¼³Á¤ (2°³)
+	// Phase1ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ãµï¿½ È°ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ (2ï¿½ï¿½)
 	void SetActiveCleanserSites(const TArray<TObjectPtr<ADRCleanserSite>>& InActiveSites);
 
-	// Phase1¿¡¼­ ¼±ÅÃµÈ È°¼º Å¬·»Àú »çÀÌÆ® °¡Á®¿À±â (Phase2, 3¿¡¼­ »ç¿ë)
+	// Phase1ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ãµï¿½ È°ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ (Phase2, 3ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½)
 	const TArray<TObjectPtr<ADRCleanserSite>>& GetActiveCleanserSites() const { return ActiveCleanserSites; }
 
-	// ========== Àû °ü¸® ==========
+	// ========== ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ==========
 
-	// ÀûÀÌ Á×¾úÀ» ¶§ µ¨¸®°ÔÀÌÆ®·Î È£ÃâµÊ
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½×¾ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ È£ï¿½ï¿½ï¿½
 	UFUNCTION()
 	virtual void OnEnemyDeath(AActor* DeadEnemy);
 
-protected:
-	// ========== ÇïÆÛ ÇÔ¼ö ==========
+	// ========== í”Œë ˆì´ì–´ ìƒíƒœ í†µì§€ (Plan6 Â§14.3.5) ==========
+	// GameModeê°€ ì‚¬ë§/ì ‘ì† ì¢…ë£Œë¥¼ í˜„ì¬ í˜ì´ì¦ˆì— ì „ë‹¬í•œë‹¤.
+	// ìŠ¤í…Œì´ì§€2 ë°©3+4ì²˜ëŸ¼ íŠ¹ì • í”Œë ˆì´ì–´ì˜ ì´íƒˆì´ ì§„í–‰ ìƒíƒœë¥¼ ë˜ëŒë ¤ì•¼ í•˜ëŠ” í˜ì´ì¦ˆê°€ ì‚¬ìš©í•œë‹¤.
 
-	// »ì¾ÆÀÖ´Â Àû ¼ö Ã¼Å©
+	// í”Œë ˆì´ì–´ ì‚¬ë§ (ì•„ì§ ê²Œì„ì—ëŠ” ë‚¨ì•„ ìˆìŒ)
+	virtual void NotifyPlayerDied(APlayerState* DeadPlayerState) {}
+
+	// í”Œë ˆì´ì–´ ì ‘ì† ì¢…ë£Œ (ì˜êµ¬ ì´íƒˆ)
+	virtual void NotifyPlayerLeft(APlayerState* LeftPlayerState) {}
+
+protected:
+	// ========== ï¿½ï¿½ï¿½ï¿½ ï¿½Ô¼ï¿½ ==========
+
+	// ï¿½ï¿½ï¿½ï¿½Ö´ï¿½ ï¿½ï¿½ ï¿½ï¿½ Ã¼Å©
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	int32 GetAliveEnemyCount() const;
 
-	// ========== º¯¼ö ==========
+	// ========== ï¿½ï¿½ï¿½ï¿½ ==========
 
-	// ÆäÀÌÁî°¡ ½ÃÀÛµÇ¾ú´ÂÁö ¿©ºÎ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½î°¡ ï¿½ï¿½ï¿½ÛµÇ¾ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY(BlueprintReadOnly, Category = "Phase")
 	bool bIsPhaseActive;
 
-	// ½ºÆùµÈ Àûµé
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY()
 	TArray<TWeakObjectPtr<AActor>> SpawnedEnemies;
 
-	// GameMode ÂüÁ¶
+	// GameMode ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY()
 	TObjectPtr<ADRStageGameMode> GameMode;
 
-	// GameState ÂüÁ¶
+	// GameState ï¿½ï¿½ï¿½ï¿½
 	UPROPERTY()
 	TObjectPtr<ADRStageGameState> GameState;
 
-	// ·¹º§¿¡ ¹èÄ¡µÈ ÀüÃ¼ Å¬·»Àú »çÀÌÆ® 3°³ (¸ğµç ÆäÀÌÁî°¡ °øÀ¯)
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½Ã¼ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® 3ï¿½ï¿½ (ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½î°¡ ï¿½ï¿½ï¿½ï¿½)
 	UPROPERTY(BlueprintReadOnly, Category = "Phase")
 	TArray<TObjectPtr<ADRCleanserSite>> CleanserSites;
 
-	// Phase1¿¡¼­ ¼±ÅÃµÈ È°¼º Å¬·»Àú »çÀÌÆ® 2°³
-	// Phase2, 3¿¡¼­µµ ÀÌ »çÀÌÆ®µéÀ» »ç¿ë
+	// Phase1ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ãµï¿½ È°ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® 2ï¿½ï¿½
+	// Phase2, 3ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 	UPROPERTY(BlueprintReadOnly, Category = "Phase")
 	TArray<TObjectPtr<ADRCleanserSite>> ActiveCleanserSites;
 
-	// ========== ÆäÀÌÁî ¸ñÇ¥ UI ==========
+	// ========== ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç¥ UI ==========
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase|Config")
 	UDataTable* PhaseObjectiveDataTable;
 	
 	void SetupPhaseObjective(int32 PhaseNumber);
+
+	// í–‰ ì´ë¦„ì„ ì§ì ‘ ì§€ì •í•´ ëª©í‘œë¥¼ ì„¤ì •í•œë‹¤ (Plan6 Â§5.2).
+	// í•œ í˜ì´ì¦ˆ ì•ˆì—ì„œ ëª©í‘œë¥¼ ì—¬ëŸ¬ ë²ˆ êµì²´í•˜ëŠ” ìŠ¤í…Œì´ì§€2 í˜ì´ì¦ˆë“¤ì´ ì‚¬ìš©í•œë‹¤.
+	void SetupPhaseObjectiveByRow(FName RowName);
+
+	// ìœ„ì™€ ë™ì¼í•˜ë˜ RequiredCount(ì§„í–‰ë„ ë¶„ëª¨)ë¥¼ ëŸ°íƒ€ì„ ê°’ìœ¼ë¡œ ë®ì–´ì“´ë‹¤.
+	// ì¸ì›ë³„ ìŠ¤í° ìˆ˜, ë‘ë”ì§€ ëª©í‘œ ìˆ˜ì²˜ëŸ¼ ì‹¤í–‰ ì¤‘ì— ë¶„ëª¨ê°€ ì •í•´ì§€ëŠ” ëª©í‘œì— ì‚¬ìš©í•œë‹¤.
+	void SetupPhaseObjectiveByRow(FName RowName, int32 OverrideRequiredCount);
 };

@@ -2,6 +2,7 @@
 
 
 #include "Game/DRLobbyGameState.h"
+#include "Player/DRPlayerState.h"
 #include "MultiplayerSessionsSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -93,4 +94,21 @@ void ADRLobbyGameState::SetLobbyState(ELobbyState NewState)
 void ADRLobbyGameState::OnRep_LobbyState()
 {
 	OnLobbyStateChanged.Broadcast(LobbyState);
+}
+
+bool ADRLobbyGameState::AreAllNonHostPlayersReady() const
+{
+	for (APlayerState* PS : PlayerArray)
+	{
+		if (!PS) continue;
+		if (IsPlayerHost(PS)) continue; // 호스트는 준비 검사에서 제외
+
+		const ADRPlayerState* DRPS = Cast<ADRPlayerState>(PS);
+		if (!DRPS) continue;
+
+		if (!DRPS->IsReady()) return false;
+	}
+
+	// 비호스트 플레이어가 없거나 전원 준비 완료
+	return true;
 }

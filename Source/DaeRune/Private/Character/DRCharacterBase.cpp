@@ -16,6 +16,8 @@
 #include "Character/DRCharacter.h"
 #include "Components/AudioComponent.h"
 #include "Character/DRFacialExpressionComponent.h"
+#include "AbilitySystem/DRAttributeSet.h"
+#include "Animation/AnimInstance.h"
 
 ADRCharacterBase::ADRCharacterBase()
 {
@@ -54,6 +56,9 @@ void ADRCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(ADRCharacterBase, bIsStunned);
 	DOREPLIFETIME(ADRCharacterBase, bIsBurned);
 	DOREPLIFETIME(ADRCharacterBase, bIsBeingShocked);
+
+	// 사망 상태 (RepNotify 안전망 - Relevancy 회복/늦은 조인 커버)
+	DOREPLIFETIME(ADRCharacterBase, bDead);
 }
 
 UAbilitySystemComponent* ADRCharacterBase::GetAbilitySystemComponent() const
@@ -85,69 +90,66 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 	// 플레이어 캐릭터의 경우 특별 처리
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
-		// ���� �������� Ȯ��
-		if (AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Corrupt))
+		// 의도된 디자인: 플레이어는 corrupt 상태에서만 실제로 사망한다
+		// (비-corrupt 상태의 체력 고갈은 corrupt 전환으로 이어질 뿐, 여기서 사망 처리하지 않음)
+		const bool bIsCorrupt = AbilitySystemComponent &&
+			AbilitySystemComponent->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Corrupt);
+		if (!bIsCorrupt)
 		{
-			// ���� ���¿��� ������ ��¥ ���
-			Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
-			MulticastHandleDeath(DeathImpulse);
+			return;
+		}
 
-			// �÷��̾ ��ǰ�� ��� ������ ����߸���
-			if (ADRCharacter* DRCharacter = Cast<ADRCharacter>(this))
+		// corrupt 상태에서 죽으면 진짜 사망 처리
+		Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
+		MulticastHandleDeath(DeathImpulse);
+
+		// 플레이어가 부품을 들고 있었으면 떨어트리기
+		if (ADRCharacter* DRCharacter = Cast<ADRCharacter>(this))
+		{
+			if (DRCharacter->IsCarryingPart())
 			{
-				if (DRCharacter->IsCarryingPart())
-				{
-					DRCharacter->DropCarriedPart();
-				}
+				// 사망 시에는 드롭 쿨다운을 무시해야 부품이 캐릭터와 함께 파괴되지 않는다
+				DRCharacter->ForceDropCarriedPart();
 			}
+		}
 
-			// GameMode�� �÷��̾� ��� �˸� (���� üũ)
-			if (ADRGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRGameModeBase>())
+		// GameMode에 플레이어 사망 알림 (전멸 체크)
+		if (ADRGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRGameModeBase>())
+		{
+			APlayerState* PS = GetPlayerState();
+			if (PS)
 			{
-				APlayerState* PS = GetPlayerState();
-				if (PS)
-				{
-					GameMode->OnPlayerDied(PS);
-				}
+				GameMode->OnPlayerDied(PS);
 			}
+		}
 
-			// ���� ����
-			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
-			{
-				// ���� ä���� ���� ���·� ������Ʈ
-				DRPC->UpdateVoiceChannelForDeathState(true);
-
-				// ������ �� ���� ��� ��ȯ
-				FTimerHandle SpectatorTimerHandle;
-				GetWorld()->GetTimerManager().SetTimer(
-					SpectatorTimerHandle,
-					[DRPC]()
-					{
-						if (IsValid(DRPC))
-						{
-							DRPC->ClientStartSpectating();
-						}
-					},
-					4.0f,
-					false
-				);
-			}
-
-			// ĳ���� ���� �ı�
-			FTimerHandle DestroyTimerHandle;
+		// 관전 시작
+		if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
+		{
+			// 딜레이 후 관전 모드 전환
+			FTimerHandle SpectatorTimerHandle;
 			GetWorld()->GetTimerManager().SetTimer(
-			   DestroyTimerHandle,
-			   [this]()
-			   {
-				  if (IsValid(this))
-				  {
-					 Destroy();
-				  }
-			   },
-			   3.5f,
-			   false
+				SpectatorTimerHandle,
+				FTimerDelegate::CreateWeakLambda(DRPC, [DRPC]()
+				{
+					DRPC->ClientStartSpectating();
+				}),
+				2.5f,
+				false
 			);
 		}
+
+		// 캐릭터 액터 파괴
+		FTimerHandle DestroyTimerHandle;
+		GetWorld()->GetTimerManager().SetTimer(
+		   DestroyTimerHandle,
+		   FTimerDelegate::CreateWeakLambda(this, [this]()
+		   {
+			  Destroy();
+		   }),
+		   2.2f,
+		   false
+		);
 	}
 	else
 	{
@@ -213,7 +215,11 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 	{
 		CharMoveComp->StopMovementImmediately();
 		CharMoveComp->DisableMovement();
-		CharMoveComp->SetComponentTickEnabled(false);
+		// NOTE: SetComponentTickEnabled(false)는 호출하지 않음.
+		// ACharacter는 Mesh->AddTickPrerequisiteComponent(CharacterMovement)로 mesh tick을 CMC에 종속시키는데,
+		// 서버의 Autonomous Proxy(원격 클라이언트의 캐릭터)에 한해 CMC tick을 끄면 mesh tick까지 함께 멈춰
+		// 호스트 시점에서 사망 몽타주가 보이지 않음.
+		// MovementMode가 MOVE_None이고 StopMovementImmediately가 호출됐으므로 CMC가 계속 tick해도 부하 미미.
 	}
 
 	// �޽ø� ���� ��ġ�� ����
@@ -245,19 +251,75 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 		StunDebuffComponent->Deactivate();
 	}
 
+	// RepNotify는 클라이언트에서만 자동 호출됨. 서버에서도 동일 처리를 위해 수동 호출.
+	// virtual이므로 ADRCharacter 인스턴스에서는 override가 호출되어 사망 몽타주 재생.
+	OnRep_Dead();
+
 	// ��� �̺�Ʈ ��ε�ĳ��Ʈ
 	OnDeathDelegate.Broadcast(this);
+}
 
-	if (UWorld* World = GetWorld())
+void ADRCharacterBase::Revive(const FVector& ReviveLocation, float HealthRatio, float WaterRatio)
+{
+	if (!HasAuthority() || !bDead) return;
+
+	// 부활 지점으로 이동 (물리 텔레포트 - 스윕 없이)
+	SetActorLocation(ReviveLocation, false, nullptr, ETeleportType::TeleportPhysics);
+
+	// 어트리뷰트 복원. 어트리뷰트 세트 종류에 무관하게 태그 기반으로 처리하지 않고
+	// 기본 Health/MaxHealth 만 다루므로 UDRAttributeSet 공통 경로를 사용한다.
+	if (AbilitySystemComponent)
 	{
-		if (APlayerController* LocalPC = World->GetFirstPlayerController())
+		if (const UDRAttributeSet* DRAttributes = Cast<UDRAttributeSet>(
+			AbilitySystemComponent->GetAttributeSet(UDRAttributeSet::StaticClass())))
 		{
-			if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(LocalPC))
-			{
-				DRPC->RefreshAllPlayerVoiceMutes();
-			}
+			const float TargetHealth = FMath::Max(1.f, DRAttributes->GetMaxHealth() * HealthRatio);
+			AbilitySystemComponent->SetNumericAttributeBase(DRAttributes->GetHealthAttribute(), TargetHealth);
+
+			const float TargetWater = DRAttributes->GetMaxWater() * WaterRatio;
+			AbilitySystemComponent->SetNumericAttributeBase(DRAttributes->GetWaterAttribute(), TargetWater);
 		}
 	}
+
+	// 사망 상태 해제 -> 전 클라에서 상태/연출 복원
+	bDead = false;
+	MulticastHandleRevive();
+}
+
+void ADRCharacterBase::MulticastHandleRevive_Implementation()
+{
+	// ===== MulticastHandleDeath 의 역연산 (Plan6 §5.9) =====
+
+	// 캡슐 콜리전 복원
+	if (GetCapsuleComponent())
+	{
+		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	}
+
+	// 이동 복원
+	if (UCharacterMovementComponent* CharMoveComp = GetCharacterMovement())
+	{
+		CharMoveComp->SetMovementMode(MOVE_Walking);
+	}
+
+	// 메시 복원 (사망 시 물리 시뮬을 끄고 QueryOnly 로 바꿔둔 상태)
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->SetSimulatePhysics(false);
+		MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+
+		// 사망 몽타주 정지
+		if (UAnimInstance* AnimInstance = MeshComp->GetAnimInstance())
+		{
+			AnimInstance->StopAllMontages(0.1f);
+		}
+	}
+
+	// 디버프 VFX 컴포넌트는 사망 시 비활성화되었으나, 부활 시엔 디버프가 없는 상태이므로
+	// 켜지 않는다 (디버프가 다시 적용되면 각 RepNotify 가 활성화한다).
+
+	// BP 측 복원: Dissolve 머티리얼 파라미터 원복, 사망 카메라 애니메이션 해제, 표정 리셋 등
+	K2_OnCharacterRevived();
 }
 
 void ADRCharacterBase::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
@@ -278,6 +340,11 @@ void ADRCharacterBase::OnRep_Stunned()
 
 void ADRCharacterBase::OnRep_Burned()
 {
+}
+
+void ADRCharacterBase::OnRep_Dead()
+{
+	// 기본 구현은 비어있음. 파생 클래스(ADRCharacter)에서 사망 애니메이션 재생.
 }
 
 void ADRCharacterBase::BeginPlay()
@@ -348,7 +415,7 @@ UNiagaraSystem* ADRCharacterBase::GetBloodEffect_Implementation()
 
 FTaggedMontage ADRCharacterBase::GetTaggedMontageByTag_Implementation(const FGameplayTag& MontageTag)
 {
-	for (FTaggedMontage TaggedMontage : AttackMontages)
+	for (const FTaggedMontage& TaggedMontage : AttackMontages)
 	{
 		if (TaggedMontage.MontageTag == MontageTag)
 		{

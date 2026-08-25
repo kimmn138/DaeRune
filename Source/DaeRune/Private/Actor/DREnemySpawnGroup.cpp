@@ -21,7 +21,7 @@ void ADREnemySpawnGroup::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// ¹Ì¸® ¹èÄ¡µÈ Àûµé µî·Ï
+	// ï¿½Ì¸ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
 	if (HasAuthority())
 	{
 		for (const TSoftObjectPtr<ADREnemy>& SoftEnemy : PrePlacedEnemies)
@@ -47,7 +47,7 @@ void ADREnemySpawnGroup::RegisterEnemy(ADREnemy* Enemy)
 	if (!HasAuthority()) return;
 	if (!Enemy) return;
 
-	// Áßº¹ µî·Ï ¹æÁö
+	// ï¿½ßºï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	for (const TWeakObjectPtr<ADREnemy>& Registered : RegisteredEnemies)
 	{
 		if (Registered.Get() == Enemy) return;
@@ -56,7 +56,7 @@ void ADREnemySpawnGroup::RegisterEnemy(ADREnemy* Enemy)
 	RegisteredEnemies.Add(Enemy);
 	AliveEnemyCount++;
 
-	// Àû »ç¸Á ÀÌº¥Æ® ¹ÙÀÎµù
+	// ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½Ìºï¿½Æ® ï¿½ï¿½ï¿½Îµï¿½
 	Enemy->OnDestroyed.AddDynamic(this, &ADREnemySpawnGroup::OnEnemyDestroyed);
 }
 
@@ -68,11 +68,11 @@ void ADREnemySpawnGroup::ActivateAllEnemies()
 	{
 		if (ADREnemy* Enemy = WeakEnemy.Get())
 		{
-			// Àû È°¼ºÈ­ (DREnemy¿¡ ÀÌ ÇÔ¼ö°¡ ÀÖ´Ù°í °¡Á¤)
+			// ï¿½ï¿½ È°ï¿½ï¿½È­ (DREnemyï¿½ï¿½ ï¿½ï¿½ ï¿½Ô¼ï¿½ï¿½ï¿½ ï¿½Ö´Ù°ï¿½ ï¿½ï¿½ï¿½ï¿½)
 			Enemy->SetActorHiddenInGame(false);
 			Enemy->SetActorEnableCollision(true);
 
-			// AI È°¼ºÈ­´Â DREnemyÀÇ ÇÔ¼ö·Î Ã³¸®
+			// AI È°ï¿½ï¿½È­ï¿½ï¿½ DREnemyï¿½ï¿½ ï¿½Ô¼ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 			// Enemy->ActivateAI();
 		}
 	}
@@ -87,7 +87,7 @@ void ADREnemySpawnGroup::OnEnemyDestroyed(AActor* DestroyedActor)
 
 	AliveEnemyCount = FMath::Max(0, AliveEnemyCount - 1);
 
-	// °³º° »ç¸Á delegate
+	// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ delegate
 	OnEnemyDied.Broadcast(DeadEnemy);
 
 	CheckAllEnemiesDead();
@@ -99,7 +99,7 @@ void ADREnemySpawnGroup::CheckAllEnemiesDead()
 	{
 		bAllEnemiesDead = true;
 
-		// Àü¸ê delegate
+		// ï¿½ï¿½ï¿½ï¿½ delegate
 		OnAllEnemiesDead.Broadcast();
 	}
 }
@@ -108,7 +108,21 @@ void ADREnemySpawnGroup::OnRep_AllEnemiesDead()
 {
 	if (bAllEnemiesDead)
 	{
-		// Å¬¶óÀÌ¾ðÆ®¿¡¼­ ÇÊ¿äÇÑ Ã³¸® (UI ¾÷µ¥ÀÌÆ® µî)
+		// Å¬ï¿½ï¿½ï¿½Ì¾ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¿ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½ (UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½)
 	}
+}
+
+TArray<ADREnemy*> ADREnemySpawnGroup::GetRegisteredEnemies() const
+{
+	TArray<ADREnemy*> Out;
+	Out.Reserve(RegisteredEnemies.Num());
+	for (const TWeakObjectPtr<ADREnemy>& Weak : RegisteredEnemies)
+	{
+		if (ADREnemy* Enemy = Weak.Get())
+		{
+			Out.Add(Enemy);
+		}
+	}
+	return Out;
 }
 

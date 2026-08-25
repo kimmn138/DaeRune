@@ -15,11 +15,13 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Character/DRCharacter.h"
+#include "Player/DRPlayerState.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "Engine/OverlapResult.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/ShapeComponent.h"
 #include "DRAbilityTypes.h"
+#include "Game/DRGameStateBase.h"
 #include "DaeRune/DaeRune.h"
 #include "Net/UnrealNetwork.h"
 
@@ -31,7 +33,8 @@ ADREnemy::ADREnemy()
 	// 메시 가시성 충돌 설정
 	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
-	NetPriority = 3.0f;
+	// 폰 기본값(3.0)이면 적 100마리가 플레이어와 동순위로 경쟁 - 낮춰서 대역폭 포화 시 플레이어 갱신 보호
+	NetPriority = 2.0f;
 	NetUpdateFrequency = 30.0f;
 	MinNetUpdateFrequency = 15.0f;
 
@@ -48,9 +51,15 @@ ADREnemy::ADREnemy()
 	GetCharacterMovement()->bUseControllerDesiredRotation = false;  // 회전은 직접 처리
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 500.f, 0.f);
 
-	// 클라이언트 네트워크 스무딩 설정 (위치만)
+	// 클라이언트 네트워크 스무딩 설정 (위치/회전)
 	GetCharacterMovement()->NetworkSimulatedSmoothLocationTime = 0.1f;
+	GetCharacterMovement()->NetworkSimulatedSmoothRotationTime = 0.1f;
 	GetCharacterMovement()->NetworkSmoothingMode = ENetworkSmoothingMode::Exponential;
+
+	// RVO Avoidance - 적들이 같은 지점으로 몰릴 때 서로 비켜서 지나가도록
+	GetCharacterMovement()->bUseRVOAvoidance = true;
+	GetCharacterMovement()->AvoidanceConsiderationRadius = 500.f;
+	GetCharacterMovement()->AvoidanceWeight = 0.5f;
 
 	// 적 전용 어트리뷰트셋
 	AttributeSets = CreateDefaultSubobject<UDREnemyAttributeSet>("EnemyAttributeSet");
@@ -77,18 +86,11 @@ void ADREnemy::Tick(float DeltaTime)
 
 	if (HasAuthority())
 	{
-		// 서버: ControlRotation(SetFocus)을 향해 직접 회전 + 복제용 저장
+		// 서버: ControlRotation(SetFocus)을 향해 직접 회전
+		// (클라이언트는 ReplicatedMovement의 Rotation + CharacterMovement 회전 스무딩으로 따라가므로 별도 복제 불필요)
 		FRotator CurrentControlRot = GetControlRotation();
 		FRotator CurrentActorRot = GetActorRotation();
-		FRotator NewRotation = FMath::RInterpTo(CurrentActorRot, CurrentControlRot, DeltaTime, 10.0f);
-		SetActorRotation(FRotator(0.f, NewRotation.Yaw, 0.f));
-		ReplicatedTargetRotation = CurrentControlRot;
-	}
-	else if (GetLocalRole() == ROLE_SimulatedProxy)
-	{
-		// 클라이언트: ReplicatedTargetRotation을 향해 직접 회전
-		FRotator CurrentActorRot = GetActorRotation();
-		FRotator NewRotation = FMath::RInterpTo(CurrentActorRot, ReplicatedTargetRotation, DeltaTime, 10.0f);
+		FRotator NewRotation = FMath::RInterpTo(CurrentActorRot, CurrentControlRot, DeltaTime, RotationInterpSpeed);
 		SetActorRotation(FRotator(0.f, NewRotation.Yaw, 0.f));
 	}
 }
@@ -97,13 +99,67 @@ void ADREnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME(ADREnemy, ReplicatedTargetRotation);
 	DOREPLIFETIME(ADREnemy, bIsAggroed);
+	DOREPLIFETIME(ADREnemy, bCarriesPart);
+	DOREPLIFETIME_CONDITION(ADREnemy, WaveOutlineLevel, COND_InitialOnly);
 }
 
-void ADREnemy::OnRep_TargetRotation()
+void ADREnemy::SetCarriesPart(bool bNewCarriesPart)
 {
-	// Tick에서 보간 처리 - 여기서는 아무것도 안 함
+	if (!HasAuthority()) return;
+	if (bCarriesPart == bNewCarriesPart) return;
+
+	bCarriesPart = bNewCarriesPart;
+
+	// 서버에서 즉시 가시화/숨김 (OnRep는 클라이언트에서만 호출됨)
+	if (PartMeshComponent)
+	{
+		PartMeshComponent->SetVisibility(bCarriesPart);
+	}
+
+	// 블랙보드에 부품 보유 상태 반영
+	if (DRAIController && DRAIController->GetBlackboardComponent())
+	{
+		DRAIController->GetBlackboardComponent()->SetValueAsBool(DRBlackboardKeys::HasPart, bCarriesPart);
+	}
+}
+
+void ADREnemy::OnRep_bCarriesPart()
+{
+	// 클라이언트: 메시 가시화 동기화
+	if (PartMeshComponent)
+	{
+		PartMeshComponent->SetVisibility(bCarriesPart);
+	}
+}
+
+void ADREnemy::SetWaveOutlineLevel(uint8 NewLevel)
+{
+	if (!HasAuthority()) return;
+
+	WaveOutlineLevel = FMath::Clamp<uint8>(NewLevel, 0, 5);
+	ApplyWaveOutline();
+}
+
+void ADREnemy::OnRep_WaveOutlineLevel()
+{
+	ApplyWaveOutline();
+}
+
+void ADREnemy::ApplyWaveOutline()
+{
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (!MeshComp) return;
+
+	if (WaveOutlineLevel > 0)
+	{
+		MeshComp->SetRenderCustomDepth(true);
+		MeshComp->SetCustomDepthStencilValue(static_cast<int32>(WaveOutlineLevel));
+	}
+	else
+	{
+		MeshComp->SetRenderCustomDepth(false);
+	}
 }
 
 void ADREnemy::PossessedBy(AController* NewController)
@@ -239,24 +295,27 @@ void ADREnemy::ActivateDeathAbilities()
 
 void ADREnemy::ReduceWaterReward()
 {
-	if (!HasAuthority() || !WaterReductionEffectClass) return;
+	//if (!HasAuthority() || !WaterReductionEffectClass) return;
 
-	// 현재 물이 없으면 감소시키지 않음
-	const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets);
-	if (!DRAS || DRAS->GetWater() <= 0.f) return;
+	//// 현재 물이 없으면 감소시키지 않음
+	//const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets);
+	//if (!DRAS || DRAS->GetWater() <= 0.f) return;
 
-	// 헬퍼 함수로 간소화된 GE 생성 및 적용
-	FGameplayEffectSpecHandle SpecHandle = UDRAbilitySystemLibrary::CreateEffectSpec(
-		AbilitySystemComponent, WaterReductionEffectClass, this);
+	//// TEMP: 공격당 물 감소 비활성화 (테스트용, 되돌릴 때 이 라인 제거)
+	//return;
 
-	if (SpecHandle.IsValid())
-	{
-		UDRAbilitySystemLibrary::ApplyEffectSpecWithSetByCaller(
-			AbilitySystemComponent,
-			SpecHandle,
-			FDRGameplayTags::Get().Water_SetByCaller_Reduction,
-			WaterReductionPerAttack);
-	}
+	//// 헬퍼 함수로 간소화된 GE 생성 및 적용
+	//FGameplayEffectSpecHandle SpecHandle = UDRAbilitySystemLibrary::CreateEffectSpec(
+	//	AbilitySystemComponent, WaterReductionEffectClass, this);
+
+	//if (SpecHandle.IsValid())
+	//{
+	//	UDRAbilitySystemLibrary::ApplyEffectSpecWithSetByCaller(
+	//		AbilitySystemComponent,
+	//		SpecHandle,
+	//		FDRGameplayTags::Get().Water_SetByCaller_Reduction,
+	//		WaterReductionPerAttack);
+	//}
 }
 
 void ADREnemy::SetKnockbackState(bool bInKnockback)
@@ -280,10 +339,32 @@ bool ADREnemy::DropPart()
 	SpawnParams.SpawnCollisionHandlingOverride =
 		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	FVector SpawnLocation = GetActorLocation() + GetActorUpVector() * 10.f;
-	if (PartMeshComponent && PartMeshComponent->IsVisible())
+	// 시작점: PartMesh 위치(가능 시) 또는 액터 위치
+	FVector SpawnLocation = GetActorLocation();
+	if (PartMeshComponent)
 	{
 		SpawnLocation = PartMeshComponent->GetComponentLocation();
+	}
+
+	// 잠자리처럼 공중에서 죽는 경우 대비: 지면으로 라인트레이스 후 그 지점에 스폰
+	{
+		const FVector TraceStart = SpawnLocation + FVector(0.f, 0.f, 50.f);
+		const FVector TraceEnd = SpawnLocation - FVector(0.f, 0.f, 5000.f);
+		FHitResult GroundHit;
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(this);
+		if (GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, QueryParams))
+		{
+			SpawnLocation = GroundHit.ImpactPoint + FVector(0.f, 0.f, 80.f);
+		}
+		else
+		{
+			// 지면을 못 찾으면 액터 발 밑(캡슐 하단)으로 폴백
+			if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+			{
+				SpawnLocation = GetActorLocation() - FVector(0.f, 0.f, Capsule->GetScaledCapsuleHalfHeight());
+			}
+		}
 	}
 
 	AActor* DroppedPart = GetWorld()->SpawnActor<AActor>(
@@ -345,6 +426,10 @@ void ADREnemy::BeginPlay()
 
 	// 커스텀 히트박스 자동 수집 및 콜리전 설정
 	SetupHitboxComponents();
+
+	// 웨이브 외곽선 적용 (서버는 SetWaveOutlineLevel에서, 클라는 OnRep에서 호출되지만
+	// 컴포넌트 초기화 타이밍 이슈 방지용으로 BeginPlay에서도 한 번 재적용)
+	ApplyWaveOutline();
 
 	// GameBalanceConfig에서 밸런스 값 적용 (서버에서만)
 	if (HasAuthority())
@@ -620,12 +705,14 @@ void ADREnemy::GrantWaterToPlayers()
 
 	if (bIsBoss)
 	{
-		// 보스: 맵 전체 플레이어에게 지급
-		UGameplayStatics::GetAllActorsOfClass(
-			GetWorld(),
-			ADRCharacter::StaticClass(),
-			PlayersToGrant
-		);
+		// 보스: 맵 전체 플레이어에게 지급 (월드 전체 액터 순회 대신 GameState 플레이어 목록 사용)
+		if (const ADRGameStateBase* GS = GetWorld()->GetGameState<ADRGameStateBase>())
+		{
+			for (ADRCharacter* Player : GS->GetAlivePlayers())
+			{
+				PlayersToGrant.Add(Player);
+			}
+		}
 	}
 	else
 	{
@@ -677,6 +764,16 @@ void ADREnemy::GrantWaterToPlayers()
 			{
 				// 보스는 MaxWater까지 채워주기
 				WaterAmount = TargetAS->GetMaxWater() - TargetAS->GetWater();
+			}
+
+			// 업그레이드 칩의 "물 획득량" 배율 (대상 플레이어별로 다르다)
+			if (const APawn* TargetPawn = Cast<APawn>(Player))
+			{
+				if (const ADRPlayerState* TargetPS = TargetPawn->GetPlayerState<ADRPlayerState>())
+				{
+					WaterAmount = FMath::Max(0.f,
+						TargetPS->GetUpgradeRuntime().Apply(EDRUpgradeStat::WaterGain, WaterAmount));
+				}
 			}
 
 			// SetByCaller로 지급량 설정

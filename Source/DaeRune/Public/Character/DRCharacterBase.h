@@ -60,6 +60,22 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	virtual void MulticastHandleDeath(const FVector& DeathImpulse);
 
+	// ========== 부활 (Plan6 §5.9) ==========
+	// 사망 처리(MulticastHandleDeath)의 역연산. 같은 폰을 되살린다.
+	// 스테이지2 방4 두더지 클리어 시 사망자를 부활시키는 데 사용한다.
+	// HealthRatio = 최대 체력에 대한 비율 (0.5 = 50%)
+	UFUNCTION(BlueprintCallable, Category = "Combat|Revive")
+	virtual void Revive(const FVector& ReviveLocation, float HealthRatio = 0.5f, float WaterRatio = 0.5f);
+
+	// 부활 상태 복원 RPC (전 클라 공통 연출/컴포넌트 복원)
+	UFUNCTION(NetMulticast, Reliable)
+	virtual void MulticastHandleRevive();
+
+	// BP 측 부활 연출 훅.
+	// ★Dissolve 는 BP 타임라인으로 진행되므로 머티리얼 파라미터 원복은 여기서 처리해야 한다.
+	UFUNCTION(BlueprintImplementableEvent, Category = "Combat|Revive")
+	void K2_OnCharacterRevived();
+
 	// ���� ��Ÿ�� �迭
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	TArray<FTaggedMontage> AttackMontages;
@@ -107,10 +123,15 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	FName TailSocketName;
 
-protected:
-	// 사망 상태
+public:
+	// 사망 상태 (서버에서 MulticastHandleDeath로 변경, OnRep_Dead로 클라 동기화)
+	UPROPERTY(ReplicatedUsing = OnRep_Dead, BlueprintReadOnly, Category = "Combat|Death")
 	bool bDead = false;
 
+	UFUNCTION()
+	virtual void OnRep_Dead();
+
+protected:
 	// ���� �±� �ݹ�
 	virtual void StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 

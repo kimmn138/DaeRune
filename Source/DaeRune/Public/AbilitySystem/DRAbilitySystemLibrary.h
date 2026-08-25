@@ -11,6 +11,7 @@ class UAbilityInfo;
 class UAbilitySystemComponent;
 class UGameBalanceConfig;
 class UOverlayWidgetController;
+class UUserWidget;
 struct FWidgetControllerParams;
 
 /**
@@ -39,6 +40,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|CharacterClassDefaults")
 	static UPlayerCharacterClassInfo* GetPlayerCharacterClassInfo(const UObject* WorldContextObject);
+
+	// EPlayerCharacterClass에 매핑된 캐릭터 설명창 위젯 클래스 반환 (Tab Hold 패널용)
+	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|CharacterClassDefaults", meta = (DefaultToSelf = "WorldContextObject"))
+	static TSubclassOf<UUserWidget> GetCharacterInfoWidgetClass(const UObject* WorldContextObject, EPlayerCharacterClass PlayerClass);
 
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|CharacterClassDefaults")
 	static void InitializePlayerDefaultAttributes(const UObject* WorldContextObject, EPlayerCharacterClass PlayerClass, float Level, UAbilitySystemComponent* ASC);
@@ -71,6 +76,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayEffects")
 	static FVector GetKnockbackForce(const FGameplayEffectContextHandle& EffectContextHandle);
 
+	// 소스 어빌리티 AssetTags 조회 (탑승 공유 데미지 재전파 방지 판정 등)
+	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayEffects")
+	static FGameplayTagContainer GetSourceAbilityTags(const FGameplayEffectContextHandle& EffectContextHandle);
+
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|GameplayEffects")
 	static void SetIsSuccessfulDebuff(UPARAM(ref) FGameplayEffectContextHandle& EffectContextHandle, bool bInSuccessfulDebuff);
 
@@ -97,6 +106,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|GameplayMechanics")
 	static AActor* GetClosestCleanserSite(APawn* ControlledPawn);
+
+	// Asker가 Target을 직접 시야로 볼 수 있는지 검사 (벽/지형이 사이를 가로막지 않는지).
+	// 비행 적이 벽 너머 플레이어를 타깃팅하지 않도록 BT의 타깃 선정/검증에서 사용.
+	// 지상 적의 NavMesh 도달 가능성이 아니라 "벽 너머 차단" 의미. 비행/지상 위치와 무관하게 작동.
+	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|AI")
+	static bool IsActorReachable(APawn* Asker, AActor* Target);
 
 	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayMechanics")
 	static bool IsNotFriend(AActor* FirstActor, AActor* SecondActor);

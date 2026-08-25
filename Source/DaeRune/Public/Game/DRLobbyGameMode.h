@@ -34,6 +34,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Lobby")
 	void PowerOn(class ADRPlayerController* Requester);
 
+	// 플레이어 준비 상태 설정 (클라이언트 요청 처리, 서버 전용)
+	UFUNCTION(BlueprintCallable, Category = "Lobby")
+	void SetPlayerReady(class ADRPlayerController* Player, bool bReady);
+
 	// 플레이어 킥 (호스트만 호출 가능)
 	UFUNCTION(BlueprintCallable, Category = "Lobby")
 	void KickPlayer(class ADRPlayerController* Requester, class ADRPlayerController* TargetPlayer);

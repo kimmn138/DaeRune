@@ -3,6 +3,8 @@
 
 #include "Game/DRMainMenuGameMode.h"
 #include "Game/DRGameInstance.h"
+#include "UI/Loading/DRLoadingScreenSubsystem.h"
+#include "UI/Loading/DRLoadingScreenWidget.h"
 #include "Camera/CameraActor.h"
 #include "Character/DRCharacter.h"
 #include "UI/Widget/DRTutorialStartWidget.h"
@@ -208,27 +210,9 @@ void ADRMainMenuGameMode::StartTutorial()
 		CurrentMenuWidget = nullptr;
 	}
 
-	// 2. 디스플레이 캐릭터가 있으면 카메라를 캐릭터 쪽으로 블렌드
-	if (DisplayCharacter)
-	{
-		// 캐릭터 이동 활성화 (Possess 준비)
-		if (UCharacterMovementComponent* CMC = Cast<UCharacterMovementComponent>(DisplayCharacter->GetMovementComponent()))
-		{
-			CMC->SetMovementMode(MOVE_Walking);
-		}
-
-		PC->Possess(DisplayCharacter);
-		PC->SetViewTargetWithBlend(DisplayCharacter, CameraBlendTime);
-	}
-
-	// 3. 블렌드 완료 후 튜토리얼 맵으로 이동
-	GetWorldTimerManager().SetTimer(
-		TutorialTransitionTimerHandle,
-		this,
-		&ADRMainMenuGameMode::OnTutorialTransitionFinished,
-		CameraBlendTime,
-		false
-	);
+	// 2. 카메라 블렌드 없이 즉시 로딩 화면 등장 + 맵 이동
+	//    (로딩 화면이 전체를 덮으므로 블렌드 연출은 보이지 않아 생략)
+	OnTutorialTransitionFinished();
 }
 
 void ADRMainMenuGameMode::OnTutorialTransitionFinished()
@@ -236,6 +220,61 @@ void ADRMainMenuGameMode::OnTutorialTransitionFinished()
 	UWorld* World = GetWorld();
 	if (!World) return;
 
-	// 튜토리얼 맵으로 이동
+	// 로딩 화면 위젯이 지정되어 있으면: 등장 애니 → 로드 → (도착 맵에서) 퇴장 애니
+	if (TutorialLoadingWidgetClass)
+	{
+		if (UGameInstance* GI = GetGameInstance())
+		{
+			if (UDRLoadingScreenSubsystem* LoadingSubsystem = GI->GetSubsystem<UDRLoadingScreenSubsystem>())
+			{
+				LoadingSubsystem->OpenLevelWithLoadingScreen(TutorialLoadingWidgetClass, FName(*TutorialMapName), FString());
+				return;
+			}
+		}
+	}
+
+	// 폴백: 로딩 화면 없이 바로 이동
 	UGameplayStatics::OpenLevel(World, FName(*TutorialMapName));
+}
+
+void ADRMainMenuGameMode::SkipTutorialAndReloadMenu()
+{
+	UDRGameInstance* GI = Cast<UDRGameInstance>(GetGameInstance());
+	if (!GI) return;
+
+	GI->SetTutorialCompleted();
+
+	if (CurrentMenuWidget)
+	{
+		CurrentMenuWidget->RemoveFromParent();
+		CurrentMenuWidget = nullptr;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// 현재 메인 메뉴 맵을 그대로 재오픈 → BeginPlay()가 다시 분기 평가 (로비 프리뷰로 진입)
+	const FName CurrentMapName(*UGameplayStatics::GetCurrentLevelName(World, true));
+	UGameplayStatics::OpenLevel(World, CurrentMapName);
+}
+
+void ADRMainMenuGameMode::ResetTutorialAndReloadMenu()
+{
+	UDRGameInstance* GI = Cast<UDRGameInstance>(GetGameInstance());
+	if (!GI) return;
+
+	GI->ResetTutorialProgress();
+
+	if (CurrentMenuWidget)
+	{
+		CurrentMenuWidget->RemoveFromParent();
+		CurrentMenuWidget = nullptr;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// 현재 메인 메뉴 맵을 그대로 재오픈 → BeginPlay()가 다시 분기 평가
+	const FName CurrentMapName(*UGameplayStatics::GetCurrentLevelName(World, true));
+	UGameplayStatics::OpenLevel(World, CurrentMapName);
 }

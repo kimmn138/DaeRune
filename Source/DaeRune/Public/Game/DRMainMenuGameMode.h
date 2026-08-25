@@ -8,6 +8,7 @@
 
 class ADRCharacter;
 class UDRTutorialStartWidget;
+class UDRLoadingScreenWidget;
 
 UCLASS()
 class DAERUNE_API ADRMainMenuGameMode : public AGameModeBase
@@ -20,6 +21,14 @@ public:
 	// 튜토리얼 시작 (UI에서 호출)
 	UFUNCTION(BlueprintCallable, Category = "MainMenu")
 	void StartTutorial();
+
+	// 튜토리얼 스킵: 완료 플래그를 저장하고 메인 메뉴를 재로드 → 로비 프리뷰로 전환
+	UFUNCTION(BlueprintCallable, Category = "MainMenu")
+	void SkipTutorialAndReloadMenu();
+
+	// QA: 튜토리얼 진행 상태를 리셋하고 메인 메뉴를 재로드
+	UFUNCTION(BlueprintCallable, Category = "MainMenu|QA")
+	void ResetTutorialAndReloadMenu();
 
 protected:
 	virtual void BeginPlay() override;
@@ -91,6 +100,10 @@ protected:
 	// 튜토리얼 맵 이름
 	UPROPERTY(EditDefaultsOnly, Category = "Level")
 	FString TutorialMapName = TEXT("TutorialMap");
+
+	// 튜토리얼 시작 시 사용할 로딩 화면 위젯 클래스(WBP_LoadingScreen_Tutorial 등)
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UDRLoadingScreenWidget> TutorialLoadingWidgetClass;
 
 private:
 	// 현재 활성 UI 위젯

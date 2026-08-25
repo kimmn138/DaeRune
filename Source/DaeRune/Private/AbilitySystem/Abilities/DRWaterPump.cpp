@@ -188,7 +188,8 @@ void UDRWaterPump::StartWaterPumpLoop()
     if (!OwnerCharacter) return;
 
     // 공통 초기화
-    DamageTickCounter = 0;
+    // 첫 틱에서 즉시 데미지가 적용되도록 카운터를 임계값 직전으로 초기화
+    DamageTickCounter = FMath::Max(0, DamageApplicationInterval - 1);
     CurrentTarget = nullptr;
     PreviousTarget = nullptr;
     CachedBeamEndPoint = FVector::ZeroVector;
@@ -199,10 +200,29 @@ void UDRWaterPump::StartWaterPumpLoop()
         // GameplayCue는 서버에서만 관리 → ASC가 자동으로 클라이언트에 리플리케이트
         if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
         {
-            ASC->AddGameplayCue(
-                FDRGameplayTags::Get().GameplayCue_Skill_WaterPump,
-                FGameplayCueParameters()
-            );
+            // AddGameplayCue는 카운트 누적 방식 → 이전 Stop 누락 시 잔존하므로 먼저 제거
+            const FGameplayTag& WaterPumpCue = FDRGameplayTags::Get().GameplayCue_Skill_WaterPump;
+            ASC->RemoveGameplayCue(WaterPumpCue);
+            ASC->AddGameplayCue(WaterPumpCue, FGameplayCueParameters());
+
+            // 채널링 슬로우 GE 적용 (이전 핸들이 살아있다면 먼저 제거하여 스택 누적 방지)
+            if (SlowSelfEffectClass)
+            {
+                if (ActiveSlowSelfHandle.IsValid())
+                {
+                    ASC->RemoveActiveGameplayEffect(ActiveSlowSelfHandle);
+                    ActiveSlowSelfHandle.Invalidate();
+                }
+
+                FGameplayEffectContextHandle ContextHandle = ASC->MakeEffectContext();
+                ContextHandle.AddSourceObject(this);
+                const FGameplayEffectSpecHandle SpecHandle =
+                    ASC->MakeOutgoingSpec(SlowSelfEffectClass, GetAbilityLevel(), ContextHandle);
+                if (SpecHandle.IsValid())
+                {
+                    ActiveSlowSelfHandle = ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+                }
+            }
         }
 
         // 서버 전용 데미지 틱 타이머 (타겟 감지 + 데미지 적용)
@@ -218,6 +238,9 @@ void UDRWaterPump::StartWaterPumpLoop()
         // 3P 빔 리플리케이트 상태 활성화
         if (ADRCharacter* DRChar = Cast<ADRCharacter>(OwnerCharacter))
         {
+            // 3P 빔 길이 정규화가 1P와 같은 사거리를 쓰도록 동기화
+            DRChar->WaterPumpWeaponRange = WeaponRange;
+
             // 활성화 전에 초기 끝지점 계산 (비소유 클라이언트에서 유효한 끝지점으로 3P 빔 생성)
             if (OwnerCharacter->Implements<UCombatInterface>())
             {
@@ -292,6 +315,13 @@ void UDRWaterPump::StopWaterPumpLoop()
             ASC->RemoveGameplayCue(
                 FDRGameplayTags::Get().GameplayCue_Skill_WaterPump
             );
+
+            // 채널링 슬로우 GE 제거
+            if (ActiveSlowSelfHandle.IsValid())
+            {
+                ASC->RemoveActiveGameplayEffect(ActiveSlowSelfHandle);
+                ActiveSlowSelfHandle.Invalidate();
+            }
         }
 
         DamageTickCounter = 0;
@@ -337,9 +367,14 @@ void UDRWaterPump::PerformWaterPumpTick()
     FVector BeamEndPoint = CalculateWaterBeamEndPoint(WeaponSocketLocation, bHitObstacle, HitResult);
 
     // 캐릭터의 리플리케이트 빔 끝점 갱신 (비소유 클라이언트에서 3P 빔 위치 업데이트에 사용)
+    // 일정 거리 이상 움직였을 때만 대입해서 정지 조준 시 프로퍼티가 dirty되지 않도록 함
     if (ADRCharacter* DRChar = Cast<ADRCharacter>(OwnerCharacter))
     {
-        DRChar->WaterPumpBeamEndPoint = BeamEndPoint;
+        constexpr float BeamEndPointUpdateThresholdSq = 25.f * 25.f;
+        if (FVector::DistSquared(DRChar->WaterPumpBeamEndPoint, BeamEndPoint) > BeamEndPointUpdateThresholdSq)
+        {
+            DRChar->WaterPumpBeamEndPoint = BeamEndPoint;
+        }
     }
 
     // BoxOverlap으로 타겟 감지
@@ -353,9 +388,8 @@ void UDRWaterPump::PerformWaterPumpTick()
         {
             PreviousTarget = CurrentTarget;
             CurrentTarget = NewTarget;
-            DamageTickCounter = 0; // �� Ÿ���̸� ī���� ����
+            // 타겟 변경 시 카운터를 리셋하지 않음 (활성화 기준 주기 유지 → 스왑 익스플로잇 방지)
 
-            // ��������Ʈ �̺�Ʈ
             OnTargetChanged(PreviousTarget.Get(), CurrentTarget.Get());
         }
 
@@ -378,7 +412,7 @@ void UDRWaterPump::PerformWaterPumpTick()
         {
             PreviousTarget = CurrentTarget;
             CurrentTarget = nullptr;
-            DamageTickCounter = 0;
+            // 카운터 유지 (활성화 기준 주기)
 
             OnTargetChanged(PreviousTarget.Get(), nullptr);
         }
@@ -421,6 +455,12 @@ return;
     if (!FPMesh->DoesSocketExist(MuzzleSocketName))
     {
 return;
+    }
+
+    // 직전 스폰이 정리되지 않은 경우(빠른 토글로 Stop 누락) 누수 방지
+    if (FirstPersonBeam)
+    {
+        StopBeamEffect();
     }
 
     // 1P 빔만 생성 (IsLocallyControlled 분기에서 소유 클라이언트에서만 호출됨)
@@ -511,6 +551,20 @@ void UDRWaterPump::StopBeamEffect()
         FirstPersonBeam->DestroyComponent();
         FirstPersonBeam = nullptr;
     }
+}
+
+void UDRWaterPump::EndAbility(
+    const FGameplayAbilitySpecHandle Handle,
+    const FGameplayAbilityActorInfo* ActorInfo,
+    const FGameplayAbilityActivationInfo ActivationInfo,
+    bool bReplicateEndAbility,
+    bool bWasCancelled)
+{
+    // BP의 EndAbility 이벤트가 실행되지 않는 캔슬 경로(다른 어빌리티의 강제 캔슬,
+    // 인풋 시퀀스 꼬임 등)에서도 cleanup이 보장되도록 C++에서 직접 호출
+    StopWaterPumpLoop();
+
+    Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
 bool UDRWaterPump::GetAimDirection(FVector& OutAimStart, FVector& OutAimDirection) const

@@ -1,11 +1,13 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "AbilitySystem/Abilities/DRVendingMachineBasicAttack.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "ActiveGameplayEffectHandle.h"
 #include "GameplayEffect.h"
 #include "Actor/DRProjectile.h"
+#include "Character/DRCharacter.h"
 #include "Interaction/CombatInterface.h"
 #include "DRGameplayTags.h"
 
@@ -123,6 +125,19 @@ void UDRVendingMachineBasicAttack::ExecuteShot()
 
 		OnCapsuleShotFired(CapsuleTier);
 		OnJackpotStacksChanged(CurrentJackpotStacks, MaxJackpotStacks);
+
+		if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
+		{
+			DRASC->NotifyVendingMachineStacksChanged(CurrentJackpotStacks, MaxJackpotStacks);
+		}
+
+		// 잭팟 캡슐 발사 사운드 멀티캐스트 (Plan2.md §3.3)
+		if (ADRCharacter* DRChar = Cast<ADRCharacter>(GetAvatarActorFromActorInfo()))
+		{
+			const FVector ShotLocation = ICombatInterface::Execute_GetCombatSocketLocation(
+				GetAvatarActorFromActorInfo(), FireSocketTag);
+			DRChar->MulticastPlayVendingCapsuleShot(static_cast<uint8>(CapsuleTier), ShotLocation);
+		}
 	}
 	else
 	{
@@ -133,6 +148,19 @@ void UDRVendingMachineBasicAttack::ExecuteShot()
 
 		OnNormalShotFired();
 		OnJackpotStacksChanged(CurrentJackpotStacks, MaxJackpotStacks);
+
+		if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
+		{
+			DRASC->NotifyVendingMachineStacksChanged(CurrentJackpotStacks, MaxJackpotStacks);
+		}
+
+		// 일반 코인 발사 사운드 멀티캐스트 (Plan2.md §3.3)
+		if (ADRCharacter* DRChar = Cast<ADRCharacter>(GetAvatarActorFromActorInfo()))
+		{
+			const FVector ShotLocation = ICombatInterface::Execute_GetCombatSocketLocation(
+				GetAvatarActorFromActorInfo(), FireSocketTag);
+			DRChar->MulticastPlayVendingCoinShot(ShotLocation);
+		}
 	}
 }
 
@@ -158,35 +186,6 @@ float UDRVendingMachineBasicAttack::GetCurrentFireInterval() const
 		}
 	}
 
-	const float SpeedMultiplier = 1.0f + (BuffStacks * 0.1f);
+	const float SpeedMultiplier = 1.0f + (BuffStacks * 0.2f);
 	return BaseFireInterval / SpeedMultiplier;
-}
-
-FVector UDRVendingMachineBasicAttack::CalculateTargetLocation() const
-{
-	const AActor* AvatarActor = GetAvatarActorFromActorInfo();
-	if (!AvatarActor) return FVector::ZeroVector;
-
-	const APawn* AvatarPawn = Cast<APawn>(AvatarActor);
-	if (!AvatarPawn) return AvatarActor->GetActorLocation() + AvatarActor->GetActorForwardVector() * 5000.f;
-
-	const APlayerController* PC = Cast<APlayerController>(AvatarPawn->GetController());
-	if (!PC) return AvatarActor->GetActorLocation() + AvatarActor->GetActorForwardVector() * 5000.f;
-
-	FVector CameraLocation;
-	FRotator CameraRotation;
-	PC->GetPlayerViewPoint(CameraLocation, CameraRotation);
-
-	const FVector TraceEnd = CameraLocation + CameraRotation.Vector() * 10000.f;
-
-	FHitResult HitResult;
-	FCollisionQueryParams Params;
-	Params.AddIgnoredActor(AvatarActor);
-
-	if (GetWorld()->LineTraceSingleByChannel(HitResult, CameraLocation, TraceEnd, ECC_Visibility, Params))
-	{
-		return HitResult.ImpactPoint;
-	}
-
-	return TraceEnd;
 }

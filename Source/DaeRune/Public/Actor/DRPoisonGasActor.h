@@ -85,6 +85,9 @@ protected:
 
 	FTimerHandle PhaseTransitionTimerHandle;
 
+	// 활성 진입 시 GameState에 카운트 증가를 알렸는지 (EndPlay 누수 방지용)
+	bool bNotifiedActive = false;
+
 	// 이 가스 액터가 현재 GE를 적용 중인 타겟
 	TSet<TWeakObjectPtr<AActor>> ActiveEffectTargets;
 

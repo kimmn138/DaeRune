@@ -17,6 +17,12 @@ class DAERUNE_API UDRVendingMachineAttackSpeedBuff : public UDRGameplayAbility
 {
 	GENERATED_BODY()
 
+public:
+	/** BP에서 GE Apply 직후 호출. 서버 권한일 때만 현재 버프 스택을 조회해
+	    캐릭터의 MulticastPlayVendingSkillUse(Stacks)를 트리거한다 (Plan2.md §3.3). */
+	UFUNCTION(BlueprintCallable, Category = "VendingMachine|Skill")
+	void NotifySkillActivated();
+
 protected:
 	/** 적용할 공격속도 버프 GE 클래스 (BP에서 설정) */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|Skill")

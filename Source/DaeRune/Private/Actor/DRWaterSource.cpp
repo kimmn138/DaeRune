@@ -110,6 +110,9 @@ void ADRWaterSource::FillPlayerWater(AActor* TargetActor)
 
             // ��������Ʈ �̺�Ʈ ȣ��
             OnWaterSourceUsed(PlayerCharacter);
+
+            // C++ 델리게이트 브로드캐스트 (튜토리얼 매니저 등 외부 리스너 통지)
+            OnWaterSourceUsedDelegate.Broadcast(PlayerCharacter);
         }
     }
 }

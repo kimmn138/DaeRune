@@ -12,6 +12,7 @@
 #include "UI/Widget/DRBillboardWidgetComponent.h"
 #include "Player/DRPlayerController.h"
 #include "Character/DRCharacter.h"
+#include "Actor/DRCleanserPart.h"
 #include "Sound/DRSoundManager.h"
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -66,7 +67,8 @@ ADRCleanserSite::ADRCleanserSite()
 	// GAS ������Ʈ ����
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetIsReplicated(true);
-	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
+	// 플레이어 소유가 아닌 액터라 GE/큐 전체 복제가 불필요 - 어트리뷰트만 복제되는 Minimal이면 충분
+	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
 
 	AttributeSet = CreateDefaultSubobject<UDRCleanserSiteAttributeSet>(TEXT("AttributeSet"));
 
@@ -243,9 +245,52 @@ void ADRCleanserSite::InstallPart(ADRCharacter* Character)
 	}
 }
 
+ADRCleanserPart* ADRCleanserSite::EjectInstalledPart(TSubclassOf<ADRCleanserPart> PartClass, float EjectOffset)
+{
+	if (!HasAuthority()) return nullptr;
+
+	// 설치된 부품이 없으면 할 일이 없다
+	if (InstalledPartsCount <= 0) return nullptr;
+
+	// 설치 카운트를 되돌리고 표시 메시를 숨긴다
+	--InstalledPartsCount;
+
+	if (InstalledPartsCount == 0)
+	{
+		if (InstalledPartMesh1) InstalledPartMesh1->SetVisibility(false);
+	}
+	if (InstalledPartsCount <= 1)
+	{
+		if (InstalledPartMesh2) InstalledPartMesh2->SetVisibility(false);
+	}
+
+	OnRep_InstalledPartsCount();
+	UpdateInteractionUI();
+
+	if (!PartClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[CleanserSite] EjectInstalledPart: PartClass 가 지정되지 않아 부품을 되돌리지 못했습니다."));
+		return nullptr;
+	}
+
+	// 설치대 옆에 부품을 다시 스폰한다
+	const FVector EjectLocation = GetActorLocation() + GetActorForwardVector() * EjectOffset;
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	return GetWorld()->SpawnActor<ADRCleanserPart>(
+		PartClass, EjectLocation, GetActorRotation(), SpawnParams);
+}
+
 FVector ADRCleanserSite::GetSpawnLocation() const
 {
 	return GetActorLocation();
+}
+
+TArray<FVector> ADRCleanserSite::GetPhase1EnemySpawnLocations() const
+{
+	return Phase1EnemySpawnOffsets;
 }
 
 FVector ADRCleanserSite::GetClosestSurfacePoint(const FVector& FromLocation) const
@@ -270,6 +315,7 @@ FVector ADRCleanserSite::GetClosestSurfacePoint(const FVector& FromLocation) con
 void ADRCleanserSite::UpdateWaterMeshScale(float HealthRatio)
 {
 	if (!WaterMesh) return;
+	if (CurrentState != ECleanserSiteState::PartsCollected) return;
 
 	// ü�� ������ 0~1 ���̷� ����
 	HealthRatio = FMath::Clamp(HealthRatio, 0.0f, 1.0f);
@@ -280,7 +326,7 @@ void ADRCleanserSite::UpdateWaterMeshScale(float HealthRatio)
 
 	// �� ��ġ ���
 	const float ScaleChange = InitialWaterMeshScale.Z - NewScale.Z;
-	const float LocationOffset = ScaleChange * 250.0f;
+	const float LocationOffset = ScaleChange * WaterMeshScaleToOffsetRatio;
 	FVector NewLocation = InitialWaterMeshLocation;
 	NewLocation.Z = InitialWaterMeshLocation.Z + LocationOffset;
 
@@ -343,48 +389,37 @@ void ADRCleanserSite::BeginPlay()
 
 void ADRCleanserSite::OnBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	// Phase2�� �ƴϸ� ����
-	if (CurrentState != ECleanserSiteState::Active) return;
-
-	// �̹� ��ǰ�� �� ��ġ�Ǿ����� ����
-	if (InstalledPartsCount >= RequiredPartsCount) return;
-
-	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
-	if (!Character) return;
-
-	// �÷��̾ ��ǰ�� ��� �ִ��� Ȯ��
-	if (!Character->IsCarryingPart()) return;
-
-	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
-	if (!PC) return;
-
-	// ���� ��Ʈ�ѷ������� ó��
-	if (PC->IsLocalController())
-	{
-		// PlayerController�� ���� ����Ʈ ����
-		PC->CurrentOverlappedSite = this;
-		
-		// UI ǥ��
-		InteractionWidget->SetVisibility(true);
-	}
+	RefreshOverlapStateFor(Cast<ADRCharacter>(OtherActor));
 }
 
 void ADRCleanserSite::OnBoxEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
-	if (!Character) return;
+	RefreshOverlapStateFor(Cast<ADRCharacter>(OtherActor));
+}
+
+void ADRCleanserSite::RefreshOverlapStateFor(ADRCharacter* Character)
+{
+	if (!Character || !InteractionBox) return;
 
 	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
-	if (!PC) return;
+	if (!PC || !PC->IsLocalController()) return;
 
-	// ���� ��Ʈ�ѷ������� ó��
-	if (PC->IsLocalController())
+	const bool bIsOverlapping = InteractionBox->IsOverlappingActor(Character);
+	const bool bShouldDetect =
+		bIsOverlapping &&
+		CurrentState == ECleanserSiteState::Active &&
+		InstalledPartsCount < RequiredPartsCount &&
+		Character->IsCarryingPart();
+
+	// 사이트 감지를 토글; 실제 위젯 표시 여부는 PlayerController의 라인트레이스가 결정
+	PC->SetSiteDetectionEnabled(bShouldDetect, this);
+}
+
+void ADRCleanserSite::SetInteractionUIVisible(bool bShow)
+{
+	if (InteractionWidget)
 	{
-		// PlayerController�� ����Ʈ ���� ����
-		PC->CurrentOverlappedSite = nullptr;
-		
-		// UI ����
-		InteractionWidget->SetVisibility(false);
+		InteractionWidget->SetVisibility(bShow);
 	}
 }
 

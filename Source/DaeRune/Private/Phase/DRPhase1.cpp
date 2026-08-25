@@ -2,11 +2,19 @@
 
 
 #include "Phase/DRPhase1.h"
+
+#include "AbilitySystemComponent.h"
+#include "DRGameplayTags.h"
+#include "EngineUtils.h"
+#include "TimerManager.h"
+#include "AbilitySystem/DRAttributeSet.h"
+#include "Actor/DRCleanserSite.h"
+#include "Actor/DRDoorManager.h"
+#include "Actor/DREnemySpawnGroup.h"
+#include "Character/DREnemy.h"
 #include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
 #include "Interaction/CombatInterface.h"
-#include "Actor/DRCleanserSite.h"
-#include "Actor/DRDoorManager.h"
 
 void UDRPhase1::OnPhaseStart()
 {
@@ -14,35 +22,86 @@ void UDRPhase1::OnPhaseStart()
 
 	if (!GameMode || !GameState) return;
 
-	// ¸ñÇ¥ ¼³Á¤
+	// 1) í˜ì´ì¦ˆ ëª©í‘œ / GameState ì´ˆê¸°í™”
 	SetupPhaseObjective(1);
 
-	// GameState Phase 1 ÃÊ±âÈ­
 	GameState->SetCleanserAreaSecured(false);
 	GameState->SetRemainingEnemiesInArea(0);
-
-	// Å¬·»Àú À§Ä¡¿¡ Àû ½ºÆù
-	SpawnEnemiesAtCleanserSites();
-
-	// ÃÑ Àû ¼ö·Î GameState ¾÷µ¥ÀÌÆ®
-	GameState->SetRemainingEnemiesInArea(TotalEnemyCount);
+	GameState->SetCollectedParts(0);
+	GameState->SetCleanserActivated(false);
 
 	GameState->SetInitialPlayerCount(GameState->GetAlivePlayers().Num());
+
+	// 2) í´ë Œì € ì‚¬ì´íŠ¸ 1ê°œ ê°•ì œ ìœ ì§€ + í™œì„±í™” + ë¶€í’ˆ ì„¤ì¹˜ ë¸ë¦¬ê²Œì´íŠ¸ êµ¬ë…
+	KeepSingleCleanserSite();
+	if (!ActiveSite.IsValid())
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Phase1] ActiveSite is invalid after KeepSingleCleanserSite()."));
+		return;
+	}
+
+	ActiveSite->ActivateSite();
+	ActiveSite->OnPartInstalled.AddDynamic(this, &UDRPhase1::OnPartInstalled);
+
+	// 3) ì‚¬ì´íŠ¸ ì£¼ë³€ ì  ìŠ¤í° (ë°°ì—´ ê¸°ë°˜)
+	SpawnEnemiesAroundCleanserSite(ActiveSite.Get());
+
+	// 4) í†µë¡œ DREnemySpawnGroup ìë™ ìˆ˜ì§‘ + ê·¸ë£¹ë³„ ë¶€í’ˆ ìš´ë°˜ì ì„ ì •
+	// ì£¼ì˜: ì´ í˜ì´ì¦ˆëŠ” GameMode::BeginPlay ì•ˆì—ì„œ ë™ê¸° ì‹¤í–‰ë˜ëŠ”ë°, ë ˆë²¨ì— ë°°ì¹˜ëœ
+	// DREnemySpawnGroup ì•¡í„°ë“¤ì˜ BeginPlay(= PrePlacedEnemies ë“±ë¡)ëŠ” UEì˜ ì•¡í„° BeginPlay
+	// ìˆœì„œ ë³´ì¥ì´ ì—†ì–´ ì•„ì§ ì‹¤í–‰ë˜ì§€ ì•Šì•˜ì„ ìˆ˜ ìˆë‹¤. ì´ ì‹œì ì— ë°”ë¡œ ìˆ˜ì§‘í•˜ë©´ RegisteredEnemiesê°€
+	// ë¹„ì–´ ìˆì–´ ë¶€í’ˆ ìš´ë°˜ì ì„ ì • ë° Phase1 íƒœê·¸ ë¶€ì—¬ê°€ ëª¨ë‘ ì‹¤íŒ¨í•œë‹¤.
+	// â†’ ëª¨ë“  ì•¡í„° BeginPlayê°€ ëë‚œ ë‹¤ìŒ í‹±ìœ¼ë¡œ ì§€ì—°ì‹œí‚¨ë‹¤. (bCarriesPartëŠ” ë³µì œ + OnRepë¡œ
+	//    ë™ê¸°í™”ë˜ë¯€ë¡œ 1í”„ë ˆì„ ì§€ì—°ì€ ì‹œê°ì ìœ¼ë¡œ ë¬´í•´í•˜ë‹¤.)
+	if (UWorld* World = GameMode->GetWorld())
+	{
+		World->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			CollectSpawnGroups();
+			AssignPartCarriersForAllGroups();
+		}));
+	}
+	else
+	{
+		// ì›”ë“œë¥¼ ëª» ì–»ëŠ” ì˜ˆì™¸ ìƒí™©: ì¦‰ì‹œ ì‹¤í–‰(ê¸°ì¡´ ë™ì‘ í´ë°±)
+		CollectSpawnGroups();
+		AssignPartCarriersForAllGroups();
+	}
+
+	// 5) GameState ì§„í–‰ë¥  ì´ˆê¸°í™” (CleanserSite::RequiredPartsCount = 2 ê³ ì •)
+	FPhaseObjectiveData PhaseObjective = GameState->GetCurrentPhaseObjective();
+	PhaseObjective.RequiredCount = RequiredPartsToComplete;
+	GameState->SetPhaseObjective(PhaseObjective);
+	GameState->UpdatePhaseObjectiveProgress(0);
+}
+
+bool UDRPhase1::IsCompleted() const
+{
+	// ë¶€í’ˆ ì„¤ì¹˜ ì™„ë£Œ + í´ë Œì € í™œì„±í™” ì‹œ í˜ì´ì¦ˆ ì™„ë£Œ
+	if (!GameState) return false;
+	return GameState->GetCollectedParts() >= RequiredPartsToComplete && GameState->IsCleanserActivated();
 }
 
 void UDRPhase1::OnPhaseEnd()
 {
-	Super::OnPhaseEnd();
+	// ë¶€í’ˆ ì„¤ì¹˜ ë¸ë¦¬ê²Œì´íŠ¸ í•´ì œ
+	if (ActiveSite.IsValid())
+	{
+		ActiveSite->OnPartInstalled.RemoveDynamic(this, &UDRPhase1::OnPartInstalled);
+	}
 
-	// DoorManager¿¡ ¾Ë¸²
+	// DoorManagerì— ì•Œë¦¼ (ê¸°ì¡´ Phase1ê³¼ ë™ì¼í•œ ì²˜ë¦¬)
 	if (ADRDoorManager* DoorMgr = GetDoorManager())
 	{
 		DoorMgr->OnPhase1Ended();
 	}
 
-	// Phase1 Àü¿ë Á¤¸®
-	SelectedCleanserSites.Empty();
-	TotalEnemyCount = 0;
+	// ì»¬ë ‰ì…˜ ì •ë¦¬
+	SpawnGroups.Empty();
+	PartCarrierByGroup.Empty();
+	ActiveSite.Reset();
+
+	Super::OnPhaseEnd();
 }
 
 void UDRPhase1::OnEnemyDeath(AActor* DeadEnemy)
@@ -51,101 +110,80 @@ void UDRPhase1::OnEnemyDeath(AActor* DeadEnemy)
 
 	if (!GameMode || !GameState || !bIsPhaseActive) return;
 
-	// »ì¾ÆÀÖ´Â Àû ¼ö °è»ê
-	int32 AliveCount = GetAliveEnemyCount();
-
-	// GameState ¾÷µ¥ÀÌÆ®
+	// í†µê³„ ê°±ì‹ : ë‚¨ì€ ì‚¬ì´íŠ¸ ì£¼ë³€ ì  ìˆ˜
+	const int32 AliveCount = GetAliveEnemyCount();
 	GameState->SetRemainingEnemiesInArea(AliveCount);
-	GameState->UpdatePhaseObjectiveProgress(GameState->CurrentPhaseObjective.RequiredCount - AliveCount);
 
-	// ¸ğµç ÀûÀÌ Á×¾úÀ¸¸é Áö¿ª È®º¸ ¿Ï·á
-	if (AliveCount == 0)
-	{
-		GameState->SetCleanserAreaSecured(true);
-	}
-
-	// GameMode¿¡ ¿Ï·á Á¶°Ç Ã¼Å© ¿äÃ»
-	GameMode->ValidatePhaseCompletion();
+	// í˜ì´ì¦ˆ ì™„ë£Œ ì¡°ê±´ì€ ë¶€í’ˆ ì„¤ì¹˜ ê¸°ë°˜ì´ë¯€ë¡œ ì  ì²˜ì¹˜ë§Œìœ¼ë¡œëŠ” ì™„ë£Œ ì²˜ë¦¬í•˜ì§€ ì•ŠëŠ”ë‹¤.
+	// (ì‚¬ì´íŠ¸ ì£¼ë³€ ì ì´ ëª¨ë‘ ì£½ì–´ë„ ë¶€í’ˆì´ ëª¨ë‘ ì„¤ì¹˜ë˜ì–´ì•¼ ë‹¤ìŒ í˜ì´ì¦ˆë¡œ ì§„í–‰)
 }
 
-void UDRPhase1::SpawnEnemiesAtCleanserSites()
+void UDRPhase1::KeepSingleCleanserSite()
 {
-	if (!GameMode) return;
-
-	// PhaseBase¿¡¼­ ÀüÃ¼ Å¬·»Àú »çÀÌÆ® °¡Á®¿À±â
-	if (CleanserSites.Num() < 3) return;
-
-	// ·£´ıÀ¸·Î Á¦°ÅÇÒ 1°³ ¼±ÅÃ
-	int32 IndexToRemove = FMath::RandRange(0, CleanserSites.Num() - 1);
-	TObjectPtr<ADRCleanserSite> SiteToDestroy = CleanserSites[IndexToRemove];
-
-	// Á¦°Å ´ë»ó ¾×ÅÍ ÆÄ±«
-	if (SiteToDestroy && IsValid(SiteToDestroy))
+	if (CleanserSites.Num() == 0)
 	{
-		SiteToDestroy->Destroy();
+		UE_LOG(LogTemp, Error, TEXT("[Phase1] No CleanserSite found in the level."));
+		return;
 	}
 
-	// ¹è¿­¿¡¼­ Á¦°Å
-	CleanserSites.RemoveAt(IndexToRemove);
-
-	// ³²Àº 2°³¸¦ È°¼º Å¬·»Àú »çÀÌÆ®·Î ¼³Á¤
-	SelectedCleanserSites = CleanserSites; 
-	SetActiveCleanserSites(SelectedCleanserSites);
-	GameState->SetCleanserSites(SelectedCleanserSites);
-
-	// ¼±ÅÃµÈ »çÀÌÆ® È°¼ºÈ­ ¹× Àû ½ºÆù
-	for (const TObjectPtr<ADRCleanserSite>& SelectedSite : SelectedCleanserSites)
+	if (CleanserSites.Num() > 1)
 	{
-		if (!SelectedSite) continue;
-
-		// Å¬·»Àú »çÀÌÆ® È°¼ºÈ­
-		SelectedSite->ActivateSite();
-
-		// ÇØ´ç À§Ä¡¿¡ Àû ½ºÆù
-		SpawnEnemyGroupAtCleanserSite(SelectedSite.Get());
-	}
-}
-
-void UDRPhase1::SpawnEnemyGroupAtCleanserSite(ADRCleanserSite* CleanserSite)
-{
-	if (!CleanserSite || !EliteEnemyClass || !NormalEnemyClass) return;
-
-	// Å¬·»Àú »çÀÌÆ®ÀÇ ½ºÆù À§Ä¡ °¡Á®¿À±â
-	FVector CenterLocation = CleanserSite->GetSpawnLocation();
-
-	// 1. ¿¤¸®Æ® ¸ó½ºÅÍ 1¸¶¸® (Å¬·»Àú¿¡¼­ ¾à°£ ¶³¾îÁø À§Ä¡)
-	// ·£´ıÇÑ ¹æÇâÀ¸·Î EliteSpawnOffset¸¸Å­ ¶³¾î¶ß¸®±â
-	float RandomAngle = FMath::FRandRange(0.0f, 360.0f);
-	FVector EliteOffset = FVector(
-		FMath::Cos(FMath::DegreesToRadians(RandomAngle)) * EliteSpawnOffset,
-		FMath::Sin(FMath::DegreesToRadians(RandomAngle)) * EliteSpawnOffset,
-		0.0f
-	);
-	FVector EliteSpawnLocation = CenterLocation + EliteOffset;
-
-	AActor* EliteEnemy = SpawnEnemy(EliteEnemyClass, EliteSpawnLocation);
-	if (EliteEnemy)
-	{
-		TotalEnemyCount++;
+		UE_LOG(LogTemp, Warning, TEXT("[Phase1] %d CleanserSites found. Keeping index 0, destroying rest."), CleanserSites.Num());
 	}
 
-	// 2. ÀÏ¹İ ¸ó½ºÅÍ 4¸¶¸® (ÁÖº¯¿¡ ¿øÇüÀ¸·Î)
-	for (int32 i = 0; i < NormalEnemyCount; i++)
+	const int32 IndexToKeep = 0;
+	for (int32 i = CleanserSites.Num() - 1; i >= 0; --i)
 	{
-		// ¿øÇü ¹èÄ¡ °è»ê
-		float Angle = (360.0f / NormalEnemyCount) * i;
-		FVector Offset = FVector(
-			FMath::Cos(FMath::DegreesToRadians(Angle)) * SpawnRadius,
-			FMath::Sin(FMath::DegreesToRadians(Angle)) * SpawnRadius,
-			0.0f
-		);
+		if (i == IndexToKeep) continue;
 
-		FVector SpawnLocation = CenterLocation + Offset;
-
-		AActor* NormalEnemy = SpawnEnemy(NormalEnemyClass, SpawnLocation);
-		if (NormalEnemy)
+		TObjectPtr<ADRCleanserSite> SiteToDestroy = CleanserSites[i];
+		if (SiteToDestroy && IsValid(SiteToDestroy))
 		{
-			TotalEnemyCount++;
+			SiteToDestroy->Destroy();
+		}
+		CleanserSites.RemoveAt(i);
+	}
+
+	// í™œì„± ì‚¬ì´íŠ¸ = ë‚¨ì€ ì‚¬ì´íŠ¸ 1ê°œ
+	TArray<TObjectPtr<ADRCleanserSite>> SelectedSites = CleanserSites;
+	SetActiveCleanserSites(SelectedSites);
+	if (GameState)
+	{
+		TArray<ADRCleanserSite*> RawSites;
+		RawSites.Reserve(SelectedSites.Num());
+		for (const TObjectPtr<ADRCleanserSite>& Site : SelectedSites)
+		{
+			if (Site) RawSites.Add(Site.Get());
+		}
+		GameState->SetCleanserSites(RawSites);
+	}
+
+	ActiveSite = CleanserSites.IsValidIndex(0) ? CleanserSites[0] : nullptr;
+}
+
+void UDRPhase1::SpawnEnemiesAroundCleanserSite(ADRCleanserSite* Site)
+{
+	if (!Site) return;
+
+	const TArray<FVector> Locations = Site->GetPhase1EnemySpawnLocations();
+	const int32 SpawnCount = FMath::Min(EnemiesToSpawn.Num(), Locations.Num());
+
+	if (EnemiesToSpawn.Num() != Locations.Num())
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Phase1] EnemiesToSpawn (%d) and CleanserSite spawn locations (%d) mismatch. Spawning %d."),
+			EnemiesToSpawn.Num(), Locations.Num(), SpawnCount);
+	}
+
+	for (int32 i = 0; i < SpawnCount; ++i)
+	{
+		TSubclassOf<ADREnemy> EnemyClass = EnemiesToSpawn[i];
+		if (!EnemyClass) continue;
+
+		AActor* SpawnedActor = SpawnEnemy(EnemyClass, Locations[i]);
+		if (ADREnemy* Spawned = Cast<ADREnemy>(SpawnedActor))
+		{
+			ApplyPhase1Tag(Spawned);
 		}
 	}
 }
@@ -157,37 +195,164 @@ AActor* UDRPhase1::SpawnEnemy(TSubclassOf<AActor> EnemyClass, const FVector& Loc
 	UWorld* World = GameMode->GetWorld();
 	if (!World) return nullptr;
 
-	// ½ºÆù ÆÄ¶ó¹ÌÅÍ ¼³Á¤
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	// Àû ½ºÆù
 	AActor* SpawnedEnemy = World->SpawnActor<AActor>(EnemyClass, Location, FRotator::ZeroRotator, SpawnParams);
+	if (!SpawnedEnemy) return nullptr;
 
-	if (SpawnedEnemy)
+	// ì‚¬ë§ ë¸ë¦¬ê²Œì´íŠ¸ ë°”ì¸ë”©
+	if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(SpawnedEnemy))
 	{
-		// µ¨¸®°ÔÀÌÆ® ¹ÙÀÎµù
-		if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(SpawnedEnemy))
-		{
-			CombatInterface->GetOnDeathDelegate().AddDynamic(this, &UDRPhase1::OnEnemyDeath);
-		}
-
-		// ½ºÆùµÈ Àû ¸®½ºÆ®¿¡ Ãß°¡
-		SpawnedEnemies.Add(SpawnedEnemy);
+		CombatInterface->GetOnDeathDelegate().AddDynamic(this, &UDRPhase1::OnEnemyDeath);
 	}
 
+	SpawnedEnemies.Add(SpawnedEnemy);
 	return SpawnedEnemy;
+}
+
+void UDRPhase1::CollectSpawnGroups()
+{
+	SpawnGroups.Empty();
+
+	UWorld* World = GameMode ? GameMode->GetWorld() : nullptr;
+	if (!World) return;
+
+	for (TActorIterator<ADREnemySpawnGroup> It(World); It; ++It)
+	{
+		if (ADREnemySpawnGroup* Group = *It)
+		{
+			SpawnGroups.Add(Group);
+
+			// ê·¸ë£¹ì— ë“±ë¡ëœ ëª¨ë“  ì ì—ê²Œ Phase1 íƒœê·¸ ë¶€ì—¬
+			for (ADREnemy* Enemy : Group->GetRegisteredEnemies())
+			{
+				ApplyPhase1Tag(Enemy);
+			}
+		}
+	}
+}
+
+void UDRPhase1::AssignPartCarriersForAllGroups()
+{
+	PartCarrierByGroup.Empty();
+
+	if (!ActiveSite.IsValid()) return;
+
+	// CleanserSite::RequiredPartsCount = 2 ê³ ì •. ê·¸ë£¹ì€ ì •í™•íˆ 2ê°œë¥¼ ê¶Œì¥.
+	constexpr int32 RequiredParts = 2;
+
+	if (SpawnGroups.Num() != RequiredParts)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Phase1] SpawnGroup count (%d) does not match RequiredPartsCount (%d). Will assign carriers to first %d groups."),
+			SpawnGroups.Num(), RequiredParts, FMath::Min(SpawnGroups.Num(), RequiredParts));
+	}
+
+	const int32 MaxCarrierGroups = FMath::Min(SpawnGroups.Num(), RequiredParts);
+	for (int32 i = 0; i < MaxCarrierGroups; ++i)
+	{
+		ADREnemySpawnGroup* Group = SpawnGroups[i];
+		if (!Group) continue;
+
+		ADREnemy* Carrier = PickPartCarrierFromGroup(Group);
+		if (Carrier)
+		{
+			ConfigurePartCarrier(Carrier);
+			Group->SetPartCarrierEnemy(Carrier);
+			PartCarrierByGroup.Add(Group, Carrier);
+		}
+	}
+}
+
+ADREnemy* UDRPhase1::PickPartCarrierFromGroup(ADREnemySpawnGroup* Group) const
+{
+	if (!Group) return nullptr;
+
+	const TArray<ADREnemy*> Registered = Group->GetRegisteredEnemies();
+
+	TArray<ADREnemy*> Candidates;
+	Candidates.Reserve(Registered.Num());
+	for (ADREnemy* Enemy : Registered)
+	{
+		if (!Enemy || !IsValid(Enemy)) continue;
+		if (ArmadilloEnemyClass && Enemy->IsA(ArmadilloEnemyClass)) continue;
+		Candidates.Add(Enemy);
+	}
+
+	if (Candidates.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Phase1] SpawnGroup %s has no non-Armadillo carrier candidates. Skipping part assignment."),
+			*Group->GetName());
+		return nullptr;
+	}
+
+	const int32 PickedIndex = FMath::RandRange(0, Candidates.Num() - 1);
+	return Candidates[PickedIndex];
+}
+
+void UDRPhase1::ConfigurePartCarrier(ADREnemy* Carrier) const
+{
+	if (!Carrier) return;
+
+	// PartActorClass ì£¼ì… (DropPart()ì—ì„œ ì‚¬ìš©)
+	if (PartActorClass)
+	{
+		Carrier->PartActorClass = PartActorClass;
+	}
+
+	// bCarriesPart=true + PartMesh ê°€ì‹œí™” (ì„œë²„ ì¦‰ì‹œ + OnRepë¡œ í´ë¼ì´ì–¸íŠ¸ ë™ê¸°í™”)
+	Carrier->SetCarriesPart(true);
+
+	// ë¶€í’ˆ ìš´ë°˜ìëŠ” ì´ë™ì†ë„ 50% ê°ì†. MoveSpeed ì–´íŠ¸ë¦¬ë·°íŠ¸ ë² ì´ìŠ¤ë¥¼ ì§ì ‘ ì¡°ì •í•˜ë©´
+	// UDRAttributeSet::PostAttributeChangeì—ì„œ CharacterMovement::MaxWalkSpeedê°€ ìë™ ë™ê¸°í™”ë¨.
+	if (UAbilitySystemComponent* ASC = Carrier->GetAbilitySystemComponent())
+	{
+		const FGameplayAttribute MoveSpeedAttr = UDRAttributeSet::GetMoveSpeedAttribute();
+		const float CurrentMoveSpeed = ASC->GetNumericAttribute(MoveSpeedAttr);
+		ASC->SetNumericAttributeBase(MoveSpeedAttr, CurrentMoveSpeed * 0.5f);
+	}
+}
+
+void UDRPhase1::ApplyPhase1Tag(ADREnemy* Enemy) const
+{
+	if (!Enemy) return;
+
+	UAbilitySystemComponent* ASC = Enemy->GetAbilitySystemComponent();
+	if (!ASC) return;
+
+	const FGameplayTag TagToApply = Phase1EnemyTag.IsValid()
+		? Phase1EnemyTag
+		: FDRGameplayTags::Get().State_Enemy_Phase1;
+
+	// ì„œë²„ ê¶Œìœ„ ExecCalcê°€ ì„œë²„ì—ì„œë§Œ ì‹¤í–‰ë˜ë¯€ë¡œ LooseTagë§Œìœ¼ë¡œ ì¶©ë¶„.
+	// ì¶”í›„ í´ë¼ì´ì–¸íŠ¸ UIì—ì„œ íƒœê·¸ ì¡°íšŒê°€ í•„ìš”í•˜ë©´ AddReplicatedLooseGameplayTagë¡œ ì „í™˜.
+	ASC->AddLooseGameplayTag(TagToApply);
+}
+
+void UDRPhase1::OnPartInstalled(ADRCleanserSite* Site)
+{
+	if (!Site || !GameState) return;
+
+	const int32 Installed = Site->GetInstalledPartsCount();
+	GameState->SetCollectedParts(Installed);
+	GameState->UpdatePhaseObjectiveProgress(Installed);
+
+	if (Site->IsPartInstallationComplete())
+	{
+		GameState->SetCleanserActivated(true);
+		if (GameMode)
+		{
+			GameMode->ValidatePhaseCompletion();
+		}
+	}
 }
 
 ADRDoorManager* UDRPhase1::GetDoorManager()
 {
-	// ÀÌ¹Ì Ä³½ÌµÇ¾î ÀÖÀ¸¸é ¹İÈ¯
-	if (CachedDoorManager)
-	{
-		return CachedDoorManager;
-	}
+	if (CachedDoorManager) return CachedDoorManager;
 
-	// GameState¿¡¼­ °¡Á®¿À±â
 	if (UWorld* World = GetWorld())
 	{
 		if (ADRStageGameState* StageGameState = World->GetGameState<ADRStageGameState>())

@@ -17,6 +17,8 @@
 #include "EngineUtils.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
+#include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "Game/DRGameInstance.h"
 
 ADRLobbyGameMode::ADRLobbyGameMode()
@@ -290,6 +292,9 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 	// ?湲곗떎 ?곹깭?먯꽌留?媛??
 	if (LGS->GetLobbyState() != ELobbyState::WaitingRoom) return;
 
+	// 모든 비호스트 플레이어가 준비 상태여야 PowerOn 가능
+	if (!LGS->AreAllNonHostPlayersReady()) return;
+
 	// 1. ?몄뀡 李멸? 李⑤떒
 	BlockJoinInProgress();
 
@@ -309,8 +314,9 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 		if (!PS) continue;
 
 		// ?좏깮???대옒?ㅼ쓽 BP ?ㅽ룿
-		if (!PlayerCharacterClassInfo) continue;
-		TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(PS->GetSelectedPlayerClass());
+		UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this);
+		if (!ClassInfo) continue;
+		TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(PS->GetSelectedPlayerClass());
 		if (!BPClassPtr || !*BPClassPtr) continue;
 
 		int32* SlotIdx = PlayerSlotMap.Find(PC);
@@ -354,6 +360,25 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 		2.0f, // 移대찓???꾪솚 ?쒓컙
 		false
 	);
+}
+
+void ADRLobbyGameMode::SetPlayerReady(ADRPlayerController* Player, bool bReady)
+{
+	if (!HasAuthority() || !Player) return;
+
+	ADRLobbyGameState* LGS = GetGameState<ADRLobbyGameState>();
+	if (!LGS || LGS->GetLobbyState() != ELobbyState::WaitingRoom) return;
+
+	ADRPlayerState* PS = Player->GetPlayerState<ADRPlayerState>();
+	if (!PS) return;
+
+	// 호스트는 준비 토글 대상이 아님 (호스트 버튼 = PowerOn)
+	if (LGS->IsPlayerHost(PS)) return;
+
+	PS->SetReady(bReady);
+
+	// 모든 클라이언트/호스트 대기실 UI 갱신
+	BroadcastRefreshWaitingRoomUI();
 }
 
 void ADRLobbyGameMode::KickPlayer(ADRPlayerController* Requester, ADRPlayerController* TargetPlayer)
@@ -586,8 +611,9 @@ void ADRLobbyGameMode::RespawnPlayerWithClass(ADRPlayerController* PC, EPlayerCh
 	}
 
 	// FreeRoam: 湲곗〈 ??援먯껜 濡쒖쭅 (吏꾩쭨 Possess ?꾩슂)
-	if (!PlayerCharacterClassInfo) return;
-	TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(NewClass);
+	UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this);
+	if (!ClassInfo) return;
+	TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(NewClass);
 	if (!BPClassPtr || !*BPClassPtr) return;
 
 	APawn* OldPawn = PC->GetPawn();
@@ -643,9 +669,9 @@ UClass* ADRLobbyGameMode::GetDefaultPawnClassForController_Implementation(AContr
 		{
 			EPlayerCharacterClass SelectedClass = PS->GetSelectedPlayerClass();
 
-			if (PlayerCharacterClassInfo)
+			if (UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this))
 			{
-				TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(SelectedClass);
+				TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(SelectedClass);
 				if (BPClassPtr && *BPClassPtr)
 				{
 					return *BPClassPtr;
@@ -659,8 +685,10 @@ UClass* ADRLobbyGameMode::GetDefaultPawnClassForController_Implementation(AContr
 
 void ADRLobbyGameMode::SpawnDisplayCharacter(AController* Player, EPlayerCharacterClass CharClass, int32 SlotIndex)
 {
-	if (!PlayerCharacterClassInfo || !Player) return;
-	TSubclassOf<ADRCharacter>* BPClassPtr = PlayerCharacterClassInfo->CharacterBPClasses.Find(CharClass);
+	if (!Player) return;
+	UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this);
+	if (!ClassInfo) return;
+	TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(CharClass);
 	if (!BPClassPtr || !*BPClassPtr) return;
 
 	if (WaitingRoomSlots.Num() == 0) return;

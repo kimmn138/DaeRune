@@ -19,6 +19,18 @@ void UDRTutorialStartWidget::OnStartGameClicked()
 	}
 }
 
+void UDRTutorialStartWidget::OnSkipTutorialClicked()
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	ADRMainMenuGameMode* GM = Cast<ADRMainMenuGameMode>(World->GetAuthGameMode());
+	if (GM)
+	{
+		GM->SkipTutorialAndReloadMenu();
+	}
+}
+
 void UDRTutorialStartWidget::OnSettingsClicked()
 {
 	APlayerController* PC = GetOwningPlayer();

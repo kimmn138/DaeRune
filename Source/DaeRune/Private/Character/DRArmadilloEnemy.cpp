@@ -2,13 +2,19 @@
 
 #include "Character/DRArmadilloEnemy.h"
 #include "Character/DRCharacter.h"
+#include "Game/DRGameStateBase.h"
+#include "DRAssetManager.h"
 #include "DRGameplayTags.h"
 #include "AI/DRAIController.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "BehaviorTree/BlackboardComponent.h"
+#include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "Sound/DRSoundDataAsset.h"
 #include "Engine/OverlapResult.h"
 #include "DrawDebugHelpers.h"
 
@@ -21,6 +27,23 @@ ADRArmadilloEnemy::ADRArmadilloEnemy()
 	BallFormMesh->SetupAttachment(GetRootComponent());
 	BallFormMesh->SetVisibility(false); // BasicForm is default
 	BallFormMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// 폼 체인지 전환 몽타주 기본값 (BP에서 오버라이드 가능)
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBallBasicFinder(
+		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/BasicForm/AM_Armadillo_FormChangeBtoD"));
+	if (ToBallBasicFinder.Succeeded()) FormChangeToBallMontage_Basic = ToBallBasicFinder.Object;
+
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBallBallFinder(
+		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/RollForm/AM_Armadillo_Ball_FormChangeBtoD"));
+	if (ToBallBallFinder.Succeeded()) FormChangeToBallMontage_Ball = ToBallBallFinder.Object;
+
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBasicBasicFinder(
+		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/BasicForm/AM_Armadillo_FormChangeDtoB"));
+	if (ToBasicBasicFinder.Succeeded()) FormChangeToBasicMontage_Basic = ToBasicBasicFinder.Object;
+
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBasicBallFinder(
+		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/RollForm/AM_Armadillo_Ball_FormChangeDtoB"));
+	if (ToBasicBallFinder.Succeeded()) FormChangeToBasicMontage_Ball = ToBasicBallFinder.Object;
 }
 
 void ADRArmadilloEnemy::BeginPlay()
@@ -30,6 +53,18 @@ void ADRArmadilloEnemy::BeginPlay()
 	// Save default capsule size
 	DefaultCapsuleRadius = GetCapsuleComponent()->GetUnscaledCapsuleRadius();
 	DefaultCapsuleHalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
+
+	// Late-join 대응: 우리가 늦게 들어왔는데 적이 이미 구르고 있다면
+	// bIsRolling=true가 초기 복제로 들어오면서 OnRep_IsRolling이 자동 발화되어 루프 시작.
+	// 즉 별도 처리 불필요 — RepNotify가 알아서 처리.
+}
+
+void ADRArmadilloEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// 레벨 변경/월드 정리/Destroy 등 어떤 사유든 루프 즉시 정지 (중복 호출 안전)
+	StopArmadilloRollLoop();
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void ADRArmadilloEnemy::Tick(float DeltaTime)
@@ -43,6 +78,12 @@ void ADRArmadilloEnemy::Tick(float DeltaTime)
 		SetActorRotation(FRotator(0.f, RollRotation.Yaw, 0.f));
 
 		TickRollCharge(DeltaTime);
+	}
+	else if (!HasAuthority() && bIsRolling)
+	{
+		// CurrentRollSpeed는 서버 전용 값(비복제)인데 볼 폼 ABP가 이 값으로 PlayRate를 계산함.
+		// 클라이언트에서는 복제된 이동 속도로 갱신해 애니메이션 재생 속도를 맞춘다 (추가 복제 비용 없음).
+		CurrentRollSpeed = GetVelocity().Size2D();
 	}
 }
 
@@ -58,6 +99,10 @@ void ADRArmadilloEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 
 void ADRArmadilloEnemy::MulticastHandleDeath_Implementation(const FVector& DeathImpulse)
 {
+	// 0. 모든 인스턴스(서버+클라)에서 루프 사운드 즉시 정지.
+	//    StopRollCharge는 서버 권한만 동작하므로 클라에서는 bIsRolling 복제 도착 전 잔류 가능 → 명시적 정지.
+	StopArmadilloRollLoop();
+
 	// 1. Stop roll charge if rolling
 	if (bIsRolling)
 	{
@@ -68,10 +113,7 @@ void ADRArmadilloEnemy::MulticastHandleDeath_Implementation(const FVector& Death
 	if (bIsBallForm)
 	{
 		bIsBallForm = false;
-		UpdateMeshVisibility();
-
-		// Restore default capsule size
-		GetCapsuleComponent()->SetCapsuleSize(DefaultCapsuleRadius, DefaultCapsuleHalfHeight);
+		OnRep_BallForm(); // 메시 가시성 + 캡슐 크기 복원
 	}
 
 	// 3. Parent handles death animation, dissolve, etc.
@@ -85,28 +127,61 @@ void ADRArmadilloEnemy::StartFormChange(bool bToBallForm)
 	if (!HasAuthority()) return;
 	bPendingBallForm = bToBallForm;
 	// Transition animation is played by GA -> AnimNotify calls FinishFormChange()
+
+	// GA의 PlayMontage는 서버 로컬 재생이므로 원격 클라이언트에는 별도로 브로드캐스트
+	MulticastPlayFormChangeMontage(bToBallForm);
+}
+
+void ADRArmadilloEnemy::MulticastPlayFormChangeMontage_Implementation(bool bToBallForm)
+{
+	// 서버(리슨서버 호스트 포함)는 GA가 직접 재생하므로 스킵 — 이중 재생 방지
+	if (HasAuthority()) return;
+
+	UAnimMontage* BasicMontage = bToBallForm ? FormChangeToBallMontage_Basic : FormChangeToBasicMontage_Basic;
+	UAnimMontage* BallMontage = bToBallForm ? FormChangeToBallMontage_Ball : FormChangeToBasicMontage_Ball;
+
+	// 몽타주의 AnimNotify가 클라이언트에서 발화해도 FinishFormChange()는 권한 체크로 무시됨
+	if (BasicMontage)
+	{
+		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+		{
+			AnimInstance->Montage_Play(BasicMontage);
+		}
+	}
+
+	if (BallMontage && BallFormMesh)
+	{
+		if (UAnimInstance* BallAnimInstance = BallFormMesh->GetAnimInstance())
+		{
+			BallAnimInstance->Montage_Play(BallMontage);
+		}
+	}
 }
 
 void ADRArmadilloEnemy::FinishFormChange()
 {
 	if (!HasAuthority()) return;
 	bIsBallForm = bPendingBallForm;
-	OnRep_BallForm(); // Update server local as well
-
-	// Adjust capsule size
-	if (bIsBallForm)
-	{
-		GetCapsuleComponent()->SetCapsuleSize(BallFormCapsuleRadius, BallFormCapsuleHalfHeight);
-	}
-	else
-	{
-		GetCapsuleComponent()->SetCapsuleSize(DefaultCapsuleRadius, DefaultCapsuleHalfHeight);
-	}
+	OnRep_BallForm(); // 서버 로컬 갱신 (클라이언트는 bIsBallForm 복제로 동일 경로 실행)
 }
 
 void ADRArmadilloEnemy::OnRep_BallForm()
 {
 	UpdateMeshVisibility();
+	ApplyFormCapsuleSize();
+}
+
+void ADRArmadilloEnemy::ApplyFormCapsuleSize()
+{
+	if (bIsBallForm)
+	{
+		GetCapsuleComponent()->SetCapsuleSize(BallFormCapsuleRadius, BallFormCapsuleHalfHeight);
+	}
+	else if (DefaultCapsuleHalfHeight > 0.f)
+	{
+		// BeginPlay에서 기본 크기를 저장하기 전(초기 복제 등)에는 복원하지 않음
+		GetCapsuleComponent()->SetCapsuleSize(DefaultCapsuleRadius, DefaultCapsuleHalfHeight);
+	}
 }
 
 void ADRArmadilloEnemy::UpdateMeshVisibility()
@@ -114,6 +189,26 @@ void ADRArmadilloEnemy::UpdateMeshVisibility()
 	// BasicForm mesh = GetMesh() (parent's SkeletalMeshComponent)
 	GetMesh()->SetVisibility(!bIsBallForm);
 	BallFormMesh->SetVisibility(bIsBallForm);
+}
+
+void ADRArmadilloEnemy::ApplyWaveOutline()
+{
+	// 기본 메시(GetMesh())에 stencil 적용
+	Super::ApplyWaveOutline();
+
+	// BallFormMesh에도 동일하게 적용 — 볼 폼일 때만 보이지만 stencil은 양쪽 다 세팅해두면
+	// SetVisibility로 가려진 쪽은 자동으로 CustomDepth 패스에서도 제외됨
+	if (!BallFormMesh) return;
+
+	if (WaveOutlineLevel > 0)
+	{
+		BallFormMesh->SetRenderCustomDepth(true);
+		BallFormMesh->SetCustomDepthStencilValue(static_cast<int32>(WaveOutlineLevel));
+	}
+	else
+	{
+		BallFormMesh->SetRenderCustomDepth(false);
+	}
 }
 
 // ===== Stun Override =====
@@ -131,8 +226,7 @@ void ADRArmadilloEnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 New
 	{
 		bIsBallForm = false;
 		bPendingBallForm = false;
-		OnRep_BallForm(); // Update visibility
-		GetCapsuleComponent()->SetCapsuleSize(DefaultCapsuleRadius, DefaultCapsuleHalfHeight);
+		OnRep_BallForm(); // 메시 가시성 + 캡슐 크기 복원
 	}
 
 	// Call parent stun handling (updates BB, bIsStunned, etc.)
@@ -143,15 +237,18 @@ void ADRArmadilloEnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 New
 
 AActor* ADRArmadilloEnemy::FindRollTarget() const
 {
-	// 1. Collect all players in world
-	TArray<AActor*> AllPlayers;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ADRCharacter::StaticClass(), AllPlayers);
+	// 1. GameState의 플레이어 목록에서 생존 플레이어 수집 (월드 전체 액터 순회 방지)
+	TArray<ADRCharacter*> AllPlayers;
+	if (const ADRGameStateBase* GS = GetWorld()->GetGameState<ADRGameStateBase>())
+	{
+		AllPlayers = GS->GetAlivePlayers();
+	}
 
 	// 2. Filter by distance and line-of-sight
 	TArray<AActor*> ValidTargets;
 	const FVector MyLocation = GetActorLocation();
 
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 	// Draw search range
 	DrawDebugSphere(GetWorld(), MyLocation, RollTargetSearchRange, 24, FColor::Cyan, false, 2.f);
 #endif
@@ -169,7 +266,7 @@ AActor* ADRArmadilloEnemy::FindRollTarget() const
 		const float Distance = FVector::Dist(MyLocation, Player->GetActorLocation());
 		if (Distance > RollTargetSearchRange)
 		{
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 			// Out of range — gray line
 			DrawDebugLine(GetWorld(), MyLocation, Player->GetActorLocation(), FColor::Silver, false, 2.f);
 			DrawDebugString(GetWorld(), Player->GetActorLocation() + FVector(0, 0, 50), TEXT("OUT OF RANGE"), nullptr, FColor::Silver, 2.f);
@@ -194,7 +291,7 @@ AActor* ADRArmadilloEnemy::FindRollTarget() const
 		if (!bBlocked)
 		{
 			ValidTargets.Add(Player);
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 			// Valid target — green line
 			DrawDebugLine(GetWorld(), MyLocation, Player->GetActorLocation(), FColor::Green, false, 2.f);
 			DrawDebugSphere(GetWorld(), Player->GetActorLocation(), 40.f, 8, FColor::Green, false, 2.f);
@@ -202,7 +299,7 @@ AActor* ADRArmadilloEnemy::FindRollTarget() const
 		}
 		else
 		{
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 			// Blocked by wall — red line to wall hit, then red dashed to player
 			DrawDebugLine(GetWorld(), MyLocation, HitResult.ImpactPoint, FColor::Red, false, 2.f);
 			DrawDebugLine(GetWorld(), HitResult.ImpactPoint, Player->GetActorLocation(), FColor::Orange, false, 2.f);
@@ -215,7 +312,7 @@ AActor* ADRArmadilloEnemy::FindRollTarget() const
 	// 3. Return random valid target, or nullptr
 	if (ValidTargets.Num() == 0)
 	{
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 		DrawDebugString(GetWorld(), MyLocation + FVector(0, 0, 100), TEXT("NO VALID TARGET"), nullptr, FColor::Red, 2.f);
 #endif
 		return nullptr;
@@ -224,7 +321,7 @@ AActor* ADRArmadilloEnemy::FindRollTarget() const
 	const int32 RandomIndex = FMath::RandRange(0, ValidTargets.Num() - 1);
 	AActor* ChosenTarget = ValidTargets[RandomIndex];
 
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 	// Highlight chosen target
 	DrawDebugSphere(GetWorld(), ChosenTarget->GetActorLocation(), 60.f, 12, FColor::Magenta, false, 3.f);
 	DrawDebugString(GetWorld(), ChosenTarget->GetActorLocation() + FVector(0, 0, 80), TEXT("CHOSEN TARGET"), nullptr, FColor::Magenta, 3.f);
@@ -241,6 +338,11 @@ void ADRArmadilloEnemy::StartRollCharge(FVector TargetLocation)
 	RollTargetLocation = TargetLocation;
 	RollDirection = (TargetLocation - GetActorLocation()).GetSafeNormal2D();
 	CurrentRollSpeed = RollInitialSpeed;
+	LastStuckCheckLocation = GetActorLocation();
+	StuckTimeAccumulator = 0.f;
+
+	// 서버 로컬에서도 루프 시작 (OnRep은 원격 클라 전용이므로 수동 호출)
+	OnRep_IsRolling();
 
 	// Stop AI movement (CharacterMovement is controlled directly)
 	if (DRAIController)
@@ -256,10 +358,31 @@ void ADRArmadilloEnemy::StopRollCharge()
 	bIsRolling = false;
 	CurrentRollSpeed = 0.f;
 	GetCharacterMovement()->Velocity = FVector::ZeroVector;
+
+	// 서버 로컬에서도 루프 정지
+	OnRep_IsRolling();
 }
 
 void ADRArmadilloEnemy::TickRollCharge(float DeltaTime)
 {
+	// Stuck detection: if 2D position barely changes for StuckTimeLimit seconds, treat as reaching the target.
+	const float Moved = FVector::Dist2D(GetActorLocation(), LastStuckCheckLocation);
+	if (Moved < StuckMoveThreshold)
+	{
+		StuckTimeAccumulator += DeltaTime;
+		if (StuckTimeAccumulator >= StuckTimeLimit)
+		{
+			StopRollCharge();
+			OnRollReachedTarget.Broadcast();
+			return;
+		}
+	}
+	else
+	{
+		StuckTimeAccumulator = 0.f;
+		LastStuckCheckLocation = GetActorLocation();
+	}
+
 	// 1. Accelerate
 	CurrentRollSpeed = FMath::Min(CurrentRollSpeed + RollAcceleration * DeltaTime, RollMaxSpeed);
 
@@ -286,7 +409,7 @@ void ADRArmadilloEnemy::TickRollCharge(float DeltaTime)
 	{
 		StopRollCharge();
 
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 		// Draw impact radius sphere at collision point
 		DrawDebugSphere(GetWorld(), HitResult.ImpactPoint, RollImpactRadius, 12, FColor::Red, false, 3.f);
 #endif
@@ -295,7 +418,7 @@ void ADRArmadilloEnemy::TickRollCharge(float DeltaTime)
 		BroadcastRollImpact(HitResult.ImpactPoint);
 	}
 
-#if ENABLE_DRAW_DEBUG
+#if 0 // Temporarily disabled debug draw
 	// Draw forward detection sphere
 	const float CapsuleRadius = GetCapsuleComponent()->GetScaledCapsuleRadius();
 	FVector TraceStart = GetActorLocation() + RollDirection * CapsuleRadius;
@@ -323,12 +446,21 @@ bool ADRArmadilloEnemy::DetectRollCollision(FHitResult& OutHit) const
 	ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic); // Cleanser sites, etc.
 
 	// SphereTrace with radius 30 for forward detection (multi-channel)
-	return GetWorld()->SweepSingleByObjectType(
+	bool bHit = GetWorld()->SweepSingleByObjectType(
 		OutHit, Start, End, FQuat::Identity,
 		ObjectParams,
 		FCollisionShape::MakeSphere(RollDetectionRadius),
 		Params
 	);
+
+	// Skip trigger volumes (QueryOnly components like door triggers)
+	// SweepByObjectType treats all matching object types as blocking regardless of response settings
+	if (bHit && OutHit.GetComponent() && OutHit.GetComponent()->GetCollisionEnabled() == ECollisionEnabled::QueryOnly)
+	{
+		return false;
+	}
+
+	return bHit;
 }
 
 void ADRArmadilloEnemy::BroadcastRollImpact(const FVector& ImpactLocation)
@@ -366,4 +498,64 @@ void ADRArmadilloEnemy::BroadcastRollImpact(const FVector& ImpactLocation)
 
 	// Pass collision result to GA -> GA handles damage/stun
 	OnRollImpact.Broadcast(Result);
+
+	// 충돌 사운드 모든 클라이언트로 브로드캐스트 (Plan2.md §6.3)
+	MulticastPlayRollImpactSound(ImpactLocation);
+}
+
+// ===== Roll/Impact Sound (Plan2.md §6.2, §6.3) =====
+
+void ADRArmadilloEnemy::OnRep_IsRolling()
+{
+	if (bIsRolling)
+	{
+		StartArmadilloRollLoop();
+	}
+	else
+	{
+		StopArmadilloRollLoop();
+	}
+}
+
+void ADRArmadilloEnemy::StartArmadilloRollLoop()
+{
+	// 데디케이티드 서버는 오디오 출력이 없으므로 스폰 생략
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	// 이미 재생 중이면 무시 (중복 spawn 방지)
+	if (IsValid(RollLoopComponent)) return;
+
+	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
+	if (!AssetManager) return;
+	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
+	if (!SoundData || !SoundData->ArmadilloRollLoopSound) return;
+
+	RollLoopComponent = UGameplayStatics::SpawnSoundAttached(
+		SoundData->ArmadilloRollLoopSound,
+		GetRootComponent(),
+		NAME_None,
+		FVector::ZeroVector,
+		EAttachLocation::SnapToTarget,
+		/*bStopWhenAttachedToDestroyed=*/true);
+}
+
+void ADRArmadilloEnemy::StopArmadilloRollLoop()
+{
+	if (IsValid(RollLoopComponent))
+	{
+		RollLoopComponent->Stop();
+		RollLoopComponent = nullptr;
+	}
+}
+
+void ADRArmadilloEnemy::MulticastPlayRollImpactSound_Implementation(FVector_NetQuantize Location)
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
+	if (!AssetManager) return;
+	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
+	if (!SoundData || !SoundData->ArmadilloImpactSound) return;
+
+	UGameplayStatics::PlaySoundAtLocation(this, SoundData->ArmadilloImpactSound, Location);
 }

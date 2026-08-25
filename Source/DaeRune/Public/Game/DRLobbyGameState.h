@@ -41,6 +41,10 @@ public:
 	// 로비 상태 설정 (서버 전용)
 	void SetLobbyState(ELobbyState NewState);
 
+	// 호스트를 제외한 모든 플레이어가 준비 상태인지 확인 (비호스트가 없으면 true)
+	UFUNCTION(BlueprintPure, Category = "Lobby|State")
+	bool AreAllNonHostPlayersReady() const;
+
 	// 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "Lobby")
 	FOnRoomCodeGenerated OnRoomCodeGenerated;

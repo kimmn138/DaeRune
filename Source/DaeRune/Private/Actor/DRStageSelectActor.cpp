@@ -8,18 +8,20 @@
 #include "GameFramework/Character.h"
 #include "Player/DRPlayerController.h"
 #include "Game/DRLobbyGameMode.h"
+#include "TimerManager.h"
+#include "Engine/World.h"
 
 ADRStageSelectActor::ADRStageSelectActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
 
-    // ·çÆ® ÄÄÆ÷³ÍÆ®
+    // ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
     PortalMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PortalMesh"));
     RootComponent = PortalMesh;
     PortalMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-    // »óÈ£ÀÛ¿ë ¹Ú½º
+    // ï¿½ï¿½È£ï¿½Û¿ï¿½ ï¿½Ú½ï¿½
     InteractionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractionBox"));
     InteractionBox->SetupAttachment(RootComponent);
     InteractionBox->SetBoxExtent(FVector(200.0f, 200.0f, 100.0f));
@@ -27,7 +29,7 @@ ADRStageSelectActor::ADRStageSelectActor()
     InteractionBox->SetCollisionResponseToAllChannels(ECR_Ignore);
     InteractionBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-    // UI À§Á¬
+    // UI ï¿½ï¿½ï¿½ï¿½
     InteractionWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidget"));
     InteractionWidget->SetupAttachment(RootComponent);
     InteractionWidget->SetRelativeLocation(FVector(0.0f, 0.0f, 150.0f));
@@ -44,22 +46,63 @@ void ADRStageSelectActor::BeginPlay()
 {
 	Super::BeginPlay();
 	
-    // ¼­¹ö¿¡¼­¸¸ ¿À¹ö·¦ ÀÌº¥Æ® Ã³¸®
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìºï¿½Æ® Ã³ï¿½ï¿½
     if (HasAuthority())
     {
         InteractionBox->OnComponentBeginOverlap.AddDynamic(this, &ADRStageSelectActor::OnBoxBeginOverlap);
         InteractionBox->OnComponentEndOverlap.AddDynamic(this, &ADRStageSelectActor::OnBoxEndOverlap);
+
+        // í˜¸ìŠ¤íŠ¸ëŠ” ë²”ìœ„ì™€ ë¬´ê´€í•˜ê²Œ UIê°€ í•­ìƒ ë³´ì´ë„ë¡ ì…‹ì—…
+        SetupHostWidgetVisibility();
     }
+}
+
+void ADRStageSelectActor::SetupHostWidgetVisibility()
+{
+    if (!HasAuthority()) return;
+
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+    {
+        APlayerController* PC = It->Get();
+        if (!PC || !PC->IsLocalController()) continue;
+
+        APawn* HostPawn = PC->GetPawn();
+        if (!HostPawn) continue;
+
+        HostController = Cast<ADRPlayerController>(PC);
+        SetOwner(HostPawn);
+        InteractionWidget->SetVisibility(true);
+        return;
+    }
+
+    // í˜¸ìŠ¤íŠ¸ì˜ í°ì´ ì•„ì§ ì¤€ë¹„ë˜ì§€ ì•Šì€ ê²½ìš° ìž¬ì‹œë„
+    World->GetTimerManager().SetTimer(
+        HostSetupTimerHandle,
+        this,
+        &ADRStageSelectActor::SetupHostWidgetVisibility,
+        0.5f,
+        false
+    );
 }
 
 void ADRStageSelectActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    // µ¨¸®°ÔÀÌÆ® ±¸µ¶ ÇØÁ¦
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().ClearTimer(HostSetupTimerHandle);
+    }
+
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (OverlappingHostController)
     {
         OverlappingHostController->OnInteractPressed.RemoveDynamic(this, &ADRStageSelectActor::OnHostInteract);
         OverlappingHostController = nullptr;
     }
+
+    HostController = nullptr;
 
     Super::EndPlay(EndPlayReason);
 }
@@ -74,20 +117,15 @@ void ADRStageSelectActor::OnBoxBeginOverlap(UPrimitiveComponent* OverlappedCompo
     ADRPlayerController* DRPC = Cast<ADRPlayerController>(Character->GetController());
     if (!DRPC) return;
 
-    // È£½ºÆ®¸¸ »óÈ£ÀÛ¿ë °¡´É
+    // È£ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½È£ï¿½Û¿ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (!DRPC->IsLocalController()) return;
 
-    // ÀÌ¹Ì ´Ù¸¥ È£½ºÆ®°¡ ÀÖÀ¸¸é ¹«½Ã
+    // ï¿½Ì¹ï¿½ ï¿½Ù¸ï¿½ È£ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (OverlappingHostController) return;
 
     OverlappingHostController = DRPC;
 
-    SetOwner(Character);
-
-    // UI Ç¥½Ã
-    InteractionWidget->SetVisibility(true);
-
-    // µ¨¸®°ÔÀÌÆ® ±¸µ¶
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
     OverlappingHostController->OnInteractPressed.AddDynamic(this, &ADRStageSelectActor::OnHostInteract);
 }
 
@@ -101,22 +139,17 @@ void ADRStageSelectActor::OnBoxEndOverlap(UPrimitiveComponent* OverlappedCompone
     ADRPlayerController* DRPC = Cast<ADRPlayerController>(Character->GetController());
     if (!DRPC) return;
 
-    // ÇöÀç ¿À¹ö·¦ ÁßÀÎ È£½ºÆ®°¡ ¾Æ´Ï¸é ¹«½Ã
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ È£ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½Æ´Ï¸ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (OverlappingHostController != DRPC) return;
 
-    // UI ¼û±è
-    InteractionWidget->SetVisibility(false);
-
-    SetOwner(nullptr);
-
-    // µ¨¸®°ÔÀÌÆ® ±¸µ¶ ÇØÁ¦
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     OverlappingHostController->OnInteractPressed.RemoveDynamic(this, &ADRStageSelectActor::OnHostInteract);
     OverlappingHostController = nullptr;
 }
 
 void ADRStageSelectActor::OnHostInteract()
 {
-    // ¼­¹ö·Î ÀÌµ¿ ¿äÃ»
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½ ï¿½ï¿½Ã»
     ServerRequestTravel();
 }
 
@@ -124,10 +157,10 @@ void ADRStageSelectActor::ServerRequestTravel_Implementation()
 {
     if (!HasAuthority()) return;
 
-    // È£½ºÆ®°¡ ¹üÀ§ ¾È¿¡ ÀÖ´ÂÁö È®ÀÎ
+    // È£ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½È¿ï¿½ ï¿½Ö´ï¿½ï¿½ï¿½ È®ï¿½ï¿½
     if (!OverlappingHostController) return;
 
-    // GameMode¿¡ À§ÀÓ
+    // GameModeï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     ADRLobbyGameMode* LobbyGameMode = Cast<ADRLobbyGameMode>(GetWorld()->GetAuthGameMode());
     if (!LobbyGameMode) return;
 

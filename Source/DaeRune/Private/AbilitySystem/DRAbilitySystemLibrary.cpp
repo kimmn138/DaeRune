@@ -10,7 +10,9 @@
 #include "Actor/DRCleanserSite.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "Game/DRGameModeBase.h"
+#include "Game/DRGameInstance.h"
 #include "Interaction/CombatInterface.h"
+#include "Interaction/DRProximityHitOnly.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/DRPlayerState.h"
 #include "UI/HUD/DRHUD.h"
@@ -27,6 +29,8 @@ bool UDRAbilitySystemLibrary::MakeWidgetControllerParams(const UObject* WorldCon
 		if (OutDRHUD)
 		{
 			ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>();
+			if (!PS) return false; // 클라이언트 초기화 중 PlayerState 복제 전이면 실패 처리
+
 			UAbilitySystemComponent* ASC = PS->GetAbilitySystemComponent();
 			UAttributeSet* AS = PS->GetAttributeSet();
 			
@@ -101,9 +105,19 @@ UCharacterClassInfo* UDRAbilitySystemLibrary::GetCharacterClassInfo(const UObjec
 
 UPlayerCharacterClassInfo* UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(const UObject* WorldContextObject)
 {
-	const ADRGameModeBase* DRGameMode = Cast<ADRGameModeBase>(UGameplayStatics::GetGameMode(WorldContextObject));
-	if (DRGameMode == nullptr) return nullptr;
-	return DRGameMode->PlayerCharacterClassInfo;
+	// GameInstance는 서버/클라이언트 모두에 존재하므로 양쪽에서 안전하게 접근 가능
+	const UDRGameInstance* DRGameInstance = Cast<UDRGameInstance>(UGameplayStatics::GetGameInstance(WorldContextObject));
+	if (DRGameInstance == nullptr) return nullptr;
+	return DRGameInstance->PlayerCharacterClassInfo;
+}
+
+TSubclassOf<UUserWidget> UDRAbilitySystemLibrary::GetCharacterInfoWidgetClass(const UObject* WorldContextObject, EPlayerCharacterClass PlayerClass)
+{
+	UPlayerCharacterClassInfo* ClassInfo = GetPlayerCharacterClassInfo(WorldContextObject);
+	if (ClassInfo == nullptr) return nullptr;
+
+	FCharacterClassDefaultInfo Info = ClassInfo->GetClassDefaultInfo(PlayerClass);
+	return Info.CharacterInfoWidgetClass;
 }
 
 void UDRAbilitySystemLibrary::InitializePlayerDefaultAttributes(
@@ -236,6 +250,15 @@ FVector UDRAbilitySystemLibrary::GetKnockbackForce(const FGameplayEffectContextH
 	return FVector::ZeroVector;
 }
 
+FGameplayTagContainer UDRAbilitySystemLibrary::GetSourceAbilityTags(const FGameplayEffectContextHandle& EffectContextHandle)
+{
+	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	{
+		return DREffectContext->GetSourceAbilityTags();
+	}
+	return FGameplayTagContainer();
+}
+
 void UDRAbilitySystemLibrary::SetIsSuccessfulDebuff(UPARAM(ref)FGameplayEffectContextHandle& EffectContextHandle, bool bInSuccessfulDebuff)
 {
 	if (FDRGameplayEffectContext* DREffectContext = static_cast<FDRGameplayEffectContext*>(EffectContextHandle.Get()))
@@ -349,21 +372,50 @@ AActor* UDRAbilitySystemLibrary::GetClosestCleanserSite(APawn* ControlledPawn)
 	ADRStageGameState* GameState = Cast<ADRStageGameState>(World->GetGameState());
 	if (!GameState) return nullptr;
 
-	TArray<ADRCleanserSite*> CleanserSites = GameState->GetCleanserSites();
+	const TArray<TObjectPtr<ADRCleanserSite>>& CleanserSites = GameState->GetCleanserSites();
+	if (CleanserSites.Num() == 0) return nullptr;
 
-	if (CleanserSites.Num() < 2) return nullptr;
-	if (!CleanserSites[0] || !CleanserSites[1]) return nullptr;
-	
-	const float Dist0 = FVector::Dist(CleanserSites[0]->GetActorLocation(), ControlledPawn->GetActorLocation());
-	const float Dist1 = FVector::Dist(CleanserSites[1]->GetActorLocation(), ControlledPawn->GetActorLocation());
+	const FVector PawnLocation = ControlledPawn->GetActorLocation();
+	ADRCleanserSite* Closest = nullptr;
+	float ClosestDistSq = TNumericLimits<float>::Max();
 
-	AActor* ClosestCleanserSite = Dist0 < Dist1 ? CleanserSites[0] : CleanserSites[1];
+	for (ADRCleanserSite* Site : CleanserSites)
+	{
+		if (!Site) continue;
+		const float DistSq = FVector::DistSquared(Site->GetActorLocation(), PawnLocation);
+		if (DistSq < ClosestDistSq)
+		{
+			ClosestDistSq = DistSq;
+			Closest = Site;
+		}
+	}
 
-	return ClosestCleanserSite;
+	return Closest;
+}
+
+bool UDRAbilitySystemLibrary::IsActorReachable(APawn* Asker, AActor* Target)
+{
+	if (!IsValid(Asker) || !IsValid(Target)) return false;
+
+	UWorld* World = Asker->GetWorld();
+	if (!World) return false;
+
+	// 벽/지형(WorldStatic)만 차단으로 간주. 다른 캐릭터/적은 무시.
+	const FVector Start = Asker->GetActorLocation();
+	const FVector End = Target->GetActorLocation();
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(IsActorReachable), /*bTraceComplex=*/false);
+	Params.AddIgnoredActor(Asker);
+	Params.AddIgnoredActor(Target);
+
+	FHitResult Hit;
+	const bool bBlocked = World->LineTraceSingleByChannel(Hit, Start, End, ECC_WorldStatic, Params);
+	return !bBlocked;
 }
 
 bool UDRAbilitySystemLibrary::IsNotFriend(AActor* FirstActor, AActor* SecondActor)
 {
+	if (!IsValid(FirstActor) || !IsValid(SecondActor)) return false;
 	const bool bBothArePlayers = FirstActor->ActorHasTag(FName("Player")) && SecondActor->ActorHasTag(FName("Player"));
 	const bool bBothAreEnemies = FirstActor->ActorHasTag(FName("Enemy")) && SecondActor->ActorHasTag(FName("Enemy"));
 	const bool bFriends = bBothArePlayers || bBothAreEnemies;
@@ -373,7 +425,25 @@ bool UDRAbilitySystemLibrary::IsNotFriend(AActor* FirstActor, AActor* SecondActo
 FGameplayEffectContextHandle UDRAbilitySystemLibrary::ApplyDamageEffect(const FDamageEffectParams& DamageEffectParams)
 {
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
-	const AActor* SourceAvatarActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
+	AActor* SourceAvatarActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
+
+	// ===== 근접 전용 피격 대상 가로채기 (Plan6 §5.11) =====
+	// 홀로그램 두더지처럼 "2m 안에서의 공격만 유효하고 그 밖은 투과"하는 대상을 여기서 처리한다.
+	// 모든 공격이 이 함수를 지나므로 공격 종류마다 손대지 않아도 된다.
+	// GE 는 적용하지 않는다 - 어트리뷰트를 쓰지 않는 대상이라 PostGameplayEffectExecute 를 태우면 위험하다.
+	if (DamageEffectParams.TargetAbilitySystemComponent)
+	{
+		AActor* TargetAvatarActor = DamageEffectParams.TargetAbilitySystemComponent->GetAvatarActor();
+		if (IDRProximityHitOnly* ProximityTarget = Cast<IDRProximityHitOnly>(TargetAvatarActor))
+		{
+			if (ProximityTarget->AcceptsHitFrom(SourceAvatarActor))
+			{
+				ProximityTarget->HandleProximityHit(SourceAvatarActor);
+			}
+			// 범위 밖이면 아무 일도 하지 않는다 (투과)
+			return FGameplayEffectContextHandle();
+		}
+	}
 
 	FGameplayEffectContextHandle EffectContexthandle = DamageEffectParams.SourceAbilitySystemComponent->MakeEffectContext();
 	EffectContexthandle.AddSourceObject(SourceAvatarActor);
