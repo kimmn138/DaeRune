@@ -54,22 +54,27 @@ public:
 	void SetTargetImageCount(int32 InCount);
 
 	UFUNCTION(BlueprintCallable, Category = "S2|CCTV")
-	int32 GetScreenCount() const { return Screens.Num(); }
+	int32 GetScreenCount() const { return ScreenCount; }
 
 protected:
 	virtual void BeginPlay() override;
 
 	// ========== 설정 ==========
 
-	// 화면 메시 수집용 컴포넌트 태그.
-	// BP에서 화면 메시 6개를 추가하고 각각 이 태그를 달면 BeginPlay에서 수집한다.
-	// (컴포넌트 참조 배열은 BP 디테일 패널에서 배선할 수 없어 태그 수집 방식을 쓴다.)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|CCTV")
-	FName ScreenComponentTag = TEXT("CctvScreen");
+	// ★화면 6개는 **하나의 스태틱 메시**에 있는 **머티리얼 슬롯 6개**다 (2026-08-18 변경).
+	//   메시를 6개 두는 대신 슬롯을 나눠 쓰므로 드로우콜과 배치 작업이 줄어든다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|CCTV")
+	TObjectPtr<UStaticMeshComponent> ScreenMesh;
 
-	// 수집된 화면 메시. 컴포넌트 이름 순으로 정렬되며 그 순서가 화면 인덱스가 된다.
-	UPROPERTY(BlueprintReadOnly, Category = "S2|CCTV")
-	TArray<TObjectPtr<UStaticMeshComponent>> Screens;
+	// 화면 개수 (= 사용할 머티리얼 슬롯 수)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|CCTV", meta = (ClampMin = "2"))
+	int32 ScreenCount = 6;
+
+	// 화면 인덱스 -> 머티리얼 슬롯(엘리먼트) 번호.
+	// 비워두면 0, 1, 2 ... 순서를 그대로 쓴다. 메시의 슬롯 순서가 화면 배치 순서와
+	// 다를 때만 채운다 (예: 3, 0, 5, 1, 4, 2).
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|CCTV")
+	TArray<int32> ScreenMaterialSlots;
 
 	// 머티리얼의 텍스처 파라미터 이름
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|CCTV")

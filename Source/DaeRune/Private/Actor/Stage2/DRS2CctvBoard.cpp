@@ -14,6 +14,11 @@ ADRS2CctvBoard::ADRS2CctvBoard()
 	bReplicates = true;
 
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot")));
+
+	// 화면 6개가 머티리얼 슬롯으로 나뉜 단일 메시. BP 에서 메시 에셋을 지정한다.
+	ScreenMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ScreenMesh"));
+	ScreenMesh->SetupAttachment(GetRootComponent());
+	ScreenMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
 void ADRS2CctvBoard::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -42,36 +47,49 @@ void ADRS2CctvBoard::BeginPlay()
 
 void ADRS2CctvBoard::EnsureScreenMIDs()
 {
-	// BP에서 태그를 단 화면 메시들을 수집한다 (이름 순 정렬 = 화면 인덱스 순서)
-	Screens.Reset();
+	ScreenMIDs.Reset();
 
-	TArray<UStaticMeshComponent*> FoundComponents;
-	GetComponents<UStaticMeshComponent>(FoundComponents);
-
-	for (UStaticMeshComponent* Component : FoundComponents)
+	if (!ScreenMesh || !ScreenMesh->GetStaticMesh())
 	{
-		if (Component && Component->ComponentHasTag(ScreenComponentTag))
-		{
-			Screens.Add(Component);
-		}
+		UE_LOG(LogDR, Error, TEXT("[S2CCTV] ScreenMesh 에 메시가 지정되지 않았습니다."));
+		return;
 	}
 
-	Screens.Sort([](const TObjectPtr<UStaticMeshComponent>& A, const TObjectPtr<UStaticMeshComponent>& B)
-	{
-		return A->GetName() < B->GetName();
-	});
+	const int32 SlotTotal = ScreenMesh->GetNumMaterials();
 
-	if (Screens.Num() == 0)
+	// 화면 인덱스마다 대응하는 머티리얼 슬롯의 MID 를 만든다.
+	for (int32 ScreenIndex = 0; ScreenIndex < ScreenCount; ++ScreenIndex)
+	{
+		// 매핑을 비워두면 슬롯 번호 = 화면 번호
+		const int32 Slot = ScreenMaterialSlots.IsValidIndex(ScreenIndex)
+			? ScreenMaterialSlots[ScreenIndex]
+			: ScreenIndex;
+
+		if (Slot < 0 || Slot >= SlotTotal)
+		{
+			UE_LOG(LogDR, Error,
+				TEXT("[S2CCTV] 화면 %d 의 머티리얼 슬롯 %d 이 범위(0~%d) 밖입니다."),
+				ScreenIndex, Slot, SlotTotal - 1);
+			ScreenMIDs.Add(nullptr);
+			continue;
+		}
+
+		UMaterialInstanceDynamic* MID = ScreenMesh->CreateAndSetMaterialInstanceDynamic(Slot);
+		if (!MID)
+		{
+			UE_LOG(LogDR, Error,
+				TEXT("[S2CCTV] 화면 %d (슬롯 %d): MID 생성 실패. 그 슬롯에 머티리얼이 있는지 확인하세요."),
+				ScreenIndex, Slot);
+		}
+
+		ScreenMIDs.Add(MID);
+	}
+
+	if (SlotTotal < ScreenCount)
 	{
 		UE_LOG(LogDR, Error,
-			TEXT("[S2CCTV] 화면 메시를 찾지 못했습니다. BP 컴포넌트에 '%s' 태그를 다세요."),
-			*ScreenComponentTag.ToString());
-	}
-
-	ScreenMIDs.Reset();
-	for (UStaticMeshComponent* Screen : Screens)
-	{
-		ScreenMIDs.Add(Screen ? Screen->CreateAndSetMaterialInstanceDynamic(0) : nullptr);
+			TEXT("[S2CCTV] 메시의 머티리얼 슬롯이 %d개인데 화면은 %d개입니다. 슬롯이 부족합니다."),
+			SlotTotal, ScreenCount);
 	}
 }
 
@@ -87,7 +105,6 @@ void ADRS2CctvBoard::BuildSequence()
 {
 	if (!HasAuthority()) return;
 
-	const int32 ScreenCount = Screens.Num();
 	if (ScreenCount < 2)
 	{
 		UE_LOG(LogDR, Error, TEXT("[S2CCTV] 화면이 %d개뿐입니다. 최소 2개가 필요합니다."), ScreenCount);

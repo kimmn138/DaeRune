@@ -34,8 +34,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "S2|Prop")
 	virtual bool CanInteract(const ADRCharacter* Character) const;
 
-	// 실제 처리 (서버). 자식이 소유 퍼즐에 위임한다.
-	virtual void ServerHandleInteract(ADRCharacter* Character) {}
+	// 상호작용 공용 진입점 (서버). PlayerController 가 이것을 호출한다.
+	// ★비가상이다. 쿨다운을 먼저 소비한 뒤 자식의 ExecuteInteract 를 부른다.
+	//   자식이 쿨다운 처리를 빠뜨릴 수 없게 하려는 구조다.
+	void ServerHandleInteract(ADRCharacter* Character);
 
 	// 프롭 활성/비활성 (서버). 퍼즐이 끝나면 조작을 막는다.
 	UFUNCTION(BlueprintCallable, Category = "S2|Prop")
@@ -47,6 +49,15 @@ public:
 	int32 GetPropIndex() const { return PropIndex; }
 
 protected:
+	// 자식이 구현하는 실제 처리 (서버). 소유 퍼즐에 위임한다.
+	// 쿨다운 통과 후에만 호출된다.
+	virtual void ExecuteInteract(ADRCharacter* Character) {}
+
+	// 연속 조작 방지 대기 시간(초). 0 이면 제한 없음.
+	// 레버처럼 연타가 곤란한 프롭만 값을 준다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Prop", meta = (ClampMin = "0"))
+	float InteractCooldown = 0.f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Prop")
 	TObjectPtr<UStaticMeshComponent> PropMesh;
 
@@ -78,11 +89,20 @@ protected:
 	// 연출 재생 (전 클라)
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_PlayInteractedVisual();
+
+private:
+	// 마지막 조작 시각 (서버 전용). 프롭 단위이므로 누가 눌렀든 함께 적용된다.
+	float LastInteractTime = -BIG_NUMBER;
 };
 
 /**
  * 스위치 퍼즐의 레버 (Plan6 §14.2.3)
  * PropIndex = 레버 번호 0~4
+ *
+ * ★자세(올림/내림)는 레버가 스스로 토글하지 않는다.
+ *   레버 ON/OFF 의 진실은 퍼즐의 LeverBits 이며, 라운드 성공 시 퍼즐이 이를 0 으로 초기화한다.
+ *   레버가 자체 토글로 자세를 만들면 그 초기화를 놓쳐 "올라간 채로 남는" 버그가 생긴다.
+ *   따라서 BeginPlay 에서 퍼즐에 자기를 등록하고, 퍼즐이 SetLeverOn() 으로 자세를 밀어준다.
  */
 UCLASS()
 class DAERUNE_API ADRS2Lever : public ADRS2InteractProp
@@ -90,7 +110,45 @@ class DAERUNE_API ADRS2Lever : public ADRS2InteractProp
 	GENERATED_BODY()
 
 public:
-	virtual void ServerHandleInteract(ADRCharacter* Character) override;
+	ADRS2Lever();
+
+	virtual void Tick(float DeltaSeconds) override;
+
+	// 퍼즐이 LeverBits 변경 시 호출한다 (서버·클라 공통).
+	void SetLeverOn(bool bNewOn);
+
+protected:
+	virtual void BeginPlay() override;
+	virtual void ExecuteInteract(ADRCharacter* Character) override;
+
+	// ★배치 회전을 기준으로 한 **상대 변화량**이다. 절대 회전이 아니다.
+	//   덕분에 레버를 어느 방향으로 배치하든 항상 자기 축으로 회전한다.
+	//   FRotator = (Pitch, Yaw, Roll) 이므로 Y축 회전은 Pitch 다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Lever")
+	FRotator OnRotation = FRotator(85.f, 0.f, 0.f);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Lever")
+	FRotator OffRotation = FRotator(-25.f, 0.f, 0.f);
+
+	// 두 자세 사이 전환 시간. 0 이면 즉시 스냅한다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Lever", meta = (ClampMin = "0"))
+	float ToggleDuration = 0.15f;
+
+private:
+	// Alpha 0 = OFF 자세, 1 = ON 자세
+	void ApplyPose(float Alpha);
+
+	FQuat OffQuat = FQuat::Identity;
+	FQuat OnQuat = FQuat::Identity;
+
+	bool bLeverOn = false;
+	bool bPoseInitialized = false;
+
+	float CurrentAlpha = 0.f;
+	float FromAlpha = 0.f;
+	float ToAlpha = 0.f;
+	float Elapsed = 0.f;
+	bool bAnimating = false;
 };
 
 /**
@@ -102,10 +160,9 @@ class DAERUNE_API ADRS2SafeButton : public ADRS2InteractProp
 {
 	GENERATED_BODY()
 
-public:
-	virtual void ServerHandleInteract(ADRCharacter* Character) override;
-
 protected:
+	virtual void ExecuteInteract(ADRCharacter* Character) override;
+
 	// true 면 숫자 입력이 아니라 입력 초기화 버튼으로 동작한다.
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "S2|Prop")
 	bool bIsClearButton = false;
@@ -120,6 +177,6 @@ class DAERUNE_API ADRS2PuzzleTerminal : public ADRS2InteractProp
 {
 	GENERATED_BODY()
 
-public:
-	virtual void ServerHandleInteract(ADRCharacter* Character) override;
+protected:
+	virtual void ExecuteInteract(ADRCharacter* Character) override;
 };

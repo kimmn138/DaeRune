@@ -680,8 +680,11 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 		}
 	}
 
-	// 전부 비활성화면 스킵
-	if (!bPartDetectionEnabled && !bSiteDetectionEnabled && !bMountDetectionEnabled) return;
+	// ★여기서 조기 리턴하면 안 된다.
+	//   부품/사이트/청소기 감지는 오버랩으로 켜지는 방식이라 평소 전부 false 인데,
+	//   스테이지2 프롭(레버·버튼·단말)과 열차 칸은 오버랩 게이트 없이 트레이스로만 판정한다.
+	//   과거 이 자리에 있던 "전부 비활성화면 스킵" 가드가 그 둘까지 막아
+	//   방2 레버에 다가가도 F 프롬프트가 뜨지 않았다.
 
 	LineTraceTimer += DeltaTime;
 	if (LineTraceTimer >= LineTraceUpdateInterval)
@@ -777,6 +780,8 @@ ADRS2InteractProp* ADRPlayerController::FindPropByLineTrace()
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(DRCharacter);
 
+	// ★프롭 메시에 **심플 콜리전**이 있어야 한다. 라인트레이스는 bTraceComplex=false 라
+	//   콜리전 프리미티브가 없는 메시는 그대로 통과해 감지되지 않는다.
 	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams))
 	{
 		ADRS2InteractProp* HitProp = Cast<ADRS2InteractProp>(HitResult.GetActor());
