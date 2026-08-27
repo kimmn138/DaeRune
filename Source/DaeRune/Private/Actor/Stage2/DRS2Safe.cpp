@@ -4,6 +4,7 @@
 
 #include "Actor/DRCleanserPart.h"
 #include "Actor/Stage2/DRS2CodeScreen.h"
+#include "Actor/Stage2/DRS2InteractProp.h"
 #include "Net/UnrealNetwork.h"
 #include "DaeRune/DRLogChannels.h"
 
@@ -41,6 +42,20 @@ void ADRS2Safe::BeginPlay()
 	RefreshDisplay();
 }
 
+void ADRS2Safe::RegisterButton(ADRS2SafeButton* Button)
+{
+	if (!IsValid(Button)) return;
+
+	RegisteredButtons.AddUnique(Button);
+
+	// ★문에 부착해 개방 연출 때 버튼이 함께 회전하게 한다.
+	//   부착은 서버·클라 각자 수행한다 (이동 복제를 끈 상태라 자동 동기화되지 않는다).
+	if (Button->ShouldAttachToDoor() && DoorMesh)
+	{
+		Button->AttachToComponent(DoorMesh, FAttachmentTransformRules::KeepWorldTransform);
+	}
+}
+
 void ADRS2Safe::SetSecretCode(const TArray<uint8>& InCode)
 {
 	if (!HasAuthority()) return;
@@ -56,13 +71,23 @@ void ADRS2Safe::PushDigit(uint8 Digit)
 {
 	if (!HasAuthority() || bOpened) return;
 
+	// 자릿수가 가득 차면 더 받지 않는다.
+	// Delete 로 지우거나 Reset 으로 비운 뒤 다시 입력해야 한다.
+	if (InputDigits.Num() >= CodeLength) return;
+
 	InputDigits.Add(Digit);
 	OnRep_InputDigits();
 
-	if (InputDigits.Num() >= CodeLength)
-	{
-		ValidateInput();
-	}
+	// ★여기서 자동 판정하지 않는다. 판정은 Enter(SubmitCode) 에서만 일어난다.
+}
+
+void ADRS2Safe::DeleteLastDigit()
+{
+	if (!HasAuthority() || bOpened) return;
+	if (InputDigits.Num() == 0) return;
+
+	InputDigits.Pop();
+	OnRep_InputDigits();
 }
 
 void ADRS2Safe::ClearInput()
@@ -71,6 +96,14 @@ void ADRS2Safe::ClearInput()
 
 	InputDigits.Reset();
 	OnRep_InputDigits();
+}
+
+void ADRS2Safe::SubmitCode()
+{
+	if (!HasAuthority() || bOpened) return;
+
+	// 자릿수가 모자라도 그대로 판정한다 (어차피 불일치 -> 오답 처리).
+	ValidateInput();
 }
 
 void ADRS2Safe::ValidateInput()
@@ -106,6 +139,16 @@ void ADRS2Safe::OpenSafe()
 
 	bOpened = true;
 	OnRep_bOpened();
+
+	// ★개방 후에는 버튼을 잠근다. 그러지 않으면 F 프롬프트가 계속 뜨고
+	//   문에 붙어 회전한 버튼을 계속 누를 수 있다 (입력은 무시되지만 혼란스럽다).
+	for (const TObjectPtr<ADRS2SafeButton>& Button : RegisteredButtons)
+	{
+		if (IsValid(Button))
+		{
+			Button->SetPropEnabled(false);
+		}
+	}
 
 	// 내부 부품 스폰 -> 이후는 기존 픽업 파이프라인을 그대로 탄다
 	AActor* SpawnedPart = nullptr;

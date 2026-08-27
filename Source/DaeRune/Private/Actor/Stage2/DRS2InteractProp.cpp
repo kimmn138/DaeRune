@@ -9,6 +9,7 @@
 #include "Components/WidgetComponent.h"
 #include "Interaction/CombatInterface.h"
 #include "Net/UnrealNetwork.h"
+#include "DaeRune/DRLogChannels.h"
 
 ADRS2InteractProp::ADRS2InteractProp()
 {
@@ -16,15 +17,25 @@ ADRS2InteractProp::ADRS2InteractProp()
 
 	bReplicates = true;
 
+	// ★프롭은 이동을 복제하지 않는다.
+	//   레버 자세는 LeverBits 에서, 버튼 눌림 연출은 BP 타임라인에서 각 머신이 로컬로 계산한다.
+	//   이동 복제를 켜두면 서버의 연출 좌표가 클라로 흘러가 로컬 연출과 충돌해 떨린다.
+	SetReplicateMovement(false);
+
+	// ★루트를 빈 SceneComponent 로 둔다. PropMesh 를 루트로 삼으면
+	//   PropMesh->SetRelativeLocation 이 월드 좌표가 되어 눌림 연출을 만들 수 없다.
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	SetRootComponent(SceneRoot);
+
 	PropMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PropMesh"));
-	SetRootComponent(PropMesh);
+	PropMesh->SetupAttachment(SceneRoot);
 
 	// 시점 라인트레이스(ECC_Visibility)에 걸려야 감지된다.
 	PropMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	PropMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
 	InteractionWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidget"));
-	InteractionWidget->SetupAttachment(PropMesh);
+	InteractionWidget->SetupAttachment(SceneRoot);
 	InteractionWidget->SetWidgetSpace(EWidgetSpace::Screen);
 	InteractionWidget->SetVisibility(false);
 }
@@ -89,9 +100,14 @@ void ADRS2InteractProp::SetInteractionUIVisible(bool bShow)
 	InteractionWidget->SetVisibility(bShow && bPropEnabled);
 }
 
-void ADRS2InteractProp::Multicast_PlayInteractedVisual_Implementation()
+void ADRS2InteractProp::PlayInteractedVisual()
 {
 	OnInteractedVisual();
+}
+
+void ADRS2InteractProp::Multicast_PlayInteractedVisual_Implementation()
+{
+	PlayInteractedVisual();
 }
 
 // ================= ADRS2Lever =================
@@ -104,8 +120,7 @@ ADRS2Lever::ADRS2Lever()
 	// 연타로 전구가 정신없이 깜빡이는 것을 막는다. 자세 전환(0.15초)보다 넉넉하게 잡았다.
 	InteractCooldown = 0.4f;
 
-	// 자세는 LeverBits 로부터 서버·클라가 각자 계산한다. 회전을 복제하면 소스가 이중이 되어 떨린다.
-	SetReplicateMovement(false);
+	// 이동 복제 해제는 베이스 생성자가 처리한다 (자세를 각 머신이 로컬 계산하므로).
 }
 
 void ADRS2Lever::BeginPlay()
@@ -188,18 +203,103 @@ void ADRS2Lever::ExecuteInteract(ADRCharacter* /*Character*/)
 
 // ================= ADRS2SafeButton =================
 
-void ADRS2SafeButton::ExecuteInteract(ADRCharacter* /*Character*/)
+ADRS2SafeButton::ADRS2SafeButton()
 {
-	ADRS2Safe* Safe = Cast<ADRS2Safe>(OwnerPuzzle);
-	if (!Safe) return;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
+}
 
-	if (bIsClearButton)
+void ADRS2SafeButton::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// 눌림 연출의 기준점. BP 에서 PropMesh 를 옮겨 배치했어도 그 위치에서 눌린다.
+	if (PropMesh)
 	{
-		Safe->ClearInput();
+		PressBaseLocation = PropMesh->GetRelativeLocation();
+	}
+
+	// 금고에 자기를 등록한다 (서버·클라 공통).
+	// 금고는 이 목록으로 ① 문에 부착 ② 개방 시 조작 차단 두 가지를 처리한다.
+	if (ADRS2Safe* Safe = Cast<ADRS2Safe>(OwnerPuzzle))
+	{
+		Safe->RegisterButton(this);
+	}
+}
+
+void ADRS2SafeButton::PlayInteractedVisual()
+{
+	StartPressAnimation();
+
+	// BP 훅(사운드 등)도 그대로 호출한다.
+	Super::PlayInteractedVisual();
+}
+
+void ADRS2SafeButton::StartPressAnimation()
+{
+	PressElapsed = 0.f;
+	bPressing = true;
+	SetActorTickEnabled(true);
+}
+
+void ADRS2SafeButton::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (!bPressing || !PropMesh) return;
+
+	PressElapsed += DeltaSeconds;
+
+	const float InTime = FMath::Max(PressInDuration, KINDA_SMALL_NUMBER);
+	const float OutTime = FMath::Max(PressOutDuration, KINDA_SMALL_NUMBER);
+
+	// 0 -> 1 (들어감) -> 0 (돌아옴)
+	float Alpha;
+	if (PressElapsed < InTime)
+	{
+		Alpha = PressElapsed / InTime;
+	}
+	else if (PressElapsed < InTime + OutTime)
+	{
+		Alpha = 1.f - (PressElapsed - InTime) / OutTime;
 	}
 	else
 	{
+		// ★끝나면 반드시 원위치로 스냅한다. 중간값에 멈추는 일이 없다.
+		Alpha = 0.f;
+		bPressing = false;
+		SetActorTickEnabled(false);
+	}
+
+	PropMesh->SetRelativeLocation(PressBaseLocation + PressOffset * Alpha);
+}
+
+void ADRS2SafeButton::ExecuteInteract(ADRCharacter* /*Character*/)
+{
+	ADRS2Safe* Safe = Cast<ADRS2Safe>(OwnerPuzzle);
+	if (!Safe)
+	{
+		UE_LOG(LogDR, Error, TEXT("[S2SafeButton] %s: OwnerPuzzle 이 금고가 아닙니다. 배선을 확인하세요."), *GetName());
+		return;
+	}
+
+	switch (ButtonType)
+	{
+	case ES2SafeButtonType::Digit:
 		Safe->PushDigit(static_cast<uint8>(FMath::Clamp(PropIndex, 0, 9)));
+		break;
+
+	case ES2SafeButtonType::Delete:
+		Safe->DeleteLastDigit();
+		break;
+
+	case ES2SafeButtonType::Reset:
+		Safe->ClearInput();
+		break;
+
+	case ES2SafeButtonType::Enter:
+		Safe->SubmitCode();
+		break;
 	}
 
 	Multicast_PlayInteractedVisual();

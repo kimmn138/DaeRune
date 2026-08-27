@@ -1100,7 +1100,8 @@ class ADRS2Safe : public AActor
 
 #### 4.10.6 `ADRS2CodeScreen` (Actor 또는 컴포넌트) — 숫자 표시판
 
-- 8퍼즐/스위치의 "비밀번호 스크린" + 금고 입력 표시창 공용. `SetDigits(const TArray<int32>&)` 하나만 노출하고, 표시 방식(머티리얼 숫자 아틀라스 / 3D 텍스트)은 BP에서 결정 (§14.2.9-12).
+- 8퍼즐/스위치의 "비밀번호 스크린" + 금고 입력 표시창 공용. `SetDigits(const TArray<int32>&)` 하나만 노출한다.
+- 표시는 **자리별 머티리얼 슬롯의 텍스처를 숫자 텍스처로 교체**하는 방식이며 C++이 처리한다 (§16.8.2, 2026-08-27 확정).
 - 자체 복제 없음 — 상위 퍼즐/금고의 복제 상태를 `OnRep`에서 받아 갱신한다.
 
 ### 4.11 `ADRS2MovingBlocker` (Actor, bReplicates) — ★신규 확정 (D0/D2/D4)
@@ -1351,8 +1352,7 @@ enum class ES2GateEntryRule : uint8
 | `BP_S2CctvBoard` ★ | `ADRS2CctvBoard` | 화면 6개 메시 + 머티리얼 인스턴스(텍스처 파라미터), `TargetImage`/`DummyImages`/`ErrorImage`, `StepDuration=2`, `StepCount` |
 | `BP_S2Safe` ★ | `ADRS2Safe` | 금고 본체 + 문(개방 연출) + 숫자 버튼 0~9(ChildActor) + 초기화 버튼 + 입력 표시창 + 부품 스폰 지점 |
 | `BP_S2SlideTile` / `BP_S2Lever` / `BP_S2PuzzleButton` / `BP_S2SafeButton` ★ | 각 `ADRS2InteractProp` 자식 | 메시 + "F" 프롬프트 위젯 + 누름/당김 연출 |
-| `BP_S2CodeScreen_Digit` ★ | `ADRS2CodeScreen` | **1자리** — 숫자 아틀라스 머티리얼 (0~9 + `-`, 11칸) |
-| `BP_S2SafeDisplay` ★ | `ADRS2CodeScreen` | **3자리** — 금고 입력 표시 (§16.8.2) |
+| `BP_S2CodeScreen` ★ | `ADRS2CodeScreen` | 숫자 표시판. 자릿수는 `DigitMaterialSlots` 로 정한다 (§16.8.2) |
 | `BP_S2Train`, `BP_S2TrainCar`, `BP_S2TrainObstacle`, `BP_S2TrainTrack` | 각 C++ | 칸 BP 1종을 레벨에 4개 배치 후 열차의 `Cars` 배열에 배선 |
 | 엘리트 | 기존 `EliteBossClass` BP 재사용 | 필요시 스탯 조정 자식 BP |
 
@@ -2130,7 +2130,7 @@ XOR이어야 "이 레버를 켜면 저 전구가 꺼져버린다"는 트레이�
 
 - 실제 모델의 **숫자 버튼을 눌러** 3자리를 입력한다. 자리 순서는 **① 8퍼즐 → ② 스위치 → ③ CCTV 개수**.
 - 입력 진행 상황은 금고 표시창에 복제되어 팀 전원에게 보인다.
-- 3자리 입력 완료 시 서버가 검증 → **일치**: 금고 문 개방 연출 + 내부 부품(`BP_S2Part`) 노출/스폰 → 기존 픽업 파이프라인 / **불일치**: 입력만 초기화 + 오답 사운드 (페널티·리셋 없음 — 요구사항 "실패 시 리셋 없음"과 일관).
+- **Enter 버튼**을 누르면 서버가 검증 → **일치**: 금고 문 개방 연출 + 내부 부품(`BP_S2Part`) 노출/스폰 → 기존 픽업 파이프라인 / **불일치**: 입력만 초기화 + 오답 사운드 (페널티·리셋 없음 — 요구사항 "실패 시 리셋 없음"과 일관).
 - 부품은 1개(§11.A-2)이며, 픽업 시 `State.Carrying` 태그로 이동속도 감소·스킬 차단이 자동 적용된다.
 - 금고 입력을 퍼즐 완료 전에도 허용할지는 §14.2.9-9 확인 항목 (기본: 허용 — 1000조합 브루트포스는 비현실적이라 게이트가 불필요).
 
@@ -2140,26 +2140,39 @@ XOR이어야 "이 레버를 켜면 저 전구가 꺼져버린다"는 트레이�
 
 ```
 플레이어가 "7" 버튼 상호작용
-  → ADRS2SafeButton::ServerHandleInteract  (PropIndex = 7)
+  → ADRS2SafeButton::ExecuteInteract  (ButtonType = Digit, PropIndex = 7)
   → Safe->PushDigit(7)
   → InputDigits = [7]         복제 → 표시판 "7 _ _"     (팀 전원에게 보임)
 
 "2" 누름 → InputDigits = [7,2]    표시판 "7 2 _"
+"5" 누름 → InputDigits = [7,2,5]  표시판 "7 2 5"   ← ★아직 판정하지 않는다
 
-"5" 누름 → InputDigits = [7,2,5]  ★3자리가 찼으므로 자동 판정
-  → ValidateInput()  →  SecretCode 와 일치
+Enter 누름
+  → Safe->SubmitCode() → ValidateInput() → SecretCode 와 일치
   → bOpened = true 복제 → OnSafeOpenedVisual() (문 열림 연출)
   → PartSpawnPoint 에 BP_Part 스폰 → OnSafeOpened 델리게이트 발화
 ```
 
 오답이면:
 ```
-"7","2","9" → 불일치 → InputDigits 를 비움 + Multicast_PlayWrongCodeFX()
-             → 표시판 "_ _ _" 로 복귀. ★페널티·쿨다운·리셋 없음. 바로 다시 시도 가능.
+[7,2,9] 상태에서 Enter → 불일치
+  → InputDigits 를 비움 + Multicast_PlayWrongCodeFX()
+  → 표시판 "- - -" 로 복귀. ★페널티·쿨다운·잠금 없음. 바로 다시 시도 가능.
 ```
 
-- **확인 버튼이 없다.** 3자리가 차는 순간 자동 판정한다 (§14.2.9-8 기본값).
-- 오입력 중간에 지우려면 **초기화 버튼**(`bIsClearButton = true`인 `BP_S2SafeButton`)을 쓴다.
+**버튼 4종의 동작**
+
+| 버튼 | 호출 | 동작 |
+|---|---|---|
+| 숫자 0~9 | `PushDigit(n)` | 뒤에 한 자리 추가. **가득 차면(3자리) 무시** |
+| Delete | `DeleteLastDigit()` | 맨 뒤 1자리 제거. 비어 있으면 무시 |
+| Reset | `ClearInput()` | 전체 비움 |
+| **Enter** | `SubmitCode()` | **판정.** 일치 → 개방 / 불일치 → 비우고 오답 연출 |
+
+- ★**자릿수가 다 차도 자동 판정하지 않는다.** 3자리를 채운 뒤 Enter 를 눌러야 열린다.
+  덕분에 마지막 자리를 잘못 눌러도 Delete 로 고칠 수 있다.
+- 자릿수가 모자란 상태에서 Enter 를 누르면 **그대로 오답 처리**된다(불일치이므로).
+- 금고가 열린 뒤에는 모든 버튼이 무시된다 (`bOpened` 가드).
 - 입력 진행 상황이 **복제되어 팀 전원에게 보이므로**, 한 명이 누르는 걸 다른 사람이 보며 불러줄 수 있다.
 
 #### 14.2.6 비밀번호 생성·배분·복제 규칙 ★
@@ -2203,11 +2216,11 @@ XOR이어야 "이 레버를 켜면 저 전구가 꺼져버린다"는 트레이�
 | 5-A | **8퍼즐 보드가 팀 공유인지 개인별인지** ★설계 분기점 | **공유 보드** (§14.2.10 — 스위치와 일관, 복제 단순) |
 | 6 | 스위치 전구 계산: **XOR(상쇄)** vs OR(누적) | XOR (OR이면 퍼즐 성립 불가) |
 | 7 | 스위치 정답 조합의 유일성 요구 여부 / 레버당 전구 수 범위 | 복수해 허용, 레버당 3~5개 |
-| 8 | 금고 버튼 구성: 0~9 10키만 / 확인·초기화 버튼 추가 여부 | 10키 + 초기화 1개, 3자리 입력 시 자동 판정 |
+| 8 | 금고 버튼 구성 | **확정 (2026-08-18)**: 숫자 10 + Delete + Reset + **Enter** = 13개. 자동 판정 없음 |
 | 9 | 퍼즐 완료 전 금고 입력 허용 여부 | 허용 |
 | 10 | 부품 미소지자의 출구 통과 허용 여부 | 허용(개별 이동, D1 유지) |
 | 11 | 조작 방식: 전부 F키 상호작용인지 (사격으로 조작하는 요소가 있는지) | 전부 F키 |
-| 12 | 스크린 숫자 표시 방식 | 머티리얼 숫자 텍스처(0~9 아틀라스) |
+| 12 | 스크린 숫자 표시 방식 | **확정 (2026-08-27)**: 머티리얼 슬롯의 텍스처를 숫자 텍스처 10장으로 교체 (§16.8.2) |
 | 13 | 방1 회수 지점 위치 (방1 내 어디) | D1 게이트 앞 |
 
 #### 14.2.10 8퍼즐 UI — 상세 사양 제안 ★신규 (2026-08-18)
@@ -4722,8 +4735,8 @@ void   ScheduleWaveSet(const FS2WaveSet& WaveSet);   // 스폰 지점 인자 제
 **M3 에디터 작업 (잔여)**
 
 1. `DT_S2PhaseObjective`에 행 추가: `S2P2_Puzzle`(금고의 비밀번호를 알아내라, RequiredCount 2) / `S2P2_Part`(부품을 획득하라) / `S2P2_Return`(부품을 들고 1번방으로 돌아가라). **셋 다 `PhaseAlarmText` 빈 값**
-2. BP 생성: `BP_S2Lever` / `BP_S2SafeButton` / `BP_S2PuzzleTerminal`(각 프롭, 메시 + "F" 위젯) · `BP_S2CodeScreen_Digit`(1자리 아틀라스) · `BP_S2SafeDisplay`(3자리) · `BP_S2SwitchPuzzle` · `BP_S2CctvBoard`(메시 1개 + 머티리얼 슬롯 6개 + 텍스처 파라미터 `ScreenTex`) · `BP_S2Safe`(`PartClass = BP_S2Part`) · `BP_S2SlidePuzzle`
-3. 방2 배치 + 각 프롭의 `OwnerPuzzle` / `PropIndex` 배선 (레버 0~4, 숫자 버튼 0~9, 초기화 버튼은 `bIsClearButton`)
+2. BP 생성: `BP_S2Lever` / `BP_S2SafeButton` / `BP_S2PuzzleTerminal`(각 프롭, 메시 + "F" 위젯) · `BP_S2CodeScreen`(텍스처 교체 방식) · `BP_S2SwitchPuzzle` · `BP_S2CctvBoard`(메시 1개 + 머티리얼 슬롯 6개 + 텍스처 파라미터 `ScreenTex`) · `BP_S2Safe`(`PartClass = BP_S2Part`) · `BP_S2SlidePuzzle`
+3. 방2 배치 + 각 프롭의 `OwnerPuzzle` / `PropIndex` / `ButtonType` 배선 (레버 0~4, 숫자 버튼 0~9, Delete·Reset·Enter 는 `ButtonType` 지정)
 4. Director의 방2 참조 4개 배선
 5. **검증**: 스위치 100회 라운드 생성 시 항상 해 존재 / CCTV 1주기 관찰 개수 == 금고 3번째 자리 / 오답 입력 시 초기화만 / 금고 개방 → 부품 → 출구 통과 시 전원 회수 + D1 비활성
 
@@ -5315,56 +5328,134 @@ WaveSetsByPlayerCount        (TArray<FS2WaveSet>, 4개 = 1인/2인/3인/4인)
 |---|---|
 | `PropMesh` | 메시 지정. ★**Collision Preset이 `ECC_Visibility`를 Block해야 감지된다.** C++ 생성자에서 설정하지만 BP에서 메시를 바꾸며 프리셋이 `NoCollision`으로 덮이는 실수가 흔하다 → `BlockAll` 또는 커스텀(Visibility=Block) 확인 |
 | `InteractionWidget` | `WidgetClass`에 "F" 프롬프트 위젯 지정 (기존 `WBP_CleanserSiteInteraction` 참고). `Space=Screen`은 C++ 설정됨 |
-| 연출 훅 | `OnInteractedVisual()` — 레버 당김/버튼 눌림 애니메이션·사운드. `OnPropEnabledChanged(bool)` — 퍼즐 종료 후 비활성 표시 |
+| 연출 훅 | `OnInteractedVisual()` — 금고 버튼은 **눌림 연출**(§16.8.6-A ⑤), 레버는 **사운드만**(자세는 C++ 처리 — §16.8.4 단계 3). `OnPropEnabledChanged(bool)` — 퍼즐 종료 후 비활성 표시 |
 
 **인스턴스 배선** (레벨 배치 후 각 프롭마다)
 
-| 프롭 | `OwnerPuzzle` | `PropIndex` | `bIsClearButton` |
+| 프롭 | `OwnerPuzzle` | `PropIndex` | `ButtonType` |
 |---|---|---|---|
 | 레버 5개 | 방2의 `BP_S2SwitchPuzzle` 인스턴스 | **0, 1, 2, 3, 4** | — |
-| 숫자 버튼 10개 | 방2의 `BP_S2Safe` 인스턴스 | **0~9 (표시 숫자와 동일)** | `false` |
-| 금고 초기화 버튼 1개 | 방2의 `BP_S2Safe` 인스턴스 | (무관) | **`true`** |
+| 숫자 버튼 10개 | 방2의 `BP_S2Safe` 인스턴스 | **0~9 (표시 숫자와 동일)** | `Digit` |
+| Delete 버튼 1개 | 방2의 `BP_S2Safe` 인스턴스 | (무관) | **`Delete`** |
+| Reset 버튼 1개 | 방2의 `BP_S2Safe` 인스턴스 | (무관) | **`Reset`** |
+| **Enter 버튼 1개** | 방2의 `BP_S2Safe` 인스턴스 | (무관) | **`Enter`** |
 | 8퍼즐 단말 1개 | 방2의 `BP_S2SlidePuzzle` 인스턴스 | (무관) | — |
 
 > ★`PropIndex`를 빠뜨리면 기본값 `INDEX_NONE(-1)`이다. 레버는 무반응, 숫자 버튼은 `Clamp(−1,0,9)` → **전부 0으로 입력**된다. 배치 후 반드시 전수 확인한다.
 
-#### 16.8.2 숫자 표시판 — BP 2종으로 분리 ★변경 (2026-08-18)
+#### 16.8.2 숫자 표시판 `ADRS2CodeScreen` ★확정 — 텍스처 교체 방식 (2026-08-27 전면 수정)
 
-> **당초**: `BP_S2CodeScreen` 하나를 3곳(8퍼즐·스위치·금고)에 공용.
-> **변경**: **자리 수가 다르므로 2종으로 나눈다.** 1자리 쪽은 머티리얼 아틀라스로 화면답게 만들고,
-> 3자리인 금고 표시는 별도 BP로 둔다.
+> **변경 이력**
+> - 당초: `TextRender` 로 문자열 출력
+> - 2차: 11칸 **아틀라스 텍스처 + `CellIndex` 스칼라**로 UV 를 미는 방식
+> - **현재(확정)**: 아트 에셋의 머티리얼 인스턴스에 **빈 텍스처 칸이 이미 있으므로**,
+>   그 칸에 **숫자 텍스처를 직접 갈아끼운다.** 아틀라스도, 전용 머티리얼도 만들지 않는다.
+>
+> **아틀라스 관련 서술은 모두 폐기되었다.** `M_CodeDigit`, `CellIndex`, 11칸 텍스처는 필요 없다.
 
-| BP | 부모 | 자리 수 | 배치 | 표시 방식 |
-|---|---|---|---|---|
-| **`BP_S2CodeScreen_Digit`** | `ADRS2CodeScreen` | **1자리** | 8퍼즐 옆, 스위치 옆 (2개) | 머티리얼 아틀라스 (§16.8.4 단계 1) |
-| **`BP_S2SafeDisplay`** | `ADRS2CodeScreen` | **3자리** | 금고 (1개) | `TextRender` 또는 평면 3개 |
+##### ① 동작 원리
 
-★**C++ 변경이 전혀 필요 없다.** `ADRS2SlidePuzzle::CodeScreen`, `ADRS2SwitchPuzzle::CodeScreen`,
-`ADRS2Safe::InputDisplay`가 전부 `ADRS2CodeScreen*` 타입이므로 **어떤 자식 BP를 꽂아도 동작**한다.
-계약은 `OnDigitsChanged(TArray<int32>)` 하나뿐이다.
+`ADRS2CodeScreen` 이 자리마다 **MID 를 만들어 텍스처 파라미터만 교체**한다.
+**BP 그래프를 짤 필요가 없다** — 컴포넌트 설정과 텍스처 배열만 채우면 C++ 이 처리한다.
 
-##### 배열 길이는 항상 고정이다 ★
+```
+금고가 SetDigits({7, 2, -1}) 호출
+   ▼
+자리 0 → DigitTextures[7]     교체
+자리 1 → DigitTextures[2]     교체
+자리 2 → EmptySlotTexture     교체   (-1 = 미입력)
+```
 
-두 BP 모두 **받는 배열의 길이가 변하지 않는다.** 이것이 구현을 크게 단순화한다.
+##### ② 자리를 지정하는 두 가지 방법
+
+**방법 A — 머티리얼 슬롯 (권장, 아트 에셋에 맞음)**
+
+표시판 메시의 **머티리얼 슬롯 중 숫자를 그리는 슬롯**들을 지정한다.
+
+| 프로퍼티 | 값 예시 | 설명 |
+|---|---|---|
+| `DigitMaterialSlots` | `[2]` 또는 `[2, 3, 4]` | 배열 순서 = 자릿수 순서(왼쪽부터) |
+
+- 1자리 스크린(8퍼즐·스위치): 숫자 슬롯 하나만 `[2]` 처럼 적는다
+- 금고 3자리: 세 슬롯을 순서대로 `[2, 3, 4]`
+- 슬롯 번호는 **스태틱 메시 에디터 → Material Slots** 목록에서 확인한다
+
+**방법 B — 자리마다 별도 메시 (에셋에 슬롯이 하나뿐일 때)**
+
+`DigitMaterialSlots` 를 **비워두면** 이쪽으로 동작한다.
+
+1. BP 에서 자릿수만큼 평면 메시를 추가한다
+2. 각 컴포넌트의 `Component Tags` 에 **`CodeDigit`** 을 추가한다
+3. **컴포넌트 이름 순서가 자릿수 순서**다 → `Digit_0`, `Digit_1`, `Digit_2`
+4. `FallbackMaterialSlot` (기본 `0`) 이 교체 대상 슬롯이 된다
+
+##### ③ 공통 설정
+
+| 프로퍼티 | 값 | 비고 |
+|---|---|---|
+| **`TextureParameterName`** | 에셋 머티리얼 인스턴스의 파라미터 이름 | ★기본값 `BaseTexture`. **반드시 실제 이름으로 맞춘다** |
+| **`DigitTextures`** | 숫자 텍스처 **10장** | **인덱스 = 숫자**. 0번이 "0", 7번이 "7" |
+| `EmptySlotTexture` | 미입력·미공개 표시 | `-` 또는 빈 화면. 비우면 텍스처를 지운다 |
+
+★`TextureParameterName` 이 틀리면 **에러 없이 조용히** 텍스처가 안 바뀐다.
+머티리얼 인스턴스를 열어 파라미터 이름을 그대로 복사해 넣는다.
+
+★`DigitTextures` 의 **순서가 곧 숫자**다. 뒤섞이면 엉뚱한 숫자가 표시되는데
+게임은 정상 동작하므로 알아채기 어렵다. 배치 후 0~9 를 눈으로 확인한다.
+
+##### ④ 배치 — BP 는 1종이면 된다
+
+자릿수는 `DigitMaterialSlots` 배열 길이로 정해지므로 **BP 를 2종으로 나눌 필요가 없다.**
+
+| 배치 위치 | 자릿수 | 배선 대상 |
+|---|---|---|
+| 8퍼즐 옆 | 1 | `BP_S2SlidePuzzle` 의 `CodeScreen` |
+| 스위치 옆 | 1 | `BP_S2SwitchPuzzle` 의 `CodeScreen` |
+| 금고 | 3 | `BP_S2Safe` 의 `InputDisplay` |
+
+메시가 서로 다르면 BP 를 나눠도 되고, 같은 BP 를 배치해 인스턴스마다 메시만 바꿔도 된다.
+
+> 이전 판에서 나눴던 `BP_S2CodeScreen_Digit` / `BP_S2SafeDisplay` 구분은 **자릿수 때문이었는데,
+> 이제 프로퍼티로 결정되므로 의미가 없다.** 이름은 자유롭게 정한다.
+
+##### ⑤ 받는 배열은 길이가 고정이다
 
 | 용도 | 시작 | 진행 중 | 완료 |
 |---|---|---|---|
 | 8퍼즐 / 스위치 | `{-1}` | — | `{7}` |
 | 금고 입력 | `{-1,-1,-1}` | `{7,-1,-1}` → `{7,2,-1}` | `{7,2,5}` |
 
-금고는 `ADRS2Safe::RefreshDisplay()`가 **미입력 자리를 `-1`로 채워** 항상 `CodeLength` 길이로 보낸다.
-→ **"자리가 아예 없음"이라는 상태가 존재하지 않는다.** 각 자리는 `숫자` 아니면 `-` 둘 중 하나다.
-→ 아틀라스에 **빈칸 칸을 넣을 필요가 없다** (0~9 + `-` = **11칸**).
+`ADRS2Safe::RefreshDisplay()` 가 미입력 자리를 `-1` 로 채워 항상 `CodeLength` 길이로 보낸다.
+→ 각 자리는 **숫자 아니면 `EmptySlotTexture`** 둘 중 하나이며, "자리가 없음" 상태는 없다.
 
-##### `BP_S2SafeDisplay` (3자리)
+##### ⑥ 추가 연출이 필요하면
 
-| 항목 | 내용 |
+`OnDigitsChanged(TArray<int32>)` BP 훅이 텍스처 교체와 **별개로** 계속 발화한다.
+입력음, 점멸, 스크린 발광 같은 연출을 여기 붙인다. 숫자 표시 자체는 C++ 이 이미 처리했으므로
+이 훅을 **비워둬도 정상 동작한다.**
+
+##### ⑦ 확인 절차
+
+| # | 확인 | 실패 시 원인 |
+|---|---|---|
+| 1 | 시작 시 전 자리가 `-`(빈 표시) | `EmptySlotTexture` 미지정 |
+| 2 | 숫자를 누르면 **왼쪽부터** 채워진다 | `DigitMaterialSlots` 순서가 뒤바뀜 |
+| 3 | 표시 숫자가 누른 버튼과 같다 | `DigitTextures` 배열 순서 오류 |
+| 4 | Delete 로 맨 뒤가 빈 표시로 돌아간다 | 정상 |
+| 5 | Enter 오답 시 전부 빈 표시 | 정상 |
+| 6 | 2인 PIE 에서 양쪽 화면에 같이 보인다 | 정상 (`InputDigits` 복제) |
+
+##### ⑧ 문제 해결
+
+| 증상 | 원인 |
 |---|---|
-| 표시 | `TextRender` 1개로 `"7 2 -"` 처럼 이어붙이는 것이 가장 간단하다 |
-| **`OnDigitsChanged`** ★필수 | `ForEachLoop` → 값 < 0 이면 `"-"`, 아니면 숫자 → 이어붙여 `SetText` |
-
-> 아트가 붙으면 `BP_S2CodeScreen_Digit`의 아틀라스 머티리얼을 재사용해 평면 3개로 바꿀 수 있다.
-> 배열 길이가 고정이라 그때도 로직 변경 없이 인덱스별로 스칼라만 세팅하면 된다.
+| 텍스처가 전혀 안 바뀐다 | **`TextureParameterName` 불일치**(1순위) — 로그가 안 뜨면 이것이다 |
+| `표시할 자리를 찾지 못했습니다` Warning | `DigitMaterialSlots` 가 비었고 `CodeDigit` 태그도 없음 |
+| `머티리얼 슬롯 N 이 범위 밖` Error | 메시의 슬롯 수보다 큰 번호를 적음 |
+| `MID 생성 실패` Error | 그 슬롯에 머티리얼이 지정되지 않음 |
+| `DigitTextures 가 N개뿐입니다` Warning | 0~9 를 다 채우지 않음 |
+| 엉뚱한 숫자가 뜬다 | `DigitTextures` 순서가 숫자와 다름 |
+| 자리 순서가 반대다 | `DigitMaterialSlots` 순서를 뒤집는다 (방법 B 면 컴포넌트 이름 순서) |
 
 #### 16.8.3 `BP_S2SlidePuzzle` (부모 `ADRS2SlidePuzzle`) — 8퍼즐
 
@@ -5374,7 +5465,7 @@ WaveSetsByPlayerCount        (TArray<FS2WaveSet>, 4개 = 1인/2인/3인/4인)
 
 | 프로퍼티 | 값 |
 |---|---|
-| `CodeScreen` | 옆에 배치한 `BP_S2CodeScreen_Digit` 인스턴스 |
+| `CodeScreen` | 옆에 배치한 `BP_S2CodeScreen` 인스턴스 |
 
 | 연출 훅 | 내용 |
 |---|---|
@@ -5400,7 +5491,7 @@ BP_S2SwitchPuzzle  × 1      ← 퍼즐의 "두뇌". 모든 상태를 소유·�
  └─ 성공 표시 3개   (메시 컴포넌트)   ← 출력일 뿐, 조작 대상 아님
 
 BP_S2Lever         × 5      ← 각각 독립 액터. F키로 조작
-BP_S2CodeScreen_Digit × 1   ← 독립 액터. 8퍼즐 옆에도 같은 BP 를 하나 더 배치
+BP_S2CodeScreen    × 1      ← 독립 액터. 8퍼즐 옆에도 같은 BP 를 하나 더 배치
                     ────
                      7개 액터
 ```
@@ -5414,10 +5505,10 @@ BP_S2CodeScreen_Digit × 1   ← 독립 액터. 8퍼즐 옆에도 같은 BP 를 
 
 ##### ② 작업 순서
 
-`BP_S2SwitchPuzzle`이 `BP_S2CodeScreen_Digit`을 참조하므로 **스크린을 먼저** 만든다.
+`BP_S2SwitchPuzzle`이 숫자 표시판을 참조하므로 **스크린을 먼저** 만든다.
 
 ```
-1) BP_S2CodeScreen_Digit 생성 → 2) BP_S2SwitchPuzzle 생성 → 3) BP_S2Lever 생성
+1) BP_S2CodeScreen 생성 → 2) BP_S2SwitchPuzzle 생성 → 3) BP_S2Lever 생성
                                         ▼
                           4) 레벨에 7개 배치 + 인스턴스 배선
                                         ▼
@@ -5428,61 +5519,24 @@ BP_S2CodeScreen_Digit × 1   ← 독립 액터. 8퍼즐 옆에도 같은 BP 를 
 
 ---
 
-##### 단계 1 — `BP_S2CodeScreen_Digit` (부모 `ADRS2CodeScreen`) — 1자리 전용
+##### 단계 1 — 숫자 표시판 (부모 `ADRS2CodeScreen`)
 
-8퍼즐·스위치가 쓰는 **1자리** 표시판. 금고(3자리)는 별도 BP를 쓴다 (§16.8.2).
+스위치 퍼즐 옆에 둘 **1자리** 표시판. 3라운드 클리어 시 금고 두 번째 자리가 여기 뜬다.
 
-**받는 배열은 항상 길이 1이다.** 시작 시 `{-1}`, 해결 시 `{d}`.
-→ 표시할 상태는 **`0`~`9` 또는 `-` 11가지뿐**이고, "자리 없음" 케이스가 없다.
+**표시 방식은 텍스처 교체다** — 자세한 설정은 **§16.8.2** 참고. 여기서는 요점만 정리한다.
 
-**머티리얼 아틀라스 방식** (권장)
-
-머티리얼을 숫자마다 10개 만드는 대신, **텍스처 한 장 + 머티리얼 한 개 + 스칼라 파라미터**로 처리한다.
-에셋이 1/10이고 셰이더도 1종이라 교체 히칭이 없다. 폰트를 바꿀 때 텍스처 한 장만 갈면 된다.
-
-**① 텍스처** — 가로 11칸 아틀라스
-
-```
-┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┐
-│ 0 │ 1 │ 2 │ 3 │ 4 │ 5 │ 6 │ 7 │ 8 │ 9 │ - │
-└───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘
-  0   1   2   3   4   5   6   7   8   9   10   ← CellIndex
-```
-
-**② 머티리얼** `M_CodeDigit` — Scalar Parameter `CellIndex` 1개
-
-```
-TexCoord ──> U 성분에 × (1/11)
-             U 성분에 + (CellIndex × (1/11))
-                  ▼
-            Texture Sample ──> Emissive Color    (화면처럼 발광)
-```
-
-**③ 컴포넌트**
-
-| 컴포넌트 | 설정 |
+| 프로퍼티 | 값 |
 |---|---|
-| `ScreenMesh` (C++ 제공) | 평면 메시 + `M_CodeDigit` |
+| `ScreenMesh` | 표시판 메시 |
+| `DigitMaterialSlots` | 숫자를 그리는 머티리얼 슬롯 **1개** (예: `[2]`) |
+| **`TextureParameterName`** | ★에셋 머티리얼 인스턴스의 실제 파라미터 이름 |
+| `DigitTextures` | 숫자 텍스처 10장 (인덱스 = 숫자) |
+| `EmptySlotTexture` | 미공개 표시 (`-`) |
 
-**④ 이벤트 그래프**
+**BP 그래프를 짤 필요가 없다.** C++ 이 MID 를 만들어 텍스처를 교체한다.
 
-```
-BeginPlay
-  └ ScreenMesh → CreateDynamicMaterialInstance → 변수 ScreenMID 에 저장
-
-이벤트 OnDigitsChanged (NewDigits)
-  ├ NewDigits[0] 가져오기        ← 길이가 항상 1이라 인덱스 0만 보면 된다
-  ├ 값 < 0 ?
-  │    ├ 예     → CellIndex = 10   ("-")     ← ★미공개
-  │    └ 아니오 → CellIndex = 값
-  └ ScreenMID → SetScalarParameterValue("CellIndex", CellIndex)
-```
-
-★**음수 처리를 빠뜨리면 안 된다.** 퍼즐 시작 시 C++이 `SetDigits({-1})`을 부르므로,
-처리하지 않으면 UV가 음수로 밀려 **엉뚱한 칸이나 깨진 화면**이 나온다.
-
-> **먼저 빨리 돌려보고 싶다면**: `TextRender` 컴포넌트를 붙이고 `OnDigitsChanged`에서
-> `SetText`만 해도 로직 검증은 끝난다. 아틀라스는 그 뒤에 교체해도 된다.
+★퍼즐 시작 시 C++ 이 `SetDigits({-1})` 을 보내므로 `EmptySlotTexture` 를 반드시 지정한다.
+비워두면 그 자리의 텍스처가 지워져 빈 화면이 된다(그것도 의도라면 무방하다).
 
 ---
 
@@ -5630,7 +5684,7 @@ C++은 **비트마스크 정수 하나**만 던져준다. 비트 i가 켜져 있
 
 | 컴포넌트 | 설정 |
 |---|---|
-| `PropMesh` (C++ 제공, 루트) | 레버 메시. ★**메시 에셋 자체에 심플 콜리전이 있어야 한다** (아래 참고) |
+| `PropMesh` (C++ 제공, `SceneRoot` 의 자식) | 레버 메시. ★**메시 에셋 자체에 심플 콜리전이 있어야 한다** (아래 참고) |
 | `InteractionWidget` (C++ 제공) | `Widget Class`에 "F" 프롬프트 위젯 지정 (`WBP_CleanserSiteInteraction` 참고) |
 
 > ★**실제로 겪은 문제 (2026-08-18)**: 레버에 다가가도 F 프롬프트가 안 뜨고 F 키도 무반응이었는데,
@@ -5718,8 +5772,8 @@ BeginPlay
 
 | 배치 | 개수 | 설정할 것 |
 |---|---|---|
-| `BP_S2SwitchPuzzle` | 1 | `CodeScreen` ← 배치한 `BP_S2CodeScreen_Digit` 인스턴스 |
-| `BP_S2CodeScreen_Digit` | 1 | (없음) |
+| `BP_S2SwitchPuzzle` | 1 | `CodeScreen` ← 배치한 `BP_S2CodeScreen` 인스턴스 |
+| `BP_S2CodeScreen` | 1 | (없음) |
 | `BP_S2Lever` | 5 | `OwnerPuzzle` ← `BP_S2SwitchPuzzle` 인스턴스<br>`PropIndex` ← **0, 1, 2, 3, 4** |
 
 ★**`PropIndex` 전수 확인**: 기본값이 `INDEX_NONE(-1)`이라 빠뜨리면 `LeverMasks.IsValidIndex(-1)`이
@@ -5843,7 +5897,7 @@ ScreenMesh (StaticMeshComponent)
 
 | 프로퍼티 | 값 |
 |---|---|
-| `InputDisplay` | **`BP_S2SafeDisplay`** 인스턴스 (3자리 입력 표시 — §16.8.2) |
+| `InputDisplay` | `BP_S2CodeScreen` 인스턴스 (`DigitMaterialSlots` 3개 — §16.8.2) |
 | **`PartClass`** | **`BP_Part`** ★ 비우면 금고를 열어도 부품이 나오지 않아 진행 불가 |
 | `CodeLength` | `3` (기본값) — `SetSecretCode`가 실제 코드 길이로 덮어쓴다 |
 
@@ -5854,10 +5908,484 @@ ScreenMesh (StaticMeshComponent)
 
 | 연출 훅 | 내용 |
 |---|---|
-| **`OnSafeOpenedVisual()`** | ★문 개방 애니메이션. 비우면 문이 그대로 닫혀 보여 부품이 있는지 알 수 없다 |
+| **`OnSafeOpenedVisual()`** | ★문 개방 애니메이션. 비우면 문이 그대로 닫혀 보여 부품이 있는지 알 수 없다 (**상세: 아래**) |
 | `OnWrongCodeVisual()` | 오답 사운드/붉은 점멸 |
 
+##### 문 개방 연출 — `OnSafeOpenedVisual()` ★상세 (2026-08-18)
+
+정답 입력 시 `DoorMesh` 를 **천천히 -90° 회전**시킨다.
+
+##### 유리한 조건 두 가지
+
+1. **`DoorMesh` 는 `SafeBodyMesh` 의 자식**이다 (C++ 구성). 루트가 아니므로
+   `SetRelativeRotation` 이 정상 동작한다 — 버튼(§16.8.1-A)처럼 기준값을 캐시할 필요가 없다.
+2. `OpenSafe()` 가 서버에서 `OnRep_bOpened()` 를 **수동 호출**하므로
+   리슨 서버와 클라이언트 **모두** 연출이 재생된다. 추가 배관이 필요 없다.
+
+##### ★먼저: 문 메시의 피벗
+
+**피벗이 경첩(힌지) 위치에 있어야 한다.** 피벗이 문 중앙이면 제자리에서 빙글 돌아
+금고 몸통을 뚫고 지나간다 (개찰구 회전문 §4.11-A 와 같은 문제다).
+
+에셋 피벗을 못 옮기면 → BP 에서 경첩 위치에 `SceneComponent`(`DoorHinge`) 를 두고
+그 자식으로 문 메시를 붙인 뒤, **`DoorHinge` 를 회전**시킨다.
+
+##### 방법 A — `Move Component To` 한 노드 (가장 간단, 권장)
+
+```
+Event OnSafeOpenedVisual
+  └ Move Component To
+       Component                 = DoorMesh
+       Target Relative Location  = DoorMesh → GetRelativeLocation    ← 위치는 그대로
+       Target Relative Rotation  = (0, -90, 0)      ← Roll, Pitch, Yaw 중 Yaw 에 -90
+       Over Time                 = 1.5
+       Ease Out                  = ✓
+       Ease In                   = ✓
+       Force Shortest Rotation Path = ✓
+```
+
+- **`Target Relative Rotation` 은 목표 절대값**이지 변화량이 아니다.
+  BP 에서 `DoorMesh` 의 Rotation 이 `(0,0,0)` 이면 그대로 `(0,-90,0)` 을 넣으면 된다.
+  문을 미리 돌려 배치했다면 그 값에 -90 을 더한 값을 넣는다.
+- **`Over Time` 이 "천천히" 를 결정한다.** 1.5초면 묵직한 금고문 느낌. 2.0~2.5 도 괜찮다.
+- ★`DoorMesh` 의 **Mobility 를 `Movable`** 로 둔다. `Static` 이면 꿈쩍도 안 한다.
+
+##### 어느 축인가
+
+`FRotator` 는 BP 에서 `(Roll, Pitch, Yaw)` 순으로 표시된다.
+
+| 경첩 방향 | 쓰는 축 | 값 |
+|---|---|---|
+| **세로 경첩** (일반 여닫이문) | **Yaw** (Z) | `(0, 0, -90)` → Yaw 칸에 -90 |
+| 가로 경첩 (아래로 젖혀지는 뚜껑) | Pitch (Y) | Pitch 칸에 -90 |
+
+돌려보고 방향이 반대면 **부호를 뒤집는다.**
+
+##### 방법 B — 타임라인 (사운드·가속 커브를 세밀하게 붙일 때)
+
+**① 변수**
+
+| 변수 | 타입 | 용도 |
+|---|---|---|
+| `ClosedRot` | Rotator | 배치 당시 회전 |
+| `OpenRot` | Rotator | 목표 회전 |
+
+**② BeginPlay**
+
+```
+Event BeginPlay
+  ├ Set ClosedRot = DoorMesh → GetRelativeRotation
+  └ Set OpenRot   = ComposeRotators( A = (0, 0, -90), B = ClosedRot )
+```
+
+★`ComposeRotators(A, B)` 는 "**B 의 로컬 기준으로 A 만큼 더 회전**" 이다.
+단순 덧셈(`+`)이 아니라 이걸 써야 문을 비스듬히 배치해도 자기 경첩축으로 돈다.
+
+**③ 타임라인 `DoorTimeline`**
+
+- `Add Float Track` (`Alpha`), 키 2개: `(0.0, 0.0)` / `(1.5, 1.0)`
+- 두 키를 모두 선택 → 우클릭 → **`Auto`** 로 바꾸면 부드럽게 가속·감속한다
+- Length = `1.5`, `Use Last Keyframe?` 체크
+
+**④ 이벤트 그래프**
+
+```
+Event OnSafeOpenedVisual
+  ├ DoorTimeline → Play from Start
+  └ Play Sound at Location (금고 잠금 해제음)
+
+DoorTimeline (Update, Alpha)
+  └ DoorMesh → SetRelativeRotation
+       New Rotation = RLerp( A = ClosedRot,
+                             B = OpenRot,
+                             Alpha = Alpha,
+                             Shortest Path = ✓ )
+```
+
+> **`RLerp` 의 `Shortest Path` 를 반드시 체크**한다. 끄면 -90° 대신 +270° 로
+> 반대 방향으로 크게 돌아가는 경우가 있다.
+
+##### 방법 A vs B
+
+| | A (`Move Component To`) | B (타임라인) |
+|---|---|---|
+| 노드 수 | 1개 | 6~8개 |
+| 가속·감속 | Ease In/Out 체크박스 | 커브로 자유롭게 |
+| 중간 이벤트 (삐걱 소리, 먼지 VFX) | ✕ | ○ (Update 에서 Alpha 로 분기) |
+| 문을 다시 닫을 일 | 없음 (금고는 한 번만 열린다) | — |
+
+금고는 한 번 열리면 끝이라 **A 로 충분하다.** 연출을 공들일 때만 B 로 간다.
+
+##### 문제 해결
+
+| 증상 | 원인 |
+|---|---|
+| 문이 전혀 안 움직인다 | `DoorMesh` Mobility 가 `Static` / `OnSafeOpenedVisual` 미구현 |
+| 문이 제자리에서 빙글 돈다 | **메시 피벗이 경첩이 아니라 중앙**에 있음 |
+| 문이 금고 몸통을 뚫는다 | 같은 원인 (피벗) 또는 회전 축 선택 오류 |
+| 반대 방향으로 열린다 | -90 을 +90 으로 (부호 반전) |
+| 크게 한 바퀴 돌아 열린다 | `RLerp` 의 `Shortest Path` 미체크 (방법 B) |
+| 서버에서만 열린다 | 정상 동작이 아님 — `OnRep_bOpened` 경로라 클라도 열려야 한다. `bOpened` 복제 확인 |
+| 순간이동하듯 즉시 열린다 | `Over Time` 이 0 이거나 타임라인 Length 가 0 |
+
 ---
+
+#### 16.8.6-A `BP_S2SafeButton` — 금고 버튼 전체 설정 ★상세 (2026-08-18)
+
+금고에 3자리를 입력하는 숫자 버튼. **BP 1종을 만들어 레벨에 11개 배치**한다.
+
+| 배치 | 개수 | `ButtonType` | 역할 |
+|---|---|---|---|
+| 숫자 버튼 | **10** | `Digit` | `PropIndex` 0~9 를 입력 |
+| **Delete** | **1** | `Delete` | 맨 뒤 1자리 지우기 |
+| **Reset** | **1** | `Reset` | 입력 전체 지우기 |
+| **Enter** | **1** | `Enter` | ★**판정** — 정답이면 개방 |
+
+총 **13개**를 배치한다.
+
+> **★변경 (2026-08-18)**: 당초에는 3자리가 차면 **자동 판정**했고 초기화 버튼 하나뿐이었다.
+> **Enter 를 눌러야 판정**하도록 바꾸고 Delete / Reset 을 분리했다.
+> 이에 맞춰 C++ 도 수정했다 — `bIsClearButton`(bool) → **`ButtonType`(enum)**.
+
+> **눌림 연출을 포함한다.** 버튼을 누르면 패널 안쪽으로 살짝 들어갔다가 돌아온다 (**⑤**).
+> C++ 에서 루트를 `SceneRoot` 로 분리했으므로 **`PropMesh` 의 상대 좌표를 움직이면 된다**
+> (2026-08-27). 캐시나 좌표 변환이 필요 없다.
+>
+> 버튼은 금고 문에 **자동 부착**되어 문이 열릴 때 함께 회전하고,
+> 개방 후에는 **조작이 자동으로 차단**된다 (⑤-⑥, ⑤-⑦). 둘 다 `OwnerPuzzle` 배선만 있으면 된다.
+
+---
+
+##### ① 부모 클래스
+
+★반드시 **`ADRS2SafeButton`** 을 부모로 지정한다.
+`ADRS2InteractProp` 은 `Abstract` 이라 BP 부모로 고를 수 없고, 골라도 배치되지 않는다.
+
+---
+
+##### ② 컴포넌트 설정
+
+**`PropMesh`** (C++ 제공, 루트)
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| Static Mesh | 버튼 메시 | ★**버튼마다 메시가 다르므로 레벨 인스턴스에서 개별 지정**한다. BP 클래스 디폴트에는 대표로 하나만 넣어두면 된다 |
+| **Collision** | ★**심플 콜리전이 있어야 한다** | 아래 참고. `PropMesh` 는 `SceneRoot` 의 자식이다 |
+| Collision Preset | `BlockAll` 또는 Visibility=Block | C++ 이 설정하지만 BP 에서 메시 교체 시 덮이는 일이 있다 |
+
+★★**가장 흔한 실패 원인**: 감지에 쓰는 라인트레이스는 `bTraceComplex = false` 라
+**심플 콜리전만** 본다. 콜리전 프리미티브가 없는 메시는 트레이스가 그냥 통과해
+**F 프롬프트가 아예 뜨지 않는다.** (레버에서 실제로 겪은 문제다.)
+
+- 확인: 스태틱 메시 에디터 → `Show → Collision` 으로 초록 와이어프레임이 보이는지
+- 없으면: `Collision → Add Box Simplified Collision`
+
+**`InteractionWidget`** (C++ 제공)
+
+| 항목 | 값 |
+|---|---|
+| Widget Class | "F" 프롬프트 위젯 (`WBP_CleanserSiteInteraction` 참고) |
+| Location | 버튼 위쪽으로 조금 (예: `(0, 0, 15)`) — 버튼에 가려지지 않게 |
+| Draw Size | 버튼이 작으므로 기본값보다 줄이는 편이 낫다 |
+| Space | `Screen` (C++ 설정됨, 건드리지 않는다) |
+
+★`Widget Class` 가 비어 있으면 **감지는 되는데 아무것도 안 보인다.** F 는 작동하는데
+프롬프트만 없다면 여기를 의심한다.
+
+**`NumberText`** (BP 에서 `TextRender` 추가) ★강력 권장
+
+버튼에 숫자를 표시하는 컴포넌트. 머티리얼을 10개 만드는 대신 **`PropIndex` 를 그대로 표시**하면
+**보이는 숫자와 실제 인덱스가 절대 어긋나지 않는다** (③ 참고).
+
+| 항목 | 값 |
+|---|---|
+| Location | 버튼 앞면에 살짝 띄워서 |
+| Rotation | 플레이어를 향하도록 (보통 Yaw 180) |
+| Horizontal / Vertical Alignment | `Center` / `Center` |
+| World Size | 버튼 크기에 맞게 (기본 32는 대개 너무 크다) |
+
+---
+
+##### ③ Construction Script — 숫자 자동 표시 ★핵심
+
+`PropIndex` 와 `ButtonType` 은 **`BlueprintReadOnly`** 라 BP 에서 읽을 수 있다.
+Construction Script 에서 라벨을 만들면 **에디터에 배치하는 즉시** 숫자가 보인다.
+
+```
+Construction Script
+  │
+  └ Switch on ES2SafeButtonType  ( ButtonType )
+       ├ Digit  → Branch (PropIndex < 0)
+       │            ├ True  → Set Text ("?")    ← ★배선 누락이 눈에 보인다
+       │            └ False → Set Text ( ToText(Integer) ← PropIndex )
+       ├ Delete → Set Text ("DEL")
+       ├ Reset  → Set Text ("RST")
+       └ Enter  → Set Text ("ENT")
+```
+
+`Switch on ES2SafeButtonType` 은 `ButtonType` 핀을 끌어다 놓고 "Switch on" 으로 검색하면 나온다.
+
+이 한 조각이 **금고 배선 실수를 원천 차단**한다:
+
+- `PropIndex` 를 안 넣으면 버튼에 **`?`** 가 뜬다 → PIE 를 켜지 않아도 바로 보인다
+- 숫자를 바꾸면 라벨도 즉시 따라간다 → "7 이라고 써 있는데 실제로는 3" 이 불가능해진다
+- **`ButtonType` 을 안 바꾼 Delete/Reset/Enter 버튼에 숫자가 뜬다** → 설정 누락이 바로 보인다
+
+> `PropIndex` 를 빠뜨리면 기본값이 `-1` 인데, 금고 버튼은 `Clamp(-1, 0, 9)` 를 거쳐
+> **전부 0 으로 입력된다.** 에러 로그도 없이 조용히 잘못 동작하므로 이 방어가 중요하다.
+
+머티리얼로 숫자를 넣고 싶다면 숫자 텍스처 파라미터를 가진 머티리얼 인스턴스 10개를 만들어
+각 인스턴스의 `PropMesh` 머티리얼 오버라이드에 지정한다. 다만 **라벨과 `PropIndex` 가
+어긋날 위험이 생기므로**, 위 `TextRender` 방식을 먼저 쓰고 아트가 붙을 때 교체하기를 권한다.
+
+---
+
+##### ④ 클래스 디폴트
+
+| 프로퍼티 | 값 | 이유 |
+|---|---|---|
+| `InteractCooldown` | **`0`** (기본값) | 금고는 빠른 연속 입력이 필요하다 |
+
+> **★2026-08-27 정정**: 이전 판에는 "쿨다운을 0.3 으로 두어야 한다" 고 적혀 있었다.
+> 상호작용 키가 `ETriggerEvent::Triggered` 로 바인딩되어 **F 를 누르고 있으면 매 프레임 발화**했고,
+> 쿨다운이 그 증상을 가리는 임시방편이었기 때문이다.
+>
+> **근본 원인을 고쳤다** — `InteractAction` 바인딩을 **`Started`** 로 바꿔
+> **한 번 누르면 한 번만** 발화한다 (`DRPlayerController::SetupInputComponent`).
+> 다른 단발 입력(점프·관전·설정)이 이미 쓰던 방식과 같아졌다.
+>
+> 그래서 금고 버튼은 쿨다운이 **필요 없다.** 같은 숫자를 연속으로 눌러야 하는 경우
+> (`7 7 2`) 대기 없이 바로 입력된다.
+
+**쿨다운은 이제 "의도적인 게임 디자인" 일 때만 준다.**
+
+| 프롭 | `InteractCooldown` | 이유 |
+|---|---|---|
+| 금고 버튼 | `0` | 빠른 입력이 필요 |
+| 8퍼즐 단말 | `0` | — |
+| **레버** | **`0.4`** | 전구가 정신없이 깜빡이지 않도록 (요청 사양) |
+
+> 이 값들은 C++ 생성자 기본값이라 BP 에서 따로 설정할 필요가 없다.
+> **BP 에 예전 값(0.3)이 저장되어 있으면 그것이 우선**하므로, 클래스 디폴트에서 확인한다.
+
+---
+
+##### ⑤ 눌림 연출 — 눌렸다가 돌아오기 ★상세 (2026-08-27 전면 수정)
+
+> **★구조 변경**: 예전에는 `PropMesh` 가 액터의 루트라서 `SetActorLocation` 으로 액터를 통째로
+> 움직이고 `BaseLocation` 을 캐시해야 했다. 이 방식은
+> ① BP 배선이 복잡하고 ② 버튼을 금고 문에 붙이면 캐시가 어긋나 깨졌다.
+>
+> **C++ 에서 루트를 빈 `SceneRoot` 로 분리하고 `PropMesh` 를 그 자식으로 내렸다.**
+> 이제 `PropMesh` 의 **상대 좌표가 정상 동작**하므로 연출이 훨씬 단순해진다.
+> 캐시도, `RotateVector` 도, `Sweep` 걱정도 없다.
+
+##### 컴포넌트 구조 (C++ 제공)
+
+```
+SceneRoot            ← 액터 루트. 움직이지 않는다
+ ├ PropMesh          ← ★이것을 움직여 눌림을 표현한다
+ └ InteractionWidget
+```
+
+##### ① 변수 1개
+
+| 변수 | 타입 | 기본값 | Instance Editable |
+|---|---|---|---|
+| `PressOffset` | **Vector** | `(-2, 0, 0)` | ✓ |
+
+`PropMesh` 의 **상대 좌표** 기준으로 눌리는 방향·깊이다.
+`PropMesh` 의 기본 상대 위치가 `(0,0,0)` 이므로 여기서 이만큼 이동했다가 돌아온다.
+
+- 축·부호는 붙여보고 정한다: 안으로 안 들어가면 부호 반전 → 그래도 이상하면 축 변경
+- 깊이는 버튼 두께의 **1/3 이하**. 5cm 버튼이면 `2` 정도
+- **`RotateVector` 가 필요 없다.** 상대 좌표라 버튼을 어떤 방향으로 배치하든 자기 축으로 움직인다
+
+##### ② 타임라인 `PressTimeline`
+
+1. 이벤트 그래프 우클릭 → **`Add Timeline...`** → 이름 `PressTimeline`
+2. 더블클릭 → **`+ Track` → `Add Float Track`** → 트랙 이름 `Alpha`
+3. 곡선 영역 우클릭 → **`Add Key`** 로 키 3개, 각 키 선택 후 Time/Value 입력:
+
+| 키 | Time | Value |
+|---|---|---|
+| 1 | `0.00` | `0.0` |
+| 2 | `0.05` | `1.0` |
+| 3 | `0.20` | `0.0` |
+
+4. 상단 **`Length` = `0.20`**, **`Use Last Keyframe?` 체크**
+5. 키 3개 선택 → 우클릭 → **`Auto`**
+
+커브가 `0 → 1 → 0` 이라 **타임라인 하나로 눌림과 복귀가 끝난다.**
+
+##### ③ 이벤트 그래프 — 노드 3개면 끝난다
+
+```
+Event OnInteractedVisual
+  ├ PressTimeline → Play from Start          ← ★Play 가 아니다
+  └ Play Sound at Location (선택)
+
+PressTimeline
+  └ Update ─→ PropMesh → Set Relative Location
+                 New Location = Lerp ( A = (0,0,0),
+                                       B = PressOffset,
+                                       Alpha = Alpha 핀 )
+```
+
+`BeginPlay` 에 아무것도 넣지 않아도 된다. 캐시할 값이 없다.
+
+> **`Set Relative Location` 의 Target 을 반드시 `PropMesh` 로 지정한다.**
+> `self` 로 두면 액터 루트가 움직여, 금고 문에 부착했을 때 위치가 어긋난다.
+
+##### ④ 왜 이제 동작하는가 — 이전에 안 되던 이유
+
+| 원인 | 해결 |
+|---|---|
+| 입력이 `ETriggerEvent::Triggered` 라 **매 프레임 발화** → `Play from Start` 가 매 프레임 타임라인을 0 으로 리셋 | 바인딩을 **`Started`** 로 변경 (2026-08-27) |
+| `PropMesh` 가 루트라 `SetRelativeLocation` 이 월드 좌표로 동작 | 루트를 `SceneRoot` 로 분리 (2026-08-27) |
+
+두 가지가 겹쳐 있어서 어느 한쪽만 고쳐서는 보이지 않았다.
+
+##### ⑤ 멀티플레이
+
+`OnInteractedVisual()` 은 `Multicast_PlayInteractedVisual()`(NetMulticast)로 발화하므로
+**서버·모든 클라이언트가 각자 재생**한다. `SetReplicateMovement(false)` 라 서버 좌표가
+클라로 흘러가지 않아 로컬 연출과 충돌하지 않는다.
+
+##### ⑥ 금고 문에 부착 — 문이 열릴 때 함께 회전
+
+버튼이 금고 **문에 달린 키패드**라면 문이 열릴 때 같이 회전해야 한다.
+
+| 프로퍼티 | 기본값 | 설명 |
+|---|---|---|
+| `bAttachToDoor` | **`true`** | `BeginPlay` 에서 금고의 `DoorMesh` 에 자동 부착 |
+
+- 버튼이 `BeginPlay` 에서 `OwnerPuzzle`(금고)에 **자기를 등록**하고, 금고가 `DoorMesh` 에 붙인다.
+- 레벨에서 수동으로 attach 할 필요가 없다. **`OwnerPuzzle` 배선만 되어 있으면 된다.**
+- 부착은 `KeepWorldTransform` 이라 배치한 위치가 그대로 유지된다.
+- 키패드가 문이 아니라 **옆 벽면**에 있다면 그 버튼의 `bAttachToDoor` 를 `false` 로 둔다.
+
+★부착 후에도 눌림 연출은 그대로 동작한다. `PropMesh` 의 **상대** 좌표를 움직이기 때문이다.
+(예전의 `SetActorLocation` + 월드 캐시 방식이었다면 문이 회전한 순간 깨졌다.)
+
+##### ⑦ 개방 후 조작 차단
+
+금고가 열리면 `OpenSafe()` 가 등록된 버튼 전체에 **`SetPropEnabled(false)`** 를 호출한다.
+
+- F 프롬프트가 더 이상 뜨지 않는다
+- `CanInteract` 가 false 라 조작 자체가 막힌다
+- BP 의 `OnPropEnabledChanged(false)` 훅으로 회색 처리 등 시각적 표현을 붙일 수 있다 (선택)
+
+이것도 등록 목록으로 처리되므로 **`OwnerPuzzle` 배선만 되어 있으면 자동**이다.
+
+---
+
+##### ⑥ 레벨 배치 + 인스턴스 배선
+
+`BP_S2SafeButton` 을 금고 앞에 **11개** 배치하고 각각 아래를 설정한다.
+
+| 버튼 | `OwnerPuzzle` | `ButtonType` | `PropIndex` |
+|---|---|---|---|
+| 0 | 방2의 `BP_S2Safe` 인스턴스 | `Digit` | `0` |
+| 1 | 〃 | `Digit` | `1` |
+| … | 〃 | `Digit` | … |
+| 9 | 〃 | `Digit` | `9` |
+| **Delete** | 〃 | **`Delete`** | (무관) |
+| **Reset** | 〃 | **`Reset`** | (무관) |
+| **Enter** | 〃 | **`Enter`** | (무관) |
+
+★`ButtonType` 기본값이 **`Digit`** 이라, Delete/Reset/Enter 버튼에서 이걸 바꾸지 않으면
+**숫자 버튼으로 동작한다.** `PropIndex` 도 비어 있으면 `-1` → `Clamp` 로 **0 이 입력된다.**
+세 버튼은 배치 후 반드시 `ButtonType` 을 확인한다.
+
+★`OwnerPuzzle` 과 `PropIndex` 는 **`EditInstanceOnly`** 다.
+BP 클래스 디폴트에는 나타나지 않으며, **레벨에 배치한 액터를 선택**해야 디테일 패널에 보인다.
+
+★`OwnerPuzzle` 드롭다운에는 타입이 `AActor*` 라 **레벨의 모든 액터가 나온다.**
+스위치 퍼즐이나 8퍼즐을 잘못 고르면 런타임에 `Cast<ADRS2Safe>` 가 조용히 실패해
+그 버튼만 먹통이 된다. 스포이드로 뷰포트의 금고를 직접 찍는 편이 안전하다.
+
+**배치 요령** — 일반적인 키패드 배열:
+
+```
+┌───┬───┬───┐
+│ 1 │ 2 │ 3 │
+├───┼───┼───┤
+│ 4 │ 5 │ 6 │
+├───┼───┼───┤
+│ 7 │ 8 │ 9 │
+├───┼───┼───┤
+│ C │ 0 │   │
+└───┴───┴───┘
+```
+
+- 버튼 간격은 **조준으로 구분 가능할 만큼** 띄운다. 너무 붙이면 옆 버튼이 눌린다.
+- 트레이스 사거리는 250 이므로 금고 앞 2m 안쪽에서 조작하게 된다.
+
+---
+
+##### ⑦ 금고 본체 쪽 확인 사항
+
+버튼만 만들어도 진행되지 않는다. `BP_S2Safe` 인스턴스에서:
+
+| 항목 | 값 |
+|---|---|
+| `InputDisplay` | **`BP_S2SafeDisplay`** 인스턴스 (3자리, §16.8.2) |
+| `PartClass` | **`BP_Part`** ★비우면 금고가 열려도 부품이 안 나와 진행 불가 |
+
+그리고 `BP_S2StageDirector` 의 `Room2Safe` 에 이 금고를 배선해야
+페이즈가 `SetSecretCode()` 를 주입한다. **빠뜨리면 정답 코드가 비어 무엇을 눌러도 안 열린다.**
+
+---
+
+##### ⑧ 동작 확인 체크리스트
+
+| # | 확인 | 실패 시 |
+|---|---|---|
+| 1 | 에디터에서 버튼마다 숫자가 보이고 `?` 가 없다 | `PropIndex` 미설정 |
+| 2 | 버튼을 조준하면 F 프롬프트가 뜬다 | 메시 심플 콜리전 없음 / Widget Class 미지정 |
+| 3 | F 를 누르면 표시판에 숫자가 하나 늘어난다 | `OwnerPuzzle` 미배선 / `InputDisplay` 미배선 |
+| 4 | **F 를 꾹 눌러도 한 번만 입력된다** | 입력 바인딩이 `Started` 가 아님 (C++ 수정 미반영) |
+| 4-A | **버튼이 눌렸다가 원위치로 돌아온다** | 타임라인 미구현 / Target 이 `PropMesh` 가 아님 |
+| 5 | 표시판 숫자가 **버튼에 쓰인 숫자와 같다** | `PropIndex` 와 라벨 불일치 |
+| 6 | **Delete 로 맨 뒤 한 자리만 지워진다** | `ButtonType` 이 `Delete` 가 아님 |
+| 6-A | **Reset 으로 `- - -` 가 된다** | `ButtonType` 이 `Reset` 이 아님 |
+| 6-B | 3자리를 채워도 **저절로 열리지 않는다** | 정상 사양 (Enter 필요) |
+| 6-C | 3자리에서 숫자를 더 눌러도 **늘어나지 않는다** | 정상 사양 |
+| 7 | **Enter 를 눌러야 판정된다** | `ButtonType` 이 `Enter` 가 아님 |
+| 8 | 오답이면 입력만 지워지고 페널티가 없다 | 정상 사양 |
+| 9 | 정답이면 문이 열리고 부품이 나온다 | `PartClass` 미지정 / Director `Room2Safe` 미배선 |
+| 9-A | **문이 열릴 때 버튼도 함께 회전한다** | `bAttachToDoor` 가 `false` / `OwnerPuzzle` 미배선 |
+| 9-B | **개방 후 버튼에 F 가 뜨지 않는다** | `OwnerPuzzle` 미배선 (등록 실패) |
+| 10 | 2인 PIE 에서 **다른 플레이어 화면에도 입력이 보인다** | 정상 (InputDigits 복제) |
+
+**로그**: 개방 시 `[S2Safe] 금고 개방`, 오답 시 `[S2Safe] 오답 - 입력 초기화`(Verbose).
+
+---
+
+##### ⑨ 문제 해결
+
+| 증상 | 원인 |
+|---|---|
+| F 프롬프트가 안 뜬다 | ★**메시에 심플 콜리전 없음**(1순위) / `InteractionWidget` Widget Class 미지정 |
+| 특정 버튼만 무반응 | 그 버튼의 `OwnerPuzzle` 미배선 또는 다른 액터 지정 |
+| **무엇을 눌러도 0 만 입력된다** | `PropIndex` 미설정(`-1` → `Clamp` 로 0) |
+| Delete/Reset/Enter 를 눌렀는데 숫자가 입력된다 | 그 버튼의 `ButtonType` 이 기본값 `Digit` 인 채로 남음 |
+| Enter 를 눌러도 아무 일이 없다 | `ButtonType` 미설정 / Director `Room2Safe` 미배선(정답 코드 비어 있음) |
+| 3자리를 채웠는데 저절로 열린다 | 구버전 코드 — 자동 판정은 2026-08-18 에 제거되었다 |
+| F 한 번에 3자리가 다 채워진다 | 입력이 `Triggered` 로 매 프레임 발화 → `Started` 로 고쳤다 (2026-08-27) |
+| 표시판이 안 바뀐다 | `BP_S2Safe` 의 `InputDisplay` 미배선 / 표시판 BP 의 `OnDigitsChanged` 미구현 |
+| 표시판에 `-1` 이 찍힌다 | `OnDigitsChanged` 에서 음수를 `-` 로 처리하지 않음 |
+| 정답인데 안 열린다 | Director `Room2Safe` 미배선 → `SecretCode` 가 비어 있음 |
+| 열렸는데 부품이 없다 | `PartClass` 미지정 (`[S2Safe] PartClass 가 지정되지 않아...` Error) |
+| 부품이 벽에 껴서 못 줍는다 | `PartSpawnPoint` 가 금고 안쪽으로 너무 깊음 |
+| **눌림이 전혀 안 보인다** | 타임라인 `Length` 가 0 / Update 대신 Finished 에 연결 / `Play` 대신 `Play from Start` 필요 |
+| 눌리는 방향이 이상하다 | `PressOffset` 축·부호를 바꿔본다 (상대 좌표라 변환은 불필요) |
+| 버튼이 엉뚱한 곳으로 이동한다 | `Set Relative Location` 의 Target 이 `PropMesh` 가 아니라 `self` 임 |
+| 문이 열려도 버튼이 제자리 | `bAttachToDoor` 가 `false` 이거나 `OwnerPuzzle` 미배선 |
+| 문이 열린 뒤에도 F 가 뜬다 | `OwnerPuzzle` 미배선 → 금고가 버튼을 등록하지 못해 잠글 수 없다 |
+| 클라에서 버튼이 떨린다 | BP 에서 `Replicate Movement` 를 켬 → 꺼야 한다 (C++ 기본값이 꺼짐) |
+| 한쪽 화면에서만 눌린다 | `OnInteractedVisual` 이 아닌 로컬 입력에 연결함 |
 
 ### 16.9 방3 · 방4 에셋 (신규 3종)
 
@@ -6156,10 +6684,10 @@ C++이 복원하는 것과 BP가 복원해야 하는 것이 나뉜다.
 - 방1 `RoomID=Room1` **6개** / 방3 `RoomID=Room3` **4개** / 방5 `RoomID=Room5` **4개 + 공중 2개**
 
 #### ⑦ 방2
-- `BP_S2SlidePuzzle` 1 + `BP_S2PuzzleTerminal` 1 + `BP_S2CodeScreen_Digit` 1
-- `BP_S2SwitchPuzzle` 1 + `BP_S2Lever` **5** (`PropIndex` 0~4) + `BP_S2CodeScreen_Digit` 1
+- `BP_S2SlidePuzzle` 1 + `BP_S2PuzzleTerminal` 1 + `BP_S2CodeScreen` 1
+- `BP_S2SwitchPuzzle` 1 + `BP_S2Lever` **5** (`PropIndex` 0~4) + `BP_S2CodeScreen` 1
 - `BP_S2CctvBoard` 1 (화면 6개는 BP 내부 컴포넌트)
-- `BP_S2Safe` 1 + `BP_S2SafeButton` **10** (`PropIndex` 0~9) + 초기화 버튼 1 + `BP_S2SafeDisplay` 1
+- `BP_S2Safe` 1 + `BP_S2SafeButton` **13** (숫자 10 + Delete/Reset/Enter) + `BP_S2CodeScreen` 1
 
 #### ⑧ 방3 / 방4
 - 방3: 부활 지점 `TargetPoint` **4개**, 부품 복귀 지점 `TargetPoint` **1개** (D3 게이트 앞)
@@ -6227,8 +6755,8 @@ C++이 복원하는 것과 BP가 복원해야 하는 것이 나뉜다.
 | 프롭 27개 | `OwnerPuzzle`, `PropIndex` | §16.8.1 표 |
 | `BP_S2MoleGame` | `SpawnPoints` | 두더지 등장 지점 9~12개 |
 | `BP_S2Train` | `Track`, `StartDistanceOnTrack` | 선로, 역 거리 |
-| 퍼즐 | `CodeScreen` | `BP_S2CodeScreen_Digit` (1자리) |
-| 금고 | `InputDisplay` | `BP_S2SafeDisplay` (3자리) |
+| 퍼즐 | `CodeScreen` | `BP_S2CodeScreen` (`DigitMaterialSlots` 1개) |
+| 금고 | `InputDisplay` | `BP_S2CodeScreen` (`DigitMaterialSlots` 3개) |
 
 ---
 
@@ -6378,7 +6906,7 @@ C++이 복원하는 것과 BP가 복원해야 하는 것이 나뉜다.
 | 모든 숫자 버튼이 0으로 입력된다 | `PropIndex` 미배선(기본 −1) | §16.8.1 |
 | CCTV 화면이 안 바뀐다 | 머티리얼 슬롯이 6개 미만이거나 빈 슬롯이 있음 / 파라미터 이름(`ScreenTex`) 불일치 | §16.8.5 |
 | 금고를 열어도 부품이 없다 | `PartClass` 미지정 | §16.8.6 |
-| 금고 문이 그대로 보인다 | `OnSafeOpenedVisual` 미구현 | §16.8.6 |
+| 금고 문이 그대로 보인다 | `OnSafeOpenedVisual` 미구현 또는 `DoorMesh` Mobility 가 `Static` | §16.8.6 |
 | 부품 설치가 거부된다 | 설치대가 `Inactive` 상태 또는 `RequiredPartsCount=2` | §16.9.1 |
 | 두더지가 스폰되지 않는다 | `MoleClass` 미지정 또는 `SpawnPoints` 비어 있음 | §16.9.3 |
 | 두더지를 때려도 안 사라진다 | 2m 밖에서 공격 중(정상) / `HitBox` 콜리전을 덮어썼다 | §16.9.2 |

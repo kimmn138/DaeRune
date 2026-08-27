@@ -9,12 +9,16 @@
 
 class ADRS2CodeScreen;
 class ADRCleanserPart;
+class ADRS2SafeButton;
 
 /**
  * 금고 (Plan6 §14.2.5)
  *
- * 실제 모델의 숫자 버튼(ADRS2SafeButton)을 눌러 3자리를 입력한다.
+ * 실제 모델의 버튼(ADRS2SafeButton)을 눌러 3자리를 입력하고 Enter 로 판정한다.
  * 자리 순서: ① 8퍼즐 ② 스위치 퍼즐 ③ CCTV 관찰 개수
+ *
+ * 버튼 4종: 숫자(0~9) / Delete(맨 뒤 1자리) / Reset(전체) / Enter(확인)
+ * ★자릿수가 다 차도 자동으로 판정하지 않는다. 판정은 Enter 를 눌러야 일어난다.
  *
  * 정답이면 문이 열리고 내부에 부품이 스폰된다. 오답이면 입력만 초기화되며
  * 페널티는 없다 (요구사항 "실패 시 리셋 없음"과 일관).
@@ -34,11 +38,24 @@ public:
 	// 페이즈가 매 판 생성한 3자리 코드를 주입한다 (서버 전용)
 	void SetSecretCode(const TArray<uint8>& InCode);
 
-	// 숫자 버튼 입력 (서버). 자리 수가 차면 자동 판정한다.
+	// 숫자 버튼 입력 (서버). 자릿수가 가득 차면 무시한다.
+	// ★자동 판정하지 않는다 - 판정은 SubmitCode() 로만 일어난다.
 	void PushDigit(uint8 Digit);
 
-	// 입력 초기화 (서버)
+	// Delete 버튼: 맨 뒤 1자리를 지운다 (서버)
+	void DeleteLastDigit();
+
+	// Reset 버튼: 입력 전체 초기화 (서버)
 	void ClearInput();
+
+	// Enter 버튼: 현재 입력을 정답과 비교한다 (서버).
+	// 일치하면 개방, 아니면 입력 초기화 + 오답 연출.
+	void SubmitCode();
+
+	// 버튼이 BeginPlay 에서 자기를 등록한다 (서버·클라 공통).
+	// 등록된 버튼은 ① 문(DoorMesh)에 부착되어 함께 움직이고
+	//              ② 금고 개방 시 조작이 차단된다.
+	void RegisterButton(ADRS2SafeButton* Button);
 
 	UFUNCTION(BlueprintCallable, Category = "S2|Safe")
 	bool IsOpened() const { return bOpened; }
@@ -108,6 +125,10 @@ private:
 
 	// 표시판 갱신
 	void RefreshDisplay();
+
+	// 등록된 버튼들 (서버·클라 양쪽에 존재)
+	UPROPERTY()
+	TArray<TObjectPtr<ADRS2SafeButton>> RegisteredButtons;
 
 	// 서버 전용 정답 코드
 	TArray<uint8> SecretCode;

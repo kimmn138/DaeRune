@@ -53,8 +53,18 @@ protected:
 	// 쿨다운 통과 후에만 호출된다.
 	virtual void ExecuteInteract(ADRCharacter* Character) {}
 
+	// ★루트는 빈 SceneComponent 다 (2026-08-27 변경).
+	//   PropMesh 를 루트로 두면 PropMesh->SetRelativeLocation 이 사실상 월드 좌표가 되어
+	//   눌림 연출을 만들 수 없었다. 루트를 분리해 PropMesh 를 자식으로 내리면
+	//   상대 좌표가 정상 동작하고, 액터를 금고 문에 붙여도 연출이 그대로 유지된다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Prop")
+	TObjectPtr<USceneComponent> SceneRoot;
+
 	// 연속 조작 방지 대기 시간(초). 0 이면 제한 없음.
-	// 레버처럼 연타가 곤란한 프롭만 값을 준다.
+	//
+	// 입력이 ETriggerEvent::Started 라 한 번 누르면 한 번만 발화한다(2026-08-27 수정).
+	// 따라서 연타 방지는 **의도적인 게임 디자인**일 때만 값을 준다 (레버 0.4초).
+	// 금고 버튼처럼 빠른 연속 입력이 필요한 곳은 0 으로 둔다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Prop", meta = (ClampMin = "0"))
 	float InteractCooldown = 0.f;
 
@@ -79,7 +89,11 @@ protected:
 	UFUNCTION()
 	void OnRep_bPropEnabled();
 
-	// 누름/당김 연출
+	// 조작 연출 진입점 (전 클라 공통). 자식이 C++ 연출을 추가할 때 오버라이드한다.
+	// 기본 구현은 BP 훅 OnInteractedVisual() 만 호출한다.
+	virtual void PlayInteractedVisual();
+
+	// 누름/당김 연출 (BP 훅). 사운드·VFX 용도.
 	UFUNCTION(BlueprintImplementableEvent, Category = "S2|Prop")
 	void OnInteractedVisual();
 
@@ -151,21 +165,81 @@ private:
 	bool bAnimating = false;
 };
 
+/** 금고 버튼의 종류 (Plan6 §14.2.5) */
+UENUM(BlueprintType)
+enum class ES2SafeButtonType : uint8
+{
+	// 숫자 입력. PropIndex(0~9) 가 입력될 숫자다.
+	Digit   UMETA(DisplayName = "숫자 (0~9)"),
+
+	// 맨 뒤 1자리를 지운다
+	Delete  UMETA(DisplayName = "Delete - 한 자리 지우기"),
+
+	// 입력 전체를 지운다
+	Reset   UMETA(DisplayName = "Reset - 전체 지우기"),
+
+	// 현재 입력을 정답과 비교한다. ★이 버튼을 눌러야 판정이 일어난다.
+	Enter   UMETA(DisplayName = "Enter - 확인"),
+};
+
 /**
- * 금고 숫자 버튼 (Plan6 §14.2.5)
- * PropIndex = 숫자 0~9. 음수면 입력 초기화 버튼으로 동작한다.
+ * 금고 버튼 (Plan6 §14.2.5)
+ *
+ * ButtonType 으로 4종을 구분한다. Digit 일 때만 PropIndex(0~9) 를 쓴다.
+ * 자릿수가 다 차도 자동 판정하지 않으며, Enter 를 눌러야 금고가 열린다.
  */
 UCLASS()
 class DAERUNE_API ADRS2SafeButton : public ADRS2InteractProp
 {
 	GENERATED_BODY()
 
+public:
+	ADRS2SafeButton();
+
+	virtual void Tick(float DeltaSeconds) override;
+
+	// 금고 문에 붙어 함께 회전할지 (금고가 등록 시 확인한다)
+	bool ShouldAttachToDoor() const { return bAttachToDoor; }
+
 protected:
+	virtual void BeginPlay() override;
 	virtual void ExecuteInteract(ADRCharacter* Character) override;
 
-	// true 면 숫자 입력이 아니라 입력 초기화 버튼으로 동작한다.
+	// ★눌림 연출을 C++ 에서 처리한다 (2026-08-27).
+	//   BP 타임라인으로 만들면 커브 키·Length 설정 실수로 "들어간 채 안 돌아오는" 문제가
+	//   생기기 쉬워, 레버 자세와 동일하게 C++ 로 옮겼다. BP 에는 사운드만 넣으면 된다.
+	virtual void PlayInteractedVisual() override;
+
+	// PropMesh 의 **상대 좌표** 기준 눌리는 방향·깊이
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "S2|Button")
+	FVector PressOffset = FVector(-2.f, 0.f, 0.f);
+
+	// 들어가는 시간 (짧을수록 "딸깍" 느낌)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Button", meta = (ClampMin = "0.01"))
+	float PressInDuration = 0.05f;
+
+	// 돌아오는 시간
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Button", meta = (ClampMin = "0.01"))
+	float PressOutDuration = 0.15f;
+
+	// 버튼 종류. Digit 이면 PropIndex 가 입력 숫자가 된다.
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "S2|Prop")
-	bool bIsClearButton = false;
+	ES2SafeButtonType ButtonType = ES2SafeButtonType::Digit;
+
+	// ★true 면 BeginPlay 에서 금고의 DoorMesh 에 부착되어 문이 열릴 때 함께 움직인다.
+	//   키패드가 문이 아니라 옆 벽면에 있다면 false 로 둔다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "S2|Prop")
+	bool bAttachToDoor = true;
+
+private:
+	// 눌림 애니메이션 시작 (전 머신 로컬)
+	void StartPressAnimation();
+
+	// BP 에서 배치한 PropMesh 의 원래 상대 위치 (여기서 PressOffset 만큼 이동한다)
+	FVector PressBaseLocation = FVector::ZeroVector;
+
+	float PressElapsed = 0.f;
+	bool bPressing = false;
 };
 
 /**

@@ -37,6 +37,15 @@ void UDRS2PuzzlePhase::OnPhaseStart()
 		static_cast<uint8>(FMath::RandRange(0, 9))
 	};
 
+#if !UE_BUILD_SHIPPING
+	// ★개발용 임시 로그. 퍼즐을 다 풀지 않고도 금고를 테스트할 수 있게 한다.
+	//   패키징(Shipping)에서는 컴파일되지 않으므로 지우지 않아도 안전하다.
+	UE_LOG(LogDR, Warning, TEXT("[S2P2] ★금고 비밀번호 = %d %d %d   (1번 8퍼즐 / 2번 스위치 / 3번 CCTV)"),
+		static_cast<int32>(SecretCode[0]),
+		static_cast<int32>(SecretCode[1]),
+		static_cast<int32>(SecretCode[2]));
+#endif
+
 	if (ADRS2SlidePuzzle* SlidePuzzle = Director->Room2SlidePuzzle)
 	{
 		SlidePuzzle->SetRevealDigit(SecretCode[0]);
