@@ -65,6 +65,9 @@ public:
 	// 사망 처리 override (인덱스 결정 + BP 이벤트 호출)
 	virtual void MulticastHandleDeath_Implementation(const FVector& DeathImpulse) override;
 
+	// 부활 시 1인칭/3인칭 메시 가시성 원복 (Plan6 §5.9)
+	virtual void MulticastHandleRevive_Implementation() override;
+
 	// 사망 상태 동기화 override (bDead가 true가 되면 몽타주 재생)
 	virtual void OnRep_Dead() override;
 
@@ -123,6 +126,22 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Mount")
 	bool IsMounted() const { return MountedOn != nullptr; }
+
+	// ========== 열차 좌석 (Plan6 §4.9.4 / §5.7) ==========
+	// 마운트 시스템을 미러링한 병렬 상태다.
+	// 마운트 타입이 ADRRobotVacuumCharacter 로 고정되어 있어 일반화보다 병렬 추가가 안전하다.
+
+	UPROPERTY(ReplicatedUsing = OnRep_SeatedOn, BlueprintReadOnly, Category = "Train")
+	TObjectPtr<class ADRS2TrainCar> SeatedOn;
+
+	UFUNCTION()
+	void OnRep_SeatedOn();
+
+	UFUNCTION(BlueprintCallable, Category = "Train")
+	bool IsSeatedOnTrain() const { return SeatedOn != nullptr; }
+
+	// 서버: 좌석에 attach + 이동 잠금 / 해제 시 원복
+	void SetSeatedOn(class ADRS2TrainCar* Car);
 
 	// 내 메시에서 탑승 접점(발바닥 등)이 되는 소켓 이름 (CombatSocket처럼 BP에서 지정).
 	// 탑승 높이 결정에 이 소켓의 액터 공간 Z만 사용 — 좌우 회전 시 공전을 막기 위해 XY는 무시.

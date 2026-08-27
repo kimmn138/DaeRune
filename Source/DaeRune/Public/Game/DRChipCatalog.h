@@ -28,9 +28,10 @@ public:
 	// ChipId 로 정의 조회. 없으면 nullptr.
 	const FDRUpgradeChipDefinition* FindChip(FName ChipId) const;
 
-	// 특정 로봇/카테고리의 칩 정의 목록 (업그레이드 화면 목록 구성용).
+	// 특정 로봇의 칩 정의 전체 (업그레이드 화면 목록 구성용).
+	// 분류(Category)로 거르지 않는다 — 그건 UI 표시 필터라서 뷰모델 단계에서 처리한다.
 	UFUNCTION(BlueprintCallable, Category = "Chips")
-	void GetChipsForClass(EPlayerCharacterClass CharacterClass, EDRChipCategory Category,
+	void GetChipsForClass(EPlayerCharacterClass CharacterClass,
 		TArray<FDRUpgradeChipDefinition>& OutChips) const;
 
 	// 대상 스킬 표시명. 태그가 비어 있으면 "전체".
@@ -45,14 +46,15 @@ public:
 	// 서버가 클라이언트 신고 장착 목록을 정화한다.
 	// - 카탈로그에 없는 Id / 다른 클래스 소속 항목 제거
 	// - 중복 Id 제거 (동일 칩 중복 장착 금지)
-	// - 카테고리별 필요 슬롯 수 합이 Max 슬롯 수를 넘으면 초과분 제거 (구조적 상한)
+	// - 필요 슬롯 수 합이 MaxSlots 를 넘으면 초과분 제거 (구조적 상한)
+	//   서버는 클라의 해금 단계를 모르지만 총 칸 수는 알기 때문에 이 선까지 막는다.
 	// 반환: 하나라도 수정했으면 true (로깅용)
 	bool SanitizeLoadout(TArray<FName>& InOutChips, EPlayerCharacterClass CharacterClass,
-		int32 MaxStatSlots, int32 MaxAscensionSlots) const;
+		int32 MaxSlots) const;
 
 	// 카탈로그 정합성 검사 (중복 Id, 슬롯 수 범위, 효과 누락 등). 콘텐츠 작업 후 1회 실행.
 	UFUNCTION(BlueprintCallable, Category = "Chips")
-	bool ValidateCatalog(int32 MaxStatSlots, int32 MaxAscensionSlots, TArray<FString>& OutErrors) const;
+	bool ValidateCatalog(int32 MaxSlots, TArray<FString>& OutErrors) const;
 
 protected:
 	virtual void PostLoad() override;

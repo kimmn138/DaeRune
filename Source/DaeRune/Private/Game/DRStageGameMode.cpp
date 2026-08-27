@@ -13,6 +13,7 @@
 #include "Game/DRGameInstance.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystem/Data/CharacterClassInfo.h"
+#include "DaeRune/DRLogChannels.h"
 
 ADRStageGameMode::ADRStageGameMode()
 {
@@ -251,12 +252,33 @@ void ADRStageGameMode::NotifyAllPlayersGameEnd(bool bIsGameClear)
 	}
 }
 
+void ADRStageGameMode::NotifyPhasePlayerDied(APlayerState* DeadPlayerState)
+{
+	if (CurrentPhase)
+	{
+		CurrentPhase->NotifyPlayerDied(DeadPlayerState);
+	}
+}
+
+void ADRStageGameMode::NotifyPhasePlayerLeft(APlayerState* LeftPlayerState)
+{
+	if (CurrentPhase)
+	{
+		CurrentPhase->NotifyPlayerLeft(LeftPlayerState);
+	}
+}
+
 void ADRStageGameMode::InitializePhaseSystem()
 {
 	if (!HasAuthority()) return;
 
 	// 페이즈 구조 개편: 사이트 맵 배치/활성화 모두 1개로 고정 (Phase1이 안전망으로 1개만 유지)
-	if (CleanserSites.Num() < 1) return;
+	// Plan6 §5.1: 스테이지2는 방4 설치대 1개만 사용하며 맵 구성에 따라 사이트가 없을 수도 있다.
+	// 사이트 유무로 페이즈 시스템 자체를 막지 않고 경고만 남긴다 (사이트 의존 로직만 동작하지 않음).
+	if (CleanserSites.Num() < 1)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Phase] CleanserSite 가 하나도 없습니다. 사이트 의존 로직은 동작하지 않습니다."));
+	}
 
 	// 占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙 占싸쏙옙占싹쏙옙 占쏙옙占쏙옙
 	PhaseInstances.Empty();

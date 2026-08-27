@@ -25,6 +25,12 @@ class ADRCleanserSite;
 class ADRRobotVacuumCharacter;
 class ADRWaitingRoomCameraActor;
 class UDRWaitingRoomWidget;
+class ADRS2InteractProp;
+class ADRS2SlidePuzzle;
+
+// 스테이지2 8퍼즐 UI 열기 요청 (Plan6 §14.2.2 - UI 방식).
+// HUD/BP 가 이 델리게이트를 받아 실제 위젯을 생성한다.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSlidePuzzleUIRequested, ADRS2SlidePuzzle*, Puzzle);
 enum class ELobbyState : uint8;
 
 // 현재 레벨 컨텍스트 (레벨 진입 시 1회 판별해 캐시 - 매 프레임 맵 이름 문자열 연산 방지)
@@ -334,18 +340,65 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Upgrade")
 	bool IsUpgradeScreenOpen() const { return bIsUpgradeScreenOpen; }
 
-	// 블루프린트에서 업그레이드 위젯을 생성/제거한다
+	// ★블루프린트가 위젯을 생성/제거한다★ (설정 메뉴의 OnSettingsMenuOpened/Closed 와 같은 구조)
+	//  - Opened : CreateWidget → AddToViewport → SetKeyboardFocus
+	//  - Closed : RemoveFromParent
 	UFUNCTION(BlueprintImplementableEvent, Category = "Upgrade")
 	void OnUpgradeScreenOpened();
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Upgrade")
 	void OnUpgradeScreenClosed();
 
+	// 업그레이드 화면 위젯 클래스 (BP_DRPlayerController 에서 WBP_UpgradeScreen 지정).
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<class UDRUpgradeScreenWidget> UpgradeScreenWidgetClass;
+
+	// BP 가 만든 화면 위젯을 여기 보관해 둔다 (디버그/치트에서 접근하기 위함).
+	// 소유권은 BP 에 있고, 여기서는 약한 참조처럼 쓴다.
+	UPROPERTY(BlueprintReadWrite, Transient, Category = "UI")
+	TObjectPtr<UDRUpgradeScreenWidget> UpgradeScreenWidget;
+
 	// ========== 치트/디버그 모드 ==========
 
     // �׽�Ʈ�� ������ ��ŵ (��������Ʈ���� ȣ��)
     UFUNCTION(BlueprintCallable, Category = "Cheat|Phase")
     void CheatSkipToNextPhase();
+
+	/**
+	 * 치트: 업그레이드 시스템 해금 + 재화 지급. (Plan2.md 5.1 — 정식 경로는 스테이지1 최초 클리어)
+	 *
+	 * 콘솔(`~`)에서 `DRUnlockUpgrade` / `DRAddCurrency 5000` 으로 부른다.
+	 * 세이브에 즉시 기록되므로 재시작해도 유지된다 — 되돌리려면 DRLockUpgrade 를 쓴다.
+	 */
+	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Upgrade")
+	void DRUnlockUpgrade();
+
+	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Upgrade")
+	void DRAddCurrency(int32 Amount = 5000);
+
+	// 해금 전 상태(잠김 프롬프트/차단 문구)를 다시 확인하고 싶을 때
+	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Upgrade")
+	void DRLockUpgrade();
+
+	/**
+	 * 치트: 슬롯을 Count 개 해금한다(재화는 자동으로 채워 준다).
+	 *
+	 * ★칩은 슬롯을 1칸 이상 해금해야 열린다★ — IsChipUnlocked() 가
+	 * UnlockedSlots >= RequiredSlotTier 로 판정하기 때문이다(DRGameInstance.cpp:651).
+	 * 시스템 해금(DRUnlockUpgrade)만으로는 칩이 잠긴 채로 남는다.
+	 */
+	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Upgrade")
+	void DRUnlockSlot(int32 Count = 1);
+
+	// 현재 진행도를 로그로 덤프 (해금 수 / 재화 / 칩 상태)
+	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Upgrade")
+	void DRDumpUpgrade();
+
+private:
+	// 치트가 조작할 대상 로봇 (업그레이드 화면의 GetViewedClass 와 같은 기준)
+	EPlayerCharacterClass GetViewedUpgradeClass() const;
+
+public:
 
 	// ========== 카메라 피치 제한 ==========
 
@@ -627,6 +680,37 @@ private:
 	// 현재 감지(라인트레이스) 중인 부품 (IDRInteractable 구현 액터)
 	UPROPERTY()
 	TObjectPtr<AActor> CurrentDetectedPart;
+
+	// ========== 스테이지2 상호작용 프롭 (Plan6 §5.5-b) ==========
+	// 레버/버튼/단말 등 조작 대상을 하나의 슬롯 + 하나의 분기로 처리한다.
+
+	UPROPERTY()
+	TObjectPtr<AActor> CurrentDetectedProp;
+
+	ADRS2InteractProp* FindPropByLineTrace();
+
+	// ========== 열차 좌석 (Plan6 §5.5) ==========
+
+	UPROPERTY()
+	TObjectPtr<AActor> CurrentDetectedCar;
+
+	class ADRS2TrainCar* FindTrainCarByLineTrace();
+
+	// 점프 키로 하차 요청 (마운트 하차와 동일 관례)
+	UFUNCTION(Server, Reliable)
+	void ServerRequestTrainDeboard();
+
+public:
+	// 8퍼즐 UI 열기 (서버 -> 요청한 클라이언트)
+	UFUNCTION(Client, Reliable)
+	void Client_OpenSlidePuzzleUI(ADRS2SlidePuzzle* Puzzle);
+
+	// HUD/BP 가 바인딩해 실제 위젯을 생성한다
+	UPROPERTY(BlueprintAssignable, Category = "S2|Puzzle")
+	FOnSlidePuzzleUIRequested OnSlidePuzzleUIRequested;
+
+	// 원래의 private 구역으로 복귀 (이 아래 멤버들의 접근 수준을 바꾸지 않기 위함)
+private:
 
 	// ��ǰ ��� ��û
 	UFUNCTION(Server, Reliable)

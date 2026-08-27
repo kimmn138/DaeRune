@@ -32,6 +32,13 @@ public:
 
 	UDRPhaseBase* GetCurrentPhase() { return CurrentPhase; }
 
+protected:
+	// 사망/이탈을 현재 페이즈에 전달 (Plan6 §14.3.5)
+	virtual void NotifyPhasePlayerDied(APlayerState* DeadPlayerState) override;
+	virtual void NotifyPhasePlayerLeft(APlayerState* LeftPlayerState) override;
+
+public:
+
 	// Phase�� ���� ���� Ʈ����
 	UFUNCTION()
 	void TriggerGameOver();

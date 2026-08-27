@@ -173,6 +173,12 @@ public:
 	FGameplayTag GameplayCue_Skill_VacuumJetJump;
 	FGameplayTag GameplayCue_Skill_VacuumDash;
 
+	// ========== 스테이지2 두더지 보스 (Plan7 §5.5) ==========
+	FGameplayTag Abilities_MoleBoss_Claw;
+	FGameplayTag Abilities_MoleBoss_BurrowStrike;
+	FGameplayTag Cooldown_MoleBoss_BurrowStrike;
+	FGameplayTag State_MoleBoss_Burrowed;
+
 private:
 	static FDRGameplayTags GameplayTags;
 };

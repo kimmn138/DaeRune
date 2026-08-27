@@ -91,6 +91,9 @@ void ADRCleanserPart::PickupPart(ADRCharacter* Character)
 	MulticastPlayPickupSound();
 
 	// State.Carrying 태그 토글은 ADRCharacter::SetCarryingState 에서 일괄 처리
+
+	// 획득 알림 (Plan6 §5.6) - 스테이지2 방2가 금고 부품 획득을 감지한다
+	OnPartPickedUp.Broadcast(this, Character);
 }
 
 void ADRCleanserPart::OnRep_CarryingCharacter()

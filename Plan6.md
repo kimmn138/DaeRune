@@ -5,6 +5,7 @@
 > **작성일**: 2026-07-23. 코드 실측 기반 (아래 §2). 대상 브랜치: `feat/PlayExpo`.
 > **갱신 (2026-07-23)**: §11 미확정 사항에 대한 답변 반영 — 확정 5건(§11.A), 미정 유지 7건(§11.B). 미정 항목은 전부 BP/프레임워크로 격리되어 논블로킹이며, 구조에 영향을 주는 §11-9(설치대 체력)만 M4 착수 전 결정 게이트로 관리.
 > **갱신 (2026-08-06)**: ① **방1 상세 사양 확정 → §14.1 신설 (방1의 SSOT)**. 인원별 스폰 룩업 테이블, 웨이브 2개(30초 간격), 시작지점 봉쇄 방식이 "물체 상승 차단물", 방1→방2 이동이 "문 모델 발광 + 근접 순간이동"으로 확정되어 §0/§1.1/§1.2/§4.1/§4.3/§4.5/§4.11/§4.12/§5/§6/§7.2/§8/§9/§10.1/§11/§12 동반 수정. ② 선행 답변 반영 — 부품 **1개**(§11-2 종결), 설치대 체력 **미도입**(§11-9 종결 → 적 AI 타겟팅 작업 전량 삭제), 선로 **ㄷ자 + 코너 곡선 일부·등속 주행**(§4.9.1), 방4 클리어 시 **사망자 50% 체력 부활 도입**(신규 요구 → §5.9, §11.B-13). ③ 방3~방6 상세 사양은 순차 설명 예정이며 확정될 때마다 §14.3~§14.6에 추가하고 관련 §4 설계를 갱신한다. **§14가 방별 요구사항의 최신 기준이며, §1·§4의 방별 서술이 §14와 충돌하면 §14가 우선한다.**
+> **갱신 (2026-08-07, 5차)**: **열차 구조 재설계 — 좌석 폐지, 칸별 곡선 추종.** 실제 아트가 좌석 없는 **바구니 형태 1칸짜리 열차 4개**를 이어 붙이는 구성으로 확정되어, ① `ADRS2TrainSeat` → **`ADRS2TrainCar`** 로 대체(칸 자체가 탑승 지점, 좌석 액터 폐지), ② ★**칸마다 자기 스플라인 거리**(`선두 거리 − 간격 × 칸번호`)를 갖게 해 **곡선에서 앞칸이 먼저 꺾이고 뒤칸이 나중에 꺾이도록** 구현(§4.9.3-A). 칸을 한 액터의 컴포넌트로 붙이면 강체로 함께 회전해 이 동작이 나오지 않으므로 **개별 액터**로 만들고 열차의 `Cars` 배열에 배선한다. ③ 스플라인 트랜스폼의 **스케일 무시** + `bLevelPitchAndRoll`(경사·뱅킹 무시) + `HeightOffset`(피벗 보정) 추가. ④ `ADRCharacter::SeatedOn`·PlayerController 감지/디스패치 타입 교체. ⑤ §0·§4.9.2~4·§5.5·§6·§9.2·§14.6.2·§15.9-H·§16.10·§16.12·§16.15·§16.17 동반 수정.
 > **갱신 (2026-08-07, 4차)**: **§9 마일스톤 재분배 + §15 구현 상세 신설.** ① §9를 6개 방 확정 사양 기준으로 재작성 — 방2(M3)·방3+4(M4)가 단일 최대 작업이라 각각 3개 서브 단계로 분할하고, 의존 그래프·크리티컬 패스(M1→M3→M8)·규모(S~XL)·회귀 체크 3지점·별도 트랙 2개(아트, 보스 스킬)를 명시. ② **§15 "어떻게 만드는가" 신설** — 마일스톤 순서대로 실제 시그니처·알고리즘·검증 방법을 기록한다. 공통 규약(§15.0), 공유 코드 수정 4건의 before/after(§15.1), 기반 타입·베이스·레지스트리(§15.2), 통로 액터 2종(§15.3), BP·맵 배선 절차(§15.4), 방1~방6 구현(§15.5~§15.9), 신규 파일 21개 생성 순서(§15.10). 소프트락 유발 알고리즘 3종(8퍼즐 셔플, 스위치 마스크 생성, CCTV 시퀀스)과 부활 역연산 12항목 체크리스트를 코드 수준으로 확정.
 > **갱신 (2026-08-07, 3차)**: **방6 상세 사양 확정 → §14.6 전면 작성. 이로써 6개 방 전체 사양이 확정되었다(§14).** 4칸 열차에 상호작용 키로 탑승해 생존자 전원 착석 시 등속 출발, 장애물 3구간에서 **두더지 보스가 장애물을 부수며 등장**하고, **단일 개체의 체력이 67% → 34% → 처치로 이어지며**(§14.6.4), **최종 처치가 곧 스테이지2 클리어**다. 이에 따라 ① **§4.9.7 열차 페이즈 재작성**(임계 배열 `RetreatHealthRatios`, **Destroy 대신 비활성 보관**으로 체력 유지, 완료 조건 `bBossDefeated`), ② §4.9.5 장애물의 해제 타이밍이 "임계 도달" → **"보스 등장과 동시"** 로 변경되고 `PawnWall` 제거, ③ §4.9.6 배리어를 **전·후방 한 쌍(3개 → 6개)** 으로 확장, ④ **원안의 종점 도착 판정 폐기** — `Trigger_Destination`·`S2P5_Arrive`·도착 플랫폼 배치 삭제(§14.6.6), ⑤ §3.1 페이즈 매핑의 완료 조건 5개를 전부 확정값으로 갱신, ⑥ §0·§1.2·§7.2·§8·§9·§10.1·§11·§12 동반 갱신. 보스의 스킬·패턴은 별도 작업으로 격리(§14.6.7).
 > **갱신 (2026-08-07, 2차)**: **방5 상세 사양 확정 → §14.5 신설**. 전원 입장 시 **D4 구조물이 다시 올라와 봉쇄**(왕복 동작), 인원별 3웨이브(§14.5.2 — 총 9/11/16/20마리), 웨이브 전환은 **`min(30초 경과, 전원 전멸)` 하이브리드**(§14.5.3 — 방1의 시간 고정, 방3의 시간 고정 무한 반복과 구분), 웨이브3 전멸 시 **D5 구조물 하강 개방**. 이에 따라 ① **§4.8 방5 페이즈 재작성**(타이머 + 전멸 시 타이머 취소·즉시 스폰, 마지막 웨이브 타이머 미예약), ② §4.11 표에 D4 왕복·D5 추가 + 멱등 호출 규약, ③ **`ADRAutoSlidingDoor` 재사용이 0건으로 결론**(통로 8곳 전부 구조물/게이트) → §0·§1.1·§2.3·§6.2·§8에서 `BP_S2Door` 제거, ④ §7.2/§9/§10.1/§11 동반 갱신. **남은 미확정은 방6(열차) 상세뿐.**
@@ -27,7 +28,7 @@
 | 방3 무한 웨이브 | **신규 경량 스포너** (페이즈 내 타이머 + 순환 템플릿 + 동시 생존 상한). `UDRPhase3`은 시간 기반 웨이브 + DataTable + 독가스/엘리트 결합이 과해서 재사용하지 않음 (§4.6) |
 | 방5 3웨이브 | 인원별 웨이브 배열(`FS2WaveSet` — §4.1, 웨이브 3개, 구성은 §14.5.2 확정). 전환 트리거는 **`min(30초 경과, 전원 전멸)` 하이브리드**(§14.5.3) — 방1(시간 고정)·방3(시간 고정 무한)과 다르다. `GameState`의 기존 `CurrentWaveNumber/TotalWaves` 복제 필드 재활용 (`DRStageGameState.h:303-309`) |
 | 열차 이동 방식 | **스플라인 트랙 + "복제 1회, 로컬 시뮬" 이동** — `{상태, 시작거리, 목표거리, 시작서버시각, 속도}` 구조체 1회 복제 후 서버/클라 각자 동일 계산 (기존 `WaveTimerEndServerTime` 관례 미러, `DRStageGameState.h:314-316`). 탑승자는 좌석에 attach되어 자동 추종 |
-| 열차 탑승 | **마운트 시스템 선례 미러** (`DRCharacter.h:108-138`의 `MountedOn` RepNotify attach 패턴) — 신규 `ADRS2TrainSeat`(IDRInteractable) + `ADRCharacter`에 좌석 상태 추가. F키 탑승 / 점프키 하차 (마운트와 동일 관례, `DRPlayerController.cpp:1102-1103`) |
+| 열차 탑승 | **마운트 시스템 선례 미러** (`DRCharacter.h:108-138`의 `MountedOn` RepNotify attach 패턴) — 신규 `ADRS2TrainCar`(바구니 칸 = 탑승 지점, IDRInteractable) + `ADRCharacter`에 탑승 상태 추가. ★좌석 액터를 따로 두지 않는다(§4.9.3). F키 탑승 / 점프키 하차 (마운트와 동일 관례, `DRPlayerController.cpp:1102-1103`) |
 | 열차 구간 보스 | **두더지 보스 1개체가 3구간에 반복 등장하며 체력이 이어진다** (§14.6.4) — 67% → 34% → 처치. `ADREnemy::OnHealthChanged / OnMaxHealthChanged`(BlueprintAssignable, `DREnemy.h:74-78`)에 페이즈가 바인딩해 비율을 추적하고, 임계 도달 시 **Destroy가 아니라 비활성 보관**(숨김 + 콜리전/AI 정지)으로 체력·디버프를 유지한 뒤 다음 구간에서 되살린다. 3구간에는 임계가 없고 **처치 = 스테이지2 클리어**. 보스의 스킬·패턴은 별도 작업(§14.6.7)이며 `MoleBossClass` BP 프로퍼티로 격리 |
 | 하차 후 이동 제한 | 장애물 자체(전방 차단) + 신규 **`ADRS2Barrier`**(후방 차단, Pawn 전용 콜리전, 복제 토글) 조합. 정지 중에만 하차 가능하므로 "움직이는 발판 위 캐릭터" 네트워크 문제 자체가 발생하지 않음 ★핵심 단순화 |
 | UI의 페이즈 인덱스 하드코딩 | **제거 필수** — `OverlayWidgetController.cpp:34, 459-475, 481-488`의 `PhaseIndex == 2` 비교는 스테이지2에서 방3 페이즈(인덱스 2)에 스테이지1 방어 UI(웨이브 타이머/클렌저 HP)를 띄우는 **실제 버그**를 유발. `GameState`에 복제 플래그 `bWaveDefenseUIActive` 신설로 대체 (§5.4). M1에서 선처리 |
@@ -58,10 +59,10 @@
 | D0 | 시작지점 → 방1 | **상승 차단물** `ADRS2MovingBlocker` ★확정 | 내려감 (통행 가능) | **전원 방1 입장 → 물체 상승, 영구 봉쇄** | (재개방 없음 — 시작지점 복귀 불가) |
 | D1 | 방1 → 방2 | **텔레포트 게이트** `ADRS2TeleportGate` (Mode=`Individual`) ★확정 | 비활성 (발광 없음) | **부품 소지자의 방2 퇴장 → 비활성화**(재입장 불가, §14.2.7) | **방1 적 전멸 → 문 모델 발광, 근접 시 순간이동** (문이 열리지는 않음) |
 | E2 | 방2 → 방1 (출구) | **텔레포트 게이트** `ADRS2TeleportGate` (Mode=`TeamOnCarrier`) ★확정 | 상시 활성 | — | 부품 미소지자는 개별 이동, **부품 소지자 통과 시 생존자 전원을 방1로 회수**(§14.2.7) |
-| D2 | 방1 → 방3 | **상승 구조물** `ADRS2MovingBlocker` ★확정 | 열림 (통행 가능) | **전원 방3 입장 → 구조물 상승, 영구 봉쇄** | (재개방 없음 — 방1 복귀 불가) |
+| D2 | 방1 → 방3 | **개찰구 회전문** `ADRS2TurnstileDoor` ★확정 (2026-08-18) | 열림 (통행 가능) | **전원 방3 입장 → 구조물 상승, 영구 봉쇄** | (재개방 없음 — 방1 복귀 불가) |
 | D3 | 방3 → 방4 | **텔레포트 게이트** (`CarrierOnly` + `bDeactivateOnUse`) ★확정 | 비활성 | **부품 소지자 1명 통과 즉시 비활성** | 전원 방3 입장 시 발광. 두더지 클리어 시 재활성(복귀용). 방4 플레이어 사망 시 규칙을 `Anyone`으로 바꿔 재활성 (§14.3.5) |
 | R4 | 방4 → 방3 (복귀) | **텔레포트 게이트** (`Individual`) ★확정 | 비활성 | — | 두더지 클리어 시 활성 (§14.3.6-5) |
-| D4 | 방3 ↔ 방5 | **구조물** `ADRS2MovingBlocker` ★확정 | **막힘** | **전원 방5 입장 → 다시 상승 봉쇄**(방3 복귀 불가) | **두더지 20마리 클리어 → 구조물 하강, 개방** |
+| D4 | 방3 ↔ 방5 | **개찰구 회전문** `ADRS2TurnstileDoor` ★확정 (2026-08-18) | **막힘** | **전원 방5 입장 → 다시 상승 봉쇄**(방3 복귀 불가) | **두더지 20마리 클리어 → 구조물 하강, 개방** |
 | D5 | 방5 → 방6 | **하강 개방 구조물** `ADRS2MovingBlocker` ★확정 | **막힘** | (재봉쇄 없음) | **방5 3웨이브 클리어 → 구조물 하강, 개방** |
 
 > **통로 8곳 전부 확정**: 구조물 4곳(D0·D2·D4·D5) + 텔레포트 게이트 4곳(D1·E2·D3·R4). 원안이 재사용을 전제했던 `ADRAutoSlidingDoor`는 **결과적으로 스테이지2에서 쓰이지 않는다** (§14.5.4, §6.2).
@@ -370,7 +371,7 @@ protected:
     //
     // ===== 통로 제어 래퍼 (널 가드 포함) =====
     // void OpenDoor(ADRAutoSlidingDoor*); void CloseAndLockDoor(ADRAutoSlidingDoor*);
-    // void SetBlocked(ADRS2MovingBlocker*, bool);      // §4.11
+    // void SetBlockerBlocked(ADRS2PassageBlocker*, bool);   // §4.11-A
     // void SetGateActive(ADRS2TeleportGate*, bool);    // §4.12
     //
     // int32 BasePlayerCount = 0;           // 방 시작 시점 생존자 수 (확정 후 불변 — §14.1.4)
@@ -538,7 +539,9 @@ class UDRS2DefensePhase : public UDRS2PhaseBase
     //     2) Room4InstallSite->EjectInstalledPart()               // 설치 해제 + 설치대 옆에 부품 드롭 (§5.12)
     //     3) Gate_Room3ToRoom4->SetEntryRule(Anyone) + SetGateActive(true)
     //        ★부품이 방4 안에 있으므로 "소지자만" 규칙을 유지하면 아무도 못 들어간다
-    //     4) Room4Player = nullptr;  방3 웨이브는 그대로 유지 (중단하지 않음)
+    //     4) ★StopWaveLoop(); DestroyAllSpawnedEnemies()   // 방3 몬스터를 전부 제거하고 스폰 중단
+    //        재설치로 두더지가 다시 시작될 때까지 웨이브를 재개하지 않는다 (2026-08-07 수정)
+    //     5) Room4Player = nullptr
     //
     // NotifyPlayerLeft(APlayerState*):            // B: 방4 플레이어 접속 종료 (§5.10 Logout 훅)
     //   if (이탈자 == Room4Player):
@@ -695,6 +698,8 @@ class UDRS2WavePhase : public UDRS2PhaseBase
 #### 4.9.1 `ADRS2TrainTrack` (Actor)
 
 - `USplineComponent* Spline` 하나를 보유하는 순수 데이터 액터. 레벨에서 선로를 따라 스플라인 편집.
+- ★**경로를 정하는 것은 스플라인뿐이다.** 선로 메시는 시각 요소이며 경로에 관여하지 않는다.
+- **선로 메시 자동 생성(선택)**: `TrackSegmentMesh`에 반복 가능한 조각 메시를 지정하면 `OnConstruction`에서 스플라인을 따라 `USplineMeshComponent`를 균등 분할 생성한다 → 메시와 스플라인이 구조적으로 어긋날 수 없다. 비워두면 아무것도 생성하지 않으므로, ㄷ자 전체가 한 덩어리인 메시를 BP에 직접 넣는 방식과 병행할 수 있다(이 경우 스플라인을 손으로 맞춰야 한다).
 - 장애물 정지 위치는 **장애물 액터의 트랙 거리값**으로 정의: `ADRS2TrainObstacle::StopDistance` (float, 에디터 입력) — 또는 에디터 유틸로 장애물 위치를 스플라인에 투영해 자동 계산(`FindInputKeyClosestToWorldLocation`). 초기 구현은 수동 입력 + `BeginPlay` 검증(정렬 오름차순 확인).
 
 #### 4.9.2 `ADRS2Train` (Actor, bReplicates)
@@ -717,7 +722,8 @@ struct FS2TrainMovement            // "복제 1회 + 로컬 시뮬" (WaveTimerEn
 UCLASS()
 class ADRS2Train : public AActor
 {
-    // 컴포넌트: RootScene + 칸별 StaticMesh (BP 구성) + 칸별 ADRS2TrainSeat ChildActorComponent(4개)
+    // 컴포넌트: RootScene 만 (메시 없음 - 논리 관리자).
+    //   ★실제로 보이는 것은 레벨에 개별 배치한 ADRS2TrainCar 4개이며, Cars 배열로 배선한다.
     //
     // UPROPERTY(ReplicatedUsing = OnRep_Movement) FS2TrainMovement Movement;
     // ADRS2TrainTrack* Track (EditInstanceOnly);
@@ -736,7 +742,8 @@ class ADRS2Train : public AActor
     //   void SetWaitingForBoarding(); void SetArrived();
     //
     // 좌석/탑승:
-    //   TArray<ADRS2TrainSeat*> GetSeats() const;           // ChildActor 수집 (BeginPlay 캐시)
+    //   TArray<ADRS2TrainCar*> GetCars() const;             // EditInstanceOnly 배선 (BeginPlay 에 칸 번호 부여)
+    //   float CarSpacing;                                   // 칸 i 거리 = HeadDistance - CarSpacing * i
     //   bool AreAllAlivePlayersSeated() const;              // GetAlivePlayers 전원이 좌석 점유자와 일치
     //   FOnTrainBoardingChanged OnBoardingChanged;          // 좌석 변동 시 (탑승 n/N UI + 출발 판정 재평가)
     //   FOnTrainStopped OnStopped;   FOnTrainArrived OnArrived;   // 서버 전용 델리게이트
@@ -749,29 +756,62 @@ class ADRS2Train : public AActor
 - **이동 정밀도**: 서버-클라 시각차(GetServerWorldTimeSeconds 동기 오차) 수준의 위치 편차만 발생하고, 게임플레이 판정(정지/전투)은 전부 서버 기준이므로 문제 없음. 열차 콜리전은 `BlockAll`-계열이되 탑승자 캡슐과의 충돌은 attach 상태(MOVE_None)라 스윕이 없어 간섭하지 않음.
 - **출발 연출**: `OnRep_Movement`에서 상태 전환별 사운드/진동 재생 훅 (BP 이벤트).
 
-#### 4.9.3 `ADRS2TrainSeat` (Actor, IDRInteractable, bReplicates)
+#### 4.9.3 `ADRS2TrainCar` (Actor, IDRInteractable, bReplicates) — ★2026-08-07 재설계
+
+> **변경 사유**: 당초 "열차 액터 1개 + 좌석 액터 4개" 2계층이었으나, 실제 아트가 **좌석 없는 바구니 형태의 1칸짜리 열차**이고 이를 4개 이어 붙이는 구성으로 확정되었다. 따라서 **좌석을 따로 두지 않고 칸 자체가 탑승 지점**이 된다. 클래스명도 `ADRS2TrainSeat` → `ADRS2TrainCar`로 바꿨다.
+>
+> **동시에 해결한 문제**: 칸들을 한 액터의 컴포넌트로 붙이면 곡선에서 **강체로 함께 회전**해 "앞칸이 먼저 꺾이고 뒤칸이 나중에 꺾이는" 동작이 나오지 않는다. 칸을 개별 액터로 만들고 **칸마다 자기 스플라인 거리**를 갖게 해 이를 해결했다(§4.9.3-A).
 
 ```cpp
 UCLASS()
-class ADRS2TrainSeat : public AActor, public IDRInteractable
+class ADRS2TrainCar : public AActor, public IDRInteractable
 {
-    // USceneComponent* SeatPoint;   // 착석 attach 지점
-    // USceneComponent* ExitPoint;   // 하차 배치 지점 (칸 옆)
-    // UWidgetComponent* InteractionWidget;   // "F 탑승" (CleanserSite 관례)
+    // UStaticMeshComponent* CarMesh;          // 바구니 메시 = 루트 = 탑승 지점 = 라인트레이스 대상
+    // USceneComponent* RiderAttachPoint;      // 탑승자 attach 위치 (바구니 안쪽 바닥)
+    // USceneComponent* ExitPoint;             // 하차 배치 지점 (칸 옆)
+    // UWidgetComponent* InteractionWidget;    // "F 탑승"
     //
-    // UPROPERTY(ReplicatedUsing = OnRep_SeatedCharacter) ADRCharacter* SeatedCharacter;
+    // int32 CarIndex;                         // 0 = 선두. 열차가 Cars 배열 순서로 자동 지정
+    // float HeightOffset;                     // 선로 위 높이 보정 (메시 피벗 대응)
+    // bool  bLevelPitchAndRoll = true;        // 스플라인 경사·뱅킹 무시하고 수평 유지
+    //
+    // UPROPERTY(ReplicatedUsing = OnRep_Rider) ADRCharacter* Rider;
+    //
+    // ★선로 추종 (열차 Tick 이 서버·클라 양쪽에서 호출):
+    //   void UpdateFromTrack(const ADRS2TrainTrack*, float HeadDistance, float CarSpacing);
+    //     자기 거리 = HeadDistance - CarSpacing * CarIndex
     //
     // 서버 API:
     //   bool CanBeBoardedBy(ADRCharacter*) const;
-    //     → 미점유 && 후보 생존 && !IsCarryingPart && !IsMounted && 열차 상태가 탑승 허용
-    //       (DRRobotVacuumCharacter::CanBeMountedBy 검증 항목 미러, DRRobotVacuumCharacter.h:51-52)
-    //   void Board(ADRCharacter*);    // SeatedCharacter 세팅 → 캐릭터 측 SetSeatedOn(this)
-    //   void Deboard();               // ExitPoint로 배치 + 해제
-    //   사망/파괴 대응: 탑승자 OnDeath 바인딩 → 좌석 자동 해제
+    //     → 미점유 && 생존 && !IsCarryingPart && !IsMounted && !IsSeatedOnTrain && 열차가 탑승 허용
+    //       (DRRobotVacuumCharacter::CanBeMountedBy 검증 항목 미러)
+    //   void Board(ADRCharacter*);   // Rider 세팅 → 캐릭터 측 SetSeatedOn(this) → RiderAttachPoint 에 attach
+    //   void Deboard();              // ExitPoint 로 배치 + 해제
+    //   탑승자 OnDeath 바인딩 → 사망 시 칸 자동 해제
     //
-    // virtual void SetInteractionUIVisible(bool) override;   // 로컬 UI (IDRInteractable 관례)
+    // virtual void SetInteractionUIVisible(bool) override;
 };
 ```
+
+##### 4.9.3-A 곡선 순차 추종의 원리 ★
+
+```
+            HeadDistance
+                 ↓
+선로 ────────────●───────●───────●───────●────────
+              칸0      칸1      칸2      칸3
+              (선두)   -1×S     -2×S    -3×S       S = CarSpacing
+
+코너에서:  칸0 이 먼저 코너 거리에 도달 → 먼저 꺾인다
+           칸1 은 아직 직선 구간 거리 → 아직 안 꺾인다
+           → 실제 열차처럼 순차적으로 꺾인다
+```
+
+- 칸마다 `GetTransformAtDistanceAlongSpline(자기 거리)`를 따로 구해 **개별 액터 트랜스폼**으로 적용한다.
+- 탑승자는 칸에 attach되어 있으므로 칸이 움직이면 자동으로 따라온다.
+- **스케일은 적용하지 않는다** — 스플라인 트랜스폼에는 포인트 스케일이 포함되어 있어, 그대로 쓰면 스플라인 포인트 스케일이 1이 아닐 때 칸 크기가 변한다.
+- `bLevelPitchAndRoll`이 true면 피치/롤을 0으로 만들어 수평을 유지한다. 탑승자가 기울어 벽에 끼는 것도 막는다.
+- 시작 거리는 `CarSpacing × (칸 수 − 1)` 이상이어야 출발 전에 뒤 칸들이 선로 시작점(거리 0)에 겹치지 않는다. 미달 시 `BeginPlay`에서 Warning을 남긴다.
 
 #### 4.9.4 `ADRCharacter` 좌석 상태 (기존 파일 추가 — §5.5와 세트)
 
@@ -780,11 +820,11 @@ class ADRS2TrainSeat : public AActor, public IDRInteractable
 ```cpp
 // DRCharacter.h 추가
 UPROPERTY(ReplicatedUsing = OnRep_SeatedOn, BlueprintReadOnly, Category = "Train")
-TObjectPtr<ADRS2TrainSeat> SeatedOn;
+TObjectPtr<ADRS2TrainCar> SeatedOn;
 
 UFUNCTION() void OnRep_SeatedOn();          // attach/detach + 로컬 연출
 bool IsSeatedOnTrain() const { return SeatedOn != nullptr; }
-void SetSeatedOn(ADRS2TrainSeat* Seat);     // 서버: attach(SeatPoint) + CMC MOVE_None / 해제 시 원복
+void SetSeatedOn(ADRS2TrainCar* Car);       // 서버: attach(RiderAttachPoint) + CMC MOVE_None / 해제 시 원복
 ```
 
 - 착석 중 이동 입력 무시: `MOVE_None`으로 CMC가 무시 (마운트 라이더와 동일 접근).
@@ -1110,6 +1150,61 @@ class ADRS2MovingBlocker : public AActor
 - **D4만 왕복 동작**(막힘 → 하강 개방 → 상승 재봉쇄)을 하며, `SetBlocked(bool)` 양방향 API가 이를 그대로 커버한다. 방5 페이즈의 `OnPhaseStart`에서 여는 호출은 **멱등**이어야 한다(방3 페이즈가 이미 열었을 수 있음) — 같은 값으로 재호출 시 no-op 처리.
 - 이 클래스가 **스테이지2 통로 4곳(D0·D2·D4·D5)** 을 전담하고, 나머지 4곳은 텔레포트 게이트(§4.12)다. `ADRAutoSlidingDoor`는 스테이지2에서 사용하지 않는다 (§14.5.4).
 
+> **갱신 (2026-08-18)**: D2·D4를 **개찰구식 회전문**으로 바꾸면서 이 클래스를 §4.11-A의 **공용 베이스에서 파생**시켰다. `ADRS2MovingBlocker`는 이제 "상하 이동 포즈"만 담당하고, 복제·콜리전·끼임 방어는 베이스가 갖는다. **담당 통로는 D0·D5 2곳**으로 줄었다.
+
+### 4.11-A `ADRS2PassageBlocker` / `ADRS2TurnstileDoor` — ★신규 (2026-08-18)
+
+D2·D4에 **지하철 개찰구식 회전문**을 쓰기로 하면서, 통로 차단 액터가 2종이 되었다. 페이즈가 통로마다 타입을 구분하지 않도록 **공용 베이스를 추출**한다.
+
+```
+ADRS2PassageBlocker  (Abstract)   ← 페이즈가 아는 유일한 타입
+ │   bBlocked 복제 · SetBlocked(멱등) · 애니메이션 타이밍
+ │   PawnBlock 콜리전 토글 · PushOutPoint 끼임 방어
+ │   virtual ApplyPose(float Alpha)   // 0 = 열림, 1 = 막힘
+ │   virtual InitializePose()         // 파생 클래스의 사전 준비
+ ├── ADRS2MovingBlocker   → 상하 이동  (D0 · D5)
+ └── ADRS2TurnstileDoor   → 회전 개찰구 (D2 · D4)
+```
+
+**이 분리가 주는 것**: `SetBlockerBlocked()` 시그니처와 Director 필드 타입이 베이스로 바뀌었을 뿐, **5개 페이즈의 호출 코드는 한 줄도 바뀌지 않는다**. 나중에 셔터·홍채문 같은 3종째가 생겨도 `ApplyPose` 하나만 구현하면 된다.
+
+#### 회전문 동작
+
+3개 메시가 한쪽으로, 다른 3개가 **반대쪽으로** 회전하며 열린다. 닫히면 각 날개가 **배치 당시의 상대 회전(원점)으로 정확히 복귀**한다.
+
+```cpp
+UCLASS()
+class ADRS2TurnstileDoor : public ADRS2PassageBlocker
+{
+    // 날개 수집 — 컴포넌트 태그 방식 (CCTV 화면 · 열차 칸과 동일 관례).
+    //   FName GroupATag = "TurnstileA";   // 한쪽으로 도는 날개 (보통 3개)
+    //   FName GroupBTag = "TurnstileB";   // 반대쪽으로 도는 날개 (보통 3개)
+    //
+    // 회전량 — 원점 기준 "변화량"이지 절대 회전이 아니다.
+    //   FRotator OpenRotationA = (0, 90, 0);
+    //   bool     bMirrorGroupB = true;    // B = A의 정확한 반대 (부호 반전)
+    //   FRotator OpenRotationB;           // bMirrorGroupB = false 일 때만 사용
+    //
+    // BeginPlay(InitializePose) 에서 날개별로 캐시:
+    //   ClosedQuat = 배치 당시 상대 회전          ← 닫힘 = 이 값으로 정확히 복귀
+    //   OpenQuat   = ClosedQuat * OpenRotation    ← 로컬 축 기준 합성
+    // ApplyPose(Alpha): SetRelativeRotation(Slerp(ClosedQuat, OpenQuat, 1 - Alpha))
+    //
+    // CallInEditor: PreviewOpenPose() / PreviewClosedPose()  // 각도 확인용
+};
+```
+
+- **왜 컴포넌트 배열이 아니라 태그인가**: `TArray<UStaticMeshComponent*>`는 BP 디테일 패널에서 배선할 수 없다 (CCTV 화면에서 이미 겪은 문제). 태그는 컴포넌트 디테일에서 바로 달 수 있다.
+- **왜 쿼터니언 Slerp인가**: `FRotator` 덧셈은 90°를 넘거나 두 축이 섞이면 짐벌 경로로 어긋난다. 회전각을 나중에 키우더라도 안전하다.
+- **왜 로컬 합성(`ClosedQuat * OpenRotation`)인가**: 월드 축 기준으로 돌리면 문을 레벨에 회전 배치했을 때 엉뚱한 축으로 돈다. 로컬 합성이면 **배치 방향과 무관**하게 항상 날개 자신의 축으로 돈다.
+- ★**피벗 주의**: 날개 메시의 **피벗이 힌지(회전축)에 있어야** 한다. 피벗이 메시 중앙이면 제자리에서 빙글 돈다. 메시 피벗을 못 옮기면 BP에서 힌지 위치에 `SceneComponent`를 두고 그 자식으로 메시를 붙인 뒤 **SceneComponent 쪽에 태그를 단다** (회전은 태그가 달린 컴포넌트에 적용된다).
+- **차단은 여전히 `PawnBlock` 박스가 담당**한다. 날개 메시 자체는 콜리전을 끄고 연출만 맡는다 — 날개 6개의 콜리전으로 통로를 막으면 틈으로 빠져나가는 사고가 난다.
+- **D4 왕복**도 그대로 동작한다. 열림/닫힘이 대칭이라 `SetBlocked(true/false)` 반복 호출에 상태가 누적되지 않는다 (항상 원점 캐시에서 다시 보간).
+
+#### 끼임 방어 수정 (2026-08-18)
+
+`PushOutTrappedPawns()`가 `PawnBlock->GetOverlappingActors()`를 쓰고 있었는데, **Pawn 채널에 Block 응답인 컴포넌트는 오버랩 이벤트를 만들지 않아** 이 목록이 항상 비어 있었다. `UWorld::OverlapMultiByObjectType`으로 **명시적 형상 질의**를 하도록 고쳤다.
+
 ### 4.12 `ADRS2TeleportGate` (Actor, bReplicates) — ★신규 확정 (D1, §14.1.6)
 
 문 모델이 **열리지 않고 발광만** 하며, 근접한 플레이어를 목적지로 **순간이동**시킨다. 자동문(`ADRAutoSlidingDoor`)과 성격이 완전히 달라 별개 클래스로 둔다.
@@ -1186,7 +1281,7 @@ enum class ES2GateEntryRule : uint8
 | 5.2 | `DRPhaseBase.h/.cpp` | `void SetupPhaseObjectiveByRow(FName RowName)` 추가 (기존 `SetupPhaseObjective(int32)`는 내부적으로 이를 호출하도록 정리 가능) | 추가 | **없음** (순수 추가) |
 | 5.3 | `DRPhaseBase.h` (`FPhaseObjectiveData`) | `FText PhaseAlarmText` 필드 추가 (+ 선택 `bool bIsSubObjective` — 서브 목표 전환 시 알람/배너 생략 판단용) | 구조체 확장 | **낮음** — 기존 DataTable 행은 기본값(빈 텍스트)으로 로드, §5.4의 폴백 유지 |
 | 5.4 | `DRStageGameState.h/.cpp` + `OverlayWidgetController.h/.cpp` | ① GameState에 `UPROPERTY(ReplicatedUsing=OnRep_WaveDefenseUIActive) bool bWaveDefenseUIActive` + setter + 로컬 델리게이트 추가. ② `UDRPhase3::OnPhaseStart/OnPhaseEnd`에서 true/false 설정. ③ OverlayWidgetController의 `== 2` 비교 3곳(:34, :459-475, :481-488)을 플래그 구독으로 교체 (`BindCallbacksCleanserSiteToDependencies` 게이트 포함). ④ 알람 텍스트: `OnRep_CurrentPhaseObjective` 경로에서 `PhaseAlarmText`가 비어있지 않으면 브로드캐스트, 비어있으면 기존 switch 폴백 (스테이지1 데이터 갱신 전까지 동작 보존) | 리팩토링 | **중간** — §10 회귀 체크리스트로 검증 (M1에 포함해 조기 안정화) |
-| 5.5 | `DRPlayerController.h/.cpp` | ① 감지: 좌석 라인트레이스 슬롯 추가 — `CurrentDetectedSeat` + `FindSeatByLineTrace()` (마운트 감지 :241, :671 미러). ② `HandleInteract()`(:1095)에 좌석 분기 추가 (부품 미소지 && 좌석 감지 → `ServerRequestInteract(Seat)`). ③ `ServerRequestInteract_Implementation`(:371-413)에 `ADRS2TrainSeat` 분기 (CanBeBoardedBy + 거리 검증). ④ 점프 입력 경로의 마운트 하차 분기 옆에 좌석 하차(`ServerRequestTrainDeboard`) 추가 | 분기 추가 | **낮음** — 기존 분기 뒤에 병렬 추가 |
+| 5.5 | `DRPlayerController.h/.cpp` | ① 감지: 칸 라인트레이스 슬롯 추가 — `CurrentDetectedCar` + `FindTrainCarByLineTrace()` (마운트 감지 :241, :671 미러). ② `HandleInteract()`(:1095)에 좌석 분기 추가 (부품 미소지 && 좌석 감지 → `ServerRequestInteract(Seat)`). ③ `ServerRequestInteract_Implementation`(:371-413)에 `ADRS2TrainCar` 분기 (CanBeBoardedBy + 거리 검증). ④ 점프 입력 경로의 마운트 하차 분기 옆에 좌석 하차(`ServerRequestTrainDeboard`) 추가 | 분기 추가 | **낮음** — 기존 분기 뒤에 병렬 추가 |
 | 5.5-b ★신규 | `DRPlayerController.h/.cpp` | **방2 상호작용 프롭 배관** (§14.2.8) — ① 감지 슬롯 `CurrentDetectedProp` + `FindPropByLineTrace()` (`FindSiteByLineTrace` :326-362 미러, 오버랩 집합 없이 트레이스 거리 + `CanInteract()` 검사). ② `HandleInteract()`에 프롭 분기 추가. ③ `ServerRequestInteract_Implementation`에 `ADRS2InteractProp` 분기 1개 — 거리 재검증(`MaxInteractDistance`) 후 `Prop->ServerHandleInteract(Char)`. ④ 감지 틱(:662-674)에 프롭 슬롯 갱신 추가 | 분기 추가 | **낮음** — 프롭 타입은 스테이지2 전용이라 기존 경로 무영향. **조작 대상 27개를 이 분기 1개로 처리**(타일·레버·버튼 전부 `ADRS2InteractProp` 자식) |
 | 5.6 | `DRCleanserPart.h/.cpp` | ① `FOnPartPickedUp OnPartPickedUp` 델리게이트 추가, `PickupPart()`에서 브로드캐스트. ② **`bool IsCarriedNow() const` 공개 접근자 추가** — `bIsCarried`(`:94`)에 공개 접근자가 없어 방3 부품 동반 검증(§15.7.1)에서 필요 | 추가 | **없음** (순수 추가) |
 | 5.7 | `DRCharacter.h/.cpp` | §4.9.4 좌석 상태 (`SeatedOn` RepNotify + attach/detach + `Die()` 해제 + 점프 하차 훅) | 추가 | **낮음** — 마운트 경로와 독립 |
@@ -1222,7 +1317,9 @@ enum class ES2GateEntryRule : uint8
 | `Actor/Stage2/DRS2Safe.h/.cpp` ★ | `ADRS2Safe` | 금고 — 코드 검증/개방/부품 스폰 (§4.10.5) |
 | `Actor/Stage2/DRS2CodeScreen.h/.cpp` ★ | `ADRS2CodeScreen` | 숫자 표시판 공용 (§4.10.6) |
 | ~~`Actor/Stage2/DRS2PuzzleBase.h/.cpp`~~ | ~~`ADRS2PuzzleBase`, `ADRS2PuzzleGroup`~~ | **폐기** — 퍼즐 3종이 구조가 달라 일반화 불가 (§4.10 서두) |
-| `Actor/Stage2/DRS2MovingBlocker.h/.cpp` ★ | `ADRS2MovingBlocker` | 상승/하강 구조물 — D0·D2·D4 (§4.11) |
+| `Actor/Stage2/DRS2PassageBlocker.h/.cpp` ★ | `ADRS2PassageBlocker` | **통로 차단 공용 베이스** — 복제·콜리전·끼임 방어 (§4.11-A) |
+| `Actor/Stage2/DRS2MovingBlocker.h/.cpp` ★ | `ADRS2MovingBlocker` | 상하 이동 구조물 — D0·D5 (§4.11) |
+| `Actor/Stage2/DRS2TurnstileDoor.h/.cpp` ★ | `ADRS2TurnstileDoor` | 개찰구 회전문 — D2·D4 (§4.11-A) |
 | `Actor/Stage2/DRS2TeleportGate.h/.cpp` ★ | `ADRS2TeleportGate`, `ES2GateMode`, `ES2GateEntryRule` | 발광 + 순간이동 게이트 — D1·E2·D3·R4 (§4.12) |
 | `Actor/Stage2/DRS2MoleGame.h/.cpp` ★ | `ADRS2MoleGame`, `FS2MoleTier` | 두더지 게임 관리 (§4.7.1) |
 | `Actor/Stage2/DRS2Mole.h/.cpp` ★ | `ADRS2Mole` | 홀로그램 두더지 (Actor + 최소 ASC) (§4.7.2) |
@@ -1230,7 +1327,7 @@ enum class ES2GateEntryRule : uint8
 | `Actor/Stage2/DRS2Barrier.h/.cpp` | `ADRS2Barrier` | 구간 차단벽 |
 | `Actor/Stage2/DRS2TrainTrack.h/.cpp` | `ADRS2TrainTrack` | 스플라인 보유 |
 | `Actor/Stage2/DRS2Train.h/.cpp` | `ADRS2Train`, `ES2TrainState`, `FS2TrainMovement` | 이동/좌석 관리 |
-| `Actor/Stage2/DRS2TrainSeat.h/.cpp` | `ADRS2TrainSeat` | IDRInteractable |
+| `Actor/Stage2/DRS2TrainCar.h/.cpp` | `ADRS2TrainCar` | 바구니 칸 = 탑승 지점 (IDRInteractable) |
 | `Actor/Stage2/DRS2TrainObstacle.h/.cpp` | `ADRS2TrainObstacle` | 장애물 + 엘리트 스폰점 |
 
 ### 6.2 블루프린트 / 데이터 에셋
@@ -1241,7 +1338,8 @@ enum class ES2GateEntryRule : uint8
 | `Content/Blueprints/Phase/Stage2/BP_S2CombatPhase` 외 4종 | 각 C++ 페이즈 | `PhaseObjectiveDataTable = DT_S2PhaseObjective`, 스폰/웨이브/엘리트/속도 등 수치. **`BP_S2CombatPhase`는 `WaveSetsByPlayerCount`에 §14.1.3 표 4구간(각 2웨이브: 0s / 30s)을 입력** |
 | `Content/Blueprints/Data/DT_S2PhaseObjective` | DataTable(`FPhaseObjectiveData`) | §7.2 행 구성 |
 | ~~`BP_S2Door`~~ | ~~`ADRAutoSlidingDoor`~~ | **제작 불필요** — 통로 8곳이 전부 구조물/게이트로 확정 (§14.5.4) |
-| `BP_S2MovingBlocker` ★ | `ADRS2MovingBlocker` | **상승형**(D0·D2: `bStartBlocked=false`) + **하강형 자식 BP**(D4·D5: `bStartBlocked=true`, `OpenOffset` -Z). 구조물 메시 + 이동 사운드·먼지 VFX + `PushOutPoint` 배선 |
+| `BP_S2MovingBlocker` ★ | `ADRS2MovingBlocker` | **상승형**(D0: `bStartBlocked=false`) + **하강형 자식 BP**(D5: `bStartBlocked=true`, `OpenOffset` -Z). 구조물 메시 + 이동 사운드·먼지 VFX + `PushOutPoint` 배선 |
+| `BP_S2TurnstileDoor` ★ | `ADRS2TurnstileDoor` | **개찰구 회전문**(D2·D4). 날개 메시 6개 + `TurnstileA`/`TurnstileB` 컴포넌트 태그 + `PushOutPoint` 배선 (§16.5.1-A) |
 | `BP_S2TeleportGate` ★ | `ADRS2TeleportGate` | 문 모델 + **발광 전환 머티리얼 파라미터**(`OnGateActiveChanged`), 근접 트리거 박스, 텔레포트 VFX/사운드, 목적지 배선. 인스턴스별로 `Mode`/`EntryRule`/`bDeactivateOnUse` 설정 (D1·E2·D3·R4) |
 | `BP_S2MoleGame` ★ | `ADRS2MoleGame` | `Tiers` 3구간(§14.4.3 표), `GoalKills=20`, `MaxConcurrentMoles`, `SpawnPoints` 배선 |
 | `BP_S2Mole` ★ | `ADRS2Mole` | 홀로그램 메시/머티리얼 + 등장·소멸 VFX·사운드, `ProximityRadius=200`, 최소 어트리뷰트(MaxHealth=1) GE |
@@ -1253,8 +1351,9 @@ enum class ES2GateEntryRule : uint8
 | `BP_S2CctvBoard` ★ | `ADRS2CctvBoard` | 화면 6개 메시 + 머티리얼 인스턴스(텍스처 파라미터), `TargetImage`/`DummyImages`/`ErrorImage`, `StepDuration=2`, `StepCount` |
 | `BP_S2Safe` ★ | `ADRS2Safe` | 금고 본체 + 문(개방 연출) + 숫자 버튼 0~9(ChildActor) + 초기화 버튼 + 입력 표시창 + 부품 스폰 지점 |
 | `BP_S2SlideTile` / `BP_S2Lever` / `BP_S2PuzzleButton` / `BP_S2SafeButton` ★ | 각 `ADRS2InteractProp` 자식 | 메시 + "F" 프롬프트 위젯 + 누름/당김 연출 |
-| `BP_S2CodeScreen` ★ | `ADRS2CodeScreen` | 숫자 아틀라스 머티리얼 (0~9), 자리별 표시 |
-| `BP_S2Train`, `BP_S2TrainSeat`, `BP_S2TrainObstacle`, `BP_S2TrainTrack` | 각 C++ | 칸 메시 4개 + 좌석 ChildActor 4개 구성 |
+| `BP_S2CodeScreen_Digit` ★ | `ADRS2CodeScreen` | **1자리** — 숫자 아틀라스 머티리얼 (0~9 + `-`, 11칸) |
+| `BP_S2SafeDisplay` ★ | `ADRS2CodeScreen` | **3자리** — 금고 입력 표시 (§16.8.2) |
+| `BP_S2Train`, `BP_S2TrainCar`, `BP_S2TrainObstacle`, `BP_S2TrainTrack` | 각 C++ | 칸 BP 1종을 레벨에 4개 배치 후 열차의 `Cars` 배열에 배선 |
 | 엘리트 | 기존 `EliteBossClass` BP 재사용 | 필요시 스탯 조정 자식 BP |
 
 ---
@@ -1304,10 +1403,10 @@ enum class ES2GateEntryRule : uint8
    - **D0 = `BP_S2MovingBlocker`** — 시작지점↔방1 통로. 내려간(통행 가능) 상태 + `BlockedOffset`을 통로 높이 이상으로. `PushOutPoint`를 방1 쪽 안전 지점에 배선.
    - **D1 = `BP_S2TeleportGate`** (Mode=`Individual`) — 방1의 방2행 문 위치, 비활성 시작. **목적지 TargetPoint를 방2 안에** 배치.
    - **E2 = `BP_S2TeleportGate`** (Mode=`TeamOnCarrier`) — 방2 출구. 목적지 = 방1 회수 지점 TargetPoint.
-   - **D2 = `BP_S2MovingBlocker`** — 방1↔방3 통로. 통행 가능 상태 시작 + `PushOutPoint`를 방3 쪽에 배선.
+   - **D2 = `BP_TurnstileDoor_R1_R3`** — 방1↔방3 통로. 통행 가능(열림) 상태 시작 + `PushOutPoint`를 방3 쪽에 배선.
    - **D3 = `BP_S2TeleportGate`** (Mode=`Individual`, EntryRule=`CarrierOnly`, `bDeactivateOnUse=true`) — 방3의 방4행 문. 목적지 = 방4 입구 TargetPoint.
    - **R4 = `BP_S2TeleportGate`** (Mode=`Individual`) — 방4 안 복귀 게이트, 비활성 시작. 목적지 = 방3 안 TargetPoint.
-   - **D4 = `BP_S2MovingBlocker`** (하강형: `bStartBlocked=true`, `OpenOffset` = -Z) — 방3↔방5 통로를 **막고 있는 상태로** 배치. 왕복 동작이므로 `PushOutPoint`를 **방5 쪽**에 배선(재봉쇄 시 끼임 방어).
+   - **D4 = `BP_TurnstileDoor_R3_R5`** (`bStartBlocked=true`) — 방3↔방5 통로를 **닫힌 상태로** 배치. 왕복 동작이므로 `PushOutPoint`를 **방5 쪽**에 배선(재봉쇄 시 끼임 방어).
    - **D5 = `BP_S2MovingBlocker`** (하강형: `bStartBlocked=true`) — 방5↔방6 통로를 **막고 있는 상태로** 배치.
 4. **`BP_S2StageDirector` 1개** — 모든 참조 배선 (누락 시 BeginPlay Error 로그로 검출).
 5. **룸 트리거 4개**: 방1/방3/방5 전체를 덮는 박스 + 도착지점. 방 경계(문 안쪽)까지 충분히 크게. **방1 트리거는 D0 통로 입구 안쪽까지 덮어** 전원 입장 발화 시 통로에 사람이 남지 않게 한다 (차단물 끼임 방어와 세트).
@@ -1367,7 +1466,7 @@ M0 사양확정 ─ M1 인프라 (L) ─┤              └─ M5 방5 (S) ─�
 | **M4.3** | L | **클리어·부활·예외 처리**: 클리어 4단 처리(D3 재활성 / **부활 §5.9** / D4 하강 개방 / 스폰 중단 + 잔적 즉시 사망), `Logout` 오버라이드(§5.10), `EjectInstalledPart`(§5.12), **예외 A·B**(§14.3.5) | 20킬 시 4단 처리 동시 확인 / **부활 후 조작·관전 해제 정상** / 방4 사망 시 D3가 `Anyone`으로 재활성(★소프트락 방지) / 강제 종료 후 재시도 성공. **스테이지1 회귀 체크 ★2회차**(부활이 공유 경로) |
 | **M5** | **S** | **방5 (§14.5)**: D4 재봉쇄, 인원별 3웨이브, **하이브리드 전환**(30초 타이머 + 전멸 시 취소·즉시 스폰), 마지막 웨이브 타이머 미예약, D5 하강 개방 | 표대로 스폰 / 30초 전 전멸 시 즉시 다음 / 방치 시 30초에 겹쳐 스폰 / **웨이브3 뒤 4번째가 안 나오는지** / 웨이브3 전멸 시에만 완료 |
 | **M6.1** | M | **선로·열차 이동**: `ADRS2TrainTrack`(ㄷ자 스플라인), `ADRS2Train`(§4.9.2 — `FS2TrainMovement` 1회 복제 + 로컬 시뮬) | 치트 출발로 등속 주행 / 코너 곡선 통과 / 클라 화면에서 위치 부드러움 |
-| **M6.2** | L | **좌석·탑승**: `ADRS2TrainSeat`(§4.9.3), `ADRCharacter` 좌석 상태(§5.7), PlayerController 좌석 분기(§5.5), 생존자 전원 착석 시 출발 | 중복 탑승 거부 / 빈 칸 허용 출발 / 이동 중 하차 거부 / 탑승자 사망 시 좌석 해제. **마운트 경로 회귀 확인**(§10.2) |
+| **M6.2** | L | **칸·탑승**: `ADRS2TrainCar`(§4.9.3), `ADRCharacter` 탑승 상태(§5.7), PlayerController 칸 분기(§5.5), 생존자 전원 탑승 시 출발 | 중복 탑승 거부 / 빈 칸 허용 출발 / 이동 중 하차 거부 / 탑승자 사망 시 칸 해제 / **곡선에서 칸이 순차적으로 꺾이는지**. **마운트 경로 회귀 확인**(§10.2) |
 | **M6.3** | L | **장애물·보스 루프 (§14.6)**: `ADRS2TrainObstacle`(등장과 동시 파괴), `ADRS2Barrier` **전·후방 6개**, 보스 3구간 루프(**임계 67%/34% → 비활성 보관 → 재등장**), 최종 처치 → 클리어 | 정지 → 보스가 장애물 부수며 등장 → 임계 도달 → 도망 → 재탑승 → 재출발 3회 / ★**구간2·3 재등장 시 체력이 이어지는지** / 3구간 처치 시 즉시 스테이지 클리어 |
 | **M7** | M | **폴리시**: 목표 문구·알람 텍스트, 사운드/BGM(보스 BGM 전환), 연출 훅 채우기(구조물 이동, 게이트 발광, 금고 개방, 두더지 등장/소멸, 장애물 파괴, 보스 도망/재등장), **아트 에셋 교체**(임시 프리미티브 → 실제 메시), 영문 텍스트(§C2) | 데모 시연 가능 품질 |
 | **M8** | M | **통합·밸런스**: §10.1 테스트 매트릭스 전체, 1~4인 각 인원 완주, 밸런스 수치가 BP만으로 튜닝 가능한지 확인, `StageId` 보상 정의 | §10.1 전 항목 통과. **스테이지1 회귀 체크 ★3회차** |
@@ -1455,7 +1554,9 @@ M0 사양확정 ─ M1 인프라 (L) ─┤              └─ M5 방5 (S) ─�
 | | 처치 수 5 / 12 도달 | 다음 스폰부터 티어 2 / 3 수치 적용 (§14.4.3) |
 | | 동시 등장 마리수 | `MaxConcurrentMoles` 이하 유지 |
 | | 20마리 달성 | 클리어 처리 5단계 실행 |
-| | **방4 플레이어 사망** | 두더지 전부 소멸 + 처치 수 0 + **부품이 설치대 옆에 드롭** + D3가 `Anyone`으로 재활성 → 다른 1명이 입장해 재시도 가능. **방3 웨이브는 유지** |
+| | **방4 플레이어 사망** | 두더지 전부 소멸 + 처치 수 0 + **부품이 설치대 옆에 드롭** + D3가 `Anyone`으로 재활성 + **방3 몬스터 전부 제거 + 스폰 중단** |
+| | 사망 후 재설치 전까지 방3 | **웨이브가 재개되지 않음** (재설치가 트리거) |
+| | 사망 후 다른 1명이 재설치 | 두더지 + 방3 웨이브가 함께 재시작 |
 | | **방4 플레이어 접속 종료** | 방3 몬스터 전부 소멸 + 스폰 중단 + **부품이 D3 문 앞(방3)에 배치** + D3가 `CarrierOnly`로 재활성 → 재입장·재설치 시 두더지·웨이브 동시 재개 |
 | | 재시도 시 진행도 | 처치 수 0부터 (누적되지 않음) |
 | 방5 (§14.5) | 1인 / 2인 / 3인 / 4인 각각 3웨이브 | §14.5.2 표와 정확히 일치 (총 9/11/16/20마리) |
@@ -1482,7 +1583,8 @@ M0 사양확정 ─ M1 인프라 (L) ─┤              └─ M5 방5 (S) ─�
 | | 보스 도망 중 남은 체력바 UI | 다음 구간에서 이어진 값으로 표시 |
 | | 탑승자 사망 | 좌석 해제, 출발 조건 재계산 |
 | | 전투 중 전원 사망 | 게임오버 → 로비 복귀 |
-| 치트 | `ServerCheatSkipToNextPhase` 각 페이즈에서 | 다음 페이즈로 전환 + 정리 누수 없음 (문 상태는 스킵 특성상 수동 보정 허용) |
+| 치트 (§16.19) | `ServerCheatSkipToNextPhase` 각 페이즈에서 | 다음 페이즈로 전환 + 정리 누수 없음 |
+| | 방2 스킵 후 방3 진입 | ★부품 안전망이 동작해 방3이 시작되는지 (Warning 로그 확인) |
 
 ### 10.2 스테이지1 회귀 체크 (M1 직후 + M8)
 
@@ -1626,7 +1728,9 @@ KillCount == 20 → OnMoleGameCleared
 
 ■ 예외 A — 방4 플레이어 사망 (OnPlayerDied)
    MoleGame.AbortAndReset() + Site.EjectInstalledPart()
-   + Gate: EntryRule=Anyone, Active=true    → 다른 1명이 들어가 재시도 (방3 웨이브는 유지)
+   + StopWaveLoop() + DestroyAllSpawnedEnemies()   ★방3 몬스터 전부 제거하고 스폰 중단
+   + Gate: EntryRule=Anyone, Active=true
+   → 다른 1명이 들어가 부품 재설치 시 두더지 + 웨이브가 함께 재시작
 
 ■ 예외 B — 방4 플레이어 접속 종료 (Logout, §5.10)
    MoleGame.AbortAndReset() + StopWaveLoop() + DestroyAllSpawnedEnemies()
@@ -1722,7 +1826,11 @@ KillCount == 20 → OnMoleGameCleared
 
 #### 14.1.5 스폰 규칙
 
-- **스폰 지점**: `Director->Room1SpawnPoints` 중 랜덤 배정. 4인 웨이브1이 9마리이므로 지점은 최소 6개 권장 (동일 지점 연속 선택은 1회 재추첨으로 완화).
+- **스폰 지점** ★확정(2026-08-07): **스테이지1과 동일하게 레벨에 스폰 포인트 액터를 배치하고 그 위치에서 스폰**한다. 스테이지1은 액터 태그(`"Phase3EnemySpawnPoint"`)로 수집했으나(`DRPhase3::FindEnemySpawnPoints`), 스테이지2는 태그 오타로 지점이 조용히 누락되는 사고를 막기 위해 **전용 액터 `ADRS2EnemySpawnPoint` + `RoomID` 프로퍼티**로 만든다.
+  - 레벨에 배치 → `RoomID`를 `Room1`/`Room3`/`Room5`로 지정 → 페이즈 시작 시 자동 수집(Director 배선 불필요).
+  - Director의 `RoomXSpawnPoints` 배열에 명시 배선이 있으면 **그쪽이 우선**한다(특정 지점만 쓰고 싶을 때).
+  - **선택 방식은 비반복 랜덤 풀**: 모든 지점을 한 번씩 사용한 뒤 풀을 다시 채운다(`UDRPhase3::SelectNextSpawnPoint` 관례). 같은 지점에 몰려 스폰되는 일이 없다.
+  - 4인 웨이브1이 9마리이므로 방1 지점은 최소 6개 권장.
 - **스폰 순서**: 웨이브 구성의 종류별 마리 수를 1마리 단위 리스트로 펼친 뒤 셔플 → `PerEnemySpawnInterval` 간격으로 순차 스폰. 값이 0이면 동시 스폰. "적이 막 나오는" 느낌은 이 간격 + 스폰 VFX로 조절한다.
 - **웨이브 진행은 시간 기반**: 웨이브2는 웨이브1의 전멸 여부와 무관하게 전투 시작 후 30초에 스폰된다 (전멸 시 앞당기지 않음 — §14.1.7-3 확인 대기).
 - **전멸 판정** ★: `GetAliveEnemyCount() == 0 && PendingSpawnCount == 0`.
@@ -1758,6 +1866,72 @@ KillCount == 20 → OnMoleGameCleared
 
 ### 14.2 방2 — 퍼즐 3종 + 금고 ★확정 (2026-08-06)
 
+#### 14.2.0 한눈에 보기 ★읽기 시작점 (2026-08-18 추가)
+
+**방2가 하는 일은 하나다**: 금고를 열어 부품 1개를 꺼내 방1로 가져 나온다.
+금고는 **3자리 숫자**로 잠겨 있고, 그 세 자리를 각각 다른 방법으로 알아내는 것이 퍼즐 3종이다.
+
+```
+             ┌──────────────────────────────────────────────┐
+             │  UDRS2PuzzlePhase::OnPhaseStart()            │
+             │  매 판 3자리 코드 {d1, d2, d3} 를 랜덤 생성   │
+             └───┬──────────┬──────────┬──────────┬─────────┘
+                 │ d1       │ d2       │ d3       │ {d1,d2,d3}
+                 ▼          ▼          ▼          ▼
+            ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+            │ 8퍼즐  │ │ 스위치 │ │  CCTV  │ │  금고  │
+            └────┬───┘ └────┬───┘ └────┬───┘ └────▲───┘
+                 │          │          │          │
+            풀면 d1을   3라운드     d3개의        3자리를
+            스크린에    성공하면    타깃이미지를  플레이어가
+            표시        d2를 표시   화면에 노출   눌러서 입력
+                 │          │          │          │
+                 └──────────┴──────────┴──────────┘
+                        플레이어가 눈으로 읽어서 입력
+```
+
+**★가장 중요한 구조적 사실**: 퍼즐과 금고 사이에는 **코드상의 연결이 없다.**
+퍼즐이 풀려도 금고가 자동으로 열리지 않는다. 퍼즐은 숫자를 **화면에 보여줄 뿐**이고,
+그 숫자를 읽어서 금고 버튼을 누르는 것은 **플레이어**다.
+(§14.2.9-9 — 세 퍼즐을 하나도 안 풀고 금고에 1000가지를 다 눌러봐도 되지만 비현실적이라 막지 않는다.)
+
+**세 퍼즐의 성격이 서로 다르다**
+
+| | 8퍼즐 | 스위치 | CCTV |
+|---|---|---|---|
+| 조작하는가 | ○ (UI) | ○ (레버 5개) | **✕ 조작 없음** |
+| "풀림" 상태가 있는가 | ○ | ○ | **✕ 없음** |
+| 답을 화면에 표시하는가 | ○ | ○ | **✕ 안 함** |
+| 답을 얻는 방법 | 퍼즐을 완성 | 3라운드 성공 | **직접 세기** |
+| 방2 진행도(0/2)에 포함 | ○ | ○ | **✕ 제외** |
+
+CCTV만 유별난 이유: CCTV는 **관찰 퍼즐**이다. 서버는 "타깃 이미지를 d3번 보여준다"만 하고,
+그걸 세는 것은 플레이어 머릿속에서 일어난다. 그래서 서버에는 "CCTV를 풀었다"는 상태 자체가 없다.
+→ 방2 목표 UI가 **"(0/2)"** 인 이유가 이것이다. 3이 아니라 2다.
+
+**누가 무엇을 소유하는가**
+
+| 액터 | 소유하는 상태 | 복제되는가 |
+|---|---|---|
+| `ADRS2SlidePuzzle` | `SecretDigit`(정답) | **✕ 서버 전용** |
+| | `RevealedDigit`, `bSolved` | ○ (풀린 뒤에만 실제 값) |
+| `ADRS2SwitchPuzzle` | `LeverMasks`(정답 조합) | **✕ 서버 전용** |
+| | `BulbBits`, `LeverBits`, `RoundsCleared` | ○ |
+| `ADRS2CctvBoard` | `Sequence`, `StartServerTime` | ○ (1회) |
+| `ADRS2Safe` | `SecretCode`(정답) | **✕ 서버 전용, 끝까지** |
+| | `InputDigits`, `bOpened` | ○ |
+| `ADRS2InteractProp` 자식들 | 없음 — 소유 퍼즐에 위임만 | (`bPropEnabled`만) |
+
+**치트 방지 원칙**: 정답 정보는 **공개되는 순간에만** 클라로 내려간다.
+해결 전 `RevealedDigit`은 `-1`이고, 레버 마스크와 금고 코드는 **한 번도 복제되지 않는다.**
+패킷을 뜯어봐도 정답이 없다.
+
+**조작 대상은 전부 "액터 1개 = 조작 1개"**
+
+레버 5 + 금고 숫자 버튼 10 + 금고 초기화 1 + 8퍼즐 단말 1 = **17개 액터**를 레벨에 배치한다.
+전부 `ADRS2InteractProp` 자식이고, 각자 `OwnerPuzzle`(소속 퍼즐)과 `PropIndex`(번호)만 들고 있다.
+실제 로직은 소유 퍼즐이 수행한다 — 상태를 한 곳에 모아야 복제가 단순해지기 때문이다 (§14.2.8).
+
 #### 14.2.1 전체 흐름
 
 ```
@@ -1781,9 +1955,19 @@ KillCount == 20 → OnMoleGameCleared
 - **완료 조건이 "부품 픽업"이 아니라 "부품 소지자의 방2 퇴장 + 전원 방1 회수"** 로 확정 (Plan6 원안 §4.6과 다름).
 - 이로써 §14.1.7-10(방2→방1 복귀 수단)은 **해소**: 방2 출구 게이트가 복귀 수단이다.
 
-#### 14.2.2 퍼즐 1 — 8퍼즐 (슬라이드 타일)
+#### 14.2.2 퍼즐 1 — 8퍼즐 ★**UI 방식으로 변경 (2026-08-07)**
 
-**규칙**: 9칸 격자에 타일 8개 + 빈칸 1개. **빈칸에 인접한 타일을 빈칸 쪽으로 밀어** 위치를 바꾸고, 타일들이 **하나의 이어지는 그림**이 되면 성공.
+> **변경**: 당초 월드에 배치된 3×3 타일 모델을 직접 미는 방식이었으나, **UI 창을 띄워 조작하는 방식**으로 바뀌었다. 퍼즐의 세부 동작(조작 방식·해결 판정·되돌리기/초기화 유무)은 **아직 미정**이다.
+>
+> **현재 구현된 것 (M3)**: 월드 단말(`ADRS2PuzzleTerminal`) 상호작용 → 조작한 플레이어에게 UI 열기 요청, 그리고 **해결 시 금고 첫 자리 공개**라는 계약만. 보드 상태·타일 이동·셔플·Undo/Reset은 **구현하지 않았다**.
+>
+> **확장 지점**: 퍼즐 로직이 서버에서 `ADRS2SlidePuzzle::NotifySolved()`를 호출하면 숫자 공개와 델리게이트 발화가 자동 처리된다. UI 사양이 확정되면 이 함수를 호출하는 로직만 채우면 된다.
+>
+> ★**남은 부분을 채우기 위한 구체 설계는 §14.2.10 에 작성했다** (공유 보드 vs 개인 보드 선택, 셔플 패리티 함정, 조작 RPC 경로, 위젯 구성, 구현 순서). 2026-08-18 추가.
+>
+> 아래 원안 설명은 **참고용으로만 남긴다** (월드 타일 방식 기준).
+
+**원안 규칙(참고)**: 9칸 격자에 타일 8개 + 빈칸 1개. **빈칸에 인접한 타일을 빈칸 쪽으로 밀어** 위치를 바꾸고, 타일들이 **하나의 이어지는 그림**이 되면 성공.
 
 **구성물** (레벨에 실제 모델로 배치):
 
@@ -1810,17 +1994,77 @@ KillCount == 20 → OnMoleGameCleared
 
 **구성물**: 레버 5 / 전구 9 / 성공 횟수 표시 3 / 비밀번호 스크린 1.
 
+##### 동작 원리 — 실제 숫자로 따라가기 ★(2026-08-18 보강)
+
+레버 하나하나가 **"내가 담당하는 전구 목록"** 을 갖는다. 이것을 9비트 숫자(마스크)로 표현한다.
+전구 9개를 오른쪽부터 0번, 1번… 8번이라 하면:
+
+```
+전구 번호   8 7 6 5 4 3 2 1 0
+레버0 마스크 0 0 0 1 0 1 0 1 1  =  0b000101011   ← 전구 0,1,3,5 담당
+레버1 마스크 0 1 0 0 1 1 0 0 0  =  0b010011000   ← 전구 3,4,7 담당
+```
+
+**레버를 켜면 담당 전구가 "뒤집힌다"(XOR).** 더해지는 게 아니라 뒤집힌다는 것이 핵심이다.
+
+| 상태 | 계산 | 전구 결과 |
+|---|---|---|
+| 전부 OFF | `0` | `000000000` (전부 꺼짐) |
+| 레버0만 ON | `0b000101011` | `000101011` |
+| 레버0 + 레버1 ON | `0b000101011 XOR 0b010011000` | `010110011` |
+
+레버0과 레버1이 **둘 다 전구 3번을 담당**한다는 점을 보라.
+두 레버를 다 켜면 전구 3번은 "뒤집고 또 뒤집어서" **다시 꺼진다.**
+이 상쇄가 퍼즐의 재미를 만든다.
+
+**목표**: 켜진 레버들의 마스크를 전부 XOR한 결과가 `0b111111111`(전구 9개 전부 점등).
+
+##### 왜 XOR인가 — OR이면 퍼즐이 아니다
+
+만약 "켜면 담당 전구가 **켜진다**"(OR 누적)라면, 플레이어는 **레버 5개를 전부 켜기만** 하면 된다.
+켜서 손해 볼 일이 없으니 생각할 필요가 없어진다. 퍼즐이 성립하지 않는다.
+XOR이어야 "이 레버를 켜면 저 전구가 꺼져버린다"는 트레이드오프가 생긴다 (§14.2.9-6 확정).
+
+##### ★해가 존재하는 마스크 생성 — 소프트락 방지의 핵심
+
+마스크 5개를 완전 랜덤으로 뽑으면 **32가지 조합 중 정답이 하나도 없는 라운드**가 나올 수 있다.
+그러면 플레이어는 영원히 못 푼다. 그래서 **정답에서 거꾸로 만든다**:
+
+```
+① 정답이 될 레버 조합 S 를 먼저 정한다.        예: S = {레버1, 레버3, 레버4}
+② S 의 마지막 하나만 남기고 랜덤 마스크를 준다.
+     레버1 = 0b010011000  (랜덤)
+     레버3 = 0b001100100  (랜덤)
+③ 마지막 하나를 역산한다.
+     레버4 = 111111111 XOR 010011000 XOR 001100100
+           = 0b100000011
+   → 이제 {레버1,3,4} 를 켜면 반드시 전구가 전부 켜진다.
+④ S 에 없는 레버(0, 2)는 자유 랜덤 마스크.
+⑤ 마지막으로 32조합 완전탐색으로 해가 실제로 있는지 재확인 → 없으면 처음부터 재생성.
+```
+
+⑤가 사족처럼 보이지만 넣어둔다. 마스크 생성 규칙(`MinBitsPerLever`~`MaxBitsPerLever`)을
+나중에 조이다가 역산 결과가 규칙을 위반하는 경우를 방어한다. 레버가 5개뿐이라 32번 검사는 공짜다.
+
+> **복수해 허용** (§14.2.9-7): 정답 조합이 유일할 필요는 없다. 위 절차로도 {레버0, 레버2} 같은
+> 다른 조합이 우연히 정답이 될 수 있는데, 그대로 둔다. 유일성을 강제하면 생성 실패율이 올라간다.
+
+##### 3라운드 구조
+
+라운드를 성공하면 **마스크가 전부 새로 생성된다.** 같은 퍼즐을 3번 푸는 게 아니라
+**다른 퍼즐을 3번** 푸는 것이다.
+
+```
+라운드1 성공 → 성공 표시 1개 점등 → 마스크 재생성 + 레버 전부 OFF
+라운드2 성공 → 성공 표시 2개 점등 → 마스크 재생성 + 레버 전부 OFF
+라운드3 성공 → 성공 표시 3개 점등 → ★스크린에 d2 공개 + bSolved 래치
+```
+
 **구현 요점**:
-- 서버 내부 상태: `TArray<uint16> LeverMasks`(레버 5개 각각의 9비트 전구 마스크), `uint8 LeverOnBits`(레버 ON/OFF), `int32 RoundsCleared`.
-- 전구 표시값 계산: **ON 상태 레버들의 마스크 XOR** → 목표는 `0b111111111`(9개 전부 점등). XOR이므로 두 레버가 공유하는 전구는 서로 상쇄된다 (라이트아웃 계열 — OR 누적 방식이면 아무 레버나 다 켜면 끝나므로 퍼즐이 성립하지 않음. §14.2.9-6 확인).
-- **★해가 존재하는 마스크 생성이 필수**: 마스크를 완전 랜덤으로 뽑으면 32개 조합 중 정답이 없을 수 있다. 생성 절차 —
-  1. 정답이 될 레버 부분집합 `S`(공집합 아님)를 랜덤 선택
-  2. `S`의 마지막 원소 마스크 = `0b111111111 XOR (S의 나머지 원소 마스크들의 XOR)` 로 **역산**
-  3. `S` 밖의 레버는 자유 랜덤 마스크(전구 0개/9개 전부는 제외)
-  4. 생성 후 **32조합 완전탐색으로 해 존재를 검증**(5개뿐이라 비용 무시) — 실패 시 재생성
-- 복제: **전구 표시 상태(`BulbBits`)·레버 시각 상태(`LeverBits`)·성공 횟수(`RoundsCleared`)만 복제**하고 마스크 자체는 복제하지 않는다 (클라에 정답 정보를 내려보내지 않음).
-- 라운드 성공 시: `RoundsCleared++` → 성공 표시 발광(복제) → 마스크 재생성 + 레버 전부 OFF로 초기화 → 3회 도달 시 2번째 자리 공개.
-- 동시 조작: 레버별 서버 RPC 직렬 처리.
+- 서버 내부 상태: `TArray<int32> LeverMasks`(레버 5개 각각의 9비트 마스크), `LeverBits`(레버 ON/OFF), `RoundsCleared`.
+- 복제: **`BulbBits`·`LeverBits`·`RoundsCleared`만 복제**하고 `LeverMasks`는 복제하지 않는다 — 마스크가 곧 정답이므로 클라에 내려보내면 치트가 된다.
+- 동시 조작: 레버 5개를 4명이 동시에 당겨도 서버 RPC가 순차 처리되어 자연 직렬화된다.
+- 오답 페널티 없음: 전구가 다 안 켜져도 아무 일도 일어나지 않는다. 계속 시도하면 된다.
 
 #### 14.2.4 퍼즐 3 — CCTV 기믹 (6화면 / 2초 주기 / 이미지 교체)
 
@@ -1828,15 +2072,59 @@ KillCount == 20 → OnMoleGameCleared
 
 **★ 다른 두 퍼즐과의 결정적 차이**: CCTV는 "해결(solved)" 상태가 없고 **스크린에 답을 표시하지 않는다.** 플레이어의 관찰 결과가 곧 답이며, 금고 입력으로만 검증된다. 따라서 방2 완료 판정에 CCTV의 상태는 포함되지 않는다.
 
+##### 화면에서 실제로 벌어지는 일 ★(2026-08-18 보강)
+
+화면 6개가 벽에 붙어 있다. **2초마다 딱 2개만** 사진을 보여주고 나머지 4개는 지직거리는 오류 화면이다.
+플레이어는 그 사진들 중에 **정해진 한 장(타깃 이미지)이 몇 번 나오는지** 세면 된다.
+
+`d3 = 3`, `StepCount = 12`인 경우의 실제 타임라인:
+
+```
+시각    정상 화면    거기 뜨는 이미지          타깃 누적
+0~2초   화면1, 화면4  더미B,  ★타깃            1
+2~4초   화면0, 화면3  더미A,  더미C            1
+4~6초   화면2, 화면5  ★타깃,  더미A            2
+6~8초   화면1, 화면2  더미D,  더미B            2
+ ...          (총 12스텝 = 24초)          ...
+22~24초 화면3, 화면5  더미C,  ★타깃            3   ← 여기까지가 1주기
+────────────────────────── 24초에 처음부터 다시 반복 ──────────────────────────
+0~2초   화면1, 화면4  더미B,  ★타깃            1   (같은 시퀀스 재생)
+```
+
+- **노출 슬롯 = 12스텝 × 2화면 = 24칸.** 이 24칸 중 **정확히 3칸**에 타깃을 넣고 나머지 21칸은 더미로 채운다.
+- 1주기가 24초이므로, 놓쳐도 24초 기다리면 **똑같은 순서로 다시** 볼 수 있다.
+
+##### ★왜 "매번 랜덤"이면 안 되는가
+
+만약 2초마다 즉석에서 랜덤하게 뽑는다면, **"총 몇 개"라는 질문에 답이 없다.**
+1분을 보면 5개, 2분을 보면 11개… 세는 시간에 따라 답이 달라지므로 퍼즐이 성립하지 않는다.
+그래서 **유한 시퀀스를 만들어 두고 그것을 반복 재생**한다. 답은 항상 "1주기 안의 개수"다.
+
+##### 복제 — 왜 RPC를 안 쓰는가
+
+2초마다 멀티캐스트 RPC를 쏘면 24초 주기에 12번, 그것도 방2에 있는 내내 계속 나간다.
+대신 **시퀀스 배열 + 시작 서버시각을 딱 1회만 복제**하고, 각 클라가 스스로 계산한다:
+
+```cpp
+현재스텝 = ((GetServerWorldTimeSeconds() - StartServerTime) / StepDuration) % 시퀀스길이
+```
+
+서버와 모든 클라가 같은 식을 쓰므로 **저절로 동기화된다.** 나중에 접속한 사람도 즉시 맞춰진다.
+(열차·차단물과 같은 **"1회 복제 + 로컬 시뮬"** 관례 — §3.2)
+
+##### 함정: d3 = 0
+
+**타깃 이미지가 한 번도 안 나오는 경우가 정상 케이스다.** 마지막 자리가 0이면 그렇게 된다.
+플레이어 입장에서는 "아무리 봐도 안 나오는데?" → 그게 답이라는 걸 깨달아야 한다.
+구현·테스트에서 이 케이스를 반드시 확인한다 (§10.1).
+
 **구현 요점**:
-- **노출 시퀀스는 유한 길이 + 순환 반복**이어야 한다. 매 스텝을 즉석 랜덤으로 뽑으면 "총 몇 개"라는 값 자체가 정의되지 않아 퍼즐이 성립하지 않는다. 따라서 —
-  1. 판 시작 시 서버가 시퀀스를 1회 생성: `TArray<FS2CctvStep>`, 각 스텝 = `{정상 화면 인덱스 2개, 그 두 화면에 띄울 이미지 인덱스 2개}`
-  2. 전체 노출 슬롯 수 = `스텝 수 × 2`. 이 중 **타깃 이미지를 정확히 N개**(N = 마지막 자리 값) 배치하고 나머지는 더미 이미지 풀에서 채운다
-  3. 시퀀스가 끝나면 **처음부터 다시 반복** → 플레이어가 놓쳐도 다시 셀 수 있다
-- 복제: 시퀀스 배열 + `StartServerTime`을 **1회 복제**하고, 각 클라가 `GetServerWorldTimeSeconds()`로 현재 스텝을 계산해 텍스처를 교체한다 (매 스텝 RPC 불필요, 자동 동기 — 열차·타이머 관례 미러).
-- 이미지 교체 = 화면 메시 머티리얼 인스턴스의 텍스처 파라미터 세팅 (오류 화면은 전용 텍스처 + 노이즈 머티리얼).
-- N = 0인 경우도 유효하다 (타깃 이미지가 한 번도 안 나옴 → 마지막 자리 0). 이 케이스를 테스트에 포함한다.
-- **타깃 이미지가 무엇인지, 더미 풀 크기, 시퀀스 길이는 미정** (§14.2.9-1·2).
+- 시퀀스 생성은 `SetTargetImageCount()` 주입 시점에 서버에서 1회 (`BuildSequence()`).
+- 이미지 교체 = **머티리얼 인스턴스 텍스처 파라미터**(`ScreenTex`) 세팅. 실시간 카메라 캡처가 아니다 (성능 이유).
+- **화면 6개는 메시 1개의 머티리얼 슬롯 6개**다 (2026-08-18 변경). 슬롯마다 MID 를 만들어 개별 제어한다.
+- 화면 6개는 **단일 메시의 머티리얼 슬롯 6개**이며 **슬롯 번호가 화면 인덱스**가 된다 (§16.8.5).
+  순서가 다르면 `ScreenMaterialSlots` 로 매핑한다.
+- **타깃 이미지가 무엇인지, 더미 풀 크기, 시퀀스 길이는 미정** (§14.2.9-1·2). 임시 텍스처로 개발 가능하다.
 
 #### 14.2.5 금고 (3자리 코드 → 부품)
 
@@ -1845,6 +2133,34 @@ KillCount == 20 → OnMoleGameCleared
 - 3자리 입력 완료 시 서버가 검증 → **일치**: 금고 문 개방 연출 + 내부 부품(`BP_S2Part`) 노출/스폰 → 기존 픽업 파이프라인 / **불일치**: 입력만 초기화 + 오답 사운드 (페널티·리셋 없음 — 요구사항 "실패 시 리셋 없음"과 일관).
 - 부품은 1개(§11.A-2)이며, 픽업 시 `State.Carrying` 태그로 이동속도 감소·스킬 차단이 자동 적용된다.
 - 금고 입력을 퍼즐 완료 전에도 허용할지는 §14.2.9-9 확인 항목 (기본: 허용 — 1000조합 브루트포스는 비현실적이라 게이트가 불필요).
+
+##### 입력 흐름 예시 ★(2026-08-18 보강)
+
+정답이 `{7, 2, 5}`일 때:
+
+```
+플레이어가 "7" 버튼 상호작용
+  → ADRS2SafeButton::ServerHandleInteract  (PropIndex = 7)
+  → Safe->PushDigit(7)
+  → InputDigits = [7]         복제 → 표시판 "7 _ _"     (팀 전원에게 보임)
+
+"2" 누름 → InputDigits = [7,2]    표시판 "7 2 _"
+
+"5" 누름 → InputDigits = [7,2,5]  ★3자리가 찼으므로 자동 판정
+  → ValidateInput()  →  SecretCode 와 일치
+  → bOpened = true 복제 → OnSafeOpenedVisual() (문 열림 연출)
+  → PartSpawnPoint 에 BP_Part 스폰 → OnSafeOpened 델리게이트 발화
+```
+
+오답이면:
+```
+"7","2","9" → 불일치 → InputDigits 를 비움 + Multicast_PlayWrongCodeFX()
+             → 표시판 "_ _ _" 로 복귀. ★페널티·쿨다운·리셋 없음. 바로 다시 시도 가능.
+```
+
+- **확인 버튼이 없다.** 3자리가 차는 순간 자동 판정한다 (§14.2.9-8 기본값).
+- 오입력 중간에 지우려면 **초기화 버튼**(`bIsClearButton = true`인 `BP_S2SafeButton`)을 쓴다.
+- 입력 진행 상황이 **복제되어 팀 전원에게 보이므로**, 한 명이 누르는 걸 다른 사람이 보며 불러줄 수 있다.
 
 #### 14.2.6 비밀번호 생성·배분·복제 규칙 ★
 
@@ -1881,9 +2197,10 @@ KillCount == 20 → OnMoleGameCleared
 |---|---|---|
 | 1 | **CCTV 타깃 이미지가 무엇인지** (사용자 미정 명시) | 임시 텍스처 1종으로 개발 |
 | 2 | CCTV 시퀀스 길이 / 더미 이미지 풀 크기 (총 노출 슬롯 = 스텝×2) | 스텝 12개(24슬롯, 24초 주기) + 더미 6종 |
-| 3 | 8퍼즐 완성 그림 텍스처와 3×3 분할 방식 | 임시 텍스처 1장 UV 분할 |
+| 3 | 8퍼즐 완성 그림 텍스처와 3×3 분할 방식 | 임시 텍스처 1장 UV 분할 (먼저 숫자 1~8 로 검증 — §14.2.10) |
 | 4 | 8퍼즐 초기화 버튼: 최초 배치 복귀 vs 새로 셔플 | 최초 배치 복귀 |
 | 5 | 8퍼즐 셔플 강도(빈칸 이동 횟수) | 80회 |
+| 5-A | **8퍼즐 보드가 팀 공유인지 개인별인지** ★설계 분기점 | **공유 보드** (§14.2.10 — 스위치와 일관, 복제 단순) |
 | 6 | 스위치 전구 계산: **XOR(상쇄)** vs OR(누적) | XOR (OR이면 퍼즐 성립 불가) |
 | 7 | 스위치 정답 조합의 유일성 요구 여부 / 레버당 전구 수 범위 | 복수해 허용, 레버당 3~5개 |
 | 8 | 금고 버튼 구성: 0~9 10키만 / 확인·초기화 버튼 추가 여부 | 10키 + 초기화 1개, 3자리 입력 시 자동 판정 |
@@ -1892,6 +2209,142 @@ KillCount == 20 → OnMoleGameCleared
 | 11 | 조작 방식: 전부 F키 상호작용인지 (사격으로 조작하는 요소가 있는지) | 전부 F키 |
 | 12 | 스크린 숫자 표시 방식 | 머티리얼 숫자 텍스처(0~9 아틀라스) |
 | 13 | 방1 회수 지점 위치 (방1 내 어디) | D1 게이트 앞 |
+
+#### 14.2.10 8퍼즐 UI — 상세 사양 제안 ★신규 (2026-08-18)
+
+> **현재 상태**: C++에는 **껍데기만** 있다. 단말 상호작용 → UI 열기 요청, `NotifySolved()` → 첫 자리 공개.
+> **보드 상태·타일 이동·셔플·해결 판정은 전부 비어 있다.**
+> 아래는 남은 부분을 채우기 위한 **구체 제안**이다. 사양이 확정되면 이 절을 SSOT로 승격한다.
+
+##### 먼저 정해야 할 것 — 단독 조작 vs 공유 보드 ★
+
+이것이 **가장 중요한 갈림길**이고, 나머지 설계가 전부 여기서 갈린다.
+
+| | **A. 공유 보드** (권장) | **B. 개인 보드** |
+|---|---|---|
+| 보드 개수 | 팀에 1개 | 사람마다 1개 |
+| 두 명이 동시에 열면 | 같은 보드를 함께 조작 | 각자 다른 퍼즐 |
+| 협동성 | ○ "3번 타일 밀어" | ✕ 각자 따로 놂 |
+| 복제 | 퍼즐 액터가 `BoardState` 1개 복제 | 플레이어별 상태 필요 (복잡) |
+| 나머지 두 퍼즐과의 일관성 | ○ 스위치도 공유다 | ✕ 혼자만 다름 |
+| 구현 난이도 | **낮음** | 높음 |
+
+**A(공유 보드)를 권장한다.** 스위치 퍼즐이 이미 공유 방식이라 일관되고, 복제도 단순하며,
+"한 명이 조작하고 옆에서 훈수" 라는 협동 게임다운 그림이 나온다.
+아래 설계는 전부 **A 기준**이다.
+
+##### 규칙 (원안 유지, 조작만 UI로)
+
+3×3 격자에 타일 8개 + 빈칸 1개. **빈칸에 인접한 타일을 클릭하면 빈칸과 자리를 바꾼다.**
+타일이 1~8 순서대로 정렬되면(= 그림이 완성되면) 성공.
+
+```
+초기(셔플됨)        목표
+┌───┬───┬───┐    ┌───┬───┬───┐
+│ 3 │ 1 │ 2 │    │ 1 │ 2 │ 3 │
+├───┼───┼───┤    ├───┼───┼───┤
+│ 4 │   │ 6 │    │ 4 │ 5 │ 6 │
+├───┼───┼───┤    ├───┼───┼───┤
+│ 7 │ 5 │ 8 │    │ 7 │ 8 │   │
+└───┴───┴───┘    └───┴───┴───┘
+  ↑ 빈칸(0)에 인접한 1,4,6,5 만 클릭 가능
+```
+
+##### ★셔플은 반드시 "빈칸 이동"으로 — 무작위 순열 금지
+
+8퍼즐은 **가능한 배치의 절반이 풀 수 없는 배치**다 (순열 패리티 문제).
+`Shuffle(BoardState)` 같은 무작위 순열을 쓰면 **50% 확률로 영원히 못 푸는 퍼즐**이 나온다.
+
+```cpp
+// ★올바른 셔플: 풀린 상태에서 시작해 빈칸을 무작위로 K번 움직인다.
+//   실제 조작으로 만든 배치이므로 반드시 되돌릴 수 있다 (해 존재 보장).
+void ADRS2SlidePuzzle::ShuffleBoard()
+{
+    BoardState = { 1,2,3,4,5,6,7,8,0 };   // 풀린 상태
+    int32 BlankIndex = 8;
+
+    for (int32 i = 0; i < ShuffleMoves; ++i)   // ShuffleMoves 기본 80
+    {
+        TArray<int32> Neighbors = GetNeighborIndices(BlankIndex);   // 상하좌우 (2~4개)
+        const int32 Picked = Neighbors[FMath::RandRange(0, Neighbors.Num() - 1)];
+        Swap(BoardState[BlankIndex], BoardState[Picked]);
+        BlankIndex = Picked;
+    }
+
+    // 우연히 풀린 상태로 돌아왔으면 다시 섞는다
+    if (IsBoardSolved()) { ShuffleBoard(); }
+}
+```
+
+> 스위치 퍼즐의 "해가 존재하는 마스크 생성"과 **정확히 같은 종류의 방어**다.
+> 두 퍼즐 모두 "랜덤하게 만들면 못 푸는 판이 나온다"는 함정을 갖고 있다.
+
+##### 복제 설계 — `BoardState` 하나면 끝난다
+
+```cpp
+// 9칸. 값 0 = 빈칸, 1~8 = 타일 번호. 인덱스 = 격자 위치(좌상단부터 행 우선)
+UPROPERTY(ReplicatedUsing = OnRep_BoardState)
+TArray<uint8> BoardState;
+```
+
+- 배열 하나만 복제하면 **UI가 그것을 그대로 그린다.** 타일별 이동 복제가 필요 없다.
+- 위젯은 `OnRep_BoardState`에서 갱신하면 되고, 여러 명이 동시에 봐도 자동으로 같은 화면이 된다.
+- 이것이 다른 스테이지2 액터들의 **"1회 복제 + 로컬 시뮬"** 관례와 일관된다 (§3.2).
+
+##### 조작 경로 — 클라 위젯에서 서버까지
+
+★**위젯(클라)에서 `NotifySolved()`를 직접 부르면 안 된다.** 서버 상태가 갱신되지 않아
+다른 사람 화면은 그대로이고, 치트로 즉시 클리어도 가능해진다. 반드시 서버를 거친다.
+
+```
+[클라] 위젯에서 타일 클릭 (격자 인덱스 0~8)
+   │
+   ▼  ServerRequestMoveTile(int32 TileIndex)     ← ADRS2SlidePuzzle 의 Server RPC
+[서버] ① 퍼즐이 아직 안 풀렸는지 확인 (bSolved 래치)
+       ② TileIndex 가 빈칸과 인접한지 검증  ← ★없으면 임의 배치 치트 가능
+       ③ BoardState 에서 스왑
+       ④ 풀렸는지 판정 → 풀렸으면 NotifySolved()  (이미 구현됨: 숫자 공개 + 델리게이트)
+   │
+   ▼  BoardState 복제
+[전 클라] OnRep_BoardState → 열려 있는 모든 위젯이 갱신
+```
+
+- 인접하지 않은 타일을 클릭하면 **조용히 무시**한다 (오답 페널티 없음 — 방2 전체 원칙).
+- 서버 RPC이므로 여러 명이 동시에 클릭해도 순차 처리되어 자연 직렬화된다.
+
+##### UI 위젯 구성 (제안)
+
+| 요소 | 내용 |
+|---|---|
+| 3×3 타일 버튼 | `UniformGridPanel` 9칸. 각 버튼이 격자 인덱스를 들고 클릭 시 RPC |
+| 타일 이미지 | 완성 그림 1장을 3×3 UV 분할 (§14.2.9-3) — 또는 숫자 1~8로 먼저 검증 |
+| 완성 참조판 | 정답 그림을 작게 상시 표시 (조작 불가) |
+| 되돌리기 버튼 | **직전 1수만**. 사용 후 히스토리 비움 → 연속 되돌리기 불가 |
+| 초기화 버튼 | **최초 셔플 배치로 복귀** (재셔플 아님 — §14.2.9-4) |
+| 닫기 | ESC 또는 닫기 버튼. 퍼즐 상태는 서버에 남으므로 다시 열면 이어서 함 |
+
+- **되돌리기·초기화도 서버 RPC**다. 서버가 `LastMove`와 `InitialBoardState`를 들고 있어야 한다.
+- 위젯이 열려 있는 동안 **입력 모드**를 UI로 전환할지(마우스 커서) 결정 필요 — 전투 중이 아니므로 전환해도 안전하다.
+
+##### 구현 순서 (권장)
+
+1. `BoardState` + `ShuffleBoard()` + `IsBoardSolved()` — **숫자 1~8로 먼저** (그림 없이 검증)
+2. `ServerRequestMoveTile` + 인접 검증 → 서버 로직 완성
+3. 위젯 3×3 버튼 + `OnRep_BoardState` 바인딩 → 2인 PIE로 **동시 조작** 확인
+4. `NotifySolved()` 연결 → 스크린에 첫 자리 뜨는지 확인
+5. 되돌리기/초기화 추가
+6. 마지막에 그림 텍스처로 교체
+
+##### 이미 준비되어 있는 것 (다시 만들 필요 없음)
+
+| 배관 | 상태 |
+|---|---|
+| 단말 상호작용 → UI 열기 요청 | ✅ `ADRS2PuzzleTerminal` → `RequestOpenUI()` → `Client_OpenSlidePuzzleUI()` |
+| 클라 델리게이트 | ✅ `ADRPlayerController::OnSlidePuzzleUIRequested` — HUD BP에서 바인딩해 위젯 생성 |
+| 해결 시 숫자 공개 | ✅ `NotifySolved()` — 래치 + `RevealedDigit` 복제 + `CodeScreen` 갱신 + 델리게이트 |
+| 페이즈 진행도 연동 | ✅ `OnPuzzleSolved` → 방2 목표 (n/2) 갱신 |
+
+**남은 것은 보드 로직과 위젯뿐이다.**
 
 ### 14.3 방3 — 무한 방어 ★확정 (2026-08-07)
 
@@ -1969,9 +2422,21 @@ KillCount == 20 → OnMoleGameCleared
 | 1 | 홀로그램 두더지 전부 소멸, **`KillCount`를 0으로 초기화** (퍼즐 리셋) |
 | 2 | **설치되어 있던 부품을 설치 장치 옆에 드롭** (설치 상태 해제) |
 | 3 | D3 게이트 **재활성** — 이때 진입 규칙을 **`Anyone`(1명)** 으로 전환한다. 부품이 방4 안에 있으므로 "부품 소지자만" 규칙을 그대로 두면 아무도 들어갈 수 없다 ★ |
-| 4 | 새 플레이어가 입장하면 게이트 **다시 비활성**, 방4 안의 부품을 주워 재설치 → 두더지 재시작 |
-| 5 | **방3 웨이브는 중단하지 않는다** (계속 진행) |
-| 6 | 방4에서 죽은 플레이어도 최종 클리어 시 부활 대상에 포함된다 |
+| 4 | ★**방3의 몬스터를 전부 제거하고 스폰을 중단한다** (2026-08-07 수정) |
+| 5 | ★**부품을 다시 설치해 두더지 게임이 시작될 때까지 웨이브를 재개하지 않는다.** 즉 "설치 = 두더지 + 웨이브 동시 시작" 규칙이 재시도에도 그대로 적용된다 |
+| 6 | 새 플레이어가 입장하면 게이트 **다시 비활성**, 방4 안의 부품을 주워 재설치 → 두더지 + 웨이브 재시작 |
+| 7 | 방4에서 죽은 플레이어도 최종 클리어 시 부활 대상에 포함된다 |
+
+> **2026-08-07 수정**: 원안은 "방3 웨이브는 중단하지 않는다"였으나, **A도 B와 동일하게 방3을 정리하고 재설치 시점까지 대기**한다.
+>
+> **몬스터 처리는 A·B 동일 — "그냥 제거"** 한다(사망 연출·물 보상 없음). 죽이는 것이 아니므로 플레이어에게 보상이 돌아가지 않는다. 두 예외의 몬스터 제거와 웨이브 중단은 공통 함수 하나가 처리한다.
+>
+> 결과적으로 **A와 B의 차이는 3가지뿐**이다:
+> | | 예외 A (사망) | 예외 B (접속 종료) |
+> |---|---|---|
+> | 부품 위치 | 방4 안 설치대 옆 | 방3 쪽 문 앞 |
+> | D3 진입 규칙 | `Anyone` | `CarrierOnly` |
+> | 기준 인원 | 유지 | 재계산 |
 
 **B. 방4 플레이어가 게임을 종료(접속 끊김)한 경우**
 
@@ -2162,10 +2627,12 @@ KillCount == 20 → OnMoleGameCleared
 
 #### 14.6.2 열차와 탑승
 
-- **4칸 열차**, **각 칸에 플레이어 1명**씩 **상호작용 키(F)로 탑승** (`ADRS2TrainSeat`, §4.9.3).
-- **생존자 전원이 착석하면 출발.** 4명 미만이면 빈 칸을 허용한다 (§11.A-6).
+- **바구니 형태의 1칸짜리 열차 4개**를 살짝 간격을 두고 이어 붙인다. **각 칸에 플레이어 1명**씩 **상호작용 키(F)로 탑승**한다 (`ADRS2TrainCar`, §4.9.3).
+  - ★**좌석을 따로 두지 않는다.** 아트가 좌석 없는 바구니라 **칸 자체가 탑승 지점**이다 (2026-08-07 확정).
+- **생존자 전원이 탑승하면 출발.** 4명 미만이면 빈 칸을 허용한다 (§11.A-6).
 - 열차는 **등속 주행**하며, 선로는 **ㄷ자 형태에 코너 곡선이 약간 포함**된다 (§4.9.1 스플라인).
-- 이동 복제는 "1회 복제 + 로컬 시뮬" 모델(§4.9.2)이고, 탑승자는 좌석에 attach되어 자동 추종한다.
+- ★**곡선에서 앞칸이 먼저 꺾이고 뒤칸이 나중에 꺾인다.** 칸마다 자기 스플라인 거리(`선두 거리 − 간격 × 칸번호`)를 갖기 때문이다 (§4.9.3-A).
+- 이동 복제는 "1회 복제 + 로컬 시뮬" 모델(§4.9.2)이고, 탑승자는 칸에 attach되어 자동 추종한다.
 
 #### 14.6.3 장애물과 보스 등장 ★원안과 다른 지점
 
@@ -2541,7 +3008,7 @@ protected:
     AActor* SpawnEnemyAt(TSubclassOf<ADREnemy> Class, const FTransform& Xf);   // 스폰 + 사망 바인딩 + 추적
 
     // ===== 통로 래퍼 (널 가드 포함) =====
-    void SetBlocked(ADRS2MovingBlocker* Blocker, bool bBlocked);
+    void SetBlockerBlocked(ADRS2PassageBlocker* Blocker, bool bBlocked);   // 2026-08-18: 타입이 공용 베이스로
     void SetGateActive(ADRS2TeleportGate* Gate, bool bActive);
 
     // ===== 타이머 =====
@@ -2690,14 +3157,14 @@ public:
     virtual void BeginPlay() override;
 
     // 통로 8곳 (§1.1)
-    UPROPERTY(EditInstanceOnly, Category = "S2|통로") TObjectPtr<ADRS2MovingBlocker> Blocker_StartToRoom1;
+    UPROPERTY(EditInstanceOnly, Category = "S2|통로") TObjectPtr<ADRS2PassageBlocker> Blocker_StartToRoom1;
     UPROPERTY(EditInstanceOnly, Category = "S2|통로") TObjectPtr<ADRS2TeleportGate>  Gate_Room1ToRoom2;
     UPROPERTY(EditInstanceOnly, Category = "S2|통로") TObjectPtr<ADRS2TeleportGate>  Gate_Room2Exit;
-    UPROPERTY(EditInstanceOnly, Category = "S2|통로") TObjectPtr<ADRS2MovingBlocker> Blocker_Room1ToRoom3;
+    UPROPERTY(EditInstanceOnly, Category = "S2|통로") TObjectPtr<ADRS2PassageBlocker> Blocker_Room1ToRoom3;   // D2 = 회전문
     UPROPERTY(EditInstanceOnly, Category = "S2|통로") TObjectPtr<ADRS2TeleportGate>  Gate_Room3ToRoom4;
     UPROPERTY(EditInstanceOnly, Category = "S2|통로") TObjectPtr<ADRS2TeleportGate>  Gate_Room4Return;
-    UPROPERTY(EditInstanceOnly, Category = "S2|통로") TObjectPtr<ADRS2MovingBlocker> Blocker_Room3ToRoom5;
-    UPROPERTY(EditInstanceOnly, Category = "S2|통로") TObjectPtr<ADRS2MovingBlocker> Blocker_Room5ToRoom6;
+    UPROPERTY(EditInstanceOnly, Category = "S2|통로") TObjectPtr<ADRS2PassageBlocker> Blocker_Room3ToRoom5;   // D4 = 회전문
+    UPROPERTY(EditInstanceOnly, Category = "S2|통로") TObjectPtr<ADRS2PassageBlocker> Blocker_Room5ToRoom6;
 
     // 트리거 / 스폰
     UPROPERTY(EditInstanceOnly, Category = "S2|트리거") TObjectPtr<ADRS2RoomTrigger> Trigger_Room1;
@@ -3954,15 +4421,15 @@ void ADRS2Train::Tick(float DeltaSeconds)     // 서버·클라 공통
 ```cpp
 // DRCharacter.h 추가
 UPROPERTY(ReplicatedUsing = OnRep_SeatedOn, BlueprintReadOnly, Category = "Train")
-TObjectPtr<ADRS2TrainSeat> SeatedOn;
+TObjectPtr<ADRS2TrainCar> SeatedOn;
 
 UFUNCTION() void OnRep_SeatedOn();
 bool IsSeatedOnTrain() const { return SeatedOn != nullptr; }
-void SetSeatedOn(ADRS2TrainSeat* Seat);       // 서버: attach + MOVE_None / 해제 시 원복
+void SetSeatedOn(ADRS2TrainCar* Car);         // 서버: attach + MOVE_None / 해제 시 원복
 ```
 
 ```cpp
-bool ADRS2TrainSeat::CanBeBoardedBy(const ADRCharacter* C) const
+bool ADRS2TrainCar::CanBeBoardedBy(const ADRCharacter* C) const
 {
     // DRRobotVacuumCharacter::CanBeMountedBy(:51-52) 검증 항목 미러
     return !SeatedCharacter && IsValid(C) && !ICombatInterface::Execute_IsDead(const_cast<ADRCharacter*>(C))
@@ -4066,6 +4533,396 @@ void UDRS2TrainPhase::OnEnemyDeath(AActor* DeadEnemy)
 
 ---
 
+### 15.9-A 구현 진행 상황 (2026-08-07 기준)
+
+| 마일스톤 | 상태 | 비고 |
+|---|---|---|
+| **M1.1** 공유 코드 4건 | ✅ **완료** (빌드 통과 + 스테이지1 회귀 확인) | 아래 §15.9-B 설계 변경 1건 반영 |
+| **M1.2** 기반 타입·베이스·레지스트리 | ✅ **완료** (빌드 통과) | `DRS2Types` / `UDRS2PhaseBase` / `ADRS2StageDirector` / `ADRS2RoomTrigger` |
+| **M1.3** 통로 액터 2종 | ✅ **완료** (빌드 통과) | `ADRS2MovingBlocker` / `ADRS2TeleportGate` (모드·진입규칙 포함) |
+| **M1.4** 페이즈 5개 골격 | ✅ **C++ 완료** (빌드 통과) | 5개 페이즈 모두 트리거/게이트 바인딩 + 즉시 완료 스텁 |
+| **M1.4** BP·맵 배선 | ⬜ **미착수 (에디터 작업)** | 아래 §15.9-C 절차 |
+| **M2** 방1 전투 | ✅ **C++ 완료** (빌드 검증 대기 — 에디터 Live Coding 활성 중) | 스폰 지점 액터 신설 포함, 아래 §15.9-D |
+
+| **M3** 방2 (8퍼즐 내부 로직 제외) | ✅ **C++ 완료** | 아래 §15.9-E |
+| **M4** 방3+방4 | ✅ **C++ 완료** | 아래 §15.9-F. 두더지 피격 방식을 설계에서 변경 |
+| **M5** 방5 3웨이브 | ✅ **C++ 완료** | 아래 §15.9-G |
+| **M6** 방6 열차 | ✅ **C++ 완료** (빌드 통과) | 아래 §15.9-H |
+
+**★스테이지2 C++ 구현 전부 완료 (2026-08-07).** 남은 것은 **에디터 작업**(§15.9-C~H)과 **별도 트랙**(아트, 두더지 보스 스킬, 8퍼즐 UI)뿐이다.
+
+**M2에서 추가된 파일**: `Actor/Stage2/DRS2EnemySpawnPoint.h/.cpp`
+**M3에서 추가된 파일**: `Actor/Stage2/`의 `DRS2InteractProp`(+자식 3종) · `DRS2CodeScreen` · `DRS2SlidePuzzle` · `DRS2SwitchPuzzle` · `DRS2CctvBoard` · `DRS2Safe` — **총 35개 파일**
+
+**생성된 C++ 파일 21개** — `Public|Private/Phase/Stage2/`(타입 1 + 베이스 1쌍 + 페이즈 5쌍), `Public|Private/Actor/Stage2/`(Director·RoomTrigger·MovingBlocker·TeleportGate 각 1쌍).
+
+### 15.9-B M1.1 구현 중 확정한 설계 변경 ★
+
+**알람 배너 브로드캐스트 시점을 "페이즈 변경" → "목표 도착"으로 옮겼다.**
+
+원안(§15.1.4-④)은 `OnPhaseChanged` 안에서 `PhaseAlarmText`를 읽어 배너를 띄우는 것이었으나, 실제 코드를 보니 순서가 맞지 않았다:
+
+```
+ADRStageGameMode::StartPhase (:298-334)
+  1) CachedGameState->SetCurrentPhaseIndex(PhaseIndex)   → OnPhaseChanged 발화
+  2) CurrentPhase->OnPhaseStart()                        → SetupPhaseObjective → 목표 복제
+```
+
+즉 `OnPhaseChanged` 시점의 `CurrentPhaseObjective`는 **아직 이전 페이즈의 데이터**다. 그래서:
+
+- `OnPhaseChanged(int32)`는 `CachedPhaseNumber` 갱신 + `bPhaseAlarmPending = true`만 수행한다.
+- 실제 배너는 `HandlePhaseObjectiveChanged()`에서 띄운다 — `PhaseAlarmText` 우선, 비어 있으면 `GetLegacyPhaseAlarmText()` 폴백.
+- 같은 페이즈 안에서 목표가 교체되는 경우(스테이지2 서브 목표)는 `PhaseAlarmText`가 채워져 있고 직전 문구와 다를 때만 배너를 다시 띄운다(`CachedAlarmText` 비교).
+- 스테이지1은 DT에 `PhaseAlarmText`가 비어 있어 레거시 문구가 그대로 나온다. 배너가 목표와 함께 뜨므로 체감상 오히려 자연스럽다.
+
+### 15.9-C M1.4 잔여 — 에디터 작업 절차
+
+C++ 골격은 완료됐고, 아래는 에디터에서만 가능한 작업이다. **순서대로** 진행한다.
+
+**① 데이터 테이블** `Content/Blueprints/Data/DT_S2PhaseObjective` (행 구조 `FPhaseObjectiveData`)
+
+M1 골격 검증에 필요한 최소 행 5개 (나머지는 §7.2 표대로 각 마일스톤에서 추가):
+
+| RowName | PhaseNumber | ObjectiveTitle | RequiredCount | PhaseAlarmText |
+|---|---|---|---|---|
+| `S2P1_Enter` | 1 | 1번방으로 이동하라 | 0 | 구역 1: 돌입 |
+| `S2P2_Move` | 2 | 빛나는 문으로 이동하라 | 0 | 구역 2: 수수께끼 |
+| `S2P3_Enter` | 3 | 부품을 들고 3번방으로 이동하라 | 0 | 구역 3: 농성 |
+| `S2P4_Enter` | 4 | 5번방으로 이동하라 | 0 | 구역 5: 항전 |
+| `S2P5_Board` | 5 | 열차에 탑승하라 | 0 | 구역 6: 탈출 |
+
+> `PhaseNumber`는 **0이 아니어야 한다.** `HandlePhaseObjectiveChanged`가 `PhaseNumber == 0`을 placeholder로 보고 조기 return한다.
+
+**② 페이즈 BP 5종** `Content/Blueprints/Phase/Stage2/`
+
+`BP_S2CombatPhase`(부모 `UDRS2CombatPhase`) / `BP_S2PuzzlePhase` / `BP_S2DefensePhase` / `BP_S2WavePhase` / `BP_S2TrainPhase`.
+각각 **`PhaseObjectiveDataTable = DT_S2PhaseObjective`** 지정.
+
+**③ 게임모드 BP** `Content/Blueprints/Game/BP_DRStage2GameMode` (부모 `ADRStageGameMode`)
+
+- `PhaseClasses = [BP_S2CombatPhase, BP_S2PuzzlePhase, BP_S2DefensePhase, BP_S2WavePhase, BP_S2TrainPhase]` (순서 중요)
+- `StageId = "Stage2"`
+- `GameStateClass` / `EnemyCharacterClassInfo` / `AbilityInfo` / `GameBalanceConfig` 등은 **`BP_DRStageGameMode` 값을 그대로 복사** (누락 시 GAS 초기화가 조용히 실패한다)
+
+**④ 액터 BP 3종** `Content/Blueprints/Actor/Stage2/`
+
+| BP | 부모 | 설정 |
+|---|---|---|
+| `BP_S2MovingBlocker` | `ADRS2MovingBlocker` | 구조물 메시, `BlockedOffset`(통로 높이 이상), `MoveDuration`. **하강형 자식 BP**를 따로 만들어 `bStartBlocked=true` + `OpenOffset` = -Z |
+| `BP_S2TeleportGate` | `ADRS2TeleportGate` | 문 메시, `TriggerBox` 크기(문 앞 1~2m), 발광 머티리얼 파라미터를 `OnGateActiveChanged`에서 세팅 |
+| `BP_S2StageDirector` | `ADRS2StageDirector` | 컴포넌트 없음 (배선 전용) |
+| `BP_S2RoomTrigger` | `ADRS2RoomTrigger` | `TriggerBox` 크기를 방 전체 + 통로 입구 안쪽까지 |
+
+**⑤ `Stage2.umap` 배치**
+
+1. WorldSettings → `GameMode Override = BP_DRStage2GameMode`
+2. `PlayerStart` ×4 (시작지점)
+3. 구조물 4개: D0·D2(상승형, `bStartBlocked=false`) / D4·D5(하강형, `bStartBlocked=true`). 각 `PushOutPoint` 배선
+4. 게이트 4개: 인스턴스별 설정은 §15.3.2 표대로 (D1 / E2 `bStartActive=true` / D3 `CarrierOnly`+`bDeactivateOnUse` / R4). **목적지 TargetPoint 4개**도 함께 배치·배선
+5. 룸 트리거 3개 (`RoomID` = Room1 / Room3 / Room5)
+6. 스폰 지점: 방1 6개 이상 / 방3 4개 이상 / 방5 4개 이상 (TargetPoint)
+7. `BP_S2StageDirector` 1개 배치 후 **위 전부를 Director에 배선**
+
+**⑥ 로비 연결**: `LobbyMap`에 `ADRStageSelectActor` 추가 배치 + `DestinationMapName = "Stage2"`
+
+**⑦ 검증 (M1 게이트)**
+
+- PIE 2인으로 Stage2 진입 → 방을 순서대로 이동만 해도 5페이즈가 순차 전환 → 게임 클리어 → 로비 복귀
+- 배치 누락이 있으면 `BeginPlay`에서 `[S2Director] 미배선: ...` Error 로그가 전부 나열된다 (로그부터 확인할 것)
+- 각 페이즈 진입 시 목표 텍스트와 알람 배너가 DT 행대로 표시되는지
+
+### 15.9-D M2 구현 결과 — 스폰 지점 방식 확정
+
+**`ADRS2EnemySpawnPoint` 신설** (Plan6 §14.1.5 갱신 반영)
+
+```cpp
+UCLASS()
+class DAERUNE_API ADRS2EnemySpawnPoint : public AActor
+{
+	// FName RoomID = "Room1";   // 페이즈가 이 값으로 수집한다
+	// bool bAirSpawn = false;   // 공중 유닛(잠자리) 전용 지점 표시 - 방5에서 사용 예정
+	// WITH_EDITORONLY_DATA: Billboard + Arrow (배치 시 위치/방향 확인용, 런타임 영향 없음)
+};
+```
+
+- 스테이지1은 액터 태그 스캔(`ActorHasTag("Phase3EnemySpawnPoint")`)이었으나, 스테이지2는 **전용 액터 + `RoomID` 프로퍼티**로 만들어 태그 오타 사고를 막았다.
+- 배치만 하면 페이즈가 자동 수집하므로 **Director 배선이 필요 없다**. Director 배열에 값이 있으면 그쪽을 우선한다(명시 배선 필요 시).
+
+**베이스에 스폰 지점 풀 추가** (`UDRS2PhaseBase`)
+
+```cpp
+void   InitSpawnPoints(FName RoomID, const TArray<TObjectPtr<AActor>>& DirectorOverride);
+AActor* SelectNextSpawnPoint();   // 비반복 랜덤 풀 (UDRPhase3::SelectNextSpawnPoint 관례)
+void   ScheduleWaveSet(const FS2WaveSet& WaveSet);   // 스폰 지점 인자 제거 - 풀을 사용
+```
+
+- 모든 지점을 한 번씩 사용한 뒤 풀을 다시 채우므로 한곳에 몰려 스폰되지 않는다.
+- 기존의 "랜덤 + 직전 지점 1회 회피" 방식을 이 방식으로 대체했다.
+
+**`UDRS2CombatPhase` 전체 흐름**
+
+| 단계 | 처리 |
+|---|---|
+| ① | `ResolveBasePlayerCount()` — 인원 확정(이후 불변) |
+| ② | `SetBlockerBlocked(D0, true)` — 시작지점 영구 봉쇄 |
+| ③ | `InitSpawnPoints("Room1", Director->Room1SpawnPoints)` |
+| ④ | `ResolveWaveSet` → `TotalSpawnCount` = `CountTotalSpawns` → `PendingSpawnCount` 초기화 |
+| ⑤ | `SetupPhaseObjectiveByRow("S2P1_Combat", TotalSpawnCount)` — 분모를 런타임 값으로 |
+| ⑥ | `ScheduleWaveSet` — 웨이브 0초/30초 예약 (전멸 무관 시간 기반) |
+
+- `OnEnemyDeath`: 처치 수 갱신 → `Alive == 0 && Pending == 0`일 때만 완료 판정.
+- **방어 코드**: 웨이브 구성이 비었거나 마리 수가 0이면 Error 로그 후 즉시 완료 처리한다. 그러지 않으면 BP 설정 실수로 방1에서 진행이 영구 정지한다.
+- `HandleInsideCountChanged`는 `bCombatStarted` 이후에는 진행도를 갱신하지 않는다(입장 인원이 처치 수를 덮어쓰지 않도록).
+
+**M2 에디터 작업 (잔여)**
+
+1. `DT_S2PhaseObjective`에 **`S2P1_Combat`** 행 추가 — 제목 "적을 모두 처치하라", `RequiredCount`는 런타임에 덮어쓰므로 아무 값(0), `PhaseAlarmText`는 **빈 값**(배너 중복 방지).
+2. `BP_S2EnemySpawnPoint`(부모 `ADRS2EnemySpawnPoint`) 생성 → 방1에 **6개 이상 배치**, `RoomID = Room1`.
+3. `BP_S2CombatPhase`의 `WaveSetsByPlayerCount`에 §14.1.3 표 입력:
+
+| 인덱스 | 웨이브 0 (`StartDelaySeconds` = 0) | 웨이브 1 (`StartDelaySeconds` = **30**) |
+|---|---|---|
+| [0] 1인 | `BP_Dog`×2, `BP_DRArmadillo`×1 | `BP_Dog`×2, `BP_DRDragonFly`×1 |
+| [1] 2인 | `BP_Dog`×3, `BP_DRArmadillo`×2 | `BP_Dog`×2, `BP_DRDragonFly`×1 |
+| [2] 3인 | `BP_Dog`×4, `BP_DRArmadillo`×2, `BP_DRDragonFly`×1 | `BP_Dog`×3, `BP_DRDragonFly`×1 |
+| [3] 4인 | `BP_Dog`×5, `BP_DRArmadillo`×3, `BP_DRDragonFly`×1 | `BP_Dog`×3, `BP_DRDragonFly`×1 |
+
+   `PerEnemySpawnInterval`은 두 웨이브 모두 0.2 권장("막 나오는" 연출).
+
+4. **검증**: 1인/2인/4인 PIE에서 표대로 스폰되는지, **웨이브1을 30초 전에 전멸시켜도 페이즈가 끝나지 않는지**(핵심), 전멸 후 D1 발광까지.
+
+### 15.9-E M3 구현 결과 — 방2 (8퍼즐 내부 로직 제외)
+
+**구현 완료**
+
+| 클래스 | 내용 |
+|---|---|
+| `ADRS2InteractProp` (+ `ADRS2Lever` / `ADRS2SafeButton` / `ADRS2PuzzleTerminal`) | 조작 대상 공용 베이스. 상태는 갖지 않고 소유 퍼즐에 위임 |
+| `ADRS2SwitchPuzzle` | **완전 구현** — 해 보장 마스크 생성(역산 + 32조합 완전탐색 + 재시도), XOR 전구 계산, 3라운드, 마스크 미복제 |
+| `ADRS2CctvBoard` | **완전 구현** — 유한 시퀀스 생성(타깃 N개 배치 + 셔플) + 순환 반복 + 서버시각 로컬 시뮬 텍스처 교체 |
+| `ADRS2Safe` | **완전 구현** — 3자리 입력/검증/개방/부품 스폰. 정답 코드 미복제, 오답은 입력만 초기화 |
+| `ADRS2CodeScreen` | 숫자 표시판 공용 (자체 복제 없음) |
+| `UDRS2PuzzlePhase` | **완전 구현** — 코드 생성·배분, 퍼즐 진행도, 금고→부품→퇴장 완료 판정 |
+| `ADRPlayerController` | 프롭 감지 슬롯 + `FindPropByLineTrace` + `ServerRequestInteract` 분기 1개 + `Client_OpenSlidePuzzleUI` |
+| `ADRCleanserPart` | `OnPartPickedUp` 델리게이트 + `IsCarriedNow()` 접근자 (§5.6) |
+
+**미구현 (8퍼즐 UI 사양 확정 후)**
+
+`ADRS2SlidePuzzle`은 다음 두 가지만 담당한다:
+1. 단말 상호작용 → `RequestOpenUI(Character)` → 서버가 해당 클라에 `Client_OpenSlidePuzzleUI` → `OnSlidePuzzleUIRequested` 델리게이트 발화 (**위젯 생성은 BP/HUD 담당**)
+2. `NotifySolved()` 호출 시 → 첫 자리 공개 + `OnPuzzleSolved` 발화
+
+보드 상태·타일 이동·셔플·Undo/Reset·UI↔서버 조작 RPC는 **작성하지 않았다.** 퍼즐 로직이 완성되면 서버에서 `NotifySolved()`만 호출하면 나머지가 자동으로 이어진다.
+
+**구현 중 조정한 것 2건**
+
+1. **CCTV 화면을 머티리얼 슬롯으로** (2026-08-18 변경) — 당초에는 화면 메시 6개를 컴포넌트 태그(`CctvScreen`)로 수집했으나, **메시 1개의 머티리얼 슬롯 6개**를 쓰는 방식으로 바꿨다. 배치가 한 번으로 끝나고 드로우콜도 줄어든다. 슬롯 번호가 화면 인덱스이며, 순서가 다르면 `ScreenMaterialSlots` 로 매핑한다.
+2. **PlayerController 접근 지정자 보존** — 신규 멤버를 `private` 구역에 넣으면서 `public`/`private` 전환을 명시해 기존 멤버들의 접근 수준이 바뀌지 않도록 했다.
+
+**M3 에디터 작업 (잔여)**
+
+1. `DT_S2PhaseObjective`에 행 추가: `S2P2_Puzzle`(금고의 비밀번호를 알아내라, RequiredCount 2) / `S2P2_Part`(부품을 획득하라) / `S2P2_Return`(부품을 들고 1번방으로 돌아가라). **셋 다 `PhaseAlarmText` 빈 값**
+2. BP 생성: `BP_S2Lever` / `BP_S2SafeButton` / `BP_S2PuzzleTerminal`(각 프롭, 메시 + "F" 위젯) · `BP_S2CodeScreen_Digit`(1자리 아틀라스) · `BP_S2SafeDisplay`(3자리) · `BP_S2SwitchPuzzle` · `BP_S2CctvBoard`(메시 1개 + 머티리얼 슬롯 6개 + 텍스처 파라미터 `ScreenTex`) · `BP_S2Safe`(`PartClass = BP_S2Part`) · `BP_S2SlidePuzzle`
+3. 방2 배치 + 각 프롭의 `OwnerPuzzle` / `PropIndex` 배선 (레버 0~4, 숫자 버튼 0~9, 초기화 버튼은 `bIsClearButton`)
+4. Director의 방2 참조 4개 배선
+5. **검증**: 스위치 100회 라운드 생성 시 항상 해 존재 / CCTV 1주기 관찰 개수 == 금고 3번째 자리 / 오답 입력 시 초기화만 / 금고 개방 → 부품 → 출구 통과 시 전원 회수 + D1 비활성
+
+### 15.9-F M4 구현 결과 — 방3 방어 + 방4 두더지 + 부활
+
+**★설계 변경 1건: 두더지 피격을 데미지 관문에서 가로챈다**
+
+원안(§15.7.2)은 두더지에 **ASC + `UDREnemyAttributeSet`(MaxHealth=1)** 을 주고 기존 데미지 파이프라인으로 체력을 깎는 방식이었다. 구현 중 확인해보니 이 방식은 **크래시 위험**이 있다:
+
+```cpp
+// DREnemyAttributeSet.cpp:161 — 비치명 분기
+if (Props.TargetCharacter->Implements<UCombatInterface>() && ...)   // ★널 가드 없음
+```
+
+`Props.TargetCharacter`는 대상이 `ACharacter`일 때만 유효하다. 두더지는 `AActor` 기반이라 데미지가 치명이 아닌 경우(0 데미지, 힐 등) 널 역참조가 발생한다.
+
+그래서 **`IDRProximityHitOnly` 인터페이스로 피격을 직접 처리**하고 GE는 아예 적용하지 않는 방식으로 바꿨다:
+
+```cpp
+// ApplyDamageEffect 진입부 (§5.11)
+if (IDRProximityHitOnly* Prox = Cast<IDRProximityHitOnly>(TargetAvatarActor))
+{
+    if (Prox->AcceptsHitFrom(SourceAvatarActor)) { Prox->HandleProximityHit(SourceAvatarActor); }
+    return FGameplayEffectContextHandle();   // 어느 쪽이든 GE 미적용
+}
+```
+
+- 인터페이스에 `AcceptsHitFrom`(거리 조건)과 `HandleProximityHit`(1히트 처리) 두 함수를 둔다.
+- 두더지는 **어트리뷰트를 갖지 않는다.** 단 **ASC 자체는 필요**하다 — 투사체가 `GetAbilitySystemComponent(대상)`으로 ASC를 못 찾으면 `ApplyDamageEffect`가 호출되지 않아 관문에 도달하지 못한다.
+- 액터 태그 `Enemy`는 그대로 필요하다(`IsNotFriend`가 태그 기반).
+
+**구현 완료**
+
+| 클래스/파일 | 내용 |
+|---|---|
+| `IDRProximityHitOnly` | 신규 인터페이스 (`Interaction/DRProximityHitOnly.h`) |
+| `ApplyDamageEffect` | 진입부에 가로채기 분기 추가 (§5.11) |
+| `ADRS2Mole` | 최소 ASC + `Enemy` 태그 + 2m 판정 + 유지 시간 만료 + 소멸 연출 후 Destroy |
+| `ADRS2MoleGame` | 티어 3구간(기본값 코드에 내장), 동시 상한, 비반복 스폰 지점, 20마리 목표, `AbortAndReset` |
+| `UDRS2DefensePhase` | **전체 구현** — 부품 동반 검증, D2 봉쇄, D3 CarrierOnly, 설치 → 두더지+웨이브 동시 시작, 클리어 4단 처리, 예외 A/B |
+| `ADRCharacterBase::Revive` | 사망 처리 역연산 + `MulticastHandleRevive` + `K2_OnCharacterRevived` BP 훅 |
+| `ADRCharacter::MulticastHandleRevive` | 1인칭/3인칭 메시 가시성 원복 + 표정 `RevertToDefault()` |
+| `ADRGameModeBase::Logout` | 신규 오버라이드 + `NotifyPhasePlayerLeft` (§5.10) |
+| `ADRGameModeBase::OnPlayerDied` | `NotifyPhasePlayerDied` 전달 추가 |
+| `UDRPhaseBase` | `NotifyPlayerDied` / `NotifyPlayerLeft` 가상 훅 추가 |
+| `ADRCleanserSite::EjectInstalledPart` | 설치 되돌리기 + 설치대 옆 재스폰 (§5.12) |
+
+**예외 A/B 구현 (2026-08-07 수정 반영)**
+
+두 경로가 `PrepareRoom4Retry(Director, bEjectPartInsideRoom4)` 하나를 공유하고, 차이는 3가지뿐이다:
+
+| | 예외 A (사망) | 예외 B (접속 종료) |
+|---|---|---|
+| 방3 몬스터 | **동일** — `DestroyAllSpawnedEnemies()` (델리게이트 해제 후 Destroy, 연출·보상 없음) | **동일** |
+| 부품 위치 | 방4 안 설치대 옆 (그대로) | 방3 쪽 `Room4EntranceDropPoint`로 이동 |
+| D3 진입 규칙 | `Anyone` ★ | `CarrierOnly` |
+| 기준 인원 | 유지 | `ResolveBasePlayerCount()` 재계산 |
+
+**둘 다 웨이브를 중단하고 `PendingSpawnCount`를 0으로 되돌린다.** 재설치 시 `HandlePartInstalled`가 다시 호출되어 두더지와 웨이브가 함께 재개된다.
+
+**부활 구현 범위**
+
+C++가 복원하는 것: `bDead`, 캡슐 콜리전, CMC(`MOVE_Walking`), 메시 물리/콜리전, 사망 몽타주 정지, 1인칭/3인칭 메시 가시성·`SetOwnerNoSee`, 표정, 위치 이동, Health/Water.
+
+**BP가 복원해야 하는 것** (`K2_OnCharacterRevived`): **Dissolve 머티리얼 파라미터 원복**과 사망 카메라 애니메이션 해제. Dissolve는 BP 타임라인으로 진행되므로 C++에서 되돌릴 수 없다. ★이 훅을 비워두면 부활한 캐릭터가 반투명하게 남는다.
+
+**M4 에디터 작업 (잔여)**
+
+1. `DT_S2PhaseObjective`에 `S2P3_Enter4`(부품을 들고 4번방으로 들어가라) / `S2P3_Hold`(4번방 작업이 끝날 때까지 버텨라, RequiredCount 20) 행 추가 — 둘 다 `PhaseAlarmText` 빈 값
+2. `BP_S2Mole`(홀로그램 메시·머티리얼, 등장/소멸 VFX), `BP_S2MoleGame`(`MoleClass` 지정, 등장 지점 배선)
+3. `BP_S2DefensePhase`에 §14.3.2 표 입력(1인 개2+아르마딜로1+잠자리1 / 2인 개2+아르마딜로2+잠자리1 / 3인 개2+아르마딜로3+잠자리1 / 4인 개3+아르마딜로3+잠자리2), `PartClass = BP_S2Part`
+4. 방3 스폰 지점 `RoomID = Room3` 4개 이상, **부활 지점 4개**, `Room4EntranceDropPoint`
+5. 방4 중앙에 `BP_S2InstallStation`(`RequiredPartsCount = 1`, 태그 `CleanserSite`) + 두더지 등장 지점 9~12개
+6. **캐릭터 BP에서 `K2_OnCharacterRevived` 구현** — Dissolve 원복 (필수)
+7. **검증**: 2m 밖 원거리 공격 투과 / 5·12킬 티어 전환 / 20킬 시 4단 처리 / **방4 플레이어 사망 시 D3가 `Anyone`으로 바뀌는지**(소프트락 방지) / 재설치 시 웨이브 재개 / 부활 후 조작 정상
+
+### 15.9-G M5 구현 결과 — 방5 3웨이브 하이브리드
+
+신규 파일 없이 `UDRS2WavePhase` 한 쌍만 채웠다. 베이스(§15.2.2)의 인원별 조회·스폰·스폰지점 풀을 그대로 재사용한다.
+
+**하이브리드 전환 구현**
+
+```cpp
+void StartWave(int32 WaveIndex)
+{
+    ... SpawnComposition(Composition);
+
+    // ★마지막 웨이브에는 다음 웨이브 타이머를 걸지 않는다 (4번째 웨이브 방지)
+    if (WaveIndex < TotalWaveCount - 1)
+        SetTimer(NextWaveTimer, CreateUObject(this, &StartWave, WaveIndex + 1), WaveIntervalSeconds, false);
+}
+
+void OnEnemyDeath(AActor* DeadEnemy)
+{
+    Super::OnEnemyDeath(DeadEnemy);
+
+    // ★웨이브 단위가 아니라 전체 생존 수 기준 (겹쳐 스폰된 혼재분까지 포함)
+    if (GetAliveEnemyCount() > 0 || PendingSpawnCount > 0) return;
+
+    if (!IsLastWave()) { ClearTimer(NextWaveTimer); StartWave(CurrentWaveIndex + 1); }
+    else               { GameMode->ValidatePhaseCompletion(); }
+}
+```
+
+**세 방의 웨이브 진행 방식이 코드에서도 뚜렷이 갈린다**
+
+| 방 | 구현 |
+|---|---|
+| 방1 (`UDRS2CombatPhase`) | `ScheduleWaveSet()` — 각 웨이브의 `StartDelaySeconds`(0s/30s)로 한 번에 예약. 전멸이 앞당기지 않음 |
+| 방3 (`UDRS2DefensePhase`) | `SetTimer(..., bLoop=true)` — 50초 반복. 구성 1개를 계속 재사용 |
+| 방5 (`UDRS2WavePhase`) | `StartWave(i)`가 다음 웨이브를 단발 예약 + 전멸 시 타이머 취소·즉시 호출 |
+
+**그 외 구현 사항**
+
+- **D4 재봉쇄** — 전원 입장 시 `SetBlockerBlocked(Blocker_Room3ToRoom5, true)`. `OnPhaseStart`의 개방 호출은 방3 페이즈가 이미 열었을 수 있어 멱등성에 의존한다.
+- `GameState->SetTotalWaves()` / `SetCurrentWaveNumber()` / `Multicast_PlayWaveStartSound()` 기존 복제 필드·사운드 재사용.
+- 웨이브 수가 3이 아니면 Warning 로그(사양은 3개).
+- **방어 코드**: 웨이브 구성이 비어 있으면 Error 로그 후 즉시 완료 처리 — BP 설정 실수로 방5에서 진행이 영구 정지하는 것을 막는다(방1과 동일한 방침).
+- `HandleInsideCountChanged`는 웨이브 시작 후 진행도를 갱신하지 않는다(입장 인원이 웨이브 번호를 덮어쓰지 않도록).
+
+**M5 에디터 작업 (잔여)**
+
+1. `DT_S2PhaseObjective`에 `S2P4_Wave` 행 추가 — "웨이브를 막아내라", `RequiredCount` 3, `PhaseAlarmText` 빈 값
+2. 방5에 `BP_S2EnemySpawnPoint` 4개 이상 배치 (`RoomID = Room5`) + **잠자리용 공중 지점 2개**(4인 웨이브3에 잠자리 3마리 — §14.5.5-3)
+3. `BP_S2WavePhase`의 `WaveSetsByPlayerCount`에 §14.5.2 표 입력 (각 구간 웨이브 3개, `StartDelaySeconds`는 **0으로 두고 건드리지 않는다**)
+
+| 인덱스 | 웨이브1 | 웨이브2 | 웨이브3 |
+|---|---|---|---|
+| [0] 1인 | 개2, 아르마딜로1 | 개1, 아르마딜로1, 잠자리1 | 개1, 아르마딜로1, 잠자리1 |
+| [1] 2인 | 개2, 아르마딜로2 | 개1, 아르마딜로1, 잠자리1 | 개1, 아르마딜로1, 잠자리2 |
+| [2] 3인 | 개2, 아르마딜로2, 잠자리1 | 개2, 아르마딜로2, 잠자리1 | 개1, 아르마딜로2, 잠자리3 |
+| [3] 4인 | 개2, 아르마딜로3, 잠자리1 | 개2, 아르마딜로3, 잠자리2 | 개2, 아르마딜로2, 잠자리3 |
+
+4. **검증**: 표대로 스폰 / 30초 전 전멸 시 즉시 다음 웨이브 / 방치 시 30초에 겹쳐 스폰 / 겹친 상태에서 전체 전멸 시 다음 웨이브 / **웨이브3 뒤 4번째가 안 나오는지**(핵심) / 웨이브3 전멸 시 D5 하강
+
+### 15.9-H M6 구현 결과 — 방6 열차
+
+**신규 파일 5쌍**: `DRS2TrainTrack` · `DRS2Train` · `DRS2TrainSeat` · `DRS2TrainObstacle` · `DRS2Barrier`
+
+**M6.1 선로·열차 — "1회 복제 + 로컬 시뮬"**
+
+```cpp
+// 서버: FS2TrainMovement 하나만 복제
+void DepartTo(float TargetDistance, float Speed, int32 TargetIndex);
+
+// Tick (서버·클라 공통)
+const float Distance = FMath::Min(Movement.TargetDistance,
+    Movement.StartDistance + Movement.Speed * (Now - Movement.StartServerTime));
+SetActorTransform(Track->GetTransformAtDistance(Distance));
+```
+
+- `SetReplicateMovement(false)` — 이동 복제를 켜면 소스가 이중이 되어 떨린다.
+- 스플라인이 회전까지 돌려주므로 **ㄷ자 코너에서 열차가 자연스럽게 돈다**.
+- `OnRep_Movement`에서 정지/대기 상태로 바뀌면 **목표 거리로 스냅**해 서버-클라 편차를 없앤다.
+- 좌석·탑승자는 attach 계층이라 자동 추종한다.
+
+**M6.2 좌석 — 마운트 패턴 미러링**
+
+- `ADRCharacter::SeatedOn` RepNotify + `SetSeatedOn()` — 기존 `MountedOn` 구현을 **병렬 상태**로 미러링(마운트 타입이 `ADRRobotVacuumCharacter`로 고정돼 일반화보다 안전).
+- `OnRep_SeatedOn`에서 `MOVE_None` + Pawn 콜리전 Ignore + `SeatPoint`에 attach. 해제 시 `MOVE_Falling` 복구.
+- `CanBeBoardedBy`는 `CanBeMountedBy` 검증 항목을 미러링(점유/사망/부품 소지/마운트 중/이미 착석/열차 상태).
+- PlayerController: 감지 슬롯 `CurrentDetectedSeat` + `FindSeatByLineTrace()` + `HandleInteract` 분기 + `ServerRequestInteract` 분기 + **`StartJump`에 하차 분기**(마운트 하차 옆).
+- 탑승자 사망 시 좌석이 사망 델리게이트로 자동 해제된다.
+
+**M6.3 장애물·보스 루프 — 체력이 이어지는 것이 핵심**
+
+```cpp
+void ResolveSegment(int32 Index)
+{
+    UnbindBossHealth();   // ① 바인딩 먼저 끊는다 (보관 중 중복 발화 방지)
+    StashBoss();          // ② SetActorHiddenInGame + 콜리전/Tick 해제 + BrainComponent StopLogic
+    ForwardBarriers[Index]->SetBarrierEnabled(false);   // ③ 전방 개방
+    Train->SetWaitingForBoarding();                     // ④ 재탑승 목표
+}
+
+void ReappearBoss(const FTransform& Xf)
+{
+    // 위치/가시성/콜리전/AI 복구. ★체력은 손대지 않는다.
+}
+```
+
+- `HandleTrainStopped`: 장애물 `BreakByBoss()`(등장과 동시 파괴) → **전·후방 배리어 활성** → 첫 구간은 스폰, 2·3구간은 `ReappearBoss`.
+- `HandleBossHealthChanged`: `RetreatHealthRatios[Index]` 이하면 해제. **마지막 구간에는 임계가 없어** 배열 인덱스가 없으므로 자동으로 사망만이 조건이 된다.
+- `OnEnemyDeath`: 마지막 구간이면 `bBossDefeated` → 클리어. 그 전 구간에서 즉사한 예외는 진행으로 인정하되 **참조를 비워** 다음 구간에서 새 보스가 스폰되게 하고 Warning 로그를 남긴다.
+- `StopDistance`는 **미입력 시 위치를 스플라인에 투영해 자동 계산**한다(수동 입력 실수 방지). `StopMargin`만큼 장애물 앞에서 세운다.
+- 좌석/화면 수집은 CCTV와 같은 **컴포넌트 태그 방식**(`TrainSeat`) — 컴포넌트 참조 배열은 BP에서 배선할 수 없다.
+
+**M6 에디터 작업 (잔여)**
+
+1. `DT_S2PhaseObjective`에 `S2P5_Board`(열차에 탑승하라) / `S2P5_Ride`(이동 중…) / `S2P5_Boss`(두더지를 몰아내라, RequiredCount 3) 행 추가
+2. `BP_S2TrainTrack` — 스플라인을 **ㄷ자 + 코너 곡선**으로 편집
+3. `BP_S2TrainCar` — 바구니 메시 + `RiderAttachPoint`/`ExitPoint` 배치 + "F 탑승" 위젯 → **레벨에 4개 배치**
+4. `BP_S2Train` — 메시 없는 관리자. `Track`·`Cars`(선두부터 4개)·`CarSpacing`·`StartDistanceOnTrack` 배선
+5. `BP_S2TrainObstacle` ×3 — 선로 위 배치(`StopDistance`는 비워두면 자동 계산), `BossSpawnPoint` 위치 조정
+6. `BP_S2Barrier` ×6 — 전방 3 + 후방 3, 통로 폭 전체를 덮도록 `BlockBox` 조정
+7. `BP_S2TrainPhase` — `MoleBossClass`에 임시로 EliteBear 계열 지정, `RetreatHealthRatios = {0.67, 0.34}`(기본값 내장), `TrainSpeed`
+8. Director 방6 참조 5종 배선(Train/Track/Obstacles 3/ForwardBarriers 3/RearBarriers 3)
+9. **검증**: 중복 탑승 거부 / 빈 칸 허용 출발 / 이동 중 점프 무시 / 정지 시 하차 후 전·후방 차단 / **구간2·3 재등장 시 체력이 이어지는지(핵심)** / 3구간 처치 시 즉시 클리어
+
 ### 15.10 신규 파일 체크리스트 (생성 순서)
 
 | # | 파일 | 마일스톤 |
@@ -4093,3 +4950,1527 @@ void UDRS2TrainPhase::OnEnemyDeath(AActor* DeadEnemy)
 | 21 | `Actor/Stage2/DRS2TrainObstacle.h/.cpp`, `DRS2Barrier.h/.cpp` | M6.3 |
 
 **기존 파일 수정** (§5 요약): `DRStageGameMode.cpp`(가드) · `DRPhaseBase.h/.cpp`(행 조회·알람 컬럼) · `DRStageGameState.h/.cpp`(UI 플래그) · `OverlayWidgetController.h/.cpp`(플래그 구독) · `DRPhase3.cpp`(플래그 2줄) · `DRPlayerController.h/.cpp`(프롭·좌석 분기) · `DRCharacter.h/.cpp`(좌석 상태) · `DRCharacterBase.h/.cpp`(부활) · `DRGameModeBase.h/.cpp`(Logout) · `DRAbilitySystemLibrary.h/.cpp`(근접 게이트) · `DRCleanserSite.h/.cpp`(부품 배출) · `DRCleanserPart.h/.cpp`(픽업 델리게이트)
+
+---
+
+## 16. 에디터 작업 완전 가이드 ★ (2026-08-07, C++ 완료 시점 기준)
+
+C++ 구현이 끝났으므로 **남은 작업은 전부 에디터 작업**이다. 이 장은 만들어야 할 에셋·프로퍼티 값·배치·배선을 **빠짐없이** 정리한다. 앞선 §15.9-C~H의 마일스톤별 요약을 하나로 통합하고, 코드에서 실제로 읽는 프로퍼티 이름과 기본값을 전부 실측해 기재했다.
+
+> **읽는 방법**: §16.1의 순서대로 진행한다. 각 절의 표에서 **"값" 열이 비어 있으면 C++ 기본값을 그대로 쓴다는 뜻**이며, 값이 적혀 있으면 반드시 그 값으로 바꿔야 한다.
+
+### 16.0 현재 진행 상태 (저장소 실측)
+
+이미 만들어 둔 에셋이 상당수 있다. **아래 목록에 있는 것은 다시 만들지 말고 §16의 설정값만 대조·보정한다.**
+
+| 상태 | 에셋 | 경로 |
+|---|---|---|
+| ✅ 존재 | `DT_S2PhaseObjective` | `Content/Blueprints/Phase/Data/` |
+| ✅ 존재 | `BP_DRStage2GameMode` | `Content/Blueprints/Game/` |
+| ✅ 존재 | 페이즈 BP **5종 전부** (`BP_S2CombatPhase` `BP_S2PuzzlePhase` `BP_S2DefensePhase` `BP_S2WavePhase` `BP_S2TrainPhase`) | `Content/Blueprints/Phase/Stage2/` |
+| ✅ 존재 | `BP_S2StageDirector` | `Content/Blueprints/Phase/Stage2/` |
+| ✅ 존재 | 구조물 BP 2종 (`BP_MovingBlocker_S_R1` `_R5_R6`) | `Content/Blueprints/Actor/Door/Stage2/MovingBlocker/` |
+| ❌ **신규** | 회전문 BP 2종 (`BP_TurnstileDoor_R1_R3` `_R3_R5`) | `Content/Blueprints/Actor/Door/Stage2/Turnstile/` — §16.5.1-A |
+| ✅ 존재 | 게이트 BP 4종 (`BP_TeleportGate_R1_R2` `_R2_R1` `_R3_R4` `_R4_R3`) | `Content/Blueprints/Actor/Door/Stage2/TeleportGate/` |
+| ✅ 존재 | 룸 트리거 BP 3종 (`BP_Room1Trigger` `BP_Room3Trigger` `BP_Room5Trigger`) | `Content/Blueprints/Actor/Door/Stage2/` |
+| ⬜ **필요** | 스폰 포인트 1종 | §16.7 |
+| ⬜ **필요** | 방2 퍼즐 에셋 **9종** | §16.8 |
+| ⬜ **필요** | 방3·방4 에셋 **3종** | §16.9 |
+| ⬜ **필요** | 방6 열차 에셋 **5종** (칸·열차·선로·장애물·배리어) | §16.10 |
+| ⬜ **필요** | 캐릭터 BP 부활 훅 | §16.11 |
+| ⬜ **필요** | 맵 배치 + Director 배선 **27항목** | §16.12 · §16.13 |
+
+**기존 BP 이름 규칙을 그대로 따른다** — 통로는 `BP_<타입>_<출발>_<도착>`, 방별 프롭은 아래에서 제안하는 이름을 쓰되 폴더 구조만 맞추면 된다.
+
+### 16.1 작업 순서 (의존 관계 순)
+
+의존성이 있는 순서다. 앞 단계를 건너뛰면 뒤 단계에서 배선할 대상이 없다.
+
+```
+① DT_S2PhaseObjective 14행 입력            (§16.2)  ← 모든 페이즈가 참조
+② 페이즈 BP 5종 설정값 입력                 (§16.3)
+③ BP_DRStage2GameMode 설정                 (§16.4)
+④ 통로/트리거 BP 인스턴스 설정 확인          (§16.5·§16.6)
+⑤ 스폰 포인트 BP 생성                      (§16.7)
+⑥ 방2 퍼즐 에셋 9종 생성                    (§16.8)
+⑦ 방3·방4 에셋 3종 생성                     (§16.9)
+⑧ 방6 열차 에셋 5종 생성                    (§16.10)
+⑨ 캐릭터 BP 부활 훅 구현                    (§16.11)  ← 빠지면 부활이 반투명으로 남는다
+⑩ Stage2.umap 배치                        (§16.12)
+⑪ Director 배선 27항목                     (§16.13)
+⑫ 로비 연결 + 보상 정의                     (§16.14)
+⑬ 단계별 PIE 검증                          (§16.16)
+```
+
+**부분 검증이 가능한 지점**: ①~④ + ⑩(통로/트리거만) + ⑪(통로/트리거만) 을 끝내면 **방 이동만으로 5페이즈가 순차 전환되는 M1 골격 검증**이 가능하다. 각 방 콘텐츠는 그 뒤에 하나씩 붙여도 된다.
+
+---
+
+### 16.2 `DT_S2PhaseObjective` — 14행 전체 값
+
+**행 구조체**: `FPhaseObjectiveData` (필드 5개)
+
+| 필드 | 타입 | 의미 |
+|---|---|---|
+| `PhaseNumber` | int32 | ★**0이면 안 된다.** `HandlePhaseObjectiveChanged`가 0을 placeholder로 보고 무시한다 |
+| `ObjectiveTitle` | FText | 목표 제목 (UI 상단) |
+| `ProgressFormat` | FText | 진행도 설명 문구 (선택) |
+| `RequiredCount` | int32 | 진행도 분모. **0이면 숫자를 표시하지 않는다** |
+| `PhaseAlarmText` | FText | 진입 배너. ★**비어 있으면 배너를 띄우지 않는다** (서브 목표 전환의 배너 스팸 방지) |
+
+**전체 14행** — 행 이름은 C++이 문자열로 조회하므로 **오타가 있으면 Error 로그만 남고 목표가 표시되지 않는다.**
+
+| # | RowName | PhaseNumber | ObjectiveTitle | RequiredCount | PhaseAlarmText | 비고 |
+|---|---|---|---|---|---|---|
+| 1 | `S2P1_Enter` | 1 | 1번방으로 이동하라 | **0** | **구역 1: 돌입** | 진행도는 코드가 입장 인원으로 갱신 |
+| 2 | `S2P1_Combat` | 1 | 적을 모두 처치하라 | 0 | *(비움)* | ★분모는 코드가 런타임에 덮어씀(1인 6 / 2인 8 / 3인 11 / 4인 13) |
+| 3 | `S2P2_Move` | 2 | 빛나는 문으로 이동하라 | 0 | **구역 2: 수수께끼** | |
+| 4 | `S2P2_Puzzle` | 2 | 금고의 비밀번호를 알아내라 | **2** | *(비움)* | 분모 2 = 스크린 퍼즐만(8퍼즐·스위치). **CCTV는 제외** |
+| 5 | `S2P2_Part` | 2 | 부품을 획득하라 | 0 | *(비움)* | 부품 1개라 숫자 숨김 |
+| 6 | `S2P2_Return` | 2 | 부품을 들고 1번방으로 돌아가라 | 0 | *(비움)* | |
+| 7 | `S2P3_Enter` | 3 | 부품을 들고 3번방으로 이동하라 | 0 | **구역 3: 농성** | |
+| 8 | `S2P3_Enter4` | 3 | 부품을 들고 4번방으로 들어가라 | 0 | *(비움)* | |
+| 9 | `S2P3_Hold` | 3 | 4번방 작업이 끝날 때까지 버텨라 | **20** | *(비움)* | 코드가 두더지 목표 수로 덮어씀 |
+| 10 | `S2P4_Enter` | 4 | 5번방으로 이동하라 | 0 | **구역 5: 항전** | |
+| 11 | `S2P4_Wave` | 4 | 웨이브를 막아내라 | **3** | *(비움)* | 진행도 = 현재 웨이브 번호 |
+| 12 | `S2P5_Board` | 5 | 열차에 탑승하라 | 0 | **구역 6: 탈출** | 재탑승에도 재사용 |
+| 13 | `S2P5_Ride` | 5 | 이동 중… | 0 | *(비움)* | |
+| 14 | `S2P5_Boss` | 5 | 두더지를 몰아내라 | **3** | *(비움)* | 진행도 = 현재 구간 번호 |
+
+**배너가 뜨는 행은 5개뿐**(1·3·7·10·12)이다. 각 페이즈의 첫 목표에만 배너를 두고 나머지는 비워 스팸을 막는다.
+
+**선택 작업 — 스테이지1 문구 교정**: `DT_S1PhaseObjective`에도 `PhaseAlarmText`를 채우면 기존 버그(2페이즈 구조에서 인덱스1이 "페이즈 2: 수집"으로 표시)가 해소된다. 비워두면 레거시 switch 문구가 그대로 나온다.
+
+---
+
+### 16.3 페이즈 BP 5종 — 프로퍼티별 값
+
+**5종 전부 공통**: `PhaseObjectiveDataTable = DT_S2PhaseObjective` ★이것이 비면 목표가 하나도 표시되지 않는다.
+
+#### 16.3.1 `BP_S2CombatPhase` (방1)
+
+| 프로퍼티 | 값 |
+|---|---|
+| `PhaseObjectiveDataTable` | `DT_S2PhaseObjective` |
+| `SpawnPointRoomID` | `Room1` (기본값) |
+| `WaveSetsByPlayerCount` | 아래 표대로 **4개 항목** |
+
+**중첩 구조 4단계** — 에디터에서 이 순서로 펼친다:
+
+```
+WaveSetsByPlayerCount        (TArray<FS2WaveSet>, 4개 = 1인/2인/3인/4인)
+└─ [n] Waves                 (TArray<FS2WaveComposition>, 방1은 2개)
+   └─ [m] Enemies            (TArray<FS2EnemyCount>, 적 종류 수만큼)
+      ├─ EnemyClass          (TSubclassOf<ADREnemy>)
+      └─ Count               (int32)
+   ├─ StartDelaySeconds      (float)
+   └─ PerEnemySpawnInterval  (float)
+```
+
+**적 클래스 경로**
+
+| 표기 | 클래스 |
+|---|---|
+| 개 | `Content/Blueprints/Character/Enemy/Dog/BP_Dog` |
+| 아르마딜로 | `Content/Blueprints/Character/Enemy/Armadillo/BP_DRArmadillo` |
+| 잠자리 | `Content/Blueprints/Character/Enemy/DragonFly/BP_DRDragonFly` |
+
+> 변종(`BP_Dog_Phase3`, `BP_DRArmadillo_Phase1`, `BP_DRDragonFly_Part`)은 전용 BT/스탯이 달려 있어 스테이지2에는 **기본형을 쓴다** (§14.1.7-1 확인 항목).
+
+**방1 입력값** — `StartDelaySeconds`가 웨이브 순서를 만든다. `PerEnemySpawnInterval`은 두 웨이브 모두 **0.2**.
+
+| 인덱스 | Waves[0] `StartDelaySeconds` = **0** | Waves[1] `StartDelaySeconds` = **30** |
+|---|---|---|
+| **[0] 1인** | 개 2, 아르마딜로 1 | 개 2, 잠자리 1 |
+| **[1] 2인** | 개 3, 아르마딜로 2 | 개 2, 잠자리 1 |
+| **[2] 3인** | 개 4, 아르마딜로 2, 잠자리 1 | 개 3, 잠자리 1 |
+| **[3] 4인** | 개 5, 아르마딜로 3, 잠자리 1 | 개 3, 잠자리 1 |
+
+**검산용 총합**: 1인 6 / 2인 8 / 3인 11 / 4인 13. 목표 UI의 분모가 이 값과 다르면 입력 오류다.
+
+#### 16.3.2 `BP_S2PuzzlePhase` (방2)
+
+| 프로퍼티 | 값 |
+|---|---|
+| `PhaseObjectiveDataTable` | `DT_S2PhaseObjective` |
+
+**그 외 설정 없음.** 금고 코드는 페이즈가 매 판 난수로 만들어 각 퍼즐에 주입하므로 BP 입력이 필요 없다.
+
+#### 16.3.3 `BP_S2DefensePhase` (방3 + 방4)
+
+| 프로퍼티 | 값 | 비고 |
+|---|---|---|
+| `PhaseObjectiveDataTable` | `DT_S2PhaseObjective` | |
+| `SpawnPointRoomID` | `Room3` (기본값) | |
+| `WaveIntervalSeconds` | `50` (기본값) | 확정 사양 |
+| `MaxAliveEnemies` | `30` (기본값) | 안전장치. 도달 시 웨이브 스킵(게임오버 아님) |
+| `ReviveHealthRatio` | `0.5` (기본값) | 최대 체력의 50% |
+| `ReviveWaterRatio` | `0.5` (기본값) | 물 0 부활 시 즉시 부식되는 것을 막는다 |
+| **`PartClass`** | **`BP_Part`** ★ | 예외 처리에서 부품을 되돌릴 때 사용. **비우면 사망/이탈 후 부품이 사라져 진행 불가** |
+| `WaveSetsByPlayerCount` | 아래 표 (**각 구간 웨이브 1개**) | 그 1개를 50초마다 반복 스폰 |
+
+**방3 입력값** — `StartDelaySeconds`·`PerEnemySpawnInterval` 모두 **0**. 웨이브가 1개뿐인 것이 정상이다(무한 반복).
+
+| 인덱스 | Waves[0] 구성 | 합계 |
+|---|---|---|
+| **[0] 1인** | 개 2, 아르마딜로 1, 잠자리 1 | 4 |
+| **[1] 2인** | 개 2, 아르마딜로 2, 잠자리 1 | 5 |
+| **[2] 3인** | 개 2, 아르마딜로 3, 잠자리 1 | 6 |
+| **[3] 4인** | 개 3, 아르마딜로 3, 잠자리 2 | 8 |
+
+#### 16.3.4 `BP_S2WavePhase` (방5)
+
+| 프로퍼티 | 값 |
+|---|---|
+| `PhaseObjectiveDataTable` | `DT_S2PhaseObjective` |
+| `SpawnPointRoomID` | `Room5` (기본값) |
+| `WaveIntervalSeconds` | `30` (기본값) |
+| `WaveSetsByPlayerCount` | 아래 표 (**각 구간 웨이브 3개**) |
+
+**방5 입력값** — ★`StartDelaySeconds`는 **전부 0으로 두고 건드리지 않는다.** 방5는 페이즈가 전환 시점을 직접 제어하므로 이 값을 쓰지 않는다. 0이 아닌 값을 넣으면 스폰이 이중으로 지연된다.
+
+| 인덱스 | Waves[0] | Waves[1] | Waves[2] | 합계 |
+|---|---|---|---|---|
+| **[0] 1인** | 개2, 아르마딜로1 | 개1, 아르마딜로1, 잠자리1 | 개1, 아르마딜로1, 잠자리1 | 9 |
+| **[1] 2인** | 개2, 아르마딜로2 | 개1, 아르마딜로1, 잠자리1 | 개1, 아르마딜로1, 잠자리2 | 11 |
+| **[2] 3인** | 개2, 아르마딜로2, 잠자리1 | 개2, 아르마딜로2, 잠자리1 | 개1, 아르마딜로2, 잠자리3 | 16 |
+| **[3] 4인** | 개2, 아르마딜로3, 잠자리1 | 개2, 아르마딜로3, 잠자리2 | 개2, 아르마딜로2, 잠자리3 | 20 |
+
+#### 16.3.5 `BP_S2TrainPhase` (방6)
+
+| 프로퍼티 | 값 | 비고 |
+|---|---|---|
+| `PhaseObjectiveDataTable` | `DT_S2PhaseObjective` | |
+| **`MoleBossClass`** | **`BP_DREliteBear`** 등 임시 지정 ★ | 두더지 보스 제작 전까지 임시. 비우면 보스가 스폰되지 않아 진행 불가 |
+| `RetreatHealthRatios` | *(비워둠)* | 비어 있으면 코드가 `{0.67, 0.34}`를 자동 입력한다. 바꾸려면 2개만 넣는다 |
+| `TrainSpeed` | `600` (기본값) | uu/s |
+
+> `RetreatHealthRatios`의 **개수 = 구간 수 − 1**이다. 3구간이므로 2개. 3개를 넣으면 마지막 구간에서도 보스가 도망쳐 클리어가 불가능해진다.
+
+---
+
+### 16.4 `BP_DRStage2GameMode`
+
+| 프로퍼티 | 값 | 비고 |
+|---|---|---|
+| **`PhaseClasses`** | 5개, **순서 중요** | `[0] BP_S2CombatPhase` → `[1] BP_S2PuzzlePhase` → `[2] BP_S2DefensePhase` → `[3] BP_S2WavePhase` → `[4] BP_S2TrainPhase` |
+| **`StageId`** | **`Stage2`** | 진행/보상이 이 키로 조회된다. 기본값이 `Stage1`이므로 **반드시 바꿔야 한다** |
+| `CleanserSiteTag` | `CleanserSite` (기본값) | 방4 설치대가 이 태그로 수집된다 |
+| `GameStateClass` | `BP_DRStageGameState` | 스테이지1과 동일 |
+| `EnemyCharacterClassInfo` | `DA_EnemyCharacterClassInfo` | ★비면 적 GAS 초기화가 조용히 실패한다 |
+| `AbilityInfo` | 스테이지1과 동일 값 | |
+| `GameBalanceConfig` | 스테이지1과 동일 값 | |
+| `WipeoutDelayTime` | 스테이지1과 동일 (5.0) | |
+| `DefaultPawnClass` / `PlayerControllerClass` / `PlayerStateClass` / `HUDClass` | **스테이지1 값을 그대로 복사** | |
+
+> **확인 방법**: `BP_DRStageGameMode`를 열어 Class Defaults를 나란히 띄우고 값을 대조한다. 하나라도 비면 캐릭터가 스폰되지 않거나 능력이 동작하지 않는다.
+
+---
+
+### 16.5 통로 액터 — 인스턴스별 설정 (이미 생성됨, 값 대조)
+
+#### 16.5.1 구조물 `ADRS2MovingBlocker` 4종
+
+**동작 원리** — `MovingRoot`(메시가 붙는 컴포넌트)가 두 오프셋 사이를 보간한다. `PawnBlock`은 **움직이지 않고** 콜리전만 토글된다.
+
+| 방향 | `bStartBlocked` | `BlockedOffset` | `OpenOffset` | 메시를 배치할 위치 |
+|---|---|---|---|---|
+| **상승형** (D0·D2) | `false` | `(0,0,+H)` | `(0,0,0)` | **내려간(숨겨진) 상태** |
+| **하강형** (D4·D5) | `true` | `(0,0,0)` | `(0,0,-H)` | **막고 있는 상태** |
+
+`H` = 통로 높이 이상 (예: 400~600). 메시가 바닥/천장 안으로 완전히 숨겨져야 한다.
+
+| BP | 통로 | `bStartBlocked` | `BlockedOffset` | `OpenOffset` | `MoveDuration` | `PushOutPoint` |
+|---|---|---|---|---|---|---|
+| `BP_MovingBlocker_S_R1` | D0 시작→방1 | `false` | `(0,0,H)` | `(0,0,0)` | 1.5 | **방1 쪽** 안전 지점 |
+| `BP_MovingBlocker_R5_R6` | D5 방5→방6 | **`true`** | `(0,0,0)` | `(0,0,-H)` | 1.5 | 방6 쪽 |
+
+> **변경 (2026-08-18)**: D2·D4는 상하 구조물 대신 **개찰구 회전문**(§16.5.1-A)을 쓴다. `BP_MovingBlocker_R1_R3` / `_R3_R5`는 **만들지 않는다**.
+
+**`PawnBlock` 박스 크기** (기본 200/200/300): 통로 폭·높이를 완전히 덮도록 조정한다. 좁으면 옆으로 빠져나간다.
+
+**연출 훅** (선택): `OnMoveStarted(bool)` / `OnMoveFinished(bool)` — 구조물 이동 사운드, 카메라 셰이크, 먼지 VFX.
+
+#### 16.5.1-A 개찰구 회전문 `ADRS2TurnstileDoor` 2종 ★신규
+
+| BP | 통로 | `bStartBlocked` | `PushOutPoint` |
+|---|---|---|---|
+| `BP_TurnstileDoor_R1_R3` | D2 방1→방3 | `false` (열림 시작) | **방3 쪽** 안전 지점 |
+| `BP_TurnstileDoor_R3_R5` | D4 방3↔방5 | **`true`** (닫힘 시작) | **방5 쪽** ★왕복하므로 필수 |
+
+**컴포넌트 구성** (BP 에서 직접 추가)
+
+1. 날개 메시 6개를 추가한다. 이름은 자유(`LeafA1`… 권장).
+2. 각 컴포넌트 디테일 → **Tags** 배열에 태그를 하나 추가한다.
+   - 한쪽으로 도는 3개 → **`TurnstileA`**
+   - 반대쪽으로 도는 3개 → **`TurnstileB`**
+3. 날개 메시의 **Collision Presets = `NoCollision`**. 차단은 `PawnBlock` 박스가 전담한다.
+4. `PawnBlock` 박스를 통로 폭·높이에 맞춘다 (기본 200/200/300).
+
+★**피벗**: 날개 메시의 피벗이 **힌지 위치**에 있어야 한다. 피벗이 메시 중앙이면 제자리에서 빙글 돈다.
+피벗을 못 옮기는 에셋이면 → 힌지 위치에 **`SceneComponent`를 추가하고 그 자식으로 메시를 붙인 뒤, `SceneComponent` 쪽에 태그를 단다**. 회전은 태그가 달린 컴포넌트에 적용된다.
+
+**클래스 디폴트 설정**
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| `OpenRotationA` | `(0, 90, 0)` | 원점 기준 **변화량**. 개찰구는 보통 Yaw |
+| `bMirrorGroupB` | `true` | B가 A의 정확한 반대로 돈다 |
+| `OpenRotationB` | — | `bMirrorGroupB = false` 일 때만 노출 |
+| `GroupATag` / `GroupBTag` | `TurnstileA` / `TurnstileB` | 컴포넌트 태그와 일치해야 한다 |
+| `MoveDuration` | 1.0 | 회전문은 구조물보다 빠른 편이 자연스럽다 |
+
+**닫힘 원점**: BP 에서 날개를 배치한 그 상대 회전(`ClosedQuat`)이 곧 "닫힘" 자세다. 별도 입력이 없다.
+
+```
+닫힘 = ClosedQuat                   ← BeginPlay 에 1회 캐시한 배치 각도
+열림 = ClosedQuat * OpenRotationA   ← 날개 자기 축 기준 합성
+```
+
+기준이 **"여는 순간의 각도"가 아니라 캐시된 배치 각도**이므로, D4처럼 여닫기를 반복해도 각도가 누적되지 않는다.
+
+**각도 확인 방법**: 디테일 패널의 **`Preview Open Pose` / `Preview Closed Pose` 버튼**(CallInEditor)을 눌러 열림 각도를 즉시 확인한다. 회전 방향이 반대면 `OpenRotationA`의 부호를 뒤집는다.
+
+⚠️ **프리뷰 주의**
+- 프리뷰는 원점을 **최초 1회만** 캐시하므로 버튼을 여러 번 눌러도 안전하다 (초기 구현에는 누를 때마다 90°가 누적되는 버그가 있었다 — 2026-08-18 수정).
+- **열린 자세로 저장하지 않는다.** 열린 채 저장 후 에디터를 재시작하면 그 자세가 새 원점으로 잡힌다. 확인이 끝나면 반드시 `Preview Closed Pose` 로 되돌린다.
+- 날개를 다시 배치했다면 **닫힌 자세에서 `Reset Preview Origin`** 버튼을 눌러 원점을 갱신한다.
+
+**연출 훅**: `OnMoveStarted(bool)` / `OnMoveFinished(bool)` — 개찰구 작동음, 잠금 해제음.
+
+#### 16.5.2 게이트 `ADRS2TeleportGate` 4종
+
+| BP | 통로 | `Mode` | `EntryRule` | `bDeactivateOnUse` | `bStartActive` | `DestinationOverride` |
+|---|---|---|---|---|---|---|
+| `BP_TeleportGate_R1_R2` | D1 방1→방2 | `Individual` | `Anyone` | `false` | **`false`** | 방2 안 도착 지점 |
+| `BP_TeleportGate_R2_R1` | E2 방2 출구 | **`TeamOnCarrier`** | `Anyone` | `false` | **`true`** ★ | 방1 회수 지점 |
+| `BP_TeleportGate_R3_R4` | D3 방3→방4 | `Individual` | **`CarrierOnly`** | **`true`** ★ | **`false`** | 방4 입구 지점 |
+| `BP_TeleportGate_R4_R3` | R4 방4→방3 | `Individual` | `Anyone` | `false` | **`false`** | 방3 안 지점 |
+
+- `DestinationSpreadRadius` = 150 (기본값). E2는 최대 4명이 동시 이동하므로 이 값이 0이면 겹친다.
+- **`DestinationOverride`가 비면** 게이트 자신의 `DefaultDestination` 컴포넌트 위치로 이동한다 → 제자리 텔레포트가 되어 진행이 막힌다. **반드시 배선한다.**
+- `TriggerBox` (기본 120³): 문 앞 1~2m를 덮도록. 너무 크면 지나가다 빨려 들어간다.
+- `GateMesh`는 `ECC_Pawn`을 Block하므로 **문이 실제로 통행을 막는다**(발광만 하고 열리지 않는 사양과 일치).
+
+**연출 훅**: `OnGateActiveChanged(bool)` — ★**여기서 발광 머티리얼을 전환해야 한다.** 비워두면 활성 상태가 시각적으로 구분되지 않아 플레이어가 어디로 가야 할지 알 수 없다. `OnEntryDenied(Character)` — 부품 미소지자 거부 시 안내. `OnTeleportFX(Character)` — 순간이동 VFX.
+
+---
+
+### 16.6 룸 트리거 3종 (이미 생성됨)
+
+| BP | `RoomID` | `TriggerBox` 크기 | `ReevaluateInterval` |
+|---|---|---|---|
+| `BP_Room1Trigger` | `Room1` | 방1 전체 + **D0 통로 입구 안쪽까지** | 0.5 (기본값) |
+| `BP_Room3Trigger` | `Room3` | 방3 전체 + **D2 통로 입구 안쪽까지** | 0.5 |
+| `BP_Room5Trigger` | `Room5` | 방5 전체 + **D4 통로 입구 안쪽까지** | 0.5 |
+
+> **통로 입구까지 덮는 이유** ★: 전원 입장 판정이 나면 곧바로 구조물이 올라온다. 트리거가 통로를 포함하지 않으면 통로에 서 있는 사람이 "입장 완료"로 잡히지 않거나, 반대로 구조물에 끼일 수 있다. `RoomID`는 로그 식별용이며 스폰 포인트의 `RoomID`와는 별개다.
+
+---
+
+### 16.7 적 스폰 포인트 (신규 1종)
+
+**BP 생성**: `BP_S2EnemySpawnPoint` (부모 `ADRS2EnemySpawnPoint`) — 권장 경로 `Content/Blueprints/Actor/Stage2/`
+
+컴포넌트 추가 없음. 에디터에서 Billboard + Arrow가 보이므로 위치·방향 확인이 쉽다(런타임에는 표시되지 않는다).
+
+| 프로퍼티 | 값 |
+|---|---|
+| `RoomID` | 배치하는 방에 맞춰 `Room1` / `Room3` / `Room5` |
+| `bAirSpawn` | 공중 유닛(잠자리) 전용 지점이면 `true` |
+
+**배치 수량**
+
+| 방 | 최소 | 근거 |
+|---|---|---|
+| 방1 | **6개** | 4인 웨이브1이 9마리 동시 스폰 |
+| 방3 | **4개** | 4인 웨이브가 8마리 |
+| 방5 | **4개 + 공중 2개** | 4인 웨이브3에 잠자리 3마리 (§14.5.5-3) |
+
+**중요**
+- **`RoomID`가 페이즈의 `SpawnPointRoomID`와 일치해야** 수집된다. 불일치 시 `[S2Phase] RoomX 스폰 지점이 하나도 없습니다` Error 로그가 뜬다.
+- Director의 `RoomXSpawnPoints` 배열은 **비워두는 것을 권장**한다. 값이 있으면 그쪽이 우선되어 자동 수집이 무시된다.
+- 액터의 **회전(Arrow 방향)이 스폰된 적의 초기 방향**이 된다. 방 중앙을 향하게 두면 자연스럽다.
+- 벽에 너무 붙이면 스폰 시 밀려나므로 벽에서 100uu 이상 띄운다.
+
+---
+
+### 16.8 방2 퍼즐 에셋 (신규 9종)
+
+권장 경로: `Content/Blueprints/Actor/Stage2/Room2/`
+
+#### 16.8.1 상호작용 프롭 3종
+
+★**부모 클래스 주의**: `ADRS2InteractProp`은 `Abstract`이므로 직접 상속할 수 없다. 아래 **구체 자식 클래스**를 부모로 지정한다.
+
+| BP | 부모 클래스 | 용도 |
+|---|---|---|
+| `BP_S2Lever` | **`ADRS2Lever`** | 스위치 퍼즐 레버 |
+| `BP_S2SafeButton` | **`ADRS2SafeButton`** | 금고 숫자 버튼 / 초기화 버튼 |
+| `BP_S2PuzzleTerminal` | **`ADRS2PuzzleTerminal`** | 8퍼즐 UI 단말 |
+
+**3종 공통 설정**
+
+| 항목 | 내용 |
+|---|---|
+| `PropMesh` | 메시 지정. ★**Collision Preset이 `ECC_Visibility`를 Block해야 감지된다.** C++ 생성자에서 설정하지만 BP에서 메시를 바꾸며 프리셋이 `NoCollision`으로 덮이는 실수가 흔하다 → `BlockAll` 또는 커스텀(Visibility=Block) 확인 |
+| `InteractionWidget` | `WidgetClass`에 "F" 프롬프트 위젯 지정 (기존 `WBP_CleanserSiteInteraction` 참고). `Space=Screen`은 C++ 설정됨 |
+| 연출 훅 | `OnInteractedVisual()` — 레버 당김/버튼 눌림 애니메이션·사운드. `OnPropEnabledChanged(bool)` — 퍼즐 종료 후 비활성 표시 |
+
+**인스턴스 배선** (레벨 배치 후 각 프롭마다)
+
+| 프롭 | `OwnerPuzzle` | `PropIndex` | `bIsClearButton` |
+|---|---|---|---|
+| 레버 5개 | 방2의 `BP_S2SwitchPuzzle` 인스턴스 | **0, 1, 2, 3, 4** | — |
+| 숫자 버튼 10개 | 방2의 `BP_S2Safe` 인스턴스 | **0~9 (표시 숫자와 동일)** | `false` |
+| 금고 초기화 버튼 1개 | 방2의 `BP_S2Safe` 인스턴스 | (무관) | **`true`** |
+| 8퍼즐 단말 1개 | 방2의 `BP_S2SlidePuzzle` 인스턴스 | (무관) | — |
+
+> ★`PropIndex`를 빠뜨리면 기본값 `INDEX_NONE(-1)`이다. 레버는 무반응, 숫자 버튼은 `Clamp(−1,0,9)` → **전부 0으로 입력**된다. 배치 후 반드시 전수 확인한다.
+
+#### 16.8.2 숫자 표시판 — BP 2종으로 분리 ★변경 (2026-08-18)
+
+> **당초**: `BP_S2CodeScreen` 하나를 3곳(8퍼즐·스위치·금고)에 공용.
+> **변경**: **자리 수가 다르므로 2종으로 나눈다.** 1자리 쪽은 머티리얼 아틀라스로 화면답게 만들고,
+> 3자리인 금고 표시는 별도 BP로 둔다.
+
+| BP | 부모 | 자리 수 | 배치 | 표시 방식 |
+|---|---|---|---|---|
+| **`BP_S2CodeScreen_Digit`** | `ADRS2CodeScreen` | **1자리** | 8퍼즐 옆, 스위치 옆 (2개) | 머티리얼 아틀라스 (§16.8.4 단계 1) |
+| **`BP_S2SafeDisplay`** | `ADRS2CodeScreen` | **3자리** | 금고 (1개) | `TextRender` 또는 평면 3개 |
+
+★**C++ 변경이 전혀 필요 없다.** `ADRS2SlidePuzzle::CodeScreen`, `ADRS2SwitchPuzzle::CodeScreen`,
+`ADRS2Safe::InputDisplay`가 전부 `ADRS2CodeScreen*` 타입이므로 **어떤 자식 BP를 꽂아도 동작**한다.
+계약은 `OnDigitsChanged(TArray<int32>)` 하나뿐이다.
+
+##### 배열 길이는 항상 고정이다 ★
+
+두 BP 모두 **받는 배열의 길이가 변하지 않는다.** 이것이 구현을 크게 단순화한다.
+
+| 용도 | 시작 | 진행 중 | 완료 |
+|---|---|---|---|
+| 8퍼즐 / 스위치 | `{-1}` | — | `{7}` |
+| 금고 입력 | `{-1,-1,-1}` | `{7,-1,-1}` → `{7,2,-1}` | `{7,2,5}` |
+
+금고는 `ADRS2Safe::RefreshDisplay()`가 **미입력 자리를 `-1`로 채워** 항상 `CodeLength` 길이로 보낸다.
+→ **"자리가 아예 없음"이라는 상태가 존재하지 않는다.** 각 자리는 `숫자` 아니면 `-` 둘 중 하나다.
+→ 아틀라스에 **빈칸 칸을 넣을 필요가 없다** (0~9 + `-` = **11칸**).
+
+##### `BP_S2SafeDisplay` (3자리)
+
+| 항목 | 내용 |
+|---|---|
+| 표시 | `TextRender` 1개로 `"7 2 -"` 처럼 이어붙이는 것이 가장 간단하다 |
+| **`OnDigitsChanged`** ★필수 | `ForEachLoop` → 값 < 0 이면 `"-"`, 아니면 숫자 → 이어붙여 `SetText` |
+
+> 아트가 붙으면 `BP_S2CodeScreen_Digit`의 아틀라스 머티리얼을 재사용해 평면 3개로 바꿀 수 있다.
+> 배열 길이가 고정이라 그때도 로직 변경 없이 인덱스별로 스칼라만 세팅하면 된다.
+
+#### 16.8.3 `BP_S2SlidePuzzle` (부모 `ADRS2SlidePuzzle`) — 8퍼즐
+
+★**내부 로직은 C++에 없다**(UI 방식 확정, 사양 미정 — §14.2.2). 현재 동작하는 것은 "단말 상호작용 → UI 열기 요청"과 "`NotifySolved()` 호출 시 첫 자리 공개"뿐이다.
+
+> 채워야 할 내용의 구체 설계와 구현 순서는 **§14.2.10** 참고.
+
+| 프로퍼티 | 값 |
+|---|---|
+| `CodeScreen` | 옆에 배치한 `BP_S2CodeScreen_Digit` 인스턴스 |
+
+| 연출 훅 | 내용 |
+|---|---|
+| `OnPuzzleSolvedVisual(int32 Digit)` | 해결 연출 (스크린 점등, 사운드) |
+
+**UI 연동 (사양 확정 후 작업)**
+1. `ADRPlayerController::OnSlidePuzzleUIRequested` 델리게이트를 **HUD BP에서 바인딩**한다 (`ADRHUD` BeginPlay 등).
+2. 콜백에서 8퍼즐 위젯을 `CreateWidget` + `AddToViewport` 하고, 인자로 받은 `Puzzle` 참조를 위젯에 저장한다.
+3. 퍼즐이 풀리면 **서버에서** `Puzzle->NotifySolved()`를 호출한다. 위젯(클라)에서 직접 호출하면 서버 상태가 갱신되지 않으므로, 조작 RPC를 별도로 만들어야 한다.
+
+#### 16.8.4 스위치 퍼즐 — 에디터 작업 전체 가이드 ★전면 보강 (2026-08-18)
+
+> 방2 퍼즐 3종 중 **가장 먼저 만들기 좋은 것**이다. C++ 로직이 전부 완성되어 있어
+> 에디터 작업만 하면 바로 플레이 가능하다 (8퍼즐은 보드 로직이 비어 있고, CCTV는 텍스처 에셋이 필요하다).
+
+##### ① 무엇을 만드는가 — BP 3종 / 레벨 액터 7개
+
+**하나의 BP에 다 넣는 것이 아니다.** 조작하는 것과 보기만 하는 것을 나눈다.
+
+```
+BP_S2SwitchPuzzle  × 1      ← 퍼즐의 "두뇌". 모든 상태를 소유·복제
+ ├─ 전구 9개        (메시 컴포넌트)   ← 출력일 뿐, 조작 대상 아님
+ └─ 성공 표시 3개   (메시 컴포넌트)   ← 출력일 뿐, 조작 대상 아님
+
+BP_S2Lever         × 5      ← 각각 독립 액터. F키로 조작
+BP_S2CodeScreen_Digit × 1   ← 독립 액터. 8퍼즐 옆에도 같은 BP 를 하나 더 배치
+                    ────
+                     7개 액터
+```
+
+**왜 레버만 별개 액터인가**: 상호작용 감지가 카메라 **라인트레이스 → 액터 단위**다
+(`ADRPlayerController::FindPropByLineTrace`). 레버가 컴포넌트면 5개 중 어느 것을 조준했는지
+구분할 수 없다. 그래서 **조작 대상 1개 = 액터 1개**가 강제된다 (§14.2.8).
+
+**왜 전구는 컴포넌트인가**: 전구는 조작 대상이 아니라 화면 출력일 뿐이다.
+액터로 만들면 12개가 늘어나기만 하고 얻는 것이 없다.
+
+##### ② 작업 순서
+
+`BP_S2SwitchPuzzle`이 `BP_S2CodeScreen_Digit`을 참조하므로 **스크린을 먼저** 만든다.
+
+```
+1) BP_S2CodeScreen_Digit 생성 → 2) BP_S2SwitchPuzzle 생성 → 3) BP_S2Lever 생성
+                                        ▼
+                          4) 레벨에 7개 배치 + 인스턴스 배선
+                                        ▼
+                          5) StageDirector 에 퍼즐 등록
+                                        ▼
+                          6) 테스트
+```
+
+---
+
+##### 단계 1 — `BP_S2CodeScreen_Digit` (부모 `ADRS2CodeScreen`) — 1자리 전용
+
+8퍼즐·스위치가 쓰는 **1자리** 표시판. 금고(3자리)는 별도 BP를 쓴다 (§16.8.2).
+
+**받는 배열은 항상 길이 1이다.** 시작 시 `{-1}`, 해결 시 `{d}`.
+→ 표시할 상태는 **`0`~`9` 또는 `-` 11가지뿐**이고, "자리 없음" 케이스가 없다.
+
+**머티리얼 아틀라스 방식** (권장)
+
+머티리얼을 숫자마다 10개 만드는 대신, **텍스처 한 장 + 머티리얼 한 개 + 스칼라 파라미터**로 처리한다.
+에셋이 1/10이고 셰이더도 1종이라 교체 히칭이 없다. 폰트를 바꿀 때 텍스처 한 장만 갈면 된다.
+
+**① 텍스처** — 가로 11칸 아틀라스
+
+```
+┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┐
+│ 0 │ 1 │ 2 │ 3 │ 4 │ 5 │ 6 │ 7 │ 8 │ 9 │ - │
+└───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘
+  0   1   2   3   4   5   6   7   8   9   10   ← CellIndex
+```
+
+**② 머티리얼** `M_CodeDigit` — Scalar Parameter `CellIndex` 1개
+
+```
+TexCoord ──> U 성분에 × (1/11)
+             U 성분에 + (CellIndex × (1/11))
+                  ▼
+            Texture Sample ──> Emissive Color    (화면처럼 발광)
+```
+
+**③ 컴포넌트**
+
+| 컴포넌트 | 설정 |
+|---|---|
+| `ScreenMesh` (C++ 제공) | 평면 메시 + `M_CodeDigit` |
+
+**④ 이벤트 그래프**
+
+```
+BeginPlay
+  └ ScreenMesh → CreateDynamicMaterialInstance → 변수 ScreenMID 에 저장
+
+이벤트 OnDigitsChanged (NewDigits)
+  ├ NewDigits[0] 가져오기        ← 길이가 항상 1이라 인덱스 0만 보면 된다
+  ├ 값 < 0 ?
+  │    ├ 예     → CellIndex = 10   ("-")     ← ★미공개
+  │    └ 아니오 → CellIndex = 값
+  └ ScreenMID → SetScalarParameterValue("CellIndex", CellIndex)
+```
+
+★**음수 처리를 빠뜨리면 안 된다.** 퍼즐 시작 시 C++이 `SetDigits({-1})`을 부르므로,
+처리하지 않으면 UV가 음수로 밀려 **엉뚱한 칸이나 깨진 화면**이 나온다.
+
+> **먼저 빨리 돌려보고 싶다면**: `TextRender` 컴포넌트를 붙이고 `OnDigitsChanged`에서
+> `SetText`만 해도 로직 검증은 끝난다. 아틀라스는 그 뒤에 교체해도 된다.
+
+---
+
+##### 단계 2 — `BP_S2SwitchPuzzle` (부모 `ADRS2SwitchPuzzle`)
+
+**컴포넌트 추가** (루트 `SceneRoot`는 C++ 제공)
+
+| 추가할 것 | 개수 | 이름 규칙 | 비고 |
+|---|---|---|---|
+| 전구 메시 | **9** | `Bulb_0` ~ `Bulb_8` | 켜짐/꺼짐이 **한눈에 구분**되어야 한다 |
+| 성공 표시 메시 | **3** | `Round_0` ~ `Round_2` | 3라운드 진행도 |
+
+- 전구는 조작 대상이 아니므로 **Collision Preset = `NoCollision`** 으로 둔다.
+  (레버를 조준했는데 전구가 라인트레이스를 가로채면 조작이 안 된다.)
+- 배치는 3×3 격자를 권장한다. **인덱스 0이 어디인지 규칙을 정해두면** 디버깅이 쉽다
+  (예: 좌상단 = 0, 행 우선).
+
+**클래스 디폴트**
+
+| 프로퍼티 | 값 | 설명 |
+|---|---|---|
+| `LeverCount` | `5` | 레버 개수. 바꾸면 레버 액터 수도 맞춰야 한다 |
+| `BulbCount` | `9` | 전구 개수 |
+| `RequiredRounds` | `3` | 3라운드 성공 시 클리어 |
+
+##### ★조합 프리셋 — 직접 만들어 등록한다 (2026-08-18 변경)
+
+> **당초**: 매 라운드 서버가 레버-전구 담당을 랜덤 생성.
+> **변경**: **디자이너가 조합을 여러 개 만들어두고, 매 라운드 그 중 하나를 랜덤으로 뽑는다.**
+
+`Presets` 배열에 조합을 등록한다. 구조는 3단이다:
+
+```
+Presets                       ← 조합 여러 벌
+ └ [0]  Levers                ← 조합 1벌 = 레버 5개분
+      ├ [0] BulbIndices = [0, 1, 3]      ← 레버0 이 뒤집는 전구
+      ├ [1] BulbIndices = [1, 4, 7]      ← 레버1
+      ├ [2] BulbIndices = [2, 5, 8]
+      ├ [3] BulbIndices = [0, 4, 6]
+      └ [4] BulbIndices = [3, 6, 7]
+ └ [1]  Levers ...            ← 다른 조합
+```
+
+- **비트마스크가 아니라 전구 번호를 적는다.** `0b000101011` 을 계산할 필요 없이 `0, 1, 3` 이라고 쓰면 된다.
+- **`Levers` 항목 수 = `LeverCount`(5)** 여야 한다. 배열 순서가 곧 레버 `PropIndex` 다.
+- 전구 번호는 `0` ~ `BulbCount-1`(0~8). 이 번호는 BP 의 `Bulbs` 배열 인덱스와 같다.
+
+##### 선택 규칙
+
+- **비반복 랜덤**: 등록한 프리셋을 한 번씩 다 쓴 뒤에 다시 채운다.
+  3라운드 동안 같은 조합이 반복되지 않으므로 **프리셋을 3개 이상** 만드는 것을 권장한다
+  (부족하면 Warning 로그가 뜬다).
+- 매 판 순서가 달라지므로 외워서 깨기 어렵다.
+
+##### ★자동 검증 — 못 푸는 조합을 미리 잡는다
+
+`BeginPlay`(서버)에서 등록된 프리셋을 **전부 검사**하고, 통과한 것만 사용한다.
+문제가 있으면 **프리셋 번호와 함께 Error 로그**가 나오므로 어느 것을 고쳐야 하는지 바로 알 수 있다.
+
+| 검사 | 실패 시 로그 |
+|---|---|
+| `Levers` 개수 == `LeverCount` | `프리셋 N: 레버 항목이 X개인데 LeverCount 는 5 입니다` |
+| 전구 번호가 0~8 범위 | `프리셋 N / 레버 M: 전구 번호 X 는 범위 밖이라 무시합니다` (Warning) |
+| 담당 전구가 1개 이상 | `프리셋 N / 레버 M: 담당 전구가 없습니다` |
+| **전구를 전부 켜는 조합이 존재** | `프리셋 N: 전구 9개를 모두 켜는 레버 조합이 존재하지 않습니다` |
+
+마지막 검사가 핵심이다. 32조합 완전탐색으로 **정답이 실제로 존재하는지** 확인한다.
+아무 조합이나 적으면 **영원히 못 푸는 라운드**가 나와 소프트락이 되기 때문이다.
+
+##### 조합 만드는 요령
+
+정답을 먼저 정하고 거꾸로 채우면 반드시 풀린다:
+
+```
+① 정답이 될 레버를 정한다.            예: 레버 1, 3, 4
+② 그 중 마지막 하나만 비워두고 나머지에 아무 전구나 적는다.
+     레버1 = 3, 4, 7
+     레버3 = 2, 5, 6
+③ 마지막 하나 = 전구 9개 전부 중, 위에서 "짝수 번 나온" 전구만 남긴다.
+     레버1+레버3 이 덮은 것 = {2,3,4,5,6,7}
+     안 덮인 것 = {0, 1, 8}   ← 레버4 = 0, 1, 8
+④ 정답이 아닌 레버(0, 2)는 아무렇게나 적는다.
+⑤ PIE 를 켜서 Error 가 없으면 통과.
+```
+
+> **프리셋을 비워두면** 기존 랜덤 생성으로 폴백한다 (`bAllowProceduralFallback` 기본 `true`).
+> 이때만 `MinBitsPerLever`/`MaxBitsPerLever`(폴백 카테고리)가 쓰인다.
+> 조합을 만들기 전에 먼저 돌려보고 싶을 때 유용하다.
+
+**변수 추가** (전구를 배열로 다루기 위해)
+
+| 변수 | 타입 | 용도 |
+|---|---|---|
+| `Bulbs` | `Static Mesh Component` **배열** | 9칸 |
+| `RoundLights` | `Static Mesh Component` **배열** | 3칸 |
+
+`BeginPlay`(또는 `Construction Script`)에서 **순서대로** 채운다:
+`Bulbs`에 `Bulb_0`, `Bulb_1` … `Bulb_8`을 Add. **순서가 곧 전구 인덱스**다.
+
+**필수 구현: `OnBulbsChanged(int32 NewBulbBits)`** ★이걸 비우면 퍼즐을 풀 수 없다
+
+C++은 **비트마스크 정수 하나**만 던져준다. 비트 i가 켜져 있으면 전구 i가 켜진 것이다.
+
+```
+이벤트 OnBulbsChanged (NewBulbBits)
+  │
+  └ ForLoop  First = 0, Last = 8
+       │
+       ├ IsBitSet(Bits = NewBulbBits, Index = Loop Index)     ← ★C++ 제공 헬퍼 (BlueprintPure)
+       │
+       └ Branch
+            ├ True  → Bulbs[Index] 켜짐 머티리얼 / 라이트 ON
+            └ False → Bulbs[Index] 꺼짐 머티리얼 / 라이트 OFF
+```
+
+> **`IsBitSet` 노드** (2026-08-18 추가): BP에는 비트 시프트 노드가 없어 비트 검사를 직접 짜기가
+> 번거롭다. `ADRS2SwitchPuzzle::IsBitSet(Bits, Index)`를 `BlueprintPure`로 제공하므로
+> 그래프에서 바로 꺼내 쓰면 된다. `OnLeversChanged`에도 같은 방식으로 쓴다.
+
+**나머지 이벤트**
+
+| 이벤트 | 필수 | 구현 내용 |
+|---|---|---|
+| **`OnBulbsChanged(int32)`** | ★**필수** | 위 참고. 없으면 진행 불가 |
+| **`OnRoundsClearedChanged(int32 N)`** | ★**필수** | `ForLoop 0..2` → `Index < N` 이면 `RoundLights[Index]` 점등 |
+| `OnLeversChanged(int32)` | 선택 | 레버 자세는 **C++이 자동 처리**한다(§단계 3). 추가 연출이 필요할 때만 구현 |
+| `OnPuzzleSolvedVisual(int32 Digit)` | 권장 | 3라운드 완료 연출 (사운드, 스크린 점등) |
+
+★**라운드 성공 시 레버가 전부 내려간다.** C++이 `GenerateRound()`에서 `LeverBits = 0`으로
+초기화하고 `OnLeversChanged(0)`을 발화한다. 레버 자세를 `OnInteractedVisual`(토글)로만 만들면
+**라운드가 넘어가도 레버가 올라간 채로 남는다.** 자세는 `OnLeversChanged`에서 **절대값으로** 세팅하는 것이 안전하다.
+
+**레버 자세를 퍼즐 액터에서 처리하려면** 레버 액터 참조가 필요하다. 두 가지 방법:
+- (간단) `BP_S2SwitchPuzzle`에 `TArray<AActor*> LeverActors` 변수를 만들고 레벨에서 5개 배선 → `OnLeversChanged`에서 인덱스로 접근
+- (대안) 레버 BP가 `OnPropEnabledChanged` 대신 자체 Tick 없이, 퍼즐의 `LeverBits`를 읽어 갱신
+
+우선은 **사운드만 `OnInteractedVisual`로 처리하고 자세 연출은 나중에** 붙여도 플레이에는 지장이 없다.
+
+---
+
+##### 단계 3 — `BP_S2Lever` (부모 **`ADRS2Lever`**)
+
+★부모를 `ADRS2InteractProp`으로 잡으면 안 된다. `Abstract`이라 배치할 수 없다.
+반드시 구체 자식인 **`ADRS2Lever`** 를 부모로 지정한다.
+
+| 컴포넌트 | 설정 |
+|---|---|
+| `PropMesh` (C++ 제공, 루트) | 레버 메시. ★**메시 에셋 자체에 심플 콜리전이 있어야 한다** (아래 참고) |
+| `InteractionWidget` (C++ 제공) | `Widget Class`에 "F" 프롬프트 위젯 지정 (`WBP_CleanserSiteInteraction` 참고) |
+
+> ★**실제로 겪은 문제 (2026-08-18)**: 레버에 다가가도 F 프롬프트가 안 뜨고 F 키도 무반응이었는데,
+> 원인은 **메시 에셋에 콜리전이 없던 것**이었다.
+>
+> 감지에 쓰는 `LineTraceSingleByChannel` 은 `bTraceComplex = false` 라 **심플 콜리전만** 본다.
+> 콜리전 프리미티브가 없는 메시는 트레이스가 그냥 통과해 아무것도 감지되지 않는다.
+> 컴포넌트의 Collision Preset 이 아무리 맞아도 **메시에 형상이 없으면 소용없다.**
+>
+> **확인·해결**: 스태틱 메시 에디터 → Collision → `Add Box Simplified Collision`(또는 형상에 맞는 것).
+> 뷰포트에서 `Show → Collision` 으로 초록 와이어프레임이 보이는지 확인한다.
+>
+> 부수적으로 컴포넌트 Collision Preset 도 확인한다. C++ 생성자가 `QueryAndPhysics` +
+> `Visibility Block` 을 설정하지만, BP 에서 메시를 교체하며 `NoCollision` 으로 덮이는 경우가 있다.
+
+**연타 방지 쿨다운** ★(2026-08-18)
+
+| 프로퍼티 | 기본값 | 설명 |
+|---|---|---|
+| `InteractCooldown` | **`0.4`** (레버) | F 를 누른 뒤 이 시간 동안 재조작 무시 |
+
+- **프롭 단위**다. 누가 눌렀든 같은 레버는 함께 잠긴다 (플레이어별이 아님).
+- **서버에서 판정**한다. 클라가 F 를 연타해도 서버가 무시하므로 우회할 수 없다.
+- 베이스 `ADRS2InteractProp` 에 있는 공용 기능이며 기본값은 `0`(제한 없음)이다.
+  금고 숫자 버튼처럼 빠른 입력이 필요한 프롭은 그대로 두고, 레버만 `0.4` 로 올려두었다.
+- 자세 전환(`ToggleDuration` 0.15초)보다 넉넉해 전구가 정신없이 깜빡이지 않는다.
+
+> 구현 구조: `ServerHandleInteract()` 가 **비가상 공용 진입점**이 되어 쿨다운을 소비한 뒤
+> 자식의 `ExecuteInteract()` 를 호출한다. 자식이 쿨다운 처리를 빠뜨릴 수 없다.
+
+**자세 회전 — C++ 구현됨** ★(2026-08-18)
+
+레버를 당기면 **Y축(Pitch)** 으로 회전한다. BP 작업 없이 동작하며, 각도는 클래스 디폴트로 조절한다.
+
+| 프로퍼티 | 기본값 | 설명 |
+|---|---|---|
+| `OnRotation` | `(Pitch 85, 0, 0)` | 켠 자세 |
+| `OffRotation` | `(Pitch -25, 0, 0)` | 끈 자세 |
+| `ToggleDuration` | `0.15` | 전환 시간. `0`이면 즉시 스냅 |
+
+★두 값은 **배치 회전 기준의 상대 변화량**이다. 절대 회전이 아니므로 레버를 벽면 어느 방향으로
+돌려 배치해도 항상 자기 축으로 회전한다 (개찰구 회전문 §4.11-A와 같은 로컬 합성 방식).
+
+##### ★자세를 레버가 직접 토글하지 않는 이유
+
+레버 ON/OFF의 **진실은 퍼즐의 `LeverBits`** 이고, 라운드 성공 시 `GenerateRound()`가 이를 `0`으로
+초기화한다. 레버가 `OnInteractedVisual`에서 자체 토글하면 **이 초기화를 놓쳐 올라간 채로 남는다.**
+
+그래서 구조를 이렇게 잡았다:
+
+```
+BeginPlay
+  레버 → Puzzle->RegisterLever(this)
+       → 퍼즐이 즉시 현재 LeverBits 기준 자세를 밀어줌
+         (BeginPlay 순서·복제 도착 순서에 의존하지 않음)
+
+레버 조작
+  Lever::ServerHandleInteract → Puzzle->ToggleLever(index)
+       → LeverBits 갱신 → OnRep_LeverBits → RefreshLeverPoses()
+       → 등록된 레버 전체에 SetLeverOn() 푸시
+
+라운드 성공
+  GenerateRound() → LeverBits = 0 → 같은 경로 → ★레버가 전부 자동으로 내려감
+```
+
+회전은 복제하지 않는다(`SetReplicateMovement(false)`). `LeverBits` 하나만 복제되고
+서버·클라가 각자 같은 자세를 계산한다 — 스테이지2 공통 **"1회 복제 + 로컬 시뮬"** 관례.
+
+**연출 훅** (선택)
+
+| 이벤트 | 내용 |
+|---|---|
+| `OnInteractedVisual()` | 레버 당기는 **사운드만**. 자세는 C++이 처리하므로 여기서 회전시키지 말 것 |
+| `OnPropEnabledChanged(bool)` | 퍼즐 완료 후 비활성 표시 (회색 등) |
+
+**레버는 퍼즐 상태를 갖지 않는다.** `ServerHandleInteract`가 `OwnerPuzzle->ToggleLever(PropIndex)`로
+위임할 뿐이다. 상태를 퍼즐 액터 한 곳에 모아야 복제가 단순해지기 때문이다.
+(자세 보간용 로컬 변수는 갖지만, 그 값도 `LeverBits`에서 파생된다.)
+
+---
+
+##### 단계 4 — 레벨 배치 + 인스턴스 배선
+
+방2에 7개를 배치한다.
+
+| 배치 | 개수 | 설정할 것 |
+|---|---|---|
+| `BP_S2SwitchPuzzle` | 1 | `CodeScreen` ← 배치한 `BP_S2CodeScreen_Digit` 인스턴스 |
+| `BP_S2CodeScreen_Digit` | 1 | (없음) |
+| `BP_S2Lever` | 5 | `OwnerPuzzle` ← `BP_S2SwitchPuzzle` 인스턴스<br>`PropIndex` ← **0, 1, 2, 3, 4** |
+
+★**`PropIndex` 전수 확인**: 기본값이 `INDEX_NONE(-1)`이라 빠뜨리면 `LeverMasks.IsValidIndex(-1)`이
+실패해 **그 레버는 아무 반응도 하지 않는다.** 에러 로그도 안 뜬다. 5개를 하나씩 확인한다.
+
+★`CodeScreen`과 `OwnerPuzzle`은 **`EditInstanceOnly`** 다. BP 클래스 디폴트가 아니라
+**레벨에 배치한 인스턴스의 디테일 패널**에서 설정한다.
+
+---
+
+##### 단계 5 — StageDirector 등록
+
+레벨의 `BP_S2StageDirector` 인스턴스에서:
+
+| 필드 | 값 |
+|---|---|
+| `Room2SwitchPuzzle` | 배치한 `BP_S2SwitchPuzzle` 인스턴스 |
+
+★**이걸 빠뜨리면 조용히 잘못 동작한다.** 퍼즐 자체는 정상 작동하지만
+`UDRS2PuzzlePhase`가 `SetRevealDigit()`을 주입하지 못해 `SecretDigit`이 `-1`로 남는다.
+→ 3라운드를 다 성공해도 **스크린에 `-`가 뜨고** 금고 두 번째 자리를 알 수 없다.
+(Director `BeginPlay`가 미배선을 Error 로그로 나열하므로 출력 로그를 확인한다.)
+
+---
+
+##### 단계 6 — 테스트 체크리스트
+
+**혼자 PIE**로 먼저 확인:
+
+| # | 확인 | 실패 시 원인 |
+|---|---|---|
+| 1 | 레버 5개 각각에 F 프롬프트가 뜬다 | `PropMesh` Collision이 Visibility를 Block하지 않음 |
+| 2 | 레버를 당기면 **전구 상태가 바뀐다** | `OnBulbsChanged` 미구현 |
+| 3 | 같은 레버를 두 번 당기면 원래대로 돌아온다 | 정상 (XOR 토글) |
+| 4 | 두 레버가 겹치는 전구는 **꺼진다** | 정상 — 이것이 XOR의 핵심 |
+| 5 | 전구 9개가 전부 켜지면 성공 표시 1개 점등 | `OnRoundsClearedChanged` 미구현 |
+| 6 | 성공 직후 **레버가 전부 내려가고 전구가 꺼진다** | 정상 동작(C++ 자동). 안 되면 `OwnerPuzzle` 미배선 |
+| 7 | 3라운드 성공 시 스크린에 숫자가 뜬다 | Director `Room2SwitchPuzzle` 미배선 (→ `-` 표시) |
+| 8 | 부품을 든 상태로는 레버 조작이 안 된다 | 정상 (`CanInteract`가 차단) |
+
+**2인 PIE**로 멀티 확인:
+
+| # | 확인 |
+|---|---|
+| 9 | 한 명이 레버를 당기면 **다른 화면의 전구도 같이** 바뀐다 |
+| 10 | 두 명이 서로 다른 레버를 동시에 당겨도 상태가 깨지지 않는다 |
+| 11 | 나중에 접속한 클라이언트도 현재 전구 상태가 맞게 보인다 |
+
+**로그 확인**: 라운드 성공 시 `[S2Switch] 라운드 성공 n/3` 이 출력된다.
+전구가 안 켜지는데 이 로그가 뜬다면 **C++은 정상이고 BP 연출만 빠진 것**이다.
+
+---
+
+##### 문제 해결
+
+| 증상 | 원인 |
+|---|---|
+| F 프롬프트가 안 뜬다 | ★**메시 에셋에 심플 콜리전이 없음**(가장 흔함) / Collision Preset이 `NoCollision` / `InteractionWidget`에 위젯 클래스 미지정 |
+| F 를 연타해도 한 번만 먹는다 | 정상. `InteractCooldown`(레버 0.4초) 때문이다 |
+| 특정 레버만 반응이 없다 | 그 레버의 `PropIndex`가 `-1`이거나 중복 |
+| 전 레버가 반응 없다 | `OwnerPuzzle` 미배선 (`Cast<ADRS2SwitchPuzzle>` 실패) |
+| 전구가 안 켜진다 | `OnBulbsChanged` 미구현 / `Bulbs` 배열이 비었거나 순서가 뒤섞임 |
+| 레버를 조준했는데 전구가 조준된다 | 전구 Collision이 `NoCollision`이 아님 |
+| 3라운드 후 스크린에 `-` | Director `Room2SwitchPuzzle` 미배선 |
+| 스크린에 `-1`이 찍힌다 | `OnDigitsChanged`에서 음수 처리 누락 |
+| 라운드가 넘어가도 레버가 올라가 있다 | BP에서 자체 토글 회전을 추가함 → 제거하고 C++ 자동 처리에 맡길 것 |
+| `해가 있는 마스크 생성에 실패` Error | `BulbCount`/`MinBitsPerLever` 설정이 비정상 (예: 전구보다 담당 수가 큼) |
+
+#### 16.8.5 `BP_S2CctvBoard` (부모 `ADRS2CctvBoard`) — CCTV
+
+> **★변경 (2026-08-18)**: 화면을 **메시 6개**로 두던 방식에서
+> **메시 1개 + 머티리얼 슬롯 6개**로 바꿨다. 배치가 한 번으로 끝나고 드로우콜도 줄어든다.
+> C++ 도 이에 맞춰 수정했다(태그 수집 → 슬롯 인덱스).
+
+| 프로퍼티 | 값 |
+|---|---|
+| `ScreenCount` | `6` — 화면 개수 = 사용할 머티리얼 슬롯 수 |
+| `ScreenMaterialSlots` | **비워둔다** (화면 i = 슬롯 i). 슬롯 순서가 화면 배치 순서와 다를 때만 채운다 |
+| `ScreenTextureParameterName` | `ScreenTex` (기본값) |
+| **`TargetImage`** | 세어야 할 대상 텍스처 ★§14.2.9-1 미정 → 임시 텍스처 |
+| **`DummyImages`** | 더미 텍스처 배열 (6종 권장) |
+| **`ErrorImage`** | 오류 화면 텍스처 |
+| `StepDuration` | `2.0` (기본값) — 확정 사양 |
+| `StepCount` | `12` (기본값) → 총 노출 슬롯 24개, 24초 주기 |
+
+##### 컴포넌트 구성
+
+`ScreenMesh`(C++ 제공) **하나**에 CCTV 벽 메시를 지정한다. 컴포넌트를 추가할 필요가 없다.
+
+**메시가 갖춰야 할 조건**: 화면 6개가 **서로 다른 머티리얼 슬롯(엘리먼트)** 으로 분리되어 있어야 한다.
+DCC 툴에서 화면 면마다 다른 머티리얼을 할당해 임포트하면 슬롯이 나뉜다.
+스태틱 메시 에디터의 **Material Slots** 목록에 6개가 보이면 준비된 것이다.
+
+```
+ScreenMesh (StaticMeshComponent)
+ ├ Element 0  ← 화면 0
+ ├ Element 1  ← 화면 1
+ ├ ...
+ └ Element 5  ← 화면 5
+```
+
+- **슬롯 번호가 곧 화면 인덱스**다. 메시의 슬롯 순서가 벽에 붙은 순서와 다르면
+  `ScreenMaterialSlots` 에 매핑을 적는다 (예: `3, 0, 5, 1, 4, 2`).
+- 여섯 슬롯 **전부에 머티리얼이 지정**되어 있어야 한다. 비어 있으면 그 화면의 MID 생성이 실패한다
+  (`[S2CCTV] 화면 N (슬롯 M): MID 생성 실패` Error).
+- 슬롯 수가 `ScreenCount` 보다 적으면 Error 가 뜬다.
+
+##### 머티리얼 요구사항
+
+여섯 슬롯이 **같은 머티리얼을 공유해도 된다.** 런타임에 슬롯별로 MID 가 따로 만들어지므로
+서로 다른 텍스처를 표시한다.
+
+- `Texture Sample` 을 `TextureSampleParameter2D` 로 만들고 파라미터 이름을 **`ScreenTex`** 로 지정.
+- 이름이 다르면 **오류 없이 조용히** 텍스처가 안 바뀌고 초기 상태로 멈춘다.
+- Emissive 출력으로 연결하면 화면처럼 보인다.
+
+> 기존 아트 에셋에 CCTV 메시가 있다(`Content/DaeRuneAssets/Map/Stage2_v1/cctv1~6`, `cctv11~61`).
+> 다만 이들이 **개별 메시**라면 슬롯이 나뉜 통합 메시가 따로 필요하다.
+
+#### 16.8.6 `BP_S2Safe` (부모 `ADRS2Safe`) — 금고
+
+| 프로퍼티 | 값 |
+|---|---|
+| `InputDisplay` | **`BP_S2SafeDisplay`** 인스턴스 (3자리 입력 표시 — §16.8.2) |
+| **`PartClass`** | **`BP_Part`** ★ 비우면 금고를 열어도 부품이 나오지 않아 진행 불가 |
+| `CodeLength` | `3` (기본값) — `SetSecretCode`가 실제 코드 길이로 덮어쓴다 |
+
+**컴포넌트** (C++ 제공): `SafeBodyMesh`, `DoorMesh`(개방 연출용), `PartSpawnPoint`(부품 스폰 위치)
+
+- `PartSpawnPoint`를 **금고 내부**에 두되, 문이 열린 뒤 플레이어가 라인트레이스로 집을 수 있는 위치여야 한다. 너무 깊으면 벽에 가려 픽업이 안 된다.
+- 숫자 버튼 10개 + 초기화 버튼은 **별개 액터**(`BP_S2SafeButton`)로 금고 앞에 배치하고 `OwnerPuzzle`을 이 금고로 배선한다.
+
+| 연출 훅 | 내용 |
+|---|---|
+| **`OnSafeOpenedVisual()`** | ★문 개방 애니메이션. 비우면 문이 그대로 닫혀 보여 부품이 있는지 알 수 없다 |
+| `OnWrongCodeVisual()` | 오답 사운드/붉은 점멸 |
+
+---
+
+### 16.9 방3 · 방4 에셋 (신규 3종)
+
+권장 경로: `Content/Blueprints/Actor/Stage2/Room4/`
+
+#### 16.9.1 `BP_S2InstallStation` (부모 `ADRCleanserSite`)
+
+기존 `BP_DRCleanserSite`를 복제해 만드는 것이 빠르다.
+
+| 항목 | 값 |
+|---|---|
+| **`RequiredPartsCount`** | **`1`** ★ 기본값이 2이므로 반드시 바꾼다. 2로 두면 부품 1개로는 설치가 완료되지 않아 두더지 게임이 시작되지 않는다 |
+| **액터 태그** | **`CleanserSite`** ★ GameMode의 사이트 스캔이 이 태그로 수집한다 |
+| 초기 상태 | 코드가 `Active`를 요구한다. 스테이지1처럼 `Inactive`로 시작하면 설치가 거부된다 → **BP/레벨에서 `Active`로 시작**하도록 확인 |
+| `InstalledPartMesh1` | 설치 완료 표시용 메시 (1개만 사용) |
+
+> `EjectInstalledPart`가 설치를 되돌릴 때 `InstalledPartMesh1`의 가시성을 끄고 부품을 재스폰한다. 메시가 지정되지 않아도 동작은 하지만 시각 피드백이 없다.
+
+#### 16.9.2 `BP_S2Mole` (부모 `ADRS2Mole`) — 홀로그램 두더지
+
+| 프로퍼티 | 값 |
+|---|---|
+| `ProximityRadius` | `200` (기본값 = 2m) — 확정 사양 |
+| `VanishDuration` | `0.3` (기본값) — 소멸 연출 시간 |
+
+**컴포넌트** (C++ 제공): `MoleMesh`(홀로그램 메시), `HitBox`(캡슐 34×60), `AbilitySystemComponent`
+
+| 항목 | 내용 |
+|---|---|
+| `MoleMesh` | 홀로그램 머티리얼(반투명 + Emissive + 스캔라인 등) |
+| `HitBox` | 크기를 메시에 맞춘다. ★**콜리전 설정을 건드리지 말 것** — C++이 `ECC_Pawn` 오브젝트 타입 + `Visibility` Block + `Pawn` Overlap으로 정확히 설정한다. BP에서 프리셋을 바꾸면 투사체가 통과하거나 플레이어를 밀어낸다 |
+| **`OnEmergeVisual()`** | ★필수 권장. 바닥에서 튀어나오는 연출. 비우면 제자리에 갑자기 나타난다 |
+| **`OnVanishVisual(bool bWasKilled)`** | ★필수 권장. `true`=처치, `false`=시간 만료. 둘을 구분해 피드백을 주면 플레이어가 놓친 것을 인지한다 |
+
+> 두더지는 어트리뷰트가 없고 **1히트에 사라진다**. 체력바나 데미지 숫자가 뜨지 않는 것이 정상이다.
+
+#### 16.9.3 `BP_S2MoleGame` (부모 `ADRS2MoleGame`) — 두더지 게임 관리
+
+| 프로퍼티 | 값 |
+|---|---|
+| `Tiers` | **비워두지 말 것.** C++ 생성자가 `{0, 2.0, 0.8}` / `{5, 1.3, 0.5}` / `{12, 0.8, 0.3}` 3구간을 넣어두므로 **BP에서 그대로 상속된다.** 수정하려면 이 3개만 조정 |
+| `GoalKills` | `20` (기본값) — 확정 사양 |
+| `MaxConcurrentMoles` | `3` (기본값) |
+| **`MoleClass`** | **`BP_S2Mole`** ★ 비우면 두더지가 스폰되지 않아 방3+4를 클리어할 수 없다 |
+| **`SpawnPoints`** | 레벨 배치 시 배선 (아래) |
+
+**두더지 등장 지점**: 방4 바닥에 **빈 액터(또는 `TargetPoint`) 9~12개**를 격자로 배치하고 `SpawnPoints` 배열에 전부 넣는다.
+- 전용 클래스가 없으므로 `TargetPoint`를 쓰면 에디터에서 잘 보인다.
+- 배열이 비면 `[S2MoleGame] 등장 지점이 배선되지 않았습니다` Error가 뜬다.
+- 지점 간 거리를 **4m 이상** 벌려야 2m 근접 규칙이 의미를 갖는다. 너무 촘촘하면 한자리에서 다 잡힌다.
+
+#### 16.9.4 방3 부활 지점 · 부품 복귀 지점
+
+전용 클래스가 없으므로 `TargetPoint`를 쓴다.
+
+| 항목 | 수량 | 위치 | Director 배선 |
+|---|---|---|---|
+| 부활 지점 | **4개** (최대 인원) | 방3 안, 서로 200uu 이상 이격 | `Room3RevivePoints` |
+| 부품 복귀 지점 | **1개** | 방3 쪽 **D3 게이트 앞** | `Room4EntranceDropPoint` |
+
+- 부활 지점이 **0개면** `[S2P3] 부활 지점이 없어 부활을 건너뜁니다` Error가 뜨고 사망자가 부활하지 않는다.
+- 지점 수가 인원보다 적으면 남는 인원은 `[0]`번 지점에 겹쳐 부활한다.
+
+---
+
+### 16.10 방6 열차 에셋 (신규 5종)
+
+권장 경로: `Content/Blueprints/Actor/Stage2/Room6/`
+
+#### 16.10.1 `BP_S2TrainTrack` (부모 `ADRS2TrainTrack`)
+
+★**경로를 정하는 것은 스플라인이다.** 열차는 오직 스플라인만 보고 달린다. **선로 메시를 배치한다고 경로가 생기지 않는다.**
+
+| 항목 | 내용 |
+|---|---|
+| `Spline` (루트) | 레벨에서 **ㄷ자 + 코너 곡선**으로 편집 (§14.6.2 확정) |
+
+**선로 메시를 만드는 두 가지 방법**
+
+| 메시 형태 | 방법 | 어긋남 위험 |
+|---|---|---|
+| **반복 가능한 조각** (직선 1구간) | `TrackSegmentMesh`에 지정 → **스플라인을 따라 자동 생성** | 없음 (권장) |
+| **ㄷ자 전체가 한 덩어리** | `TrackSegmentMesh`를 **비우고** BP에 `StaticMeshComponent`로 직접 추가 | ★스플라인을 메시 경로에 **손으로 맞춰야** 한다 |
+
+**조각 자동 생성 설정** (`TrackSegmentMesh` 지정 시에만 동작)
+
+| 프로퍼티 | 값 | 비고 |
+|---|---|---|
+| `TrackSegmentMesh` | 선로 조각 메시 | **비우면 아무것도 생성하지 않는다** — 한 덩어리 방식과 병행 가능 |
+| `SegmentLength` | `0` (기본값) | 0이면 메시 바운드에서 자동 계산. 조각 사이가 벌어지거나 겹치면 실측값을 직접 입력 |
+| `SegmentForwardAxis` | `X` (기본값) | 조각 메시의 진행 방향 축. 메시가 뒤틀리면 Y/Z로 바꿔본다 |
+| `bSegmentCollision` | `true` (기본값) | 플레이어가 선로 위를 걸어야 하면 true |
+| `SegmentCollisionProfile` | `BlockAll` (기본값) | |
+
+- 스플라인을 편집하면 **에디터에서 즉시 메시가 갱신**된다(`OnConstruction`).
+- 수동 갱신이 필요하면 디테일 패널의 **`Rebuild Track Mesh`** 버튼을 누른다.
+- 전체 길이를 균등 분할하므로 **끝에 자투리가 남지 않는다**.
+- 스플라인 접선을 조각 길이로 재스케일하므로 코너에서 과도하게 휘지 않는다.
+
+**편집 요령**
+- 시작점(역)에서 종점까지 한 방향으로만 진행하게 만든다. 되돌아오는 구간이 있으면 거리 계산이 어긋난다.
+- `Closed Loop`는 **끄고** 둔다(C++ 기본값 false).
+- 코너는 포인트 2~3개로 완만하게. 급격한 곡선은 열차가 회전하며 탑승자가 벽에 끼일 수 있다.
+- 스플라인 총 길이가 종점 거리가 된다. 구간당 20~30초 주행을 원하면 `TrainSpeed 600` 기준 **구간당 12000~18000uu**.
+
+##### 16.10.1-A 한 덩어리 메시에 스플라인 맞추기 ★
+
+ㄷ자 전체가 한 덩어리인 선로 메시를 쓴다면 **메시를 기준으로 스플라인을 맞춘다.** 아래 3가지 기준을 지키면 어긋나지 않는다.
+
+| # | 축 | 기준 | 틀리면 생기는 일 |
+|---|---|---|---|
+| 1 | **좌우** | 레일 **두 줄의 정중앙**에 스플라인을 놓는다 | 열차가 한쪽으로 치우쳐 달린다 |
+| 2 | **높이** | 레일 **상단** 높이에 놓는다 | 칸이 파묻히거나 공중에 뜬다 |
+| 3 | **방향** | 포인트 순서 = 진행 방향. **[0]이 역(출발 지점)** | 열차가 역방향으로 간다 |
+
+**높이 기준의 정확한 의미**: 칸 액터의 **원점**이 스플라인 위에 놓인다. 따라서 바구니 메시의 피벗 위치에 따라 보정값이 달라진다.
+
+| 바구니 메시 피벗 | `HeightOffset` (`BP_S2TrainCar`) |
+|---|---|
+| 바닥 중앙 | `0` |
+| 메시 중앙 | 메시 높이의 **절반** |
+
+**포인트는 적을수록 좋다** — 포인트가 많을수록 메시와 어긋날 지점이 늘어난다.
+
+| 구간 | 권장 포인트 수 | Point Type |
+|---|---|---|
+| 직선 | 양 끝 **2개** | **`Linear`** (의도치 않은 휨 제거) |
+| 코너 | **1~2개** | `Curve` + 탄젠트 핸들로 곡률을 메시에 맞춤 |
+
+ㄷ자면 **총 6~8개**면 충분하다.
+
+**작업 순서**
+1. 선로 메시를 레벨에 배치하고 위치를 고정한다.
+2. `BP_S2TrainTrack`을 배치한다.
+3. **Top 뷰(위에서 보기)로 전환**해 스플라인 포인트를 레일 정중앙에 맞춘다. 원근 뷰보다 훨씬 정확하다.
+4. 직선 구간 포인트를 우클릭 → **Point Type = `Linear`** 로 바꾼다.
+5. 코너 포인트의 탄젠트 핸들을 조정해 메시 곡선에 맞춘다.
+6. 측면 뷰로 전환해 높이를 레일 상단에 맞춘다.
+
+**검증**: 눈으로 맞춘 뒤 **PIE에서 실제로 주행**시킨다. 어긋나면 열차가 선로 옆으로 벗어나거나 공중에 뜬 채 달린다. 칸의 상하 위치만 어긋나면 `HeightOffset`으로 보정한다.
+
+> **반대 방향도 가능하다** — 스플라인을 먼저 편하게 그리고 **메시를 그 위에 맞춰 옮기는** 방식이다. 메시가 대칭적이고 단순하면 이쪽이 더 빠르다. 어느 쪽이든 **하나를 기준으로 고정**하고 나머지를 맞추는 것이 중요하다. 둘 다 조금씩 움직이면 계속 어긋난다.
+
+**"트랙을 배치하면 알아서 트랙 위를 따라가나?" — 조건부로 그렇다** ★
+
+코드는 `GetTransformAtDistanceAlongSpline`으로 **위치와 회전을 스플라인에서 직접 가져오므로**, 스플라인만 제대로 그려두면 열차가 그 위를 따라간다. 다만 **아래 4가지는 스플라인이 알아서 해주지 않으므로** 코드/설정으로 보정한다.
+
+| 항목 | 스플라인이 주는 것 | 처리 방식 |
+|---|---|---|
+| **위치·회전** | ✅ 그대로 사용 | 별도 처리 없음 |
+| **칸별 순차 회전** | ❌ 한 점의 트랜스폼만 준다 | ★칸마다 자기 거리를 계산해 개별 배치 (§4.9.3-A) |
+| **스케일** | ⚠️ 포인트 스케일이 포함된다 | ★코드에서 **무시**한다. 무시하지 않으면 스플라인 포인트 스케일이 1이 아닐 때 칸 크기가 변한다 |
+| **경사·뱅킹(Pitch/Roll)** | ⚠️ 포인트 회전이 그대로 반영된다 | `bLevelPitchAndRoll = true`면 수평 유지 (기본값) |
+| **높이(피벗)** | ❌ 액터 원점이 스플라인 위에 놓인다 | 메시 피벗이 바닥 중앙이 아니면 `HeightOffset`으로 보정 |
+
+즉 **스플라인을 그리고 칸을 배치·배선하기만 하면 되지만**, 스플라인 포인트의 **스케일을 1이 아닌 값으로 바꾸거나 롤을 준 경우**에는 위 설정을 확인해야 한다. 가장 흔한 문제는 **메시 피벗** — 칸이 선로에 반쯤 파묻히거나 공중에 뜨면 `HeightOffset`을 조정한다.
+
+#### 16.10.2 `BP_S2TrainCar` (부모 `ADRS2TrainCar`) — 바구니 칸 ★2026-08-07 변경
+
+> **좌석 BP는 만들지 않는다.** 바구니 칸 자체가 탑승 지점이다. BP는 이것 하나만 만들고 **레벨에 4개 배치**한다.
+
+| 항목 | 내용 |
+|---|---|
+| `CarMesh` (루트) | **바구니 열차 메시**. ★`ECC_Visibility` Block 필수 (탑승 라인트레이스 감지) |
+| **`RiderAttachPoint`** | ★탑승자가 attach될 지점. **바구니 안쪽 바닥에 캐릭터 발이 닿을 높이**로 둔다. 잘못 두면 캐릭터가 바구니에 박히거나 공중에 뜬다 |
+| **`ExitPoint`** | ★하차 지점. **칸 옆 바닥**. 선로 위나 벽 안에 두면 하차 시 끼인다 |
+| `InteractionWidget` | "F 탑승" 프롬프트 위젯 |
+| `HeightOffset` | 선로 위로 띄울 높이. **메시 피벗이 바닥 중앙이 아니면** 이 값으로 보정한다 (피벗이 바닥이면 0) |
+| `bLevelPitchAndRoll` | `true` (기본값) — 스플라인 경사·뱅킹을 무시하고 수평 유지. 바구니 열차에 자연스럽고 탑승자가 기울어 끼는 것도 막는다 |
+| `CarIndex` | **입력하지 않는다** — 열차의 `Cars` 배열 순서로 자동 지정된다 (표시 전용) |
+| `OwningTrain` | **비워둔다** — 열차가 자동 배선한다 |
+| `OnRiderChanged(Character)` | 탑승/하차 연출 (선택) |
+
+#### 16.10.3 `BP_S2Train` (부모 `ADRS2Train`) — 논리 관리자
+
+★열차 BP에는 **메시가 없어도 된다.** 실제로 보이는 것은 칸 4개이고, 이 액터는 주행 로직만 담당한다.
+
+| 프로퍼티 | 값 |
+|---|---|
+| **`Track`** | 레벨의 `BP_S2TrainTrack` 인스턴스 ★비우면 열차가 움직이지 않는다 |
+| **`Cars`** | 레벨에 배치한 `BP_S2TrainCar` **4개를 선두부터 순서대로** ★배열 순서 = 칸 번호 |
+| **`CarSpacing`** | 칸 간 거리(uu). **칸 메시 길이 + 원하는 틈**. 기본 `400` |
+| **`StartDistanceOnTrack`** | 역(출발 지점)의 스플라인 거리. ★**`CarSpacing × 3` 이상**이어야 출발 전에 뒤 칸들이 선로 시작점에 겹치지 않는다 |
+
+**배치 순서**
+
+1. 선로(`BP_S2TrainTrack`)를 먼저 배치·편집한다.
+2. `BP_S2TrainCar` **4개**를 역 근처에 배치한다. 위치는 대충 둬도 된다 — `BeginPlay`에서 선로 위로 자동 정렬된다.
+3. `BP_S2Train` 1개를 배치하고 `Track`·`Cars`·`CarSpacing`·`StartDistanceOnTrack`을 채운다.
+4. `Cars` 배열은 **[0]이 선두**다. 순서를 거꾸로 넣으면 열차가 뒤로 늘어선다.
+
+**`CarSpacing` 정하는 법**: 칸 메시의 진행 방향 길이를 재고 거기에 원하는 틈(예: 50~100uu)을 더한다. 너무 좁으면 **곡선에서 칸끼리 겹쳐 보이고**, 너무 넓으면 열차가 끊어져 보인다.
+
+| 연출 훅 | 내용 |
+|---|---|
+| `OnTrainStateChanged(ES2TrainState)` | 출발/급정거 사운드·진동. `Moving` / `StoppedAtObstacle` / `WaitingForBoarding` / `Arrived` 구분 |
+
+> **검증 로그**: `StartDistanceOnTrack`이 부족하면 `[S2Train] StartDistanceOnTrack(x) < 필요 거리(y)` Warning, `Cars`가 비면 `[S2Train] 칸이 하나도 배선되지 않았습니다` Error가 뜬다.
+
+#### 16.10.4 `BP_S2TrainObstacle` (부모 `ADRS2TrainObstacle`) — 3개 배치
+
+| 프로퍼티 | 값 |
+|---|---|
+| `StopDistance` | **`-1` (기본값)로 비워둔다** → 위치를 스플라인에 투영해 자동 계산 |
+| `StopMargin` | `400` (기본값) — 장애물 앞 이 거리에서 멈춘다 |
+| `Track` | **비워둔다** — 페이즈가 `OnPhaseStart`에서 Director의 Track을 주입한다 |
+
+**컴포넌트** (C++ 제공): `ObstacleMesh`(보스가 부수는 차단물), `BossSpawnPoint`
+
+- `BossSpawnPoint`를 **장애물 뒤/아래**에 둔다. 열차 쪽에 너무 가까우면 보스가 열차 안에 스폰된다.
+- 3개를 **선로 진행 순서대로** 배치하고 Director의 `Obstacles` 배열도 같은 순서로 넣는다. 순서가 뒤바뀌면 열차가 뒤로 가려 해 멈춘다.
+- `OnBrokenVisual()` — 파편/먼지/사운드. 보스 등장과 동시에 재생된다.
+
+#### 16.10.5 `BP_S2Barrier` (부모 `ADRS2Barrier`) — 6개 배치
+
+| 항목 | 내용 |
+|---|---|
+| `BlockBox` | 기본 100×500×300. **통로 폭·높이를 완전히 덮도록** 조정 |
+| `OnBarrierEnabledChanged(bool)` | 역장 시각화 (선택이지만 권장 — 보이지 않는 벽은 혼란스럽다) |
+
+**배치**: 장애물 3곳마다 **전방 1 + 후방 1**.
+
+| 종류 | 위치 | Director 배선 |
+|---|---|---|
+| 전방 배리어 | 장애물 **바로 앞**(진행 방향 쪽) | `ForwardBarriers[i]` |
+| 후방 배리어 | 정지한 열차 **뒤쪽** | `RearBarriers[i]` |
+
+★**인덱스가 `Obstacles`와 일치해야 한다.** 어긋나면 엉뚱한 구간이 막히거나 열려 플레이어가 이탈한다.
+
+**콜리전 주의**: C++이 `Pawn`만 Block하도록 설정한다. BP에서 프리셋을 `BlockAll`로 바꾸면 **열차가 배리어에 막혀 출발하지 못한다.**
+
+---
+
+### 16.11 캐릭터 BP — 부활 훅 (★필수, 빠지면 버그로 보인다)
+
+**대상**: 플레이어 캐릭터 BP 전부 (`BP_DRCharacter` 계열 — Gardener / VendingMachine 등 `ADRCharacter` 파생 BP)
+
+**구현할 이벤트**: `K2_OnCharacterRevived` (BlueprintImplementableEvent)
+
+C++이 복원하는 것과 BP가 복원해야 하는 것이 나뉜다.
+
+| C++이 이미 복원 (`MulticastHandleRevive`) | BP가 복원해야 함 (`K2_OnCharacterRevived`) |
+|---|---|
+| `bDead = false` | **Dissolve 머티리얼 파라미터 원복** ★ |
+| 캡슐 콜리전 (`QueryAndPhysics`) | 사망 카메라 애니메이션 해제 |
+| CMC (`MOVE_Walking`) | 그 외 BP 타임라인으로 만든 사망 연출 되돌리기 |
+| 메시 물리/콜리전 | 부활 VFX·사운드 (선택) |
+| 사망 몽타주 정지 (`StopAllMontages`) | |
+| 1인칭 메시 재표시 + 3인칭 `SetOwnerNoSee(true)` | |
+| 표정 `RevertToDefault()` | |
+| 위치 이동 · Health/Water 회복 | |
+
+> ★**Dissolve를 되돌리지 않으면** 부활한 캐릭터가 **반투명하게 남는다.** Dissolve는 `StartDissolveTimeline`(BP 타임라인)으로 진행되므로 C++에서 되돌릴 수 없다. BP에서 타임라인을 `Reverse` 또는 정지 후 `SetScalarParameterValue`로 원래 값(보통 Dissolve 진행도 0)으로 복원한다.
+
+**검증 방법**: PIE에서 캐릭터를 죽인 뒤 콘솔이나 치트로 방4 두더지를 클리어시켜 부활을 확인한다. 반투명하거나 카메라가 사망 시점에 고정돼 있으면 이 훅이 비어 있다.
+
+---
+
+### 16.12 `Stage2.umap` 배치 체크리스트
+
+기존 아트 에셋 상황: 방1~6 지오메트리는 있고(`Content/DaeRuneAssets/Map/Stage2_v1/`), **열차·선로·장애물·구조물·두더지·금고 메시는 없다**. 임시 프리미티브(큐브 등)로 진행하고 M7에서 교체한다.
+
+#### ① WorldSettings
+- `GameMode Override` = **`BP_DRStage2GameMode`**
+
+#### ② 시작지점
+- `PlayerStart` **×4** — 서로 200uu 이상 이격
+
+#### ③ 통로 8곳
+
+| 배치 | BP | 위치 |
+|---|---|---|
+| D0 | `BP_MovingBlocker_S_R1` | 시작지점↔방1 통로. 메시는 **내려간 상태**로 |
+| D1 | `BP_TeleportGate_R1_R2` | 방1의 방2행 문 위치 |
+| E2 | `BP_TeleportGate_R2_R1` | 방2 출구 |
+| D2 | `BP_MovingBlocker_R1_R3` | 방1↔방3 통로. 메시는 **내려간 상태**로 |
+| D3 | `BP_TeleportGate_R3_R4` | 방3의 방4행 문 위치 |
+| R4 | `BP_TeleportGate_R4_R3` | 방4 안 복귀 문 |
+| D4 | `BP_MovingBlocker_R3_R5` | 방3↔방5 통로. 메시는 **막고 있는 상태**로 |
+| D5 | `BP_MovingBlocker_R5_R6` | 방5↔방6 통로. 메시는 **막고 있는 상태**로 |
+
+#### ④ 도착 지점 `TargetPoint` 4개 + 밀어내기 지점 4개
+
+| 용도 | 수량 | 위치 | 배선 대상 |
+|---|---|---|---|
+| D1 도착 | 1 | **방2 안** | `BP_TeleportGate_R1_R2`의 `DestinationOverride` |
+| E2 도착 (방1 회수) | 1 | 방1 안 (D1 게이트 앞 권장) | `BP_TeleportGate_R2_R1`의 `DestinationOverride` |
+| D3 도착 | 1 | **방4 입구** | `BP_TeleportGate_R3_R4`의 `DestinationOverride` |
+| R4 도착 | 1 | 방3 안 | `BP_TeleportGate_R4_R3`의 `DestinationOverride` |
+| 구조물 밀어내기 | 4 | 각 통로의 "안쪽" 방 | 각 Blocker의 `PushOutPoint` |
+
+#### ⑤ 룸 트리거 3개
+- `BP_Room1Trigger` / `BP_Room3Trigger` / `BP_Room5Trigger` — 박스를 방 전체 + 통로 입구 안쪽까지
+
+#### ⑥ 스폰 포인트
+- 방1 `RoomID=Room1` **6개** / 방3 `RoomID=Room3` **4개** / 방5 `RoomID=Room5` **4개 + 공중 2개**
+
+#### ⑦ 방2
+- `BP_S2SlidePuzzle` 1 + `BP_S2PuzzleTerminal` 1 + `BP_S2CodeScreen_Digit` 1
+- `BP_S2SwitchPuzzle` 1 + `BP_S2Lever` **5** (`PropIndex` 0~4) + `BP_S2CodeScreen_Digit` 1
+- `BP_S2CctvBoard` 1 (화면 6개는 BP 내부 컴포넌트)
+- `BP_S2Safe` 1 + `BP_S2SafeButton` **10** (`PropIndex` 0~9) + 초기화 버튼 1 + `BP_S2SafeDisplay` 1
+
+#### ⑧ 방3 / 방4
+- 방3: 부활 지점 `TargetPoint` **4개**, 부품 복귀 지점 `TargetPoint` **1개** (D3 게이트 앞)
+- 방4: `BP_S2InstallStation` **중앙**, `BP_S2MoleGame` 1, 두더지 등장 지점 `TargetPoint` **9~12개**
+
+#### ⑨ 방6 / 선로
+- `BP_S2TrainTrack` 1 (스플라인 ㄷ자 편집)
+- **`BP_S2TrainCar` 4개** (바구니 칸) — 역 근처에 배치. 위치는 대충 둬도 `BeginPlay`에서 선로 위로 자동 정렬된다
+- `BP_S2Train` 1 — `Track`·`Cars`(선두부터 4개)·`CarSpacing`·`StartDistanceOnTrack` 입력
+- `BP_S2TrainObstacle` **3개** — 선로 진행 순서대로
+- `BP_S2Barrier` **6개** — 전방 3 + 후방 3
+
+#### ⑩ NavMesh
+- 방1~5 전체 + **선로변 전투 구간 3곳**(전방~후방 배리어 사이) 커버
+- 두더지 보스가 하차한 플레이어를 추적해야 하므로 전투 구간 NavMesh는 필수
+- 방4는 텔레포트로만 진입하므로 방3과 NavMesh가 이어지지 않아도 된다
+
+#### ⑪ `BP_S2StageDirector` 1개 배치 → §16.13 배선
+
+#### ⑫ BGM
+- `ADRBGMActor` 배치 (스테이지1 참고). 보스 BGM 전환이 필요하면 `UDRS2TrainPhase`에서 `DRPhase3.cpp:1314-1328` 패턴 호출 (미구현, 선택)
+
+---
+
+### 16.13 Director 배선 — 전체 27항목 체크리스트
+
+`BP_S2StageDirector` 인스턴스를 선택하고 디테일 패널에서 전부 채운다. **미배선 항목은 `BeginPlay`에서 Error 로그로 전부 나열되므로 로그를 먼저 확인하는 것이 가장 빠르다.**
+
+| # | 카테고리 | 프로퍼티 | 배선 대상 | 필수 |
+|---|---|---|---|---|
+| 1 | 통로 | `Blocker_StartToRoom1` | D0 인스턴스 | ★ |
+| 2 | 통로 | `Gate_Room1ToRoom2` | D1 인스턴스 | ★ |
+| 3 | 통로 | `Gate_Room2Exit` | E2 인스턴스 | ★ |
+| 4 | 통로 | `Blocker_Room1ToRoom3` | D2 인스턴스 | ★ |
+| 5 | 통로 | `Gate_Room3ToRoom4` | D3 인스턴스 | ★ |
+| 6 | 통로 | `Gate_Room4Return` | R4 인스턴스 | ★ |
+| 7 | 통로 | `Blocker_Room3ToRoom5` | D4 인스턴스 | ★ |
+| 8 | 통로 | `Blocker_Room5ToRoom6` | D5 인스턴스 | ★ |
+| 9 | 트리거 | `Trigger_Room1` | `BP_Room1Trigger` | ★ |
+| 10 | 트리거 | `Trigger_Room3` | `BP_Room3Trigger` | ★ |
+| 11 | 트리거 | `Trigger_Room5` | `BP_Room5Trigger` | ★ |
+| 12 | 스폰 | `Room1SpawnPoints` | **비워둠** (RoomID 자동 수집) | — |
+| 13 | 스폰 | `Room3SpawnPoints` | **비워둠** | — |
+| 14 | 스폰 | `Room5SpawnPoints` | **비워둠** | — |
+| 15 | 방2 | `Room2SlidePuzzle` | `BP_S2SlidePuzzle` | ★ |
+| 16 | 방2 | `Room2SwitchPuzzle` | `BP_S2SwitchPuzzle` | ★ |
+| 17 | 방2 | `Room2CctvBoard` | `BP_S2CctvBoard` | ★ |
+| 18 | 방2 | `Room2Safe` | `BP_S2Safe` | ★ |
+| 19 | 방3 | `Room3RevivePoints` | `TargetPoint` 4개 | ★ |
+| 20 | 방3 | `Room4EntranceDropPoint` | `TargetPoint` 1개 | ★ |
+| 21 | 방4 | `Room4InstallSite` | `BP_S2InstallStation` | ★ |
+| 22 | 방4 | `Room4MoleGame` | `BP_S2MoleGame` | ★ |
+| 23 | 방6 | `Train` | `BP_S2Train` | ★ |
+| 24 | 방6 | `Track` | `BP_S2TrainTrack` | ★ |
+| 25 | 방6 | `Obstacles` | 장애물 3개 (**진행 순서대로**) | ★ |
+| 26 | 방6 | `ForwardBarriers` | 전방 배리어 3개 (**Obstacles와 동일 인덱스**) | ★ |
+| 27 | 방6 | `RearBarriers` | 후방 배리어 3개 (**동일 인덱스**) | ★ |
+
+**Director 외 개별 배선** (액터 자신의 디테일 패널)
+
+| 대상 | 프로퍼티 | 값 |
+|---|---|---|
+| 게이트 4개 | `DestinationOverride` | 각 도착 `TargetPoint` |
+| 구조물 4개 | `PushOutPoint` | 각 안쪽 방 안전 지점 |
+| 프롭 27개 | `OwnerPuzzle`, `PropIndex` | §16.8.1 표 |
+| `BP_S2MoleGame` | `SpawnPoints` | 두더지 등장 지점 9~12개 |
+| `BP_S2Train` | `Track`, `StartDistanceOnTrack` | 선로, 역 거리 |
+| 퍼즐 | `CodeScreen` | `BP_S2CodeScreen_Digit` (1자리) |
+| 금고 | `InputDisplay` | `BP_S2SafeDisplay` (3자리) |
+
+---
+
+### 16.14 로비 연결 · 진행/보상
+
+#### ① 로비 포털
+- `LobbyMap`에 **`BP_DRStageSelectActor`** 추가 배치
+- `DestinationMapName` = **`Stage2`**
+- 기존 스테이지1 포털 옆에 두고 안내 문구/메시를 구분
+
+#### ② 진행·보상 정의 (선택이지만 권장)
+`ProgressionConfig` 데이터에셋의 `StageRewards` 배열에 항목을 추가한다.
+
+| 필드 | 값 |
+|---|---|
+| `StageId` | **`Stage2`** (GameMode의 `StageId`와 정확히 일치) |
+| 보상 내용 | 프로젝트 정책에 따라 |
+
+> 정의가 없으면 클리어해도 보상이 0이고 `[Progression] ProgressionConfig 에 StageId 'Stage2' 정의가 없어 최초 클리어 보상이 없습니다` Warning만 남는다(진행 자체는 정상).
+
+#### ③ 스테이지2 해금 조건
+현재 코드에 해금 게이트가 없어 **로비에 포털을 두면 바로 진입 가능**하다. "스테이지1 클리어 후 해금"이 필요하면 별도 작업이며 이 문서 범위 밖이다.
+
+---
+
+### 16.15 콜리전 · 머티리얼 요구사항 요약
+
+**C++이 설정하므로 BP에서 덮어쓰지 말아야 하는 것** ★
+
+| 컴포넌트 | 설정 | 덮어쓰면 생기는 문제 |
+|---|---|---|
+| `ADRS2Mole::HitBox` | `ECC_Pawn` 타입 + Visibility Block + Pawn Overlap | 투사체 통과 / 플레이어 밀림 |
+| `ADRS2Barrier::BlockBox` | Pawn만 Block | `BlockAll`로 바꾸면 **열차가 막힌다** |
+| `ADRS2MovingBlocker::PawnBlock` | Pawn만 Block, 콜리전 토글은 코드가 관리 | 상시 Block으로 두면 열림 상태에서도 못 지난다 |
+| `ADRS2RoomTrigger::TriggerBox` | Pawn Overlap only | Block으로 바꾸면 방에 못 들어간다 |
+| `ADRS2TeleportGate::TriggerBox` | Pawn Overlap only | 동일 |
+
+**BP에서 반드시 확인해야 하는 것**
+
+| 항목 | 요구사항 |
+|---|---|
+| 모든 `ADRS2InteractProp` 자식의 `PropMesh` | **`ECC_Visibility` Block** — 없으면 라인트레이스에 안 걸려 상호작용 불가 |
+| `ADRS2TrainCar::CarMesh` | **`ECC_Visibility` Block** — 동일 |
+| CCTV 화면 머티리얼 | **`ScreenTex`** 이름의 Texture Parameter |
+| CCTV 화면 | 컴포넌트 태그 아님 — **`ScreenMesh` 의 머티리얼 슬롯 0~5** (2026-08-18 변경) |
+
+
+---
+
+### 16.16 검증 절차 (단계별 PIE)
+
+각 단계는 앞 단계를 전제한다. **로그(`LogDR`)를 항상 열어두고** 진행한다.
+
+#### 단계 0 — 배선 검증 (배치 직후, 플레이 없이)
+1. PIE 시작 → 즉시 로그 확인
+2. `[S2Director] 배선 검증 완료 (누락 없음)` 이 떠야 한다
+3. `미배선:` Error가 있으면 해당 항목을 채운다
+4. `Room1SpawnPoints %d개 - 부족` Warning은 스폰 지점 수를 늘린다
+
+#### 단계 1 — 골격 전환 (통로/트리거만 배치된 상태에서도 가능)
+1. PIE 2인 → 방1 진입 → **D0 구조물 상승** 확인
+2. 방1 적 전멸(치트 `ServerCheatSkipToNextPhase` 사용 가능) → **D1 발광** 확인
+3. D1 근접 → 방2 순간이동
+4. 이하 순차 진행 → 마지막 페이즈 완료 → **게임 클리어 → 로비 복귀**
+5. 각 페이즈 진입 시 **목표 텍스트 + 배너** 표시 확인
+
+#### 단계 2 — 방1 전투
+1. **1인 / 2인 / 4인** 각각 PIE → 스폰 마리 수가 §16.3.1 표와 정확히 일치하는지
+2. ★**웨이브1을 30초 안에 전멸시켜도 페이즈가 끝나지 않아야 한다** (Pending 판정)
+3. 30초에 웨이브2 스폰
+4. 전멸 → D1 발광
+
+#### 단계 3 — 방2
+1. 스위치 퍼즐: **100회 라운드를 돌려도 항상 해가 존재**하는지 (레버를 눌러가며 확인)
+2. 스위치 3라운드 → 스크린에 숫자
+3. CCTV: 1주기(기본 24초) 관찰 → 타깃 등장 횟수 기억
+4. 8퍼즐: 단말 상호작용 시 UI 요청 델리게이트가 발화하는지 (UI 미구현이면 로그로 확인)
+5. 금고: 오답 → 입력만 초기화 / 정답 → 문 개방 + 부품 등장
+6. 부품 픽업 → 출구 통과 → **전원 방1 회수 + D1 발광 해제**
+
+#### 단계 4 — 방3 + 방4
+1. **부품 없이 전원 방3 입장** → 봉쇄되지 않고 재무장되는지
+2. 부품 들고 입장 → D2 상승 + D3 발광
+3. **부품 미소지자가 D3 진입** → 거부
+4. 소지자 진입 → 방4 이동 + **D3 즉시 비활성**
+5. 설치 → **두더지 + 방3 웨이브 동시 시작**
+6. ★**2m 밖에서 원거리 공격** → 두더지 무반응(투과)
+7. 2m 이내 공격 → 1히트 소멸
+8. 5킬 / 12킬에서 스폰 간격이 빨라지는지
+9. **방4 플레이어 사망** → 두더지 리셋 + 부품 설치대 옆 + **D3가 `Anyone`으로 재활성** + **방3 몬스터 전부 제거 + 웨이브 중단**
+10. 다른 1명이 입장해 재설치 → 두더지 + 웨이브 재시작
+11. 20킬 → **부활(체력 50%) + D4 하강 + 잔적 소멸** 동시 확인
+12. ★**부활 후 조작 정상 + 반투명하지 않은지** (§16.11)
+
+#### 단계 5 — 방5
+1. 전원 입장 → **D4 재상승 봉쇄**
+2. 1인/4인 스폰이 §16.3.4 표와 일치
+3. 30초 전 전멸 → **즉시** 다음 웨이브
+4. 방치 → 30초에 겹쳐 스폰
+5. ★**웨이브3 뒤 4번째 웨이브가 안 나오는지**
+6. 웨이브3 전멸 → D5 하강
+
+#### 단계 6 — 방6
+1. 중복 탑승 거부 / 부품 소지 탑승 거부
+2. 생존 3명이 3칸만 채움 → **출발**(빈 칸 허용)
+3. 이동 중 점프 → **무시**
+4. 장애물 도착 → **보스가 장애물을 부수며 등장** + 전·후방 배리어 활성
+5. 정지 중 하차 → 전방/후방 이탈 시도 → 차단
+6. 체력 67% 도달 → 보스 도망 + 전방 개방 + "재탑승" 목표
+7. ★**구간2에서 보스 재등장 시 체력이 67%에서 이어지는지** (100%로 리셋되면 버그)
+8. 34% → 구간3 재등장 시 **34%에서 이어지는지**
+9. 구간3에서 처치 → **즉시 스테이지2 클리어** → 로비
+
+#### 단계 7 — 스테이지1 회귀 (§9.4 2·3회차)
+공유 코드를 대량 수정했으므로 **반드시 확인한다.**
+1. 스테이지1 PIE 2인 완주
+2. 페이즈 전환 / 목표·알람 배너 문구
+3. 방어 페이즈에서 **웨이브 타이머 UI + 클렌저 HP UI** 표시, 그 외 페이즈에서 숨김
+4. 부품 픽업·설치·드롭 전 과정
+5. **마운트 탑승/하차** (좌석 분기 추가 후에도 정상인지)
+6. 적 사망 시 물 보상·데미지 정상 (데미지 관문에 분기 추가됨)
+
+---
+
+### 16.17 자주 나는 실수 · 트러블슈팅
+
+증상 → 원인 순으로 정리했다. **대부분 로그에 단서가 남는다.**
+
+| 증상 | 원인 | 확인 위치 |
+|---|---|---|
+| 목표 텍스트가 하나도 안 뜬다 | 페이즈 BP의 `PhaseObjectiveDataTable` 미지정 | §16.3 |
+| 특정 목표만 안 뜬다 | DT 행 이름 오타. `[Phase] 목표 DataTable 에 행이 없습니다: X` | §16.2 |
+| 목표는 뜨지만 진행도 숫자가 없다 | 행의 `RequiredCount = 0` (의도된 경우도 있음) | §16.2 |
+| 배너가 매 목표 전환마다 뜬다 | 서브 목표 행에 `PhaseAlarmText`를 채웠다 → 비운다 | §16.2 |
+| 페이즈가 전환되지 않는다 | Director 미배선 → `[S2Director] 미배선:` Error | §16.13 |
+| 캐릭터가 스폰되지 않는다 | GameMode BP의 `DefaultPawnClass` 등 누락 | §16.4 |
+| 적이 스폰되지 않는다 | 스폰 포인트 `RoomID` 불일치 → `[S2Phase] RoomX 스폰 지점이 하나도 없습니다` | §16.7 |
+| 적이 한 자리에 몰려 스폰된다 | 스폰 지점이 1~2개뿐 | §16.7 |
+| 방1에서 웨이브1 전멸 후 바로 넘어간다 | `StartDelaySeconds`가 둘 다 0 → 웨이브2를 **30**으로 | §16.3.1 |
+| 구조물이 안 움직인다 | `BlockedOffset`/`OpenOffset`이 같음 | §16.5.1 |
+| 구조물이 열려 있는데 못 지난다 | `PawnBlock` 프리셋을 상시 Block으로 덮었다 | §16.15 |
+| 구조물에 캐릭터가 낀다 | `PushOutPoint` 미배선 / 트리거가 통로를 안 덮음 | §16.5.1 · §16.6 |
+| 게이트에 들어가도 제자리 | `DestinationOverride` 미배선 | §16.5.2 |
+| 게이트가 활성인지 알 수 없다 | `OnGateActiveChanged` 발광 연출 미구현 | §16.5.2 |
+| 레버/버튼에 F 프롬프트가 안 뜬다 | `PropMesh`가 `ECC_Visibility`를 Block하지 않음 | §16.15 |
+| 레버를 눌러도 전구가 안 변한다 | `OnBulbsChanged` 미구현 | §16.8.4 |
+| 모든 숫자 버튼이 0으로 입력된다 | `PropIndex` 미배선(기본 −1) | §16.8.1 |
+| CCTV 화면이 안 바뀐다 | 머티리얼 슬롯이 6개 미만이거나 빈 슬롯이 있음 / 파라미터 이름(`ScreenTex`) 불일치 | §16.8.5 |
+| 금고를 열어도 부품이 없다 | `PartClass` 미지정 | §16.8.6 |
+| 금고 문이 그대로 보인다 | `OnSafeOpenedVisual` 미구현 | §16.8.6 |
+| 부품 설치가 거부된다 | 설치대가 `Inactive` 상태 또는 `RequiredPartsCount=2` | §16.9.1 |
+| 두더지가 스폰되지 않는다 | `MoleClass` 미지정 또는 `SpawnPoints` 비어 있음 | §16.9.3 |
+| 두더지를 때려도 안 사라진다 | 2m 밖에서 공격 중(정상) / `HitBox` 콜리전을 덮어썼다 | §16.9.2 |
+| 사망자가 부활하지 않는다 | `Room3RevivePoints` 비어 있음 | §16.9.4 |
+| 부활한 캐릭터가 반투명하다 | ★`K2_OnCharacterRevived`에서 Dissolve 원복 안 함 | §16.11 |
+| 방4 사망 후 아무도 못 들어간다 | D3 진입 규칙 전환 실패 — 코드가 처리하므로 로그 확인 | §16.16 단계4-9 |
+| 열차가 움직이지 않는다 | `Track` 미배선 / 스플라인 길이 0 | §16.10.3 |
+| 열차가 선로 밖으로 다닌다 | ★선로 **메시와 스플라인이 어긋났다**. 조각 자동 생성을 쓰거나 스플라인을 메시에 맞춘다 | §16.10.1-A |
+| 열차가 레일 한쪽으로 치우쳐 달린다 | 스플라인이 레일 **두 줄의 정중앙**에 있지 않다 (Top 뷰에서 확인) | §16.10.1-A |
+| 열차가 역방향으로 간다 | 스플라인 포인트 **순서가 거꾸로**다 ([0]이 역이어야 한다) | §16.10.1-A |
+| 직선 구간인데 열차가 미묘하게 휘어 간다 | 직선 포인트의 Point Type 이 `Curve` → `Linear` 로 변경 | §16.10.1-A |
+| 선로 조각이 안 생긴다 | `TrackSegmentMesh` 미지정 (의도된 경우도 있음) | §16.10.1 |
+| 선로 조각이 벌어지거나 겹친다 | `SegmentLength` 자동 계산이 부정확 → 실측값 직접 입력 | §16.10.1 |
+| 선로 조각이 뒤틀려 배치된다 | `SegmentForwardAxis`가 메시 진행 축과 다르다 | §16.10.1 |
+| 열차가 출발하지 못한다 | 배리어 프리셋이 `BlockAll` | §16.15 |
+| 칸에 탈 수 없다 | `Cars` 미배선 → `[S2Train] 칸이 하나도 배선되지 않았습니다` | §16.10.3 |
+| 출발 전 뒤 칸들이 한곳에 겹친다 | `StartDistanceOnTrack` < `CarSpacing × 3` (Warning) | §16.10.3 |
+| 곡선에서 칸이 한 덩어리로 돈다 | 칸을 열차의 컴포넌트로 붙였다 → **개별 액터**로 배치하고 `Cars`에 배선 | §4.9.3-A |
+| 곡선에서 칸끼리 겹쳐 보인다 | `CarSpacing`이 칸 메시 길이보다 짧다 | §16.10.3 |
+| 칸이 선로에 파묻히거나 뜬다 | 메시 피벗이 바닥 중앙이 아니다 → `HeightOffset` 보정 | §16.10.1 |
+| 칸 크기가 주행 중 변한다 | 스플라인 포인트 스케일이 1이 아니다 (코드가 무시하므로 보통 발생 안 함) | §16.10.1 |
+| 타면 캐릭터가 박힌다 | `RiderAttachPoint` 위치 부적절 | §16.10.2 |
+| 하차 시 벽에 낀다 | `ExitPoint`가 벽/선로 안 | §16.10.2 |
+| 열차가 뒤로 가려 한다 | `Obstacles` 배열 순서가 진행 순서와 다름 | §16.10.4 |
+| 엉뚱한 구간이 막힌다 | 배리어 인덱스가 `Obstacles`와 어긋남 | §16.10.5 |
+| 보스가 스폰되지 않는다 | `MoleBossClass` 미지정 | §16.3.5 |
+| 구간2에서 보스 체력이 100%로 돌아온다 | 보스가 구간1에서 즉사했다 → Warning 로그 확인. 밸런스 문제 | §15.9-H |
+| 마지막 구간에서도 보스가 도망간다 | `RetreatHealthRatios`에 3개를 넣었다 → 2개만 | §16.3.5 |
+| 클리어해도 보상이 0 | `ProgressionConfig`에 `Stage2` 정의 없음 (Warning) | §16.14 |
+
+---
+
+### 16.18 별도 트랙 (이 문서 범위 밖, 병행 작업)
+
+| 트랙 | 내용 | 현재 상태 |
+|---|---|---|
+| **A. 아트 에셋** | 열차 4칸·선로·장애물·이동 구조물·홀로그램 두더지·금고·퍼즐 프롭·CCTV 화면 메시 | 미제작. 임시 프리미티브로 진행 후 M7에서 교체 |
+| **B. 두더지 보스** | 스킬·공격 패턴·스탯 (§14.6.7) | 별도 확정 예정. `MoleBossClass`만 바꾸면 페이즈 코드는 수정 불필요 |
+| **C. 8퍼즐 UI** | 조작 방식·해결 판정·되돌리기/초기화 (§14.2.2) | 사양 미정. `NotifySolved()` 호출만 연결하면 금고까지 자동 연동 |
+| **D. 영문 텍스트** | 목표 14행 + 배너 5개의 en 번역 | `Content/Localization/Game/en` 타깃 존재. 한글만 먼저 넣고 일괄 번역 가능 |
+| **E. 연출·사운드** | 구조물 이동, 게이트 발광, 금고 개방, 두더지 등장/소멸, 장애물 파괴, 보스 도망/재등장, 스테이지2 BGM | 훅은 전부 노출됨 (§16의 각 "연출 훅" 항목) |
+
+---
+
+### 16.19 페이즈 건너뛰기 치트 — 스테이지2 동작 분석 ★
+
+**치트**: `ADRPlayerController::ServerCheatSkipToNextPhase` (`DRPlayerController.cpp`, `#if !UE_BUILD_SHIPPING`)
+
+```cpp
+if (UDRPhase3* Phase3 = Cast<UDRPhase3>(GameMode->GetCurrentPhase()))
+{
+    Phase3->SkipToNextWave();   // 스테이지1 방어 페이즈 전용 분기
+    return;
+}
+GameMode->TransitionToNextPhase();
+```
+
+스테이지2 페이즈는 `UDRPhase3`가 아니므로 **항상 `TransitionToNextPhase()`** 를 탄다. 즉 치트 자체에 스테이지2 전용 수정은 필요 없다.
+
+**핵심은 각 페이즈가 스킵을 견디는가**이다. 스테이지2가 "입장 통로는 **다음 페이즈의 `OnPhaseStart`** 가 연다"(§3.1)는 규약을 지키므로 대부분 자연스럽게 동작한다.
+
+| 스킵 | 결과 | 비고 |
+|---|---|---|
+| 방1 → 방2 | ✅ 동작 | 방2 페이즈가 D1 게이트를 켜므로 걸어가서 진입 가능 |
+| **방2 → 방3** | ⚠️ **원래 막혔음 → 안전망으로 해결** | 아래 참조 |
+| 방3+4 → 방5 | ✅ 동작 | 방5 페이즈가 D4를 연다 (`SetBlocked(false)`) |
+| 방5 → 방6 | ✅ 동작 | 방6 페이즈가 D5를 연다 |
+| 방6 → 종료 | ✅ 동작 | `NextIndex >= PhaseInstances.Num()` → `TriggerGameClear()` |
+
+#### 방2 스킵 문제와 안전망
+
+**문제**: 방2를 스킵하면 금고를 열지 않았으므로 **월드에 부품이 존재하지 않는다.** 방3은 진입 시 `IsPartPresentInRoom3()`로 부품 동반을 검증하는데(부품을 방1에 두고 오는 소프트락 방지용), 부품이 아예 없으면 **검증이 영원히 실패해 트리거만 재무장을 반복**한다 → 방3이 시작되지 않는다.
+
+**해결**: `UDRS2DefensePhase::OnPhaseStart`에 `EnsurePartExists()` 안전망을 추가했다.
+
+```cpp
+// 월드에 ADRCleanserPart 가 하나라도 있으면 아무것도 하지 않는다.
+// 하나도 없으면 = 페이즈 스킵 등 비정상 진입 → Room4EntranceDropPoint 에 부품 1개 생성 + Warning 로그
+```
+
+- **정상 플레이에서는 절대 발동하지 않는다** — 방2를 완료(부품 소지자 퇴장)해야 방3에 오므로 부품이 반드시 존재한다.
+- 부품이 버그로 소실된 경우에도 소프트락을 막아주는 이중 안전망이 된다.
+- `BP_S2DefensePhase`의 **`PartClass`가 비어 있으면 동작하지 않는다** (Error 로그). §16.3.3 참조.
+
+#### 스킵 시 남는 사소한 불일치 (수정 비목표)
+
+개발 편의 기능이므로 완전한 상태 정합은 목표로 하지 않는다. 아래는 알려진 부작용이며 진행을 막지 않는다.
+
+| 스킵 | 불일치 |
+|---|---|
+| 방1 | D0 구조물이 올라오지 않아 시작지점으로 되돌아갈 수 있다 |
+| 방2 | D1 게이트가 계속 활성이라 방2에 다시 들어갈 수 있다 |
+| 방3+4 | 사망자가 부활하지 않는다 (부활은 두더지 클리어 시에만) |
+| 방5 | D4 구조물이 재봉쇄되지 않아 방3으로 되돌아갈 수 있다 |
+| 방6 | 보스가 스폰되지 않은 채 클리어된다 |

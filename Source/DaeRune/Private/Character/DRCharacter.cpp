@@ -29,6 +29,7 @@
 #include "Game/DRTutorialGameMode.h"
 #include "Character/DRFacialExpressionComponent.h"
 #include "Character/DRRobotVacuumCharacter.h"
+#include "Actor/Stage2/DRS2TrainCar.h"
 #include "DRAbilityTypes.h"
 #include "DRAssetManager.h"
 #include "Sound/DRSoundDataAsset.h"
@@ -131,6 +132,9 @@ void ADRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 
 	// 탑승 시스템 (라이더 측)
 	DOREPLIFETIME(ADRCharacter, MountedOn);
+
+	// 열차 좌석 (Plan6 §5.7)
+	DOREPLIFETIME(ADRCharacter, SeatedOn);
 
 	// WaterPump 3P 빔 리플리케이트
 	DOREPLIFETIME(ADRCharacter, bWaterPumpActive);
@@ -1146,6 +1150,81 @@ void ADRCharacter::MulticastHandleDeath_Implementation(const FVector& DeathImpul
 
 	// BP에서 추가 사망 연출이 필요한 경우의 훅
 	K2_OnCharacterDied();
+}
+
+void ADRCharacter::SetSeatedOn(ADRS2TrainCar* Car)
+{
+	if (!HasAuthority()) return;
+
+	SeatedOn = Car;
+
+	// 리슨 서버에서도 attach/이동모드가 적용되도록 수동 호출 (마운트 관례 미러)
+	OnRep_SeatedOn();
+}
+
+void ADRCharacter::OnRep_SeatedOn()
+{
+	// 클라이언트 보정: attach 는 AttachmentReplication 으로 복제되지만
+	// CMC 를 가진 Character 는 클라 CMC 가 위치를 덮어쓸 수 있어 직접 맞춘다 (마운트와 동일 접근)
+	if (SeatedOn)
+	{
+		GetCharacterMovement()->SetMovementMode(MOVE_None);
+		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+
+		if (USceneComponent* AttachPoint = SeatedOn->GetRiderAttachPoint())
+		{
+			if (GetAttachParentActor() != SeatedOn)
+			{
+				AttachToComponent(AttachPoint, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+			}
+		}
+	}
+	else
+	{
+		if (GetAttachParentActor())
+		{
+			DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		}
+
+		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+
+		if (GetCharacterMovement()->MovementMode == MOVE_None)
+		{
+			GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+		}
+	}
+}
+
+void ADRCharacter::MulticastHandleRevive_Implementation()
+{
+	// 베이스: 콜리전/이동/메시/몽타주 복원 + BP 훅
+	Super::MulticastHandleRevive_Implementation();
+
+	// 사망 시 1인칭 메시를 숨기고 3인칭 메시를 소유자에게도 보이게 바꿨으므로 원복한다
+	// (MulticastHandleDeath 의 IsLocallyControlled 분기 역연산)
+	if (IsLocallyControlled())
+	{
+		if (FirstPersonMesh)
+		{
+			FirstPersonMesh->SetVisibility(true);
+		}
+
+		if (USkeletalMeshComponent* MeshComp = GetMesh())
+		{
+			MeshComp->SetOwnerNoSee(true);
+		}
+
+		if (Weapon)
+		{
+			Weapon->SetOwnerNoSee(true);
+		}
+	}
+
+	// 표정 리셋 (사망 표정 해제)
+	if (FacialExpressionComponent)
+	{
+		FacialExpressionComponent->RevertToDefault();
+	}
 }
 
 void ADRCharacter::OnRep_Dead()

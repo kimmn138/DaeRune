@@ -16,6 +16,8 @@
 #include "Character/DRCharacter.h"
 #include "Components/AudioComponent.h"
 #include "Character/DRFacialExpressionComponent.h"
+#include "AbilitySystem/DRAttributeSet.h"
+#include "Animation/AnimInstance.h"
 
 ADRCharacterBase::ADRCharacterBase()
 {
@@ -255,6 +257,69 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 
 	// ��� �̺�Ʈ ��ε�ĳ��Ʈ
 	OnDeathDelegate.Broadcast(this);
+}
+
+void ADRCharacterBase::Revive(const FVector& ReviveLocation, float HealthRatio, float WaterRatio)
+{
+	if (!HasAuthority() || !bDead) return;
+
+	// 부활 지점으로 이동 (물리 텔레포트 - 스윕 없이)
+	SetActorLocation(ReviveLocation, false, nullptr, ETeleportType::TeleportPhysics);
+
+	// 어트리뷰트 복원. 어트리뷰트 세트 종류에 무관하게 태그 기반으로 처리하지 않고
+	// 기본 Health/MaxHealth 만 다루므로 UDRAttributeSet 공통 경로를 사용한다.
+	if (AbilitySystemComponent)
+	{
+		if (const UDRAttributeSet* DRAttributes = Cast<UDRAttributeSet>(
+			AbilitySystemComponent->GetAttributeSet(UDRAttributeSet::StaticClass())))
+		{
+			const float TargetHealth = FMath::Max(1.f, DRAttributes->GetMaxHealth() * HealthRatio);
+			AbilitySystemComponent->SetNumericAttributeBase(DRAttributes->GetHealthAttribute(), TargetHealth);
+
+			const float TargetWater = DRAttributes->GetMaxWater() * WaterRatio;
+			AbilitySystemComponent->SetNumericAttributeBase(DRAttributes->GetWaterAttribute(), TargetWater);
+		}
+	}
+
+	// 사망 상태 해제 -> 전 클라에서 상태/연출 복원
+	bDead = false;
+	MulticastHandleRevive();
+}
+
+void ADRCharacterBase::MulticastHandleRevive_Implementation()
+{
+	// ===== MulticastHandleDeath 의 역연산 (Plan6 §5.9) =====
+
+	// 캡슐 콜리전 복원
+	if (GetCapsuleComponent())
+	{
+		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	}
+
+	// 이동 복원
+	if (UCharacterMovementComponent* CharMoveComp = GetCharacterMovement())
+	{
+		CharMoveComp->SetMovementMode(MOVE_Walking);
+	}
+
+	// 메시 복원 (사망 시 물리 시뮬을 끄고 QueryOnly 로 바꿔둔 상태)
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->SetSimulatePhysics(false);
+		MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+
+		// 사망 몽타주 정지
+		if (UAnimInstance* AnimInstance = MeshComp->GetAnimInstance())
+		{
+			AnimInstance->StopAllMontages(0.1f);
+		}
+	}
+
+	// 디버프 VFX 컴포넌트는 사망 시 비활성화되었으나, 부활 시엔 디버프가 없는 상태이므로
+	// 켜지 않는다 (디버프가 다시 적용되면 각 RepNotify 가 활성화한다).
+
+	// BP 측 복원: Dissolve 머티리얼 파라미터 원복, 사망 카메라 애니메이션 해제, 표정 리셋 등
+	K2_OnCharacterRevived();
 }
 
 void ADRCharacterBase::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)

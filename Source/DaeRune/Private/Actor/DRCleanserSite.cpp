@@ -12,6 +12,7 @@
 #include "UI/Widget/DRBillboardWidgetComponent.h"
 #include "Player/DRPlayerController.h"
 #include "Character/DRCharacter.h"
+#include "Actor/DRCleanserPart.h"
 #include "Sound/DRSoundManager.h"
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -242,6 +243,44 @@ void ADRCleanserSite::InstallPart(ADRCharacter* Character)
 	{
 		SetPartsCollected();
 	}
+}
+
+ADRCleanserPart* ADRCleanserSite::EjectInstalledPart(TSubclassOf<ADRCleanserPart> PartClass, float EjectOffset)
+{
+	if (!HasAuthority()) return nullptr;
+
+	// 설치된 부품이 없으면 할 일이 없다
+	if (InstalledPartsCount <= 0) return nullptr;
+
+	// 설치 카운트를 되돌리고 표시 메시를 숨긴다
+	--InstalledPartsCount;
+
+	if (InstalledPartsCount == 0)
+	{
+		if (InstalledPartMesh1) InstalledPartMesh1->SetVisibility(false);
+	}
+	if (InstalledPartsCount <= 1)
+	{
+		if (InstalledPartMesh2) InstalledPartMesh2->SetVisibility(false);
+	}
+
+	OnRep_InstalledPartsCount();
+	UpdateInteractionUI();
+
+	if (!PartClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[CleanserSite] EjectInstalledPart: PartClass 가 지정되지 않아 부품을 되돌리지 못했습니다."));
+		return nullptr;
+	}
+
+	// 설치대 옆에 부품을 다시 스폰한다
+	const FVector EjectLocation = GetActorLocation() + GetActorForwardVector() * EjectOffset;
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	return GetWorld()->SpawnActor<ADRCleanserPart>(
+		PartClass, EjectLocation, GetActorRotation(), SpawnParams);
 }
 
 FVector ADRCleanserSite::GetSpawnLocation() const

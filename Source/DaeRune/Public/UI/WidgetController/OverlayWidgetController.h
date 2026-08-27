@@ -258,6 +258,14 @@ private:
 	void OnPhaseChanged(int32 NewPhaseIndex);
 	UFUNCTION()
 	void OnToxicGasWarningReceived(bool bIsToxicGasWave);
+
+	// 웨이브 방어 UI(타이머 + 클렌저 HP) 표시 플래그 변경 콜백 (Plan6 §5.4)
+	// 페이즈 인덱스 하드코딩 대신 GameState의 복제 플래그를 구독한다.
+	UFUNCTION()
+	void HandleWaveDefenseUIActiveChanged(bool bIsActive);
+
+	// 목표 데이터에 PhaseAlarmText가 없을 때 사용하는 레거시 문구 (스테이지1 호환)
+	FText GetLegacyPhaseAlarmText(int32 PhaseIndex) const;
 	
 	// Ŭ���� ����Ʈ ASC/AttributeSet ���ε� �Լ�
 	UFUNCTION()
@@ -289,4 +297,12 @@ private:
 
 	// 페이즈 알람 중복 방지용 플래그
 	bool bPhaseAlarmShown = false;
+
+	// 페이즈가 바뀌었으나 아직 새 목표 데이터가 도착하지 않은 상태 (Plan6 §5.4)
+	// GameMode가 페이즈 인덱스를 먼저 복제하고 목표는 그 뒤에 설정하므로,
+	// 알람 문구 결정은 목표 데이터가 도착한 시점으로 미룬다.
+	bool bPhaseAlarmPending = false;
+
+	// 같은 문구를 연속으로 다시 띄우지 않기 위한 캐시
+	FText CachedAlarmText;
 };

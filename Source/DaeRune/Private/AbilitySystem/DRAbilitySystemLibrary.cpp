@@ -12,6 +12,7 @@
 #include "Game/DRGameModeBase.h"
 #include "Game/DRGameInstance.h"
 #include "Interaction/CombatInterface.h"
+#include "Interaction/DRProximityHitOnly.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/DRPlayerState.h"
 #include "UI/HUD/DRHUD.h"
@@ -424,7 +425,25 @@ bool UDRAbilitySystemLibrary::IsNotFriend(AActor* FirstActor, AActor* SecondActo
 FGameplayEffectContextHandle UDRAbilitySystemLibrary::ApplyDamageEffect(const FDamageEffectParams& DamageEffectParams)
 {
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
-	const AActor* SourceAvatarActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
+	AActor* SourceAvatarActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
+
+	// ===== 근접 전용 피격 대상 가로채기 (Plan6 §5.11) =====
+	// 홀로그램 두더지처럼 "2m 안에서의 공격만 유효하고 그 밖은 투과"하는 대상을 여기서 처리한다.
+	// 모든 공격이 이 함수를 지나므로 공격 종류마다 손대지 않아도 된다.
+	// GE 는 적용하지 않는다 - 어트리뷰트를 쓰지 않는 대상이라 PostGameplayEffectExecute 를 태우면 위험하다.
+	if (DamageEffectParams.TargetAbilitySystemComponent)
+	{
+		AActor* TargetAvatarActor = DamageEffectParams.TargetAbilitySystemComponent->GetAvatarActor();
+		if (IDRProximityHitOnly* ProximityTarget = Cast<IDRProximityHitOnly>(TargetAvatarActor))
+		{
+			if (ProximityTarget->AcceptsHitFrom(SourceAvatarActor))
+			{
+				ProximityTarget->HandleProximityHit(SourceAvatarActor);
+			}
+			// 범위 밖이면 아무 일도 하지 않는다 (투과)
+			return FGameplayEffectContextHandle();
+		}
+	}
 
 	FGameplayEffectContextHandle EffectContexthandle = DamageEffectParams.SourceAbilitySystemComponent->MakeEffectContext();
 	EffectContexthandle.AddSourceObject(SourceAvatarActor);

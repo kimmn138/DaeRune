@@ -82,21 +82,15 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade")
 	TObjectPtr<UDRChipCatalog> ChipCatalog;
 
-	// ========== 슬롯 ==========
+	// ========== 슬롯 (카테고리 구분 없는 통합 6칸) ==========
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Slot", meta = (ClampMin = "0"))
-	int32 MaxStatSlots = 3;
+	int32 MaxSlots = 6;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Slot", meta = (ClampMin = "0"))
-	int32 MaxAscensionSlots = 3;
-
-	// 스탯 슬롯 해금 비용 (index = 해금할 슬롯 번호-1). 비면 DefaultSlotCost * 번호.
+	// 슬롯 해금 비용 (index = 해금할 슬롯 번호-1). 비면 DefaultSlotCost * 번호.
+	// 순차 해금이므로 단조 증가로 넣는 것을 권장한다. 예: {400, 700, 1100, 1500, 1900, 2400}
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Slot")
-	TArray<int32> StatSlotCosts;
-
-	// 돌파 슬롯 해금 비용 (index = 해금할 슬롯 번호-1). 비면 DefaultSlotCost * 번호.
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Slot")
-	TArray<int32> AscensionSlotCosts;
+	TArray<int32> SlotCosts;
 
 	// 비용 배열이 비었을 때의 폴백 단가
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Slot", meta = (ClampMin = "0"))
@@ -120,13 +114,13 @@ public:
 
 	// ========== 조회 헬퍼 ==========
 
-	// 카테고리별 최대 슬롯 수
+	// 로봇 1대의 통합 슬롯 총 칸 수
 	UFUNCTION(BlueprintPure, Category = "Progression")
-	int32 GetMaxSlotCount(EDRChipCategory Category) const;
+	int32 GetMaxSlotCount() const;
 
 	// SlotNumber(1-base) 슬롯을 해금하는 비용. 범위를 벗어나면 -1.
 	UFUNCTION(BlueprintPure, Category = "Progression")
-	int32 GetSlotUnlockCost(EDRChipCategory Category, int32 SlotNumber) const;
+	int32 GetSlotUnlockCost(int32 SlotNumber) const;
 
 	// 스테이지 최초 클리어 보상 정의. 없으면 nullptr.
 	const FDRStageRewardDef* FindStageReward(FName StageId) const;

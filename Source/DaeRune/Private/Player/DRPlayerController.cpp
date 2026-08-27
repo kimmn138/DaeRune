@@ -12,6 +12,10 @@
 #include "UI/Widget/DamageTextComponent.h"
 #include "Actor/DRCleanserPart.h"
 #include "Actor/DRCleanserSite.h"
+#include "Actor/Stage2/DRS2InteractProp.h"
+#include "Actor/Stage2/DRS2SlidePuzzle.h"
+#include "Actor/Stage2/DRS2TrainCar.h"
+#include "Actor/Stage2/DRS2Train.h"
 #include "Interaction/DRInteractable.h"
 #include "Actor/DRWaitingRoomCameraActor.h"
 #include "Tutorial/DRTutorialManager.h"
@@ -34,6 +38,7 @@
 #include "Actor/DRBGMActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "UI/Widget/DRWaitingRoomWidget.h"
+#include "UI/DRUpgradeUILibrary.h"
 #include "Game/DRLobbyGameMode.h"
 #include "Game/DRGameInstance.h"
 #include "Game/DRChipCatalog.h"
@@ -402,6 +407,33 @@ void ADRPlayerController::ServerRequestInteract_Implementation(AActor* Interacta
 		return;
 	}
 
+	// 열차 좌석 탑승 요청 (Plan6 §5.5)
+	if (ADRS2TrainCar* Car = Cast<ADRS2TrainCar>(Interactable))
+	{
+		// 서버 측 검증: 상태 + 거리
+		if (!Car->CanBeBoardedBy(DRCharacter)) return;
+
+		const float CarDistSq = FVector::DistSquared(DRCharacter->GetActorLocation(), Car->GetActorLocation());
+		if (CarDistSq > FMath::Square(MaxInteractDistance)) return;
+
+		Car->Board(DRCharacter);
+		return;
+	}
+
+	// 스테이지2 상호작용 프롭 요청 (Plan6 §5.5-b)
+	// 레버/버튼/단말 20여 개를 이 분기 하나로 처리한다 (실제 로직은 소유 퍼즐이 수행).
+	if (ADRS2InteractProp* Prop = Cast<ADRS2InteractProp>(Interactable))
+	{
+		// 서버 측 검증: 클라이언트가 보낸 포인터를 그대로 신뢰하지 않고 상태/거리 확인
+		if (!Prop->CanInteract(DRCharacter)) return;
+
+		const float DistSq = FVector::DistSquared(DRCharacter->GetActorLocation(), Prop->GetActorLocation());
+		if (DistSq > FMath::Square(MaxInteractDistance)) return;
+
+		Prop->ServerHandleInteract(DRCharacter);
+		return;
+	}
+
 	// 로봇 청소기 탑승 요청 (Plan3 §5.2)
 	if (ADRRobotVacuumCharacter* Mount = Cast<ADRRobotVacuumCharacter>(Interactable))
 	{
@@ -648,8 +680,11 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 		}
 	}
 
-	// 전부 비활성화면 스킵
-	if (!bPartDetectionEnabled && !bSiteDetectionEnabled && !bMountDetectionEnabled) return;
+	// ★여기서 조기 리턴하면 안 된다.
+	//   부품/사이트/청소기 감지는 오버랩으로 켜지는 방식이라 평소 전부 false 인데,
+	//   스테이지2 프롭(레버·버튼·단말)과 열차 칸은 오버랩 게이트 없이 트레이스로만 판정한다.
+	//   과거 이 자리에 있던 "전부 비활성화면 스킵" 가드가 그 둘까지 막아
+	//   방2 레버에 다가가도 F 프롬프트가 뜨지 않았다.
 
 	LineTraceTimer += DeltaTime;
 	if (LineTraceTimer >= LineTraceUpdateInterval)
@@ -673,7 +708,98 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 		{
 			SetCurrentDetectedInteractable(FindMountByLineTrace(), CurrentDetectedMount);
 		}
+
+		// 스테이지2 상호작용 프롭 라인트레이스 (Plan6 §5.5-b)
+		// 레버/버튼/단말을 하나의 슬롯으로 처리한다. 오버랩 집합 없이 트레이스 거리로만 판정한다.
+		SetCurrentDetectedInteractable(FindPropByLineTrace(), CurrentDetectedProp);
+
+		// 열차 좌석 라인트레이스 (Plan6 §5.5)
+		SetCurrentDetectedInteractable(FindTrainCarByLineTrace(), CurrentDetectedCar);
 	}
+}
+
+ADRS2TrainCar* ADRPlayerController::FindTrainCarByLineTrace()
+{
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter) return nullptr;
+
+	// 이미 앉아 있거나 부품을 들고 있으면 감지하지 않는다
+	if (DRCharacter->IsSeatedOnTrain() || DRCharacter->IsCarryingPart()) return nullptr;
+
+	UCameraComponent* Camera = DRCharacter->GetFollowCamera();
+	if (!Camera) return nullptr;
+
+	const FVector Start = Camera->GetComponentLocation();
+	const FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
+
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(DRCharacter);
+
+	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams))
+	{
+		ADRS2TrainCar* HitCar = Cast<ADRS2TrainCar>(HitResult.GetActor());
+		if (HitCar && HitCar->CanBeBoardedBy(DRCharacter))
+		{
+			return HitCar;
+		}
+	}
+
+	return nullptr;
+}
+
+void ADRPlayerController::ServerRequestTrainDeboard_Implementation()
+{
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter) return;
+
+	ADRS2TrainCar* Car = DRCharacter->SeatedOn;
+	if (!Car) return;
+
+	// 이동 중 하차 거부 (Plan6 §14.6.5)
+	if (ADRS2Train* Train = Car->GetOwningTrain())
+	{
+		if (!Train->CanDeboardNow()) return;
+	}
+
+	Car->Deboard();
+}
+
+ADRS2InteractProp* ADRPlayerController::FindPropByLineTrace()
+{
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter) return nullptr;
+
+	UCameraComponent* Camera = DRCharacter->GetFollowCamera();
+	if (!Camera) return nullptr;
+
+	const FVector Start = Camera->GetComponentLocation();
+	const FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
+
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(DRCharacter);
+
+	// ★프롭 메시에 **심플 콜리전**이 있어야 한다. 라인트레이스는 bTraceComplex=false 라
+	//   콜리전 프리미티브가 없는 메시는 그대로 통과해 감지되지 않는다.
+	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams))
+	{
+		ADRS2InteractProp* HitProp = Cast<ADRS2InteractProp>(HitResult.GetActor());
+		if (HitProp && HitProp->CanInteract(DRCharacter))
+		{
+			return HitProp;
+		}
+	}
+
+	return nullptr;
+}
+
+void ADRPlayerController::Client_OpenSlidePuzzleUI_Implementation(ADRS2SlidePuzzle* Puzzle)
+{
+	if (!IsLocalController() || !Puzzle) return;
+
+	// 실제 위젯 생성은 HUD/BP 가 담당한다 (8퍼즐 UI 사양 확정 후 구현)
+	OnSlidePuzzleUIRequested.Broadcast(Puzzle);
 }
 void ADRPlayerController::SetupInputComponent()
 {
@@ -1092,6 +1218,13 @@ void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
 			ServerRequestDismount();
 			return;
 		}
+
+		// 열차 좌석에 앉아 있으면 점프키 = 하차 (Plan6 §14.6.5)
+		if (DRChar->IsSeatedOnTrain())
+		{
+			ServerRequestTrainDeboard();
+			return;
+		}
 	}
 
 	// 占쏙옙占쏙옙 占쏙옙占쏙옙
@@ -1128,7 +1261,7 @@ void ADRPlayerController::HandleInteract()
 		ServerRequestInteract(CurrentDetectedPart);
 		return;
 	}
-	
+
 	// 遺?덉쓣 ?ㅺ퀬 ?덇퀬 ?대젋? ?ъ씠???ㅻ쾭??以묒씠硫??ㅼ튂
 	if (DRCharacter->IsCarryingPart())
 	{
@@ -1150,6 +1283,20 @@ void ADRPlayerController::HandleInteract()
 	if (!DRCharacter->IsCarryingPart() && CurrentDetectedMount)
 	{
 		ServerRequestInteract(CurrentDetectedMount);
+		return;
+	}
+
+	// 열차 좌석 탑승 (Plan6 §5.5)
+	if (CurrentDetectedCar)
+	{
+		ServerRequestInteract(CurrentDetectedCar);
+		return;
+	}
+
+	// 스테이지2 상호작용 프롭 (레버/버튼/단말) — Plan6 §5.5-b
+	if (CurrentDetectedProp)
+	{
+		ServerRequestInteract(CurrentDetectedProp);
 		return;
 	}
 
@@ -1241,8 +1388,7 @@ void ADRPlayerController::ServerReportUpgradeLoadout_Implementation(EPlayerChara
 	}
 
 	TArray<FName> Sanitized = Chips;
-	const bool bModified = Catalog->SanitizeLoadout(
-		Sanitized, ForClass, GI->GetMaxSlotCount(EDRChipCategory::Stat), GI->GetMaxSlotCount(EDRChipCategory::Ascension));
+	const bool bModified = Catalog->SanitizeLoadout(Sanitized, ForClass, GI->GetMaxSlotCount());
 
 	if (bModified)
 	{
@@ -1294,7 +1440,105 @@ void ADRPlayerController::OpenUpgradeScreen()
 	SetInputMode(FInputModeUIOnly());
 	SetShowMouseCursor(true);
 
+	// 블루프린트에서 위젯 생성 (설정 메뉴와 같은 구조 — OpenSettingsMenu 참조)
 	OnUpgradeScreenOpened();
+}
+
+void ADRPlayerController::DRUnlockUpgrade()
+{
+	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
+	if (!GI)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
+		return;
+	}
+
+	GI->UnlockUpgradeSystem();
+	UE_LOG(LogDR, Warning, TEXT("[Cheat] 업그레이드 시스템 해금됨 (현재 재화 %d)"), GI->GetCurrency());
+}
+
+void ADRPlayerController::DRLockUpgrade()
+{
+	if (UDRGameInstance* GI = GetGameInstance<UDRGameInstance>())
+	{
+		GI->DebugSetUpgradeSystemUnlocked(false);
+	}
+}
+
+void ADRPlayerController::DRUnlockSlot(int32 Count)
+{
+	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
+	if (!GI)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
+		return;
+	}
+
+	// 시스템이 잠겨 있으면 CanUnlockSlot 이 SystemLocked 로 막는다 — 먼저 열어 준다
+	GI->UnlockUpgradeSystem();
+
+	const EPlayerCharacterClass Class = GetViewedUpgradeClass();
+
+	for (int32 Index = 0; Index < FMath::Max(1, Count); ++Index)
+	{
+		// 비용이 모자라면 그만큼 채워 넣고 다시 시도한다 (치트니까 지갑은 신경 쓰지 않는다)
+		if (GI->CanUnlockSlot(Class) == EDRUpgradeResult::NotEnoughCurrency)
+		{
+			GI->AddCurrency(FMath::Max(1000, GI->GetNextSlotUnlockCost(Class)));
+		}
+
+		const EDRUpgradeResult Result = GI->UnlockSlot(Class);
+		if (Result != EDRUpgradeResult::Success)
+		{
+			UE_LOG(LogDR, Warning, TEXT("[Cheat] 슬롯 해금 중단 (%d번째): %s"),
+				Index + 1, *UDRUpgradeUILibrary::GetUpgradeResultText(Result).ToString());
+			break;
+		}
+	}
+
+	DRDumpUpgrade();
+}
+
+void ADRPlayerController::DRDumpUpgrade()
+{
+	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
+	if (!GI)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
+		return;
+	}
+
+	const EPlayerCharacterClass Class = GetViewedUpgradeClass();
+
+	UE_LOG(LogDR, Warning,
+		TEXT("[Cheat] 진행도: 시스템=%s / 재화=%d / 클래스=%d / 해금슬롯=%d/%d / 빈칸=%d"),
+		GI->IsUpgradeSystemUnlocked() ? TEXT("해금") : TEXT("잠김"),
+		GI->GetCurrency(), static_cast<int32>(Class),
+		GI->GetUnlockedSlotCount(Class), GI->GetMaxSlotCount(),
+		GI->GetFreeSlotCount(Class));
+}
+
+EPlayerCharacterClass ADRPlayerController::GetViewedUpgradeClass() const
+{
+	// 업그레이드 화면과 같은 기준으로 클래스를 고른다(UDRUpgradeScreenWidget::GetViewedClass 와 동일)
+	if (const ADRPlayerState* PS = GetPlayerState<ADRPlayerState>())
+	{
+		return PS->GetSelectedPlayerClass();
+	}
+	return EPlayerCharacterClass::Gardener;
+}
+
+void ADRPlayerController::DRAddCurrency(int32 Amount)
+{
+	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
+	if (!GI)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
+		return;
+	}
+
+	GI->AddCurrency(Amount);
+	UE_LOG(LogDR, Warning, TEXT("[Cheat] 재화 %d 지급 → 현재 %d"), Amount, GI->GetCurrency());
 }
 
 void ADRPlayerController::CloseUpgradeScreen()
@@ -1302,6 +1546,7 @@ void ADRPlayerController::CloseUpgradeScreen()
 	if (!IsLocalController()) return;
 	if (!bIsUpgradeScreenOpen) return;
 
+	// 블루프린트에서 위젯 제거 (설정 메뉴와 같은 구조 — CloseSettingsMenu 참조)
 	OnUpgradeScreenClosed();
 
 	bIsUpgradeScreenOpen = false;

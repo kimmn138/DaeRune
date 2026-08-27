@@ -74,6 +74,7 @@ void ADRStageGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ADRStageGameState, bIsWaveRestTime);
     DOREPLIFETIME(ADRStageGameState, bIsToxicGasWave);
     DOREPLIFETIME(ADRStageGameState, bPoisonGasLoopActive);
+    DOREPLIFETIME(ADRStageGameState, bWaveDefenseUIActive);
     DOREPLIFETIME(ADRStageGameState, EnemySpawnPointVFXLocations);
     DOREPLIFETIME(ADRStageGameState, EnemySpawnPointVFXAsset);
     DOREPLIFETIME(ADRStageGameState, EliteSpawnPointVFXLocations);
@@ -262,6 +263,22 @@ void ADRStageGameState::OnRep_CurrentPhaseState()
 void ADRStageGameState::OnRep_CurrentObjectiveProgress()
 {
     OnPhaseObjectiveChangedDelegate.Broadcast();
+}
+
+void ADRStageGameState::SetWaveDefenseUIActive(bool bActive)
+{
+    // 서버 전용. 값이 같으면 아무것도 하지 않는다(멱등).
+    if (!HasAuthority() || bWaveDefenseUIActive == bActive) return;
+
+    bWaveDefenseUIActive = bActive;
+
+    // 리슨 서버에서도 UI가 갱신되도록 RepNotify 수동 호출
+    OnRep_WaveDefenseUIActive();
+}
+
+void ADRStageGameState::OnRep_WaveDefenseUIActive()
+{
+    OnWaveDefenseUIActiveChangedDelegate.Broadcast(bWaveDefenseUIActive);
 }
 
 void ADRStageGameState::OnRep_WaveTimerEndServerTime()

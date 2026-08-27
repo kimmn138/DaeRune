@@ -38,7 +38,11 @@ void UDRPhase3::OnPhaseStart()
 
 	// 페이즈 구조 개편: 기존 Phase3가 새 Phase2 역할로 표기됨
 	SetupPhaseObjective(2);
-	
+
+	// 웨이브 타이머 + 클렌저 사이트 HP UI 표시 요청 (Plan6 §5.4)
+	// 기존에는 위젯 컨트롤러가 "페이즈 인덱스 == 2"로 판단했으나, 이 UI를 쓰는 페이즈가 직접 켠다.
+	GameState->SetWaveDefenseUIActive(true);
+
 	GameState->SetCurrentWaveNumber(0);
 	GameState->SetCurrentWaveLevel(0);
 	GameState->SetTotalWaves(TotalWaveCount);
@@ -98,6 +102,9 @@ void UDRPhase3::OnPhaseEnd()
 	{
 		GameState->ClearEnemySpawnPointVFX();
 		GameState->ClearEliteSpawnPointVFX();
+
+		// 웨이브 방어 UI 숨김 (Plan6 §5.4) - 게임오버로 페이즈가 끝나는 경로도 여기를 지난다
+		GameState->SetWaveDefenseUIActive(false);
 	}
 
 	ClearAllPhaseTimers();

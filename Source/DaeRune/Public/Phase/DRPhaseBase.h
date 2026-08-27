@@ -26,6 +26,12 @@ struct FPhaseObjectiveData : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 RequiredCount = 0;
+
+	// 페이즈 진입 배너 문구 (Plan6 §5.3)
+	// 비어 있으면 배너를 띄우지 않는다 - 한 페이즈 안에서 목표만 교체하는 서브 목표 전환용.
+	// 비어 있는 경우 OverlayWidgetController가 레거시 switch 문구로 폴백한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FText PhaseAlarmText;
 };
 
 /**
@@ -77,6 +83,16 @@ public:
 	UFUNCTION()
 	virtual void OnEnemyDeath(AActor* DeadEnemy);
 
+	// ========== 플레이어 상태 통지 (Plan6 §14.3.5) ==========
+	// GameMode가 사망/접속 종료를 현재 페이즈에 전달한다.
+	// 스테이지2 방3+4처럼 특정 플레이어의 이탈이 진행 상태를 되돌려야 하는 페이즈가 사용한다.
+
+	// 플레이어 사망 (아직 게임에는 남아 있음)
+	virtual void NotifyPlayerDied(APlayerState* DeadPlayerState) {}
+
+	// 플레이어 접속 종료 (영구 이탈)
+	virtual void NotifyPlayerLeft(APlayerState* LeftPlayerState) {}
+
 protected:
 	// ========== ���� �Լ� ==========
 
@@ -117,4 +133,12 @@ protected:
 	UDataTable* PhaseObjectiveDataTable;
 	
 	void SetupPhaseObjective(int32 PhaseNumber);
+
+	// 행 이름을 직접 지정해 목표를 설정한다 (Plan6 §5.2).
+	// 한 페이즈 안에서 목표를 여러 번 교체하는 스테이지2 페이즈들이 사용한다.
+	void SetupPhaseObjectiveByRow(FName RowName);
+
+	// 위와 동일하되 RequiredCount(진행도 분모)를 런타임 값으로 덮어쓴다.
+	// 인원별 스폰 수, 두더지 목표 수처럼 실행 중에 분모가 정해지는 목표에 사용한다.
+	void SetupPhaseObjectiveByRow(FName RowName, int32 OverrideRequiredCount);
 };

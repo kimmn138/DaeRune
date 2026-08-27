@@ -51,8 +51,14 @@ enum class EDRUpgradeOp : uint8
 };
 
 /**
- * 칩 분류 = 장착 가능한 슬롯 종류.
- * 스탯 칩은 스탯 슬롯에만, 돌파 칩은 돌파 슬롯에만 장착된다.
+ * 칩 분류. ★UI 분류·표기 전용이며 장착 제한이 아니다.★
+ *
+ * 슬롯에는 종류 구분이 없다 — 스탯 칩이든 돌파 칩이든 통합 6칸 어디에나 장착된다.
+ * 이 enum 이 남아서 하는 일은 두 가지뿐이다:
+ *   ① 업그레이드 화면 우측 목록의 필터 탭(STATS / ASCENSION)
+ *   ② UDRChipCatalog::ValidateCatalog() 의 "단점 없는 돌파 칩" 경고
+ * → 장착 판정 코드에서 Category 를 읽는 곳이 하나라도 생기면 3차 개정 규칙이 깨진 것이다.
+ * (Plan2.md 4.4 참조)
  */
 UENUM(BlueprintType)
 enum class EDRChipCategory : uint8
@@ -81,7 +87,6 @@ enum class EDRUpgradeResult : uint8
 	SystemLocked,			// 업그레이드 시스템 미해금 (스테이지1 최초 클리어 전)
 	UnknownChip,			// 카탈로그에 없는 ChipId
 	WrongClass,				// 이 로봇의 칩이 아님
-	WrongSlotType,			// 칩 카테고리와 슬롯 종류 불일치
 	ChipLocked,				// 슬롯 해금 단계 미달 (RequiredSlotTier)
 	AlreadyEquipped,		// 같은 칩 중복 장착 불가
 	NotEquipped,			// 해제할 칩이 장착돼 있지 않음
@@ -90,7 +95,20 @@ enum class EDRUpgradeResult : uint8
 	AllSlotsUnlocked,		// 더 해금할 슬롯이 없음
 	NoSlotToRefund,			// 환불할 해금 슬롯이 없음
 	RefundDisabled,			// 설정에서 슬롯 환불을 막아둠
-	SlotOccupied			// 환불 대상 슬롯이 칩에 점유 중 (먼저 칩을 해제해야 함)
+	SlotOccupied,			// 환불 대상 슬롯이 칩에 점유 중 (먼저 칩을 해제해야 함)
+	PreviousSlotLocked		// 아직 해금되지 않은 칸 (순차 해금 — 앞 칸을 먼저 해금해야 한다)
+};
+
+/**
+ * 슬롯 1칸의 상태. 업그레이드 화면 좌측 6칸의 텍스처 스왑 기준이다.
+ * 순차 해금이므로 Locked 칸은 항상 뒤쪽에 모인다. (Plan2.md 21.1 참조)
+ */
+UENUM(BlueprintType)
+enum class EDRSlotState : uint8
+{
+	Locked		UMETA(DisplayName = "잠김"),
+	Empty		UMETA(DisplayName = "빈 칸"),
+	Occupied	UMETA(DisplayName = "장착됨")
 };
 
 /** 스탯이 "스킬 단위"인지 판정. */
@@ -100,6 +118,18 @@ FORCEINLINE bool DRIsSkillStat(EDRUpgradeStat Stat)
 		|| Stat == EDRUpgradeStat::SkillWaterCost
 		|| Stat == EDRUpgradeStat::SkillCooldown
 		|| Stat == EDRUpgradeStat::SkillProjectileCount;
+}
+
+/**
+ * 값이 "낮을수록 좋은" 스탯인가.
+ * 미리보기(FDRStatPreviewLine::bIsWorse)와 단점 표기 색상을 판정하는 데 쓴다.
+ * 예: 받는 피해 +40% 는 나쁜 변화지만, 이동 속도 +40% 는 좋은 변화다.
+ */
+FORCEINLINE bool DRIsLowerBetter(EDRUpgradeStat Stat)
+{
+	return Stat == EDRUpgradeStat::DamageTaken
+		|| Stat == EDRUpgradeStat::SkillWaterCost
+		|| Stat == EDRUpgradeStat::SkillCooldown;
 }
 
 /**
@@ -156,7 +186,7 @@ struct FDRUpgradeChipDefinition
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Identity")
 	EPlayerCharacterClass OwnerClass = EPlayerCharacterClass::Gardener;
 
-	// 장착 가능한 슬롯 종류
+	// UI 분류·표기 전용 (필터 탭). 어느 칸에 꽂히는지를 결정하지 않는다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Identity")
 	EDRChipCategory Category = EDRChipCategory::Stat;
 
@@ -181,7 +211,7 @@ struct FDRUpgradeChipDefinition
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Slot", meta = (ClampMin = "1"))
 	int32 RequiredSlotCount = 1;
 
-	// 해당 종류 슬롯을 이 개수 이상 해금해야 사용 가능 (슬롯 해금 단계 = 칩 해금 조건)
+	// 통합 슬롯을 이 개수 이상 해금해야 사용 가능 (슬롯 해금 단계 = 유일한 칩 해금 조건)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Slot", meta = (ClampMin = "1"))
 	int32 RequiredSlotTier = 1;
 
