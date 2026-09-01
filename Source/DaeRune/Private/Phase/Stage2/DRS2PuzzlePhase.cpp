@@ -115,10 +115,17 @@ void UDRS2PuzzlePhase::HandlePartPickedUp(ADRCleanserPart* /*Part*/, ADRCharacte
 
 	bPartPickedUp = true;
 
+	// ★D2(방1<->방3) 개방. 닫힌 채로 시작해 여기서 열린다 (Plan6 §14.2.7).
+	//   부품을 얻기 전에는 방3으로 갈 수 없고, 열린 뒤 전원 방3 입장 시 다시 봉쇄된다.
+	if (ADRS2StageDirector* Director = GetDirector())
+	{
+		SetBlockerBlocked(Director->Blocker_Room1ToRoom3, false);
+	}
+
 	// 픽업만으로는 완료가 아니다. 부품을 들고 방2를 나가야 한다.
 	SetupPhaseObjectiveByRow(TEXT("S2P2_Return"));
 
-	UE_LOG(LogDR, Log, TEXT("[S2P2] 부품 획득 - 방1 복귀 대기"));
+	UE_LOG(LogDR, Log, TEXT("[S2P2] 부품 획득 - D2 개방, 방1 복귀 대기"));
 }
 
 void UDRS2PuzzlePhase::HandleTeamRecalled()

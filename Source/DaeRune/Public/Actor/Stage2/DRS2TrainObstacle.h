@@ -26,9 +26,15 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// 트랙 상 정지 거리. 미입력(음수)이면 BeginPlay 에서 위치를 스플라인에 투영해 자동 계산한다.
+	// 트랙 상 정지 거리.
+	//
+	// ★미입력(음수)이면 **첫 호출 시점에** 위치를 스플라인에 투영해 계산한다 (지연 평가).
+	//   BeginPlay 에서 계산하지 않는 이유: 장애물의 BeginPlay 는 맵 로드 시점에 끝나지만
+	//   페이즈가 SetTrack() 으로 선로를 주입하는 것은 방6 페이즈 시작 시점이라 훨씬 나중이다.
+	//   BeginPlay 에서만 계산하면 Track 이 아직 null 이라 -1 이 그대로 남고,
+	//   DepartTo 가 이를 0 으로 클램프해 열차가 출발 즉시 "도착"해 버린다.
 	UFUNCTION(BlueprintCallable, Category = "S2|Obstacle")
-	float GetStopDistance() const { return StopDistance; }
+	float GetStopDistance();
 
 	// 보스 등장 트랜스폼
 	UFUNCTION(BlueprintCallable, Category = "S2|Obstacle")
@@ -58,9 +64,12 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Obstacle")
 	TObjectPtr<USceneComponent> BossSpawnPoint;
 
-	// 트랙 상 정지 거리. 음수면 자동 계산.
+	// 트랙 상 정지 거리. 음수면 자동 계산 (GetStopDistance 첫 호출 시).
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "S2|Obstacle")
 	float StopDistance = -1.f;
+
+	// StopDistance 가 미입력이면 지금 계산한다. 이미 값이 있거나 Track 이 없으면 아무것도 하지 않는다.
+	void TryResolveStopDistance();
 
 	// 열차가 이 장애물 앞에서 멈출 여유 거리 (장애물 직전에 세우기 위한 오프셋)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Obstacle", meta = (ClampMin = "0.0"))

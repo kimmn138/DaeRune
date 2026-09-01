@@ -9,7 +9,7 @@ ADRS2CodeScreen::ADRS2CodeScreen()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	// 표시 전용. 상태는 상위 퍼즐/금고가 복제하고 이 액터는 결과만 받아 그린다.
+	// 표시 전용. 상태는 상위 퍼즐이 복제하고 이 액터는 결과만 받아 그린다.
 	bReplicates = false;
 
 	ScreenMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ScreenMesh"));
@@ -21,44 +21,25 @@ void ADRS2CodeScreen::BeginPlay()
 {
 	Super::BeginPlay();
 
-	EnsureDigitMIDs();
+	EnsureDisplayMIDs();
 
-	// 아직 SetDigits 가 오기 전이면 전 자리를 "미입력" 으로 둔다.
-	RefreshDigitTextures();
+	// ★퍼즐이 자기 BeginPlay 에서 SetDigits({-1}) 을 먼저 보냈을 수 있다.
+	//   그때는 MID 가 아직 없어 반영되지 않았으므로 여기서 한 번 더 적용한다.
+	ApplyDigitTextures();
 }
 
-void ADRS2CodeScreen::EnsureDigitMIDs()
+void ADRS2CodeScreen::EnsureDisplayMIDs()
 {
-	DigitMIDs.Reset();
+	DisplayMIDs.Reset();
 
-	if (DigitMaterialSlots.Num() > 0)
-	{
-		// ★기본 방식: 한 메시의 머티리얼 슬롯 여러 개를 자리로 쓴다.
-		BuildMIDsFromMaterialSlots();
-	}
-	else
-	{
-		// 대안: 자리마다 별도 메시 컴포넌트를 둔 경우
-		BuildMIDsFromTaggedComponents();
-	}
-
-	if (DigitMIDs.Num() == 0)
+	if (DigitMaterialSlots.Num() == 0)
 	{
 		UE_LOG(LogDR, Warning,
-			TEXT("[S2Screen] %s: 표시할 자리를 찾지 못했습니다. DigitMaterialSlots 를 채우거나 '%s' 태그를 다세요."),
-			*GetName(), *DigitComponentTag.ToString());
+			TEXT("[S2Screen] %s: DigitMaterialSlots 가 비어 있습니다. 숫자가 표시되지 않습니다."),
+			*GetName());
+		return;
 	}
 
-	if (DigitTextures.Num() < 10)
-	{
-		UE_LOG(LogDR, Warning,
-			TEXT("[S2Screen] %s: DigitTextures 가 %d개뿐입니다. 0~9 를 채우세요."),
-			*GetName(), DigitTextures.Num());
-	}
-}
-
-void ADRS2CodeScreen::BuildMIDsFromMaterialSlots()
-{
 	if (!ScreenMesh || !ScreenMesh->GetStaticMesh())
 	{
 		UE_LOG(LogDR, Error, TEXT("[S2Screen] %s: ScreenMesh 에 메시가 지정되지 않았습니다."), *GetName());
@@ -74,7 +55,7 @@ void ADRS2CodeScreen::BuildMIDsFromMaterialSlots()
 			UE_LOG(LogDR, Error,
 				TEXT("[S2Screen] %s: 머티리얼 슬롯 %d 이 범위(0~%d) 밖입니다."),
 				*GetName(), Slot, SlotTotal - 1);
-			DigitMIDs.Add(nullptr);
+			DisplayMIDs.Add(nullptr);
 			continue;
 		}
 
@@ -86,47 +67,19 @@ void ADRS2CodeScreen::BuildMIDsFromMaterialSlots()
 				*GetName(), Slot);
 		}
 
-		DigitMIDs.Add(MID);
-	}
-}
-
-void ADRS2CodeScreen::BuildMIDsFromTaggedComponents()
-{
-	TArray<UStaticMeshComponent*> Found;
-	GetComponents<UStaticMeshComponent>(Found);
-
-	TArray<UStaticMeshComponent*> DigitMeshes;
-	for (UStaticMeshComponent* Component : Found)
-	{
-		if (Component && Component->ComponentHasTag(DigitComponentTag))
-		{
-			DigitMeshes.Add(Component);
-		}
+		DisplayMIDs.Add(MID);
 	}
 
-	// 이름 순 정렬이 곧 자릿수 순서(왼쪽부터)다.
-	DigitMeshes.Sort([](const UStaticMeshComponent& A, const UStaticMeshComponent& B)
+	if (DigitTextures.Num() < 10)
 	{
-		return A.GetName() < B.GetName();
-	});
-
-	for (UStaticMeshComponent* Mesh : DigitMeshes)
-	{
-		UMaterialInstanceDynamic* MID = Mesh->CreateAndSetMaterialInstanceDynamic(FallbackMaterialSlot);
-		if (!MID)
-		{
-			UE_LOG(LogDR, Error,
-				TEXT("[S2Screen] %s / %s: 슬롯 %d 의 MID 생성 실패."),
-				*GetName(), *Mesh->GetName(), FallbackMaterialSlot);
-		}
-
-		DigitMIDs.Add(MID);
+		UE_LOG(LogDR, Warning,
+			TEXT("[S2Screen] %s: DigitTextures 가 %d개뿐입니다. 0~9 를 채우세요."),
+			*GetName(), DigitTextures.Num());
 	}
 }
 
 UTexture2D* ADRS2CodeScreen::DigitToTexture(int32 Digit) const
 {
-	// 음수(미공개/미입력)이거나 텍스처가 없으면 빈 자리 표시
 	if (!DigitTextures.IsValidIndex(Digit))
 	{
 		return EmptySlotTexture.Get();
@@ -136,14 +89,14 @@ UTexture2D* ADRS2CodeScreen::DigitToTexture(int32 Digit) const
 	return Texture ? Texture : EmptySlotTexture.Get();
 }
 
-void ADRS2CodeScreen::RefreshDigitTextures()
+void ADRS2CodeScreen::ApplyDigitTextures()
 {
-	for (int32 SlotIndex = 0; SlotIndex < DigitMIDs.Num(); ++SlotIndex)
+	for (int32 SlotIndex = 0; SlotIndex < DisplayMIDs.Num(); ++SlotIndex)
 	{
-		UMaterialInstanceDynamic* MID = DigitMIDs[SlotIndex];
+		UMaterialInstanceDynamic* MID = DisplayMIDs[SlotIndex];
 		if (!MID) continue;
 
-		// 배열보다 자리가 많으면 남는 자리는 빈 표시로 둔다.
+		// 배열보다 자리가 많으면 남는 자리는 미표시로 둔다.
 		const int32 Digit = Digits.IsValidIndex(SlotIndex) ? Digits[SlotIndex] : INDEX_NONE;
 
 		MID->SetTextureParameterValue(TextureParameterName, DigitToTexture(Digit));
@@ -154,7 +107,7 @@ void ADRS2CodeScreen::SetDigits(const TArray<int32>& InDigits)
 {
 	Digits = InDigits;
 
-	RefreshDigitTextures();
+	ApplyDigitTextures();
 	OnDigitsChanged(Digits);
 }
 
@@ -162,6 +115,6 @@ void ADRS2CodeScreen::ClearDigits()
 {
 	Digits.Reset();
 
-	RefreshDigitTextures();
+	ApplyDigitTextures();
 	OnDigitsChanged(Digits);
 }

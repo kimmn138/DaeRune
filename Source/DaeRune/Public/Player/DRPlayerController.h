@@ -358,6 +358,37 @@ public:
 	UPROPERTY(BlueprintReadWrite, Transient, Category = "UI")
 	TObjectPtr<UDRUpgradeScreenWidget> UpgradeScreenWidget;
 
+	// ========== 로비 옷장 화면 (Plan.md 5.3 / 15) ==========
+	//
+	// 업그레이드 화면과 ★완전히 같은 구조★ 다. 옷장도 로컬 세이브만 다루므로 RPC 가 없다.
+
+	// 옷장 상호작용으로 호출 (로컬 UI — RPC 없음)
+	UFUNCTION(BlueprintCallable, Category = "Cosmetic")
+	void OpenWardrobeScreen();
+
+	UFUNCTION(BlueprintCallable, Category = "Cosmetic")
+	void CloseWardrobeScreen();
+
+	UFUNCTION(BlueprintPure, Category = "Cosmetic")
+	bool IsWardrobeScreenOpen() const { return bIsWardrobeScreenOpen; }
+
+	// ★블루프린트가 위젯을 생성/제거한다★ (OnUpgradeScreenOpened/Closed 와 같은 구조)
+	//  - Opened : CreateWidget → AddToViewport → SetKeyboardFocus
+	//  - Closed : RemoveFromParent
+	UFUNCTION(BlueprintImplementableEvent, Category = "Cosmetic")
+	void OnWardrobeScreenOpened();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Cosmetic")
+	void OnWardrobeScreenClosed();
+
+	// 옷장 화면 위젯 클래스 (BP_DRPlayerController 에서 WBP_Wardrobe 지정).
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<class UDRWardrobeScreenWidget> WardrobeScreenWidgetClass;
+
+	// BP 가 만든 화면 위젯 보관 (소유권은 BP)
+	UPROPERTY(BlueprintReadWrite, Transient, Category = "UI")
+	TObjectPtr<UDRWardrobeScreenWidget> WardrobeScreenWidget;
+
 	// ========== 치트/디버그 모드 ==========
 
     // �׽�Ʈ�� ������ ��ŵ (��������Ʈ���� ȣ��)
@@ -393,6 +424,21 @@ public:
 	// 현재 진행도를 로그로 덤프 (해금 수 / 재화 / 칩 상태)
 	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Upgrade")
 	void DRDumpUpgrade();
+
+	/**
+	 * 치트: 코스메틱 카탈로그의 모든 해금 조건을 달성 처리한다.
+	 * 옷장 UI 를 만들 때 잠긴/해금 상태를 번갈아 확인하기 위한 것이다.
+	 */
+	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Cosmetic")
+	void DRUnlockSkins();
+
+	// 치트: 옷장 화면을 강제로 연다 (로비에서 옷장 액터 없이 UI 를 확인할 때)
+	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Cosmetic")
+	void DROpenWardrobe();
+
+	// 치트: 현재 로봇의 장착 코스메틱을 로그로 덤프
+	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Cosmetic")
+	void DRDumpCosmetic();
 
 private:
 	// 치트가 조작할 대상 로봇 (업그레이드 화면의 GetViewedClass 와 같은 기준)
@@ -443,6 +489,9 @@ protected:
 
 	// 업그레이드 화면 표시 여부
 	bool bIsUpgradeScreenOpen = false;
+
+	// 옷장 화면 표시 여부
+	bool bIsWardrobeScreenOpen = false;
 
 	// ========== 대기실 UI ==========
 

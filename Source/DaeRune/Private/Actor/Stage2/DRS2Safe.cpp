@@ -5,6 +5,7 @@
 #include "Actor/DRCleanserPart.h"
 #include "Actor/Stage2/DRS2CodeScreen.h"
 #include "Actor/Stage2/DRS2InteractProp.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "DaeRune/DRLogChannels.h"
 
@@ -39,7 +40,71 @@ void ADRS2Safe::BeginPlay()
 {
 	Super::BeginPlay();
 
+	EnsureDisplayMIDs();
 	RefreshDisplay();
+}
+
+void ADRS2Safe::EnsureDisplayMIDs()
+{
+	DisplayMIDs.Reset();
+
+	if (DigitMaterialSlots.Num() == 0) return;   // 슬롯 방식을 쓰지 않는 설정
+
+	UStaticMeshComponent* TargetMesh = bDisplayOnDoorMesh ? DoorMesh : SafeBodyMesh;
+	if (!TargetMesh || !TargetMesh->GetStaticMesh())
+	{
+		UE_LOG(LogDR, Error, TEXT("[S2Safe] 표시용 메시(%s)에 메시가 지정되지 않았습니다."),
+			bDisplayOnDoorMesh ? TEXT("DoorMesh") : TEXT("SafeBodyMesh"));
+		return;
+	}
+
+	const int32 SlotTotal = TargetMesh->GetNumMaterials();
+
+	for (int32 Slot : DigitMaterialSlots)
+	{
+		if (Slot < 0 || Slot >= SlotTotal)
+		{
+			UE_LOG(LogDR, Error, TEXT("[S2Safe] 머티리얼 슬롯 %d 이 범위(0~%d) 밖입니다."), Slot, SlotTotal - 1);
+			DisplayMIDs.Add(nullptr);
+			continue;
+		}
+
+		UMaterialInstanceDynamic* MID = TargetMesh->CreateAndSetMaterialInstanceDynamic(Slot);
+		if (!MID)
+		{
+			UE_LOG(LogDR, Error, TEXT("[S2Safe] 슬롯 %d 의 MID 생성 실패. 그 슬롯에 머티리얼이 있는지 확인하세요."), Slot);
+		}
+
+		DisplayMIDs.Add(MID);
+	}
+
+	if (DigitTextures.Num() < 10)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[S2Safe] DigitTextures 가 %d개뿐입니다. 0~9 를 채우세요."), DigitTextures.Num());
+	}
+}
+
+UTexture2D* ADRS2Safe::DigitToTexture(int32 Digit) const
+{
+	if (!DigitTextures.IsValidIndex(Digit))
+	{
+		return EmptySlotTexture.Get();
+	}
+
+	UTexture2D* Texture = DigitTextures[Digit].Get();
+	return Texture ? Texture : EmptySlotTexture.Get();
+}
+
+void ADRS2Safe::ApplyDigitTextures(const TArray<int32>& DisplayDigits)
+{
+	for (int32 SlotIndex = 0; SlotIndex < DisplayMIDs.Num(); ++SlotIndex)
+	{
+		UMaterialInstanceDynamic* MID = DisplayMIDs[SlotIndex];
+		if (!MID) continue;
+
+		const int32 Digit = DisplayDigits.IsValidIndex(SlotIndex) ? DisplayDigits[SlotIndex] : INDEX_NONE;
+		MID->SetTextureParameterValue(TextureParameterName, DigitToTexture(Digit));
+	}
 }
 
 void ADRS2Safe::RegisterButton(ADRS2SafeButton* Button)
@@ -185,8 +250,6 @@ void ADRS2Safe::OnRep_bOpened()
 
 void ADRS2Safe::RefreshDisplay()
 {
-	if (!InputDisplay) return;
-
 	// 입력된 자리는 숫자로, 남은 자리는 -1(미입력)로 표시한다
 	TArray<int32> DisplayDigits;
 	DisplayDigits.Reserve(CodeLength);
@@ -196,7 +259,14 @@ void ADRS2Safe::RefreshDisplay()
 		DisplayDigits.Add(InputDigits.IsValidIndex(i) ? static_cast<int32>(InputDigits[i]) : -1);
 	}
 
-	InputDisplay->SetDigits(DisplayDigits);
+	// 금고 메시에 직접 표시
+	ApplyDigitTextures(DisplayDigits);
+
+	// 별도 표시판 액터를 쓰는 경우에도 전달한다 (선택)
+	if (InputDisplay)
+	{
+		InputDisplay->SetDigits(DisplayDigits);
+	}
 }
 
 void ADRS2Safe::Multicast_PlayWrongCodeFX_Implementation()

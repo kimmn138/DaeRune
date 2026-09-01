@@ -100,7 +100,8 @@ void UDRS2TrainPhase::DepartToNextTarget(ADRS2StageDirector* Director)
 
 	if (Director->Obstacles.IsValidIndex(NextObstacleIndex))
 	{
-		const ADRS2TrainObstacle* Obstacle = Director->Obstacles[NextObstacleIndex];
+		// ★const 로 잡지 않는다. GetStopDistance 가 미입력값을 지연 계산하기 때문이다.
+		ADRS2TrainObstacle* Obstacle = Director->Obstacles[NextObstacleIndex];
 		if (!Obstacle) return;
 
 		TargetDistance = Obstacle->GetStopDistance();

@@ -165,7 +165,15 @@
       "Bash(awk 'NR>=5979 && NR<=6400 && /^##### |^###### |^#### 16.9/' Plan6.md)",
       "Bash(awk -F: '$1>5330 && $1<5480')",
       "Bash(awk 'NR>=5346 && NR<=5510 && /^##### |^#### /' Plan6.md)",
-      "Bash(grep -n \"PropMesh\\\\` \\(C++ 제공\" Plan6.md)"
+      "Bash(grep -n \"PropMesh\\\\` \\(C++ 제공\" Plan6.md)",
+      "Read(//tmp/**)",
+      "Read(//c/Users/OWNER/AppData/Local/Temp/**)",
+      "Read(//d/Program Files/**)",
+      "Read(//d/UE_5.5/**)",
+      "Bash(grep -i -E \"\\\\.claude|claude|plan|\\\\.md$\")",
+      "Bash(gh repo *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://api.github.com/repos/kimmn138/DaeRune)",
+      "Bash(curl -s https://api.github.com/repos/kimmn138/DaeRune)"
     ]
   },
   "enabledMcpjsonServers": [

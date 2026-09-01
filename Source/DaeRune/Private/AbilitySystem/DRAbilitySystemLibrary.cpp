@@ -13,6 +13,7 @@
 #include "Game/DRGameInstance.h"
 #include "Interaction/CombatInterface.h"
 #include "Interaction/DRProximityHitOnly.h"
+#include "DaeRune/DRLogChannels.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/DRPlayerState.h"
 #include "UI/HUD/DRHUD.h"
@@ -317,11 +318,31 @@ void UDRAbilitySystemLibrary::GetLiveObjectsWithinRadius(const UObject* WorldCon
 	{
 		TArray<FOverlapResult> Overlaps;
 		World->OverlapMultiByObjectType(Overlaps, SphereOrigin, FQuat::Identity, FCollisionObjectQueryParams(FCollisionObjectQueryParams::InitType::AllDynamicObjects), FCollisionShape::MakeSphere(Radius), SphereParams);
+		// [임시 진단]
+		UE_LOG(LogDR, Warning, TEXT("[MoleDiag] A. 반경 %.0f 오버랩 %d개 (중심 %s)"),
+			Radius, Overlaps.Num(), *SphereOrigin.ToCompactString());
+
 		for (FOverlapResult& Overlap : Overlaps)
 		{
+			// [임시 진단] 두더지만 골라 출력
+			if (Overlap.GetActor() && Overlap.GetActor()->GetClass()->GetName().Contains(TEXT("Mole")))
+			{
+				UE_LOG(LogDR, Warning, TEXT("[MoleDiag] B. 두더지 발견: %s / Implements=%d / IsDead=%d"),
+					*Overlap.GetActor()->GetName(),
+					Overlap.GetActor()->Implements<UCombatInterface>() ? 1 : 0,
+					Overlap.GetActor()->Implements<UCombatInterface>() ? (ICombatInterface::Execute_IsDead(Overlap.GetActor()) ? 1 : 0) : -1);
+			}
+
 			if (Overlap.GetActor()->Implements<UCombatInterface>() && !ICombatInterface::Execute_IsDead(Overlap.GetActor()))
 			{
 				OutOverlappingActors.AddUnique(ICombatInterface::Execute_GetAvatar(Overlap.GetActor()));
+			}
+			// ★근접 전용 피격 대상(홀로그램 두더지 등)도 수집한다 (2026-08-27 추가).
+			//   ICombatInterface 를 구현하지 않아 위 분기에서 걸러지고 있었고,
+			//   그 결과 광역·근접 공격이 두더지를 대상으로 잡지 못했다.
+			else if (Cast<IDRProximityHitOnly>(Overlap.GetActor()))
+			{
+				OutOverlappingActors.AddUnique(Overlap.GetActor());
 			}
 			else if (ADRCleanserSite* CleanserSite = Cast<ADRCleanserSite>(Overlap.GetActor()))
 			{
@@ -422,10 +443,32 @@ bool UDRAbilitySystemLibrary::IsNotFriend(AActor* FirstActor, AActor* SecondActo
 	return !bFriends;
 }
 
+bool UDRAbilitySystemLibrary::IsValidDamageTarget(AActor* Attacker, AActor* Target)
+{
+	if (!IsValid(Attacker) || !IsValid(Target)) return false;
+
+	// 아군 판정 (액터 태그 기반)
+	if (!IsNotFriend(Attacker, Target)) return false;
+
+	// 전투 대상이면 사망 여부까지 본다. 인터페이스가 없어도 유효 대상일 수 있으므로 통과시킨다.
+	if (Target->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Target))
+	{
+		return false;
+	}
+
+	return true;
+}
+
 FGameplayEffectContextHandle UDRAbilitySystemLibrary::ApplyDamageEffect(const FDamageEffectParams& DamageEffectParams)
 {
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 	AActor* SourceAvatarActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
+
+	// [임시 진단] 이 함수에 도달한 모든 공격
+	UE_LOG(LogDR, Warning, TEXT("[MoleDiag] F. ApplyDamageEffect 진입: 대상아바타=%s"),
+		DamageEffectParams.TargetAbilitySystemComponent
+			? *GetNameSafe(DamageEffectParams.TargetAbilitySystemComponent->GetAvatarActor())
+			: TEXT("★TargetASC 없음"));
 
 	// ===== 근접 전용 피격 대상 가로채기 (Plan6 §5.11) =====
 	// 홀로그램 두더지처럼 "2m 안에서의 공격만 유효하고 그 밖은 투과"하는 대상을 여기서 처리한다.
@@ -436,6 +479,10 @@ FGameplayEffectContextHandle UDRAbilitySystemLibrary::ApplyDamageEffect(const FD
 		AActor* TargetAvatarActor = DamageEffectParams.TargetAbilitySystemComponent->GetAvatarActor();
 		if (IDRProximityHitOnly* ProximityTarget = Cast<IDRProximityHitOnly>(TargetAvatarActor))
 		{
+			// [임시 진단]
+			UE_LOG(LogDR, Warning, TEXT("[MoleDiag] D. ApplyDamageEffect 도달: 대상=%s / Accepts=%d"),
+				*GetNameSafe(TargetAvatarActor), ProximityTarget->AcceptsHitFrom(SourceAvatarActor) ? 1 : 0);
+
 			if (ProximityTarget->AcceptsHitFrom(SourceAvatarActor))
 			{
 				ProximityTarget->HandleProximityHit(SourceAvatarActor);

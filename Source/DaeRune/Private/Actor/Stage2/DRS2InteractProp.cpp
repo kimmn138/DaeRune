@@ -120,6 +120,14 @@ ADRS2Lever::ADRS2Lever()
 	// 연타로 전구가 정신없이 깜빡이는 것을 막는다. 자세 전환(0.15초)보다 넉넉하게 잡았다.
 	InteractCooldown = 0.4f;
 
+	// 설치부 메시. SceneRoot 자식이라 PropMesh 가 회전해도 제자리에 남는다.
+	LeverBaseMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LeverBaseMesh"));
+	LeverBaseMesh->SetupAttachment(GetRootComponent());
+
+	// 이 메시를 조준해도 레버로 감지되도록 PropMesh 와 같은 콜리전 설정을 준다.
+	LeverBaseMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	LeverBaseMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
 	// 이동 복제 해제는 베이스 생성자가 처리한다 (자세를 각 머신이 로컬 계산하므로).
 }
 
@@ -127,8 +135,9 @@ void ADRS2Lever::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// ★배치 회전이 기준점이다. 여기에 OnRotation/OffRotation 을 로컬 합성한다.
-	const FQuat BaseQuat = GetActorQuat();
+	// ★PropMesh(손잡이)의 배치 상대 회전이 기준점이다.
+	//   액터를 통째로 돌리면 LeverBaseMesh(설치부)까지 같이 돌아가므로 손잡이만 돌린다.
+	const FQuat BaseQuat = PropMesh ? PropMesh->GetRelativeRotation().Quaternion() : FQuat::Identity;
 	OffQuat = BaseQuat * OffRotation.Quaternion();
 	OnQuat = BaseQuat * OnRotation.Quaternion();
 
@@ -188,7 +197,10 @@ void ADRS2Lever::Tick(float DeltaSeconds)
 
 void ADRS2Lever::ApplyPose(float Alpha)
 {
-	SetActorRotation(FQuat::Slerp(OffQuat, OnQuat, FMath::Clamp(Alpha, 0.f, 1.f)));
+	if (!PropMesh) return;
+
+	// 손잡이(PropMesh)만 회전한다. 설치부(LeverBaseMesh)는 고정이다.
+	PropMesh->SetRelativeRotation(FQuat::Slerp(OffQuat, OnQuat, FMath::Clamp(Alpha, 0.f, 1.f)));
 }
 
 void ADRS2Lever::ExecuteInteract(ADRCharacter* /*Character*/)

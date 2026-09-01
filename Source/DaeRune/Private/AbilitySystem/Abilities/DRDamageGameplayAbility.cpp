@@ -2,6 +2,7 @@
 
 
 #include "AbilitySystem/Abilities/DRDamageGameplayAbility.h"
+#include "DaeRune/DRLogChannels.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "DaeRune/Public/DRGameplayTags.h"
@@ -21,6 +22,11 @@ FDamageEffectParams UDRDamageGameplayAbility::MakeDamageEffectParamsFromClassDef
 	Params.DamageGameplayEffectClass = DamageEffectClass;
 	Params.SourceAbilitySystemComponent = GetAbilitySystemComponentFromActorInfo();
 	Params.TargetAbilitySystemComponent = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
+
+	// [임시 진단] 어빌리티(BP 포함)가 이 대상으로 파라미터를 만들었는지
+	UE_LOG(LogDR, Warning, TEXT("[MoleDiag] E. MakeDamageEffectParams: 대상=%s / TargetASC=%s"),
+		*GetNameSafe(TargetActor),
+		Params.TargetAbilitySystemComponent ? TEXT("있음") : TEXT("★없음"));
 	Params.BaseDamage = GetUpgradedDamage();
 	Params.AbilityLevel = GetAbilityLevel();
 	Params.DamageType = DamageType;

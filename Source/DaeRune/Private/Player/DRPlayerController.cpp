@@ -879,6 +879,13 @@ void ADRPlayerController::OnLevelEntered()
 		bIsUpgradeScreenOpen = false;
 	}
 
+	// 옷장 화면도 같은 처리
+	if (bIsWardrobeScreenOpen)
+	{
+		OnWardrobeScreenClosed();
+		bIsWardrobeScreenOpen = false;
+	}
+
 	// 愿???곹깭 珥덇린??(?몃━寃뚯씠???뺣━ ?ы븿)
 	if (CurrentSpectatedCharacter.IsValid())
 	{
@@ -942,7 +949,13 @@ void ADRPlayerController::OnLevelEntered()
 
 void ADRPlayerController::HandleToggleSettings()
 {
-	// 업그레이드 화면이 열려 있으면 ESC 로 그 화면을 먼저 닫는다
+	// 옷장/업그레이드 화면이 열려 있으면 ESC 로 그 화면을 먼저 닫는다.
+	// (옷장은 위젯의 NativeOnKeyDown 도 ESC 를 받지만, 포커스를 잃은 상태를 대비해 여기도 둔다)
+	if (bIsWardrobeScreenOpen)
+	{
+		CloseWardrobeScreen();
+		return;
+	}
 	if (bIsUpgradeScreenOpen)
 	{
 		CloseUpgradeScreen();
@@ -1557,6 +1570,94 @@ void ADRPlayerController::CloseUpgradeScreen()
 
 	// 변경된 장착 상태를 서버에 반영
 	ReportUpgradeLoadout();
+}
+
+// ========================= 로비 옷장 화면 (Plan.md 5.3 / 15) =========================
+
+void ADRPlayerController::OpenWardrobeScreen()
+{
+	if (!IsLocalController()) return;
+	if (bIsWardrobeScreenOpen) return;
+
+	// 옷장은 로비 전용이다. 스테이지 도중 외형을 바꿔 끼우는 경로를 만들지 않는다.
+	// (OpenUpgradeScreen 과 같은 가드)
+	if (!IsInLobby())
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cosmetic] 로비가 아닌 곳에서 옷장 열기를 시도했습니다 — 무시합니다."));
+		return;
+	}
+
+	// 다른 전체화면 UI 와 입력 모드가 겹치지 않게 먼저 닫는다
+	if (bIsSettingsMenuOpen)
+	{
+		CloseSettingsMenu();
+	}
+	if (bIsUpgradeScreenOpen)
+	{
+		CloseUpgradeScreen();
+	}
+
+	bIsWardrobeScreenOpen = true;
+
+	SetInputMode(FInputModeUIOnly());
+	SetShowMouseCursor(true);
+
+	// 블루프린트에서 위젯 생성 (업그레이드 화면과 같은 구조)
+	OnWardrobeScreenOpened();
+}
+
+void ADRPlayerController::CloseWardrobeScreen()
+{
+	if (!IsLocalController()) return;
+	if (!bIsWardrobeScreenOpen) return;
+
+	// 블루프린트에서 위젯 제거
+	OnWardrobeScreenClosed();
+
+	bIsWardrobeScreenOpen = false;
+	RestoreDefaultInputMode();
+
+	// 서버 반영(ReportCosmeticLoadout)은 복제 경로가 구현되는 시점에 여기 붙는다 (Plan.md 5.3 / M3).
+	// 지금은 로컬 세이브에 이미 기록돼 있어 다음 실행에도 선택이 유지된다.
+}
+
+void ADRPlayerController::DRUnlockSkins()
+{
+	if (UDRGameInstance* GI = GetGameInstance<UDRGameInstance>())
+	{
+		GI->DebugUnlockAllSkins();
+	}
+}
+
+void ADRPlayerController::DROpenWardrobe()
+{
+	OpenWardrobeScreen();
+}
+
+void ADRPlayerController::DRDumpCosmetic()
+{
+	const UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
+	if (!GI)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
+		return;
+	}
+
+	const EPlayerCharacterClass Class = GetViewedUpgradeClass();
+	const TArray<FName> Equipped = GI->GetEquippedSkins(Class);
+
+	FString Line;
+	for (int32 Index = 0; Index < Equipped.Num(); ++Index)
+	{
+		Line += FString::Printf(TEXT("%s=%s "),
+			*StaticEnum<EDRCosmeticCategory>()->GetNameStringByValue(Index),
+			*Equipped[Index].ToString());
+	}
+
+	UE_LOG(LogDR, Warning, TEXT("[Cheat] 코스메틱: 클래스=%d / 카탈로그=%s / %s"),
+		static_cast<int32>(Class),
+		GI->GetCosmeticCatalog() ? TEXT("지정됨") : TEXT("★미지정★"),
+		*Line);
 }
 
 void ADRPlayerController::RestoreDefaultInputMode()

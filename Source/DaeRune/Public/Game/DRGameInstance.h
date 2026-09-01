@@ -7,12 +7,15 @@
 #include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "Game/DRProgressionTypes.h"
 #include "Game/DRUpgradeTypes.h"
+#include "Game/DRCosmeticTypes.h"
 #include "DRGameInstance.generated.h"
 
 class UDRSaveGame;
 class UPlayerCharacterClassInfo;
 class UDRProgressionConfig;
 class UDRChipCatalog;
+class UDRCosmeticCatalog;
+class UTexture2D;
 
 // 재화 보유량 변경 알림 (업그레이드 화면 바인딩용)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCurrencyChangedSignature, int32, NewCurrency);
@@ -20,6 +23,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCurrencyChangedSignature, int32, 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnUpgradesChangedSignature, EPlayerCharacterClass, CharacterClass);
 // 업그레이드 시스템 해금 알림 (스테이지1 최초 클리어)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnUpgradeSystemUnlockedSignature);
+// 특정 로봇의 장착 코스메틱 변경 알림 (옷장 화면 갱신용)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCosmeticsChangedSignature, EPlayerCharacterClass, CharacterClass);
+// 새 스킨 해금 알림 (해금 토스트용)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSkinUnlockedSignature, FName, SkinId);
 
 /**
  *
@@ -251,6 +258,89 @@ public:
 	// 이미 지급된 보상인가
 	UFUNCTION(BlueprintPure, Category = "Progression|Reward")
 	bool IsRewardClaimed(FName RewardId) const;
+
+	// ========== 코스메틱 / 옷장 (계정 단위, 클라 권위) — Plan.md 5.1 / 15.11 ==========
+	//
+	// 해금 상태는 ★저장하지 않고 매번 파생★한다 (EarnedAchievements ∪ ClaimedRewards).
+	// 파생값을 저장하면 카탈로그의 해금 조건을 조정했을 때 둘이 어긋난다. (Plan.md 4.5)
+
+	UFUNCTION(BlueprintPure, Category = "Cosmetic")
+	UDRCosmeticCatalog* GetCosmeticCatalog() const;
+
+	// 해금 조건이 비어 있으면 "기본 제공"으로 true. 정의가 없으면 false.
+	UFUNCTION(BlueprintPure, Category = "Cosmetic")
+	bool IsSkinUnlocked(FName SkinId) const;
+
+	// 장착 중인 스킨. 없으면 NAME_None(기본 외형).
+	UFUNCTION(BlueprintPure, Category = "Cosmetic")
+	FName GetEquippedSkin(EPlayerCharacterClass CharacterClass, EDRCosmeticCategory Category) const;
+
+	// 서버 보고 / 외형 적용용 — 길이는 항상 EDRCosmeticCategory::Count 다.
+	UFUNCTION(BlueprintPure, Category = "Cosmetic")
+	TArray<FName> GetEquippedSkins(EPlayerCharacterClass CharacterClass) const;
+
+	/**
+	 * 장착 (세이브 기록 + 즉시 저장 + OnCosmeticsChanged).
+	 * NAME_None 은 "기본 외형으로 되돌리기"라 항상 허용된다.
+	 * 잠겼거나 / 다른 로봇 소속이거나 / 카테고리가 다르면 false 를 돌려주고 아무 것도 바꾸지 않는다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Cosmetic")
+	bool EquipSkin(EPlayerCharacterClass CharacterClass, EDRCosmeticCategory Category, FName SkinId);
+
+	// 4개 카테고리를 ★전부★ 해제한다 (옷장의 Clear All 버튼). 바뀐 게 있으면 true.
+	UFUNCTION(BlueprintCallable, Category = "Cosmetic")
+	bool ClearAllSkins(EPlayerCharacterClass CharacterClass);
+
+	/**
+	 * 옷장 화면 그리기의 ★단일 진입점★ (GetChipViewModels 와 같은 규약).
+	 * UI 가 카탈로그와 세이브를 직접 조합하지 않게 한다.
+	 * 인덱스 0 은 항상 "기본"(장착 해제) 칸이다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Cosmetic")
+	void GetSkinViewModels(EPlayerCharacterClass CharacterClass, EDRCosmeticCategory Category,
+		TArray<FDRSkinViewModel>& OutViewModels) const;
+
+	// 이 로봇에 (잠긴 것 포함) 고를 옷이 하나라도 정의돼 있는가. 옷장 프롬프트 표시용.
+	UFUNCTION(BlueprintPure, Category = "Cosmetic")
+	bool HasAnySkinAvailable(EPlayerCharacterClass CharacterClass) const;
+
+	// ★치트/디버그 전용★ — 업적을 임의로 달성 처리 (DebugSetUpgradeSystemUnlocked 선례)
+	UFUNCTION(BlueprintCallable, Category = "Cosmetic")
+	void DebugGrantAchievement(FName AchievementId);
+
+	// ★치트/디버그 전용★ — 카탈로그의 모든 해금 조건을 달성 처리
+	UFUNCTION(BlueprintCallable, Category = "Cosmetic")
+	void DebugUnlockAllSkins();
+
+	UPROPERTY(BlueprintAssignable, Category = "Cosmetic")
+	FOnCosmeticsChangedSignature OnCosmeticsChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Cosmetic")
+	FOnSkinUnlockedSignature OnSkinUnlocked;
+
+private:
+	// ========== 코스메틱 내부 ==========
+
+	FDRClassCosmeticState& FindOrAddCosmeticState(EPlayerCharacterClass CharacterClass);
+	const FDRClassCosmeticState* FindCosmeticState(EPlayerCharacterClass CharacterClass) const;
+
+	// 카탈로그 조회 (미지정이면 nullptr)
+	const FDRSkinDefinition* FindSkinDef(FName SkinId) const;
+
+	// 카탈로그에서 사라졌거나 소속이 어긋난 장착 Id 를 NAME_None 으로 되돌린다. 변경이 있으면 true.
+	bool SanitizeCosmeticState(EPlayerCharacterClass CharacterClass, FDRClassCosmeticState& State) const;
+
+	// 썸네일 동기 로드 (옷장은 로비 UI라 아이콘 수가 적다 — ResolveChipIcon 과 같은 판단)
+	UTexture2D* ResolveSkinIcon(const TSoftObjectPtr<UTexture2D>& Icon) const;
+
+	// HowToUnlock 이 비어 있을 때 쓸 기본 잠금 문구
+	FText MakeDefaultUnlockHint(const FDRSkinDefinition& Def) const;
+
+	// 지금 해금돼 있는 스킨 Id 집합 (보상 반영 전후 비교용)
+	TSet<FName> SnapshotUnlockedSkins() const;
+
+	// 스냅샷 이후 새로 해금된 스킨만 OnSkinUnlocked 로 알린다
+	void BroadcastNewlyUnlockedSkins(const TSet<FName>& BeforeUnlocked);
 
 private:
 	// LoadProgress 후 세이브 포맷 마이그레이션 + 누락 키 lazy 초기화 + 상태 정화.

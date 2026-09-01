@@ -116,6 +116,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayMechanics")
 	static bool IsNotFriend(AActor* FirstActor, AActor* SecondActor);
 
+	/**
+	 * 이 공격자가 이 대상에게 데미지를 줄 수 있는가 (BP 어빌리티의 공용 필터).
+	 *
+	 * ★어빌리티 BP 에서 `Cast To DREnemy` 같은 클래스 검사로 대상을 거르면
+	 *   홀로그램 두더지처럼 **캐릭터가 아닌 유효 대상**이 조용히 빠진다.
+	 *   대상 판정은 클래스가 아니라 이 함수로 하는 것을 규약으로 한다.
+	 *
+	 * 통과 조건: 유효한 액터 + 아군이 아님 + (전투 대상이면) 살아 있음
+	 */
+	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayMechanics")
+	static bool IsValidDamageTarget(AActor* Attacker, AActor* Target);
+
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|DamageEffect")
 	static FGameplayEffectContextHandle ApplyDamageEffect(const FDamageEffectParams& DamageEffectParams);
 

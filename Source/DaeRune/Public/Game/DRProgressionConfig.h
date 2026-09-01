@@ -8,6 +8,7 @@
 #include "DRProgressionConfig.generated.h"
 
 class UDRChipCatalog;
+class UDRCosmeticCatalog;
 
 /**
  * 스테이지 최초 클리어 보상 정의. 계정당 1회만 지급된다.
@@ -65,6 +66,17 @@ struct FDRAchievementDef
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Achievement", meta = (ClampMin = "0"))
 	int32 Currency = 400;
+
+	/**
+	 * 스팀 파트너 사이트에 등록한 Achievement API Name.
+	 * 비워두면 ★스팀 미러링 대상이 아니다★ (로컬 전용 업적).
+	 *
+	 * 파트너 사이트 등록은 출시 후 삭제가 비가역이라 마지막에 몰아서 한다 — 그전까지는
+	 * 이 칸을 비워둔 채 게임 안 업적만 자유롭게 늘려도 된다. (Plan.md 8.1)
+	 * 영숫자와 '_' 만 사용 (공백/한글 불가).
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Achievement|Steam")
+	FString SteamApiName;
 };
 
 /**
@@ -81,6 +93,13 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade")
 	TObjectPtr<UDRChipCatalog> ChipCatalog;
+
+	// ========== 코스메틱 정의 (옷장) ==========
+
+	// GameInstance BP 에 이미 ProgressionConfig 슬롯이 있으므로 새 슬롯을 늘리지 않고 여기에 매단다.
+	// (ChipCatalog 와 같은 방식 — UDRGameInstance::GetCosmeticCatalog 가 단일 접근 경로다)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cosmetic")
+	TObjectPtr<UDRCosmeticCatalog> CosmeticCatalog;
 
 	// ========== 슬롯 (카테고리 구분 없는 통합 6칸) ==========
 

@@ -135,6 +135,13 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void ExecuteInteract(ADRCharacter* Character) override;
 
+	// ★레버가 설치된 받침/하우징. 회전하지 않고 제자리에 고정된다.
+	//   조준 감지는 액터 단위이므로(HitResult.GetActor()) 이 메시를 맞혀도 레버로 인식된다.
+	//   → **상호작용 범위가 넓어진다.**
+	//   PropMesh 는 움직이는 레버 손잡이, LeverBaseMesh 는 고정된 설치부다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Lever")
+	TObjectPtr<UStaticMeshComponent> LeverBaseMesh;
+
 	// ★배치 회전을 기준으로 한 **상대 변화량**이다. 절대 회전이 아니다.
 	//   덕분에 레버를 어느 방향으로 배치하든 항상 자기 축으로 회전한다.
 	//   FRotator = (Pitch, Yaw, Roll) 이므로 Y축 회전은 Pitch 다.
