@@ -31,10 +31,34 @@ void UDRS2PuzzlePhase::OnPhaseStart()
 
 	// ===== 비밀번호 생성 및 배분 (Plan6 §14.2.6) =====
 	// 반드시 한곳에서 만들어 각 액터에 주입한다. 각자 난수를 뽑으면 값이 어긋난다.
+	//
+	// ★3번째 자리만 예외다 (2026-09-16). CCTV 는 "타깃 캐릭터가 사진에 몇 명 나오는가"가 답인데,
+	//   그 수는 그림에 이미 그려져 있어 서버가 정할 수 없다. 그래서 CCTV 보드가 후보 중 하나를
+	//   뽑아 자릿수를 **결정하고**, 여기서 그것을 읽어 온다 (§14.2.4).
+	ADRS2CctvBoard* CctvBoard = Director->Room2CctvBoard;
+
+	int32 CctvDigit = INDEX_NONE;
+	if (CctvBoard)
+	{
+		CctvBoard->ChooseTarget();          // 후보 선정 + 화면 시퀀스 재생 시작
+		CctvDigit = CctvBoard->GetSecretDigit();
+	}
+
+	if (CctvDigit < 0 || CctvDigit > 9)
+	{
+		// 보드 미배선이거나 후보가 비었을 때. 금고는 열려야 하므로 난수로 대체한다.
+		// (이 경우 CCTV 를 아무리 세어도 답이 안 나오므로 개발 중에만 벌어져야 한다)
+		UE_LOG(LogDR, Error,
+			TEXT("[S2P2] CCTV 보드에서 3번째 자리를 얻지 못했습니다(%d). ")
+			TEXT("Director 의 Room2CctvBoard 배선과 TargetCandidates 를 확인하세요. 난수로 대체합니다."),
+			CctvDigit);
+		CctvDigit = FMath::RandRange(0, 9);
+	}
+
 	SecretCode = {
 		static_cast<uint8>(FMath::RandRange(0, 9)),
 		static_cast<uint8>(FMath::RandRange(0, 9)),
-		static_cast<uint8>(FMath::RandRange(0, 9))
+		static_cast<uint8>(CctvDigit)
 	};
 
 #if !UE_BUILD_SHIPPING
@@ -56,12 +80,6 @@ void UDRS2PuzzlePhase::OnPhaseStart()
 	{
 		SwitchPuzzle->SetRevealDigit(SecretCode[1]);
 		SwitchPuzzle->OnPuzzleSolved.AddDynamic(this, &UDRS2PuzzlePhase::HandlePuzzleSolved);
-	}
-
-	if (ADRS2CctvBoard* CctvBoard = Director->Room2CctvBoard)
-	{
-		// CCTV는 해결 상태가 없다. 타깃 이미지 등장 횟수가 곧 마지막 자리다.
-		CctvBoard->SetTargetImageCount(SecretCode[2]);
 	}
 
 	if (ADRS2Safe* Safe = Director->Room2Safe)

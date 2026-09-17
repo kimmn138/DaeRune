@@ -758,6 +758,16 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "S2|Puzzle")
 	FOnSlidePuzzleUIRequested OnSlidePuzzleUIRequested;
 
+	/**
+	 * 8퍼즐 해결 보고 (클라 -> 서버).
+	 *
+	 * 퍼즐 판정은 UI 위젯이 있는 클라에서 일어나는데, ADRS2SlidePuzzle::NotifySolved() 는
+	 * HasAuthority() 가드가 있어 클라에서 부르면 조용히 무시된다. 그 사이를 잇는 다리다.
+	 * 위젯 BP 가 OnPuzzleSolved 델리게이트에서 이걸 호출한다.
+	 */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "S2|Puzzle")
+	void Server_ReportSlidePuzzleSolved(ADRS2SlidePuzzle* Puzzle);
+
 	// 원래의 private 구역으로 복귀 (이 아래 멤버들의 접근 수준을 바꾸지 않기 위함)
 private:
 

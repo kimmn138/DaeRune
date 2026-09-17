@@ -3,6 +3,8 @@
 #include "Phase/Stage2/DRS2TrainPhase.h"
 
 #include "AIController.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystem/DRAttributeSet.h"
 #include "Actor/Stage2/DRS2StageDirector.h"
 #include "Actor/Stage2/DRS2Train.h"
 #include "Actor/Stage2/DRS2TrainTrack.h"
@@ -50,6 +52,11 @@ void UDRS2TrainPhase::OnPhaseStart()
 		{
 			Obstacle->SetTrack(Director->Track);
 		}
+	}
+
+	if (!Director->Track)
+	{
+		UE_LOG(LogDR, Error, TEXT("[S2P5] Director 의 Track 미배선 - 장애물 StopDistance 자동 계산 불가"));
 	}
 
 	if (ADRS2Train* Train = Director->Train)
@@ -142,9 +149,18 @@ void UDRS2TrainPhase::HandleTrainStopped(int32 ObstacleIndex)
 	{
 		Director->ForwardBarriers[ObstacleIndex]->SetBarrierEnabled(true);
 	}
+	else
+	{
+		UE_LOG(LogDR, Error, TEXT("[S2P5] 구간 %d 의 ForwardBarriers 가 없어 전방이 열린 채로 전투합니다."), ObstacleIndex);
+	}
+
 	if (Director->RearBarriers.IsValidIndex(ObstacleIndex) && Director->RearBarriers[ObstacleIndex])
 	{
 		Director->RearBarriers[ObstacleIndex]->SetBarrierEnabled(true);
+	}
+	else
+	{
+		UE_LOG(LogDR, Error, TEXT("[S2P5] 구간 %d 의 RearBarriers 가 없어 후방이 열린 채로 전투합니다."), ObstacleIndex);
 	}
 
 	const FTransform SpawnTransform = Obstacle->GetBossSpawnTransform();
@@ -190,10 +206,31 @@ void UDRS2TrainPhase::BindBossHealth()
 {
 	if (!MoleBoss.IsValid()) return;
 
-	CachedBossMaxHealth = 0.f;
+	// ★도망 임계를 **스폰 시점에 절대 HP 로 환산**해 둔다.
+	//   MaxHealth 는 스폰 후 변하지 않으므로 여기서 한 번 읽으면 충분하다.
+	//   (예전 구현은 OnMaxHealthChanged 통지를 기다렸는데, 그 통지는 ADREnemy::BeginPlay 안에서
+	//    바인딩보다 먼저 지나가 버려 최대 체력이 0 으로 남았고 임계 판정이 통째로 죽어 있었다.)
+	RetreatHealthThresholds.Reset();
+
+	const UAbilitySystemComponent* ASC = MoleBoss->GetAbilitySystemComponent();
+	const float MaxHealth = ASC ? ASC->GetNumericAttribute(UDRAttributeSet::GetMaxHealthAttribute()) : 0.f;
+
+	if (MaxHealth <= 0.f)
+	{
+		UE_LOG(LogDR, Error,
+			TEXT("[S2P5] 보스 MaxHealth 를 읽지 못했습니다(%.0f). 도망 임계가 동작하지 않아 구간이 넘어가지 않습니다."),
+			MaxHealth);
+	}
+	else
+	{
+		RetreatHealthThresholds.Reserve(RetreatHealthRatios.Num());
+		for (const float Ratio : RetreatHealthRatios)
+		{
+			RetreatHealthThresholds.Add(MaxHealth * Ratio);
+		}
+	}
 
 	MoleBoss->OnHealthChanged.AddDynamic(this, &UDRS2TrainPhase::HandleBossHealthChanged);
-	MoleBoss->OnMaxHealthChanged.AddDynamic(this, &UDRS2TrainPhase::HandleBossMaxHealthChanged);
 }
 
 void UDRS2TrainPhase::UnbindBossHealth()
@@ -201,27 +238,21 @@ void UDRS2TrainPhase::UnbindBossHealth()
 	if (!MoleBoss.IsValid()) return;
 
 	MoleBoss->OnHealthChanged.RemoveDynamic(this, &UDRS2TrainPhase::HandleBossHealthChanged);
-	MoleBoss->OnMaxHealthChanged.RemoveDynamic(this, &UDRS2TrainPhase::HandleBossMaxHealthChanged);
-}
-
-void UDRS2TrainPhase::HandleBossMaxHealthChanged(float NewValue)
-{
-	CachedBossMaxHealth = NewValue;
 }
 
 void UDRS2TrainPhase::HandleBossHealthChanged(float NewValue)
 {
 	const int32 Index = CurrentObstacleIndex;
 
-	// ★마지막 구간에는 임계가 없다. 사망만이 해제 조건이다.
-	if (!RetreatHealthRatios.IsValidIndex(Index)) return;
-	if (bSegmentResolved.IsValidIndex(Index) && bSegmentResolved[Index]) return;
-	if (CachedBossMaxHealth <= 0.f) return;
+	// ★마지막 구간에는 임계가 없다(임계 수 = 구간 수 - 1). 사망만이 해제 조건이다.
+	if (!RetreatHealthThresholds.IsValidIndex(Index)) return;
 
-	const float Ratio = NewValue / CachedBossMaxHealth;
-	if (Ratio <= RetreatHealthRatios[Index])
+	// 임계 아래로는 계속 피격 통지가 오므로 래치로 중복 도망을 막는다.
+	if (bSegmentResolved.IsValidIndex(Index) && bSegmentResolved[Index]) return;
+
+	if (NewValue <= RetreatHealthThresholds[Index])
 	{
-		UE_LOG(LogDR, Log, TEXT("[S2P5] 구간 %d 임계 도달 (%.0f%%) - 보스 도망"), Index + 1, Ratio * 100.f);
+		UE_LOG(LogDR, Log, TEXT("[S2P5] 구간 %d 임계 도달 - 보스 도망"), Index + 1);
 		ResolveSegment(Index);
 	}
 }
@@ -290,7 +321,12 @@ void UDRS2TrainPhase::ReappearBoss(const FTransform& SpawnTransform)
 
 	ADREnemy* Boss = MoleBoss.Get();
 
-	Boss->SetActorTransform(SpawnTransform);
+	// ★위치·회전만 옮긴다. SetActorTransform 을 쓰면 안 된다 —
+	//   FTransform 의 Scale3D 까지 적용되어 BP 에서 키워 둔 보스 캡슐 크기가
+	//   스폰 지점 컴포넌트의 스케일(보통 1)로 덮어써진다.
+	//   증상: 1구간에서는 크게 나오다가 2·3구간 재등장에서 원래 크기로 줄어든다.
+	//   재등장은 "같은 개체를 옮기는" 것이지 다시 만드는 것이 아니므로 크기를 건드릴 이유가 없다.
+	Boss->SetActorLocationAndRotation(SpawnTransform.GetLocation(), SpawnTransform.GetRotation());
 	Boss->SetActorHiddenInGame(false);
 	Boss->SetActorEnableCollision(true);
 	Boss->SetActorTickEnabled(true);

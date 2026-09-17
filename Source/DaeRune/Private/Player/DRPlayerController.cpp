@@ -798,8 +798,24 @@ void ADRPlayerController::Client_OpenSlidePuzzleUI_Implementation(ADRS2SlidePuzz
 {
 	if (!IsLocalController() || !Puzzle) return;
 
-	// 실제 위젯 생성은 HUD/BP 가 담당한다 (8퍼즐 UI 사양 확정 후 구현)
+	// 실제 위젯 생성은 HUD/BP 가 담당한다 (WBP_S2SlidePuzzle)
 	OnSlidePuzzleUIRequested.Broadcast(Puzzle);
+}
+
+void ADRPlayerController::Server_ReportSlidePuzzleSolved_Implementation(ADRS2SlidePuzzle* Puzzle)
+{
+	if (!IsValid(Puzzle)) return;
+
+	// NotifySolved 안에도 bSolved 가드가 있지만, 여기서 먼저 걸러 로그를 깨끗하게 둔다.
+	if (Puzzle->IsSolved()) return;
+
+	// ★보드 상태를 서버가 재검증하지는 않는다★
+	// 퍼즐 판정이 클라에만 있는 구조라 '정답을 서버가 다시 맞춰 보는' 경로가 없다.
+	// 협동 PvE 라 조작 위험은 자기 팀 진행을 앞당기는 정도이고, 되돌릴 이득이 없어 허용한다.
+	// 서버 권위가 필요해지면 보드 상태 자체를 ADRS2SlidePuzzle 로 옮기고 이동을 RPC 로 받아야 한다.
+	UE_LOG(LogDR, Log, TEXT("[S2Puzzle] %s 가 8퍼즐 해결을 보고"), *GetNameSafe(this));
+
+	Puzzle->NotifySolved();
 }
 void ADRPlayerController::SetupInputComponent()
 {
