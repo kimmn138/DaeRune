@@ -41,6 +41,12 @@ void UDRS2DefensePhase::OnPhaseStart()
 	}
 
 	// 비정상 진입(페이즈 스킵 치트 등) 대비 안전망
+	//
+	// ★D2 는 방2에서 부품을 획득할 때 열린다. 방2를 건너뛰면 닫힌 채로 남아
+	//   방3에 도달할 수 없으므로 여기서도 한 번 연다.
+	//   정상 흐름에서는 이미 열려 있어 멱등 처리로 아무 일도 일어나지 않는다.
+	SetBlockerBlocked(Director->Blocker_Room1ToRoom3, false);
+
 	EnsurePartExists(Director);
 }
 
@@ -146,6 +152,15 @@ void UDRS2DefensePhase::HandleAllInsideRoom3()
 	// ⑤ 설치대 / 두더지 게임 바인딩
 	if (ADRCleanserSite* Site = Director->Room4InstallSite)
 	{
+		// ★설치대를 Active 로 만든다 (2026-08-27 추가).
+		//   ADRCleanserSite 는 스테이지1 클래스라 생성자에서 Inactive 로 시작하며,
+		//   스테이지1에서는 UDRPhase1 이 ActivateSite() 를 불러 켠다.
+		//   스테이지2에는 그 호출이 없어 설치대가 Inactive 로 남아 있었고, 그 결과
+		//     - RefreshOverlapStateFor 가 Active 를 요구해 **상호작용 위젯이 뜨지 않고**
+		//     - InstallPart 가 Active 를 요구해 **설치가 거부**되었다.
+		//   BP/레벨 설정으로는 바꿀 수 없다(생성자에서 고정) - 반드시 코드로 켜야 한다.
+		Site->ActivateSite();
+
 		Site->OnPartInstalled.AddDynamic(this, &UDRS2DefensePhase::HandlePartInstalled);
 	}
 	if (ADRS2MoleGame* MoleGame = Director->Room4MoleGame)

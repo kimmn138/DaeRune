@@ -2,11 +2,13 @@
 
 #include "AbilitySystem/Abilities/Stage2/DRS2MoleBurrowStrike.h"
 
+#include "AbilitySystemComponent.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Actor/Stage2/DRS2GroundWarning.h"
 #include "Character/DRCharacter.h"
 #include "Character/DREnemy.h"
 #include "Character/Stage2/DRS2MoleBoss.h"
+#include "DRGameplayTags.h"
 #include "DaeRune/DRLogChannels.h"
 #include "Game/DRGameStateBase.h"
 #include "NavigationSystem.h"
@@ -109,6 +111,10 @@ void UDRS2MoleBurrowStrike::ActivateAbility(
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
+
+	// ★여기서부터 잠수·융기·기상 몽타주가 이어진다. 그 사이 피격 몽타주가 끼어들면
+	//   연출이 끊기므로 어빌리티가 끝날 때까지 히트 리액트를 막는다 (데미지는 그대로 들어간다).
+	SetHitReactBlocked(true);
 
 	// ★잠수 몽타주는 보스가 재생하고 길이를 돌려준다.
 	//   그 길이를 그대로 타이머로 쓰므로 "에셋 길이 vs 코드 상수" 불일치가 생길 수 없다.
@@ -411,6 +417,29 @@ void UDRS2MoleBurrowStrike::ClearAllTimers()
 	}
 }
 
+void UDRS2MoleBurrowStrike::SetHitReactBlocked(bool bBlock)
+{
+	// 카운터 기반 API 라 짝이 어긋나면 다른 곳의 차단까지 풀린다. 상태를 들고 멱등하게 만든다.
+	if (bHitReactBlocked == bBlock) return;
+
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!ASC) return;
+
+	FGameplayTagContainer HitReactTags;
+	HitReactTags.AddTag(FDRGameplayTags::Get().Effects_HitReact);
+
+	if (bBlock)
+	{
+		ASC->BlockAbilitiesWithTags(HitReactTags);
+	}
+	else
+	{
+		ASC->UnBlockAbilitiesWithTags(HitReactTags);
+	}
+
+	bHitReactBlocked = bBlock;
+}
+
 void UDRS2MoleBurrowStrike::EndAbility(
 	const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo,
@@ -421,6 +450,7 @@ void UDRS2MoleBurrowStrike::EndAbility(
 	// ★어떤 경로로 끝나든 여기서 전부 되돌린다.
 	//   보스 도망(NotifyStashed → CancelAbilities)도 이 경로를 탄다.
 	ClearAllTimers();
+	SetHitReactBlocked(false);
 
 	if (ADRS2GroundWarning* Warning = WarningActor.Get())
 	{

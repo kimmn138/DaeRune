@@ -7,6 +7,9 @@
 > ③ **Plan2 M4가 완료**되어 1차 개정의 최대 선행 조건이 해소됨. 무효화된 전제는 §0.2 참조.
 > ④ **결정 4건 확정** — 캐릭터 해금 제외 / **세이브 슬롯 스팀 계정 키잉** / 스팀 등록은 M6으로 지연 /
 > **옷장 UI 안 실시간 3D 프리뷰**. 상세는 §0.1, 설계는 §4.6·§5.8.
+> **⑤ 아트 시안 반영 (2026-08-25) — §15 신설.** PNG 12종 실측 기반 `WBP_Wardrobe` 제작 사양
+> (위젯 트리·1080p 좌표·텍스처 설정·PS 블렌드 모드 변환). **시안의 4개 카테고리가 데이터 모델을
+> 바꾼다 — §15.11 이 §4.2·§4.4·§5.1·§5.2·§5.4 를 개정한다.**
 > **대상**: DaeRune (UE 5.5, GAS, OnlineSubsystemSteam) / 브랜치 `feat/PlayExpo`
 > **선행 문서**: Plan2 §4~7(세이브·재화·칩·보고 파이프라인), Plan4(현지화), Plan5 §1(FP·TP 메시 분리), Plan6(스테이지2)
 > **목적**: 스팀 도전과제 달성 → 로비 **옷장**에서 코스메틱(스킨) 해금·장착 → 스테이지까지 그 외형 유지
@@ -325,7 +328,10 @@ bInitServerOnClient=true
 ### 비목표 (이번 범위 밖)
 
 - **플레이어블 캐릭터(로봇) 해금** — 요구는 "옷"이다. §12-1에서 결정 항목으로만 유지.
-- **메시 교체형 스킨 / 부착물(모자) / 트레일 이펙트** — 2차 범위. 1차는 **머티리얼 오버라이드만** (§4.4).
+- ~~**메시 교체형 스킨 / 부착물(모자) / 트레일 이펙트** — 2차 범위~~
+  → **2026-08-25 해제.** 아트 시안의 4개 카테고리(HEAD·FACE·BODY·TAIL)가 **부착물로 확정**되어
+  **부착물 메시가 1차 범위에 포함**된다 (§15.11). 다만 **트레일 이펙트는 여전히 비목표**다.
+- **캐릭터 본체 메시 교체(Skeletal Mesh 자체 스왑)** — 부착물로 대체 가능하므로 하지 않는다.
 - 유료 DLC / 마이크로트랜잭션 / Steam Inventory Service / 드롭·거래.
 - 시즌패스, 서버 권위형 전적 DB.
 - 신규 플레이어블 캐릭터 제작.
@@ -1147,6 +1153,9 @@ BP 래퍼 `BP_Wardrobe` 를 `Content/Blueprints/Actor/Lobby/` 에 만들어 메�
 
 `UDRUpgradeScreenWidget` (`Public/UI/Widget/DRUpgradeScreenWidget.h`, 89줄)의 구조를 그대로 따른다.
 
+> ★**BP 측 사양은 §15 에 있다.**★ 아래 C++ API 는 아트 시안 반영 후 **카테고리 인자가 추가**된다 —
+> 최종 시그니처는 **§15.11** 을 따를 것. (`TryEquip` / `RefreshAll` 은 그대로, 조회 계열만 바뀐다)
+
 ```cpp
 UCLASS(Abstract)
 class DAERUNE_API UDRWardrobeScreenWidget : public UDRUserWidget
@@ -1400,28 +1409,90 @@ void ADRCosmeticPreviewStage::SetPreviewSkin(FName SkinId)
 **FreeRoam 에서는 로봇을 바꿀 수 없으므로**(§1.4) 화면이 열려 있는 동안 프리뷰 클래스는 고정이다.
 `SetPreviewClass` 는 화면 열 때 1회만 호출된다 — 프레임마다 클래스 비교를 돌릴 필요가 없다.
 
-#### 5.8.3 위젯 배선
+#### 5.8.3 위젯 배선 — `UDRCosmeticPreviewWidget` (구현 완료)
 
-```cpp
-// UDRWardrobeScreenWidget 에 추가
+프리뷰는 **전용 위젯**이 담당한다. 드래그 회전·MID 생성·스테이지 탐색이 한 곳에 모여 있고,
+옷장 화면은 "장착이 바뀌었다"만 알려주면 된다.
 
-// RT 를 물린 머티리얼 인스턴스. BP 의 Image 위젯에 물린다.
-UFUNCTION(BlueprintPure, Category = "Cosmetic")
-UMaterialInstanceDynamic* GetPreviewMaterial() const;
-
-// 프리뷰 이미지 위에서 드래그 → 턴테이블 회전 (BP 의 OnMouseMove 에서 호출)
-UFUNCTION(BlueprintCallable, Category = "Cosmetic")
-void RotatePreview(float DeltaYaw);
+```
+WBP_CosmeticPreview  (Parent: UDRCosmeticPreviewWidget)
+└── Img_Preview  [Image]   Brush.Material ← OnPreviewReady(Material) 에서 대입
 ```
 
-- `NativeConstruct`: `ADRCosmeticPreviewStage::Find()` → `SetPreviewClass(GetViewedClass())`
-  → `SetPreviewSkin(현재 장착)` → `SetCaptureActive(true)`
-- `TryEquip()` 성공 시: `GI->EquipSkin()` **직후 `Stage->SetPreviewSkin(SkinId)`**
-  → **서버 왕복 없이 그 프레임에 갈아입는다** ← 요구사항의 "실시간"
-- `NativeDestruct`: `SetCaptureActive(false)` + 프리뷰 캐릭터 파괴
+| 항목 | 값 |
+|---|---|
+| `PreviewMaterial` | `M_CosmeticPreview` (BP 에서 지정) |
+| `PreviewTextureParameter` | 기본 `"Tex"` — 머티리얼의 텍스처 파라미터 이름과 맞출 것 |
+| `YawPerPixel` | 기본 `0.5` — **부호를 뒤집으면 회전 방향이 반대가 된다** |
 
-**필요 에셋**: `RT_CosmeticPreview`(512×1024 권장), `M_CosmeticPreview`(Unlit, `TextureSampleParameter2D`),
-`BP_CosmeticPreviewStage`(배경판 + 라이트 + 캡처 세팅).
+**연결**: `WBP_Wardrobe` 안에 이 위젯을 배치하고 **변수 이름을 정확히 `Preview_Character`** 로 지으면
+`UDRWardrobeScreenWidget` 이 `BindWidgetOptional` 로 자동 연결한다. 이름이 다르거나 없으면
+**프리뷰만 빠지고 나머지는 정상 동작**한다.
+
+> ⚠️ **`Img_Preview` 와 루트의 Visibility 를 `Visible` 로 둘 것.**
+> `SelfHitTestInvisible` 이면 드래그 입력이 위젯에 도달하지 않는다.
+> (`NativeConstruct` 에서 루트는 강제로 `Visible` 로 맞춰 두었지만, 자식 Image 는 디자이너 몫이다)
+
+**흐름**
+```
+화면 열림  → NativeConstruct
+             → Preview_Character->InitializePreview(ViewedClass, GetEquippedSkins(ViewedClass))
+                  Stage::Find → SetPreviewClass → SetPreviewSkins → SetCaptureActive(true)
+                  MID 생성 → OnPreviewReady(Material) → BP 가 Img_Preview 에 물린다
+
+칸 클릭    → TryEquip → GI->EquipSkin → OnCosmeticsChanged
+             → HandleCosmeticsChanged → SyncPreview() → Stage->SetPreviewSkins(...)
+             ★서버 왕복 0 — 클릭한 프레임에 반영된다 (메시 비동기 로드 한두 프레임 뒤 실제 부착)★
+
+드래그     → NativeOnMouseButtonDown(캡처) → OnMouseMove → Stage->AddPreviewYaw(-DeltaX * YawPerPixel)
+             마우스를 캡처하므로 커서가 위젯 밖으로 나가도 회전이 이어진다
+
+화면 닫힘  → NativeDestruct → SetCaptureActive(false)   (상시 캡처는 로비 프레임을 깎아먹는다)
+```
+
+> **갱신 지점이 `HandleCosmeticsChanged` 한 곳뿐인 이유**: 칸 클릭·Clear All·치트가 전부
+> `OnCosmeticsChanged` 를 지나므로, 프리뷰 갱신을 거기 한 번만 걸면 경로를 빠뜨릴 수가 없다.
+
+#### 5.8.4 투명 배경 — `SCS_SceneColorHDR` ★
+
+시안의 레이어 순서상 **캐릭터 뒤에 청색 글로우(`Img_CharBack`)가 비쳐 보여야 한다**(§15.3).
+따라서 RenderTarget 의 배경이 **투명**해야 한다.
+
+`ADRCosmeticPreviewStage` 는 `CaptureSource = SCS_SceneColorHDR` 로 고정돼 있다.
+엔진 정의상 이 모드의 알파는 **역불투명도(Inv Opacity)** 다:
+
+| 픽셀 | A | 머티리얼 Opacity (`1 - A`) |
+|---|---|---|
+| 아무 것도 없음 | 1 | 0 (투명) |
+| 캐릭터 | 0 | 1 (불투명) |
+
+**`M_CosmeticPreview` 배선**
+```
+Material Domain : User Interface
+Blend Mode      : Translucent
+Shading Model   : Unlit
+
+  Tex (TextureSampleParameter2D, 이름 "Tex")
+    ├─ RGB ──────────────────▶ Emissive Color
+    └─ A ──▶ OneMinus(1-x) ──▶ Opacity
+```
+
+**트레이드오프**: `SCS_SceneColorHDR` 은 **톤매퍼를 거치지 않아** 색이 인게임과 다를 수 있다.
+스튜디오 조명을 눈으로 맞춰 흡수한다. 그래도 안 맞으면 대안은
+Project Settings 의 알파 채널 전파를 켜고 `SCS_FinalColorLDR` 로 바꾸는 것인데,
+**렌더링 전역 설정을 바꾸는 비용이 커서 기본값으로 택하지 않았다.**
+
+#### 5.8.5 필요 에셋
+
+| 에셋 | 설정 |
+|---|---|
+| `RT_CosmeticPreview` | `UTextureRenderTarget2D`. 권장 **512×1024** (프리뷰 영역 781×1080 의 대략 절반 — 세로형) |
+| `M_CosmeticPreview` | §5.8.4 배선 |
+| `WBP_CosmeticPreview` | 부모 `UDRCosmeticPreviewWidget` |
+| `BP_CosmeticPreviewStage` | 부모 `ADRCosmeticPreviewStage`. **라이트를 컴포넌트로 포함**시켜야 맵 밖에서도 캐릭터가 보인다. `RenderTarget` 지정, `PreviewSpawnPoint` 와 `CaptureComponent` 로 프레이밍, `BaseYaw` 로 정면 각도 |
+
+**배치**: `LobbyMap` 의 **맵 밖** (예: `Z = -20000`). `PRM_UseShowOnlyList` 는 캡처만 격리하지
+일반 뷰를 가리지 않으므로, 맵 안에 두면 로비를 돌아다니다 프리뷰 캐릭터를 만난다.
 
 ---
 
@@ -1529,20 +1600,28 @@ if (ADRLobbyGameMode* LobbyGM = GetWorld()->GetAuthGameMode<ADRLobbyGameMode>())
 - "기본" 카드(`SkinId = NAME_None`)를 항상 첫 칸에 둬서 되돌리기가 가능하게 한다.
 - ESC / 닫기 버튼 → `RequestClose()` → `PC->CloseWardrobeScreen()` → 서버 반영.
 
-**레이아웃**: 좌측 **3D 프리뷰**, 우측 스킨 그리드. (업그레이드 화면의 "좌 슬롯 / 우 칩" 구성과 같은 골격)
+> ★**아트 시안 반영(2026-08-25) — 이 절의 스케치는 §15 로 대체되었다.**★
+> 실제 배치·좌표·에셋·위젯 트리는 **§15 `WBP_Wardrobe` 제작 사양**이 확정판이다.
+> 시안이 **좌 패널(탭+그리드) / 우 캐릭터** 구성이고 **카테고리가 4개(HEAD·FACE·BODY·TAIL)** 라는 점이
+> 데이터 모델까지 바꾼다 — **§15.11 을 반드시 함께 읽을 것.**
+
+**레이아웃**: 좌측 패널(탭 + 스킨 그리드), 우측 **3D 프리뷰**. (아래는 초기 스케치 — 확정판은 §15.5)
 
 ```
-┌─────────────────────────────────────────────┐
-│  옷장                                   [X] │
-├──────────────────┬──────────────────────────┤
-│                  │  ┌────┐┌────┐┌────┐      │
-│                  │  │기본││블루││화이││ ...  │
-│   [3D 프리뷰]    │  │ ✔  ││    ││ 🔒 │      │
-│   드래그로 회전  │  └────┘└────┘└────┘      │
-│                  │                          │
-│   RT_Cosmetic    │  🔒 호버 → "스테이지1을   │
-│   Preview        │      클리어하세요"        │
-└──────────────────┴──────────────────────────┘
+┌──────────────────────────────┬──────────────────────────────┐
+│ WARDROBE                     │                              │
+│ ┌HEAD┬FACE┬BODY┬TAIL┐        │                              │
+│ ├────┴────┴────┴────┴──────┐ │        [3D 프리뷰]           │
+│ │ ┌────┐┌────┐┌────┐       │ │        드래그로 회전         │
+│ │ │기본││ ✔  ││ 🔒 │       │ │                              │
+│ │ └────┘└────┘└────┘       │ │      RT_CosmeticPreview      │
+│ │ ┌────┐┌────┐┌────┐  ▲    │ │      (뒤에 캐릭터 백글로우)  │
+│ │ │    ││    ││    │  ║스크│ │                              │
+│ │ └────┘└────┘└────┘  ▼롤  │ │                              │
+│ └──────────────────────────┘ │                              │
+│                        [ C ] │                              │
+└──────────────────────────────┴──────────────────────────────┘
+   좌: 패널 x151..971            우: 캐릭터 x938..1719  (1080p 기준)
 ```
 
 - **3D 프리뷰는 필수다** (결정 4). 구현은 §5.8. 본인 시점은 FP 메시만 보이므로(§1.7)
@@ -1694,8 +1773,13 @@ IncludePathFilters=Plugins/MultiplayerSessions/Content/*
 
 ### M2 — 코스메틱 데이터 토대 (게임플레이 무관, 순수 추가)
 
-- [ ] `UDRSaveGame` 에 필드 3개 추가 — **`CurrentSaveVersion` 은 4 그대로** (§4.2)
-- [ ] `EnsureProgressInitialized()` 에 `EquippedSkins` lazy 초기화 + 스킨 정화
+> ⚠️ **착수 전 §15.11 결정 필요**: 아트 시안의 4개 카테고리(HEAD·FACE·BODY·TAIL)가
+> **(A) 부위별 머티리얼 리컬러**인지 **(B) 부착물 메시**인지에 따라 아래 자료구조가 갈린다.
+> 어느 쪽이든 **로봇당 스킨 1개 → 4개**로 바뀌므로, §4.2·§4.4·§5.1·§5.2·§5.4 는 **§15.11 개정안**을 따른다.
+
+- [ ] `EDRCosmeticCategory` enum + `FDRSkinDefinition::Category` (§15.11)
+- [ ] `UDRSaveGame` 에 필드 3개 추가 (`Cosmetics` 는 카테고리별) — **`CurrentSaveVersion` 은 4 그대로** (§4.2)
+- [ ] `EnsureProgressInitialized()` 에 `Cosmetics` lazy 초기화 + 스킨 정화
 - [ ] `FDRAchievementDef` 에 `SteamApiName` 컬럼 추가
 - [ ] `DRCosmeticTypes.h` — `FDRSkinDefinition`, `FDRSkinViewModel`
 - [ ] `UDRCosmeticCatalog` + `UDRProgressionConfig::CosmeticCatalog` 참조
@@ -1727,8 +1811,8 @@ IncludePathFilters=Plugins/MultiplayerSessions/Content/*
 ### M4 — 옷장 액터 + 화면 + 3D 프리뷰 ← **요구사항 완결점**
 
 - [ ] `ADRWardrobe` (`ADRUpgradeStation` 복제) + `BP_Wardrobe`
-- [ ] `ADRPlayerController::OpenWardrobeScreen` / `CloseWardrobeScreen` + ESC 우선순위
-- [ ] `UDRWardrobeScreenWidget` + `WBP_Wardrobe` (좌 프리뷰 / 우 그리드)
+- [ ] `ADRPlayerController::OpenWardrobeScreen` / `CloseWardrobeScreen` + ESC 우선순위 + `C` 키
+- [ ] **`UDRWardrobeScreenWidget` + `WBP_Wardrobe` 외 위젯 3종 — 전체 사양은 §15, 순서는 §15.13**
 - [ ] **`ADRCosmeticPreviewStage`** + `BP_CosmeticPreviewStage` + `RT_CosmeticPreview` + `M_CosmeticPreview` (§5.8)
 - [ ] 프리뷰 드래그 회전 + 캡처 On/Off 배선
 - [ ] `LobbyMap` — FreeRoam 구역에 옷장 배치 + **맵 밖에 프리뷰 스테이지 배치**
@@ -1891,9 +1975,14 @@ for (int32 Step = 0; Step < ClassCount; ++Step)
 - `Content/Blueprints/Progression/DA_CosmeticCatalog.uasset`
 - `Content/Blueprints/Actor/Lobby/BP_Wardrobe.uasset`
 - `Content/Blueprints/Actor/Lobby/BP_CosmeticPreviewStage.uasset`
-- `Content/Blueprints/UI/Wardrobe/WBP_Wardrobe.uasset` (+ 카드 위젯)
+- `Content/Blueprints/UI/Wardrobe/WBP_Wardrobe.uasset` — **트리 사양 §15.5**
+- `Content/Blueprints/UI/Wardrobe/WBP_WardrobeTab.uasset` — §15.6
+- `Content/Blueprints/UI/Wardrobe/WBP_WardrobeSlot.uasset` — §15.7
+- `Content/Blueprints/UI/Wardrobe/WBP_WardrobeClearAll.uasset` — §15.9
 - `Content/Blueprints/UI/Wardrobe/RT_CosmeticPreview.uasset` (512×1024)
-- `Content/Blueprints/UI/Wardrobe/M_CosmeticPreview.uasset` (Unlit)
+- `Content/Blueprints/UI/Wardrobe/Material/M_CosmeticPreview.uasset` (Unlit)
+- `Content/Blueprints/UI/Wardrobe/Material/M_UI_Additive.uasset` + 인스턴스 3종 — §15.4
+- `Content/DaeRuneAssets/UI/Wardrobe/` — **텍스처 10종** (§15.1 실측표, 임포트 설정 §15.10)
 
 **수정**
 | 파일 | 내용 | 마일스톤 |
@@ -1942,3 +2031,1589 @@ for (int32 Step = 0; Step < ClassCount; ++Step)
 
 6. **M4 가 요구사항 완결점**이다. 여기까지가 "로비 옷장에서 옷을 골라 입고 그대로 플레이"의 전부이며,
    **실 AppId 없이 로컬만으로 완주할 수 있다.** M5~M6 는 그 위의 폴리시와 계정 이식성이다.
+
+---
+
+# 15. `WBP_Wardrobe` 제작 사양 (에셋 실측 기반)
+
+> **작성일** 2026-08-25 · **근거** 아트팀 제공 PNG 12종 실측(§15.1) + 프로젝트 설정 실측
+> **범위** 옷장 화면 UMG 위젯 트리 · 좌표 · 텍스처 설정 · 상태 머신 · 블렌드 모드 변환
+> **비범위** C++ 로직(§5.6), 3D 프리뷰 스테이지(§5.8) — 이 절은 **그리는 쪽만** 다룬다
+>
+> §7.2 의 레이아웃 스케치를 제작 가능한 수준으로 확정한 문서다. 충돌하면 **이 절이 우선**한다.
+
+## 15.0 이 절을 읽는 법
+
+- **"실측"** 은 PNG 픽셀에서 직접 잰 값이다. 그대로 입력하면 된다.
+- **"추정 ±N"** 은 소프트 엣지 때문에 오차가 있다. 에디터에서 조립 시안을 겹쳐 눈으로 맞춘다.
+- **"미확정"** 은 시안에 정보가 없어 결정이 필요한 항목이다. 전부 §15.12 에 모아 뒀다.
+
+## 15.1 에셋 실측표
+
+전부 RGBA PNG. **알파 최대값이 낮은 에셋이 여럿 있다** — 텍스처 압축 설정을 잘못 잡으면 뭉개진다(§15.10).
+
+| 원본 파일 | 크기 | 알파 범위 | PS 블렌드 | 용도 | 제안 에셋명 |
+|---|---:|---|---|---|---|
+| `1차검은배경` | 1920x1080 | **155 균일** | Normal | 전체 화면 딤 (**순수 #000000 @ a61%**) | **텍스처 불필요** — 컬러 브러시(§15.4) |
+| `2차배경` | 1601x901 | 0-254 | **Soft Light** | 중앙 하늘색 라디얼 글로우 | `T_Wardrobe_BGGlow` |
+| `캐릭터 back` | 868x1076 | 0-**136** | **Lighter Color 90%** | 캐릭터 뒤 달걀형 청색 글로우 | `T_Wardrobe_CharBack` |
+| `옷장` | 820x839 | 0-255 | Normal | 좌측 패널 프레임 (**글로우 여백 50px**) | `T_Wardrobe_PanelFrame` |
+| `카테고리바` | 496x44 | 0-**102** | Normal | 탭 바 배경 | `T_Wardrobe_TabBar` |
+| `카테고리 선택박스` | 124x44 | 0-209 | Normal | 활성 탭 필 | `T_Wardrobe_TabPill` |
+| `속성 1=기본` | 216x252 | 0-179 | Normal | 칸 — 기본 | `T_Wardrobe_Slot_Normal` |
+| `속성 1=호버` | 216x252 | 0-250 | Normal | 칸 — 호버 | `T_Wardrobe_Slot_Hovered` |
+| `속성 1=선택` | 216x252 | 0-246 | Normal | 칸 — 선택 (**체크 마크 각인됨**) | `T_Wardrobe_Slot_Selected` |
+| `clear all` | 112x117 | 0-255 | Normal | Clear All 버튼 (`C` 키 힌트) | `T_Wardrobe_ClearAll` |
+| `화면효과` | 1753x993 | 0-**48** | **Soft Light** | 최상단 스캔라인 비네트 | `T_Wardrobe_ScreenFX` |
+| `조립(배경없음)` | 2128x1198 | — | — | **참고용 합성 시안** (임포트 안 함) | — |
+| `image_1` | 1018x1005 | — | — | **참고용 칸 배치 시안** (임포트 안 함) | — |
+
+**임포트 위치** (프로젝트 관례 실측):
+- 텍스처 → `Content/DaeRuneAssets/UI/Wardrobe/`  (`DaeRuneAssets/UI/Lobby/` 선례)
+- 위젯 → `Content/Blueprints/UI/Wardrobe/`  (`Blueprints/UI/Upgrade/` 선례)
+- 머티리얼 → `Content/Blueprints/UI/Wardrobe/Material/`  (`UI/Lobby/Material/M_UI_radialGradient2` 선례)
+
+## 15.2 디자인 해상도 — 1920x1080, 에셋 1:1 (실측 확인) ★
+
+**프로젝트 설정이 이미 이 캔버스에 맞춰져 있다** (`Config/DefaultEngine.ini:83-98`):
+```ini
+[/Script/Engine.UserInterfaceSettings]
+UIScaleRule=ShortestSide
+UIScaleCurve=(... (Time=1080.000000,Value=1.000000) ...)
+DesignScreenSize=(X=1920,Y=1080)
+```
+→ **1080p 세로에서 스케일이 정확히 1.0.** 따라서 아래 좌표를 **Canvas Slot 의 Position/Size 에 그대로**
+넣으면 다른 해상도에서 자동으로 비례한다. 별도 스케일 계산이 필요 없다.
+
+**에셋이 1080p 네이티브라는 근거 (독립적으로 3번 교차 검증)**
+
+| 검증 대상 | 조립 시안(2128x1198) 실측 | 에셋 원본 | 비율 |
+|---|---:|---:|---:|
+| 패널 테두리 박스 | 796 x 817 | 720 x 739 (`옷장.png` 내부 bbox 50,50 - 769,788) | 1.1056 |
+| 활성 탭 필 너비 | 138 | 124 | 1.1129 |
+| 캔버스 자체 | 2128 x 1198 | 1920 x 1080 | **1.1083** |
+
+세 값이 일치한다 → **조립 시안은 1920x1080 디자인을 약 1.108배 확대 출력한 것**이고,
+**개별 에셋은 1080p 기준 1:1** 이다. 조립 좌표를 1.10833 으로 나눈 값이 §15.5 의 배치표다.
+
+> 경고: **조립 시안(2128x1198)을 그대로 임포트해 배경으로 쓰지 말 것.** 크기가 다르고 알파가 없다.
+> 시안은 에디터에서 위치를 눈으로 맞출 때 참고용으로만 쓴다.
+
+## 15.3 레이어 → 위젯 z-order 매핑
+
+아트팀 레이어 순서(`레이어순서.png`, 위가 앞):
+```
+화면효과
+캐릭터, 글자 등 다른여러 요소들   ← 그룹(접힘): 캐릭터 프리뷰 + 타이틀 + 탭 + 칸 + Clear All
+옷장                              ← 패널 프레임만
+캐릭터 back
+2차배경
+1차검은배경
+```
+
+**UMG Canvas Panel 은 자식 순서가 곧 z-order 다 (뒤에 있을수록 앞).** 위 순서를 뒤집어 배치한다:
+
+| z | 위젯 | 대응 레이어 | 비고 |
+|---:|---|---|---|
+| 1 | `Img_Dim` | 1차검은배경 | 컬러 브러시 |
+| 2 | `Img_BGGlow` | 2차배경 | Additive |
+| 3 | `Img_CharBack` | 캐릭터 back | Additive. **패널보다 뒤** |
+| 4 | `Img_PanelFrame` | 옷장 | 패널 프레임 |
+| 5 | `Canvas_Content` | 캐릭터/글자 그룹 | 프리뷰 + 타이틀 + 탭 + 칸 + Clear All |
+| 6 | `Img_ScreenFX` | 화면효과 | Additive, **`Is Hit Test Visible = false` 필수** |
+
+> ★3번이 4번보다 뒤라는 점을 놓치기 쉽다.★ 캐릭터 백글로우(폭 868, x 895-1763)는
+> 패널 우측 경계(x=919)를 약 24px 침범한다. 순서가 바뀌면 글로우가 패널 위로 올라와 테두리를 흐린다.
+
+## 15.4 Photoshop 블렌드 모드 → UMG 변환 ★★
+
+**UMG 는 Soft Light / Lighter Color 를 지원하지 않는다.** UI 도메인 머티리얼이 제공하는 블렌드 모드는
+`Opaque / Masked / Translucent / Additive / Modulate / AlphaComposite / AlphaHoldout` 뿐이고,
+UMG 위젯은 아래 위젯의 픽셀을 샘플링할 수 없어 **진짜 Soft Light 는 구현 불가**다.
+
+아래가 실용적 변환이다. **전부 근사이므로 에디터에서 Tint 알파를 눈으로 튜닝한다.**
+
+| 레이어 | 원본 | UMG 변환 | 근거 |
+|---|---|---|---|
+| 1차검은배경 | Normal, #000 a155 | **컬러 브러시** `(0,0,0,0.608)` — 텍스처 임포트 안 함 | 전 픽셀 알파가 155 로 **균일**. 1920x1080 텍스처를 쓸 이유가 없다 |
+| 2차배경 | **Soft Light** | `M_UI_Additive` + Tint a **0.25 시작** | 어두운 바탕(a61% 검정) 위에서 Soft Light 의 밝은 색은 **밝히는 방향으로만** 작용 → Additive 가 가장 가깝다 |
+| 캐릭터 back | **Lighter Color 90%** | `M_UI_Additive` + Tint a **1.0 시작** | Lighter Color 는 두 색 중 밝은 쪽을 취한다. 소스 배경이 검정이라 어두운 부분은 사라지고 밝은 부분만 남는다 = 사실상 Screen/Additive. **알파가 이미 최대 136(53%)이라 90% 불투명도가 반영돼 있을 가능성이 높다** — 1.0 부터 시작해 과하면 낮춘다 |
+| 화면효과 | **Soft Light** | `M_UI_Additive` + Tint a **1.0 시작** | 알파 최대가 48(19%)로 이미 매우 옅다. Additive 로 거의 동일한 결과가 난다 |
+
+**대안 — 픽셀 단위로 정확해야 한다면**: `1차검은배경 + 2차배경` 두 장을 **포토샵에서 병합**해
+알파를 보존한 채 한 장으로 내보낸다(`T_Wardrobe_BG` 1920x1080). 둘 다 정적 전체화면이라 손해가 없고
+Soft Light 문제가 배경에서는 완전히 사라진다.
+**화면효과는 캐릭터 위에 와야 하므로 병합 대상이 아니다.**
+
+### `M_UI_Additive` (신규 머티리얼 1개, 인스턴스 3개)
+
+```
+Material Domain : User Interface
+Blend Mode      : Additive
+Shading Model   : Unlit
+
+파라미터
+  Tex  : TextureSampleParameter2D
+  Tint : VectorParameter (기본 1,1,1,1)
+
+배선
+  Emissive Color = Tex.RGB * Tint.RGB
+  Opacity        = Tex.A   * Tint.A
+```
+→ `MI_UI_Wardrobe_BGGlow` / `MI_UI_Wardrobe_CharBack` / `MI_UI_Wardrobe_ScreenFX` 3개를 만들고
+각 Image 위젯의 Brush 에 물린다. Tint 알파만 다르게 잡으면 된다.
+
+## 15.5 `WBP_Wardrobe` 위젯 트리 + 좌표
+
+> ★**실제로 만들 때는 §16 을 보라.**★ 이 절은 **완성된 모습과 좌표의 근거**만 담는다.
+> 어떤 순서로 만드는지, 각 변수/함수가 어디서 나와 어디로 연결되는지는 **§16 클릭 단위 가이드**에 있다.
+
+**부모 클래스: `UDRWardrobeScreenWidget`** (§5.6). 루트는 Canvas Panel.
+
+```
+WBP_Wardrobe  (Parent: UDRWardrobeScreenWidget)
+└── RootCanvas                          [Canvas Panel]
+    │
+    ├── Img_Dim                         Anchor 전체(0,0,1,1) / Offset 0,0,0,0
+    │                                   Brush: Color (0,0,0,0.608)
+    │
+    ├── Img_BGGlow                      Anchor 중앙(0.5,0.5) / Alignment(0.5,0.5)
+    │                                   Pos(0,0)  Size 1601x901
+    │                                   Brush: MI_UI_Wardrobe_BGGlow
+    │
+    ├── Img_CharBack                    Anchor 좌상(0,0) / Pos(895, 2)  Size 868x1076
+    │                                   Brush: MI_UI_Wardrobe_CharBack
+    │
+    ├── Img_PanelFrame                  Anchor 좌상(0,0) / Pos(151, 147) Size 820x839
+    │                                   Brush: T_Wardrobe_PanelFrame (Draw As = Image)
+    │
+    ├── Canvas_Content                  Anchor 전체 / Offset 0,0,0,0   ← z-order 그룹 용도
+    │   │
+    │   ├── Preview_Character           [WBP_CosmeticPreview]  ★변수 이름 고정★
+    │   │                               Anchor 좌상 / Pos(938, 0)  Size 781x1080
+    │   │                               Visibility = Visible (SelfHitTestInvisible 이면 드래그 불가)
+    │   │                               내부 Img_Preview 의 Brush.Material 은 런타임 대입 (§5.8.3)
+    │   │                               ★스테이지가 없으면 스스로 접힌다 (§5.8.2 폴백)★
+    │   │
+    │   ├── Txt_Title                   Anchor 좌상 / Pos(207, 52)
+    │   │                               "WARDROBE" / Font: BrunoAceSC-Regular_Font / Size 48 (추정)
+    │   │                               Color: 거의 흰색 (#EAF2FF)
+    │   │
+    │   ├── Overlay_TabBar              Anchor 좌상 / Pos(202, 139)  Size 496x44
+    │   │   ├── Img_TabBarBG            Fill / Brush: T_Wardrobe_TabBar
+    │   │   └── HBox_Tabs               Fill
+    │   │       ├── Tab_Head            [WBP_WardrobeTab]  124x44
+    │   │       ├── Tab_Face            [WBP_WardrobeTab]  124x44
+    │   │       ├── Tab_Body            [WBP_WardrobeTab]  124x44
+    │   │       └── Tab_Tail            [WBP_WardrobeTab]  124x44
+    │   │
+    │   ├── Scroll_Slots                Anchor 좌상 / Pos(224, 227)  Size 672x677   (추정 +-5)
+    │   │   └── Grid_Slots              [Uniform Grid Panel]  Slot Padding (6,6,6,6)
+    │   │       └── (런타임 생성) WBP_WardrobeSlot x N
+    │   │
+    │   └── Btn_ClearAll                [WBP_WardrobeClearAll]
+    │                                   Anchor(1,1) / Alignment(1,1) / Pos(-64,-64) Size 112x117
+    │                                   ★화면 우하단 — 설정창·업그레이드 창과 같은 자리 (§15.9)★
+    │
+    └── Img_ScreenFX                    Anchor 중앙 / Alignment(0.5,0.5)
+                                        Pos(0,0)  Size 1753x993
+                                        Brush: MI_UI_Wardrobe_ScreenFX
+                                        ★Is Hit Test Visible = false★
+```
+
+### 좌표 산출 근거 (조립 시안 실측 ÷ 1.10833)
+
+| 요소 | 조립 시안(2128) 실측 | → 1080p | 최종 배치값 |
+|---|---|---|---|
+| 패널 **테두리** 박스 | x 223-1019, y 218-1035 | x 201-919, y 197-934 (718x737) | — |
+| 패널 **이미지** | 위 + 글로우 여백 50px | — | **Pos(151,147) Size 820x839** |
+| 탭 바 좌측 = 활성 필 좌측 | x 224 | x 202 | **X = 202** |
+| 탭 바 상단 | y 154 | y 139 | **Y = 139** |
+| 활성 필 너비 | 138 | 124.5 | 에셋 124 그대로 |
+| 타이틀 글자 bbox | x 229-572, y 68-108 | x 207-516, y 61-97 | **Pos(207,52)**, 대문자 높이 36px |
+| 캐릭터 영역 가이드선 | x 1040 / 1905 | x 938 / 1719 | **프리뷰 Pos(938,0) W=781** |
+| 캐릭터 백글로우 | 가이드 영역 중앙 정렬 | 중심 x = 1328.5 | **Pos(895,2) 868x1076** |
+
+**패널 이미지 검산**: `151 + 820 = 971`, 글로우 50 제외 → 우측 테두리 `921` (실측 919, 오차 2px).
+`147 + 839 = 986` → 하단 테두리 `936` (실측 934, 오차 2px). **소프트 엣지 기준 허용 범위.**
+
+### 그리드 영역 (추정 +-5px — 에디터에서 시안 겹쳐 확인)
+
+- 좌우 여백: 패널 테두리 안쪽에서 **23px** → X = 201 + 23 = **224**
+- 폭: `216x3 + 12x2 = 672` → **정확히 3열이 들어간다**
+- 상단 여백: 패널 상단에서 **30px** → Y = 197 + 30 = **227**
+- 높이: 패널 하단(934) - 하단 여백 30 = **677**
+- 근거: `image_1.png`(1018x1005) 실측 — 칸 폭 285 / 간격 16 / 좌여백 35.
+  이 시안의 스케일은 285 ÷ 216 = **1.319** 이므로 1080p 환산 시 칸 216 / 간격 12 / 여백 26.5.
+
+## 15.6 `WBP_WardrobeTab` (탭 1개, 124x44)
+
+```
+WBP_WardrobeTab   (Root: SizeBox  W=124 H=44)
+└── Overlay
+    ├── Img_Pill        Brush: T_Wardrobe_TabPill (124x44)
+    │                   ★Visibility 를 선택 상태로 토글★ (Visible / Collapsed)
+    ├── Btn_Tab         Style 전부 투명 (Normal/Hovered/Pressed 알파 0)
+    │                   ★Hovered = Normal 과 동일 — 호버 연출 없음 (확정 §15.12-5)★
+    │                   배경은 Img_Pill 이 담당 — 버튼은 히트박스와 이벤트만
+    └── Txt_Label       HAlign/VAlign Center
+                        Font: BrunoAceSC-Regular_Font / Size 20 (추정)
+```
+
+**노출 변수 / 이벤트**
+```
+[변수]   Category : EDRCosmeticCategory  (Instance Editable, Expose on Spawn)
+         Label    : Text                  (Instance Editable)  "HEAD" / "FACE" / "BODY" / "TAIL"
+[이벤트] OnTabClicked(EDRCosmeticCategory)  → 부모 WBP_Wardrobe 가 구독
+[함수]   SetSelected(bool bSelected)
+           Img_Pill.Visibility        = bSelected ? Visible : Collapsed
+           Txt_Label.ColorAndOpacity  = bSelected ? #EAF2FF : #8E9BC8   (시안 기준 흐린 청보라)
+```
+
+**필(Pill)을 탭마다 하나씩 두는 이유**: 필 1개를 활성 탭 위치로 이동시키는 방식은 좌표 계산과
+애니메이션이 붙는다. 탭마다 소유하고 `Collapsed` 토글하면 계산이 0이 된다.
+`496 ÷ 4 = 124` 로 **에셋 크기가 이미 정확히 4등분**이라 HBox 만으로 정렬이 끝난다.
+
+**호버 연출 — 확정 (§15.12-5)**: **넣지 않는다.** `Btn_Tab` 의 Hovered/Pressed 스타일을
+Normal 과 동일하게 둔다. 나중에 필요해지면 `Txt_Label` 색 보간만 추가하면 되므로 구조는 그대로다.
+
+**폰트 — 확정 (§15.12-8)**: 프로젝트에 실재하는 3종 중 아래로 정한다.
+
+| 용도 | 폰트 | 이유 |
+|---|---|---|
+| **라틴 표시용** (`WARDROBE`, `HEAD/FACE/BODY/TAIL`) | **`BrunoAceSC-Regular_Font`** | 시안의 각지고 넓은 테크노 서체와 형태가 가장 가깝다. 대문자 전용 표시라 한글 미지원이 문제되지 않는다 |
+| **한글/본문** (툴팁, 해금 조건 문구, 스킨 이름) | **`Pretendard-SemiBold__1__Font`** | 한글 가독성이 좋고 이미 다른 UI 에서 쓰인다 |
+
+> 스킨 이름·설명은 **한글이 들어올 수 있으므로 반드시 Pretendard** 로 둔다.
+> BrunoAce 는 한글 글리프가 없어 네모(tofu)로 표시된다.
+
+## 15.7 `WBP_WardrobeSlot` (칸 1개, 216x252)
+
+> ⚠️ **아래 "버튼 스타일 스왑" 구조는 §16 STEP 4 가 대체했다.**
+> UE 5.2 부터 `UButton::WidgetStyle` 직접 접근이 deprecated 라 BP 에서 하려면 `FButtonStyle` 을
+> 통째로 조립해야 한다(노드 10개 이상). **§16 STEP 4 의 "투명 버튼 + 상태 이미지" 구조를 쓸 것** —
+> `Set Brush from Texture` 노드 하나로 끝나고 C++ 은 하나도 바뀌지 않는다.
+
+```
+WBP_WardrobeSlot  (Parent: UDRWardrobeSlotWidget / Root: SizeBox  W=216 H=252)
+└── Btn_Slot                      [Button]  ★상태 브러시를 이 버튼 스타일로 처리★
+    └── Overlay
+        ├── Img_Thumbnail         Padding (16,16,16,16) / Stretch: ScaleToFit
+        │                         Brush 는 디자이너에 비워 둔다 — 런타임 바인딩 (§15.12-7)
+        │                         ★아이콘이 아직 없으므로 자동으로 Collapsed 된다★
+        ├── Img_Lock              HAlign/VAlign Center / 잠김일 때만 Visible
+        │                         ★브러시 미지정 (§15.12-2) — 자물쇠 아트가 나오면 채운다★
+        └── Txt_Debug             (개발 중 SkinId 표시, 배포 시 Collapsed)
+```
+
+> **아이콘·자물쇠 아트가 아직 없다(§15.12-2, §15.12-7).** 위젯은 **지금 만들어 두고 브러시만 비워 둔다.**
+> `UDRWardrobeSlotWidget` 이 `PreviewIcon == nullptr` 이면 `Img_Thumbnail` 을 자동으로 숨기므로,
+> 아트가 없는 동안에도 칸은 **상태 3종(기본/호버/선택)이 정상 동작**한다. 아트가 나오면 브러시만 채우면 된다.
+
+### 상태 머신 — Button Style 스왑
+
+칸에는 **입력 상태(Hover/Press)** 와 **지속 상태(Selected/Locked)** 가 섞여 있다.
+`UButton` 스타일만으로 처리하되 **선택/잠김일 때 스타일 3칸을 전부 덮어쓴다.**
+
+| 논리 상태 | Normal | Hovered | Pressed | 추가 처리 |
+|---|---|---|---|---|
+| 일반 (해금·미선택) | `Slot_Normal` | `Slot_Hovered` | `Slot_Hovered` | — |
+| **선택됨** | `Slot_Selected` | `Slot_Selected` | `Slot_Selected` | 체크 마크는 **텍스처에 각인돼 있어 별도 위젯 불필요** |
+| **잠김** | `Slot_Normal` | `Slot_Normal` | `Slot_Normal` | `Img_Lock` 표시 + 썸네일 회색조 Tint `(0.35,0.35,0.35,1)` |
+
+```
+[함수] Setup(const FDRSkinViewModel& VM)
+    SkinId = VM.SkinId
+    Img_Thumbnail.Brush.SetResourceObject(VM.PreviewIcon)
+    Img_Thumbnail.ColorAndOpacity = VM.bUnlocked ? White : (0.35,0.35,0.35,1)
+    Img_Lock.Visibility           = VM.bUnlocked ? Collapsed : Visible
+    ApplyStateBrushes(VM.bUnlocked, VM.bEquipped)
+    Btn_Slot.ToolTipText          = VM.bUnlocked ? VM.Description : VM.UnlockHint
+    Btn_Slot.IsEnabled            = true          ← ★잠겨도 비활성화하지 않는다★
+```
+
+> **잠긴 칸을 `IsEnabled=false` 로 두지 말 것.** 비활성 버튼은 UMG 에서 툴팁과 호버 이벤트를 받지 못해
+> **"왜 잠겼는지" 안내가 뜨지 않는다.** 활성으로 두고, 클릭 시 `TryEquip()` 이 `false` 를 돌려주면
+> 흔들림 연출 + 조건 문구를 띄운다 (§5.6 `TryEquip` 의 반환값이 이 용도다).
+
+**클릭 흐름** — §5.8.3 의 "실시간 갈아입기"가 여기서 시작된다:
+```
+Btn_Slot.OnClicked
+  → 부모 WBP_Wardrobe 의 OnSlotClicked(SkinId)
+  → UDRWardrobeScreenWidget::TryEquip(SkinId)
+       ├─ 실패(잠김) → false → 흔들림 애니메이션 + UnlockHint 토스트
+       └─ 성공       → GI->EquipSkin()                  (로컬 세이브 즉시 기록)
+                     → Stage->SetPreviewSkin(SkinId)    ★서버 왕복 없이 그 프레임에 반영★
+                     → RefreshAll()                     (이전 선택 해제 + 새 선택 표시)
+```
+
+## 15.8 그리드 / 스크롤
+
+```
+Scroll_Slots  [Scroll Box]
+    Orientation           : Vertical
+    Scroll Bar Visibility : Collapsed   ★확정 §15.12-6 — 스크롤바를 넣지 않는다★
+    Consume Mouse Wheel   : WhenScrollingPossible
+    Allow Overscroll      : false       ← 고정 프레임 UI 에서 튕김은 어색하다
+└── Grid_Slots  [Uniform Grid Panel]
+        Slot Padding : (6,6,6,6)        ← 상하좌우 6 → 인접 칸 간격 12 (실측값)
+```
+
+**런타임 채우기** (`OnRefreshSkins` BP 이벤트 안):
+```
+Grid_Slots.ClearChildren()
+GetProgression()->GetSkinViewModels(GetViewedClass(), CurrentCategory, ViewModels)
+for (i, VM) in ViewModels:
+    W    = CreateWidget<WBP_WardrobeSlot>()
+    W.Setup(VM)
+    Slot = Grid_Slots.AddChildToUniformGrid(W)
+    Slot.SetRow(i / 3)                          ← ★3열 고정★
+    Slot.SetColumn(i % 3)
+    Slot.SetHorizontalAlignment(HAlign_Left)    ← Fill 로 두면 칸이 늘어난다
+    Slot.SetVerticalAlignment(VAlign_Top)
+```
+
+> **`WrapBox` 대신 `UniformGridPanel` + 명시적 행/열을 쓰는 이유**: WrapBox 는 가용 폭에 따라
+> 열 수가 바뀐다. 패딩을 한 번 잘못 건드리면 조용히 2열이나 4열이 되고, 그 사실은 아이템 수가
+> 늘어난 뒤에야 드러난다. 행/열을 직접 지정하면 3열이 구조적으로 보장된다.
+
+> ℹ️ **스크롤바를 뺀 데 따르는 한 가지**: 그리드 높이 677 에는 **2행(252×2 + 간격 12 = 516)까지만**
+> 온전히 들어가고 3행째는 잘린다. 즉 **아이템이 7개를 넘으면 스크롤이 필요한데 그 사실을 알리는
+> 시각 요소가 없다.** 카테고리당 6개 이하로 유지되면 문제가 없다.
+> 넘어가게 되면 스크롤바 대신 **하단 페이드 그라디언트** 한 장이 가장 싼 해결책이다(아트 1장).
+
+**"기본" 칸**: `SkinId = NAME_None` 인 가상 항목을 **항상 인덱스 0** 에 넣어 기본 외형으로 되돌릴 수 있게
+한다(§7.2). `GetSkinViewModels()` 가 이 항목을 포함해 반환하도록 §5.1 에서 처리한다.
+
+## 15.9 Clear All 버튼
+
+`clear all.png` (112x117) 는 모서리가 둥근 사각형 안에 **`C`** 가 들어 있다 — **키보드 힌트를 겸한 버튼**이다.
+
+```
+WBP_WardrobeClearAll  (Root: SizeBox 112x117)
+└── Btn_Clear   Normal  : T_Wardrobe_ClearAll
+                Hovered : 같은 텍스처 + Tint (1.15, 1.15, 1.15, 1)
+                Pressed : 같은 텍스처 + Tint (0.85, 0.85, 0.85, 1)
+```
+
+**배치 — 확정 (§15.12-3)**: **화면 우하단**. 설정창·업그레이드 창과 같은 자리다.
+```
+Btn_ClearAll   Anchor (1,1)  Alignment (1,1)   Pos(-64, -64)   Size 112x117
+```
+> 앵커를 (1,1) 로 잡는 이유: 패널 기준이 아니라 **화면 기준**이라 다른 창과 같은 자리에 오고,
+> 해상도가 바뀌어도 우하단에 붙어 있는다. `Pos` 는 다른 창의 여백에 맞춰 조정한다.
+
+**동작 — 확정 (§15.12-4)**: **4개 카테고리 전부 해제.** 확인 창 없음
+(되돌리기가 클릭 한 번이라 확인 창은 과하다). → `UDRGameInstance::ClearAllSkins(Class)`
+
+**`C` 키 바인딩**: 옷장 화면이 열려 있는 동안만 유효해야 한다. 화면이 `FInputModeUIOnly` 이므로
+(§5.3 `OpenWardrobeScreen`) Enhanced Input 액션이 아니라 **위젯의 `NativeOnKeyDown` 오버라이드**로
+받는 편이 안전하다. `NativeConstruct` 에서 `SetKeyboardFocus()` 를 호출해 두어야 키 입력이 들어온다.
+
+**닫기 — 확정 (§15.12-9)**: 마우스 전용 닫기 버튼은 만들지 않는다.
+`NativeOnKeyDown` 이 **`Escape`** 를 받아 `RequestClose()` → `PC->CloseWardrobeScreen()` 으로 넘긴다.
+(`ADRPlayerController::HandleToggleSettings` 에도 같은 분기를 넣어 두 경로 모두 동작하게 한다)
+
+## 15.10 텍스처 임포트 설정 ★ (틀리면 티가 난다)
+
+**전 텍스처 공통**
+```
+Texture Group        : UI
+Compression Settings : UserInterface2D (RGBA)     ★기본 DXT5 금지★
+sRGB                 : true
+Mip Gen Settings     : NoMipmaps
+Filter               : Default (Bilinear)
+Never Stream         : true
+```
+
+> **`UserInterface2D` 가 필수인 이유**: 이 에셋들은 대부분 **부드러운 라디얼 그라디언트**다.
+> 기본 `DXT5` 는 4x4 블록당 색을 2개만 저장해서 이런 그라디언트에 **밴딩(띠)** 을 만든다.
+> 특히 알파 최대값이 낮은 3종 — `화면효과`(48) · `카테고리바`(102) · `캐릭터 back`(136) — 은
+> 알파 정밀도가 그대로 뭉개져 **계단이 눈에 보인다.** UI 텍스처는 압축하지 않는 것이 정답이다.
+
+**Draw As 설정**
+
+| 위젯 | Draw As | 이유 |
+|---|---|---|
+| `Img_PanelFrame` | **Image** | 모서리 노치가 비대칭이라 9-slice(Box)로 자를 수 없다 |
+| `Img_TabBarBG` / `Img_Pill` | **Image** | 크기 고정(496x44 / 124x44)이라 늘릴 일이 없다 |
+| 칸 3종 | **Image** | 216x252 고정 |
+| `Img_Dim` | **Image** + 색상만 | 단색 |
+
+> **어떤 것도 `Box`(9-slice)로 설정하지 않는다.** 전부 고정 크기로 쓰는 에셋이고,
+> 소프트 글로우가 있는 이미지를 9-slice 하면 가장자리가 늘어나며 글로우가 뭉개진다.
+
+## 15.11 ★4개 카테고리가 데이터 모델을 바꾼다★
+
+**이번 시안에서 드러난 가장 큰 설계 영향이다. §4.2 / §4.4 / §5.1 / §5.2 / §5.4 를 개정해야 한다.**
+
+현재 계획서는 **로봇 1대당 스킨 1개**를 전제한다:
+```cpp
+TMap<EPlayerCharacterClass, FName> EquippedSkins;   // §4.2 — 로봇당 1개
+FName EquippedSkinId;                               // §5.2 — 복제 1개
+```
+그런데 UI 는 **HEAD / FACE / BODY / TAIL 4개 카테고리**가 각각 자기 그리드와 자기 선택을 갖는다.
+즉 **로봇 1대당 동시 장착 4개**다.
+
+### 개정안
+
+```cpp
+// DRCosmeticTypes.h
+UENUM(BlueprintType)
+enum class EDRCosmeticCategory : uint8
+{
+    Head, Face, Body, Tail,
+    Count UMETA(Hidden)      // ★EPlayerCharacterClass 와 같은 규약 — Count 직전에만 추가★
+};
+
+// FDRSkinDefinition 에 추가
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skin")
+EDRCosmeticCategory Category = EDRCosmeticCategory::Head;
+```
+
+```cpp
+// DRSaveGame.h — §4.2 의 EquippedSkins 를 대체
+USTRUCT()
+struct FDRClassCosmeticState
+{
+    GENERATED_BODY()
+    // 길이 = EDRCosmeticCategory::Count. 빈 칸은 NAME_None.
+    // FDRClassUpgradeState::SlotChips 와 ★같은 관용구★ (고정 길이 배열 + NAME_None)
+    UPROPERTY() TArray<FName> EquippedByCategory;
+};
+
+UPROPERTY(VisibleAnywhere, Category = "Progress|Cosmetic")
+TMap<EPlayerCharacterClass, FDRClassCosmeticState> Cosmetics;
+```
+
+```cpp
+// DRPlayerState.h — §5.2 의 EquippedSkinId 를 대체
+// 길이 4 고정, 인덱스 = EDRCosmeticCategory
+UPROPERTY(ReplicatedUsing = OnRep_EquippedSkinIds, BlueprintReadOnly, Category = "Cosmetic")
+TArray<FName> EquippedSkinIds;
+```
+
+### ★확정 (2026-08-25): 4개 카테고리는 **부착물 메시**다★
+
+`HEAD / FACE / BODY / TAIL` = 부위별 **부착물**. 따라서 **§2 비목표의 "부착물(모자)" 제외가 해제**된다.
+(트레일 이펙트와 본체 메시 스왑은 여전히 비목표)
+
+```cpp
+// DRCosmeticTypes.h
+
+/** 메시 1개를 캐릭터에 붙이는 명세. TP/FP 각각 따로 지정한다. */
+USTRUCT(BlueprintType)
+struct FDRSkinAttachSpec
+{
+    GENERATED_BODY()
+
+    // 둘 다 지정하면 Skeletal 이 우선. 둘 다 비면 "이쪽에는 안 붙인다".
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attach")
+    TSoftObjectPtr<USkeletalMesh> SkeletalMesh;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attach")
+    TSoftObjectPtr<UStaticMesh> StaticMesh;
+
+    // 붙을 소켓/본. None 이면 부모 컴포넌트 원점.
+    // ★bUseLeaderPose 가 true 면 무시된다★ (스켈레톤을 공유하므로 소켓 개념이 없다)
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attach")
+    FName SocketName;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attach")
+    FTransform RelativeTransform;
+
+    // 부모 메시의 포즈를 그대로 따라갈지 (SetLeaderPoseComponent).
+    //   몸통 의상처럼 ★같은 스켈레톤을 공유하는 메시★ → true (전용 ABP 불필요, 성능도 유리)
+    //   모자처럼 소켓에 매달리는 소품                → false
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attach")
+    bool bUseLeaderPose = false;
+
+    // 부착물 자체의 머티리얼 오버라이드 (같은 메시의 색상 변형)
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attach")
+    TArray<FDRSkinMaterialOverride> MaterialOverrides;
+
+    bool IsValid() const { return !SkeletalMesh.IsNull() || !StaticMesh.IsNull(); }
+};
+
+/** 캐릭터 ★본체★ 메시의 일부 머티리얼 슬롯만 덮어쓴다. (부착물 없이 리컬러만 하는 스킨용) */
+USTRUCT(BlueprintType)
+struct FDRSkinMaterialOverride
+{
+    GENERATED_BODY()
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) int32 MaterialSlot = 0;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) TSoftObjectPtr<UMaterialInterface> Material;
+};
+```
+
+`FDRSkinDefinition` 은 **부착물 + 본체 리컬러를 모두** 담는다. 둘 다 선택이므로
+"부착물만" / "리컬러만" / "둘 다" 스킨이 전부 표현된다.
+
+```cpp
+// 외형 — 부착물 (주 경로)
+UPROPERTY(...) FDRSkinAttachSpec ThirdPerson;   // 타인 시점
+UPROPERTY(...) FDRSkinAttachSpec FirstPerson;   // 본인 시점. ★비워두면 FP 에는 안 붙는다★
+
+// 외형 — 본체 머티리얼 오버라이드 (보조 경로, 선택)
+UPROPERTY(...) TArray<FDRSkinMaterialOverride> BodyMaterialsTP;
+UPROPERTY(...) TArray<FDRSkinMaterialOverride> BodyMaterialsFP;
+UPROPERTY(...) TArray<FDRSkinMaterialOverride> WeaponMaterials;
+```
+
+> **FP 를 비워두는 것이 기본값이다.** 1인칭에서는 자기 머리 위의 모자도, 꼬리도 보이지 않는다.
+> 청소기는 FP 스켈레톤이 TP 와 완전히 별개라(Plan5 §1.1) **소켓 이름이 아예 다르거나 없을 수 있다.**
+> FP 스펙은 "1인칭에서도 실제로 보이는 부위"에만 채운다.
+
+### 적용 규칙 (§5.4 `RefreshSkinVisuals` 개정)
+
+**부착물 컴포넌트는 복제하지 않는다.** 각 머신이 복제된 `EquippedSkinIds`(길이 4)를 보고
+**로컬에서 컴포넌트를 만든다.** 컴포넌트를 복제하면 스폰 순서·소유권 문제가 붙는데 얻는 게 없다.
+
+```
+1. 기존 부착물 컴포넌트 4×2(TP/FP) 를 전부 DestroyComponent
+2. 본체 머티리얼을 BP CDO 값으로 ★전 슬롯 리셋★
+     (리셋이 없으면 아이템을 벗어도 이전 머티리얼이 남는다)
+3. Head → Face → Body → Tail 순으로
+     a. BodyMaterials* 오버라이드 적용   (같은 슬롯이 겹치면 ★나중이 이긴다★)
+     b. AttachSpec 이 유효하면 컴포넌트 생성 → 소켓에 Attach → MaterialOverrides 적용
+4. 4개 모두 NAME_None 이면 1~2 만 수행 = 기본 외형
+```
+
+`ADRCharacter` 추가 멤버:
+```cpp
+// 카테고리별 부착물 컴포넌트. 런타임 생성이며 ★복제하지 않는다★.
+// 길이 = EDRCosmeticCategory::Count. 비어 있는 칸은 nullptr.
+UPROPERTY(Transient) TArray<TObjectPtr<UMeshComponent>> CosmeticAttachTP;
+UPROPERTY(Transient) TArray<TObjectPtr<UMeshComponent>> CosmeticAttachFP;
+```
+
+**가시성**: 생성 직후 TP 부착물은 `SetOwnerNoSee(true)`, FP 부착물은 `SetOnlyOwnerSee(true)` 로 맞춘다.
+`UpdateMeshVisibility()`(`DRCharacter.cpp:467-497`)와 `SetWaitingRoomVisibility()`(`:557-605`)가
+부모 메시의 가시성을 뒤집으므로, **두 함수에서 부착물도 함께 갱신**해야 한다.
+
+### 함수 시그니처 변경
+
+| 기존 (§5.1 / §5.3) | 개정 |
+|---|---|
+| `EquipSkin(Class, SkinId)` | `EquipSkin(Class, Category, SkinId)` |
+| `GetEquippedSkin(Class)` | `GetEquippedSkin(Class, Category)` |
+| `GetSkinViewModels(Class, Out)` | `GetSkinViewModels(Class, Category, Out)` |
+| — | `ClearAllSkins(Class)` ← Clear All 버튼(§15.9) |
+| — | `GetEquippedSkins(Class)` → `TArray<FName>` 길이 4 (서버 보고용) |
+| `ServerReportCosmeticLoadout(ForClass, SkinId)` | `ServerReportCosmeticLoadout(ForClass, const TArray<FName>& SkinIds)` |
+
+> 복제량은 FName 1개 → 4개로 는다. **무시할 수준이다** (`EquippedChips` 가 이미 최대 6개를 복제한다).
+
+### 부착물로 확정되면서 새로 생기는 작업
+
+| 항목 | 내용 |
+|---|---|
+| **소켓 규약** | 로봇 3종의 TP 스켈레톤에 `Cosmetic_Head` / `Cosmetic_Face` / `Cosmetic_Body` / `Cosmetic_Tail` 소켓을 추가한다. 없으면 부착물이 원점에 붙어 바닥에 박힌다 |
+| **비동기 로드** | 대상이 텍스처가 아니라 **메시**라 용량이 크다. §5.4 의 `RequestAsyncLoad` + 유효성 재확인이 더 중요해진다 |
+| **프리뷰 스테이지** | §5.8 의 프리뷰 캐릭터도 같은 `RefreshSkinVisuals()` 를 타므로 **추가 작업 없음** |
+| **사망 Dissolve** | 본체만 Dissolve 되고 부착물은 그대로 남는다 → `MulticastHandleDeath` 에서 부착물도 숨기거나 함께 Dissolve 해야 한다 (§15.12-11 신규) |
+
+## 15.12 결정 완료 (2026-08-25) · 남은 항목
+
+**10건 전부 회신됨.** 아래가 확정 사양이다.
+
+| # | 항목 | **확정** | 반영 |
+|---|---|---|---|
+| 1 | 4 카테고리의 의미 | **부착물 메시** | §15.11 재작성 · §2 비목표 해제 |
+| 2 | 잠긴 칸 아트 | **추후 추가.** 지금은 **현재 이미지만으로** 처리 | §15.7 — `Slot_Normal` + 썸네일 회색조 Tint. **자물쇠 아이콘 위젯은 만들되 브러시 미지정 상태로 둔다** |
+| 3 | Clear All 위치 | **화면 우하단** (설정창·업그레이드 창과 동일) | §15.9 — 앵커 (1,1) |
+| 4 | Clear All 범위 | **4개 카테고리 전부 해제** | §15.9 · `ClearAllSkins(Class)` |
+| 5 | 탭 호버 연출 | **미정 — 넣지 않는다** | §15.6 — Hovered 스타일 = Normal 과 동일 |
+| 6 | 스크롤바 | **넣지 않는다** (내릴 일이 없을 수 있음) | §15.8 — `Scroll Bar Visibility = Collapsed` |
+| 7 | 칸 썸네일 | **추후 추가.** 지금은 **칸에 맞춰 이미지만 배치** | §15.7 — `Img_Thumbnail` 배치만 하고 브러시는 런타임 바인딩. 아이콘이 없으면 자동으로 숨긴다 |
+| 8 | 폰트 | **`BrunoAceSC-Regular_Font`** (라틴 표시용) + **`Pretendard-SemiBold__1__Font`** (한글/본문) | §15.5 · §15.6 |
+| 9 | 닫기 버튼 | **불필요.** 다른 창과 동일하게 **키 입력으로 닫는다** | §15.9 — `NativeOnKeyDown` |
+| 10 | 화면효과 배치 | **중앙 정렬** | §15.5 — Anchor 중앙 / 네이티브 1753x993 |
+
+### 남은 항목 (부착물 확정으로 새로 생김)
+
+| # | 항목 | 필요 조치 |
+|---|---|---|
+| 11 | **사망 Dissolve 와 부착물** | 본체만 Dissolve 되고 부착물은 남는다. `MulticastHandleDeath` 에서 부착물도 숨기거나 함께 Dissolve (§15.11) |
+| 12 | **소켓 규약** | 로봇 3종 TP 스켈레톤에 `Cosmetic_Head/Face/Body/Tail` 소켓 추가. **없으면 부착물이 원점에 박힌다** |
+| 13 | **부착물 메시 에셋** | 카테고리별 실제 메시. 없으면 옷장은 "기본" 칸 1개만 표시된다(동작에는 문제 없음) |
+
+## 15.13 제작 순서 체크리스트
+
+**A. 에셋 준비**
+- [ ] PNG 10종을 `Content/DaeRuneAssets/UI/Wardrobe/` 로 임포트 (`1차검은배경`·시안 2종 제외)
+- [ ] 전 텍스처에 §15.10 설정 적용 — **`UserInterface2D` 확인이 핵심**
+- [ ] `M_UI_Additive` 제작 + 인스턴스 3종 (§15.4)
+
+**B. 하위 위젯**
+- [ ] `WBP_WardrobeTab` (§15.6)
+- [ ] `WBP_WardrobeSlot` (§15.7) — 상태 브러시 스왑 + 잠김 처리
+- [ ] `WBP_WardrobeClearAll` (§15.9)
+
+**C. 메인 위젯**
+- [ ] `WBP_Wardrobe` 트리 구성 (§15.5) — **z-order 6단 순서 주의(§15.3)**
+- [ ] 조립 시안을 임시 Image 로 얹고 알파 30% 로 겹쳐 **좌표 눈맞춤** → 확인 후 제거
+- [ ] `UDRWardrobeScreenWidget` 를 부모로 지정하고 `OnRefreshSkins` 구현
+
+**D. 배선**
+- [ ] 탭 4개 → `CurrentCategory` 전환 → `RefreshAll()`
+- [ ] 칸 클릭 → `TryEquip()` → 프리뷰 즉시 반영 (§15.7)
+- [ ] `C` 키 → `NativeOnKeyDown` → Clear All
+- [ ] ESC → `RequestClose()` (§5.6)
+
+**E. 검증**
+- [ ] 1920x1080 / 2560x1440 / 1280x720 에서 배치가 비례하는지 (ShortestSide 스케일 확인)
+- [ ] `Img_ScreenFX` 가 클릭을 먹지 않는지 (`Is Hit Test Visible = false`)
+- [ ] 알파 낮은 3종(화면효과·카테고리바·캐릭터 back)에 밴딩이 없는지
+- [ ] 칸이 10개 이상일 때 스크롤이 3열을 유지하는지
+- [ ] 잠긴 칸 호버 시 조건 툴팁이 뜨는지 (**`IsEnabled=false` 로 두면 안 뜬다**)
+
+## 15.14 §15 가 기존 절에 미치는 영향 요약
+
+| 절 | 변경 |
+|---|---|
+| §2 비목표 | **(B) 해석 채택 시** "부착물" 제외 항목 해제 필요 (§15.11) |
+| §4.2 SaveGame | `EquippedSkins` → `Cosmetics : TMap<Class, FDRClassCosmeticState>` |
+| §4.4 스킨 정의 | `Category` 필드 추가, 머티리얼 배열 → `FDRSkinMaterialOverride` 배열 |
+| §5.1 GameInstance | 4개 API 시그니처에 `Category` 추가 + `ClearAllSkins()` 신설 |
+| §5.2 PlayerState | `EquippedSkinId : FName` → `EquippedSkinIds : TArray<FName>` (길이 4) |
+| §5.3 Controller | `ServerReportCosmeticLoadout` 인자 변경 + `C` 키 처리 |
+| §5.4 Character | **CDO 리셋 후 Head→Face→Body→Tail 순차 적용** 규칙 신설 |
+| §5.6 위젯 | `CurrentCategory` 상태 + `TryEquip` 에 카테고리 반영 |
+| §7.2 레이아웃 | **§15.5 가 확정판** — §7.2 의 ASCII 스케치를 대체 |
+| §13 파일 목록 | 신규 위젯 3종 + 텍스처 10종 + 머티리얼 1+3 추가 |
+| §10 마일스톤 | M4 에 §15.13 체크리스트 반영. **M2 착수 전 §15.11 결정 필요** |
+
+## 15.15 구현 현황 (2026-08-25)
+
+**UI 제작을 막고 있던 C++ 을 전부 착지시켰다.** WBP 작업은 지금 바로 시작할 수 있다.
+UHT(리플렉션) 통과 확인 — 에디터가 열려 있어 C++ 컴파일은 미검증(§15.15 말미).
+
+### 완료 — 신규 파일 8개
+
+| 파일 | 내용 |
+|---|---|
+| `Public/Game/DRCosmeticTypes.h` | `EDRCosmeticCategory`(Head/Face/Body/Tail/Count), `FDRSkinMaterialOverride`, `FDRSkinAttachSpec`, `FDRSkinDefinition`, `FDRClassCosmeticState`, `FDRSkinViewModel` |
+| `Public/Game/DRCosmeticCatalog.h` / `.cpp` | 스킨 카탈로그 DataAsset. Id 인덱스 캐시 · `GetSkinsForCategory`(정렬 포함) · `SanitizeSkin`/`SanitizeLoadout` · 에디터 자동 검증 |
+| `Public/UI/Widget/DRWardrobeScreenWidget.h` / `.cpp` | 옷장 화면 베이스. 카테고리 상태 · `TryEquip` · `ClearAll` · ESC/C 키 · 탭 선택 일괄 갱신 · 델리게이트 구독/해제 |
+| `Public/UI/Widget/DRWardrobeTabWidget.h` / `.cpp` | 탭 1개. `Category` 지정 + `SetSelected` + 클릭 중계 |
+| `Public/UI/Widget/DRWardrobeSlotWidget.h` / `.cpp` | 칸 1개. 뷰모델 수신 + 클릭 중계 + 썸네일 유무/틴트/툴팁 헬퍼 |
+| `Public/Actor/DRWardrobe.h` / `.cpp` | 로비 옷장 액터 (`ADRUpgradeStation` 구조 복제) |
+| `Public/Actor/DRCosmeticPreviewStage.h` / `.cpp` | 맵 밖 촬영 스튜디오. 프리뷰 캐릭터 스폰·회전·캡처 On/Off·ShowOnlyList (§5.8) |
+| `Public/UI/Widget/DRCosmeticPreviewWidget.h` / `.cpp` | RT→MID 배선 + 드래그 회전(마우스 캡처) + 스테이지 부재 시 폴백 |
+
+### 완료 — 기존 파일 수정
+
+| 파일 | 내용 |
+|---|---|
+| `DRSaveGame.h` | `EarnedAchievements` / `Cosmetics` / `PendingSteamAchievements` 추가. **`CurrentSaveVersion` 은 4 유지** |
+| `DRProgressionConfig.h` | `FDRAchievementDef::SteamApiName` + `UDRProgressionConfig::CosmeticCatalog` |
+| `DRGameInstance.h` / `.cpp` | 코스메틱 API 11종 + 델리게이트 2종 + 내부 헬퍼 8종. `EnsureProgressInitialized` lazy 초기화·정화, `ApplyStageReward` 훅 2곳 |
+| `DRCharacter.h` / `.cpp` | `ApplyCosmeticSkins`/`RefreshSkinVisuals`/`SyncCosmeticVisibility` + 내부 5종. 부활 경로·가시성 2곳 배선 |
+| `DRPlayerController.h` / `.cpp` | `OpenWardrobeScreen`/`CloseWardrobeScreen` + BP 훅 2종 + 위젯 클래스 슬롯, ESC 우선순위, 레벨 이동 리셋, 치트 3종(`DRUnlockSkins`/`DROpenWardrobe`/`DRDumpCosmetic`) |
+
+### 지금 되는 것 / 안 되는 것
+
+| | 상태 |
+|---|---|
+| 옷장 화면 열기·닫기 (ESC / C) | ✅ |
+| 탭 4개 전환 + 칸 목록 생성 + 잠금 판정 + 툴팁 | ✅ |
+| 선택 → 로컬 세이브 기록 → 재시작 후 유지 | ✅ |
+| 업적 달성 → 스킨 해금 + 해금 토스트 이벤트 | ✅ |
+| **부착물이 캐릭터에 실제로 붙는 것** | ✅ `ADRCharacter::ApplyCosmeticSkins` — 부착물 생성 + 본체 머티리얼 오버라이드 + CDO 리셋 + 비동기 로드 + 세대 검사 |
+| **3D 프리뷰 (실시간 갈아입기 + 드래그 회전)** | ✅ `ADRCosmeticPreviewStage` + `UDRCosmeticPreviewWidget` (§5.8) |
+| 부활 후 옷 유지 (Dissolve 원복) | ✅ `MulticastHandleRevive_Implementation` 에서 `RefreshSkinVisuals()` |
+| 대기실/1인칭 전환 시 부착물 가시성 | ✅ `SyncCosmeticVisibility()` — `UpdateMeshVisibility`/`SetWaitingRoomVisibility` 두 곳에 배선 |
+| **다른 플레이어에게 내 옷이 보이는 것** | ⬜ **M3** — `ADRPlayerState::EquippedSkinIds` 복제 + 보고 RPC (§5.2/§5.3). 지금은 ★내 화면의 프리뷰에서만★ 보인다 |
+| 대기실 디스플레이 캐릭터에 반영 | ⬜ **M5** — `DisplaySkinOverride` 배선 (§6.3) |
+| 세이브 슬롯 계정 키잉 | ⬜ **M1** — 진행도 파일 전체를 건드리므로 ★단독 착지★ (§4.6) |
+
+> **컴파일 미검증**: UHT 는 통과했으나(헤더·리플렉션 정상) 언리얼 에디터가 실행 중이라
+> Live Coding 이 빌드를 막았다. **신규 `UCLASS` 파일은 Live Coding 으로 못 올라가므로 에디터를 닫고
+> 풀 빌드해야 한다.** 에디터 종료 후 재빌드 필요.
+
+### WBP 작업 착수 순서
+
+1. 텍스처 10종 임포트 + §15.10 설정 (**`UserInterface2D` 확인**)
+2. `M_UI_Additive` + 인스턴스 3종 (§15.4)
+3. `WBP_WardrobeTab` → 부모 `UDRWardrobeTabWidget`, `Category` 지정, 버튼 OnClicked → `HandleClicked`
+4. `WBP_WardrobeSlot` → 부모 `UDRWardrobeSlotWidget`, 버튼 OnClicked → `HandleClicked`,
+   `OnViewModelUpdated` 에서 상태 브러시 스왑 + `HasThumbnail`/`GetThumbnailTint`/`GetTooltipText` 반영
+5. `WBP_Wardrobe` → 부모 `UDRWardrobeScreenWidget`, §15.5 트리 구성,
+   `OnRefreshSkins` 에서 `GetCurrentSkinViewModels` → 칸 생성(§15.8)
+6. `BP_DRPlayerController` 에 `WardrobeScreenWidgetClass` 지정 +
+   `OnWardrobeScreenOpened/Closed` 에서 CreateWidget/RemoveFromParent
+7. `DA_CosmeticCatalog` 생성 → `DA_ProgressionConfig.CosmeticCatalog` 에 연결
+8. 콘솔에서 `DROpenWardrobe` / `DRUnlockSkins` / `DRDumpCosmetic` 으로 확인
+
+---
+
+# 16. WBP 제작 클릭 단위 가이드
+
+> **작성일** 2026-08-25 · **§15 와의 관계**: §15 는 **"무엇을 왜"**(좌표·에셋·근거), 이 절은 **"어떤 순서로 어떻게"**다.
+> 수치가 필요하면 §15 를 보고, 만드는 동안에는 이 절만 위에서 아래로 따라가면 된다.
+> **충돌 시 이 절이 우선**한다 (§16 STEP 4 가 §15.7 의 칸 구조를 대체했다 — 이유는 STEP 4-0).
+
+## 16.0 먼저 알아 둘 것 — "이 변수/함수는 어디서 나왔나"
+
+이 문서에 나오는 모든 이름은 **출처가 셋 중 하나**다. 각 STEP 의 표에 항상 표기한다.
+
+| 표기 | 뜻 | 에디터에서 꺼내는 법 |
+|---|---|---|
+| **[C++]** | C++ 부모 클래스가 준 것 | 아래 4가지 방법 참조 |
+| **[BP변수]** | 이 문서에서 **직접 만들라고 지시하는** 블루프린트 변수 | My Blueprint 패널 → Variables → `+` |
+| **[위젯]** | 디자이너에 배치한 위젯. 이름이 곧 변수 | Designer 에서 배치 후 이름 변경 |
+
+### [C++] 을 꺼내는 4가지 방법
+
+**① C++ 이벤트를 구현한다 (BlueprintImplementableEvent)**
+> My Blueprint 패널 → **Functions** 항목 오른쪽의 **`Override ▼`** 드롭다운 클릭 → 목록에서 선택
+> → **Event Graph 에 `Event <이름>` 노드가 생긴다.**
+> 예) `OnRefreshSkins` → `Event On Refresh Skins`
+
+**② C++ 함수를 호출한다 (BlueprintCallable / BlueprintPure)**
+> Event Graph 빈 곳 **우클릭 → 이름 검색**.
+> 자기 자신(self)에 대한 호출이면 Context Sensitive 가 켜진 채로 그냥 이름만 쳐도 나온다.
+> 예) `TryEquip` → `Try Equip` 노드 (에디터는 띄어쓰기를 넣어 표시한다)
+
+**③ C++ 변수를 읽는다 (UPROPERTY BlueprintReadOnly/ReadWrite)**
+> ★상속 변수는 My Blueprint 패널에 기본으로 안 보인다★ —
+> My Blueprint 패널 우상단 **눈 아이콘(Settings) → `Show Inherited Variables` 체크**.
+> 또는 그래프에서 우클릭 → `Get <이름>` 검색.
+> 예) `ViewModel` → `Get View Model`
+
+**④ C++ 기본값을 설정한다 (EditDefaultsOnly / EditAnywhere)**
+> 블루프린트 에디터 상단 툴바의 **`Class Defaults`** 버튼 → 우측 Details 패널에 나타난다.
+> 예) `ClearAllKey`, `LockedTint`, `PreviewMaterial`
+
+### BindWidget 규칙
+
+C++ 이 `meta = (BindWidget)` 또는 `(BindWidgetOptional)` 로 선언한 프로퍼티는
+**디자이너의 위젯 이름을 프로퍼티 이름과 글자 단위로 똑같이** 지으면 자동 연결된다.
+
+이 프로젝트에서 해당하는 것은 **딱 하나**다:
+
+| WBP | 위젯 이름 | 타입 | 필수? |
+|---|---|---|---|
+| `WBP_Wardrobe` | **`Preview_Character`** | `WBP_CosmeticPreview` | Optional — 없거나 이름이 달라도 컴파일된다 (프리뷰만 빠짐) |
+
+나머지 위젯 이름은 **전부 자유**다. 다만 이 문서의 이름을 그대로 쓰면 아래 배선 설명과 1:1로 맞는다.
+
+## 16.1 제작 순서 (의존 관계)
+
+**아래에서 위로 만든다.** 뒤 단계가 앞 단계의 결과물을 참조하므로 순서를 지켜야 한다.
+
+```
+STEP 1  텍스처 임포트            (의존 없음)
+STEP 2  M_UI_Additive + 인스턴스 3종        ← STEP 1
+STEP 3  WBP_WardrobeTab                     ← STEP 1
+STEP 4  WBP_WardrobeSlot                    ← STEP 1
+STEP 5  RT_CosmeticPreview + M_CosmeticPreview  (의존 없음)
+STEP 6  WBP_CosmeticPreview                 ← STEP 5
+STEP 7  BP_CosmeticPreviewStage             ← STEP 5
+STEP 8  WBP_Wardrobe  ★본체★               ← STEP 2,3,4,6
+STEP 9  BP_DRPlayerController 배선           ← STEP 8
+STEP 10 DA_CosmeticCatalog                  (의존 없음)
+STEP 11 BP_Wardrobe 액터 + 레벨 배치         ← STEP 7
+STEP 12 동작 확인
+```
+
+> **STEP 8 까지 가야 화면이 뜬다.** 중간에 확인하고 싶으면 STEP 3·4 를 만든 직후
+> 각 WBP 에디터의 Designer 탭에서 눈으로만 확인하고 넘어간다.
+
+---
+
+## STEP 1 — 텍스처 임포트
+
+**위치**: `Content/DaeRuneAssets/UI/Wardrobe/`
+
+PNG 10 장을 드래그해 임포트한다 (`1차검은배경`·`조립`·`image_1` 3장은 **임포트하지 않는다** — §15.1).
+
+임포트 후 **10장 전부 선택 → 우클릭 → Asset Actions → Bulk Edit via Property Matrix** 로 한 번에 설정:
+
+| 항목 | 값 |
+|---|---|
+| Texture Group | **UI** |
+| Compression Settings | **UserInterface2D (RGBA)** ★가장 중요★ |
+| Mip Gen Settings | **NoMipmaps** |
+| sRGB | 체크 |
+
+> 기본 `DXT5` 로 두면 부드러운 그라디언트에 **밴딩(띠)** 이 생긴다.
+> 특히 `화면효과`(알파 최대 48)·`카테고리바`(102)·`캐릭터 back`(136)은 알파 정밀도가 낮아 계단이 눈에 보인다. (§15.10)
+
+**이름 변경** (§15.1 의 "제안 에셋명" 열대로):
+`T_Wardrobe_BGGlow` / `T_Wardrobe_CharBack` / `T_Wardrobe_PanelFrame` / `T_Wardrobe_TabBar` /
+`T_Wardrobe_TabPill` / `T_Wardrobe_Slot_Normal` / `T_Wardrobe_Slot_Hovered` / `T_Wardrobe_Slot_Selected` /
+`T_Wardrobe_ClearAll` / `T_Wardrobe_ScreenFX`
+
+---
+
+## STEP 2 — `M_UI_Additive` + 머티리얼 인스턴스 3종
+
+**위치**: `Content/Blueprints/UI/Wardrobe/Material/`
+
+포토샵의 **Soft Light / Lighter Color 를 UMG 가 지원하지 않기 때문에** Additive 로 근사한다 (§15.4).
+
+### 2-1. 머티리얼 만들기
+
+우클릭 → Material → 이름 `M_UI_Additive` → 더블클릭
+
+**Details 패널 (그래프 빈 곳 클릭 시 나오는 머티리얼 자체 설정)**
+
+| 항목 | 값 |
+|---|---|
+| Material Domain | **User Interface** |
+| Blend Mode | **Additive** |
+| Shading Model | **Unlit** |
+
+**노드 배선**
+
+```
+[TextureSampleParameter2D]  이름: Tex        [VectorParameter]  이름: Tint
+        │ RGB ─────────┐                            │ RGB ──┐
+        │              └──▶ [Multiply] ◀────────────┘       │
+        │                        └──────────────▶ Emissive Color
+        │ A ───────────┐                                    │
+                       └──▶ [Multiply] ◀───────────── A ────┘
+                                └──────────────▶ Opacity
+```
+
+- `TextureSampleParameter2D` 노드: 팔레트에서 `TextureSampleParameter2D` 검색 →
+  노드 선택 후 Details 의 **Parameter Name 을 `Tex`** 로
+- `VectorParameter` 노드: Details 의 **Parameter Name 을 `Tint`**, Default Value 를 `(1,1,1,1)` 로
+- Multiply 두 개: 하나는 RGB 끼리, 하나는 A 끼리
+
+### 2-2. 인스턴스 3개 만들기
+
+`M_UI_Additive` 우클릭 → **Create Material Instance** → 3개 만들고 각각:
+
+| 인스턴스 이름 | `Tex` | `Tint` 의 A (시작값) |
+|---|---|---|
+| `MI_UI_Wardrobe_BGGlow` | `T_Wardrobe_BGGlow` | **0.25** |
+| `MI_UI_Wardrobe_CharBack` | `T_Wardrobe_CharBack` | **1.0** |
+| `MI_UI_Wardrobe_ScreenFX` | `T_Wardrobe_ScreenFX` | **1.0** |
+
+> 인스턴스 에디터에서 파라미터 왼쪽 **체크박스를 켜야** 값이 적용된다.
+> Tint 알파는 **눈으로 보고 조정할 값**이다 — 위 숫자는 시작점일 뿐이다.
+
+---
+
+## STEP 3 — `WBP_WardrobeTab` (탭 1개)
+
+**위치**: `Content/Blueprints/UI/Wardrobe/`
+**만들기**: 우클릭 → User Interface → Widget Blueprint → **Parent Class 선택 창에서 `DRWardrobeTabWidget` 검색**
+
+> ★Widget Blueprint 를 만들 때 부모를 고르는 창이 뜬다.★ "User Widget" 을 고르면 안 된다.
+> 이미 만들었다면: 블루프린트 에디터 → File → Reparent Blueprint → `DRWardrobeTabWidget`
+
+### 3-1. 출처표
+
+| 이름 | 출처 | 타입 | 꺼내는 법 |
+|---|---|---|---|
+| `Category` | **[C++]** `UDRWardrobeTabWidget` | `EDRCosmeticCategory` | ④ Class Defaults, 또는 §16.9 에서 **인스턴스마다** 설정 |
+| `HandleClicked` | **[C++]** BlueprintCallable | 함수 | ② 우클릭 검색 `Handle Clicked` |
+| `OnSelectionChanged(bool)` | **[C++]** BlueprintImplementableEvent | 이벤트 | ① Override ▼ → `On Selection Changed` |
+| `bSelected` | **[C++]** BlueprintReadOnly | bool | ③ (이 STEP 에서는 안 쓴다 — 이벤트 인자로 받는다) |
+| `Img_Pill` | **[위젯]** | Image | 아래 3-2 |
+| `Btn_Tab` | **[위젯]** | Button | 아래 3-2 |
+| `Txt_Label` | **[위젯]** | Text | 아래 3-2 |
+
+### 3-2. Designer 계층
+
+```
+[Root]
+└── SizeBox                    ← Palette 에서 드래그. 루트로 놓는다
+    │   Width Override  = 124   (Details → Child Layout)
+    │   Height Override = 44
+    └── Overlay                ← SizeBox 안에 드래그
+        ├── Img_Pill    [Image]   ★Overlay 슬롯: Horizontal/Vertical Alignment = Fill★
+        ├── Btn_Tab     [Button]  ★Fill★
+        └── Txt_Label   [Text]    ★Alignment = Center / Center★
+```
+
+> **Overlay 는 나중에 넣은 것이 위에 그려진다.** 순서를 반드시 위 그대로.
+> `Txt_Label` 을 `Btn_Tab` 뒤에 두는 이유는 글자가 버튼 위에 보여야 하기 때문이다.
+> 버튼이 글자에 가려도 클릭은 정상 동작한다 (Text 는 기본 `SelfHitTestInvisible`).
+
+**Details 설정**
+
+| 위젯 | 설정 |
+|---|---|
+| `Img_Pill` | Appearance → Brush → **Image = `T_Wardrobe_TabPill`** / **Visibility = `Collapsed`** (기본은 꺼진 상태) |
+| `Btn_Tab` | Style → Normal/Hovered/Pressed 의 **Tint 알파를 전부 `0`** 으로 (배경은 `Img_Pill` 이 담당) |
+| `Txt_Label` | Font = **`BrunoAceSC-Regular_Font`**, Size **20**, Color = `#8E9BC8` (비활성 기본색) |
+
+> **호버 연출은 넣지 않는다** (§15.12-5 확정). Hovered/Pressed 를 Normal 과 똑같이 두면 된다.
+
+### 3-3. Graph 배선
+
+**(1) 클릭 → 화면에 카테고리 전환 요청**
+
+`Btn_Tab` 선택 → Details 패널 맨 아래 **Events → `On Clicked` 의 `+`** 클릭
+→ Event Graph 에 `On Clicked (Btn_Tab)` 노드가 생긴다.
+
+```
+[On Clicked (Btn_Tab)] ──exec──▶ [Handle Clicked]        ← ② 우클릭 검색
+                                  (Target = self, 자동 연결됨)
+```
+
+> `HandleClicked` 는 C++ 이 `FindOwnerScreen(this)` 로 소속 옷장 화면을 찾아
+> `SetCurrentCategory(Category)` 를 부른다. **BP 는 화면을 몰라도 된다.**
+
+**(2) 선택 상태 표시**
+
+My Blueprint → Functions 옆 **`Override ▼` → `On Selection Changed`** 선택
+
+```
+[Event On Selection Changed] ──exec──▶ [Set Visibility]        (Target = Img_Pill)
+       │ b In Selected ──────────────────▶ [Select]  ← 아래 참조
+       └───────────────┐
+                       └──▶ [Set Color and Opacity] (Target = Txt_Label)
+```
+
+- **`Set Visibility`** 의 `In Visibility` 핀: 우클릭 → Promote 하지 말고
+  **`Select` 노드**(우클릭 → `Select` 검색)를 써서
+  `bInSelected == true` → `Visible`, `false` → `Collapsed` 로 고른다.
+  (또는 Branch 두 갈래로 `Set Visibility` 를 두 번 놓아도 된다 — 취향)
+- **`Set Color and Opacity`** (Target = `Txt_Label`): 같은 방식으로
+  `true` → `#EAF2FF`, `false` → `#8E9BC8`
+
+> ★`SetSelected` 를 BP 에서 부르지 않는다★ — 옷장 화면이 WidgetTree 를 순회하며 대신 불러 준다(§15.6).
+> BP 는 "바뀌었다는 통보"만 받아 그림을 바꾼다.
+
+**컴파일 → 저장.**
+
+---
+
+## STEP 4 — `WBP_WardrobeSlot` (칸 1개)
+
+**위치**: `Content/Blueprints/UI/Wardrobe/`
+**부모 클래스**: `DRWardrobeSlotWidget`
+
+### 4-0. ★§15.7 에서 구조가 바뀐 이유★
+
+§15.7 은 "버튼 스타일 3칸을 상태에 따라 통째로 교체"하는 방식이었다.
+그런데 UE 5.2 부터 `UButton::WidgetStyle` 직접 접근이 deprecated 라
+BP 에서 하려면 **`FButtonStyle` 을 통째로 조립**해야 한다 —
+Normal/Hovered/Pressed 각각 `Make SlateBrush` 를 만들어 끼우는 노드가 열 개 넘게 붙는다.
+
+대신 **"투명 버튼 + 상태 이미지 1장"** 으로 바꾼다.
+`Set Brush from Texture` **노드 하나**로 끝나고, 탭 위젯과도 같은 관용구가 된다.
+**C++ 은 하나도 바뀌지 않는다.**
+
+### 4-1. 출처표
+
+| 이름 | 출처 | 타입 | 꺼내는 법 |
+|---|---|---|---|
+| `ViewModel` | **[C++]** `UDRWardrobeSlotWidget` | `FDRSkinViewModel` | ③ `Get View Model` |
+| `OnViewModelUpdated` | **[C++]** BIE | 이벤트 | ① Override ▼ |
+| `HandleClicked` | **[C++]** BlueprintCallable → bool | 함수 | ② 우클릭 검색 |
+| `HasThumbnail` | **[C++]** BlueprintPure → bool | 함수 | ② |
+| `GetThumbnailTint` | **[C++]** BlueprintPure → LinearColor | 함수 | ② |
+| `GetTooltipText` | **[C++]** BlueprintPure → Text | 함수 | ② |
+| `LockedTint` | **[C++]** EditDefaultsOnly | LinearColor | ④ Class Defaults (기본 0.35 회색 — 그대로 두면 된다) |
+| **`Tex_Normal`** | **[BP변수]** | `Texture2D` | 직접 만든다 (4-3) |
+| **`Tex_Hovered`** | **[BP변수]** | `Texture2D` | 직접 만든다 |
+| **`Tex_Selected`** | **[BP변수]** | `Texture2D` | 직접 만든다 |
+| **`bIsHovering`** | **[BP변수]** | `Boolean` | 직접 만든다 |
+| **`UpdateStateImage`** | **[BP함수]** | 함수 | 직접 만든다 (4-5) |
+| `Img_State` `Img_Thumbnail` `Img_Lock` `Btn_Slot` | **[위젯]** | | 4-2 |
+
+### 4-2. Designer 계층
+
+```
+[Root]
+└── SizeBox
+    │   Width Override  = 216
+    │   Height Override = 252
+    └── Overlay
+        ├── Img_State      [Image]  Fill / Fill      ← 상태 브러시(기본·호버·선택)
+        ├── Img_Thumbnail  [Image]  Fill / Fill, Padding = 16 (상하좌우)
+        ├── Img_Lock       [Image]  Center / Center  ← 브러시 ★비워 둔다★ (아트 미정 §15.12-2)
+        └── Btn_Slot       [Button] Fill / Fill      ← 맨 위: 클릭/호버 히트박스
+```
+
+**Details 설정**
+
+| 위젯 | 설정 |
+|---|---|
+| `Img_State` | Brush Image = `T_Wardrobe_Slot_Normal` (런타임에 교체된다) |
+| `Img_Thumbnail` | Brush 비워 둠. **Visibility = `Collapsed`** (아이콘이 없으면 숨긴 채로 시작) |
+| `Img_Lock` | Brush 비워 둠. **Visibility = `Collapsed`** |
+| `Btn_Slot` | Style 의 Normal/Hovered/Pressed **Tint 알파 전부 `0`** |
+
+### 4-3. BP 변수 4개 만들기
+
+My Blueprint → Variables → `+` 를 4번:
+
+| 이름 | 타입 | Instance Editable | 기본값 |
+|---|---|---|---|
+| `Tex_Normal` | Texture 2D **(Object Reference)** | ✔ | `T_Wardrobe_Slot_Normal` |
+| `Tex_Hovered` | Texture 2D | ✔ | `T_Wardrobe_Slot_Hovered` |
+| `Tex_Selected` | Texture 2D | ✔ | `T_Wardrobe_Slot_Selected` |
+| `bIsHovering` | Boolean | ✖ | false |
+
+> 기본값은 **컴파일을 한 번 해야** Details 패널에서 지정할 수 있다.
+
+### 4-4. 그래프 — 뷰모델 반영
+
+My Blueprint → **Override ▼ → `On View Model Updated`**
+
+```
+[Event On View Model Updated]
+  │
+  ├─exec─▶ [Update State Image]                       ← 4-5 에서 만들 BP 함수
+  │
+  ├─exec─▶ [Set Visibility]  Target = Img_Thumbnail
+  │            In Visibility ◀── [Select] ◀── [Has Thumbnail]        ← ② C++ Pure
+  │                          (true → Visible / false → Collapsed)
+  │
+  ├─exec─▶ [Set Brush from Texture]  Target = Img_Thumbnail
+  │            Texture ◀── [Get View Model] ▶ [Break] ▶ PreviewIcon   ← ③ C++ 변수
+  │            (bMatchSize = false)
+  │
+  ├─exec─▶ [Set Color and Opacity]  Target = Img_Thumbnail
+  │            In Color and Opacity ◀── [Get Thumbnail Tint]         ← ② C++ Pure
+  │
+  ├─exec─▶ [Set Visibility]  Target = Img_Lock
+  │            In Visibility ◀── [Select] ◀── [NOT] ◀── ViewModel.bUnlocked
+  │                          (잠김이면 Visible)
+  │
+  └─exec─▶ [Set Tool Tip Text]  Target = Btn_Slot
+               In Tool Tip Text ◀── [Get Tooltip Text]               ← ② C++ Pure
+```
+
+**`Get View Model` 구조체 멤버 꺼내는 법**: `Get View Model` 노드의 출력 핀을 끌어
+`Break DRSkin View Model` 을 놓으면 `SkinId / DisplayName / PreviewIcon / bUnlocked / bEquipped / UnlockHint / bIsNoneSlot` 이 모두 나온다.
+> 핀이 너무 많으면 Break 노드 우클릭 → **Split Struct Pin** 대신
+> `Get View Model` 핀에서 바로 드래그 → 멤버 이름 검색이 더 빠르다.
+
+### 4-5. BP 함수 `UpdateStateImage` 만들기
+
+My Blueprint → Functions → `+` → 이름 `UpdateStateImage`
+
+```
+[Function Entry]
+   └─exec─▶ [Set Brush from Texture]   Target = Img_State, bMatchSize = false
+                Texture ◀── [Select]
+                              Option 0(=Index 0) : Tex_Normal
+                              Option 1           : Tex_Hovered
+                              Option 2           : Tex_Selected
+                              Index ◀── (아래 계산)
+```
+
+Index 계산 — **Select (Int)** 대신 `Branch` 두 개가 더 읽기 쉽다:
+
+```
+[Branch]  Condition ◀── ViewModel.bEquipped
+   True  ─▶ [Set Brush from Texture]  Texture = Tex_Selected
+   False ─▶ [Branch]  Condition ◀── bIsHovering
+                True  ─▶ [Set Brush from Texture]  Texture = Tex_Hovered
+                False ─▶ [Set Brush from Texture]  Texture = Tex_Normal
+```
+
+> **잠긴 칸도 `Tex_Normal` 을 쓴다** — 전용 잠금 아트가 아직 없다(§15.12-2 확정).
+> 잠김 표시는 `Img_Lock` + 썸네일 회색조(`GetThumbnailTint`)가 담당한다.
+
+### 4-6. 그래프 — 호버 / 클릭
+
+`Btn_Slot` Details → Events 에서 `On Hovered`, `On Unhovered`, `On Clicked` 를 각각 `+`:
+
+```
+[On Hovered (Btn_Slot)]   ─▶ [Set bIsHovering] = true   ─▶ [Update State Image]
+[On Unhovered (Btn_Slot)] ─▶ [Set bIsHovering] = false  ─▶ [Update State Image]
+
+[On Clicked (Btn_Slot)]   ─▶ [Handle Clicked]           ← ② C++ BlueprintCallable
+                                 └─ Return Value(bool) ─▶ [Branch]
+                                        False ─▶ (선택) 흔들림 애니메이션 재생
+```
+
+> `HandleClicked` 는 C++ 이 소속 화면을 찾아 `TryEquip(ViewModel.SkinId)` 를 부른다.
+> **성공 시 목록이 통째로 다시 그려지므로 BP 가 선택 표시를 직접 바꿀 필요가 없다.**
+> `false` 는 "잠겨서 거절됨" — 연출을 붙이고 싶을 때만 쓴다
+> (조건 문구는 화면 쪽 `OnEquipRejected` 로도 온다).
+
+**컴파일 → 저장.**
+
+---
+
+## STEP 5 — `RT_CosmeticPreview` + `M_CosmeticPreview`
+
+**위치**: `Content/Blueprints/UI/Wardrobe/` (RT) / `.../Wardrobe/Material/` (머티리얼)
+
+### 5-1. 렌더 타깃
+
+우클릭 → Materials & Textures → **Render Target** → 이름 `RT_CosmeticPreview`
+
+| 항목 | 값 |
+|---|---|
+| Size X / Y | **512 / 1024** (세로형 — 프리뷰 영역 781×1080 비율) |
+| Render Target Format | **RTF RGBA16f** ★HDR + 알파가 필요하다★ |
+
+> `RTF RGBA8` 로 두면 `SCS_SceneColorHDR` 의 HDR 값이 잘린다.
+
+### 5-2. 프리뷰 머티리얼
+
+우클릭 → Material → 이름 `M_CosmeticPreview`
+
+**Details**
+
+| 항목 | 값 |
+|---|---|
+| Material Domain | **User Interface** |
+| Blend Mode | **Translucent** |
+| Shading Model | **Unlit** |
+
+**노드 배선** — ★알파가 "역불투명도"라 반전이 필요하다★ (§5.8.4)
+
+```
+[TextureSampleParameter2D]  Parameter Name: Tex
+        │ RGB ────────────────────────────────▶ Emissive Color
+        │ A ──▶ [OneMinus (1-x)] ─────────────▶ Opacity
+```
+
+- `Tex` 의 Default Texture 에 `RT_CosmeticPreview` 를 넣어 두면 미리보기가 편하다
+  (런타임에는 C++ 이 같은 이름의 파라미터에 다시 넣는다)
+- `OneMinus` 노드: 우클릭 → `OneMinus` 검색
+
+> **왜 반전인가**: 엔진 정의상 `SCS_SceneColorHDR` 의 알파는 **Inv Opacity** 다.
+> 아무 것도 없는 픽셀 A=1, 캐릭터 A=0 → `1 - A` 가 곧 불투명도가 된다.
+> 이 덕분에 배경이 뚫려 **뒤에 깔린 청색 글로우(`Img_CharBack`)가 비쳐 보인다.**
+
+---
+
+## STEP 6 — `WBP_CosmeticPreview`
+
+**위치**: `Content/Blueprints/UI/Wardrobe/`
+**부모 클래스**: `DRCosmeticPreviewWidget`
+
+### 6-1. 출처표
+
+| 이름 | 출처 | 꺼내는 법 |
+|---|---|---|
+| `PreviewMaterial` | **[C++]** EditDefaultsOnly | ④ Class Defaults → `M_CosmeticPreview` 지정 |
+| `PreviewTextureParameter` | **[C++]** EditDefaultsOnly | ④ 기본 `Tex` — STEP 5 의 파라미터 이름과 같으면 그대로 둔다 |
+| `YawPerPixel` | **[C++]** EditDefaultsOnly | ④ 기본 0.5. **부호를 뒤집으면 회전 방향이 반대** |
+| `OnPreviewReady(Material)` | **[C++]** BIE | ① Override ▼ |
+| `OnPreviewUnavailable()` | **[C++]** BIE | ① Override ▼ |
+| `Img_Preview` | **[위젯]** | 6-2 |
+
+### 6-2. Designer 계층
+
+```
+[Root]
+└── Img_Preview   [Image]
+        Visibility = ★Visible★   (SelfHitTestInvisible 이면 드래그가 안 먹는다)
+        Brush 는 비워 둔다 — 런타임에 머티리얼이 들어간다
+```
+
+루트 위젯(캔버스 없이 Image 하나)이면 된다. Image 를 루트로 끌어다 놓는다.
+
+> ★가장 흔한 실수★: Image 의 Visibility 가 기본 `Self Hit Test Invisible` 이면
+> 마우스 드래그 이벤트가 위젯에 도달하지 않아 **회전이 안 된다.**
+> 루트는 C++ 이 강제로 `Visible` 로 맞추지만 **자식 Image 는 디자이너 몫이다.**
+
+### 6-3. Class Defaults
+
+Class Defaults → Details 에서:
+- **Preview Material = `M_CosmeticPreview`**
+- Preview Texture Parameter = `Tex`
+- Yaw Per Pixel = `0.5`
+
+### 6-4. Graph 배선
+
+```
+[Event On Preview Ready]              ← ① Override ▼
+   │ Material (입력 핀)
+   └─exec─▶ [Set Brush from Material]   Target = Img_Preview
+                 Material ◀── Material 핀
+```
+
+```
+[Event On Preview Unavailable]        ← ① Override ▼
+   └─exec─▶ [Set Visibility]  Target = self,  In Visibility = Collapsed
+```
+
+> 두 번째가 **§15.12 의 폴백**이다 — 레벨에 프리뷰 스테이지를 안 놓았을 때
+> 프리뷰 영역만 접히고 칸 목록은 정상 동작한다.
+
+**드래그 회전은 BP 배선이 필요 없다.** C++ 의 `NativeOnMouseButtonDown/Move/Up` 이 처리한다.
+
+**컴파일 → 저장.**
+
+---
+
+## STEP 7 — `BP_CosmeticPreviewStage`
+
+**위치**: `Content/Blueprints/Actor/Lobby/`
+**만들기**: 우클릭 → Blueprint Class → **All Classes 에서 `DRCosmeticPreviewStage` 검색**
+
+### 7-1. 컴포넌트 추가
+
+C++ 이 준 컴포넌트 3개는 이미 계층에 있다 (**[C++]** — Components 패널에 회색으로 보인다):
+`SceneRoot` (루트) / `PreviewSpawnPoint` / `CaptureComponent`
+
+여기에 **조명을 직접 추가한다** — 맵 밖에 두면 월드 조명이 닿지 않아 캐릭터가 새까맣게 나온다:
+
+| 추가할 컴포넌트 | 위치(대략) | 설정 |
+|---|---|---|
+| `KeyLight` [Rect Light] | 캐릭터 앞 왼쪽 위 | Intensity 를 눈으로 조정 |
+| `FillLight` [Rect Light] | 앞 오른쪽 | Key 보다 약하게 |
+| `RimLight` [Spot Light] | 뒤쪽 | 실루엣 강조 (선택) |
+
+> 조명은 `SceneRoot` 아래에 붙인다. 액터를 옮기면 통째로 따라간다.
+
+### 7-2. 배치 조정 (Viewport)
+
+- `PreviewSpawnPoint` → 캐릭터가 설 자리. 원점 근처에 둔다.
+- `CaptureComponent` → 캐릭터를 바라보게 회전 + 거리 조절.
+  **Details 에서 `FOV Angle` 을 30~40 정도로 낮추면** 왜곡이 줄어 인물 사진처럼 나온다.
+
+### 7-3. Class Defaults
+
+| 항목 | 값 |
+|---|---|
+| **Render Target** | `RT_CosmeticPreview` ★필수★ |
+| Backdrop Actors | 비워 둔다 (배경을 투명하게 쓰므로) |
+| Base Yaw | 캐릭터가 카메라를 정면으로 보는 각도. 보통 `180` 근처 — **STEP 12 에서 눈으로 맞춘다** |
+
+> `CaptureComponent` 의 나머지 설정(`CaptureSource`, `PrimitiveRenderMode`, `bCaptureEveryFrame`)은
+> **C++ 생성자가 이미 잡아 뒀다.** 건드리지 않는다.
+
+### 7-4. 레벨 배치
+
+`LobbyMap` 을 열고 `BP_CosmeticPreviewStage` 를 드래그 → **Location Z 를 `-20000`** 으로.
+
+> ★맵 안에 두면 안 된다★ — `PRM_UseShowOnlyList` 는 **캡처만** 격리하지 일반 뷰를 가리지 않는다.
+> 맵 안에 두면 로비를 돌아다니다 프리뷰 캐릭터를 만난다.
+
+---
+
+## STEP 8 — `WBP_Wardrobe` ★본체★
+
+**위치**: `Content/Blueprints/UI/Wardrobe/`
+**부모 클래스**: `DRWardrobeScreenWidget`
+
+### 8-1. 출처표
+
+| 이름 | 출처 | 꺼내는 법 |
+|---|---|---|
+| `OnRefreshSkins()` | **[C++]** BIE | ① Override ▼ ← **칸 목록을 그리는 핵심** |
+| `OnCategoryChanged(Category)` | **[C++]** BIE | ① (선택 — 탭 표시는 C++ 이 알아서 한다) |
+| `OnEquipRejected(SkinId, UnlockHint)` | **[C++]** BIE | ① (선택 — 잠금 안내 토스트) |
+| `OnSkinEquipped(SkinId)` | **[C++]** BIE | ① (선택 — 사운드 등) |
+| `OnSkinNewlyUnlocked(SkinId)` | **[C++]** BIE | ① (선택 — 해금 토스트) |
+| `GetCurrentSkinViewModels(out)` | **[C++]** BlueprintCallable | ② 우클릭 검색 |
+| `ClearAll()` | **[C++]** BlueprintCallable | ② (Clear All 버튼용) |
+| `RequestClose()` | **[C++]** BlueprintCallable | ② (필요 시) |
+| `ClearAllKey` / `DefaultCategory` | **[C++]** EditDefaultsOnly | ④ Class Defaults (기본값 그대로 두면 된다) |
+| **`Preview_Character`** | **[C++]** BindWidgetOptional | ★위젯 이름을 정확히 이렇게★ |
+| **`SlotWidgetClass`** | **[BP변수]** | 직접 만든다 (8-4) |
+
+### 8-2. Designer 계층 — 위에서부터 순서대로 배치
+
+루트 캔버스에 **아래 순서 그대로** 드래그한다. **Canvas Panel 은 나중에 넣은 것이 앞에 그려진다**(§15.3).
+
+```
+[Root] CanvasPanel  (이름: RootCanvas)
+ │
+ ├─1─ Img_Dim              [Image]
+ │      Anchor: 전체(왼쪽 위/오른쪽 아래 늘리기 프리셋) · Offset L/T/R/B = 0
+ │      Brush → Image 비움 / **Tint = (0, 0, 0, 0.608)**
+ │
+ ├─2─ Img_BGGlow           [Image]
+ │      Anchor: 중앙 · Alignment (0.5, 0.5) · Position (0,0) · Size 1601 x 901
+ │      Brush → **Image = MI_UI_Wardrobe_BGGlow** (머티리얼도 Image 슬롯에 넣는다)
+ │
+ ├─3─ Img_CharBack         [Image]
+ │      Anchor: 왼쪽 위 · Position (895, 2) · Size 868 x 1076
+ │      Brush → Image = MI_UI_Wardrobe_CharBack
+ │
+ ├─4─ Img_PanelFrame       [Image]
+ │      Anchor: 왼쪽 위 · Position (151, 147) · Size 820 x 839
+ │      Brush → Image = T_Wardrobe_PanelFrame
+ │
+ ├─5─ Preview_Character    [WBP_CosmeticPreview]  ★이름 고정★
+ │      Anchor: 왼쪽 위 · Position (938, 0) · Size 781 x 1080
+ │
+ ├─6─ Txt_Title            [Text]
+ │      Anchor: 왼쪽 위 · Position (207, 52)
+ │      Text "WARDROBE" · Font BrunoAceSC-Regular_Font · Size 48 · Color #EAF2FF
+ │
+ ├─7─ Overlay_TabBar       [Overlay]
+ │      Anchor: 왼쪽 위 · Position (202, 139) · Size 496 x 44
+ │      ├── Img_TabBarBG   [Image]  Fill/Fill · Brush Image = T_Wardrobe_TabBar
+ │      └── HBox_Tabs      [Horizontal Box]  Fill/Fill
+ │            ├── Tab_Head  [WBP_WardrobeTab]   Slot: Size = Fill(1.0)
+ │            ├── Tab_Face  [WBP_WardrobeTab]   Slot: Size = Fill(1.0)
+ │            ├── Tab_Body  [WBP_WardrobeTab]   Slot: Size = Fill(1.0)
+ │            └── Tab_Tail  [WBP_WardrobeTab]   Slot: Size = Fill(1.0)
+ │
+ ├─8─ Scroll_Slots         [Scroll Box]
+ │      Anchor: 왼쪽 위 · Position (224, 227) · Size 672 x 677
+ │      Orientation = Vertical
+ │      **Scroll Bar Visibility = Collapsed**   (§15.12-6 확정)
+ │      Allow Overscroll = ✖
+ │      └── Grid_Slots     [Uniform Grid Panel]
+ │             Slot Padding = (6, 6, 6, 6)
+ │
+ ├─9─ Btn_ClearAll         [Button]
+ │      Anchor: 오른쪽 아래 · Alignment (1, 1) · Position (-64, -64) · Size 112 x 117
+ │      Style Normal/Hovered/Pressed 의 Image = T_Wardrobe_ClearAll
+ │      (Hovered Tint 1.15 / Pressed Tint 0.85 로 살짝 변화를 준다)
+ │
+ └─10─ Img_ScreenFX        [Image]
+        Anchor: 중앙 · Alignment (0.5,0.5) · Position (0,0) · Size 1753 x 993
+        Brush → Image = MI_UI_Wardrobe_ScreenFX
+        ★Visibility = `Self Hit Test Invisible`★  ← 클릭을 먹지 않게
+```
+
+> **좌표 입력 위치**: 위젯 선택 → Details 패널 맨 위 **Slot (Canvas Panel Slot)** 섹션.
+> Anchor 프리셋 버튼 → 원하는 정렬 → 그 아래 Position/Size 에 숫자를 넣는다.
+
+**탭 4개의 Category 지정** — 각 탭을 선택하고 Details 패널의 **`Category`**(**[C++]** 상속 변수)를:
+
+| 위젯 | Category |
+|---|---|
+| `Tab_Head` | Head |
+| `Tab_Face` | Face |
+| `Tab_Body` | Body |
+| `Tab_Tail` | Tail |
+
+**탭 라벨** — 각 탭의 `Txt_Label` 은 자식 WBP 안에 있어 부모에서 직접 못 고친다.
+→ **가장 간단한 방법**: `WBP_WardrobeTab` 에 `Label` [BP변수, Text, Instance Editable] 을 하나 만들고
+`Event Pre Construct` 에서 `Set Text (Txt_Label) = Label` 을 연결한 뒤,
+부모에서 탭마다 `Label` 에 "HEAD"/"FACE"/"BODY"/"TAIL" 을 입력한다.
+
+### 8-3. Class Defaults
+
+Class Defaults → Details:
+- `Default Category` = **Head**
+- `Clear All Key` = **C** (기본값)
+
+### 8-4. BP 변수 만들기
+
+My Blueprint → Variables → `+`
+
+| 이름 | 타입 | 기본값 |
+|---|---|---|
+| `SlotWidgetClass` | **Class Reference → `DRWardrobeSlotWidget`** | `WBP_WardrobeSlot` |
+
+> 타입 고를 때: 검색창에 `DRWardrobeSlotWidget` → 오른쪽 화살표 → **Class Reference** 를 고른다.
+> (Object Reference 를 고르면 Create Widget 의 Class 핀에 못 꽂는다)
+
+### 8-5. ★핵심★ 칸 목록 그리기
+
+My Blueprint → **Override ▼ → `On Refresh Skins`**
+
+```
+[Event On Refresh Skins]
+   │
+   ├─exec─▶ [Clear Children]              Target = Grid_Slots
+   │
+   ├─exec─▶ [Get Current Skin View Models]        ← ② C++ BlueprintCallable
+   │             └─ Out View Models (배열 출력 핀)
+   │                        │
+   ├─exec─▶ [For Each Loop] ◀─ Array 핀에 위 배열 연결
+   │             │
+   │             │  Loop Body:
+   │             ├─exec─▶ [Create Widget]
+   │             │           Class         ◀── [Get SlotWidgetClass]
+   │             │           Owning Player ◀── [Get Owning Player]
+   │             │           └─ Return Value  (이 핀을 아래 두 곳에 재사용)
+   │             │
+   │             ├─exec─▶ [Set Skin View Model]
+   │             │           Target        ◀── Create Widget 의 Return Value
+   │             │           In View Model ◀── For Each 의 **Array Element**
+   │             │
+   │             └─exec─▶ [Add Child to Uniform Grid]
+   │                         Target     ◀── Grid_Slots
+   │                         Content    ◀── Create Widget 의 Return Value
+   │                         In Row     ◀── [Divide (integer)]  A = Array Index, B = 3
+   │                         In Column  ◀── [% (integer)]       A = Array Index, B = 3
+   │                         └─ Return Value (Uniform Grid Slot)
+   │                               │
+   │                               ├─exec─▶ [Set Horizontal Alignment]  = Left
+   │                               └─exec─▶ [Set Vertical Alignment]    = Top
+   │
+   └─ Completed: (아무 것도 안 함)
+```
+
+**노드 찾는 법**
+- `Clear Children` : `Grid_Slots` 를 그래프로 드래그 → 핀에서 드래그 → `Clear Children` 검색
+- `Divide (integer)` : 우클릭 → `/` 또는 `Divide` 검색 → **integer** 버전 선택
+- `% (integer)` : 우클릭 → `%` 또는 `Percent` 검색 → integer 버전
+- `Add Child to Uniform Grid` : `Grid_Slots` 핀에서 드래그 → 검색
+
+> **왜 3 으로 나누고 나머지를 쓰나**: 그리드 폭 672 = `216×3 + 12×2` 로 **3열이 딱 맞는다**(§15.5).
+> Row/Column 을 직접 넣으므로 패딩을 바꿔도 3열이 구조적으로 보장된다.
+
+> **`Array Index` 가 안 보이면**: `For Each Loop` 노드를 쓴 게 맞는지 확인한다
+> (`For Each Loop with Break` 에도 있다). 매크로를 접었다 펴면 나타난다.
+
+### 8-6. Clear All 버튼
+
+`Btn_ClearAll` Details → Events → `On Clicked` `+`
+
+```
+[On Clicked (Btn_ClearAll)] ──exec──▶ [Clear All]     ← ② C++ BlueprintCallable
+```
+
+> `C` 키는 **C++ 의 `NativeOnKeyDown` 이 이미 처리한다.** BP 배선이 필요 없다.
+> ESC 닫기도 마찬가지다.
+
+### 8-7. (선택) 잠금 안내 · 해금 토스트
+
+```
+[Event On Equip Rejected]      ← ① Override ▼
+   │ Skin Id, Unlock Hint (Text)
+   └─▶ 원하는 안내 위젯에 Unlock Hint 를 표시
+
+[Event On Skin Newly Unlocked] ← ① Override ▼
+   └─▶ "새 옷 해금!" 토스트
+```
+
+**컴파일 → 저장.**
+
+---
+
+## STEP 9 — `BP_DRPlayerController` 배선
+
+`Content/Blueprints/` 아래의 플레이어 컨트롤러 BP 를 연다
+(업그레이드 화면이 이미 배선돼 있는 그 BP 다 — `OnUpgradeScreenOpened` 를 찾으면 된다).
+
+### 9-1. Class Defaults
+
+Details 에서 **`Wardrobe Screen Widget Class` = `WBP_Wardrobe`** 지정 (**[C++]** EditDefaultsOnly)
+
+### 9-2. Graph — 화면 생성/제거
+
+**Override ▼ → `On Wardrobe Screen Opened`**
+
+```
+[Event On Wardrobe Screen Opened]
+   ├─exec─▶ [Create Widget]
+   │           Class         ◀── [Get Wardrobe Screen Widget Class]   ← ③ C++ 변수
+   │           Owning Player ◀── [Self]
+   │           └─ Return Value
+   ├─exec─▶ [Set Wardrobe Screen Widget]  ◀── Return Value            ← ③ C++ 변수(ReadWrite)
+   └─exec─▶ [Add to Viewport]  Target ◀── Return Value
+```
+
+**Override ▼ → `On Wardrobe Screen Closed`**
+
+```
+[Event On Wardrobe Screen Closed]
+   ├─▶ [Get Wardrobe Screen Widget] ─▶ [Is Valid] ─exec─▶ [Remove from Parent]
+   └─exec─▶ [Set Wardrobe Screen Widget] = None
+```
+
+> **입력 모드(`FInputModeUIOnly`)와 커서 표시는 C++ 이 이미 처리한다.** BP 에서 또 하지 않는다.
+> 기존 `OnUpgradeScreenOpened` 배선을 그대로 흉내 내면 된다.
+
+---
+
+## STEP 10 — `DA_CosmeticCatalog`
+
+**위치**: `Content/Blueprints/Progression/`
+
+우클릭 → Miscellaneous → **Data Asset** → 클래스 목록에서 **`DRCosmeticCatalog`** 선택
+→ 이름 `DA_CosmeticCatalog`
+
+### 10-1. 스킨 추가
+
+`Skins` 배열에 `+` 를 눌러 항목을 만들고:
+
+| 필드 | 값 | 비고 |
+|---|---|---|
+| `Skin Id` | `Skin.Gardener.Head.Cap` 같은 형식 | ★변경 금지★ — 세이브에 저장된다 |
+| `Owner Class` | Gardener / VendingMachine / RobotVacuum | |
+| `Category` | Head / Face / Body / Tail | 어느 탭에 나올지 |
+| `Display Name` | 표시명 | 한글 가능 |
+| `Required Achievements` | 비워 두면 **기본 제공(항상 해금)** | 테스트 중엔 비워 두는 게 편하다 |
+| `Third Person` → `Skeletal Mesh` 또는 `Static Mesh` | 부착할 메시 | |
+| `Third Person` → `Socket Name` | 붙을 소켓 이름 | ★없으면 캐릭터 원점(발밑)에 붙는다★ |
+| `First Person` | **비워 둔다** | 1인칭에선 자기 모자가 안 보인다 |
+| `Preview Icon` | 아직 없으면 비워 둔다 | 칸이 비어 보일 뿐 동작엔 문제없다 |
+
+> **메시가 아직 없다면**: 아무 스태틱 메시(큐브 등)로 항목 하나만 만들어도
+> 옷장 UI 전체 흐름을 확인할 수 있다.
+
+### 10-2. 연결 ★이걸 빼먹으면 목록이 안 나온다★
+
+`Content/Blueprints/Progression/DA_ProgressionConfig` 를 열고
+**`Cosmetic Catalog` 에 `DA_CosmeticCatalog`** 를 지정한다.
+
+> `UDRGameInstance::GetCosmeticCatalog()` 가 `ProgressionConfig->CosmeticCatalog` 를 읽는다.
+> GameInstance BP 에 새 슬롯을 늘리지 않고 여기에 매달아 두었다(§4.4).
+
+### 10-3. 소켓 추가
+
+부착물이 제 위치에 붙으려면 **캐릭터 스켈레톤에 소켓이 있어야 한다.**
+로봇의 스켈레탈 메시 에셋을 열고 → Skeleton Tree → 원하는 본 우클릭 → **Add Socket** →
+이름을 `Cosmetic_Head` / `Cosmetic_Face` / `Cosmetic_Body` / `Cosmetic_Tail` 로.
+
+---
+
+## STEP 11 — `BP_Wardrobe` 액터 + 레벨 배치
+
+**위치**: `Content/Blueprints/Actor/Lobby/`
+**만들기**: 우클릭 → Blueprint Class → All Classes → **`DRWardrobe`**
+
+### 11-1. 컴포넌트 설정
+
+C++ 이 준 3개(`WardrobeMesh` 루트 / `InteractionBox` / `InteractionWidget`)를 채운다:
+
+| 컴포넌트 | 설정 |
+|---|---|
+| `WardrobeMesh` | 옷장 스태틱 메시 지정 |
+| `InteractionBox` | Box Extent 를 옷장 크기에 맞게 |
+| `InteractionWidget` | Widget Class = 프롬프트 위젯 (없으면 비워 둬도 동작) |
+
+### 11-2. (선택) BP 이벤트
+
+```
+[Event On Local Player Entered Range]   ← ① Override ▼,  입력: b Has Any Skin
+   └─▶ 프롬프트 문구 갱신 / 문 열림 애니메이션
+
+[Event On Local Player Left Range]      ← ①
+[Event On Interact Blocked]             ← ①  (고를 옷이 하나도 없을 때)
+```
+
+### 11-3. 레벨 배치
+
+`LobbyMap` 의 **FreeRoam 구역** (업그레이드 장치 근처)에 드래그해 놓는다.
+
+> ★대기실(WaitingRoom)에는 놓을 수 없다★ — 그 상태에서는 플레이어 폰 자체가 없다(§1.4).
+
+---
+
+## STEP 12 — 동작 확인 순서
+
+에디터에서 `LobbyMap` PIE 실행 후, 콘솔(`~`)에 순서대로:
+
+| # | 명령 / 동작 | 기대 결과 | 실패 시 확인 |
+|---|---|---|---|
+| 1 | `DRDumpCosmetic` | 로그에 `카탈로그=지정됨` | STEP 10-2 연결 |
+| 2 | `DROpenWardrobe` | 옷장 화면이 뜬다 | STEP 9-1 위젯 클래스 지정 |
+| 3 | 탭 4개 클릭 | 필이 옮겨 다닌다 | STEP 8-2 의 Category 지정 |
+| 4 | 칸 목록 | 첫 칸이 "기본", 그 뒤로 카탈로그 항목 | STEP 8-5 배선 |
+| 5 | 좌측 3D 캐릭터 | 캐릭터가 보인다 | 스테이지 배치(STEP 7-4), `RenderTarget` 지정, 조명 |
+| 6 | 드래그 | 캐릭터가 돈다 | `Img_Preview` 의 Visibility = Visible |
+| 7 | 칸 클릭 | 그 자리에서 옷이 바뀐다 | 소켓 이름(STEP 10-3), 메시 지정 |
+| 8 | `C` 키 | 전부 벗는다 | — |
+| 9 | `ESC` | 닫힌다 | — |
+| 10 | `DRUnlockSkins` 후 재확인 | 잠긴 칸이 열린다 | `Required Achievements` 설정 |
+| 11 | PIE 재시작 | **고른 옷이 유지된다** | 세이브 정상 |
+
+### 자주 걸리는 것
+
+| 증상 | 원인 |
+|---|---|
+| 칸이 하나도 안 나온다 (기본 칸만) | `DA_ProgressionConfig.CosmeticCatalog` 미지정 (STEP 10-2) |
+| 프리뷰가 검은 사각형 | 스테이지에 **조명이 없다** (STEP 7-1) |
+| 프리뷰가 아예 안 보인다 | 레벨에 `BP_CosmeticPreviewStage` 미배치 → 로그에 경고가 찍힌다 |
+| 프리뷰 배경이 검게 채워진다 | `M_CosmeticPreview` 의 `1 - A` 반전 누락 (STEP 5-2) 또는 RT 포맷이 RGBA8 |
+| 드래그가 안 먹는다 | `Img_Preview` Visibility 가 `Self Hit Test Invisible` |
+| 부착물이 발밑에 박힌다 | 소켓 이름 오타/미생성 (STEP 10-3) — 로그에 경고가 찍힌다 |
+| 클릭이 안 먹는다 | `Img_ScreenFX` 의 Visibility 가 `Visible` (→ `Self Hit Test Invisible` 로) |
+| 탭 필이 안 옮겨진다 | 탭들의 `Category` 가 전부 같은 값 |

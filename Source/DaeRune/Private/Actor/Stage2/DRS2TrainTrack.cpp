@@ -4,6 +4,23 @@
 
 #include "Components/SplineComponent.h"
 #include "Engine/StaticMesh.h"
+#include "DaeRune/DRLogChannels.h"
+
+namespace
+{
+	const TCHAR* SplinePointTypeToString(ESplinePointType::Type Type)
+	{
+		switch (Type)
+		{
+		case ESplinePointType::Linear:				return TEXT("Linear");
+		case ESplinePointType::Curve:				return TEXT("Curve");
+		case ESplinePointType::Constant:			return TEXT("Constant");
+		case ESplinePointType::CurveClamped:		return TEXT("CurveClamped");
+		case ESplinePointType::CurveCustomTangent:	return TEXT("CurveCustomTangent");
+		default:									return TEXT("?");
+		}
+	}
+}
 
 ADRS2TrainTrack::ADRS2TrainTrack()
 {
@@ -44,6 +61,43 @@ float ADRS2TrainTrack::ProjectWorldLocationToDistance(const FVector& WorldLocati
 
 	const float InputKey = Spline->FindInputKeyClosestToWorldLocation(WorldLocation);
 	return Spline->GetDistanceAlongSplineAtSplineInputKey(InputKey);
+}
+
+void ADRS2TrainTrack::LogTrackInfo()
+{
+	if (!Spline)
+	{
+		UE_LOG(LogDR, Error, TEXT("[S2Track] %s: 스플라인이 없습니다."), *GetName());
+		return;
+	}
+
+	const int32 PointCount = Spline->GetNumberOfSplinePoints();
+
+	UE_LOG(LogDR, Warning, TEXT("[S2Track] %s: 전체 길이 %.0f uu / 포인트 %d개 / ClosedLoop=%s"),
+		*GetName(), Spline->GetSplineLength(), PointCount,
+		Spline->IsClosedLoop() ? TEXT("ON(★꺼야 한다)") : TEXT("off"));
+
+	UE_LOG(LogDR, Warning, TEXT("[S2Track]   액터 트랜스폼: 위치 %s / 회전 %s / 스케일 %s"),
+		*GetActorLocation().ToCompactString(),
+		*GetActorRotation().ToCompactString(),
+		*GetActorScale3D().ToCompactString());
+
+	for (int32 Index = 0; Index < PointCount; ++Index)
+	{
+		const float Distance = Spline->GetDistanceAlongSplineAtSplinePoint(Index);
+
+		UE_LOG(LogDR, Warning, TEXT("[S2Track]   [%d] 월드 위치 %s"), Index,
+			*Spline->GetLocationAtSplinePoint(Index, ESplineCoordinateSpace::World).ToCompactString());
+
+		// ★포인트 타입은 **그 포인트에서 다음 포인트로 가는 구간**의 보간 방식이다.
+		//   따라서 마지막 포인트의 타입은 나가는 구간이 없어 의미가 없다.
+		const bool bHasOutgoingSegment = (Index < PointCount - 1);
+
+		UE_LOG(LogDR, Warning, TEXT("[S2Track]   [%d] 거리 %8.0f  타입 %-18s %s"),
+			Index, Distance,
+			SplinePointTypeToString(Spline->GetSplinePointType(Index)),
+			bHasOutgoingSegment ? TEXT("") : TEXT("(마지막 - 타입 무의미)"));
+	}
 }
 
 // ================= 선로 메시 자동 생성 =================
