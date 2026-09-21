@@ -37,6 +37,13 @@
 #include "Components/AudioComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Game/DRGameInstance.h"
+#include "Game/DRCosmeticCatalog.h"
+#include "Engine/AssetManager.h"
+#include "Engine/StreamableManager.h"
+#include "Engine/SkeletalMesh.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 #include "DaeRune/DRLogChannels.h"
 
 ADRCharacter::ADRCharacter()
@@ -495,6 +502,9 @@ void ADRCharacter::UpdateMeshVisibility()
 			Weapon->SetVisibility(true);
 		}
 	}
+
+	// 부착물도 부모 메시와 같은 가시성 규칙을 따르게 한다
+	SyncCosmeticVisibility();
 }
 
 void ADRCharacter::ShowFirstPersonPart(UStaticMesh* InPartMesh)
@@ -583,6 +593,9 @@ void ADRCharacter::SetWaitingRoomVisibility(bool bInWaitingRoom)
 		{
 			ThirdPersonPartMesh->SetVisibility(false);
 		}
+
+		// 부착물도 3인칭 규칙(주인도 보임)으로 맞춘다
+		SyncCosmeticVisibility();
 
 		// 대기실에서는 오버헤드 닉네임 숨김 (WBP_PlayerSlot UI에서 표시)
 		SetOverheadWidgetVisibility(false);
@@ -1225,6 +1238,12 @@ void ADRCharacter::MulticastHandleRevive_Implementation()
 	{
 		FacialExpressionComponent->RevertToDefault();
 	}
+
+	// ★코스메틱 재적용 — 반드시 필요하다★
+	// ADRCharacterBase::Dissolve() 가 사망 시 본체/무기의 머티리얼 슬롯 0 을 Dissolve 머티리얼로
+	// 덮어쓰는데, 부활 복원은 BP(K2_OnCharacterRevived)가 "Dissolve 파라미터"만 되돌린다.
+	// 여기서 다시 입히지 않으면 부활할 때마다 옷이 기본 외형으로 돌아간다. (Plan.md 1.7 / 15.11)
+	RefreshSkinVisuals();
 }
 
 void ADRCharacter::OnRep_Dead()
@@ -1268,4 +1287,287 @@ void ADRCharacter::PlayDeathMontage_Internal()
 	{
 		bDeathMontagePlayed = true;
 	}
+}
+
+// ========================= 코스메틱 외형 (Plan.md 5.4 / 15.11) =========================
+
+namespace
+{
+	// 소프트 참조 하나를 로드 목록에 담는다 (중복 제거)
+	void DRGatherPath(const FSoftObjectPath& Path, TArray<FSoftObjectPath>& OutPaths)
+	{
+		if (Path.IsValid())
+		{
+			OutPaths.AddUnique(Path);
+		}
+	}
+
+	void DRGatherMaterialOverrides(const TArray<FDRSkinMaterialOverride>& Overrides,
+		TArray<FSoftObjectPath>& OutPaths)
+	{
+		for (const FDRSkinMaterialOverride& Override : Overrides)
+		{
+			DRGatherPath(Override.Material.ToSoftObjectPath(), OutPaths);
+		}
+	}
+
+	void DRGatherAttachSpec(const FDRSkinAttachSpec& Spec, TArray<FSoftObjectPath>& OutPaths)
+	{
+		DRGatherPath(Spec.SkeletalMesh.ToSoftObjectPath(), OutPaths);
+		DRGatherPath(Spec.StaticMesh.ToSoftObjectPath(), OutPaths);
+		DRGatherMaterialOverrides(Spec.MaterialOverrides, OutPaths);
+	}
+
+	void DRGatherSkinAssets(const FDRSkinDefinition& Def, TArray<FSoftObjectPath>& OutPaths)
+	{
+		DRGatherAttachSpec(Def.ThirdPerson, OutPaths);
+		DRGatherAttachSpec(Def.FirstPerson, OutPaths);
+		DRGatherMaterialOverrides(Def.BodyMaterialsTP, OutPaths);
+		DRGatherMaterialOverrides(Def.BodyMaterialsFP, OutPaths);
+		DRGatherMaterialOverrides(Def.WeaponMaterials, OutPaths);
+	}
+}
+
+void ADRCharacter::ApplyCosmeticSkins(const TArray<FName>& SkinIds)
+{
+	const int32 CategoryCount = DRGetCosmeticCategoryCount();
+
+	// 길이를 항상 카테고리 수로 정규화한다 — 이후 로직이 인덱스로 접근하기 때문이다
+	AppliedSkinIds.SetNum(CategoryCount);
+	for (int32 Index = 0; Index < CategoryCount; ++Index)
+	{
+		AppliedSkinIds[Index] = SkinIds.IsValidIndex(Index) ? SkinIds[Index] : NAME_None;
+	}
+
+	RefreshSkinVisuals();
+}
+
+void ADRCharacter::RefreshSkinVisuals()
+{
+	// 이전 요청을 무효화한다. 세대 번호를 올려 두면 늦게 도착한 콜백이 스스로 물러난다.
+	++CosmeticApplyGeneration;
+	if (CosmeticLoadHandle.IsValid())
+	{
+		CosmeticLoadHandle->CancelHandle();
+		CosmeticLoadHandle.Reset();
+	}
+
+	const UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
+	const UDRCosmeticCatalog* Catalog = GI ? GI->GetCosmeticCatalog() : nullptr;
+
+	TArray<FSoftObjectPath> ToLoad;
+	if (Catalog)
+	{
+		for (const FName& SkinId : AppliedSkinIds)
+		{
+			if (const FDRSkinDefinition* Def = Catalog->FindSkin(SkinId))
+			{
+				DRGatherSkinAssets(*Def, ToLoad);
+			}
+		}
+	}
+
+	// 붙일 에셋이 없다 = 기본 외형. 로드를 기다릴 것도 없이 바로 정리한다.
+	if (ToLoad.Num() == 0)
+	{
+		BuildCosmeticVisuals();
+		return;
+	}
+
+	const uint32 Generation = CosmeticApplyGeneration;
+	TWeakObjectPtr<ADRCharacter> WeakThis(this);
+
+	CosmeticLoadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
+		MoveTemp(ToLoad),
+		FStreamableDelegate::CreateLambda([WeakThis, Generation]()
+		{
+			ADRCharacter* Self = WeakThis.Get();
+			if (!Self) return;
+
+			// 로드 도중 다른 옷을 고르거나 캐릭터가 재스폰됐으면 이 결과는 버린다.
+			// (이 검사가 없으면 빠르게 여러 벌을 눌렀을 때 마지막이 아닌 옷이 입혀질 수 있다)
+			if (Self->CosmeticApplyGeneration != Generation) return;
+
+			Self->BuildCosmeticVisuals();
+		}));
+}
+
+void ADRCharacter::BuildCosmeticVisuals()
+{
+	ClearCosmeticAttachments();
+
+	// 1) 본체 머티리얼을 BP 기본값으로 되돌린다.
+	//    이게 없으면 옷을 벗어도 직전 옷의 머티리얼이 남는다.
+	if (const ADRCharacter* CDO = GetClass() ? GetClass()->GetDefaultObject<ADRCharacter>() : nullptr)
+	{
+		ResetMeshMaterialsFrom(GetMesh(), CDO->GetMesh());
+		ResetMeshMaterialsFrom(FirstPersonMesh, CDO->FirstPersonMesh);
+		ResetMeshMaterialsFrom(Weapon, CDO->Weapon);
+	}
+
+	const UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
+	const UDRCosmeticCatalog* Catalog = GI ? GI->GetCosmeticCatalog() : nullptr;
+	if (!Catalog) return;
+
+	const int32 CategoryCount = DRGetCosmeticCategoryCount();
+	CosmeticAttachTP.SetNum(CategoryCount);
+	CosmeticAttachFP.SetNum(CategoryCount);
+
+	// 2) Head → Face → Body → Tail 순으로 겹쳐 적용한다.
+	//    같은 머티리얼 슬롯을 두 카테고리가 건드리면 ★나중이 이긴다★ —
+	//    순서를 카테고리 순으로 고정해 결과를 결정적으로 만든다.
+	for (int32 Index = 0; Index < CategoryCount; ++Index)
+	{
+		const FName SkinId = AppliedSkinIds.IsValidIndex(Index) ? AppliedSkinIds[Index] : NAME_None;
+
+		const FDRSkinDefinition* Def = Catalog->FindSkin(SkinId);
+		if (!Def) continue;
+
+		ApplyCosmeticMaterials(GetMesh(), Def->BodyMaterialsTP);
+		ApplyCosmeticMaterials(FirstPersonMesh, Def->BodyMaterialsFP);
+		ApplyCosmeticMaterials(Weapon, Def->WeaponMaterials);
+
+		CosmeticAttachTP[Index] = SpawnCosmeticAttachment(Def->ThirdPerson, GetMesh(), false);
+		CosmeticAttachFP[Index] = SpawnCosmeticAttachment(Def->FirstPerson, FirstPersonMesh, true);
+	}
+}
+
+UMeshComponent* ADRCharacter::SpawnCosmeticAttachment(const FDRSkinAttachSpec& Spec,
+	USkeletalMeshComponent* Parent, bool bFirstPerson)
+{
+	if (!Parent || !Spec.HasMesh()) return nullptr;
+
+	UMeshComponent* Created = nullptr;
+
+	// 로드는 RefreshSkinVisuals 가 끝내 놓았으므로 여기서는 Get() 이 유효하다.
+	// (그래도 null 이면 조용히 건너뛴다 — 에셋이 지워진 경우)
+	if (USkeletalMesh* SkeletalMesh = Spec.SkeletalMesh.Get())
+	{
+		USkeletalMeshComponent* SkeletalComp = NewObject<USkeletalMeshComponent>(this);
+		SkeletalComp->SetSkeletalMesh(SkeletalMesh);
+
+		if (Spec.bUseLeaderPose)
+		{
+			// 같은 스켈레톤을 공유하는 의상 — 부모 포즈를 그대로 따라간다.
+			// 전용 ABP 가 필요 없고 애니메이션 평가도 한 번만 돈다.
+			SkeletalComp->SetLeaderPoseComponent(Parent);
+		}
+
+		Created = SkeletalComp;
+	}
+	else if (UStaticMesh* StaticMesh = Spec.StaticMesh.Get())
+	{
+		UStaticMeshComponent* StaticComp = NewObject<UStaticMeshComponent>(this);
+		StaticComp->SetStaticMesh(StaticMesh);
+		Created = StaticComp;
+	}
+
+	if (!Created) return nullptr;
+
+	Created->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Created->RegisterComponent();
+
+	// LeaderPose 는 스켈레톤을 공유하므로 소켓 개념이 없다 — 부모 원점에 붙인다.
+	const FName SocketName = Spec.bUseLeaderPose ? NAME_None : Spec.SocketName;
+
+	if (!SocketName.IsNone() && !Parent->DoesSocketExist(SocketName))
+	{
+		UE_LOG(LogDR, Warning,
+			TEXT("[Cosmetic] %s: 부모 메시에 '%s' 소켓이 없습니다 — 부착물이 캐릭터 원점에 붙습니다."),
+			*GetName(), *SocketName.ToString());
+	}
+
+	Created->AttachToComponent(Parent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, SocketName);
+	Created->SetRelativeTransform(Spec.RelativeTransform);
+
+	ApplyCosmeticMaterials(Created, Spec.MaterialOverrides);
+
+	// 1인칭 부착물은 뷰모델과 같은 그림자/바운즈 규칙을 따른다
+	if (bFirstPerson)
+	{
+		Created->bCastDynamicShadow = false;
+		Created->CastShadow = false;
+		Created->BoundsScale = 4.f;	// FirstPersonMesh 와 동일 — depth 압축 WPO 로 인한 컬링 pop 방지
+	}
+
+	// 가시성 플래그는 부모 메시를 그대로 따라간다 (대기실/1인칭 전환 상태까지 자동 반영)
+	Created->SetOnlyOwnerSee(Parent->bOnlyOwnerSee);
+	Created->SetOwnerNoSee(Parent->bOwnerNoSee);
+	Created->SetVisibility(Parent->IsVisible());
+
+	return Created;
+}
+
+void ADRCharacter::ApplyCosmeticMaterials(UMeshComponent* Target,
+	const TArray<FDRSkinMaterialOverride>& Overrides)
+{
+	if (!Target) return;
+
+	const int32 NumSlots = Target->GetNumMaterials();
+
+	for (const FDRSkinMaterialOverride& Override : Overrides)
+	{
+		UMaterialInterface* Material = Override.Material.Get();
+		if (!Material) continue;
+
+		if (Override.MaterialSlot < 0 || Override.MaterialSlot >= NumSlots)
+		{
+			UE_LOG(LogDR, Warning,
+				TEXT("[Cosmetic] %s: 머티리얼 슬롯 %d 이 범위를 벗어났습니다 (슬롯 수 %d) — 건너뜁니다."),
+				*GetName(), Override.MaterialSlot, NumSlots);
+			continue;
+		}
+
+		Target->SetMaterial(Override.MaterialSlot, Material);
+	}
+}
+
+void ADRCharacter::ResetMeshMaterialsFrom(UMeshComponent* Target, const UMeshComponent* Source)
+{
+	if (!Target || !Source) return;
+
+	const int32 NumSlots = Target->GetNumMaterials();
+	for (int32 Index = 0; Index < NumSlots; ++Index)
+	{
+		Target->SetMaterial(Index, Source->GetMaterial(Index));
+	}
+}
+
+void ADRCharacter::ClearCosmeticAttachments()
+{
+	auto DestroyAll = [](TArray<TObjectPtr<UMeshComponent>>& Components)
+	{
+		for (TObjectPtr<UMeshComponent>& Component : Components)
+		{
+			if (Component)
+			{
+				Component->DestroyComponent();
+				Component = nullptr;
+			}
+		}
+		Components.Reset();
+	};
+
+	DestroyAll(CosmeticAttachTP);
+	DestroyAll(CosmeticAttachFP);
+}
+
+void ADRCharacter::SyncCosmeticVisibility()
+{
+	auto Sync = [](TArray<TObjectPtr<UMeshComponent>>& Components, const USkeletalMeshComponent* Parent)
+	{
+		if (!Parent) return;
+
+		for (const TObjectPtr<UMeshComponent>& Component : Components)
+		{
+			if (!Component) continue;
+
+			Component->SetOnlyOwnerSee(Parent->bOnlyOwnerSee);
+			Component->SetOwnerNoSee(Parent->bOwnerNoSee);
+			Component->SetVisibility(Parent->IsVisible());
+		}
+	};
+
+	Sync(CosmeticAttachTP, GetMesh());
+	Sync(CosmeticAttachFP, FirstPersonMesh);
 }

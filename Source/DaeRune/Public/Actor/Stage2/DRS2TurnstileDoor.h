@@ -51,26 +51,29 @@ protected:
 	// ===== 날개 수집 =====
 
 	// 한쪽으로 회전하는 날개 그룹의 컴포넌트 태그 (보통 3개)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Turnstile")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "S2|Turnstile")
 	FName GroupATag = TEXT("TurnstileA");
 
 	// 반대쪽으로 회전하는 날개 그룹의 컴포넌트 태그 (보통 3개)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Turnstile")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "S2|Turnstile")
 	FName GroupBTag = TEXT("TurnstileB");
 
 	// ===== 회전량 =====
 
-	// 그룹 A 가 완전히 열렸을 때의 **로컬 회전 변화량** (원점 기준 상대값).
-	// 개찰구 날개는 보통 Yaw 회전이다. 예: (0, 90, 0)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Turnstile")
+	// 그룹 A 가 완전히 열렸을 때의 회전 변화량.
+	// ★**문(액터) 기준 축**이다. 날개 메시를 어떻게 돌려 배치했든 이 축으로 돈다.
+	//   개찰구 날개는 보통 Yaw 회전이다. 예: (0, 90, 0)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "S2|Turnstile")
 	FRotator OpenRotationA = FRotator(0.f, 90.f, 0.f);
 
 	// true 면 그룹 B 는 A 의 정확히 반대 방향으로 회전한다 (부호 반전).
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Turnstile")
+	// 회전이 문 기준 축이므로 배치 방향과 무관하게 항상 반대로 돈다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "S2|Turnstile")
 	bool bMirrorGroupB = true;
 
 	// bMirrorGroupB 가 false 일 때 그룹 B 의 회전량을 직접 지정한다.
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Turnstile",
+	// 두 그룹을 같은 방향으로 돌리고 싶을 때 A 와 같은 값을 넣는다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "S2|Turnstile",
 		meta = (EditCondition = "!bMirrorGroupB"))
 	FRotator OpenRotationB = FRotator(0.f, -90.f, 0.f);
 

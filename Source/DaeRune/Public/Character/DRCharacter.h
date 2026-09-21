@@ -83,6 +83,36 @@ public:
 	// (InitializePlayerDefaultAttributes 가 활성 GE 를 제거하고 BaseValue 를 0으로 리셋한다).
 	void RefreshUpgradeEffects();
 
+	// ========== 코스메틱 외형 (Plan.md 5.4 / 15.11) ==========
+
+	/**
+	 * 카테고리별 스킨 4종을 이 캐릭터에 반영한다. ★멱등★ — 몇 번 호출해도 안전하다.
+	 *
+	 * 부착물 컴포넌트는 ★복제하지 않는다★. 각 머신이 자기 목록을 보고 로컬로 만든다.
+	 * 그래서 이 함수는 인게임(복제된 PlayerState) · 대기실 디스플레이 · 옷장 3D 프리뷰가
+	 * 전부 공유하는 단일 적용 경로다.
+	 *
+	 * 메시/머티리얼은 비동기로 로드되므로 적용이 한두 프레임 늦을 수 있다.
+	 * @param SkinIds 길이가 EDRCosmeticCategory::Count 여야 한다. 짧으면 없는 칸은 비어 있는 것으로 본다.
+	 */
+	void ApplyCosmeticSkins(const TArray<FName>& SkinIds);
+
+	// 마지막으로 적용한 목록으로 다시 적용한다.
+	// ★부활 직후 반드시 호출해야 한다★ — Dissolve 가 본체 머티리얼 슬롯 0 을 덮어쓰기 때문이다.
+	void RefreshSkinVisuals();
+
+	// 지금 적용돼 있는 목록 (디버그/재적용용)
+	const TArray<FName>& GetAppliedSkins() const { return AppliedSkinIds; }
+
+	/**
+	 * 부착물의 가시성 플래그를 부모 메시와 맞춘다.
+	 *
+	 * ★UpdateMeshVisibility() / SetWaitingRoomVisibility() 가 부모 메시의 플래그를 뒤집으므로
+	 *   그 두 곳에서 반드시 함께 호출해야 한다★ — 안 하면 대기실에서 자기 모자가 안 보이거나
+	 *   1인칭 전환 시 부착물만 남는다.
+	 */
+	void SyncCosmeticVisibility();
+
 	// �����̳� �ý��� ����
 	UPROPERTY(EditDefaultsOnly, Category = "Container System")
 	int32 NumContainers = 4;
@@ -327,6 +357,43 @@ protected:
 	virtual float GetMoveSpeed() override;
 
 private:
+	// ========== 코스메틱 외형 (내부) ==========
+
+	// 로드가 끝난 뒤 실제로 컴포넌트를 만들고 머티리얼을 얹는다
+	void BuildCosmeticVisuals();
+
+	// 기존 부착물 컴포넌트를 전부 파괴한다
+	void ClearCosmeticAttachments();
+
+	// 부착 명세대로 컴포넌트 1개를 만들어 붙인다. 붙일 메시가 없으면 nullptr.
+	class UMeshComponent* SpawnCosmeticAttachment(const struct FDRSkinAttachSpec& Spec,
+		USkeletalMeshComponent* Parent, bool bFirstPerson);
+
+	// 슬롯 인덱스 기반 머티리얼 오버라이드 적용
+	void ApplyCosmeticMaterials(class UMeshComponent* Target,
+		const TArray<struct FDRSkinMaterialOverride>& Overrides);
+
+	// Target 의 머티리얼을 Source(=BP CDO 의 같은 컴포넌트) 값으로 되돌린다.
+	// ★이 리셋이 없으면 옷을 벗어도 이전 머티리얼이 남는다★
+	void ResetMeshMaterialsFrom(class UMeshComponent* Target, const class UMeshComponent* Source);
+
+	// 지금 적용 중인 스킨 (길이 = EDRCosmeticCategory::Count)
+	UPROPERTY(Transient)
+	TArray<FName> AppliedSkinIds;
+
+	// 카테고리별 부착물 컴포넌트. 런타임 생성이며 복제하지 않는다.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<class UMeshComponent>> CosmeticAttachTP;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<class UMeshComponent>> CosmeticAttachFP;
+
+	// 비동기 로드 핸들 + 세대 번호.
+	// 로드 도중 다른 옷을 고르면 늦게 도착한 콜백이 엉뚱한 외형을 입히므로,
+	// 세대가 어긋난 콜백은 버린다.
+	TSharedPtr<struct FStreamableHandle> CosmeticLoadHandle;
+	uint32 CosmeticApplyGeneration = 0;
+
 	// 부품 드롭 실제 구현 (쿨다운 검사 없음, 권한/보유 검사는 호출부에서 수행)
 	void DoDropCarriedPart();
 

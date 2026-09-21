@@ -57,6 +57,26 @@ void ADRS2MoleBoss::BeginPlay()
 			Level, GetAbilitySystemComponent()
 				? GetAbilitySystemComponent()->GetNumericAttribute(UDRAttributeSet::GetMaxHealthAttribute())
 				: 0.f);
+
+		// ★기본공격(발톱)이 실제로 부여됐는지 확인한다.
+		//   BT 는 Abilities.MoleBoss.Claw 태그로 TryActivateAbilitiesByTag 를 호출하므로,
+		//   DA_EnemyCharacterClassInfo 의 MoleBoss StartupAbilities 에 GA 가 빠져 있으면
+		//   활성이 그냥 false 를 돌려주고 보스가 스킬만 쓴 채 기본공격을 영원히 하지 않는다.
+		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+		{
+			FGameplayTagContainer ClawTag;
+			ClawTag.AddTag(FDRGameplayTags::Get().Abilities_MoleBoss_Claw);
+
+			TArray<FGameplayAbilitySpec*> MatchingSpecs;
+			ASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(ClawTag, MatchingSpecs, false);
+
+			if (MatchingSpecs.Num() == 0)
+			{
+				UE_LOG(LogDR, Error,
+					TEXT("[MoleBoss] 기본공격 어빌리티(Abilities.MoleBoss.Claw)가 부여되지 않았습니다. ")
+					TEXT("DA_EnemyCharacterClassInfo 의 MoleBoss 항목 StartupAbilities 에 GA_Mole_Claw 를 추가하세요."));
+			}
+		}
 	}
 }
 
