@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Actor/Stage2/DRS2SlidePuzzleTypes.h"
 #include "UI/Widget/DRUserWidget.h"
 #include "DRS2PuzzleTileWidget.generated.h"
 
@@ -12,23 +13,9 @@ class UImage;
 class UOverlay;
 class UDRS2PuzzleTileWidget;
 
-/**
- * 8퍼즐 보드 기하 상수 (SSOT).
- *
- * 조각 위젯과 보드 위젯이 같은 숫자를 각자 들고 있으면 언젠가 어긋난다.
- * 좌표 변환 / 인접 판정 / 셔플이 전부 이 네 값에서 파생되므로 여기만 고치면 된다.
- * 4x4(15퍼즐)로 바꾸려면 GridSize 를 4 로 올리고 CellSize 를 새 텍스처 크기로 맞춘다.
- */
-namespace DRS2Puzzle
-{
-	inline constexpr int32 GridSize  = 3;                    // 한 변의 칸 수
-	inline constexpr int32 CellCount = GridSize * GridSize;  // 9 (빈칸 포함한 전체 칸)
-	inline constexpr int32 TileCount = CellCount - 1;        // 8 (실제 조각 수)
-
-	inline constexpr float CellSize  = 224.f;                // 조각 PNG 원본 크기
-	inline constexpr float CellGap   = 2.f;                  // 칸 사이 간격
-	inline constexpr float CellPitch = CellSize + CellGap;   // 226 = 한 칸 이동 거리
-}
+// 보드 기하 상수(namespace DRS2Puzzle)는 DRS2SlidePuzzleTypes.h 로 옮겼다 (2026-09-20).
+// 서버 액터 ADRS2SlidePuzzle 이 같은 상수와 인접 판정을 써야 하는데,
+// 액터가 UI 위젯 헤더를 include 하게 둘 수는 없기 때문이다.
 
 /**
  * 조각이 지금 무엇을 하고 있는가. 셋 중 하나만 성립한다.

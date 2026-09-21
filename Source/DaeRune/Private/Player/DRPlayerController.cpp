@@ -14,6 +14,7 @@
 #include "Actor/DRCleanserSite.h"
 #include "Actor/Stage2/DRS2InteractProp.h"
 #include "Actor/Stage2/DRS2SlidePuzzle.h"
+#include "UI/Widget/Stage2/DRS2SlidePuzzleWidget.h"
 #include "Actor/Stage2/DRS2TrainCar.h"
 #include "Actor/Stage2/DRS2Train.h"
 #include "Interaction/DRInteractable.h"
@@ -425,10 +426,35 @@ void ADRPlayerController::ServerRequestInteract_Implementation(AActor* Interacta
 	if (ADRS2InteractProp* Prop = Cast<ADRS2InteractProp>(Interactable))
 	{
 		// 서버 측 검증: 클라이언트가 보낸 포인터를 그대로 신뢰하지 않고 상태/거리 확인
-		if (!Prop->CanInteract(DRCharacter)) return;
+		if (!Prop->CanInteract(DRCharacter))
+		{
+			// 프롬프트는 떴는데 눌러도 반응이 없는 두 원인 중 하나다 (비활성 / 사망 / 부품 운반 중).
+			UE_LOG(LogDR, Warning, TEXT("[S2Prop] %s 조작 거부: CanInteract=false"), *Prop->GetName());
+			return;
+		}
 
-		const float DistSq = FVector::DistSquared(DRCharacter->GetActorLocation(), Prop->GetActorLocation());
-		if (DistSq > FMath::Square(MaxInteractDistance)) return;
+		// ★거리는 '보이는 물체' 기준으로 잰다 (2026-09-21)★
+		// 프롭의 루트는 빈 SceneComponent 다 (눌림 연출 때문에 PropMesh 를 자식으로 내렸다).
+		// 그래서 BP 에서 메시를 루트에서 떼어 두면 액터 원점과 실제로 보이는 물체가 갈라지고,
+		// 원점 기준으로 재면 눈앞에 서 있어도 거부된다 — 프롬프트는 메시에 닿은 라인트레이스라
+		// 멀쩡히 떠 있으므로 증상이 "F 를 눌러도 아무 반응이 없다"로만 나타나 원인을 찾기 어렵다.
+		// 콜리전까지의 최단 거리로 재면 메시를 어디에 두든 플레이어가 보는 것과 판정이 일치한다.
+		FVector ClosestPoint = FVector::ZeroVector;
+		float Dist = Prop->ActorGetDistanceToCollision(DRCharacter->GetActorLocation(), ECC_Visibility, ClosestPoint);
+		if (Dist < 0.f)
+		{
+			// 콜리전 프리미티브가 없는 프롭 (라인트레이스에도 안 잡히지만 방어적으로 둔다)
+			Dist = FVector::Dist(DRCharacter->GetActorLocation(), Prop->GetActorLocation());
+		}
+
+		if (Dist > MaxInteractDistance)
+		{
+			UE_LOG(LogDR, Warning, TEXT("[S2Prop] %s 조작 거부: 거리 %.0f > %.0f"),
+				*Prop->GetName(), Dist, MaxInteractDistance);
+			return;
+		}
+
+		UE_LOG(LogDR, Log, TEXT("[S2Prop] %s 조작 수락 (서버)"), *Prop->GetName());
 
 		Prop->ServerHandleInteract(DRCharacter);
 		return;
@@ -796,26 +822,128 @@ ADRS2InteractProp* ADRPlayerController::FindPropByLineTrace()
 
 void ADRPlayerController::Client_OpenSlidePuzzleUI_Implementation(ADRS2SlidePuzzle* Puzzle)
 {
-	if (!IsLocalController() || !Puzzle) return;
-
-	// 실제 위젯 생성은 HUD/BP 가 담당한다 (WBP_S2SlidePuzzle)
-	OnSlidePuzzleUIRequested.Broadcast(Puzzle);
+	OpenSlidePuzzleScreen(Puzzle);
 }
 
-void ADRPlayerController::Server_ReportSlidePuzzleSolved_Implementation(ADRS2SlidePuzzle* Puzzle)
+void ADRPlayerController::OpenSlidePuzzleScreen(ADRS2SlidePuzzle* Puzzle)
+{
+	if (!IsLocalController() || !IsValid(Puzzle))
+	{
+		UE_LOG(LogDR, Warning, TEXT("[S2Puzzle] 창 열기 무시 (로컬 컨트롤러=%d, 퍼즐=%s)"),
+			IsLocalController() ? 1 : 0, *GetNameSafe(Puzzle));
+		return;
+	}
+
+	// 다른 전체화면 UI 와 입력 모드가 겹치지 않게 먼저 닫는다 (OpenUpgradeScreen 과 같은 가드)
+	if (bIsSettingsMenuOpen)
+	{
+		CloseSettingsMenu();
+	}
+
+	// 이미 열려 있으면 아무것도 하지 않는다 (같은 단말을 두 번 눌렀을 때).
+	if (bIsSlidePuzzleOpen)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[S2Puzzle] 창이 이미 열린 상태로 기록돼 있다 - 열기를 건너뛴다"));
+		return;
+	}
+
+	if (!SlidePuzzleWidgetClass)
+	{
+		UE_LOG(LogDR, Error,
+			TEXT("[S2Puzzle] SlidePuzzleWidgetClass 미지정 - BP_DRPlayerController 의 UI|Stage2 에 WBP_S2SlidePuzzle 을 넣을 것"));
+		return;
+	}
+
+	// ★창은 재사용한다★ 판 상태는 서버에 있으므로 새로 만들어도 동작하지만,
+	// 재사용하면 등장 연출이 매번 다시 돌지 않고 조각 8개를 다시 만들 일도 줄어든다.
+	if (!IsValid(SlidePuzzleWidget))
+	{
+		SlidePuzzleWidget = CreateWidget<UDRS2SlidePuzzleWidget>(this, SlidePuzzleWidgetClass);
+		if (!SlidePuzzleWidget)
+		{
+			UE_LOG(LogDR, Error, TEXT("[S2Puzzle] 8퍼즐 창 생성 실패 (SlidePuzzleWidgetClass 확인)"));
+			return;
+		}
+	}
+
+	bIsSlidePuzzleOpen = true;
+
+	// ★입력 모드는 여기서만 바꾼다★ (대기실 UI · 업그레이드 · 옷장과 같은 위치)
+	//  포커스 위젯을 지정하지 않는 이유: 위젯이 NativeConstruct(=아래 AddToViewport) 에서
+	//  SetKeyboardFocus 를 부르므로, 순서상 위젯이 마지막에 포커스를 가져간다.
+	SetInputMode(FInputModeUIOnly());
+	SetShowMouseCursor(true);
+
+	// ★BindToPuzzle 이 AddToViewport 보다 먼저다★
+	// 그래야 NativeConstruct 가 조각을 만든 직후 서버 보드를 그대로 그릴 수 있다.
+	SlidePuzzleWidget->BindToPuzzle(Puzzle);
+	SlidePuzzleWidget->AddToViewport(10);
+
+	UE_LOG(LogDR, Log, TEXT("[S2Puzzle] 8퍼즐 창을 열었다 (%s)"), *GetNameSafe(SlidePuzzleWidget));
+
+	OnSlidePuzzleScreenOpened(Puzzle);   // BP 연출 훅 (선택)
+}
+
+void ADRPlayerController::CloseSlidePuzzleScreen()
+{
+	if (!IsLocalController()) return;
+	if (!bIsSlidePuzzleOpen) return;
+
+	// ★플래그를 먼저 내린다★
+	// 아래 RemoveFromParent 가 위젯의 NativeDestruct 를 부르고, 거기서 이 함수가 한 번 더 들어온다.
+	bIsSlidePuzzleOpen = false;
+
+	if (IsValid(SlidePuzzleWidget))
+	{
+		// 파괴하지 않는다. 다음에 열 때 같은 인스턴스를 다시 쓴다.
+		SlidePuzzleWidget->RemoveFromParent();
+	}
+
+	OnSlidePuzzleScreenClosed();   // BP 연출 훅 (선택)
+
+	// 레벨 컨텍스트(메인메뉴/튜토리얼/대기실/스테이지)에 맞는 모드로 되돌린다.
+	RestoreDefaultInputMode();
+}
+
+void ADRPlayerController::Client_SlidePuzzleBusy_Implementation(ADRS2SlidePuzzle* Puzzle, APlayerState* Occupant)
+{
+	if (!IsLocalController() || !Puzzle) return;
+
+	UE_LOG(LogDR, Log, TEXT("[S2Puzzle] 8퍼즐이 사용 중이다 (조작자: %s)"), *GetNameSafe(Occupant));
+
+	OnSlidePuzzleScreenBusy(Occupant);
+}
+
+// ===== 8퍼즐 조작 요청 (2026-09-20) =====
+// 넷 다 액터에 위임만 한다. 점유자 검사와 인접 검사는 ADRS2SlidePuzzle 안에서 하고,
+// 거절은 조용히 무시된다 (보드가 안 바뀌므로 복제도 없다 - 위젯은 확정 타임아웃으로 잠금을 푼다).
+
+void ADRPlayerController::Server_SlidePuzzleMove_Implementation(ADRS2SlidePuzzle* Puzzle, int32 TileId)
 {
 	if (!IsValid(Puzzle)) return;
 
-	// NotifySolved 안에도 bSolved 가드가 있지만, 여기서 먼저 걸러 로그를 깨끗하게 둔다.
-	if (Puzzle->IsSolved()) return;
+	Puzzle->TryMove(this, TileId);
+}
 
-	// ★보드 상태를 서버가 재검증하지는 않는다★
-	// 퍼즐 판정이 클라에만 있는 구조라 '정답을 서버가 다시 맞춰 보는' 경로가 없다.
-	// 협동 PvE 라 조작 위험은 자기 팀 진행을 앞당기는 정도이고, 되돌릴 이득이 없어 허용한다.
-	// 서버 권위가 필요해지면 보드 상태 자체를 ADRS2SlidePuzzle 로 옮기고 이동을 RPC 로 받아야 한다.
-	UE_LOG(LogDR, Log, TEXT("[S2Puzzle] %s 가 8퍼즐 해결을 보고"), *GetNameSafe(this));
+void ADRPlayerController::Server_SlidePuzzleUndo_Implementation(ADRS2SlidePuzzle* Puzzle)
+{
+	if (!IsValid(Puzzle)) return;
 
-	Puzzle->NotifySolved();
+	Puzzle->TryUndo(this);
+}
+
+void ADRPlayerController::Server_SlidePuzzleReset_Implementation(ADRS2SlidePuzzle* Puzzle)
+{
+	if (!IsValid(Puzzle)) return;
+
+	Puzzle->TryReset(this);
+}
+
+void ADRPlayerController::Server_SlidePuzzleRelease_Implementation(ADRS2SlidePuzzle* Puzzle)
+{
+	if (!IsValid(Puzzle)) return;
+
+	Puzzle->ReleaseControl(this);
 }
 void ADRPlayerController::SetupInputComponent()
 {
@@ -1328,6 +1456,8 @@ void ADRPlayerController::HandleInteract()
 	// 스테이지2 상호작용 프롭 (레버/버튼/단말) — Plan6 §5.5-b
 	if (CurrentDetectedProp)
 	{
+		UE_LOG(LogDR, Log, TEXT("[S2Prop] F -> %s 조작 요청 (클라)"), *CurrentDetectedProp->GetName());
+
 		ServerRequestInteract(CurrentDetectedProp);
 		return;
 	}

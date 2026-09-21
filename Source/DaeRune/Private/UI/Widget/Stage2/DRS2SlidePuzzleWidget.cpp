@@ -2,13 +2,17 @@
 
 #include "UI/Widget/Stage2/DRS2SlidePuzzleWidget.h"
 
+#include "Actor/Stage2/DRS2SlidePuzzle.h"
 #include "Animation/WidgetAnimation.h"
 #include "Components/Button.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/TextBlock.h"
 #include "Engine/Texture2D.h"
-#include "GameFramework/PlayerController.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerState.h"
+#include "Player/DRPlayerController.h"
+#include "TimerManager.h"
 #include "DaeRune/DRLogChannels.h"
 
 // ================= 생명주기 =================
@@ -37,10 +41,9 @@ void UDRS2SlidePuzzleWidget::NativeConstruct()
 
 	BuildTiles();
 
-	if (bStartOnConstruct)
-	{
-		StartNewPuzzle();
-	}
+	// PC 가 Add to Viewport 보다 먼저 BindToPuzzle 을 부르므로, 그때는 조각이 아직 없다.
+	// 조각이 준비된 지금 다시 한 번 맞춘다 (판 상태는 서버에 있으므로 언제 그려도 같은 결과다).
+	SyncFromPuzzle();
 
 	if (Anim_Intro)
 	{
@@ -54,6 +57,25 @@ void UDRS2SlidePuzzleWidget::NativeConstruct()
 
 void UDRS2SlidePuzzleWidget::NativeDestruct()
 {
+	// ★창이 사라지는 모든 경로에서 점유를 반납한다★
+	// RequestClose 를 거치지 않는 경로(레벨 전환, HUD 파괴, 사망 처리)가 있고,
+	// 여기서 놓치면 "아무도 못 여는 단말"이 된다. 서버는 점유자가 아닌 반납을 무시하므로
+	// RequestClose 와 여기서 두 번 와도 안전하다.
+	ReleaseControlOnServer();
+
+	// RequestClose 를 거치지 않고 사라지는 경로(레벨 전환, HUD 파괴, 사망 처리)에서도
+	// 입력 모드가 UI 에 묶인 채 남지 않게 한다. 이미 닫혔으면 PC 쪽 가드가 무시한다.
+	CloseScreenOnController();
+
+	ClearAckWait();
+
+	if (ADRS2SlidePuzzle* Puzzle = OwnerPuzzle.Get())
+	{
+		Puzzle->OnBoardChanged.RemoveDynamic(this, &UDRS2SlidePuzzleWidget::HandleBoardChanged);
+		Puzzle->OnDigitRevealed.RemoveDynamic(this, &UDRS2SlidePuzzleWidget::HandleDigitRevealed);
+		Puzzle->OnOccupantChanged.RemoveDynamic(this, &UDRS2SlidePuzzleWidget::HandleOccupantChanged);
+	}
+
 	for (TPair<int32, TObjectPtr<UDRS2PuzzleTileWidget>>& Pair : TileWidgets)
 	{
 		if (Pair.Value)
@@ -63,7 +85,65 @@ void UDRS2SlidePuzzleWidget::NativeDestruct()
 	}
 	TileWidgets.Empty();
 
+	// 다음에 열릴 때는 조각을 새로 만들고 처음부터 찍는다 (애니메이션 없이).
+	DisplayBoard.Reset();
+	bBoardDrawnOnce = false;
+	PendingSlides   = 0;
+
 	Super::NativeDestruct();
+}
+
+// ================= 액터와의 연결 =================
+
+void UDRS2SlidePuzzleWidget::BindToPuzzle(ADRS2SlidePuzzle* InPuzzle)
+{
+	if (!IsValid(InPuzzle))
+	{
+		UE_LOG(LogDR, Error, TEXT("[S2Puzzle] BindToPuzzle 에 유효하지 않은 액터가 들어왔다"));
+		return;
+	}
+
+	OwnerPuzzle = InPuzzle;
+
+	// ★AddUnique 여야 한다★ - HUD 가 위젯을 재사용하면 열 때마다 여기로 들어온다.
+	// 중복 바인딩되면 이동 한 번에 ApplyServerBoard 가 두 번 돌아 조각이 튄다.
+	InPuzzle->OnBoardChanged.AddUniqueDynamic(this, &UDRS2SlidePuzzleWidget::HandleBoardChanged);
+	InPuzzle->OnDigitRevealed.AddUniqueDynamic(this, &UDRS2SlidePuzzleWidget::HandleDigitRevealed);
+	InPuzzle->OnOccupantChanged.AddUniqueDynamic(this, &UDRS2SlidePuzzleWidget::HandleOccupantChanged);
+
+	SyncFromPuzzle();
+}
+
+void UDRS2SlidePuzzleWidget::SyncFromPuzzle()
+{
+	ADRS2SlidePuzzle* Puzzle = OwnerPuzzle.Get();
+	if (!Puzzle || TileWidgets.Num() == 0)
+	{
+		// 조각이 아직 없다 (Add to Viewport 전). NativeConstruct 가 다시 부른다.
+		return;
+	}
+
+	ApplyServerBoard(Puzzle->GetBoard());
+	ShowCode(Puzzle->GetRevealedDigit());   // 이미 풀린 판이면 번호가 바로 뜬다 (-1 이면 표시 없음)
+}
+
+void UDRS2SlidePuzzleWidget::HandleBoardChanged(const TArray<int32>& NewBoard, int32 /*NewMoveCount*/)
+{
+	ApplyServerBoard(NewBoard);
+}
+
+void UDRS2SlidePuzzleWidget::HandleDigitRevealed(int32 Digit)
+{
+	ShowCode(Digit);
+}
+
+void UDRS2SlidePuzzleWidget::HandleOccupantChanged(APlayerState* NewOccupant)
+{
+	// 점유가 늦게 도착해도 이 시점에 잠금이 풀린다
+	// (Client_OpenSlidePuzzleUI RPC 와 Occupant 복제는 도착 순서가 보장되지 않는다).
+	UpdateInteractivity();
+
+	OnOccupantChanged(NewOccupant);
 }
 
 // ================= 조각 생성 =================
@@ -123,96 +203,118 @@ void UDRS2SlidePuzzleWidget::BuildTiles()
 	OnBoardBuilt();
 }
 
-// ================= 판 진행 =================
+// ================= 서버 보드 -> 화면 =================
 
-void UDRS2SlidePuzzleWidget::StartNewPuzzle()
+void UDRS2SlidePuzzleWidget::ApplyServerBoard(const TArray<int32>& NewBoard)
 {
-	Shuffle();
-
-	StartBoard = Board;
-	History.Empty();
-	PendingSlides = 0;
-	bSolvedOnce   = false;
-	bInputLocked  = false;
-
-	ApplyBoardInstant();
-
-	if (Text_Code)
+	if (NewBoard.Num() != DRS2Puzzle::CellCount)
 	{
-		Text_Code->SetText(FText::GetEmpty());
-		Text_Code->SetRenderOpacity(0.f);
+		// 서버가 아직 판을 안 만들었다 (BeginPlay 이전에 열렸을 때).
+		return;
+	}
+	if (TileWidgets.Num() == 0)
+	{
+		return;
 	}
 
-	RefreshButtons();
-}
-
-void UDRS2SlidePuzzleWidget::Shuffle()
-{
-	// ★무작위 순열을 쓰면 안 된다★ - 9칸을 그냥 섞으면 절반은 아무리 움직여도 안 풀린다
-	// (순열의 짝홀이 정답과 달라진다). 정답에서 출발해 합법 이동만 밟으면 항상 되짚어 갈 수 있다.
-	constexpr int32 MaxAttempts = 8;
-
-	for (int32 Attempt = 0; Attempt < MaxAttempts; ++Attempt)
+	// 다른 칸을 모은다. 이 개수 하나가 연출을 고른다.
+	TArray<int32> Diff;
+	for (int32 i = 0; i < DRS2Puzzle::CellCount; ++i)
 	{
-		Board.Reset(DRS2Puzzle::CellCount);
-		for (int32 i = 1; i < DRS2Puzzle::CellCount; ++i)
+		if (!DisplayBoard.IsValidIndex(i) || DisplayBoard[i] != NewBoard[i])
 		{
-			Board.Add(i);
+			Diff.Add(i);
 		}
-		Board.Add(0);
+	}
 
-		int32 Empty     = DRS2Puzzle::CellCount - 1;
-		int32 PrevEmpty = INDEX_NONE;
+	DisplayBoard = NewBoard;
+	EmptyIndex   = NewBoard.IndexOfByKey(0);
 
-		for (int32 Step = 0; Step < ShuffleSteps; ++Step)
+	ClearAckWait();
+
+	const bool bFirstDraw = !bBoardDrawnOnce;
+
+	if (Diff.Num() == 2 && !bFirstDraw)
+	{
+		// 한 칸 이동. 두 칸 중 새 보드에서 0 이 아닌 쪽이 조각의 새 자리다.
+		const int32 To     = (NewBoard[Diff[0]] != 0) ? Diff[0] : Diff[1];
+		const int32 From   = (To == Diff[0]) ? Diff[1] : Diff[0];
+		const int32 TileId = NewBoard[To];
+
+		PendingSlides = 1;
+		if (TObjectPtr<UDRS2PuzzleTileWidget>* Found = TileWidgets.Find(TileId))
 		{
-			TArray<int32> Candidates = GetNeighbors(Empty);
+			(*Found)->SlideToIndex(To, MoveDuration);
+		}
+		else
+		{
+			PendingSlides = 0;   // 위젯이 없으면 영영 콜백이 안 온다
+		}
 
-			// 직전에 빈칸이 있던 자리로 되돌아가면 방금 한 이동이 취소된다.
-			Candidates.Remove(PrevEmpty);
-			if (Candidates.Num() == 0)
+		OnMoveApplied(TileId, From, To);
+	}
+	else if (Diff.Num() > 0)
+	{
+		// Reset · 첫 오픈 · 어긋남 복구. 여러 조각이 한꺼번에 움직인다.
+		// ★두 번 돌아야 한다★ - 먼저 전부 세고, 그 다음에 이동시킨다.
+		// 한 번에 하면 첫 조각의 콜백이 즉시 돌아와 카운터가 1에서 0으로 떨어지고
+		// 나머지가 출발하기도 전에 잠금이 풀린다.
+		PendingSlides = 0;
+
+		if (!bFirstDraw)
+		{
+			for (int32 i = 0; i < NewBoard.Num(); ++i)
+			{
+				if (NewBoard[i] != 0 && TileWidgets.Contains(NewBoard[i]))
+				{
+					++PendingSlides;
+				}
+			}
+		}
+
+		for (int32 i = 0; i < NewBoard.Num(); ++i)
+		{
+			const int32 TileId = NewBoard[i];
+			if (TileId == 0)
 			{
 				continue;
 			}
-
-			const int32 Pick = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
-			Swap(Board[Empty], Board[Pick]);
-
-			PrevEmpty = Empty;
-			Empty     = Pick;
-		}
-
-		EmptyIndex = Empty;
-
-		// 드물게 제자리로 돌아온다. 그 판은 버리고 다시 섞는다.
-		if (!IsSolved())
-		{
-			return;
+			if (TObjectPtr<UDRS2PuzzleTileWidget>* Found = TileWidgets.Find(TileId))
+			{
+				if (bFirstDraw)
+				{
+					// SnapToIndex 는 완료 델리게이트를 쏘지 않는다 (PendingSlides 를 오염시키지 않는다).
+					(*Found)->SnapToIndex(i);
+				}
+				else
+				{
+					(*Found)->SlideToIndex(i, ResetDuration);
+				}
+			}
 		}
 	}
 
-	UE_LOG(LogDR, Warning, TEXT("[S2Puzzle] 셔플이 %d회 연속 정답 배치로 끝났다. ShuffleSteps(%d) 확인 필요"),
-		MaxAttempts, ShuffleSteps);
-}
+	bBoardDrawnOnce = true;
 
-void UDRS2SlidePuzzleWidget::ApplyBoardInstant()
-{
-	for (int32 i = 0; i < Board.Num(); ++i)
+	UpdateInteractivity();
+
+	ADRS2SlidePuzzle* Puzzle = OwnerPuzzle.Get();
+
+	if (bFirstDraw && Puzzle && Puzzle->GetMoveCount() > 0)
 	{
-		const int32 TileId = Board[i];
-		if (TileId == 0)
-		{
-			continue;
-		}
-		if (TObjectPtr<UDRS2PuzzleTileWidget>* Found = TileWidgets.Find(TileId))
-		{
-			// SnapToIndex 는 완료 델리게이트를 쏘지 않는다 (PendingSlides 를 오염시키지 않기 위해).
-			(*Found)->SnapToIndex(i);
-		}
+		UE_LOG(LogDR, Log, TEXT("[S2Puzzle] 진행 중인 공유 판을 연다 (이동 %d회)"), Puzzle->GetMoveCount());
+
+		OnBoardResumed(Puzzle->GetMoveCount());
+	}
+
+	// 서버가 이미 풀렸다고 했다. 뒤늦게 연 사람(번호 확인용)도 여기로 들어온다.
+	if (!bSolvedOnce && Puzzle && Puzzle->IsSolved())
+	{
+		HandleSolved();
 	}
 }
 
-// ================= 클릭 -> 판정 -> 이동 =================
+// ================= 클릭 -> 이동 요청 =================
 
 void UDRS2SlidePuzzleWidget::HandleTileClicked(int32 InTileId)
 {
@@ -221,14 +323,24 @@ void UDRS2SlidePuzzleWidget::HandleTileClicked(int32 InTileId)
 		return;
 	}
 
-	const int32 From = Board.IndexOfByKey(InTileId);
+	ADRS2SlidePuzzle* Puzzle = OwnerPuzzle.Get();
+	if (!Puzzle)
+	{
+		// 액터 없이는 한 칸도 못 움직인다. HUD 의 BindToPuzzle 누락이 거의 유일한 원인이다.
+		UE_LOG(LogDR, Warning, TEXT("[S2Puzzle] OwnerPuzzle 이 없다. HUD 에서 BindToPuzzle 을 불렀는지 확인할 것"));
+		return;
+	}
+
+	const int32 From = DisplayBoard.IndexOfByKey(InTileId);
 	if (From == INDEX_NONE)
 	{
 		return;
 	}
 
-	// 빈칸과 상하좌우로 맞닿아 있는가. 이것이 8퍼즐의 유일한 이동 조건이다.
-	if (!AreAdjacent(From, EmptyIndex))
+	// 빈칸과 상하좌우로 맞닿아 있는가.
+	// ★이 검사는 '연출용'이다★ - 못 가는 조각을 서버 왕복 없이 즉시 흔들어 주려고 한 번 본다.
+	//   통과해도 이동이 확정된 것은 아니다. 확정은 서버의 TryMove 가 한다.
+	if (!DRS2Puzzle::AreAdjacent(From, EmptyIndex))
 	{
 		if (TObjectPtr<UDRS2PuzzleTileWidget>* Found = TileWidgets.Find(InTileId))
 		{
@@ -238,49 +350,21 @@ void UDRS2SlidePuzzleWidget::HandleTileClicked(int32 InTileId)
 		return;
 	}
 
-	MoveTile(InTileId, MoveDuration, /*bRecordHistory=*/true);
-}
-
-bool UDRS2SlidePuzzleWidget::MoveTile(int32 InTileId, float Duration, bool bRecordHistory)
-{
-	const int32 From = Board.IndexOfByKey(InTileId);
-	if (From == INDEX_NONE || !AreAdjacent(From, EmptyIndex))
-	{
-		return false;
-	}
-
-	// 조각이 빈칸으로 가고, 빈칸은 조각이 있던 자리로 온다.
-	const int32 To = EmptyIndex;
-	Swap(Board[From], Board[To]);
-	EmptyIndex = From;
-
-	if (bRecordHistory)
-	{
-		History.Add(InTileId);
-	}
-
-	// ★잠금과 카운터를 SlideToIndex 보다 먼저 세운다★
-	// Duration 이 0 이면 완료 콜백이 그 자리에서 되돌아오기 때문이다.
-	SetInputLocked(true);
-	PendingSlides = 1;
-
 	if (TObjectPtr<UDRS2PuzzleTileWidget>* Found = TileWidgets.Find(InTileId))
 	{
+		// 눌림 연출은 즉시 재생한다 (왕복 동안 화면이 죽어 있지 않도록). 흔들림과는 배타다.
 		(*Found)->PlayPressFeedback();
-		(*Found)->SlideToIndex(To, Duration);
-	}
-	else
-	{
-		// 위젯이 없으면 영영 콜백이 안 온다. 잠금을 직접 푼다.
-		PendingSlides = 0;
-		SetInputLocked(false);
 	}
 
-	OnMoveApplied(InTileId, From, To);
-	return true;
+	BeginAckWait();
+
+	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwningPlayer()))
+	{
+		PlayerController->Server_SlidePuzzleMove(Puzzle, InTileId);
+	}
 }
 
-void UDRS2SlidePuzzleWidget::HandleSlideFinished(UDRS2PuzzleTileWidget* Tile)
+void UDRS2SlidePuzzleWidget::HandleSlideFinished(UDRS2PuzzleTileWidget* /*Tile*/)
 {
 	// 어디선가 흘러들어온 콜백 방어 (카운터가 음수로 내려가면 잠금이 영영 안 풀린다).
 	if (PendingSlides <= 0)
@@ -290,17 +374,10 @@ void UDRS2SlidePuzzleWidget::HandleSlideFinished(UDRS2PuzzleTileWidget* Tile)
 
 	if (--PendingSlides > 0)
 	{
-		return;
+		return;   // Reset 은 8개가 끝나야 0 이 된다
 	}
 
-	if (!bSolvedOnce && IsSolved())
-	{
-		HandleSolved();
-		return;
-	}
-
-	SetInputLocked(false);
-	RefreshButtons();
+	UpdateInteractivity();
 }
 
 void UDRS2SlidePuzzleWidget::HandleSolved()
@@ -316,7 +393,7 @@ void UDRS2SlidePuzzleWidget::HandleSolved()
 		PlayAnimation(Anim_Solved);
 	}
 
-	UE_LOG(LogDR, Log, TEXT("[S2Puzzle] 8퍼즐 완성 (이동 %d회)"), History.Num());
+	UE_LOG(LogDR, Log, TEXT("[S2Puzzle] 8퍼즐 완성 화면 처리"));
 
 	OnSolvedVisual();
 	OnPuzzleSolved.Broadcast();
@@ -326,77 +403,106 @@ void UDRS2SlidePuzzleWidget::HandleSolved()
 
 void UDRS2SlidePuzzleWidget::RequestUndo()
 {
-	if (bInputLocked || bSolvedOnce || History.Num() == 0)
+	if (bInputLocked || !HasControl() || GetMoveCount() == 0)
 	{
 		return;
 	}
 
-	// 같은 조각을 한 번 더 움직이면 정확히 제자리로 돌아온다. 좌표를 저장할 필요가 없는 이유다.
-	const int32 TileId = History.Last();
+	BeginAckWait();
 
-	// ★되돌리기는 히스토리에 기록하지 않는다★ 기록하면 Undo 가 서로를 되돌리며 제자리걸음을 한다.
-	if (MoveTile(TileId, MoveDuration, /*bRecordHistory=*/false))
+	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwningPlayer()))
 	{
-		History.Pop();
+		PlayerController->Server_SlidePuzzleUndo(OwnerPuzzle.Get());
 	}
 }
 
 void UDRS2SlidePuzzleWidget::RequestReset()
 {
-	if (bInputLocked || bSolvedOnce)
+	if (bInputLocked || !HasControl())
 	{
 		return;
 	}
 
-	// 새로 셔플하지 않는다. 꼬였을 때 원점으로 돌아가는 것이 목적이므로 새 배치를 주면 배신감이 든다.
-	Board      = StartBoard;
-	EmptyIndex = Board.IndexOfByKey(0);
-	History.Empty();
+	BeginAckWait();
 
-	SetInputLocked(true);
-
-	// ★두 번 돌아야 한다★ - 먼저 전부 세고, 그 다음에 이동시킨다.
-	// 한 번에 하면 첫 조각의 콜백이 (0초 이동일 때) 즉시 돌아와 카운터가 1에서 0으로 떨어지고
-	// 나머지 7개가 출발하기도 전에 잠금이 풀린다.
-	PendingSlides = 0;
-	for (int32 i = 0; i < Board.Num(); ++i)
+	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwningPlayer()))
 	{
-		if (Board[i] != 0 && TileWidgets.Contains(Board[i]))
-		{
-			++PendingSlides;
-		}
-	}
-
-	if (PendingSlides == 0)
-	{
-		SetInputLocked(false);
-		RefreshButtons();
-		return;
-	}
-
-	for (int32 i = 0; i < Board.Num(); ++i)
-	{
-		const int32 TileId = Board[i];
-		if (TileId == 0)
-		{
-			continue;
-		}
-		if (TObjectPtr<UDRS2PuzzleTileWidget>* Found = TileWidgets.Find(TileId))
-		{
-			(*Found)->SlideToIndex(i, ResetDuration);
-		}
+		PlayerController->Server_SlidePuzzleReset(OwnerPuzzle.Get());
 	}
 }
 
 void UDRS2SlidePuzzleWidget::RequestClose()
 {
-	if (APlayerController* PlayerController = GetOwningPlayer())
+	ReleaseControlOnServer();
+
+	// ★창을 내리는 주체는 PlayerController 다★
+	// 이 프로젝트의 화면 UI 는 전부 PC 가 소유한다 (대기실 · 게임오버 · 업그레이드 · 옷장).
+	// 위젯 제거도, 입력 모드 복귀(RestoreDefaultInputMode 의 레벨별 분기)도 저쪽 책임이다.
+	if (!CloseScreenOnController())
 	{
-		PlayerController->SetInputMode(FInputModeGameOnly());
-		PlayerController->SetShowMouseCursor(false);
+		RemoveFromParent();   // PC 를 못 찾은 예외 경로에서만 스스로 빠진다
+	}
+}
+
+bool UDRS2SlidePuzzleWidget::CloseScreenOnController()
+{
+	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwningPlayer()))
+	{
+		PlayerController->CloseSlidePuzzleScreen();
+		return true;
+	}
+	return false;
+}
+
+void UDRS2SlidePuzzleWidget::ReleaseControlOnServer()
+{
+	ADRS2SlidePuzzle* Puzzle = OwnerPuzzle.Get();
+	if (!Puzzle)
+	{
+		return;
 	}
 
-	RemoveFromParent();
+	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwningPlayer()))
+	{
+		PlayerController->Server_SlidePuzzleRelease(Puzzle);
+	}
+}
+
+// ================= 서버 확정 대기 =================
+
+void UDRS2SlidePuzzleWidget::BeginAckWait()
+{
+	bWaitingForAck = true;
+	SetInputLocked(true);
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(AckTimer, this, &UDRS2SlidePuzzleWidget::HandleAckTimeout, MoveAckTimeout, false);
+	}
+}
+
+void UDRS2SlidePuzzleWidget::ClearAckWait()
+{
+	bWaitingForAck = false;
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(AckTimer);
+	}
+}
+
+void UDRS2SlidePuzzleWidget::HandleAckTimeout()
+{
+	// 서버가 거절했거나 패킷이 늦다. 거절은 보드를 바꾸지 않으므로 복제도 오지 않는다
+	// - 이 타이머가 없으면 여기서 입력이 영영 잠긴다.
+	bWaitingForAck = false;
+
+	if (ADRS2SlidePuzzle* Puzzle = OwnerPuzzle.Get())
+	{
+		ApplyServerBoard(Puzzle->GetBoard());   // 화면을 서버 보드로 다시 맞춘다
+	}
+
+	UpdateInteractivity();
 }
 
 // ================= 표시 =================
@@ -405,6 +511,10 @@ void UDRS2SlidePuzzleWidget::ShowCode(int32 Digit)
 {
 	if (!Text_Code)
 	{
+		if (Digit >= 0)
+		{
+			UE_LOG(LogDR, Warning, TEXT("[S2Puzzle] Text_Code 가 없어 금고 번호를 표시할 수 없다 (WBP 하이어라키 확인)"));
+		}
 		return;
 	}
 
@@ -423,9 +533,11 @@ void UDRS2SlidePuzzleWidget::ShowCode(int32 Digit)
 	}
 	else
 	{
-		// 등장 애니메이션이 없으면 StartNewPuzzle 이 내려 둔 투명도를 직접 되돌린다.
+		// 등장 애니메이션이 없으면 디자이너가 내려 둔 투명도를 직접 되돌린다.
 		Text_Code->SetRenderOpacity(1.f);
 	}
+
+	OnCodeRevealed(Digit);
 }
 
 // ================= 상태/헬퍼 =================
@@ -442,13 +554,21 @@ void UDRS2SlidePuzzleWidget::SetInputLocked(bool bLocked)
 	OnInputLockChanged(bLocked);
 }
 
+void UDRS2SlidePuzzleWidget::UpdateInteractivity()
+{
+	const bool bBusy = (PendingSlides > 0) || bWaitingForAck;
+
+	SetInputLocked(bBusy || !HasControl());
+	RefreshButtons();
+}
+
 void UDRS2SlidePuzzleWidget::RefreshButtons()
 {
-	const bool bInteractive = !bInputLocked && !bSolvedOnce;
+	const bool bInteractive = !bInputLocked && HasControl();
 
 	if (Btn_Undo)
 	{
-		Btn_Undo->SetIsEnabled(bInteractive && History.Num() > 0);
+		Btn_Undo->SetIsEnabled(bInteractive && GetMoveCount() > 0);
 	}
 	if (Btn_Reset)
 	{
@@ -458,46 +578,42 @@ void UDRS2SlidePuzzleWidget::RefreshButtons()
 
 bool UDRS2SlidePuzzleWidget::IsSolved() const
 {
-	if (Board.Num() != DRS2Puzzle::CellCount)
-	{
-		return false;
-	}
-
-	// 마지막 칸은 검사할 필요가 없다. 앞이 전부 맞으면 나머지는 자동으로 빈칸이다.
-	for (int32 i = 0; i < DRS2Puzzle::CellCount - 1; ++i)
-	{
-		if (Board[i] != i + 1)
-		{
-			return false;
-		}
-	}
-	return true;
+	const ADRS2SlidePuzzle* Puzzle = OwnerPuzzle.Get();
+	return Puzzle ? Puzzle->IsSolved() : false;
 }
 
-TArray<int32> UDRS2SlidePuzzleWidget::GetNeighbors(int32 Index) const
+int32 UDRS2SlidePuzzleWidget::GetMoveCount() const
 {
-	TArray<int32> Out;
-	Out.Reserve(4);
-
-	const int32 Row = Index / DRS2Puzzle::GridSize;
-	const int32 Col = Index % DRS2Puzzle::GridSize;
-
-	if (Row > 0)                        { Out.Add(Index - DRS2Puzzle::GridSize); }
-	if (Row < DRS2Puzzle::GridSize - 1) { Out.Add(Index + DRS2Puzzle::GridSize); }
-	if (Col > 0)                        { Out.Add(Index - 1); }
-	if (Col < DRS2Puzzle::GridSize - 1) { Out.Add(Index + 1); }
-
-	return Out;
+	const ADRS2SlidePuzzle* Puzzle = OwnerPuzzle.Get();
+	return Puzzle ? Puzzle->GetMoveCount() : 0;
 }
 
-bool UDRS2SlidePuzzleWidget::AreAdjacent(int32 A, int32 B)
+FText UDRS2SlidePuzzleWidget::GetOccupantName() const
 {
-	// ★Abs(A-B)==1 로 하면 안 된다★ - 인덱스 2와 3은 화면에서 줄이 다른데 값 차이는 1이다.
-	// 오른쪽 끝 조각이 왼쪽 끝으로 순간이동하는 버그가 여기서 나온다.
-	const int32 RowA = A / DRS2Puzzle::GridSize, ColA = A % DRS2Puzzle::GridSize;
-	const int32 RowB = B / DRS2Puzzle::GridSize, ColB = B % DRS2Puzzle::GridSize;
+	const ADRS2SlidePuzzle* Puzzle = OwnerPuzzle.Get();
+	if (!Puzzle)
+	{
+		return FText::GetEmpty();
+	}
 
-	return FMath::Abs(RowA - RowB) + FMath::Abs(ColA - ColB) == 1;
+	const APlayerState* Occupant = Puzzle->GetOccupant();
+	return Occupant ? FText::FromString(Occupant->GetPlayerName()) : FText::GetEmpty();
+}
+
+bool UDRS2SlidePuzzleWidget::HasControl() const
+{
+	const ADRS2SlidePuzzle* Puzzle = OwnerPuzzle.Get();
+	if (!Puzzle || Puzzle->IsSolved())
+	{
+		return false;   // 해결된 판은 번호 확인용 읽기 전용이다
+	}
+
+	// ★Occupant 가 아직 안 내려왔을 수 있다★
+	// Client_OpenSlidePuzzleUI(RPC) 와 Occupant(프로퍼티 복제) 는 서로 다른 채널이라
+	// 도착 순서가 보장되지 않는다. 그 잠깐을 잠가 두면 첫 클릭이 씹히므로 '비어 있으면 내 것'으로 본다.
+	// 틀려도 서버가 거절할 뿐이라 손해가 없고, 점유가 도착하면 OnOccupantChanged 가 바로잡는다.
+	const APlayerState* Occupant = Puzzle->GetOccupant();
+	return Occupant == nullptr || Occupant == GetOwningPlayerState();
 }
 
 // ================= 입력 =================
@@ -536,25 +652,4 @@ FReply UDRS2SlidePuzzleWidget::NativeOnKeyDown(const FGeometry& InGeometry, cons
 	}
 
 	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
-}
-
-// ================= 디버그 =================
-
-void UDRS2SlidePuzzleWidget::DebugSolveInstantly()
-{
-	Board.Reset(DRS2Puzzle::CellCount);
-	for (int32 i = 1; i < DRS2Puzzle::CellCount; ++i)
-	{
-		Board.Add(i);
-	}
-	Board.Add(0);
-
-	EmptyIndex    = DRS2Puzzle::CellCount - 1;
-	PendingSlides = 0;
-	History.Empty();
-
-	ApplyBoardInstant();
-
-	bSolvedOnce = false;
-	HandleSolved();
 }

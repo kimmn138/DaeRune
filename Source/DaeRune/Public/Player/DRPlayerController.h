@@ -27,10 +27,8 @@ class ADRWaitingRoomCameraActor;
 class UDRWaitingRoomWidget;
 class ADRS2InteractProp;
 class ADRS2SlidePuzzle;
-
-// 스테이지2 8퍼즐 UI 열기 요청 (Plan6 §14.2.2 - UI 방식).
-// HUD/BP 가 이 델리게이트를 받아 실제 위젯을 생성한다.
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSlidePuzzleUIRequested, ADRS2SlidePuzzle*, Puzzle);
+class APlayerState;
+class UDRS2SlidePuzzleWidget;
 enum class ELobbyState : uint8;
 
 // 현재 레벨 컨텍스트 (레벨 진입 시 1회 판별해 캐시 - 매 프레임 맵 이름 문자열 연산 방지)
@@ -520,6 +518,14 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UDRWaitingRoomWidget> WaitingRoomWidget;
 
+	// 8퍼즐 창 위젯 클래스 (BP_DRPlayerController 에서 WBP_S2SlidePuzzle 지정)
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Stage2")
+	TSubclassOf<UDRS2SlidePuzzleWidget> SlidePuzzleWidgetClass;
+
+	// 현재 8퍼즐 창 인스턴스. 닫아도 파괴하지 않고 재사용한다 (Intro 연출이 매번 돌지 않게).
+	UPROPERTY()
+	TObjectPtr<UDRS2SlidePuzzleWidget> SlidePuzzleWidget;
+
 public:
 	// 현재 대기실 위젯 반환 (Blueprint에서 설정창 등이 참조 획득용)
 	UFUNCTION(BlueprintPure, Category = "UI|Lobby")
@@ -605,6 +611,9 @@ private:
 
 	// ���� �޴� ���� ����
 	bool bIsSettingsMenuOpen = false;
+
+	// 8퍼즐 화면 열림 여부 (설정 메뉴와 같은 역할)
+	bool bIsSlidePuzzleOpen = false;
 
 	// ���� ��� ����
 	void SetSpectateTarget(ACharacter* NewTarget);
@@ -754,19 +763,71 @@ public:
 	UFUNCTION(Client, Reliable)
 	void Client_OpenSlidePuzzleUI(ADRS2SlidePuzzle* Puzzle);
 
-	// HUD/BP 가 바인딩해 실제 위젯을 생성한다
-	UPROPERTY(BlueprintAssignable, Category = "S2|Puzzle")
-	FOnSlidePuzzleUIRequested OnSlidePuzzleUIRequested;
+	/**
+	 * 8퍼즐 화면 열기/닫기 (대기실 UI · 게임오버 · 업그레이드 · 옷장과 ★같은 구조★).
+	 *
+	 * ★화면 UI 는 HUD 가 아니라 PlayerController 가 소유한다★
+	 * 이 프로젝트에서 ADRHUD 는 상시 표시되는 오버레이와 캐릭터 설명창만 들고,
+	 * 떴다 사라지는 '창'은 전부 여기서 만든다 (CreateWaitingRoomUI / 게임오버 / 업그레이드 / 옷장).
+	 * 입력 모드·커서·위젯 생성/제거가 한 곳에 모여 있어야 복귀 규칙이 갈라지지 않는다.
+	 *
+	 * ★입력 모드는 이 두 함수에서만 바꾼다★
+	 * 복귀는 RestoreDefaultInputMode() 가 메인메뉴/튜토리얼/대기실/스테이지를 갈라서 처리한다.
+	 * 위젯이나 BP 가 각자 SetInputMode 를 부르면 그 규칙이 두 곳으로 갈라진다.
+	 *
+	 * BP 가 할 일은 없다. 위젯 클래스만 SlidePuzzleWidgetClass 에 지정하면 된다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "S2|Puzzle")
+	void OpenSlidePuzzleScreen(ADRS2SlidePuzzle* Puzzle);
+
+	UFUNCTION(BlueprintCallable, Category = "S2|Puzzle")
+	void CloseSlidePuzzleScreen();
+
+	UFUNCTION(BlueprintPure, Category = "S2|Puzzle")
+	bool IsSlidePuzzleScreenOpen() const { return bIsSlidePuzzleOpen; }
+
+	UFUNCTION(BlueprintPure, Category = "S2|Puzzle")
+	UDRS2SlidePuzzleWidget* GetSlidePuzzleWidget() const { return SlidePuzzleWidget; }
+
+	// 8퍼즐이 사용 중이라 열지 못했다 (서버 -> 요청한 클라이언트)
+	UFUNCTION(Client, Reliable)
+	void Client_SlidePuzzleBusy(ADRS2SlidePuzzle* Puzzle, APlayerState* Occupant);
+
+	// ===== BP 훅 (전부 선택 - 사운드/안내 연출용) =====
+	// 위젯 생성/제거는 C++ 이 한다. 여기서는 연출만 얹는다.
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "S2|Puzzle")
+	void OnSlidePuzzleScreenOpened(ADRS2SlidePuzzle* Puzzle);
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "S2|Puzzle")
+	void OnSlidePuzzleScreenClosed();
+
+	/** 다른 사람이 조작 중이라 열리지 않았다. "OOO 님이 사용 중" 안내를 띄운다. */
+	UFUNCTION(BlueprintImplementableEvent, Category = "S2|Puzzle")
+	void OnSlidePuzzleScreenBusy(APlayerState* Occupant);
 
 	/**
-	 * 8퍼즐 해결 보고 (클라 -> 서버).
+	 * 8퍼즐 조작 요청 (클라 -> 서버). 2026-09-20 개정.
 	 *
-	 * 퍼즐 판정은 UI 위젯이 있는 클라에서 일어나는데, ADRS2SlidePuzzle::NotifySolved() 는
-	 * HasAuthority() 가드가 있어 클라에서 부르면 조용히 무시된다. 그 사이를 잇는 다리다.
-	 * 위젯 BP 가 OnPuzzleSolved 델리게이트에서 이걸 호출한다.
+	 * ★왜 퍼즐 액터가 아니라 여기에 다는가★
+	 * Server RPC 는 그 액터를 클라가 소유할 때만 전달된다. ADRS2SlidePuzzle 은 레벨에 놓인
+	 * 무소유 액터라 RPC 가 조용히 버려진다. 클라가 소유한 액터는 자기 PlayerController 뿐이다.
+	 *
+	 * 판정(점유자 검사 · 인접 검사)은 전부 액터 안에서 한다. 여기서는 위임만 한다.
+	 * 해결 판정도 서버가 직접 하므로 "풀었다" 보고 RPC 는 없다 - 그게 있으면 퍼즐 건너뛰기 치트가 된다.
 	 */
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "S2|Puzzle")
-	void Server_ReportSlidePuzzleSolved(ADRS2SlidePuzzle* Puzzle);
+	void Server_SlidePuzzleMove(ADRS2SlidePuzzle* Puzzle, int32 TileId);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "S2|Puzzle")
+	void Server_SlidePuzzleUndo(ADRS2SlidePuzzle* Puzzle);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "S2|Puzzle")
+	void Server_SlidePuzzleReset(ADRS2SlidePuzzle* Puzzle);
+
+	/** 창을 닫았다 -> 조작 점유권 반납. 이게 안 오면 다음 사람이 퍼즐을 못 연다. */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "S2|Puzzle")
+	void Server_SlidePuzzleRelease(ADRS2SlidePuzzle* Puzzle);
 
 	// 원래의 private 구역으로 복귀 (이 아래 멤버들의 접근 수준을 바꾸지 않기 위함)
 private:

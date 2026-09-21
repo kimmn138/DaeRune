@@ -319,11 +319,36 @@ void ADRS2SafeButton::ExecuteInteract(ADRCharacter* /*Character*/)
 
 // ================= ADRS2PuzzleTerminal =================
 
+void ADRS2PuzzleTerminal::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (!HasAuthority()) return;
+
+	// ★가장 흔한 사고: 단말 인스턴스의 Owner Puzzle 이 비어 있는 경우★
+	// F 프롬프트는 뜨는데 눌러도 아무 일이 없어 원인을 찾기 어렵다. 시작할 때 크게 알린다.
+	if (!Cast<ADRS2SlidePuzzle>(OwnerPuzzle))
+	{
+		UE_LOG(LogDR, Error,
+			TEXT("[S2Puzzle] %s: Owner Puzzle 미배선(%s). 레벨에서 이 단말을 선택해 ")
+			TEXT("S2|Prop -> Owner Puzzle 에 BP_S2SlidePuzzle 인스턴스를 넣으세요."),
+			*GetName(), *GetNameSafe(OwnerPuzzle));
+	}
+}
+
 void ADRS2PuzzleTerminal::ExecuteInteract(ADRCharacter* Character)
 {
-	if (ADRS2SlidePuzzle* Puzzle = Cast<ADRS2SlidePuzzle>(OwnerPuzzle))
+	ADRS2SlidePuzzle* Puzzle = Cast<ADRS2SlidePuzzle>(OwnerPuzzle);
+	if (!Puzzle)
 	{
-		Puzzle->RequestOpenUI(Character);
-		Multicast_PlayInteractedVisual();
+		UE_LOG(LogDR, Error,
+			TEXT("[S2Puzzle] %s: Owner Puzzle 이 8퍼즐 액터가 아니다(%s). 창을 열 수 없다."),
+			*GetName(), *GetNameSafe(OwnerPuzzle));
+		return;
 	}
+
+	UE_LOG(LogDR, Log, TEXT("[S2Puzzle] 단말 조작: %s -> %s"), *GetName(), *Puzzle->GetName());
+
+	Puzzle->RequestOpenUI(Character);
+	Multicast_PlayInteractedVisual();
 }

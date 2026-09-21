@@ -259,5 +259,8 @@ class DAERUNE_API ADRS2PuzzleTerminal : public ADRS2InteractProp
 	GENERATED_BODY()
 
 protected:
+	// 배선 검증 (OwnerPuzzle 이 8퍼즐 액터를 가리키는지). 다른 Stage2 액터와 같은 관례다.
+	virtual void BeginPlay() override;
+
 	virtual void ExecuteInteract(ADRCharacter* Character) override;
 };
