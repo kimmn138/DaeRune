@@ -167,10 +167,25 @@ private:
 
 	void ClearAllTimers();
 
+	/**
+	 * 히트 리액트 차단 토글 (멱등).
+	 *
+	 * ★잠수·융기·기상 몽타주가 도는 동안 피격 몽타주가 끼어들면 보스가 땅속에서
+	 *   갑자기 튀어나온 것처럼 보인다. 어빌리티가 도는 동안 Effects.HitReact 태그를 가진
+	 *   어빌리티의 활성을 막아 연출만 지킨다 — **데미지는 그대로 들어간다**.
+	 *
+	 * ★생성자에서 BlockAbilitiesWithTag 로 처리하지 않는 이유: 네이티브 태그는
+	 *   DRAssetManager::StartInitialLoading 에서 등록되므로 CDO 생성 시점에는 아직 없다.
+	 */
+	void SetHitReactBlocked(bool bBlock);
+
 	TWeakObjectPtr<ADRCharacter> CachedTarget;
 	TWeakObjectPtr<ADRS2GroundWarning> WarningActor;
 
 	FVector PendingEruptGround = FVector::ZeroVector;
+
+	// 히트 리액트를 막아 둔 상태인지 (Block/UnBlock 짝을 맞춘다 — 카운터 기반 API 라 어긋나면 안 된다)
+	bool bHitReactBlocked = false;
 
 	// BeginBurrowPhase 중복 진입 방지 (타이머 + AnimNotify 양쪽에서 호출될 수 있다)
 	bool bBurrowPhaseStarted = false;

@@ -52,9 +52,16 @@ void ADRS2TurnstileDoor::CollectGroup(FName Tag, const FRotator& OpenRotation)
 		// ★배치 당시의 상대 회전이 "닫힘 원점"이다. 닫히면 정확히 이 값으로 되돌아간다.
 		Leaf.ClosedQuat = Component->GetRelativeRotation().Quaternion();
 
-		// 열림 목표는 원점에 회전량을 **로컬로** 합성한 값이다.
-		// (월드 축이 아니라 날개 자신의 축을 기준으로 돌아야 배치 방향과 무관하게 동작한다)
-		Leaf.OpenQuat = Leaf.ClosedQuat * OpenRotation.Quaternion();
+		// ★회전량을 **문(액터) 기준 축**으로 합성한다 (전곱). 2026-08-27 수정.
+		//
+		//   후곱(ClosedQuat * OpenRotation)이면 날개 **자신의** 축으로 돌기 때문에,
+		//   두 그룹이 서로 마주보게(180° 돌려) 배치된 개찰구에서는 그 방향 뒤집힘이
+		//   부호 반전을 상쇄해 **양쪽이 같은 방향으로 도는** 문제가 생긴다.
+		//
+		//   전곱이면 날개 메시를 어떻게 돌려 배치했든 항상 문 기준으로 돌므로,
+		//   A(+각도)와 B(-각도)가 반드시 반대 방향이 된다.
+		//   문 전체를 레벨에서 회전 배치해도 액터 기준이라 그대로 따라간다.
+		Leaf.OpenQuat = OpenRotation.Quaternion() * Leaf.ClosedQuat;
 
 		Leaves.Add(Leaf);
 	}

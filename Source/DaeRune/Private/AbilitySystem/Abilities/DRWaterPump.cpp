@@ -2,6 +2,7 @@
 
 
 #include "AbilitySystem/Abilities/DRWaterPump.h"
+#include "DaeRune/DRLogChannels.h"
 #include "Camera/CameraComponent.h"
 #include "DaeRune/DaeRune.h"
 #include "DRGameplayTags.h"
@@ -35,6 +36,23 @@ FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLoca
     QueryParams.bTraceComplex = false;
     QueryParams.bReturnPhysicalMaterial = false;
 
+    // ★먼저 카메라 광선으로 **실제 조준 지점**을 찾는다 (2026-08-27).
+    //
+    //   이 단계가 없으면 소켓에서 "최대 사거리 지점"을 향해 직선을 쏘게 된다.
+    //   무기 소켓이 지면에 가까운 캐릭터가 낮은 표적을 내려다보면 그 직선이
+    //   목표에 닿기 훨씬 전에 바닥을 파고들어, 빔이 코앞에서 잘려 버린다.
+    //
+    //   조준 지점을 먼저 확정하면 소켓->조준점 직선이 목표를 향하므로 그 문제가 사라진다.
+    //   벽 차단은 아래 소켓 트레이스가 그대로 담당하므로 관통 문제는 생기지 않는다.
+    {
+        FHitResult CameraHit;
+        if (GetWorld()->LineTraceSingleByChannel(
+                CameraHit, AimStart, CameraTargetPoint, ECC_Visibility, QueryParams))
+        {
+            CameraTargetPoint = CameraHit.ImpactPoint;
+        }
+    }
+
     // LineTrace ����
     bHitObstacle = GetWorld()->LineTraceSingleByChannel(
         OutHitResult,
@@ -43,6 +61,28 @@ FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLoca
         ECC_Visibility,
         QueryParams
     );
+
+    // [임시 진단]
+    UE_LOG(LogDR, Warning,
+        TEXT("[MoleDiag] V. 빔 트레이스: 히트=%d / 맞은것=%s / 거리=%.0f / 관통시작=%d / 최대사거리=%.0f"),
+        bHitObstacle ? 1 : 0,
+        *GetNameSafe(OutHitResult.GetActor()),
+        OutHitResult.Distance,
+        OutHitResult.bStartPenetrating ? 1 : 0,
+        WeaponRange);
+
+    // ★시작점이 이미 막힌 형상 안이면(BlockingVolume 등) 거리 0 으로 히트가 잡힌다.
+    //   그대로 두면 빔 길이가 0 이 되어 판정 박스가 소켓 자리에 뭉개지고
+    //   **아무 대상도 맞히지 못한다.** 이 경우는 히트가 아닌 것으로 취급한다. (2026-08-27)
+    if (bHitObstacle && (OutHitResult.bStartPenetrating || OutHitResult.Distance < 1.f))
+    {
+        UE_LOG(LogDR, Warning,
+            TEXT("[WaterPump] 무기 소켓이 막힌 형상(%s) 안에 있어 히트를 무시하고 최대 사거리를 사용한다."),
+            *GetNameSafe(OutHitResult.GetActor()));
+
+        bHitObstacle = false;
+        OutHitResult = FHitResult();
+    }
 
     FVector BeamEndPoint;
     if (bHitObstacle)
@@ -101,10 +141,17 @@ AActor* UDRWaterPump::FindClosestTargetInBeam(const FVector& WeaponSocketLocatio
     FVector BeamDirection = (BeamEndPoint - WeaponSocketLocation).GetSafeNormal();
     float BeamLength = FVector::Distance(WeaponSocketLocation, BeamEndPoint);
 
-    // �ڽ� �߽��� (���� ���ϰ� ������ �߰�)
-    FVector BoxCenter = WeaponSocketLocation + (BeamDirection * BeamLength * 0.5f);
+    // 빔이 완전히 뭉개진 경우(소켓이 형상 안 등) 방향을 조준 방향으로 되살린다.
+    if (BeamDirection.IsNearlyZero())
+    {
+        FVector AimStart, AimDirection;
+        BeamDirection = GetAimDirection(AimStart, AimDirection)
+            ? AimDirection
+            : OwnerCharacter->GetActorForwardVector();
+    }
 
-    // �ڽ� ũ�� (���� �� ����)
+    // 판정 박스는 시각 빔과 동일한 길이를 쓴다. 벽 너머를 때리면 안 되기 때문이다.
+    FVector BoxCenter = WeaponSocketLocation + (BeamDirection * BeamLength * 0.5f);
     FVector BoxHalfExtent(BeamLength * 0.5f, BeamWidth * 0.5f, BeamHeight * 0.5f);
 
     // ȸ�� ��� (������ ��������)
@@ -155,10 +202,27 @@ AActor* UDRWaterPump::FindClosestTargetInBeam(const FVector& WeaponSocketLocatio
     AActor* ClosestTarget = nullptr;
     float ClosestDistanceSq = FLT_MAX;
 
+    // [임시 진단]
+    UE_LOG(LogDR, Warning, TEXT("[MoleDiag] W1. 박스 중심=%s 반크기=%s / 오버랩 %d개"),
+        *BoxCenter.ToCompactString(), *BoxHalfExtent.ToCompactString(), OverlapResults.Num());
+
+    for (const FOverlapResult& R : OverlapResults)
+    {
+        UE_LOG(LogDR, Warning, TEXT("[MoleDiag] W1-%s (컴포넌트 %s)"),
+            *GetNameSafe(R.GetActor()), *GetNameSafe(R.GetComponent()));
+    }
+
     for (const FOverlapResult& Result : OverlapResults)
     {
         AActor* OverlappedActor = Result.GetActor();
         if (!OverlappedActor) continue;
+
+        // [임시 진단] 두더지만 출력
+        if (OverlappedActor->GetClass()->GetName().Contains(TEXT("Mole")))
+        {
+            UE_LOG(LogDR, Warning, TEXT("[MoleDiag] W2. 두더지 발견: %s / Implements=%d"),
+                *OverlappedActor->GetName(), OverlappedActor->Implements<UCombatInterface>() ? 1 : 0);
+        }
 
         // CombatInterface üũ
         if (!OverlappedActor->Implements<UCombatInterface>()) continue;
@@ -175,6 +239,9 @@ AActor* UDRWaterPump::FindClosestTargetInBeam(const FVector& WeaponSocketLocatio
             ClosestTarget = OverlappedActor;
         }
     }
+
+    // [임시 진단]
+    UE_LOG(LogDR, Warning, TEXT("[MoleDiag] W3. 최종 대상 = %s"), *GetNameSafe(ClosestTarget));
 
     return ClosestTarget;
 }

@@ -67,9 +67,6 @@ protected:
 	UFUNCTION()
 	void HandleBossHealthChanged(float NewValue);
 
-	UFUNCTION()
-	void HandleBossMaxHealthChanged(float NewValue);
-
 	// ========== 상태 ==========
 
 	// 3구간에 반복 등장하는 단일 보스 (체력이 이어진다)
@@ -103,10 +100,12 @@ private:
 	// 보관 중인 보스를 다음 구간 위치에서 되살린다
 	void ReappearBoss(const FTransform& SpawnTransform);
 
-	// 체력 델리게이트 바인딩/해제
+	// 체력 델리게이트 바인딩/해제 (바인딩 시 도망 임계도 함께 환산한다)
 	void BindBossHealth();
 	void UnbindBossHealth();
 
-	// 보스 최대 체력 캐시 (비율 계산용)
-	float CachedBossMaxHealth = 0.f;
+	// ★구간별 도망 임계를 **절대 HP** 로 환산해 둔 값 (RetreatHealthRatios × MaxHealth).
+	//   MaxHealth 는 스폰 후 변하지 않으므로 바인딩 시점에 한 번 계산한다.
+	//   비어 있으면 임계 판정을 하지 않는다(= MaxHealth 를 못 읽은 경우, 에러 로그가 남는다).
+	TArray<float> RetreatHealthThresholds;
 };

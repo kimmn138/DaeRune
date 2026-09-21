@@ -14,6 +14,7 @@
 #include "Actor/DRCleanserSite.h"
 #include "Actor/Stage2/DRS2InteractProp.h"
 #include "Actor/Stage2/DRS2SlidePuzzle.h"
+#include "UI/Widget/Stage2/DRS2SlidePuzzleWidget.h"
 #include "Actor/Stage2/DRS2TrainCar.h"
 #include "Actor/Stage2/DRS2Train.h"
 #include "Interaction/DRInteractable.h"
@@ -425,10 +426,35 @@ void ADRPlayerController::ServerRequestInteract_Implementation(AActor* Interacta
 	if (ADRS2InteractProp* Prop = Cast<ADRS2InteractProp>(Interactable))
 	{
 		// 서버 측 검증: 클라이언트가 보낸 포인터를 그대로 신뢰하지 않고 상태/거리 확인
-		if (!Prop->CanInteract(DRCharacter)) return;
+		if (!Prop->CanInteract(DRCharacter))
+		{
+			// 프롬프트는 떴는데 눌러도 반응이 없는 두 원인 중 하나다 (비활성 / 사망 / 부품 운반 중).
+			UE_LOG(LogDR, Warning, TEXT("[S2Prop] %s 조작 거부: CanInteract=false"), *Prop->GetName());
+			return;
+		}
 
-		const float DistSq = FVector::DistSquared(DRCharacter->GetActorLocation(), Prop->GetActorLocation());
-		if (DistSq > FMath::Square(MaxInteractDistance)) return;
+		// ★거리는 '보이는 물체' 기준으로 잰다 (2026-09-21)★
+		// 프롭의 루트는 빈 SceneComponent 다 (눌림 연출 때문에 PropMesh 를 자식으로 내렸다).
+		// 그래서 BP 에서 메시를 루트에서 떼어 두면 액터 원점과 실제로 보이는 물체가 갈라지고,
+		// 원점 기준으로 재면 눈앞에 서 있어도 거부된다 — 프롬프트는 메시에 닿은 라인트레이스라
+		// 멀쩡히 떠 있으므로 증상이 "F 를 눌러도 아무 반응이 없다"로만 나타나 원인을 찾기 어렵다.
+		// 콜리전까지의 최단 거리로 재면 메시를 어디에 두든 플레이어가 보는 것과 판정이 일치한다.
+		FVector ClosestPoint = FVector::ZeroVector;
+		float Dist = Prop->ActorGetDistanceToCollision(DRCharacter->GetActorLocation(), ECC_Visibility, ClosestPoint);
+		if (Dist < 0.f)
+		{
+			// 콜리전 프리미티브가 없는 프롭 (라인트레이스에도 안 잡히지만 방어적으로 둔다)
+			Dist = FVector::Dist(DRCharacter->GetActorLocation(), Prop->GetActorLocation());
+		}
+
+		if (Dist > MaxInteractDistance)
+		{
+			UE_LOG(LogDR, Warning, TEXT("[S2Prop] %s 조작 거부: 거리 %.0f > %.0f"),
+				*Prop->GetName(), Dist, MaxInteractDistance);
+			return;
+		}
+
+		UE_LOG(LogDR, Log, TEXT("[S2Prop] %s 조작 수락 (서버)"), *Prop->GetName());
 
 		Prop->ServerHandleInteract(DRCharacter);
 		return;
@@ -796,10 +822,128 @@ ADRS2InteractProp* ADRPlayerController::FindPropByLineTrace()
 
 void ADRPlayerController::Client_OpenSlidePuzzleUI_Implementation(ADRS2SlidePuzzle* Puzzle)
 {
+	OpenSlidePuzzleScreen(Puzzle);
+}
+
+void ADRPlayerController::OpenSlidePuzzleScreen(ADRS2SlidePuzzle* Puzzle)
+{
+	if (!IsLocalController() || !IsValid(Puzzle))
+	{
+		UE_LOG(LogDR, Warning, TEXT("[S2Puzzle] 창 열기 무시 (로컬 컨트롤러=%d, 퍼즐=%s)"),
+			IsLocalController() ? 1 : 0, *GetNameSafe(Puzzle));
+		return;
+	}
+
+	// 다른 전체화면 UI 와 입력 모드가 겹치지 않게 먼저 닫는다 (OpenUpgradeScreen 과 같은 가드)
+	if (bIsSettingsMenuOpen)
+	{
+		CloseSettingsMenu();
+	}
+
+	// 이미 열려 있으면 아무것도 하지 않는다 (같은 단말을 두 번 눌렀을 때).
+	if (bIsSlidePuzzleOpen)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[S2Puzzle] 창이 이미 열린 상태로 기록돼 있다 - 열기를 건너뛴다"));
+		return;
+	}
+
+	if (!SlidePuzzleWidgetClass)
+	{
+		UE_LOG(LogDR, Error,
+			TEXT("[S2Puzzle] SlidePuzzleWidgetClass 미지정 - BP_DRPlayerController 의 UI|Stage2 에 WBP_S2SlidePuzzle 을 넣을 것"));
+		return;
+	}
+
+	// ★창은 재사용한다★ 판 상태는 서버에 있으므로 새로 만들어도 동작하지만,
+	// 재사용하면 등장 연출이 매번 다시 돌지 않고 조각 8개를 다시 만들 일도 줄어든다.
+	if (!IsValid(SlidePuzzleWidget))
+	{
+		SlidePuzzleWidget = CreateWidget<UDRS2SlidePuzzleWidget>(this, SlidePuzzleWidgetClass);
+		if (!SlidePuzzleWidget)
+		{
+			UE_LOG(LogDR, Error, TEXT("[S2Puzzle] 8퍼즐 창 생성 실패 (SlidePuzzleWidgetClass 확인)"));
+			return;
+		}
+	}
+
+	bIsSlidePuzzleOpen = true;
+
+	// ★입력 모드는 여기서만 바꾼다★ (대기실 UI · 업그레이드 · 옷장과 같은 위치)
+	//  포커스 위젯을 지정하지 않는 이유: 위젯이 NativeConstruct(=아래 AddToViewport) 에서
+	//  SetKeyboardFocus 를 부르므로, 순서상 위젯이 마지막에 포커스를 가져간다.
+	SetInputMode(FInputModeUIOnly());
+	SetShowMouseCursor(true);
+
+	// ★BindToPuzzle 이 AddToViewport 보다 먼저다★
+	// 그래야 NativeConstruct 가 조각을 만든 직후 서버 보드를 그대로 그릴 수 있다.
+	SlidePuzzleWidget->BindToPuzzle(Puzzle);
+	SlidePuzzleWidget->AddToViewport(10);
+
+	UE_LOG(LogDR, Log, TEXT("[S2Puzzle] 8퍼즐 창을 열었다 (%s)"), *GetNameSafe(SlidePuzzleWidget));
+
+	OnSlidePuzzleScreenOpened(Puzzle);   // BP 연출 훅 (선택)
+}
+
+void ADRPlayerController::CloseSlidePuzzleScreen()
+{
+	if (!IsLocalController()) return;
+	if (!bIsSlidePuzzleOpen) return;
+
+	// ★플래그를 먼저 내린다★
+	// 아래 RemoveFromParent 가 위젯의 NativeDestruct 를 부르고, 거기서 이 함수가 한 번 더 들어온다.
+	bIsSlidePuzzleOpen = false;
+
+	if (IsValid(SlidePuzzleWidget))
+	{
+		// 파괴하지 않는다. 다음에 열 때 같은 인스턴스를 다시 쓴다.
+		SlidePuzzleWidget->RemoveFromParent();
+	}
+
+	OnSlidePuzzleScreenClosed();   // BP 연출 훅 (선택)
+
+	// 레벨 컨텍스트(메인메뉴/튜토리얼/대기실/스테이지)에 맞는 모드로 되돌린다.
+	RestoreDefaultInputMode();
+}
+
+void ADRPlayerController::Client_SlidePuzzleBusy_Implementation(ADRS2SlidePuzzle* Puzzle, APlayerState* Occupant)
+{
 	if (!IsLocalController() || !Puzzle) return;
 
-	// 실제 위젯 생성은 HUD/BP 가 담당한다 (8퍼즐 UI 사양 확정 후 구현)
-	OnSlidePuzzleUIRequested.Broadcast(Puzzle);
+	UE_LOG(LogDR, Log, TEXT("[S2Puzzle] 8퍼즐이 사용 중이다 (조작자: %s)"), *GetNameSafe(Occupant));
+
+	OnSlidePuzzleScreenBusy(Occupant);
+}
+
+// ===== 8퍼즐 조작 요청 (2026-09-20) =====
+// 넷 다 액터에 위임만 한다. 점유자 검사와 인접 검사는 ADRS2SlidePuzzle 안에서 하고,
+// 거절은 조용히 무시된다 (보드가 안 바뀌므로 복제도 없다 - 위젯은 확정 타임아웃으로 잠금을 푼다).
+
+void ADRPlayerController::Server_SlidePuzzleMove_Implementation(ADRS2SlidePuzzle* Puzzle, int32 TileId)
+{
+	if (!IsValid(Puzzle)) return;
+
+	Puzzle->TryMove(this, TileId);
+}
+
+void ADRPlayerController::Server_SlidePuzzleUndo_Implementation(ADRS2SlidePuzzle* Puzzle)
+{
+	if (!IsValid(Puzzle)) return;
+
+	Puzzle->TryUndo(this);
+}
+
+void ADRPlayerController::Server_SlidePuzzleReset_Implementation(ADRS2SlidePuzzle* Puzzle)
+{
+	if (!IsValid(Puzzle)) return;
+
+	Puzzle->TryReset(this);
+}
+
+void ADRPlayerController::Server_SlidePuzzleRelease_Implementation(ADRS2SlidePuzzle* Puzzle)
+{
+	if (!IsValid(Puzzle)) return;
+
+	Puzzle->ReleaseControl(this);
 }
 void ADRPlayerController::SetupInputComponent()
 {
@@ -812,7 +956,10 @@ void ADRPlayerController::SetupInputComponent()
 	DRInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Look);
 	DRInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ADRPlayerController::StartJump);
 	DRInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ADRPlayerController::StopJump);
-	DRInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &ADRPlayerController::HandleInteract);
+	// ★Started 여야 한다. Triggered 는 키를 누르고 있는 동안 **매 프레임** 발화해
+	//   레버가 연속 토글되고 금고에 같은 숫자가 반복 입력된다 (2026-08-27 수정).
+	//   상호작용은 전부 "한 번 누르면 한 번" 의미이므로 다른 단발 입력들과 동일하게 맞춘다.
+	DRInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &ADRPlayerController::HandleInteract);
 	DRInputComponent->BindAction(SpectateNextAction, ETriggerEvent::Started, this, &ADRPlayerController::HandleSpectateNext);
 	DRInputComponent->BindAction(SpectatePreviousAction, ETriggerEvent::Started, this, &ADRPlayerController::HandleSpectatePrevious);
 	DRInputComponent->BindAction(ToggleSettingsAction, ETriggerEvent::Started, this, &ADRPlayerController::HandleToggleSettings);
@@ -874,6 +1021,13 @@ void ADRPlayerController::OnLevelEntered()
 	{
 		OnUpgradeScreenClosed();
 		bIsUpgradeScreenOpen = false;
+	}
+
+	// 옷장 화면도 같은 처리
+	if (bIsWardrobeScreenOpen)
+	{
+		OnWardrobeScreenClosed();
+		bIsWardrobeScreenOpen = false;
 	}
 
 	// 愿???곹깭 珥덇린??(?몃━寃뚯씠???뺣━ ?ы븿)
@@ -939,7 +1093,13 @@ void ADRPlayerController::OnLevelEntered()
 
 void ADRPlayerController::HandleToggleSettings()
 {
-	// 업그레이드 화면이 열려 있으면 ESC 로 그 화면을 먼저 닫는다
+	// 옷장/업그레이드 화면이 열려 있으면 ESC 로 그 화면을 먼저 닫는다.
+	// (옷장은 위젯의 NativeOnKeyDown 도 ESC 를 받지만, 포커스를 잃은 상태를 대비해 여기도 둔다)
+	if (bIsWardrobeScreenOpen)
+	{
+		CloseWardrobeScreen();
+		return;
+	}
 	if (bIsUpgradeScreenOpen)
 	{
 		CloseUpgradeScreen();
@@ -1296,6 +1456,8 @@ void ADRPlayerController::HandleInteract()
 	// 스테이지2 상호작용 프롭 (레버/버튼/단말) — Plan6 §5.5-b
 	if (CurrentDetectedProp)
 	{
+		UE_LOG(LogDR, Log, TEXT("[S2Prop] F -> %s 조작 요청 (클라)"), *CurrentDetectedProp->GetName());
+
 		ServerRequestInteract(CurrentDetectedProp);
 		return;
 	}
@@ -1554,6 +1716,94 @@ void ADRPlayerController::CloseUpgradeScreen()
 
 	// 변경된 장착 상태를 서버에 반영
 	ReportUpgradeLoadout();
+}
+
+// ========================= 로비 옷장 화면 (Plan.md 5.3 / 15) =========================
+
+void ADRPlayerController::OpenWardrobeScreen()
+{
+	if (!IsLocalController()) return;
+	if (bIsWardrobeScreenOpen) return;
+
+	// 옷장은 로비 전용이다. 스테이지 도중 외형을 바꿔 끼우는 경로를 만들지 않는다.
+	// (OpenUpgradeScreen 과 같은 가드)
+	if (!IsInLobby())
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cosmetic] 로비가 아닌 곳에서 옷장 열기를 시도했습니다 — 무시합니다."));
+		return;
+	}
+
+	// 다른 전체화면 UI 와 입력 모드가 겹치지 않게 먼저 닫는다
+	if (bIsSettingsMenuOpen)
+	{
+		CloseSettingsMenu();
+	}
+	if (bIsUpgradeScreenOpen)
+	{
+		CloseUpgradeScreen();
+	}
+
+	bIsWardrobeScreenOpen = true;
+
+	SetInputMode(FInputModeUIOnly());
+	SetShowMouseCursor(true);
+
+	// 블루프린트에서 위젯 생성 (업그레이드 화면과 같은 구조)
+	OnWardrobeScreenOpened();
+}
+
+void ADRPlayerController::CloseWardrobeScreen()
+{
+	if (!IsLocalController()) return;
+	if (!bIsWardrobeScreenOpen) return;
+
+	// 블루프린트에서 위젯 제거
+	OnWardrobeScreenClosed();
+
+	bIsWardrobeScreenOpen = false;
+	RestoreDefaultInputMode();
+
+	// 서버 반영(ReportCosmeticLoadout)은 복제 경로가 구현되는 시점에 여기 붙는다 (Plan.md 5.3 / M3).
+	// 지금은 로컬 세이브에 이미 기록돼 있어 다음 실행에도 선택이 유지된다.
+}
+
+void ADRPlayerController::DRUnlockSkins()
+{
+	if (UDRGameInstance* GI = GetGameInstance<UDRGameInstance>())
+	{
+		GI->DebugUnlockAllSkins();
+	}
+}
+
+void ADRPlayerController::DROpenWardrobe()
+{
+	OpenWardrobeScreen();
+}
+
+void ADRPlayerController::DRDumpCosmetic()
+{
+	const UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
+	if (!GI)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
+		return;
+	}
+
+	const EPlayerCharacterClass Class = GetViewedUpgradeClass();
+	const TArray<FName> Equipped = GI->GetEquippedSkins(Class);
+
+	FString Line;
+	for (int32 Index = 0; Index < Equipped.Num(); ++Index)
+	{
+		Line += FString::Printf(TEXT("%s=%s "),
+			*StaticEnum<EDRCosmeticCategory>()->GetNameStringByValue(Index),
+			*Equipped[Index].ToString());
+	}
+
+	UE_LOG(LogDR, Warning, TEXT("[Cheat] 코스메틱: 클래스=%d / 카탈로그=%s / %s"),
+		static_cast<int32>(Class),
+		GI->GetCosmeticCatalog() ? TEXT("지정됨") : TEXT("★미지정★"),
+		*Line);
 }
 
 void ADRPlayerController::RestoreDefaultInputMode()
