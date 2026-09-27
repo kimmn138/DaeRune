@@ -4,6 +4,7 @@
 
 #include "Components/BoxComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "DaeRune/DRLogChannels.h"
 
 ADRS2Barrier::ADRS2Barrier()
 {
@@ -49,5 +50,15 @@ void ADRS2Barrier::SetBarrierEnabled(bool bNewEnabled)
 void ADRS2Barrier::OnRep_bEnabled()
 {
 	BlockBox->SetCollisionEnabled(bEnabled ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
+
+	// ★런타임 코드가 바꾸는 것은 CollisionEnabled 뿐이고, 채널 응답은 BP 에 직렬화된 값을 그대로 쓴다.
+	//   BP 에서 콜리전 프리셋을 건드리면 배리어를 켜도 플레이어가 그냥 통과한다.
+	if (bEnabled && BlockBox->GetCollisionResponseToChannel(ECC_Pawn) != ECR_Block)
+	{
+		UE_LOG(LogDR, Error,
+			TEXT("[S2Barrier] %s: BlockBox 의 Pawn 응답이 Block 이 아니라 플레이어를 막지 못합니다. ")
+			TEXT("BP_S2Barrier 의 콜리전 프리셋을 확인하세요."), *GetName());
+	}
+
 	OnBarrierEnabledChanged(bEnabled);
 }

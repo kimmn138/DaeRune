@@ -31,11 +31,44 @@ void UDRS2PuzzlePhase::OnPhaseStart()
 
 	// ===== 비밀번호 생성 및 배분 (Plan6 §14.2.6) =====
 	// 반드시 한곳에서 만들어 각 액터에 주입한다. 각자 난수를 뽑으면 값이 어긋난다.
+	//
+	// ★3번째 자리만 예외다 (2026-09-16). CCTV 는 "타깃 캐릭터가 사진에 몇 명 나오는가"가 답인데,
+	//   그 수는 그림에 이미 그려져 있어 서버가 정할 수 없다. 그래서 CCTV 보드가 후보 중 하나를
+	//   뽑아 자릿수를 **결정하고**, 여기서 그것을 읽어 온다 (§14.2.4).
+	ADRS2CctvBoard* CctvBoard = Director->Room2CctvBoard;
+
+	int32 CctvDigit = INDEX_NONE;
+	if (CctvBoard)
+	{
+		CctvBoard->ChooseTarget();          // 후보 선정 + 화면 시퀀스 재생 시작
+		CctvDigit = CctvBoard->GetSecretDigit();
+	}
+
+	if (CctvDigit < 0 || CctvDigit > 9)
+	{
+		// 보드 미배선이거나 후보가 비었을 때. 금고는 열려야 하므로 난수로 대체한다.
+		// (이 경우 CCTV 를 아무리 세어도 답이 안 나오므로 개발 중에만 벌어져야 한다)
+		UE_LOG(LogDR, Error,
+			TEXT("[S2P2] CCTV 보드에서 3번째 자리를 얻지 못했습니다(%d). ")
+			TEXT("Director 의 Room2CctvBoard 배선과 TargetCandidates 를 확인하세요. 난수로 대체합니다."),
+			CctvDigit);
+		CctvDigit = FMath::RandRange(0, 9);
+	}
+
 	SecretCode = {
 		static_cast<uint8>(FMath::RandRange(0, 9)),
 		static_cast<uint8>(FMath::RandRange(0, 9)),
-		static_cast<uint8>(FMath::RandRange(0, 9))
+		static_cast<uint8>(CctvDigit)
 	};
+
+#if !UE_BUILD_SHIPPING
+	// ★개발용 임시 로그. 퍼즐을 다 풀지 않고도 금고를 테스트할 수 있게 한다.
+	//   패키징(Shipping)에서는 컴파일되지 않으므로 지우지 않아도 안전하다.
+	UE_LOG(LogDR, Warning, TEXT("[S2P2] ★금고 비밀번호 = %d %d %d   (1번 8퍼즐 / 2번 스위치 / 3번 CCTV)"),
+		static_cast<int32>(SecretCode[0]),
+		static_cast<int32>(SecretCode[1]),
+		static_cast<int32>(SecretCode[2]));
+#endif
 
 	if (ADRS2SlidePuzzle* SlidePuzzle = Director->Room2SlidePuzzle)
 	{
@@ -47,12 +80,6 @@ void UDRS2PuzzlePhase::OnPhaseStart()
 	{
 		SwitchPuzzle->SetRevealDigit(SecretCode[1]);
 		SwitchPuzzle->OnPuzzleSolved.AddDynamic(this, &UDRS2PuzzlePhase::HandlePuzzleSolved);
-	}
-
-	if (ADRS2CctvBoard* CctvBoard = Director->Room2CctvBoard)
-	{
-		// CCTV는 해결 상태가 없다. 타깃 이미지 등장 횟수가 곧 마지막 자리다.
-		CctvBoard->SetTargetImageCount(SecretCode[2]);
 	}
 
 	if (ADRS2Safe* Safe = Director->Room2Safe)
@@ -106,10 +133,17 @@ void UDRS2PuzzlePhase::HandlePartPickedUp(ADRCleanserPart* /*Part*/, ADRCharacte
 
 	bPartPickedUp = true;
 
+	// ★D2(방1<->방3) 개방. 닫힌 채로 시작해 여기서 열린다 (Plan6 §14.2.7).
+	//   부품을 얻기 전에는 방3으로 갈 수 없고, 열린 뒤 전원 방3 입장 시 다시 봉쇄된다.
+	if (ADRS2StageDirector* Director = GetDirector())
+	{
+		SetBlockerBlocked(Director->Blocker_Room1ToRoom3, false);
+	}
+
 	// 픽업만으로는 완료가 아니다. 부품을 들고 방2를 나가야 한다.
 	SetupPhaseObjectiveByRow(TEXT("S2P2_Return"));
 
-	UE_LOG(LogDR, Log, TEXT("[S2P2] 부품 획득 - 방1 복귀 대기"));
+	UE_LOG(LogDR, Log, TEXT("[S2P2] 부품 획득 - D2 개방, 방1 복귀 대기"));
 }
 
 void UDRS2PuzzlePhase::HandleTeamRecalled()

@@ -2,10 +2,15 @@
 
 #include "Actor/Stage2/DRS2Mole.h"
 
+#include "Interaction/CombatInterface.h"
+
+#include "DaeRune/DaeRune.h"
+
 #include "AbilitySystemComponent.h"
 #include "Actor/Stage2/DRS2MoleGame.h"
 #include "Components/CapsuleComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "DaeRune/DRLogChannels.h"
 #include "TimerManager.h"
 
 ADRS2Mole::ADRS2Mole()
@@ -30,6 +35,15 @@ ADRS2Mole::ADRS2Mole()
 	HitBox->SetCollisionResponseToAllChannels(ECR_Ignore);
 	HitBox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	HitBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+
+	// ★공격 판정 채널 두 개에 반드시 응답해야 한다 (2026-08-27 수정).
+	//   오버랩은 양쪽 응답이 모두 필요한데, 이 줄들이 없으면 두더지가 해당 채널을 Ignore 해
+	//   공격이 그냥 통과한다. 그 결과 때려도 아무 반응이 없었다.
+	//     ECC_Projectile : 씨앗폭탄 등 투사체
+	//     ECC_Target     : 물대포·기본 공격 등 근접 판정 (OverlapMultiByChannel)
+	HitBox->SetCollisionResponseToChannel(ECC_Projectile, ECR_Overlap);
+	HitBox->SetCollisionResponseToChannel(ECC_Target, ECR_Overlap);
+
 	HitBox->SetGenerateOverlapEvents(true);
 
 	// 최소 ASC. 어트리뷰트는 두지 않는다 (피격은 IDRProximityHitOnly 로 직접 처리).
@@ -57,6 +71,33 @@ void ADRS2Mole::BeginPlay()
 	if (AbilitySystemComponent)
 	{
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
+	}
+
+	// ★공격 판정 채널 응답을 BeginPlay 에서 다시 강제한다 (2026-08-27).
+	//   생성자에서만 설정하면 BP(BP_DRMole)가 컴포넌트 콜리전을 직렬화해 갖고 있을 때
+	//   그 저장값이 C++ 생성자 설정을 덮어써 채널 응답이 Ignore 로 남는다.
+	//   런타임 설정은 직렬화값보다 뒤에 적용되므로 항상 이긴다.
+	if (HitBox)
+	{
+		HitBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		HitBox->SetCollisionObjectType(ECC_Pawn);
+		HitBox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+		HitBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+		HitBox->SetCollisionResponseToChannel(ECC_Projectile, ECR_Overlap);
+		HitBox->SetCollisionResponseToChannel(ECC_Target, ECR_Overlap);
+
+		// [임시 진단]
+		UE_LOG(LogDR, Warning,
+			TEXT("[S2Mole] CombatInterface=%d / 응답: Visibility=%d Target=%d Projectile=%d (0=Ignore 1=Overlap 2=Block) / CollisionEnabled=%d / 액터위치=%s / 히트박스위치=%s 반지름=%.0f 반높이=%.0f"),
+			Implements<UCombatInterface>() ? 1 : 0,
+			static_cast<int32>(HitBox->GetCollisionResponseToChannel(ECC_Visibility)),
+			static_cast<int32>(HitBox->GetCollisionResponseToChannel(ECC_Target)),
+			static_cast<int32>(HitBox->GetCollisionResponseToChannel(ECC_Projectile)),
+			static_cast<int32>(HitBox->GetCollisionEnabled()),
+			*GetActorLocation().ToCompactString(),
+			*HitBox->GetComponentLocation().ToCompactString(),
+			HitBox->GetScaledCapsuleRadius(),
+			HitBox->GetScaledCapsuleHalfHeight());
 	}
 
 	OnEmergeVisual();
@@ -92,6 +133,12 @@ bool ADRS2Mole::AcceptsHitFrom(const AActor* Attacker) const
 
 	// 2m 이내에서의 공격만 유효하다. 그 밖은 투과된다.
 	const float DistSq = FVector::DistSquared(GetActorLocation(), Attacker->GetActorLocation());
+
+	// [임시 진단]
+	UE_LOG(LogDR, Warning, TEXT("[MoleDiag] C. AcceptsHitFrom: 거리 %.0f / 허용 %.0f -> %s"),
+		FMath::Sqrt(DistSq), ProximityRadius,
+		DistSq <= FMath::Square(ProximityRadius) ? TEXT("통과") : TEXT("투과(거리 초과)"));
+
 	return DistSq <= FMath::Square(ProximityRadius);
 }
 
@@ -100,6 +147,20 @@ void ADRS2Mole::HandleProximityHit(AActor* /*Attacker*/)
 	if (!HasAuthority() || bVanishing) return;
 
 	// 데미지 수치와 무관하게 1히트로 사라진다 (홀로그램)
+	BeginVanish(/*bKilled=*/true);
+
+	if (ADRS2MoleGame* Game = OwningGame.Get())
+	{
+		Game->OnMoleKilled(this);
+	}
+}
+
+void ADRS2Mole::Die(const FVector& /*DeathImpulse*/)
+{
+	// ICombatInterface 계약상 필요하지만, 정상 경로는 HandleProximityHit 이다.
+	// 외부에서 직접 호출되더라도 같은 소멸 처리를 태워 상태가 어긋나지 않게 한다.
+	if (!HasAuthority() || bVanishing) return;
+
 	BeginVanish(/*bKilled=*/true);
 
 	if (ADRS2MoleGame* Game = OwningGame.Get())

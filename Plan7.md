@@ -2274,3 +2274,858 @@ E8 을 마친 뒤 **E6 으로 돌아가 `BP_S2MoleBoss` 의 `Behavior Tree` 에 
 [ ] E10   NavMesh 확장 + BossSpawnPoint Z + 구간 폭/천장
 [ ] V1~V26 검증
 ```
+
+---
+
+## 17. ★기본공격 원거리화 — 대각 검기(Slash Wave) 전환 계획 (2026-09-09 신규 · 사양 확정본)
+
+> **한 줄 요약**: 두더지 보스의 기본공격을 **"전방 120° / 캡슐 표면+150uu 즉발 부채꼴 2타"** 에서
+> **"전방으로 날아가는 45° 대각 관통 검기 2발 (1타 `/` · 2타 `\`)"** 로 바꾼다.
+> **판정 형태만 바뀌고, 데미지 축(구간별 1타/2타 커브)·몽타주 노티파이·GA 자산·태그·AI 태스크는 전부 그대로 쓴다.**
+
+### 17.1 왜 바꾸나 — 이 변경이 실제로 고치는 문제
+
+현재 보스는 **`MOVE_None` 으로 절대 이동하지 않는다**(§2.1). 그 결과 기본공격의 사거리가 곧 "보스의 위협 반경 전부"인데, 실효 사거리가 캡슐 표면에서 150uu 밖에 안 된다.
+
+| 현재의 문제 | 검기 전환이 주는 변화 |
+|---|---|
+| 플레이어가 **2m 밖에 서 있기만 하면 기본공격이 영원히 무의미**하다. 위협이 스킬1(굴착 강습, 쿨다운 10/8/6초)뿐이라 그 사이가 통째로 무위험 구간이 된다 | 원거리 압박이 상시로 깔린다. **"멈춰서 쏘면 검기에 맞는다"** 는 이동 강제력이 생긴다 |
+| 이동하지 않는 보스 + 근접 기본공격 = 설계상 **서로 부정하는 조합** | 이동하지 않는 보스 + 원거리 기본공격 = 포탑형 보스의 정석. 회피는 이동으로 한다 |
+| 등 뒤로 돌아가는 플레이(§2.1 의 느린 회전 4.0)가 **보상받지 못한다** — 어차피 안 맞으니 | 검기는 전방으로만 날아가므로 **측면·후면이 진짜 안전지대**가 된다. 느린 회전 설정이 비로소 의미를 갖는다 |
+| 2타가 1타와 **기능적으로 완전히 같다** (같은 부채꼴을 두 번 훑을 뿐) | ★**1타 `/` · 2타 `\`** 로 기울기가 반대라, 2타가 1타의 사각을 메운다. **"같은 방향으로만 피하면 2타에 맞는" 구조**가 생긴다 (17.8-F) |
+| 반매몰 자세(§6.1) 때문에 근접 판정에 Z 보정 코드가 잔뜩 붙어 있다 | 투사체는 발사 Z 를 한 번만 정하면 끝난다 |
+
+### 17.2 ★사용자 확정 사양 (2026-09-09)
+
+§2.5 와 같은 형식. **아래는 전부 확정이며 추가 질의 없이 진행한다.**
+
+| # | 쟁점 | **확정** |
+|---|---|---|
+| A | 조준 방식 | **전방 기준 + ±25° 조준 보정** (`MaxAimYawFromForward = 25`) |
+| B | 관통 | ★**인원수 무제한 관통** (`MaxPierceCount = 0`). **단 지형지물(벽·열차)은 관통하지 못하고 그 자리에서 소멸** (`bStopOnWorldGeometry = true`) |
+| C | 좌석 착석 플레이어 | **검기에 맞는다** (조준 대상 후보에서만 제외) |
+| D | 지형 차단 | **막힌다** — B 와 동일 결론 |
+| E | 근접 사각지대 | **없다** — 몸통 안에서 발사해 밀착해도 맞는다 (17.8-C) |
+| F | 데미지 재조정 | **1차 플레이테스트까지 현행 커브 유지** (20/30 → 26/39 → 32/48) |
+| G | BT 재시도 간격 | **1.0 → 1.8초** |
+| ★H | **검기 형태** | ★**수평이 아니라 45° 대각선.** 판정 캡슐을 진행축(X) 기준 45° 롤 시킨다. **1타와 2타는 서로 반대 방향의 대각선** (`/` 와 `\`) |
+| ★H-1 | **판정과 이펙트의 관계** | ★**보이는 참격 이펙트와 실제 판정이 똑같이 `/` `\` 로 기운다.** 둘을 따로 만들지 않고 **액터를 통째로 롤** 시켜 항상 일치시킨다 (17.6-C) |
+
+> **H 의 해석 확정**: "대각선으로 날아온다" = **칼날(이펙트 + 판정)의 단면이 `/` `\` 로 기울어 있다**는 뜻이다. **비행 궤적 자체는 여전히 수평·고도 고정**이다.
+> 이 구분이 중요한 이유: 궤적까지 기울이면 **벽 판정용 수평 선분 트레이스의 전제(17.8-D)가 깨지고**, 지면과의 관계가 매 발 달라져 "어떤 발은 바닥에 박히고 어떤 발은 머리 위로 지나가는" 통제 불가 상태가 된다. 기울기는 **롤(Roll) 하나로만** 준다.
+>
+> ★**`/` `\` 의 기준 시점**: **플레이어가 검기를 정면으로 마주 본 화면** 기준이다. 보스 뒤에서 보면 좌우가 뒤집혀 보이므로, 스폰 회전의 롤 부호는 **반드시 플레이어 시점에서 눈으로 확인**한다 (17.13-V45). 반대로 나오면 `Slash Roll Angles` 의 두 값을 맞바꾼다 — 코드는 손대지 않는다.
+
+### 17.3 바뀌는 것 / 그대로인 것 ★ (이 표가 작업 범위 전부다)
+
+| 영역 | 상태 |
+|---|---|
+| **판정 방식** | ★변경 — 즉발 부채꼴 오버랩 → **45° 기울어진 캡슐 투사체** 비행 + 무제한 관통 |
+| **신규 액터** | ★추가 — `ADRS2MoleSlashWave` (`ADRProjectile` 상속) + `BP_Mole_SlashWave` |
+| **GA C++ 클래스** | ★내부 수정 — `UDRS2MoleClawAttack` 의 `PerformClawSweep` 본문 교체 (클래스 자체는 유지) |
+| **GA 블루프린트 (`GA_Mole_Claw`)** | 유지 — 이벤트 그래프 **수정 없음**. 클래스 디폴트 프로퍼티만 재설정 |
+| **Asset Tag `Abilities.MoleBoss.Claw`** | 유지 — BT 태스크가 이 태그로 활성화하므로 건드리지 않는다 |
+| **몽타주 `AM_MoleBoss_Claw` + `Montage.Attack.1/.2`** | 유지 (노티파이 2개가 그대로 1타/2타 발사 시점) · ★**애니메이션 궤적만 좌우 반대로 저작 권장** (17.12-E14) |
+| **데미지 커브 행** (`Abilities.MoleBoss.Claw.Hit1/.Hit2`) | 유지 — ★**`CT_Damage` 에 추가할 행이 하나도 없다** |
+| **데미지 축 (구간 1/2/3차)** | 유지 — `ResolveDamage()` 로직 무수정 |
+| **물 보상 감소 (`OnAttackExecuted`)** | 유지 — 1타에서만 1회 |
+| **BT 태스크 `BTT_S2MoleBoss_Claw`** | 유지 |
+| **BT 거리 데코레이터 (`<= 200`)** | ★변경 — 검기 사거리에 맞춘다 (17.12-E13) |
+| **보스 본체 `ADRS2MoleBoss`** | ★**수정 없음** — 반매몰·잠수·융기·전기장 전부 무관 |
+| **페이즈 `UDRS2TrainPhase`** | ★**수정 없음** |
+| **신규 게임플레이 태그** | ★**불필요** |
+
+### 17.4 기준선 — 현재 구현 실측 (2026-09-09 코드 기준)
+
+**호출 체인** — 이 사슬의 **마지막 한 칸만 갈아끼운다**:
+
+```
+BT_S2MoleBoss
+ └ [Decorator] Distance To (TargetToFollow) <= 200          ← ★여기 (17.12-E13)
+   └ BTT_S2MoleBoss_Claw
+      └ TryActivateAbilitiesByTag(Abilities.MoleBoss.Claw)
+         └ GA_Mole_Claw (UDRS2MoleClawAttack, ServerOnly / InstancedPerActor)
+            ├ Wait Gameplay Event(Montage.Attack.1) → PerformClawSweep(0)   → 검기 `/`
+            ├ Wait Gameplay Event(Montage.Attack.2) → PerformClawSweep(1)   → 검기 `\`
+            └ Play Montage and Wait(AM_MoleBoss_Claw)
+                 └ PerformClawSweep() 내부:
+                    GetLiveObjectsWithinRadius → IsNotFriend → XY거리 → 부채꼴 각도 → ApplyDamageEffect
+                    ▲ ★이 5줄만 "검기 스폰"으로 교체된다
+```
+
+| 파일 | 현재 역할 | 이번 변경 |
+|---|---|---|
+| `Public/AbilitySystem/Abilities/Stage2/DRS2MoleClawAttack.h` | 부채꼴 파라미터 + Hit1/Hit2 커브 | ★수정 (부채꼴 필드 → 검기 필드) |
+| `Private/.../DRS2MoleClawAttack.cpp` | 오버랩 판정 + 데미지 | ★수정 (스폰으로 교체) |
+| `Public/Actor/DRProjectile.h/.cpp` | 공용 투사체 (스피어 + PMC + `FDamageEffectParams`) | 무수정 — **상속만 한다** |
+| `Public/Actor/DRVacuumAirProjectile.h/.cpp` | 루트 스피어 외 별도 판정 컴포넌트를 다는 선례 | 무수정 — **패턴만 차용** |
+| `Public/Character/Stage2/DRS2MoleBoss.h/.cpp` | 보스 본체 | ★무수정 |
+
+> **★문서 드리프트 경고**: §16.4 E4-1 의 표에 적힌 `Sweep Radius = 200` / `Sweep Angle = 120` 은 **현재 코드와 다르다.** 실제 구현은 `ClawReach = 150` (캡슐 **표면** 기준, 실효 반경 = `GetScaledCapsuleRadius() + ClawReach`) 으로 이미 한 번 개정됐고 그 개정이 §16.4 에 반영되지 않았다. 이번 전환으로 **해당 표 자체가 폐기**되므로 드리프트도 함께 해소된다 (17.16).
+
+### 17.5 사양 확정 — 대각 검기 수치
+
+| 항목 | 값 | 근거 |
+|---|---|---|
+| 형태 | 진행축 기준 **45° 기울어진 캡슐 칼날** (중력 0, 고도 고정) | 확정 H |
+| 1타 기울기 | **Roll = +45°** (`/` 모양) | 확정 H |
+| 2타 기울기 | **Roll = −45°** (`\` 모양) | ★두 발이 X 자로 교차해 사각을 메운다 (17.8-F) |
+| 발사 수 | **타당 1발** (총 2발) | §2.2 "2타" 사양 유지 |
+| 속도 | **1200 uu/s** | 최대 사거리까지 ≈1.2초. 옆으로 굴러 회피 가능한 하한 |
+| 최대 사거리 | **1400 uu (14m)** | 전투 구간(§1.5) 을 대략 덮되 배리어 너머까지는 못 가는 길이 |
+| 수명 | ★**자동** = 최대 사거리 ÷ 속도 (≈1.17s) | 두 값이 어긋날 여지를 코드가 없앤다 |
+| 판정 캡슐 | **Half Height 200 / Radius 50** | 바운딩 ≈ **312 × 312**, 진행방향 두께 100 (17.8-E 계산) |
+| 발사 고도 | **보스 액터 Z + 100uu** | 반매몰이라 보스 액터 Z = 지면 Z (§6.1). 칼날 중심이 플레이어 가슴 높이 |
+| 발사 원점 | 캡슐 중심 + 전방 × (보스 캡슐반지름 × 0.6) | ★몸통 **안**에서 출발 — 밀착 플레이어도 통과 경로에 들어온다 (17.8-C) |
+| 관통 | ★**무제한** (`MaxPierceCount = 0`) · 동일 대상 재타격 없음 | 확정 B |
+| 지형 | ★**벽·열차에 막혀 소멸** · 배리어·바닥은 통과 | 확정 B/D. 배리어는 Pawn 만 Block (`DRS2Barrier.cpp:20-22` 실측) |
+| 대상 | **플레이어 전용** (`IsNotFriend` + `Cast<ADRCharacter>`) | 기존과 동일 — 융기와 달리 아군 오사 없음 |
+| 데미지 | ★**변경 없음** — 구간별 Hit1/Hit2 커브 (20/30 → 26/39 → 32/48) | 확정 F |
+| 넉백 | 부모 `ADRProjectile` 의 `KnockbackChance` 경로, **기본 0** | 원거리 상시 공격이 계속 띄우면 조작감이 무너진다 |
+
+### 17.6 아키텍처 결정
+
+#### A. 왜 `ADRProjectile` 상속인가 — 공짜로 얻는 것
+
+| 얻는 것 | 부모 코드 위치 |
+|---|---|
+| 복제 + 이동 복제 (`bReplicates`, `SetReplicateMovement`) | `DRProjectile.cpp:19, 45` |
+| `UProjectileMovementComponent` (중력 0 기본) | `DRProjectile.cpp:32-35` |
+| `ECC_Projectile` 오브젝트 타입 + Pawn/World 오버랩 프로파일 | `DRProjectile.cpp:22-30` |
+| `FDamageEffectParams` 운반 + `ApplyDamageEffect` 파이프라인 | `DRProjectile.cpp:113-116` |
+| 아군 필터 (`IsNotFriend`) · 자기 자신 제외 | `DRProjectile.cpp:87-90` |
+| 임팩트 나이아가라 / 사운드 / 루핑 사운드 | `DRProjectile.cpp:53-67` |
+| 클라 소멸 시 이펙트 재생 보정 (`Destroyed` 의 `!bHit` 분기) | `DRProjectile.cpp:76` |
+
+#### B. ★왜 Box 가 아니라 Capsule 인가 — 확정 H 가 형태를 결정한다
+
+초안은 `ADRVacuumAirProjectile` 을 따라 **가로형 Box** 를 쓰려 했다. 확정 H(45° 대각)로 **캡슐이 정답이 된다**:
+
+| 후보 | 판정 |
+|---|---|
+| `UBoxComponent` | 회전은 되지만 모서리가 각져 **대각선 칼날의 끝단이 뭉툭**하다. 45° 회전 시 코너가 판정 밖으로 삐져나와 "안 맞았는데 맞음"이 잘 난다 |
+| `USphereComponent` 확대 | 비균등 스케일 불가 — 얇고 긴 칼날 자체가 표현 불가 |
+| ★**`UCapsuleComponent`** | **길고 얇은 형태가 기본형**이고, 축(로컬 Z)을 롤로 눕히면 그대로 대각 칼날이 된다. 끝단이 둥글어 시각(참격 나이아가라)과 판정이 잘 맞는다 |
+
+> 캡슐도 비균등 스케일은 안 되지만 **필요가 없다** — 길이는 `HalfHeight`, 두께는 `Radius` 로 각각 따로 조절된다. Box 를 쓸 때의 "루트 스피어는 비균등 스케일 불가" 문제 자체가 사라진다.
+
+#### C. ★기울기를 컴포넌트가 아니라 **액터 스폰 회전**으로 주는 이유
+
+기울기를 주는 방법은 둘이다:
+
+| 방법 | 결과 |
+|---|---|
+| 캡슐 컴포넌트의 상대 회전을 타마다 바꾼다 | 판정만 기울고 **메시/나이아가라는 그대로** → 보이는 것과 맞는 것이 어긋난다. BP 에서 연출을 맞추려면 같은 값을 두 번 관리해야 한다 |
+| ★**액터 스폰 회전의 Roll 에 ±45 를 넣는다** | **액터 전체(판정 + 메시 + 나이아가라 + 트레일)가 통째로 기운다.** BP 는 "수평 칼날"만 만들면 되고 방향 전환에 추가 작업이 0 이다 |
+
+**롤은 비행에 아무 영향이 없다.** `UProjectileMovementComponent` 의 속도는 `Velocity = Forward(X) * Speed` 이고 롤은 X 축 자체를 회전시키지 않는다. 즉 **궤적은 수평 그대로, 칼날 단면만 기운다** — 확정 H 의 요구와 정확히 일치한다.
+
+> ★**반드시 확인할 함정**: `ProjectileMovement->bRotationFollowsVelocity` 가 **true 이면 매 프레임 회전이 속도 방향으로 덮어써져 롤이 지워진다** (칼날이 항상 수평으로 돌아온다). UE 기본값은 false 이며 `ADRProjectile` 도 건드리지 않지만, **`BP_Mole_SlashWave` 에서 실수로 체크하면 대각선이 통째로 사라진다.** 17.13-V45 가 이걸 잡는다.
+
+#### D. 왜 GA 클래스를 새로 만들지 않는가 ★
+
+새 GA 클래스를 만들면 **`GA_Mole_Claw` 를 리페어런트하거나 새 BP 를 만들어야 하고**, 그러면 Asset Tag·몽타주 배선·`DA_EnemyCharacterClassInfo` 의 StartupAbilities·BT 태스크가 전부 재검증 대상이 된다. §16.12 의 "자주 나는 실수" 표에서 **Asset Tag 불일치가 최상위 함정**으로 지목된 자산이다.
+
+반면 기존 클래스의 `PerformClawSweep` **본문만** 교체하면:
+- BP 이벤트 그래프가 부르는 **함수 시그니처가 그대로**라 컴파일 깨짐이 없다
+- ★**`HitIndex` 가 이미 1타/2타를 구분해 넘어온다** — 대각선 방향을 고르는 인덱스로 **그대로 재사용**된다. 새 배선이 필요 없다
+- 태그·몽타주·AI·데이터 에셋이 **한 줄도 안 바뀐다**
+- 롤백이 체크박스 하나로 끝난다 (아래 F)
+
+> 클래스 **이름**(`ClawAttack`)이 내용(검기)과 어긋나는 것은 감수한다. 이름을 바꾸면 `CoreRedirects` 를 쓰더라도 BP 재저장·리페어런트 리스크가 생기고 얻는 것은 가독성뿐이다. **이름 변경은 검기가 최종 확정된 뒤 별도 커밋으로 분리**한다 (17.15-11, 선택).
+
+#### E. C++ / BP 역할 분담 (§3.3 관례 유지)
+
+| 층 | 담당 |
+|---|---|
+| C++ (`ADRS2MoleSlashWave`) | 비행·관통·중복 방지·벽 정지·데미지 적용 — **판정 전부** |
+| C++ (`UDRS2MoleClawAttack`) | 발사 원점/방향/**타별 롤 각도** 계산, 데미지 값 결정, 스폰 |
+| BP (`BP_Mole_SlashWave`) | 메시/나이아가라/사운드/**캡슐 치수** — **연출과 크기 전부** |
+| BP (`GA_Mole_Claw`) | 몽타주 재생 + 노티파이 대기 — **수정 없음** |
+
+#### F. 롤백 스위치 ★
+
+`UDRS2MoleClawAttack` 에 `bUseMeleeSweep` (기본 **false**) 를 남기고 **기존 부채꼴 코드를 `PerformMeleeSweep_Legacy()` 로 살려 둔다.**
+플레이테스트에서 근접 버전과 A/B 비교가 가능하고, 문제 발생 시 BP 체크박스 하나로 즉시 되돌아간다.
+검기가 확정되면 **다음 마일스톤에서 레거시 경로를 삭제**한다 (17.15-11).
+
+### 17.7 신규 C++ — `ADRS2MoleSlashWave`
+
+**파일**: `Public|Private/Actor/Stage2/DRS2MoleSlashWave.h/.cpp`
+
+```cpp
+UCLASS()
+class DAERUNE_API ADRS2MoleSlashWave : public ADRProjectile
+{
+    GENERATED_BODY()
+public:
+    ADRS2MoleSlashWave();
+    virtual void Tick(float DeltaSeconds) override;
+
+    /** 서버 전용. GA 가 SpawnActorDeferred 직후 FinishSpawning 전에 호출한다. */
+    void InitWave(float InSpeed, float InMaxRange);
+
+protected:
+    virtual void BeginPlay() override;
+
+    /** ★부모를 호출하지 않는다 — 부모는 첫 히트에 Destroy 하므로 관통이 불가능하다. */
+    virtual void OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+        UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep,
+        const FHitResult& SweepResult) override;
+
+    /**
+     * ★대각 칼날 판정.
+     *
+     * 캡슐의 축은 로컬 Z 다. 여기에 상대 회전 Roll = 90 을 주어 축을 **액터의 Y(좌우)** 로 눕힌다.
+     * 그 뒤 액터 자체의 스폰 회전 Roll(±45) 이 이 칼날을 진행축 기준으로 기울인다 (17.6-C).
+     *
+     * ★부호는 에디터에서 눈으로 확인하고 뒤집는다 — UE 의 롤 부호 관례를 문서로 단정하지 않는다.
+     *   확인 방법은 17.13-V45.
+     */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SlashWave")
+    TObjectPtr<UCapsuleComponent> BladeCapsule;
+
+    /** ★0 = 무제한 관통 (확정 B). 0 보다 크면 그 수만큼만 뚫는다. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "SlashWave", meta = (ClampMin = "0"))
+    int32 MaxPierceCount = 0;
+
+    /** ★지형지물(벽·열차) 관통 금지 (확정 B/D). 배리어는 Visibility 를 Ignore 하므로 통과한다. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "SlashWave")
+    bool bStopOnWorldGeometry = true;
+
+    /** 관통 순간 연출 (BP 훅) — 무제한 관통이라 여러 번 불릴 수 있다 */
+    UFUNCTION(BlueprintImplementableEvent, Category = "SlashWave")
+    void OnPierceVisual(const FVector& HitLocation);
+
+private:
+    /** ★동일 대상 재타격 금지. 오버랩에서 빠졌다가 다시 들어와도 두 번 맞지 않는다. */
+    TSet<TWeakObjectPtr<AActor>> HitActors;
+
+    int32 PierceCount = 0;
+    FVector LastTickLocation = FVector::ZeroVector;
+};
+```
+
+```cpp
+ADRS2MoleSlashWave::ADRS2MoleSlashWave()
+{
+    // ★부모는 Tick 을 끈다. 벽 판정을 위해 다시 켠다 (17.8-D)
+    PrimaryActorTick.bCanEverTick = true;
+
+    // ---- 대각 칼날 판정 캡슐 ----
+    BladeCapsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("BladeCapsule"));
+    BladeCapsule->SetupAttachment(GetRootComponent());
+
+    // ★축(로컬 Z)을 액터 Y 로 눕힌다. 기울기는 액터 스폰 회전의 Roll 이 준다 (17.6-C).
+    BladeCapsule->SetRelativeRotation(FRotator(0.f, 0.f, 90.f));
+    BladeCapsule->SetCapsuleSize(50.f, 200.f);          // Radius 50 / HalfHeight 200
+
+    BladeCapsule->SetCollisionObjectType(ECC_Projectile);
+    BladeCapsule->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    BladeCapsule->SetCollisionResponseToAllChannels(ECR_Ignore);
+    BladeCapsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+    BladeCapsule->OnComponentBeginOverlap.AddDynamic(this, &ADRS2MoleSlashWave::OnSphereOverlap);
+}
+
+void ADRS2MoleSlashWave::BeginPlay()
+{
+    Super::BeginPlay();
+
+    // ★루트 스피어의 판정을 완전히 끈다 — 판정 형태를 캡슐 하나로 단일화한다.
+    //   ① 스피어가 살아 있으면 대각선의 "빈 구석"(17.8-F)이 중앙 구에 메워져 설계가 무의미해진다
+    //   ② 지면 +100uu 를 나는 물체라 스피어가 바닥(WorldStatic)과 상시 오버랩 → 즉시 소멸한다
+    //   (부모 BeginPlay 가 Sphere 에 건 델리게이트는 콜백이 안 오므로 그대로 둬도 무해하다)
+    Sphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+    LastTickLocation = GetActorLocation();
+}
+
+void ADRS2MoleSlashWave::InitWave(float InSpeed, float InMaxRange)
+{
+    ProjectileMovement->InitialSpeed = InSpeed;
+    ProjectileMovement->MaxSpeed     = InSpeed;
+    ProjectileMovement->ProjectileGravityScale = 0.f;   // 고도 고정
+
+    // ★롤(대각 기울기)이 매 프레임 지워지는 것을 코드로도 막는다 (17.6-C 함정)
+    ProjectileMovement->bRotationFollowsVelocity = false;
+
+    // ★수명 = 사거리 / 속도. 두 값이 어긋날 여지를 없앤다 (부모의 LifeSpan 15초를 덮어쓴다)
+    SetLifeSpan(InSpeed > KINDA_SMALL_NUMBER ? (InMaxRange / InSpeed) : 1.f);
+}
+
+void ADRS2MoleSlashWave::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+    if (!HasAuthority() || bHit || !bStopOnWorldGeometry)
+    {
+        LastTickLocation = GetActorLocation();
+        return;
+    }
+
+    // ★수평 선분 트레이스 — 고도가 고정이라 바닥은 절대 안 걸리고 수직 지오메트리만 걸린다 (17.8-D)
+    const FVector Now = GetActorLocation();
+    FHitResult Hit;
+    FCollisionQueryParams Params;
+    Params.AddIgnoredActor(this);
+    if (DamageEffectParams.SourceAbilitySystemComponent)
+    {
+        Params.AddIgnoredActor(DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor());
+    }
+
+    if (GetWorld()->LineTraceSingleByChannel(Hit, LastTickLocation, Now, ECC_Visibility, Params))
+    {
+        SetActorLocation(Hit.ImpactPoint);
+        OnHit();          // 임팩트 연출 + bHit = true
+        Destroy();
+        return;
+    }
+    LastTickLocation = Now;
+}
+
+void ADRS2MoleSlashWave::OnSphereOverlap(UPrimitiveComponent*, AActor* OtherActor,
+    UPrimitiveComponent*, int32, bool, const FHitResult&)
+{
+    if (DamageEffectParams.SourceAbilitySystemComponent == nullptr) return;
+    AActor* Source = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
+    if (!IsValid(Source) || !IsValid(OtherActor) || Source == OtherActor) return;
+    if (!UDRAbilitySystemLibrary::IsNotFriend(Source, OtherActor)) return;
+
+    // ★플레이어만. 벽/소품이 들어와도 여기서 걸러진다 (지형 판정은 Tick 담당)
+    if (Cast<ADRCharacter>(OtherActor) == nullptr) return;
+
+    if (HitActors.Contains(OtherActor)) return;     // 동일 대상 재타격 금지
+    HitActors.Add(OtherActor);
+
+    OnPierceVisual(OtherActor->GetActorLocation());
+
+    if (HasAuthority())
+    {
+        if (UAbilitySystemComponent* TargetASC =
+            UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(OtherActor))
+        {
+            DamageEffectParams.DeathImpulse =
+                GetActorForwardVector() * DamageEffectParams.DeathImpulseMagnitude;
+            DamageEffectParams.TargetAbilitySystemComponent = TargetASC;
+            UDRAbilitySystemLibrary::ApplyDamageEffect(DamageEffectParams);
+        }
+
+        // ★MaxPierceCount = 0 이면 이 블록에 절대 안 들어간다 = 무제한 관통 (확정 B).
+        //   검기를 멈추는 것은 오직 벽(Tick)과 수명뿐이다.
+        if (MaxPierceCount > 0 && ++PierceCount >= MaxPierceCount)
+        {
+            OnHit();
+            Destroy();
+        }
+    }
+}
+```
+
+> **부모 `OnSphereOverlap` 을 호출하지 않는 이유**: 부모는 `IsNotFriend` 를 통과한 **첫 액터에서 무조건 `Destroy()`** 한다(`DRProjectile.cpp:120`). 그런데 `IsNotFriend` 는 **양쪽 다 `Player`/`Enemy` 태그가 아니면 "적이 아닌 것도 적으로" 통과시킨다**(`DRAbilitySystemLibrary.cpp` 실측 — 벽·소품이 전부 통과). 즉 부모 로직으로는 무제한 관통은커녕 **바닥에 스치기만 해도 사라진다.** 그래서 데미지 파이프라인만 그대로 베끼고 소멸 조건을 갈아끼운다.
+
+### 17.8 핵심 알고리즘
+
+#### A. 발사 원점 — 반매몰 보정이 여기서 끝난다
+
+보스는 캡슐 중심 Z 가 곧 지면 Z 다(`BuriedRatio = 0.5`, §6.1). 따라서:
+
+```
+SpawnLocation.XY = Boss.XY + Forward2D * (GetScaledCapsuleRadius() * MuzzleForwardRatio)   // 기본 0.6
+SpawnLocation.Z  = Boss.Z + MuzzleHeight                                                   // 기본 100
+```
+
+기존 근접 판정의 `VerticalTolerance = 400` 같은 보정이 **전부 필요 없어진다.** 검기는 처음부터 플레이어 가슴 높이를 난다.
+
+> 연출상 손/무기 소켓에서 나오게 하고 싶다면 `ICombatInterface::Execute_GetCombatSocketLocation(Boss, CombatSocket.RightHand)` 를 쓸 수 있지만 **기본값은 위 계산식**이다. 이유: `ADRCharacterBase::GetCombatSocketLocation_Implementation` 은 **태그가 안 맞으면 `FVector()`(월드 원점)을 돌려준다** — 소켓 이름을 BP 에 안 넣으면 검기가 맵 원점에서 발사되는 무증상 버그가 난다.
+> ★대각 칼날에서는 **원점 Z 가 곧 칼날의 회전 중심**이라 소켓을 쓰면 1타/2타의 대각선 중심 높이가 손 위치에 따라 흔들린다. 계산식 고정을 권한다.
+
+#### B. 방향 — 전방 + 조준 클램프 + ★타별 롤
+
+```
+Desired  = (Target.XY - Spawn.XY) 의 Yaw                  // 타깃이 없으면 Forward.Yaw
+Delta    = NormalizedDeltaYaw(Desired, Forward.Yaw)
+FireYaw  = Forward.Yaw + Clamp(Delta, -MaxAimYawFromForward, +MaxAimYawFromForward)
+
+FireRot  = FRotator(
+             Pitch = 0,                       // ★고도 고정 (17.2-H)
+             Yaw   = FireYaw,
+             Roll  = SlashRollAngles[HitIndex] // ★1타 +45 / 2타 -45  ← 대각선의 정체
+           )
+```
+
+- 타깃은 `ICombatInterface::Execute_GetCombatTarget(Boss)` → 없으면 `ADRGameStateBase::GetAlivePlayers()` 중 최근접 (스킬1 의 `PickRandomTarget()` 과 같은 소스: `DRS2MoleBurrowStrike.cpp:333-363`)
+- ★**Yaw 와 Roll 은 완전히 독립**이다. 조준 보정(Yaw)이 어떤 값이든 칼날 기울기(Roll)는 그대로 유지된다
+- ★`Pitch = 0` 고정이 **대각선 사양의 전제**다. Pitch 가 들어가면 롤 축(=진행축)이 위아래로 기울어 대각선 각도가 거리마다 달라지고, 17.8-D 의 수평 선분 트레이스도 깨진다
+
+#### C. 근접 사각지대를 만들지 않는 법
+
+이 보스는 캡슐 반지름이 커서(§16.6-a) **플레이어가 아무리 붙어도 캡슐 중심에서 `보스반지름 + 플레이어반지름` 안쪽으로 들어올 수 없다.**
+발사 원점을 `CapsuleRadius * 0.6` 으로 잡으면 검기는 **몸통 안에서 출발해 캡슐 표면을 뚫고 나간다.** 따라서 밀착한 플레이어도 정상적으로 통과 경로에 들어온다.
+(원점을 캡슐 밖 `CapsuleRadius + α` 로 잡으면 밀착 플레이어가 원점보다 뒤에 놓여 **영구 안전지대**가 생긴다 — 근접판이 겪었던 "부채꼴이 몸통 안에 갇히는" 버그의 거울상이다.)
+
+#### D. 지형 정지를 오버랩이 아니라 선분 트레이스로 하는 이유 ★
+
+| 방식 | 문제 |
+|---|---|
+| 캡슐 오버랩으로 `WorldStatic` 감지 | 검기는 지면 +100uu 를 나는데 **대각 칼날의 아래쪽 끝이 지면 밑으로 내려간다**(17.8-E) → **바닥과 상시 오버랩** → 스폰 즉시 소멸 |
+| PMC 의 `bSweepCollision` | Block 응답이 필요한데 `ECC_Projectile` 프로파일은 전부 Overlap 이다. 프로파일을 바꾸면 다른 투사체에 영향 |
+| ★**프레임 간 수평 선분 트레이스** | **고도가 고정이라 선분이 수평**이다 → 바닥과 절대 교차하지 않고 **수직 지오메트리(벽·열차)만** 잡는다. 빠른 이동에서도 터널링이 없다 |
+
+- 트레이스는 **칼날의 기울기와 무관**하다 — 액터 중심점의 이동 궤적만 보므로 1타/2타가 동일하게 동작한다
+- 배리어는 `ECC_Pawn` 만 Block 이고 나머지는 Ignore 이므로(`DRS2Barrier.cpp:20-22`) **Visibility 트레이스에 안 걸린다** = 검기가 통과한다. §1.5 의 "배리어는 투사체를 통과시킨다" 사양과 일치
+- ★대각 칼날은 **중심선보다 옆으로 150uu 씩 삐져나온다.** 중심선이 벽 모서리를 아슬아슬하게 비켜 가면 **칼날 끝이 벽을 뚫고 지나가 보인다.** 허용 오차로 두되, 거슬리면 트레이스를 `SweepSingleByChannel(구 반경 100)` 으로 바꾼다 (17.14)
+
+#### E. ★대각 칼날의 실제 판정 크기 — 숫자로 확인
+
+`HalfHeight = 200`, `Radius = 50`, 45° 기울기일 때 (캡슐의 `HalfHeight` 는 **반구 캡을 포함**한다):
+
+```
+원통부 반길이 = HalfHeight - Radius = 150
+축 방향 45° 성분 = 150 × cos45° ≈ 106
+좌우 반폭 = 106 + Radius = 156        →  ★총 폭 ≈ 312uu
+상하 반높이 = 106 + Radius = 156      →  ★총 높이 ≈ 312uu
+진행방향 두께 = Radius × 2 = 100uu
+```
+
+즉 **바운딩 박스는 312 × 312 로 기존 초안의 "폭 320" 과 사실상 같고**, 그 안에서 **대각선 띠만 판정**된다는 점이 다르다. 발사 고도 100 기준 칼날은 **지면 −56 ~ +256** 범위를 지나므로:
+- **아래쪽 끝이 살짝 땅에 잠긴다** → 바닥을 긁는 연출로 자연스럽고, 판정상 바닥은 무시된다(17.7 `BeginPlay`)
+- **위쪽 끝(+256)은 플레이어 키(≈176)보다 높다** → 위로는 못 피한다 (점프 회피 불가)
+
+#### F. ★1타 `/` · 2타 `\` 가 만드는 회피 구조 — 이 변경의 핵심 재미
+
+칼날이 대각선이면 **좌우 회피의 유불리가 비대칭**이 된다. `/` 칼날(오른쪽이 올라가는 방향) 기준:
+
+```
+      z                     칼날 `/`                   ┌ 플레이어 키 176
+  256 ┤                              ╱                 │
+      │                          ╱                     │
+  176 ┼─────────────────────╱───────────────  ← 이 위로는 칼날이 지나가도 안 맞는다
+      │                 ╱      ┌──┐                    │
+  100 ┤  칼날 중심 ╱          │  │ ← 오른쪽으로 피한 플레이어: 칼날이 머리 위로 지나감 = 회피 O
+      │      ╱                └──┘
+    0 ┼──╱────────────────────────────────────  지면
+      │╱   ┌──┐
+  -56 ┘    │  │ ← 왼쪽으로 피한 플레이어: 칼날이 다리 높이로 지나감 = 회피 X
+           └──┘
+      ←─────────  y (좌)          (우)  ─────────→
+```
+
+기본 수치에서의 대략적인 유효 회피 폭 (플레이어 캡슐 0~176 기준):
+
+| 칼날 | 왼쪽으로 회피 | 오른쪽으로 회피 |
+|---|---|---|
+| 1타 `/` | **약 ±160 까지 맞는다** (칼날이 낮게 깔림) | ★**약 110 밖이면 회피 성공** (칼날이 머리 위) |
+| 2타 `\` | ★**약 110 밖이면 회피 성공** | **약 160 까지 맞는다** |
+
+→ ★**1타를 오른쪽으로 피한 자리가 2타의 정타 자리**가 된다. **한 방향으로만 계속 피하면 반드시 2타에 맞고, 1타와 2타 사이에 방향을 바꿔야 둘 다 피한다.**
+0.5초(노티파이 0.45s → 0.95s) 안에 좌우를 바꿔야 하므로 **"검기를 보고 반응하는" 플레이**가 성립한다.
+
+> 위 숫자는 `HalfHeight 200 / Radius 50 / MuzzleHeight 100` 에서 나온 **파생값**이다. 셋 중 하나라도 바꾸면 **표를 다시 계산해야 한다.**
+> - `MuzzleHeight` ↑ → 위쪽 사각이 넓어지고 아래쪽은 "무조건 맞음"이 된다
+> - `HalfHeight` ↑ → 전체 폭이 넓어져 좌우 회피 자체가 어려워진다
+> - **비대칭을 없애고 싶다면** 롤을 ±45 대신 0/90 으로 두면 되지만, 그러면 확정 H 가 깨진다
+
+#### G. 중복 타격 방지가 필요한 이유
+
+무제한 관통이라 검기는 **대상을 지나쳐도 계속 산다.** 오버랩 이벤트는 컴포넌트가 겹칠 때마다 오므로, 플레이어가 칼날 옆면을 스치듯 들락거리면 `BeginOverlap` 이 여러 번 발생할 수 있다. `HitActors` TSet 이 **한 검기당 한 대상 1회**를 보장한다.
+
+### 17.9 기존 파일 수정 — `UDRS2MoleClawAttack`
+
+**헤더 변경** (필드 교체, 나머지 유지):
+
+| 필드 | 처리 |
+|---|---|
+| `ClawReach`, `SweepAngle`, `VerticalTolerance` | ★`bUseMeleeSweep == true` 일 때만 쓰이는 레거시로 강등 (카테고리 `MoleBoss\|Claw (Legacy)`) |
+| `Hit1Damage`, `Hit2Damage` (`FScalableFloat`) | ★**그대로** — 커브 행·`OnGiveAbility` 검증 로그까지 전부 유지 |
+| `GetEffectiveSweepRadius()` | 유지 (레거시 경로 + 디버그용) |
+| **신규** `TSubclassOf<ADRS2MoleSlashWave> SlashWaveClass` | ★필수. 미지정 시 `OnGiveAbility` 에서 Error 로그 (§15.3 방어 코드 관례) |
+| **신규** `float WaveSpeed = 1200.f` | |
+| **신규** `float WaveMaxRange = 1400.f` | |
+| **신규** `float MuzzleForwardRatio = 0.6f` / `float MuzzleHeight = 100.f` | ★`MuzzleHeight` 는 대각선 회피 구조에 직결된다 (17.8-F) |
+| **신규** `float MaxAimYawFromForward = 25.f` | 0 = 순수 전방, 180 = 완전 조준 |
+| ★**신규** `TArray<float> SlashRollAngles = { 45.f, -45.f }` | **인덱스 = HitIndex.** 1타 `/`, 2타 `\`. 배열이 짧으면 마지막 값으로 폴백, 비어 있으면 0(수평) |
+| **신규** `int32 WavesPerHit = 1` / `float FanSpreadAngle = 20.f` | ★2발 이상일 때만 부채 분산. **기본 1이라 분산 코드는 잠들어 있다** |
+| **신규** `bool bUseMeleeSweep = false` | 롤백 스위치 (17.6-F) |
+
+> ★**`SlashRollAngles` 를 배열로 두는 이유**: 3타 이상으로 늘리거나 "1타만 대각, 2타는 수평" 같은 변형을 **코드 수정 없이** 시험할 수 있다. 값 셋(`{45,-45}` / `{-45,45}` / `{30,-30}`)을 바꿔가며 회피 난이도를 조율하는 것이 17.11 의 3순위 조정 손잡이다.
+
+**`PerformClawSweep` 본문**:
+
+```cpp
+void UDRS2MoleClawAttack::PerformClawSweep(int32 HitIndex)
+{
+    AActor* Avatar = GetAvatarActorFromActorInfo();
+    if (!IsValid(Avatar) || !Avatar->HasAuthority()) return;      // ★서버 전용 (기존과 동일)
+
+    if (bUseMeleeSweep) { PerformMeleeSweep_Legacy(HitIndex); }   // 롤백 경로
+    else                { FireSlashWaves(HitIndex); }             // ★신규 기본 경로
+
+    // 물 보상 감소는 "공격 1회"당 1번 (기존 로직 그대로)
+    if (HitIndex == 0)
+    {
+        if (ADREnemy* Enemy = Cast<ADREnemy>(Avatar)) Enemy->OnAttackExecuted();
+    }
+}
+
+/** ★HitIndex 로 대각선 방향을 고른다. 범위를 벗어나면 마지막 값, 비어 있으면 수평(0). */
+float UDRS2MoleClawAttack::ResolveSlashRoll(int32 HitIndex) const
+{
+    if (SlashRollAngles.Num() == 0) return 0.f;
+    return SlashRollAngles[FMath::Clamp(HitIndex, 0, SlashRollAngles.Num() - 1)];
+}
+
+void UDRS2MoleClawAttack::FireSlashWaves(int32 HitIndex)
+{
+    if (!SlashWaveClass)
+    {
+        UE_LOG(LogDR, Error, TEXT("[MoleBoss] SlashWaveClass 미지정 — 검기가 발사되지 않습니다."));
+        return;
+    }
+
+    const FVector Muzzle    = ResolveMuzzleLocation();          // 17.8-A
+    const float   FireYaw   = ResolveFireYaw(Muzzle);           // 17.8-B (Yaw 만 계산)
+    const float   Roll      = ResolveSlashRoll(HitIndex);       // ★1타 +45 / 2타 -45
+    const float   HitDamage = ResolveDamage(HitIndex);          // ★기존 함수 그대로 (구간 축)
+
+    const int32 Count = FMath::Max(1, WavesPerHit);
+    for (int32 i = 0; i < Count; ++i)
+    {
+        float Yaw = FireYaw;
+        if (Count > 1)
+        {
+            Yaw += FanSpreadAngle * (static_cast<float>(i) / (Count - 1) - 0.5f);
+        }
+
+        // ★Pitch = 0 고정, Roll = 대각 기울기 (17.8-B)
+        const FRotator  Aim(0.f, Yaw, Roll);
+        const FTransform SpawnTM(Aim.Quaternion(), Muzzle);
+
+        ADRS2MoleSlashWave* Wave = GetWorld()->SpawnActorDeferred<ADRS2MoleSlashWave>(
+            SlashWaveClass, SpawnTM, GetOwningActorFromActorInfo(),
+            Cast<APawn>(GetOwningActorFromActorInfo()),
+            ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+        if (!Wave) continue;
+
+        Wave->DamageEffectParams = MakeDamageEffectParamsFromClassDefaults();
+        Wave->DamageEffectParams.BaseDamage = HitDamage;       // ★구간/타수별 값으로 덮어쓴다
+        Wave->InitWave(WaveSpeed, WaveMaxRange);
+        Wave->FinishSpawning(SpawnTM);
+    }
+}
+```
+
+> ★**`FRotator` 구성 순서 주의**: `FRotator(Pitch, Yaw, Roll)` 이다. `FRotator(0, Yaw, Roll)` 을 `FRotator(0, Roll, Yaw)` 로 쓰면 **검기가 엉뚱한 방향으로 날아가면서 수평으로 눕는다** — 증상이 "대각선이 안 나온다"로 보여 원인을 엉뚱한 곳에서 찾게 된다.
+> **`MakeDamageEffectParamsFromClassDefaults()` 를 타깃 없이 부른다**: 근접판은 대상별로 `(Target)` 을 넘겨 `TargetAbilitySystemComponent` 를 채웠지만, 투사체는 **맞는 순간에** 채운다(`DRProjectile.cpp:113`). `UDRProjectileSpell::SpawnProjectile` 과 동일한 관례다.
+> **디버프 설정은 자동으로 따라온다** — 확률·데미지·지속시간이 `DamageEffectParams` 안에 들어 있고 `ExecCalc_Damage` 가 읽는다.
+
+### 17.10 네트워크
+
+| 항목 | 처리 |
+|---|---|
+| 발사 권한 | **서버 전용** — GA 가 `ServerOnly`, `PerformClawSweep` 에 `HasAuthority()` 가드 (기존 유지) |
+| 검기 액터 | `bReplicates` + `SetReplicateMovement(true)` (부모 제공) → 클라는 복제된 액터를 본다 |
+| ★**대각 기울기(Roll)** | **스폰 회전에 들어 있으므로 복제된 초기 트랜스폼에 그대로 실려 간다.** 별도 복제 프로퍼티가 필요 없다 |
+| 데미지 | 서버에서만 `ApplyDamageEffect` |
+| 클라 예측 | **없음** — 적 공격이라 필요 없다 |
+| 클라 소멸 연출 | 부모 `Destroyed()` 의 `!bHit && !HasAuthority()` 분기가 임팩트를 재생 |
+| 몽타주 | ★**변경 없음** — 기존 §16.5-d 의 Multicast 보완책이 그대로 유효 |
+| ★유의 | 클라에서 **`bRotationFollowsVelocity` 가 켜져 있으면 클라에서만 칼날이 수평으로 돌아온다**(이동 복제 보간이 회전을 다시 계산). 서버는 정상이라 **"내 화면엔 수평인데 대각선 판정으로 맞는"** 최악의 증상이 된다 → 17.13-V45 를 **반드시 클라이언트에서도** 확인한다 |
+
+### 17.11 데이터 · 밸런스
+
+**커브 테이블 변경: 없음.** `Abilities.MoleBoss.Claw.Hit1/.Hit2` 를 그대로 쓴다 (§8.2-a).
+
+| 구간 | 1타 `/` | 2타 `\` | 합 | 비고 |
+|---|---|---|---|---|
+| 1차 | 20 | 30 | 50 | 현행 유지 |
+| 2차 | 26 | 39 | 65 | 현행 유지 |
+| 3차 | 32 | 48 | 80 | 현행 유지 |
+
+> ★**2타가 1타보다 아픈 것이 이제 의미를 갖는다.** 1타는 "회피 방향을 유도하는 견제", 2타는 "잘못 피하면 크게 맞는 본타"가 된다 (17.8-F). 재조정 시 **이 비율(20:30)을 뒤집지 않는 편이 좋다.**
+
+**★재조정 가이드** (확정 F — 1차 플레이테스트 후): 근접판은 사실상 명중률이 0 에 가까웠으므로 **이 값들은 실전 검증된 적이 없다.** 조정 순서:
+
+1. **BT `Wait` 간격**(1.8초) — 빈도가 가장 크게 체감된다
+2. **`WaveSpeed`** — 반응 시간. 1200 → 900 이면 눈에 띄게 쉬워진다
+3. ★**`SlashRollAngles` / `MuzzleHeight` / 캡슐 치수** — **회피 난이도의 본체.** 롤을 ±30 으로 낮추면 칼날이 눕고(=좌우 회피가 어려워짐), ±60 으로 올리면 서고(=좌우 회피가 쉬워짐). `MuzzleHeight` 를 올리면 위쪽 사각이 넓어진다 (17.8-F 표를 다시 계산할 것)
+4. **커브 값** — 마지막에 손댄다. 구간 스케일 비율(20:26:32)을 깨지 않도록 **비례 축소**
+
+> ★**관통 수는 조정 손잡이가 아니다** — 확정 B 로 무제한이며, 4인이 일렬로 서면 전원이 맞는 것이 사양이다. 총 피해가 과하다면 **커브 값(4순위)** 으로 내린다.
+
+§8.2-c 의 고정값 표는 다음으로 대체된다:
+
+| 항목 | 기존 | ★변경 |
+|---|---|---|
+| 기본공격 사거리 / 각도 | 200uu(2m) / 120° 부채꼴 | **1400uu 직선 / 45° 대각 칼날 (바운딩 312×312) / 무제한 관통** |
+| 융기 반경 / 전기장 / 띄우기 / 대상 | — | **전부 변경 없음** |
+
+### 17.12 에디터 작업 — [E11] ~ [E14]
+
+#### E11. `BP_Mole_SlashWave` (신규)
+부모 **`DRS2MoleSlashWave`** → `Content/Blueprints/AbilitySystem/Enemy/EliteMole/Abilities/`
+(DragonFly 의 `BP_Lazer` 가 같은 성격의 선례다 — 참고용으로 열어 보면 좋다)
+
+| 항목 | 값 |
+|---|---|
+| `BladeCapsule` Capsule Radius | **50** |
+| `BladeCapsule` Capsule Half Height | **200** |
+| `BladeCapsule` **Relative Rotation** | ★**Roll 90 (C++ 기본값) — 건드리지 말 것.** 기울기는 스폰 회전이 준다 (17.6-C) |
+| `BladeCapsule` Collision | **Query Only** · Pawn = Overlap, 나머지 Ignore (C++ 설정, 확인만) |
+| `Sphere` (루트) | ★**Collision 을 켜지 말 것** — C++ `BeginPlay` 가 끈다. 켜면 대각선의 사각이 메워진다 |
+| `ProjectileMovement → b Rotation Follows Velocity` | ★**반드시 체크 해제** (기본값 false). 체크되면 대각선이 사라진다 (17.6-C) |
+| 메시 / 나이아가라 | ★**에셋 원본은 수평 참격 하나만** 만든다. **게임에서는 액터 롤에 의해 `/` `\` 로 기울어 보인다** — 에셋 자체를 기울여 만들면 이중 회전이 되어 90°(수직)가 된다 |
+| 메시 정렬 | 칼날의 긴 축이 **액터 로컬 Y(좌우)** 를 향하도록. `BladeCapsule` 과 겹쳐 보며 맞춘다 → ★이렇게 맞춰 두면 **이펙트와 판정이 영원히 같이 기운다** |
+| `Impact Effect` / `Impact Sound` | 벽 타격 연출 |
+| `Looping Sound` | 비행음 (선택) |
+| `Max Pierce Count` | ★**0 (무제한)** |
+| `b Stop On World Geometry` | ★**체크** |
+| `On Pierce Visual` (이벤트) | 피격 스파크 (선택) — 무제한 관통이라 여러 번 불릴 수 있다 |
+
+> ★`Life Span`(부모, EditDefaultsOnly)은 **건드리지 않는다.** `InitWave` 가 사거리÷속도로 덮어쓴다.
+> ★**캡슐 치수를 바꾸면 17.8-F 의 회피 표가 무효**가 된다. 크기 조정은 밸런스 변경이지 연출 조정이 아니다.
+
+#### E12. `GA_Mole_Claw` — 클래스 디폴트만 수정 (★그래프 무수정)
+
+| 프로퍼티 | 값 |
+|---|---|
+| `Slash Wave Class` | ★**`BP_Mole_SlashWave`** — 비우면 Error 로그 + 무공격 |
+| `Wave Speed` | **1200** |
+| `Wave Max Range` | **1400** |
+| `Muzzle Forward Ratio` | 0.6 |
+| `Muzzle Height` | **100** |
+| `Max Aim Yaw From Forward` | **25** |
+| ★`Slash Roll Angles` | **[0] = 45 · [1] = −45** ← 1타 `/`, 2타 `\`. **부호가 반대로 보이면 두 값을 맞바꾼다** |
+| `Waves Per Hit` | **1** |
+| `Fan Spread Angle` | 20 (`WavesPerHit = 1` 이면 무시됨) |
+| `b Use Melee Sweep` | ★**체크 해제** (체크하면 근접 부채꼴로 되돌아간다) |
+| `Hit1Damage` / `Hit2Damage` | ★**변경 금지** — 커브 행 그대로 |
+| Asset Tag / Damage Effect Class / Damage Type | ★**변경 금지** |
+
+#### E13. `BT_S2MoleBoss` — 거리 데코레이터 (★필수)
+
+```
+├ Sequence   [Decorator: Distance To (TargetToFollow) <= 200]      ← 기존
+                                                    ↓
+├ Sequence   [Decorator: Distance To (TargetToFollow) <= 1300]     ← ★변경
+   ├ BTT_S2MoleBoss_Claw
+   └ Wait 1.8                                                     ← ★1.0 에서 상향 (확정 G)
+```
+
+- **1300 = 검기 사거리 1400 − 100(여유)**. 사거리 끝에서 발사해 도달 전에 소멸하는 헛발질을 막는다
+- ★`WaveMaxRange` 를 바꾸면 **이 숫자도 같이 바꿔야 한다** (BT 는 C++ 값을 모른다). 조정이 잦을 것 같으면 `BTS_S2MoleBoss_Target` 에서 사거리를 읽어 Bool 키 `bInClawRange` 로 넘기는 방식이 안전하다 (§16.8-d 의 대안과 동일)
+- 최소 사거리 데코레이터는 **넣지 않는다** (17.8-C — 근접 사각지대가 없다)
+- ★**1타만 쏘고 태스크가 끝나지 않도록** 주의: `BTT_S2MoleBoss_Claw` 는 즉시 Success 하고 몽타주가 계속 돌며 2타를 쏘는 구조다. `Wait 1.8` 이 **몽타주 길이 1.4초보다 길어야** 2타가 잘리지 않는다
+
+#### E14. 몽타주 `AM_MoleBoss_Claw` — ★연출을 대각선에 맞춘다
+
+노티파이 위치·태그·개수는 **그대로여도 동작**하지만, 대각선 방향과 팔 궤적이 어긋나면 "왜 저기서 저게 나오지" 하는 위화감이 크다.
+
+| 타 | 검기 | 권장 애니메이션 궤적 |
+|---|---|---|
+| 1타 (`Montage.Attack.1`, ≈0.45s) | `/` (Roll +45) | **왼쪽 아래 → 오른쪽 위** 로 올려 베기 |
+| 2타 (`Montage.Attack.2`, ≈0.95s) | `\` (Roll −45) | **오른쪽 위 → 왼쪽 아래** 로 내려 베기 |
+
+- 노티파이는 팔이 **최고 속도로 지나가는 프레임**에 맞춘다
+- 무기 궤적 트레일이 있다면 검기 기울기와 같은 방향으로
+- ★애니메이션 방향이 반대로 만들어졌다면 **애니메이션을 고치지 말고 `Slash Roll Angles` 두 값을 맞바꾼다** (E12) — 훨씬 싸다
+
+### 17.13 검증 시나리오 (V27~) — §16.11 에 이어서
+
+| # | 절차 | 기대 | 실패 시 |
+|---|---|---|---|
+| V27 | 보스 정면 **10m** 에 서 있기 | 검기 2발이 날아와 **맞는다** (기존엔 아무 일도 안 일어났다) | `Slash Wave Class` / BT 거리 데코레이터 |
+| V28 | 보스 정면 **밀착** | ★**맞는다** — 근접 사각지대 없음 | `Muzzle Forward Ratio` 를 낮춘다 (17.8-C) |
+| V29 | 보스 **바로 옆(90°)** | **안 맞는다** | 조준 클램프가 너무 넓음 |
+| V30 | 보스 **등 뒤** | **안 맞는다** · 크래시 없음 | |
+| ★V45 | **1타/2타를 옆에서 관찰** (서버 화면) | 1타는 `/`, 2타는 `\` 로 **서로 반대 기울기** | 기울기가 아예 없으면 → ★`b Rotation Follows Velocity` 체크 여부 / `FRotator` 인자 순서 (17.9) |
+| ★V46 | **V45 를 원격 클라이언트에서 재확인** | 클라에서도 **동일한 기울기** | 클라만 수평이면 `b Rotation Follows Velocity` (17.10) |
+| ★V47 | 1타를 **오른쪽으로** 피하고 **그 자리에 그대로 서 있기** | ★**2타에 맞는다** (`\` 의 정타 위치) | 안 맞으면 롤 부호가 두 타 모두 같은 방향 — `Slash Roll Angles` 확인 |
+| ★V48 | 1타를 오른쪽, 2타를 **왼쪽으로** 피하기 | ★**둘 다 회피 성공** | 다 맞으면 칼날이 너무 큼 → `HalfHeight` 하향 |
+| ★V49 | 칼날의 **높은 쪽 끝** 방향으로 멀찍이 서기 (1타 기준 오른쪽 ~150uu) | **머리 위로 지나간다 = 회피** | 맞으면 `MuzzleHeight` 가 너무 낮거나 캡슐이 큼 (17.8-F) |
+| ★V50 | 칼날의 **낮은 쪽 끝** 방향으로 서기 (1타 기준 왼쪽 ~150uu) | **맞는다** (다리 높이로 깔림) | 안 맞으면 `MuzzleHeight` 과다 |
+| ★V51 | **점프해서 회피 시도** | **맞는다** — 위로는 못 피한다 (칼날 상단 ≈ +256) | |
+| V31 | 발사 직후 **옆으로 구르기** | **회피 성공** | `WaveSpeed` 하향 |
+| V32 | **1타 맞고 2타 전에 이탈** | 2타는 안 맞는다 (§2.2 "독립 판정" 유지) | |
+| ★V33 | **4인이 일렬로** 정면에 서기 | ★**전원 피격** (무제한 관통, 확정 B) | 앞사람만 맞으면 `Max Pierce Count` 가 0 이 아님 |
+| V34 | 한 명이 칼날 옆면을 스치며 들락거리기 | **1회만** 피해 | `HitActors` 중복 방지 (17.8-G) |
+| V35 | 보스와 플레이어 사이에 **벽/열차** | ★**검기가 벽에서 소멸** + 임팩트 연출 (확정 B/D) | Tick 트레이스 (17.8-D) |
+| V36 | **배리어** 너머 플레이어 | 검기가 배리어를 **통과** (§1.5 사양) | 배리어 BP 의 Visibility 응답 확인 |
+| ★V37 | **경사로/난간 위**에서 발사 | 스폰 즉시 소멸하지 **않는다** (칼날 아래끝이 땅에 잠겨도 무해) | 루트 `Sphere` 의 Collision 이 켜져 있음 (17.7 `BeginPlay`) |
+| V38 | 구간 1→2→3 진행하며 데미지 측정 | **20/30 → 26/39 → 32/48** (V15 와 동일 기대치) | `ResolveDamage` 무수정 확인 |
+| V39 | 검기 비행 중 **보스 사망/도망(구간 전환)** | 날아간 검기는 끝까지 날아가 피해를 준다(허용) · **크래시 없음** | `SourceASC` 널 가드 |
+| V40 | **잠수 중** BT 가 발톱을 시도 | 발사되지 않는다 (`State.MoleBoss.Burrowed` 차단 — 기존 동작) | |
+| V41 | 원격 클라이언트 관전 | 검기가 **보인다** · 서버 판정과 체감 오차 수용 범위 | `WaveSpeed` 하향 |
+| V42 | `b Use Melee Sweep` 체크 후 PIE | ★**근접 부채꼴로 되돌아간다** | 롤백 경로 생존 확인 |
+| V43 | `Slash Wave Class` 비우고 PIE | Error 로그 1줄 + **크래시 없음** | |
+| V44 | **스테이지1 회귀** | 파이어볼트·씨앗캐논 등 정상 (`ADRProjectile` 무수정) | |
+
+> ★**V45~V51 은 이번 개정(대각선)의 핵심 검증**이다. V45 가 실패하면 나머지 대각선 시나리오는 전부 무의미하므로 **가장 먼저** 한다.
+> V45 검증 팁: PIE 를 일시정지(`Pause`)하고 검기 액터를 선택하면 캡슐 기즈모로 기울기를 직접 볼 수 있다. 또는 `BladeCapsule` 의 `Hidden In Game` 을 임시로 해제한다.
+
+### 17.14 리스크와 대응
+
+| 리스크 | 확률 | 영향 | 대응 |
+|---|---|---|---|
+| ★**롤이 매 프레임 지워져 칼날이 수평이 됨** | 중 | **대각선 사양 전체 무효** | `b Rotation Follows Velocity` = false (BP + `InitWave` 양쪽에서 보장) · V45/V46 |
+| ★**메시를 이미 기울여 만들어 이중 회전(90°)** | 중 | 칼날이 수직으로 섬 | 에셋은 **수평**으로 만든다 (17.12-E11) |
+| ★**롤 부호가 예상과 반대** | 높음 | 1타/2타 방향이 뒤바뀜 | 코드가 아니라 `Slash Roll Angles` 두 값을 **맞바꾼다** (E12) — 문서가 UE 롤 부호를 단정하지 않는 이유 |
+| **바닥/경사로에 걸려 스폰 즉시 소멸** | 중 | 공격 전무 | 루트 `Sphere` Collision Off (17.7 `BeginPlay`) + V37 |
+| ★**칼날 끝이 벽을 뚫고 보임** | 중 | 시각적 위화감 | 중심선 트레이스라 발생 가능 (17.8-D). 거슬리면 `SweepSingleByChannel(반경 100)` 으로 승격 |
+| **지형 정지가 빡빡해 작은 소품에도 막힘** | 중 | 공격 무력화 | Visibility 채널이라 소품도 잡는다 → 전용 트레이스 채널 신설 또는 소품 콜리전 조정 |
+| ★**무제한 관통으로 4인 총 피해 과다** | 중 | 밸런스 | 확정 B 라 관통은 유지 — **커브 값**으로 내린다 (17.11-4순위) |
+| 원거리화로 **체감 난이도 급상승** | 중 | 밸런스 붕괴 | 17.11 의 조정 순서 |
+| 조준 클램프가 좁아 **여전히 안 맞음** | 중 | 변경 효과 없음 | `MaxAimYawFromForward` 를 45~90 으로 올려 재테스트. **회전 속도 4.0(§2.1)과 한 세트로 조정** |
+| ★**대각선 때문에 회피가 너무 어렵/쉬움** | 중 | 재미 저하 | 롤 각도(±30 ~ ±60) → `MuzzleHeight` → 캡슐 치수 순으로 (17.11-3순위) |
+| `GA_Mole_Claw` 그래프를 실수로 건드림 | 저 | 전체 무공격 | ★그래프는 **열지 않는다.** 클래스 디폴트 패널만 수정 |
+| 검기가 **좌석 위 플레이어**를 노려 그림이 이상함 | 저 | 연출 | Pitch 0 고정이라 좌석 높이로 올라가지 않는다 (17.8-B). 착석자를 조준 후보에서 빼려면 스킬1 의 `bExcludeSeatedPlayers` 와 같은 필터를 조준 함수에 추가 |
+| 성능 | 저 | — | 수명 1.2초 · 발사 간격 1.8초라 동시 존재 수 ≤ 2 |
+
+### 17.15 작업 순서 체크리스트
+
+```
+[ ] 1.  ADRS2MoleSlashWave.h/.cpp 신규 작성                        (17.7)
+        - BladeCapsule (Radius 50 / HalfHeight 200 / 상대 Roll 90)
+        - MaxPierceCount 기본 0 (무제한) · bStopOnWorldGeometry 기본 true
+        - BeginPlay 에서 루트 Sphere Collision Off
+        - InitWave 에서 bRotationFollowsVelocity = false
+[ ] 2.  DRS2MoleClawAttack.h 필드 개편                             (17.9)
+        - 검기 프로퍼티 추가 (★SlashRollAngles = {45, -45})
+        - 부채꼴 필드는 Legacy 로 강등
+[ ] 3.  DRS2MoleClawAttack.cpp
+        - 기존 본문을 PerformMeleeSweep_Legacy() 로 이동 (삭제 아님)
+        - FireSlashWaves / ResolveMuzzleLocation / ResolveFireYaw / ResolveSlashRoll 추가
+        - ★FRotator(0, Yaw, Roll) 인자 순서 확인
+        - ★ResolveDamage · OnAttackExecuted · OnGiveAbility 검증 로그는 그대로 둔다
+[ ] 4.  OnGiveAbility 에 SlashWaveClass 널 체크 Error 로그 추가      (§15.3 관례)
+[ ] 5.  컴파일 → 에디터 재시작
+[ ] 6.  E11  BP_Mole_SlashWave 생성 (★수평 메시 · 캡슐 치수 · 관통 0)
+[ ] 7.  E12  GA_Mole_Claw 클래스 디폴트 재설정  ★그래프 무수정
+[ ] 8.  E13  BT_S2MoleBoss 거리 200 → 1300, Wait 1.0 → 1.8
+[ ] 9.  ★V45 먼저 검증 (대각선이 실제로 나오는가) → 실패 시 여기서 멈추고 원인 제거
+[ ] 10. V27~V51 전체 검증
+[ ] 11. E14 몽타주 궤적을 대각선 방향에 맞춰 재저작 (연출)
+[ ] 12. 밸런스 튜닝 (17.11 순서)
+[ ] 13. (다음 마일스톤) 레거시 부채꼴 경로 + bUseMeleeSweep 제거,
+        원한다면 클래스명 ClawAttack → SlashWave 리네임 (CoreRedirects 필요)
+```
+
+### 17.16 이 변경으로 갱신해야 할 문서 항목 ★
+
+구현 완료 후 아래를 수정한다. **지금은 §17 이 최신 사양**이며, 아래 절들은 근접판 기준으로 남아 있다:
+
+| 절 | 현재 내용 | 갱신 방향 |
+|---|---|---|
+| §0 요약 | "전방 부채꼴 2타" | "전방 45° 대각 관통 검기 2발 (`/` + `\`)" |
+| §2.2 | 기본공격 사양표 전체 | §17.5 로 대체 |
+| §2.5 | 확정 사항 A~D | ★확정 A~H (§17.2) 를 이어붙인다 |
+| §4.2 | `UDRS2MoleClawAttack` 코드 스케치 | §17.9 로 대체 |
+| §8.2-c | "발톱 사거리/각도 200uu / 120°" | "1400uu 직선 / 45° 대각 칼날 312×312 / 무제한 관통" |
+| §8.3 | 발톱 BT 재시도 간격 1.0s | 1.8s |
+| §9.1 | 신규 BP 목록 | `BP_Mole_SlashWave` 추가 |
+| §16.4 E4-1 | `Sweep Radius/Angle` 표 (★이미 코드와 어긋나 있었음) | §17.12-E12 로 대체 |
+| §16.5 | 몽타주 저작 요건 | ★1타/2타 궤적을 좌우 반대로 (§17.12-E14) |
+| §16.8-d | BT 거리 데코레이터 `<= 200` | `<= 1300` |
+| §16.12 실수 표 | — | ★"대각선이 안 나옴 → `b Rotation Follows Velocity`" 행 추가 |
+| §16.13 체크리스트 | — | E11~E14 · V27~V51 추가 |
+
+### 17.17 구현 결과 — C++ 전량 완료 (2026-09-09) ★
+
+`Build.bat DaeRuneEditor Win64 Development` **성공**. 신규 2파일 컴파일 + 링크 확인 (경고는 전부 기존 파일의 UE5.5 deprecation, 이번 변경과 무관).
+
+#### 17.17.1 생성 / 수정 결과
+
+| 파일 | 상태 | 내용 |
+|---|---|---|
+| `Public/Actor/Stage2/DRS2MoleSlashWave.h` | ★신규 | 대각 검기 액터 |
+| `Private/Actor/Stage2/DRS2MoleSlashWave.cpp` | ★신규 | 관통 · 지형 정지 · 수명 |
+| `Public/AbilitySystem/Abilities/Stage2/DRS2MoleClawAttack.h` | ★수정 | 검기 프로퍼티 추가 · 부채꼴 필드 Legacy 강등 |
+| `Private/.../DRS2MoleClawAttack.cpp` | ★수정 | `FireSlashWaves` 신설 · 기존 본문은 `PerformMeleeSweep_Legacy` 로 보존 |
+| 그 외 | **무수정** | 보스 본체 · 페이즈 · `ADRProjectile` · 태그 · 커브 — 계획대로 한 줄도 안 건드렸다 |
+
+#### 17.17.2 계획서 코드 스케치와 달라진 지점 ★
+
+구현 중 발견해 고친 것들. **스케치(§17.7 / §17.9)보다 이쪽이 실제 코드다.**
+
+**① ★`SetLifeSpan` 이 부모 `BeginPlay` 에 덮어써지는 문제 (실제 버그였다)**
+
+스케치는 `InitWave` 에서 `SetLifeSpan(사거리/속도)` 를 부르고 끝냈다. 그런데 호출 순서가
+
+```
+SpawnActorDeferred → (생성자) → InitWave [수명 1.17초 설정] → FinishSpawning → BeginPlay
+                                                                                  └ Super::BeginPlay()
+                                                                                     └ SetLifeSpan(LifeSpan=15초)  ★덮어쓴다
+```
+
+라서 **검기가 사거리를 넘어 15초간 날아간다.** 부모의 `LifeSpan` 은 private 이라 상속으로 못 막는다.
+→ `PendingLifeSpan` 에 저장해 두고 **`BeginPlay` 의 `Super` 호출 뒤에 다시 적용**한다.
+(`ADRVacuumAirProjectile` 이 `SetLifeSpan(0.f)` 로 같은 문제를 처리하는 선례가 있었다 — 그 선례를 놓쳤던 것.)
+
+**② `ResolveFireRotation` → `ResolveFireYaw` + `ResolveSlashRoll` 분리**
+
+스케치는 회전 하나를 통째로 만들었지만, **Yaw(조준)와 Roll(칼날 기울기)은 완전히 독립**이라 함수를 나누는 편이 맞다.
+다발 발사(`WavesPerHit ≥ 2`)에서 **Yaw 만 분산하고 Roll 은 유지**해야 하는데, 합쳐 두면 부채 분산 코드가 롤까지 건드릴 여지가 생긴다.
+
+**③ ★넉백 방향에서 Roll 을 제거했다 (스케치에 없던 버그)**
+
+부모 `ADRProjectile::OnSphereOverlap` 은 넉백 벡터를 `GetActorRotation()` 에서 만든다. 그대로 베끼면
+**칼날 기울기(±45)가 넉백 방향에 섞여** 1타와 2타가 서로 다른 쪽으로 플레이어를 날린다.
+
+```cpp
+FRotator Rotation = GetActorRotation();
+Rotation.Pitch = 45.f;
+Rotation.Roll  = 0.f;   // ★칼날 기울기는 넉백 방향과 무관하다
+```
+
+> 현재 `Knockback Chance` 기본값이 0 이라 당장은 드러나지 않지만, 나중에 넉백을 켜는 순간 원인 찾기 어려운 증상이 된다.
+
+**④ 조준 대상 결정을 `ResolveAimTarget()` 으로 분리 + 착석자 제외 구현**
+
+확정 C("착석자는 맞기는 하되 겨누지는 않는다")를 코드로 옮겼다:
+- ① `IEnemyInterface::Execute_GetCombatTarget` (AI 서비스가 잡아 둔 타깃) — **착석자면 건너뛴다**
+- ② 폴백: `ADRGameStateBase::GetAlivePlayers()` 중 **착석자를 뺀** 최근접
+- 프로퍼티 `bExcludeSeatedPlayersForAim` (기본 true) 로 껐다 켤 수 있다
+
+> ★`GetCombatTarget` 은 `ICombatInterface` 가 아니라 **`IEnemyInterface`** 에 있다 (`EnemyInterface.h:31`). 스케치가 틀렸다.
+
+**⑤ `OnGiveAbility` 검증 로그 2개 추가**
+
+- `SlashWaveClass` 미지정 → **Error** ("기본공격이 아무것도 발사하지 않습니다")
+- `SlashRollAngles` 비어 있음 → **Warning** ("검기가 수평으로 나갑니다")
+
+무증상 실패를 부여 시점에 잡는 §15.3 방어 코드 관례를 따랐다.
+
+**⑥ `MuzzleForwardRatio` 에 `ClampMax = 0.95`**
+
+1.0 이상이면 발사 원점이 캡슐 밖으로 나가 **근접 영구 안전지대**가 생긴다(17.8-C). 에디터에서 아예 못 넣게 막았다.
+
+**⑦ `bRotationFollowsVelocity = false` 를 `InitWave` 에서도 강제**
+
+BP 체크박스 하나로 대각선 사양 전체가 사라지는 것을 막기 위해 **코드에서도 한 번 더** 끈다. BP 와 코드 양쪽에서 보장한다.
+
+#### 17.17.3 확정 사양 → 코드 대응표 (검수용)
+
+| 확정 | 구현 위치 |
+|---|---|
+| A 조준 ±25° | `MaxAimYawFromForward = 25` · `ResolveFireYaw()` 의 `FindDeltaAngleDegrees` + `Clamp` |
+| B 무제한 관통 | `MaxPierceCount = 0` — `if (MaxPierceCount > 0 && ...)` 블록에 진입하지 않는다 |
+| B/D 지형 정지 | `bStopOnWorldGeometry` + `Tick()` 의 수평 선분 트레이스 |
+| C 착석자 | 피격 O (필터 없음) / 조준 X (`bExcludeSeatedPlayersForAim`) |
+| E 근접 사각 없음 | `MuzzleForwardRatio = 0.6` · `ResolveMuzzleLocation()` |
+| F 데미지 유지 | `ResolveDamage()` **무수정** — 커브 행 그대로 |
+| G BT 간격 | ★**BT 에디터 작업 (E13)** — C++ 아님 |
+| H 대각선 | `SlashRollAngles = {45, -45}` · `FRotator(0, Yaw, Roll)` · 캡슐 상대 Roll 90 |
+| H-1 이펙트=판정 | 액터 스폰 회전으로 통째 롤 → 메시/나이아가라/캡슐이 함께 기운다 |
+
+#### 17.17.4 ★남은 작업 — 전부 에디터 작업이다
+
+C++ 은 끝났고, **지금 PIE 를 돌리면 검기가 나가지 않는다** (`SlashWaveClass` 가 비어 있어 Error 로그만 뜬다). 아래를 해야 동작한다:
+
+```
+[ ] E11  BP_Mole_SlashWave 생성        ← ★이것부터. 없으면 아무것도 안 나간다
+[ ] E12  GA_Mole_Claw 클래스 디폴트    ← Slash Wave Class 지정 (나머지는 C++ 기본값으로 이미 맞다)
+[ ] E13  BT 거리 200 → 1300, Wait 1.0 → 1.8
+[ ] V45  ★대각선이 실제로 `/` `\` 로 나오는지 먼저 확인 → 실패 시 여기서 멈춘다
+[ ] V27~V51 전체 검증
+[ ] E14  몽타주 궤적을 대각선 방향에 맞춰 재저작 (연출, 나중에 해도 됨)
+```
+
+> ★**E12 에서 실제로 지정할 것은 `Slash Wave Class` 하나뿐이다.** 속도 1200 · 사거리 1400 · 롤 ±45 · 관통 0 · 조준 25° 는 전부 **C++ 생성자 기본값**으로 이미 들어가 있다. 값을 바꿀 때만 BP 에서 건드리면 된다.

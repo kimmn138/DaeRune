@@ -5,11 +5,13 @@
 #include "Game/DRSaveGame.h"
 #include "Game/DRProgressionConfig.h"
 #include "Game/DRChipCatalog.h"
+#include "Game/DRCosmeticCatalog.h"
 #include "Game/DRGameUserSettings.h"
 #include "Game/DRSettingsManager.h"
 #include "UI/DRUpgradeUILibrary.h"
 #include "UI/DRUpgradeUIStyle.h"
 #include "Kismet/GameplayStatics.h"
+#include "Engine/Texture2D.h"	// ResolveSkinIcon 의 TSoftObjectPtr<UTexture2D>::LoadSynchronous 가 완전한 타입을 요구한다
 #include "Player/DRPlayerState.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerState.h"
@@ -123,6 +125,12 @@ void UDRGameInstance::EnsureProgressInitialized()
 		CurrentSaveGame->bUpgradeSystemUnlocked = false;
 		CurrentSaveGame->ClassUpgrades.Reset();
 
+		// 코스메틱도 같은 "깨끗한 초기 상태" 정책을 따른다.
+		// (지금은 버전을 올리지 않으므로 이 분기는 타지 않는다 — 나중에 v5 가 생겨도 반쪽 상태가 남지 않게 함)
+		CurrentSaveGame->EarnedAchievements.Reset();
+		CurrentSaveGame->Cosmetics.Reset();
+		CurrentSaveGame->PendingSteamAchievements.Reset();
+
 		CurrentSaveGame->SaveVersion = UDRSaveGame::CurrentSaveVersion;
 	}
 
@@ -130,7 +138,34 @@ void UDRGameInstance::EnsureProgressInitialized()
 	const int32 ClassCount = static_cast<int32>(EPlayerCharacterClass::Count);
 	for (int32 Index = 0; Index < ClassCount; ++Index)
 	{
-		CurrentSaveGame->ClassUpgrades.FindOrAdd(static_cast<EPlayerCharacterClass>(Index));
+		const EPlayerCharacterClass CharacterClass = static_cast<EPlayerCharacterClass>(Index);
+
+		CurrentSaveGame->ClassUpgrades.FindOrAdd(CharacterClass);
+
+		// 코스메틱도 같은 방식. EnsureSize 가 카테고리 enum 확장까지 흡수한다.
+		CurrentSaveGame->Cosmetics.FindOrAdd(CharacterClass).EnsureSize();
+	}
+
+	// 카탈로그에서 사라졌거나 소속이 어긋난 장착 스킨을 되돌린다.
+	// 칩과 달리 재화가 오가지 않으므로 환급 처리가 없다.
+	if (GetCosmeticCatalog())
+	{
+		bool bCosmeticChanged = false;
+
+		for (auto& Pair : CurrentSaveGame->Cosmetics)
+		{
+			if (!SanitizeCosmeticState(Pair.Key, Pair.Value)) continue;
+
+			bCosmeticChanged = true;
+			UE_LOG(LogDR, Warning,
+				TEXT("[Cosmetic] 카탈로그 변경 감지 — 클래스 %d 의 장착 스킨을 정화했습니다."),
+				static_cast<int32>(Pair.Key));
+		}
+
+		if (bCosmeticChanged)
+		{
+			SaveProgress();
+		}
 	}
 
 	// 저장된 상태가 현재 설정/카탈로그와 어긋나면(슬롯 수 변경, 칩 삭제 등) 정화한다.
@@ -1240,6 +1275,10 @@ FDRStageRewardResult UDRGameInstance::ApplyStageReward(const FDRStageRewardRepor
 	// 재화는 클리어 시에만 지급한다 (게임오버 보상 없음 — Plan2.md 5.1)
 	if (!Report.bGameClear) return Result;
 
+	// 보상 반영 전의 해금 상태를 찍어 둔다 — 아래에서 "이번에 새로 열린 스킨"을 계산하는 기준이다.
+	// FDRStageRewardResult 에는 "새로 달성한 업적" 필드가 없으므로 스냅샷 비교가 유일한 정확한 방법이다.
+	const TSet<FName> UnlockedBefore = SnapshotUnlockedSkins();
+
 	// ===== 1) 스테이지 최초 클리어 =====
 	if (const FDRStageRewardDef* StageDef = ProgressionConfig->FindStageReward(Report.StageId))
 	{
@@ -1283,6 +1322,17 @@ FDRStageRewardResult UDRGameInstance::ApplyStageReward(const FDRStageRewardRepor
 			continue;
 		}
 
+		// ★해금 원장은 재화 지급 여부와 무관하게 항상 기록한다★
+		// 아래 중복 방지 continue 보다 ★반드시 앞★ 이어야 한다 —
+		// 뒤에 두면 이미 재화를 받은 업적이 코스메틱 해금 판정에서 누락된다. (Plan.md 4.5 / 5.1)
+		Save->EarnedAchievements.AddUnique(AchievementId);
+
+		// 스팀 미러링 큐. 연동(Plan.md M6) 전까지는 쌓아두기만 한다.
+		if (!Def->SteamApiName.IsEmpty())
+		{
+			Save->PendingSteamAchievements.AddUnique(AchievementId);
+		}
+
 		// 계정당 1회 — 이미 받았으면 결과창에도 표시하지 않는다
 		if (Save->ClaimedRewards.Contains(AchievementId)) continue;
 
@@ -1315,6 +1365,9 @@ FDRStageRewardResult UDRGameInstance::ApplyStageReward(const FDRStageRewardRepor
 	{
 		OnUpgradeSystemUnlocked.Broadcast();
 	}
+
+	// 이번 보상으로 새로 열린 스킨을 알린다 (해금 토스트). SaveProgress 이후여야 한다.
+	BroadcastNewlyUnlockedSkins(UnlockedBefore);
 
 	return Result;
 }
@@ -1352,4 +1405,361 @@ void UDRGameInstance::SaveAllPlayerSelections(UWorld* World)
 void UDRGameInstance::ClearPlayerClassSelections()
 {
 	PlayerClassSelections.Empty();
+}
+
+// ========================= 코스메틱 / 옷장 (Plan.md 5.1 / 15.11) =========================
+
+UDRCosmeticCatalog* UDRGameInstance::GetCosmeticCatalog() const
+{
+	return ProgressionConfig ? ProgressionConfig->CosmeticCatalog : nullptr;
+}
+
+const FDRSkinDefinition* UDRGameInstance::FindSkinDef(FName SkinId) const
+{
+	const UDRCosmeticCatalog* Catalog = GetCosmeticCatalog();
+	return Catalog ? Catalog->FindSkin(SkinId) : nullptr;
+}
+
+bool UDRGameInstance::IsSkinUnlocked(FName SkinId) const
+{
+	// NAME_None = "기본"(장착 해제) 칸. 언제나 고를 수 있어야 한다.
+	if (SkinId.IsNone()) return true;
+
+	const FDRSkinDefinition* Def = FindSkinDef(SkinId);
+	if (!Def) return false;
+
+	// 조건이 없으면 기본 제공
+	if (Def->RequiredAchievements.Num() == 0) return true;
+
+	if (!CurrentSaveGame) return false;
+
+	// 판정 입력 = EarnedAchievements ∪ ClaimedRewards
+	//   EarnedAchievements : 업적 달성 기록 (로컬 + 향후 스팀 역매핑)
+	//   ClaimedRewards     : "StageClear.<StageId>" 류도 해금 조건으로 쓸 수 있게 함께 본다
+	auto HasKey = [this](const FName& Id)
+	{
+		return CurrentSaveGame->EarnedAchievements.Contains(Id)
+			|| CurrentSaveGame->ClaimedRewards.Contains(Id);
+	};
+
+	if (Def->bRequireAll)
+	{
+		for (const FName& Id : Def->RequiredAchievements)
+		{
+			if (!HasKey(Id)) return false;
+		}
+		return true;
+	}
+
+	for (const FName& Id : Def->RequiredAchievements)
+	{
+		if (HasKey(Id)) return true;
+	}
+	return false;
+}
+
+FDRClassCosmeticState& UDRGameInstance::FindOrAddCosmeticState(EPlayerCharacterClass CharacterClass)
+{
+	// 호출부가 GetOrLoadSaveGame() 으로 유효성을 먼저 확인한다 (FindOrAddClassState 와 같은 계약)
+	FDRClassCosmeticState& State = CurrentSaveGame->Cosmetics.FindOrAdd(CharacterClass);
+	State.EnsureSize();
+	return State;
+}
+
+const FDRClassCosmeticState* UDRGameInstance::FindCosmeticState(EPlayerCharacterClass CharacterClass) const
+{
+	return CurrentSaveGame ? CurrentSaveGame->Cosmetics.Find(CharacterClass) : nullptr;
+}
+
+FName UDRGameInstance::GetEquippedSkin(EPlayerCharacterClass CharacterClass,
+	EDRCosmeticCategory Category) const
+{
+	if (!DRIsValidCosmeticCategory(Category)) return NAME_None;
+
+	const FDRClassCosmeticState* State = FindCosmeticState(CharacterClass);
+	return State ? State->Get(Category) : NAME_None;
+}
+
+TArray<FName> UDRGameInstance::GetEquippedSkins(EPlayerCharacterClass CharacterClass) const
+{
+	// 길이는 항상 카테고리 수다 — 호출부(서버 보고/외형 적용)가 인덱스로 접근하기 때문이다.
+	TArray<FName> Result;
+	Result.SetNum(DRGetCosmeticCategoryCount());
+
+	if (const FDRClassCosmeticState* State = FindCosmeticState(CharacterClass))
+	{
+		for (int32 Index = 0; Index < Result.Num(); ++Index)
+		{
+			if (State->EquippedByCategory.IsValidIndex(Index))
+			{
+				Result[Index] = State->EquippedByCategory[Index];
+			}
+		}
+	}
+
+	return Result;
+}
+
+bool UDRGameInstance::EquipSkin(EPlayerCharacterClass CharacterClass, EDRCosmeticCategory Category,
+	FName SkinId)
+{
+	if (!DRIsValidCosmeticCategory(Category)) return false;
+
+	UDRSaveGame* Save = GetOrLoadSaveGame();
+	if (!Save) return false;
+
+	// NAME_None 은 "기본 외형으로 되돌리기"라 검증 없이 통과시킨다
+	if (!SkinId.IsNone())
+	{
+		const FDRSkinDefinition* Def = FindSkinDef(SkinId);
+		if (!Def)
+		{
+			UE_LOG(LogDR, Warning, TEXT("[Cosmetic] 카탈로그에 없는 스킨 '%s' 장착 시도 — 무시합니다."),
+				*SkinId.ToString());
+			return false;
+		}
+
+		if (Def->OwnerClass != CharacterClass || Def->Category != Category) return false;
+		if (!IsSkinUnlocked(SkinId)) return false;
+	}
+
+	FDRClassCosmeticState& State = FindOrAddCosmeticState(CharacterClass);
+
+	const int32 Index = static_cast<int32>(Category);
+	if (!State.EquippedByCategory.IsValidIndex(Index)) return false;
+
+	// 이미 같은 상태면 저장도 브로드캐스트도 하지 않는다 (같은 칸 재클릭)
+	if (State.EquippedByCategory[Index] == SkinId) return true;
+
+	State.EquippedByCategory[Index] = SkinId;
+	SaveProgress();
+
+	OnCosmeticsChanged.Broadcast(CharacterClass);
+	return true;
+}
+
+bool UDRGameInstance::ClearAllSkins(EPlayerCharacterClass CharacterClass)
+{
+	UDRSaveGame* Save = GetOrLoadSaveGame();
+	if (!Save) return false;
+
+	FDRClassCosmeticState& State = FindOrAddCosmeticState(CharacterClass);
+
+	bool bChanged = false;
+	for (FName& Id : State.EquippedByCategory)
+	{
+		if (!Id.IsNone())
+		{
+			Id = NAME_None;
+			bChanged = true;
+		}
+	}
+
+	if (!bChanged) return false;
+
+	SaveProgress();
+	OnCosmeticsChanged.Broadcast(CharacterClass);
+	return true;
+}
+
+void UDRGameInstance::GetSkinViewModels(EPlayerCharacterClass CharacterClass,
+	EDRCosmeticCategory Category, TArray<FDRSkinViewModel>& OutViewModels) const
+{
+	OutViewModels.Reset();
+
+	if (!DRIsValidCosmeticCategory(Category)) return;
+
+	const FName Equipped = GetEquippedSkin(CharacterClass, Category);
+
+	// ★인덱스 0 은 항상 "기본"(장착 해제) 칸★ — 되돌릴 방법이 없으면 안 된다.
+	{
+		FDRSkinViewModel None;
+		None.SkinId = NAME_None;
+		None.Category = Category;
+		None.DisplayName = NSLOCTEXT("DRCosmetic", "SkinNoneName", "기본");
+		None.bUnlocked = true;
+		None.bEquipped = Equipped.IsNone();
+		None.bIsNoneSlot = true;
+		OutViewModels.Add(MoveTemp(None));
+	}
+
+	const UDRCosmeticCatalog* Catalog = GetCosmeticCatalog();
+	if (!Catalog) return;
+
+	TArray<const FDRSkinDefinition*> Defs;
+	Catalog->GetSkinsForCategory(CharacterClass, Category, Defs);
+
+	for (const FDRSkinDefinition* Def : Defs)
+	{
+		if (!Def) continue;
+
+		FDRSkinViewModel VM;
+		VM.SkinId = Def->SkinId;
+		VM.Category = Def->Category;
+		VM.DisplayName = Def->DisplayName.IsEmpty() ? FText::FromName(Def->SkinId) : Def->DisplayName;
+		VM.Description = Def->Description;
+		VM.PreviewIcon = ResolveSkinIcon(Def->PreviewIcon);
+		VM.bUnlocked = IsSkinUnlocked(Def->SkinId);
+		VM.bEquipped = (Equipped == Def->SkinId);
+		VM.bIsNoneSlot = false;
+
+		if (!VM.bUnlocked)
+		{
+			VM.UnlockHint = Def->HowToUnlock.IsEmpty() ? MakeDefaultUnlockHint(*Def) : Def->HowToUnlock;
+		}
+
+		OutViewModels.Add(MoveTemp(VM));
+	}
+}
+
+bool UDRGameInstance::HasAnySkinAvailable(EPlayerCharacterClass CharacterClass) const
+{
+	const UDRCosmeticCatalog* Catalog = GetCosmeticCatalog();
+	if (!Catalog) return false;
+
+	for (const FDRSkinDefinition& Skin : Catalog->Skins)
+	{
+		if (!Skin.SkinId.IsNone() && Skin.OwnerClass == CharacterClass) return true;
+	}
+	return false;
+}
+
+bool UDRGameInstance::SanitizeCosmeticState(EPlayerCharacterClass CharacterClass,
+	FDRClassCosmeticState& State) const
+{
+	const UDRCosmeticCatalog* Catalog = GetCosmeticCatalog();
+
+	// 카탈로그가 없으면 아무 것도 판단할 수 없다 — 데이터를 건드리지 않는다
+	// (SanitizeClassState 가 ProgressionConfig 에 대해 하는 판단과 같다)
+	if (!Catalog) return false;
+
+	State.EnsureSize();
+	return Catalog->SanitizeLoadout(State.EquippedByCategory, CharacterClass);
+}
+
+UTexture2D* UDRGameInstance::ResolveSkinIcon(const TSoftObjectPtr<UTexture2D>& Icon) const
+{
+	if (Icon.IsNull()) return nullptr;
+
+	// 옷장은 로비 전용 화면이고 아이콘 수가 적어 동기 로드로 충분하다 (ResolveChipIcon 과 같은 판단).
+	// 아이콘이 아직 없는 스킨은 nullptr 이 그대로 뷰모델에 실리고, 위젯이 이미지를 숨긴다.
+	return Icon.LoadSynchronous();
+}
+
+FText UDRGameInstance::MakeDefaultUnlockHint(const FDRSkinDefinition& Def) const
+{
+	if (Def.RequiredAchievements.Num() == 0) return FText::GetEmpty();
+
+	TArray<FText> Names;
+	Names.Reserve(Def.RequiredAchievements.Num());
+
+	for (const FName& Id : Def.RequiredAchievements)
+	{
+		const FDRAchievementDef* AchDef = ProgressionConfig ? ProgressionConfig->FindAchievement(Id) : nullptr;
+
+		Names.Add(AchDef && !AchDef->DisplayName.IsEmpty()
+			? AchDef->DisplayName
+			: FText::FromName(Id));
+	}
+
+	const FText Delimiter = Def.bRequireAll
+		? NSLOCTEXT("DRCosmetic", "UnlockJoinAll", ", ")
+		: NSLOCTEXT("DRCosmetic", "UnlockJoinAny", " 또는 ");
+
+	return FText::Format(
+		NSLOCTEXT("DRCosmetic", "UnlockHintFormat", "달성 필요: {0}"),
+		FText::Join(Delimiter, Names));
+}
+
+TSet<FName> UDRGameInstance::SnapshotUnlockedSkins() const
+{
+	TSet<FName> Unlocked;
+
+	const UDRCosmeticCatalog* Catalog = GetCosmeticCatalog();
+	if (!Catalog) return Unlocked;
+
+	for (const FDRSkinDefinition& Skin : Catalog->Skins)
+	{
+		if (Skin.SkinId.IsNone()) continue;
+		if (IsSkinUnlocked(Skin.SkinId))
+		{
+			Unlocked.Add(Skin.SkinId);
+		}
+	}
+
+	return Unlocked;
+}
+
+void UDRGameInstance::BroadcastNewlyUnlockedSkins(const TSet<FName>& BeforeUnlocked)
+{
+	const UDRCosmeticCatalog* Catalog = GetCosmeticCatalog();
+	if (!Catalog) return;
+
+	for (const FDRSkinDefinition& Skin : Catalog->Skins)
+	{
+		if (Skin.SkinId.IsNone()) continue;
+		if (BeforeUnlocked.Contains(Skin.SkinId)) continue;
+		if (!IsSkinUnlocked(Skin.SkinId)) continue;
+
+		UE_LOG(LogDR, Log, TEXT("[Cosmetic] 스킨 해금: %s"), *Skin.SkinId.ToString());
+		OnSkinUnlocked.Broadcast(Skin.SkinId);
+	}
+}
+
+void UDRGameInstance::DebugGrantAchievement(FName AchievementId)
+{
+	if (AchievementId.IsNone()) return;
+
+	UDRSaveGame* Save = GetOrLoadSaveGame();
+	if (!Save) return;
+
+	const TSet<FName> Before = SnapshotUnlockedSkins();
+
+	Save->EarnedAchievements.AddUnique(AchievementId);
+	SaveProgress();
+
+	UE_LOG(LogDR, Warning, TEXT("[Cheat] 업적 '%s' 달성 처리."), *AchievementId.ToString());
+
+	BroadcastNewlyUnlockedSkins(Before);
+
+	// 해금은 로봇을 가리지 않으므로 전 클래스에 갱신을 알린다 (옷장 화면이 자기 클래스만 걸러 쓴다)
+	const int32 ClassCount = static_cast<int32>(EPlayerCharacterClass::Count);
+	for (int32 Index = 0; Index < ClassCount; ++Index)
+	{
+		OnCosmeticsChanged.Broadcast(static_cast<EPlayerCharacterClass>(Index));
+	}
+}
+
+void UDRGameInstance::DebugUnlockAllSkins()
+{
+	UDRSaveGame* Save = GetOrLoadSaveGame();
+	const UDRCosmeticCatalog* Catalog = GetCosmeticCatalog();
+	if (!Save || !Catalog)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cheat] 코스메틱 카탈로그가 없어 전체 해금을 할 수 없습니다."));
+		return;
+	}
+
+	const TSet<FName> Before = SnapshotUnlockedSkins();
+
+	for (const FDRSkinDefinition& Skin : Catalog->Skins)
+	{
+		for (const FName& Id : Skin.RequiredAchievements)
+		{
+			Save->EarnedAchievements.AddUnique(Id);
+		}
+	}
+
+	SaveProgress();
+
+	UE_LOG(LogDR, Warning, TEXT("[Cheat] 코스메틱 전체 해금 (업적 %d개 보유)."),
+		Save->EarnedAchievements.Num());
+
+	BroadcastNewlyUnlockedSkins(Before);
+
+	const int32 ClassCount = static_cast<int32>(EPlayerCharacterClass::Count);
+	for (int32 Index = 0; Index < ClassCount; ++Index)
+	{
+		OnCosmeticsChanged.Broadcast(static_cast<EPlayerCharacterClass>(Index));
+	}
 }

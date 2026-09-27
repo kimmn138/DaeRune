@@ -92,17 +92,43 @@ void ADRS2Train::DepartTo(float InTargetDistance, float InSpeed, int32 InTargetI
 {
 	if (!HasAuthority() || !Track) return;
 
+	const float TrackLength = Track->GetTrackLength();
+	const float ClampedTarget = FMath::Clamp(InTargetDistance, 0.f, TrackLength);
+
+	// ★목표가 현재 위치보다 뒤에 있으면 출발시키지 않는다.
+	//   Tick 의 Min() 이 첫 프레임에 곧바로 목표 거리를 돌려주기 때문에,
+	//   "탑승하는 순간 열차가 뒤(대개 스플라인 거리 0 = 첫 포인트)로 순간이동한 뒤
+	//   도착 처리되어 출발하지 않는" 증상이 된다.
+	//   원인은 대개 셋 중 하나다:
+	//     ① 장애물 StopDistance 미해결 -> GetStopDistance() 가 0 폴백
+	//     ② 스플라인을 진행 방향과 반대로 그림
+	//     ③ StartDistanceOnTrack 이 첫 장애물 거리보다 크게 설정됨
+	if (ClampedTarget <= CurrentDistance + KINDA_SMALL_NUMBER)
+	{
+		UE_LOG(LogDR, Error,
+			TEXT("[S2Train] 출발 취소: 목표 거리(%.0f) <= 현재 거리(%.0f). ")
+			TEXT("선로 길이 %.0f / 목표 인덱스 %d. ")
+			TEXT("장애물 StopDistance · 스플라인 방향 · StartDistanceOnTrack 을 확인하세요."),
+			ClampedTarget, CurrentDistance, TrackLength, InTargetIndex);
+		return;
+	}
+
+	const ADRGameStateBase* DRGameState = GetWorld() ? GetWorld()->GetGameState<ADRGameStateBase>() : nullptr;
+	if (!DRGameState)
+	{
+		// StartServerTime 이 0 으로 남으면 Elapsed 가 곧 현재 시각이 되어 즉시 목표로 튄다.
+		UE_LOG(LogDR, Error,
+			TEXT("[S2Train] 출발 취소: ADRGameStateBase 가 없습니다. GameState 클래스를 확인하세요."));
+		return;
+	}
+
 	PendingTargetIndex = InTargetIndex;
 
 	Movement.State = ES2TrainState::Moving;
 	Movement.StartDistance = CurrentDistance;
-	Movement.TargetDistance = FMath::Clamp(InTargetDistance, 0.f, Track->GetTrackLength());
+	Movement.TargetDistance = ClampedTarget;
 	Movement.Speed = FMath::Max(1.f, InSpeed);
-
-	if (const ADRGameStateBase* DRGameState = GetWorld()->GetGameState<ADRGameStateBase>())
-	{
-		Movement.StartServerTime = DRGameState->GetServerWorldTimeSeconds();
-	}
+	Movement.StartServerTime = DRGameState->GetServerWorldTimeSeconds();
 
 	OnRep_Movement();
 
@@ -198,7 +224,7 @@ void ADRS2Train::ArriveAtTarget()
 
 void ADRS2Train::OnRep_Movement()
 {
-	// 정지/대기 상태로 바뀌면 위치를 목표에 스냅해 서버-클라 편차를 없앤다
+	// 정지/대기 상태로 바뀌면 위치를 목표에 스냅해 서버-클라 편차를 없앤다.
 	if (Movement.State != ES2TrainState::Moving)
 	{
 		CurrentDistance = Movement.TargetDistance;

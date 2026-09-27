@@ -106,10 +106,22 @@ void ADRRobotVacuumCharacter::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 	// 지속 돌진: "입력 소유" 머신에서 전진 입력 주입 (Plan3 §15.2).
-	// CMC의 클라 예측 구조상 원격 클라 폰은 자기 ServerMove 입력이 서버 값을 덮으므로,
-	// 서버(HasAuthority)에서만 주입하면 리슨 호스트 폰만 움직이고 클라 폰은 제자리에 선다.
-	// IsLocallyControlled = 리슨 호스트 본인 + 원격 소유 클라 양쪽을 커버, 시뮬 프록시는 제외.
-	// bSustainedDash는 복제 프로퍼티라 소유 클라에도 도착한다 (§4.2).
+	//
+	// ★서버(HasAuthority)에서 주입하면 원격 클라 폰은 제자리에 선다. 이유는 "덮어쓰기"가 아니라
+	//   애초에 적용되지 않기 때문이다 (UE 5.5 CharacterMovementComponent.cpp 기준):
+	//   - TickComponent:1588 이 ConsumeInputVector()로 입력을 먼저 꺼내 비운다.
+	//   - :1677 의 게이트 bShouldPerformControlledCharMove = IsLocallyControlled() || ... 가 false 면
+	//     ControlledCharacterMove()가 호출되지 않는다 → 꺼낸 입력은 쓰이지 않고 폐기된다.
+	//   - 원격 클라 폰의 실제 이동은 오직 ServerMove RPC 경로에서만 일어나고
+	//     (ServerMove_PerformMovement:"Perform actual movement" → MoveAutonomous),
+	//     MoveAutonomous:10379 는 Acceleration 을 클라가 보낸 NewAccel 로 덮어쓴다.
+	//   → 즉 서버가 밀었다가 되돌아가는 게 아니라, 서버 입력은 링에 오르지도 못하고
+	//     클라가 보낸 "가속도 0"이 그대로 적용되어 정지가 확정된다(호스트 화면에서 떨림 없음).
+	//
+	// 리슨 호스트 폰은 서버=소유 클라라 IsLocallyControlled()가 true 이므로 혼자만 정상 동작했다.
+	// IsLocallyControlled = 리슨 호스트 본인 + 원격 소유 클라 양쪽을 커버, 시뮬 프록시는 제외
+	// (시뮬 프록시에서 주입하면 복제 위치와 싸운다 — 엔진이 이동 실행 여부를 판정할 때 쓰는 것과 같은 기준).
+	// bSustainedDash는 복제 프로퍼티라 소유 클라에도 도착한다 (§4.2). 충돌/데미지/게이지는 여전히 서버 전용.
 	// 조향은 컨트롤러 회전(bUseControllerRotationYaw)을 따르므로 마우스로 방향 조절 가능 (Plan3 §10-4)
 	if (bSustainedDash && !bDead && IsLocallyControlled())
 	{

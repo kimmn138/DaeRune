@@ -52,6 +52,11 @@ public:
 	UFUNCTION(CallInEditor, BlueprintCallable, Category = "S2|Track")
 	void RebuildTrackMesh();
 
+	// 스플라인 전체 길이와 각 포인트의 타입·거리를 출력 로그에 찍는다.
+	// 장애물 구간 간격을 정하거나 포인트 타입(Linear/Curve) 배정을 확인할 때 쓴다.
+	UFUNCTION(CallInEditor, BlueprintCallable, Category = "S2|Track")
+	void LogTrackInfo();
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Track")
 	TObjectPtr<USplineComponent> Spline;
