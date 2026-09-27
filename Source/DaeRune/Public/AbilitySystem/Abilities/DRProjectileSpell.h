@@ -23,6 +23,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Projectile")
 	int32 GetEffectiveNumProjectiles() const;
 
+	/**
+	 * ★Plan5(동전칩)★ 칩이 반영된 투사체 크기 배율. 칩이 없으면 정확히 1.0.
+	 *
+	 * SpawnProjectile() 이 스폰 트랜스폼의 Scale3D 로 쓴다 — 외형(메시)과 충돌 구(Sphere)가 함께 커진다.
+	 * 스폰 경로가 따로 있는 파생 GA(자판기 잭팟 캡슐)는 이 함수를 직접 불러 같은 값을 넣는다.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Projectile|Upgrade")
+	float GetUpgradedProjectileScale() const;
+
 protected:
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 

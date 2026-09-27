@@ -144,6 +144,9 @@ public:
 	FGameplayTag Upgrade_Feature_Skill_Claw_Lifesteal;	// ② 적에게 준 피해만큼 자기 회복
 	FGameplayTag Upgrade_Feature_Skill_Claw_AllyHeal;	// ② 아군 적중 시 자기 체력으로 아군 회복
 
+	// 자판기 기본 공격(동전) 칩 피처 스위치 (Plan5(동전칩)). ASC 에 부여되지 않는다.
+	FGameplayTag Upgrade_Feature_Skill_Coin_HitHeal;	// ② 적에게 적중할 때마다 고정량 자기 회복
+
 	// 범용 SetByCaller (Plan5(발톱칩)).
 	// 체력을 ★비용으로★ 깎는 GE 가 액수를 밖에서 받게 한다.
 	// ★값은 항상 양수(= 비용 액수)로 넣는다. 부호를 빼는 것은 GE 모디파이어의 몫이다.★

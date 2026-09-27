@@ -450,6 +450,13 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("SetByCaller tag for a self-inflicted health cost (not damage)")
 	);
 
+	// ========== 자판기 기본 공격(동전) 칩 기능 스위치 (Plan5(동전칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_Coin_HitHeal = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Coin.HitHeal"),
+		FString("자판기 기본 공격이 적에게 적중할 때마다 시전자 체력 고정량 회복")
+	);
+
 	// ========== 범용 SetByCaller (Plan5(씨앗칩)) ==========
 
 	GameplayTags.Data_MoveSpeed_Mult = UGameplayTagsManager::Get().AddNativeGameplayTag(

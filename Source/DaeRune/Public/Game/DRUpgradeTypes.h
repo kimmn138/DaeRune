@@ -91,6 +91,34 @@ enum class EDRUpgradeStat : uint8
 	 */
 	SkillWindup			UMETA(DisplayName = "스킬 선딜레이"),
 
+	// ===== Plan5(동전칩) 추가 =====
+	// ★신규 값은 반드시 Count 바로 앞에 붙인다.★ 기존 값 사이에 끼우면
+	// DA_ChipCatalog 에 직렬화된 기존 칩의 효과가 다른 스탯으로 밀린다.
+
+	/**
+	 * 스킬 단위. 연사형 스킬의 ★발사 간격(초)★. 짧을수록 좋다.
+	 *
+	 *     간격 = ApplySkill(SkillFireInterval, BaseFireInterval) ÷ 공격 속도 버프 배율
+	 *
+	 * ★SkillWindup 과 달리 단위가 "초"다.★ 발사 간격은 몽타주가 아니라 GA 프로퍼티라서
+	 * 어빌리티가 기준값을 초 단위로 정확히 안다. 그래서 DRIsTimeStat 에 ★넣는다★.
+	 *
+	 * ⚠️ SkillCooldown 을 재사용하지 않는다 — 그 축은 ApplyCooldown 이 쿨다운 GE 에 쓴다.
+	 *    기본 공격에 쿨다운 GE 가 붙는 순간 같은 칩이 이중으로 걸린다. (Plan5(동전칩) D-37)
+	 */
+	SkillFireInterval	UMETA(DisplayName = "스킬 발사 간격"),
+
+	/**
+	 * 스킬 단위. 그 스킬이 만드는 ★투사체의 크기 배율★ — 외형과 충돌 구(판정)가 함께 커진다.
+	 *
+	 * ★단위가 "배율"이다.★ 기준값 1.0 에 Apply 해서 스폰 트랜스폼의 Scale3D 로 쓴다 —
+	 *     Scale = ApplySkill(SkillProjectileScale, 1.0f);   // 칩이 없으면 정확히 1.0
+	 * 투사체의 실제 반경은 발사체 BP(Sphere)에 있어 어빌리티가 모르기 때문이다(SkillWindup 과 같은 이유).
+	 *
+	 * ⚠️ SkillAreaRadius(효과 반경)와 다른 축이다 — 투사체 몸통 ≠ 폭발·판정 반경. (Plan5(동전칩) D-40)
+	 */
+	SkillProjectileScale	UMETA(DisplayName = "스킬 투사체 크기"),
+
 	Count UMETA(Hidden) // 배열 크기 계산용 - 항상 마지막
 };
 
@@ -159,7 +187,11 @@ enum class EDRUpgradeResult : uint8
 	NoSlotToRefund,			// 환불할 해금 슬롯이 없음
 	RefundDisabled,			// 설정에서 슬롯 환불을 막아둠
 	SlotOccupied,			// 환불 대상 슬롯이 칩에 점유 중 (먼저 칩을 해제해야 함)
-	PreviousSlotLocked		// 아직 해금되지 않은 칸 (순차 해금 — 앞 칸을 먼저 해금해야 한다)
+	PreviousSlotLocked,		// 아직 해금되지 않은 칸 (순차 해금 — 앞 칸을 먼저 해금해야 한다)
+
+	// ★Plan5(스킬당1칩)★ 같은 스킬 칩이 이미 장착돼 있다 — 그 칩이 있는 칸에 드롭하면 교체된다.
+	// ★반드시 맨 끝에 붙인다★ — 중간에 끼우면 BP 의 Switch 핀·바이트 값이 밀린다 (Plan5 D-52)
+	SkillConflict
 };
 
 /**
@@ -187,7 +219,9 @@ FORCEINLINE bool DRIsSkillStat(EDRUpgradeStat Stat)
 		|| Stat == EDRUpgradeStat::SkillHealing			// Plan5(씨앗칩)
 		|| Stat == EDRUpgradeStat::SkillAreaRadius		// 〃
 		|| Stat == EDRUpgradeStat::SkillWaterGrant		// Plan5(물대포칩)
-		|| Stat == EDRUpgradeStat::SkillWindup;			// Plan5(발톱칩)
+		|| Stat == EDRUpgradeStat::SkillWindup			// Plan5(발톱칩)
+		|| Stat == EDRUpgradeStat::SkillFireInterval	// Plan5(동전칩)
+		|| Stat == EDRUpgradeStat::SkillProjectileScale;	// 〃
 }
 
 /**
@@ -201,7 +235,8 @@ FORCEINLINE bool DRIsLowerBetter(EDRUpgradeStat Stat)
 		|| Stat == EDRUpgradeStat::SkillWaterCost
 		|| Stat == EDRUpgradeStat::SkillCooldown
 		|| Stat == EDRUpgradeStat::HealthRegenDelay
-		|| Stat == EDRUpgradeStat::SkillWindup;		// Plan5(발톱칩) 선딜은 짧을수록 좋다
+		|| Stat == EDRUpgradeStat::SkillWindup		// Plan5(발톱칩) 선딜은 짧을수록 좋다
+		|| Stat == EDRUpgradeStat::SkillFireInterval;	// Plan5(동전칩) 발사 간격도 짧을수록 좋다
 }
 
 /**
@@ -213,7 +248,8 @@ FORCEINLINE bool DRIsLowerBetter(EDRUpgradeStat Stat)
 FORCEINLINE bool DRIsTimeStat(EDRUpgradeStat Stat)
 {
 	return Stat == EDRUpgradeStat::SkillCooldown
-		|| Stat == EDRUpgradeStat::HealthRegenDelay;
+		|| Stat == EDRUpgradeStat::HealthRegenDelay
+		|| Stat == EDRUpgradeStat::SkillFireInterval;	// Plan5(동전칩) 단위가 초다 (배율인 SkillWindup 은 제외 — T-25)
 }
 
 /**
@@ -344,6 +380,18 @@ struct FDRUpgradeChipDefinition
 	bool IsUsableBy(EPlayerCharacterClass InClass) const
 	{
 		return bCommonChip || OwnerClass == InClass;
+	}
+
+	/**
+	 * ★Plan5(스킬당1칩)★ "같은 스킬 칩은 동시에 1개만" 규칙의 묶음 키. 비어 있으면 제한 없음.
+	 *
+	 * 칩 레벨 TargetAbilityTag 그대로다 — 칩 카드의 "적용 대상 스킬" 표기와 같은 값이라
+	 * 플레이어가 보는 것과 규칙이 일치한다 (Plan5 D-47). 공용 칩은 항상 제한 없음.
+	 * 판정은 UDRChipCatalog::FindSkillConflict() 하나로만 한다 (D-49).
+	 */
+	FGameplayTag GetExclusiveSkillTag() const
+	{
+		return bCommonChip ? FGameplayTag() : TargetAbilityTag;
 	}
 
 	// 수치든 스위치든 효과가 하나라도 있는가 (ValidateCatalog 용).

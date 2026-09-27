@@ -250,6 +250,14 @@ struct FDRChipViewModel
 	UPROPERTY(BlueprintReadOnly, Category = "Chip")
 	EDRUpgradeResult EquipBlockReason = EDRUpgradeResult::Success;
 
+	// ★Plan5(스킬당1칩)★ EquipBlockReason == SkillConflict 일 때 부딪히는(이미 장착된) 같은 스킬 칩.
+	// UI 문구("'○○' 과 같은 스킬 — 그 칸에 끌어다 놓으면 교체")와 교체 대상 칸 강조에 쓴다. 없으면 None/빈 텍스트.
+	UPROPERTY(BlueprintReadOnly, Category = "Chip")
+	FName ConflictingChipId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Chip")
+	FText ConflictingChipName;
+
 	// 단점 모디파이어 보유 여부 (경고 아이콘)
 	UPROPERTY(BlueprintReadOnly, Category = "Chip")
 	bool bHasDrawback = false;

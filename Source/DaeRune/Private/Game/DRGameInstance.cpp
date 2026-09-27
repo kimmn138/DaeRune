@@ -387,6 +387,32 @@ bool UDRGameInstance::SanitizeClassState(EPlayerCharacterClass CharacterClass, F
 		bModified = true;
 	}
 
+	// ★Plan5(스킬당1칩)★ 3차 패스: 같은 스킬 칩이 둘 이상이면 ★앞 칸의 칩만★ 남긴다(D-50).
+	// 규칙 도입 전 세이브 대비. 칩은 사는 게 아니라 슬롯을 사는 구조라 재화는 건드리지 않는다.
+	if (const UDRChipCatalog* Catalog = GetChipCatalog())
+	{
+		TArray<FName> Kept;
+		for (FName& Slot : Slots)
+		{
+			if (Slot.IsNone()) continue;
+			if (Kept.Contains(Slot)) continue;   // 다중 칸 칩의 나머지 칸
+
+			if (Catalog->FindSkillConflict(Kept, Slot).IsNone())
+			{
+				Kept.Add(Slot);
+				continue;
+			}
+
+			const FName Dropped = Slot;
+			for (FName& Other : Slots)
+			{
+				if (Other == Dropped) Other = NAME_None;
+			}
+			UE_LOG(LogDR, Warning, TEXT("[Upgrade] 같은 스킬 칩 중복으로 %s 를 해제했습니다."), *Dropped.ToString());
+			bModified = true;
+		}
+	}
+
 	// 지불액 재산정: 정가 합계보다 많이 냈던 만큼은 지갑으로 환급 (재화 증발 방지)
 	if (RebuiltSpent < State.SpentCurrency)
 	{
@@ -867,9 +893,22 @@ EDRUpgradeResult UDRGameInstance::CanEquipChip(EPlayerCharacterClass CharacterCl
 
 	if (IsChipEquipped(CharacterClass, ChipId)) return EDRUpgradeResult::AlreadyEquipped;
 
+	// ★Plan5(스킬당1칩)★ 같은 스킬 칩이 이미 있으면 거부한다(자동 교체 없음 — D-48).
+	// 슬롯 수보다 ★먼저★ 본다 — 칸이 모자란 것보다 "이 조합 자체가 안 된다"가 더 정확한 사유다.
+	// 그 칩이 있는 칸에 드롭하는 교체는 CanEquipChipAtSlot 이 따로 허용한다.
+	if (!GetSkillConflictChip(CharacterClass, ChipId).IsNone()) return EDRUpgradeResult::SkillConflict;
+
 	if (OutFreeSlots < OutRequiredSlots) return EDRUpgradeResult::NotEnoughSlots;
 
 	return EDRUpgradeResult::Success;
+}
+
+FName UDRGameInstance::GetSkillConflictChip(EPlayerCharacterClass CharacterClass, FName ChipId) const
+{
+	const UDRChipCatalog* Catalog = GetChipCatalog();
+	if (!Catalog) return NAME_None;
+
+	return Catalog->FindSkillConflict(GetEquippedChips(CharacterClass), ChipId);
 }
 
 EDRUpgradeResult UDRGameInstance::EquipChip(EPlayerCharacterClass CharacterClass, FName ChipId,
@@ -956,7 +995,9 @@ EDRUpgradeResult UDRGameInstance::CanEquipChipAtSlot(EPlayerCharacterClass Chara
 	// 칩 자체의 자격(설정/해금/소속/중복)은 기존 판정을 그대로 쓴다.
 	// NotEnoughSlots 만 "이 칸 기준"으로 다시 판단한다 — 점유 칸은 교체가 가능하기 때문.
 	const EDRUpgradeResult BaseResult = CanEquipChip(CharacterClass, ChipId, OutRequiredSlots, OutFreeSlots);
-	if (BaseResult != EDRUpgradeResult::Success && BaseResult != EDRUpgradeResult::NotEnoughSlots)
+	if (BaseResult != EDRUpgradeResult::Success
+		&& BaseResult != EDRUpgradeResult::NotEnoughSlots
+		&& BaseResult != EDRUpgradeResult::SkillConflict)
 	{
 		return BaseResult;
 	}
@@ -965,6 +1006,19 @@ EDRUpgradeResult UDRGameInstance::CanEquipChipAtSlot(EPlayerCharacterClass Chara
 	if (!State) return EDRUpgradeResult::InvalidConfig;
 
 	if (!State->SlotChips.IsValidIndex(SlotIndex)) return EDRUpgradeResult::InvalidConfig;
+
+	// ★Plan5(스킬당1칩)★ 같은 스킬 칩이 있어도, ★그 칩이 있는 칸에 드롭★ 하면 교체로 허용한다(D-48).
+	// 판정 = "목적 칸의 칩을 뺀다고 치면 더는 부딪히지 않는가". 다른 칸이면 충돌 칩이 그대로 남아 거부된다.
+	if (BaseResult == EDRUpgradeResult::SkillConflict)
+	{
+		const UDRChipCatalog* Catalog = GetChipCatalog();
+		const FName Occupant = State->SlotChips[SlotIndex];
+		if (!Catalog || Occupant.IsNone()
+			|| !Catalog->FindSkillConflict(GetEquippedChips(CharacterClass), ChipId, Occupant).IsNone())
+		{
+			return EDRUpgradeResult::SkillConflict;
+		}
+	}
 
 	// 아직 해금하지 않은 칸에는 놓을 수 없다
 	if (SlotIndex >= FMath::Min(State->UnlockedSlots, State->SlotChips.Num()))
@@ -1191,6 +1245,16 @@ void UDRGameInstance::MakeChipViewModel(EPlayerCharacterClass CharacterClass, co
 	OutViewModel.bCanEquipNow = (EquipResult == EDRUpgradeResult::Success);
 	OutViewModel.EquipBlockReason = EquipResult;
 
+	// ★Plan5(스킬당1칩)★ 부딪히는 칩을 알려 줘야 "그 칸에 놓으면 교체"를 안내할 수 있다
+	if (EquipResult == EDRUpgradeResult::SkillConflict)
+	{
+		OutViewModel.ConflictingChipId = GetSkillConflictChip(CharacterClass, Chip.ChipId);
+		if (const FDRUpgradeChipDefinition* Conflicting = FindChip(OutViewModel.ConflictingChipId))
+		{
+			OutViewModel.ConflictingChipName = Conflicting->DisplayName;
+		}
+	}
+
 	for (const FDRUpgradeModifier& Modifier : Chip.Modifiers)
 	{
 		const FText Detail = Modifier.GetDetailText();
@@ -1278,6 +1342,13 @@ void UDRGameInstance::BuildPreviewRuntime(EPlayerCharacterClass CharacterClass, 
 	}
 	if (!AddChipId.IsNone())
 	{
+		// ★Plan5(스킬당1칩)★ 같은 스킬 칩이 있으면 그 칩이 빠진다고 보고 계산한다 —
+		// 실제로 가능한 결과는 "교체"뿐이라, 둘을 합친 수치를 보여 주면 거짓 미리보기가 된다.
+		const FName Conflicting = Catalog->FindSkillConflict(Chips, AddChipId);
+		if (!Conflicting.IsNone())
+		{
+			Chips.Remove(Conflicting);
+		}
 		Chips.AddUnique(AddChipId);
 	}
 

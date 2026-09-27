@@ -32,6 +32,10 @@ ADRProjectile* UDRProjectileSpell::SpawnProjectile(const FVector& ProjectileTarg
 	FTransform SpawnTransform;
 	SpawnTransform.SetLocation(SocketLocation);
 	SpawnTransform.SetRotation(Rotation.Quaternion());
+	// ★Plan5(동전칩)★ 투사체 크기 칩(SkillProjectileScale). 칩이 없으면 1.0 이라 기존과 완전히 같다 —
+	// 이 함수를 쓰는 적 GA(원거리·잠자리)는 칩 캐시가 비어 있어 항상 1.0 이다.
+	// SpawnActorDeferred 와 FinishSpawning 에 ★같은 트랜스폼★ 이 넘어가야 한다(아래 코드 그대로).
+	SpawnTransform.SetScale3D(FVector(GetUpgradedProjectileScale()));
 
 	ADRProjectile* Projectile = GetWorld()->SpawnActorDeferred<ADRProjectile>(
 		ProjectileClass,
@@ -80,4 +84,11 @@ FVector UDRProjectileSpell::CalculateTargetLocation() const
 int32 UDRProjectileSpell::GetEffectiveNumProjectiles() const
 {
 	return GetUpgradedInt(EDRUpgradeStat::SkillProjectileCount, NumProjectiles, 1);
+}
+
+float UDRProjectileSpell::GetUpgradedProjectileScale() const
+{
+	// ★기준값 1.0 에 곱한다★ — 칩이 없으면 정확히 1.0.
+	// 0 에 가까워지면 충돌 구가 사라져 아무것도 못 맞히므로 하한을 둔다.
+	return FMath::Max(0.1f, GetUpgradedFloat(EDRUpgradeStat::SkillProjectileScale, 1.f));
 }

@@ -442,6 +442,39 @@ float UDRAbilitySystemLibrary::GetLifestealRatioForDamage(const FEffectPropertie
 	return FMath::Max(0.f, GetChipTuning(TuningContext).Claw.LifestealRatio);
 }
 
+float UDRAbilitySystemLibrary::GetHitHealAmountForDamage(const FEffectProperties& Props)
+{
+	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+
+	// ① 소스가 적중 회복 칩을 끼고 있는가
+	if (!HasUpgradeFeature(Props.SourceASC, GameplayTags.Upgrade_Feature_Skill_Coin_HitHeal))
+	{
+		return 0.f;
+	}
+
+	// ② 이 피해가 ★자판기 기본 공격에서★ 나왔는가 (흡혈의 ClawSwipe 검사와 같은 이유 —
+	//    빠뜨리면 자판기의 다른 피해원까지 회복된다). 동전·잭팟 캡슐은 둘 다 이 GA 의 태그를 싣는다.
+	const FDRGameplayEffectContext* DRContext =
+		static_cast<const FDRGameplayEffectContext*>(Props.EffectContextHandle.Get());
+	if (!DRContext) return 0.f;
+
+	if (!DRContext->GetSourceAbilityTags().HasTagExact(GameplayTags.Abilities_VendingMachine_BasicAttack))
+	{
+		return 0.f;
+	}
+
+	// ③ ★시전자가 오염 중이면 막는다★ — HandleCorruptionPurification 은 회복량과 무관하게
+	//    정화 + 컨테이너 1칸을 준다. 오염 해제는 아군 회복으로만 하는 팀 메커니즘이다.
+	//    (오염은 플레이어에게만 있다 — 판정 대상은 적이 아니라 ★시전자★ 다)
+	if (const UDRPlayerAttributeSet* SourcePlayerAS = GetPlayerAttributeSetFromASC(Props.SourceASC))
+	{
+		if (SourcePlayerAS->IsCorrupted()) return 0.f;
+	}
+
+	const AActor* TuningContext = Props.SourceASC ? Props.SourceASC->GetAvatarActor() : nullptr;
+	return FMath::Max(0.f, GetChipTuning(TuningContext).Coin.HitHealAmount);
+}
+
 bool UDRAbilitySystemLibrary::IsSuccessfulDebuff(const FGameplayEffectContextHandle& EffectContextHandle)
 {
 	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))

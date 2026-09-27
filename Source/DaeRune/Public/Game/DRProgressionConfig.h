@@ -221,6 +221,36 @@ struct FDRClawChipTuning
 };
 
 /**
+ * ★Plan5(동전칩)★ 자판기 기본 공격(동전) 칩의 동적 상수.
+ *
+ * 카탈로그 Modifiers 로 표현할 수 없는 값만 여기 둔다 — "적중 1회에 얼마를", "어떤 GE 로".
+ * 정적 수치(피해 +20% / −30%, 발사 간격 +0.4초, 크기 +30%)는 전부 DA_ChipCatalog 에 있다.
+ */
+USTRUCT(BlueprintType)
+struct FDRCoinChipTuning
+{
+	GENERATED_BODY()
+
+	// ========== ② VM.Asc.CoinDrain ==========
+
+	/**
+	 * 기본 공격(동전·잭팟 캡슐)이 적에게 ★한 번 적중할 때마다★ 회복하는 체력(고정량).
+	 *
+	 * ★준 피해와 무관하다★ — 발톱 흡혈(Claw.LifestealRatio)처럼 "비율"이 아니라 "액수"다.
+	 * 취약·엘리트·광폭화가 피해를 바꿔도 회복량은 그대로다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coin|Drain", meta = (ClampMin = "0.0"))
+	float HitHealAmount = 2.0f;
+
+	/**
+	 * 회복에 쓰는 GE. Instant + ExecCalc_Heal + SetByCaller(Heal) — 기존 GE_Heal 을 그대로 지정한다.
+	 * ★비우면 에러 없이 무동작★ 이다. Claw.HealEffect 와는 별개 필드라 ★따로 한 번 더★ 지정해야 한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coin|Drain")
+	TSoftClassPtr<UGameplayEffect> HealEffect;
+};
+
+/**
  * 돌파 칩(⑥⑦⑧)의 동적 효과 튜닝 상수. (Plan3(공용칩) §17.4.3)
  *
  * 이 수치들은 카탈로그의 FDRUpgradeModifier 로 표현할 수 없다 —
@@ -300,6 +330,11 @@ struct FDRChipTuning
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Claw")
 	FDRClawChipTuning Claw;
+
+	// ========== 자판기 기본 공격 칩 (Plan5(동전칩)) ==========
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coin")
+	FDRCoinChipTuning Coin;
 };
 
 /**

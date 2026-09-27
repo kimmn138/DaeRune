@@ -70,6 +70,15 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|BasicAttack")
 	float BaseFireInterval = 0.3f;
 
+	/**
+	 * ★Plan5(동전칩)★ 발사 간격의 하한(초).
+	 *
+	 * 발사 간격 칩(SkillFireInterval)과 공격 속도 버프가 겹쳐 0 이하가 되면 SetTimer 가 타이머를
+	 * ★지워서★ 연사가 조용히 멈춘다 — 그걸 막는 바닥값이다(UDRGameplayAbility::MinCooldownDuration 과 같은 역할).
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|BasicAttack", meta = (ClampMin = "0.01"))
+	float MinFireInterval = 0.05f;
+
 	/** 투사체 발사 소켓 태그 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|BasicAttack")
 	FGameplayTag FireSocketTag;

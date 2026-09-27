@@ -179,6 +179,31 @@ void UDRChipCatalog::ResolveLoadout(const TArray<FName>& EquippedChips, EPlayerC
 	}
 }
 
+FName UDRChipCatalog::FindSkillConflict(const TArray<FName>& EquippedChips, FName ChipId, FName IgnoreChipId) const
+{
+	const FDRUpgradeChipDefinition* Chip = FindChip(ChipId);
+	if (!Chip) return NAME_None;
+
+	// 공용 칩 · 로봇 전체 대상 칩(칩 레벨 태그 없음)은 제한이 없다
+	const FGameplayTag Key = Chip->GetExclusiveSkillTag();
+	if (!Key.IsValid()) return NAME_None;
+
+	for (const FName& OtherId : EquippedChips)
+	{
+		// 자기 자신(다중 칸 칩의 다른 칸 포함)과 곧 빠질 칩은 건너뛴다
+		if (OtherId.IsNone() || OtherId == ChipId || OtherId == IgnoreChipId) continue;
+
+		if (const FDRUpgradeChipDefinition* Other = FindChip(OtherId))
+		{
+			if (Other->GetExclusiveSkillTag().MatchesTagExact(Key))
+			{
+				return OtherId;
+			}
+		}
+	}
+	return NAME_None;
+}
+
 bool UDRChipCatalog::SanitizeLoadout(TArray<FName>& InOutChips, EPlayerCharacterClass CharacterClass,
 	int32 MaxSlots) const
 {
@@ -202,6 +227,13 @@ bool UDRChipCatalog::SanitizeLoadout(TArray<FName>& InOutChips, EPlayerCharacter
 
 		// 동일 칩 중복 장착 금지
 		if (SeenIds.Contains(ChipId))
+		{
+			bModified = true;
+			continue;
+		}
+
+		// ★Plan5(스킬당1칩)★ 같은 스킬 칩은 먼저 온 것 하나만 남긴다 (클라 조작·옛 세이브 방어)
+		if (!FindSkillConflict(Sanitized, ChipId).IsNone())
 		{
 			bModified = true;
 			continue;
@@ -294,6 +326,19 @@ bool UDRChipCatalog::ValidateCatalog(int32 MaxSlots, TArray<FString>& OutErrors)
 						*IdString, *FeatureTag.ToString()));
 				}
 			}
+
+			// ★Plan5(스킬당1칩)★ 스킬 전용 기능 스위치(Upgrade.Feature.Skill.*)를 주는 칩은
+			// 칩 레벨 대상 스킬이 있어야 한다 — 없으면 스킬당 1칩 제한을 조용히 빠져나간다 (Plan5 D-51).
+			static const FGameplayTag SkillFeatureRoot =
+				FGameplayTag::RequestGameplayTag(FName("Upgrade.Feature.Skill"), /*ErrorIfNotFound*/ false);
+
+			if (!Chip.bCommonChip && !Chip.TargetAbilityTag.IsValid() && SkillFeatureRoot.IsValid()
+				&& Chip.GrantedTags.HasTag(SkillFeatureRoot))
+			{
+				OutErrors.Add(FString::Printf(
+					TEXT("%s: 스킬 기능 스위치(Upgrade.Feature.Skill.*)를 주는데 칩의 TargetAbilityTag 가 비어 있어 스킬당 1칩 제한을 빠져나갑니다."),
+					*IdString));
+			}
 		}
 
 		if (Chip.DisplayName.IsEmpty())
@@ -335,6 +380,26 @@ bool UDRChipCatalog::ValidateCatalog(int32 MaxSlots, TArray<FString>& OutErrors)
 				OutErrors.Add(FString::Printf(
 					TEXT("%s: 캐릭터 단위 스탯에 TargetAbilityTag(%s) 가 지정돼 무시됩니다."),
 					*IdString, *Modifier.TargetAbilityTag.ToString()));
+			}
+
+			// ★Plan5(스킬당1칩)★ 전용 칩의 스킬 단위 모디파이어는 칩 레벨 대상 스킬과 ★같은 태그★ 여야 한다.
+			//  · 모디파이어 태그가 비면 그 줄이 그 로봇의 ★모든 스킬★ 에 걸린다(GR.Asc.SeedSupport 사고).
+			//  · 칩 태그와 다르면 "적용 대상 스킬" 표기·스킬당 1칩 규칙과 실제 효과가 어긋난다.
+			if (!Chip.bCommonChip && DRIsSkillStat(Modifier.Stat))
+			{
+				if (!Chip.TargetAbilityTag.IsValid())
+				{
+					OutErrors.Add(FString::Printf(
+						TEXT("%s: 스킬 단위 모디파이어(%s)가 있는데 칩의 TargetAbilityTag 가 비어 있어 스킬당 1칩 제한을 빠져나갑니다."),
+						*IdString, *UEnum::GetValueAsString(Modifier.Stat)));
+				}
+				else if (!Modifier.TargetAbilityTag.MatchesTagExact(Chip.TargetAbilityTag))
+				{
+					OutErrors.Add(FString::Printf(
+						TEXT("%s: 스킬 단위 모디파이어(%s)의 TargetAbilityTag(%s)가 칩의 대상 스킬(%s)과 다릅니다 — 비어 있으면 이 로봇의 모든 스킬에 적용됩니다."),
+						*IdString, *UEnum::GetValueAsString(Modifier.Stat),
+						*Modifier.TargetAbilityTag.ToString(), *Chip.TargetAbilityTag.ToString()));
+				}
 			}
 
 			// 공용 칩에 특정 로봇의 스킬 태그를 걸면 다른 로봇에서는 조용히 효과가 0이 된다

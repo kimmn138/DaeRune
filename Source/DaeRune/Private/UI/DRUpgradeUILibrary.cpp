@@ -76,6 +76,10 @@ FText UDRUpgradeUILibrary::GetUpgradeResultText(EDRUpgradeResult Result, int32 A
 	case EDRUpgradeResult::PreviousSlotLocked:
 		return LOCTEXT("Result_PreviousSlotLocked", "앞 슬롯을 먼저 해금해야 합니다.");
 
+	case EDRUpgradeResult::SkillConflict:
+		// ★Plan5(스킬당1칩)★ 어떤 칩과 부딪히는지는 뷰모델의 ConflictingChipName 으로 따로 보여 준다
+		return LOCTEXT("Result_SkillConflict", "같은 스킬의 칩은 하나만 장착할 수 있습니다. 장착된 칩 자리에 놓으면 교체됩니다.");
+
 	default:
 		break;
 	}
@@ -119,6 +123,12 @@ FText UDRUpgradeUILibrary::GetStatShortName(EDRUpgradeStat Stat)
 
 	case EDRUpgradeStat::SkillWindup:
 		return LOCTEXT("StatShort_SkillWindup", "선딜");			// 정식: 스킬 선딜레이
+
+	case EDRUpgradeStat::SkillFireInterval:
+		return LOCTEXT("StatShort_SkillFireInterval", "발사 간격");		// 정식: 스킬 발사 간격 (Plan5(동전칩))
+
+	case EDRUpgradeStat::SkillProjectileScale:
+		return LOCTEXT("StatShort_SkillProjectileScale", "탄 크기");		// 정식: 스킬 투사체 크기 (Plan5(동전칩))
 
 	// SkillAreaRadius("스킬 범위")는 이미 5자 이내라 폴백으로 충분하다
 

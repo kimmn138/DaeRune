@@ -110,6 +110,9 @@ void UDRVendingMachineBasicAttack::ExecuteShot()
 			FTransform SpawnTransform;
 			SpawnTransform.SetLocation(SocketLocation);
 			SpawnTransform.SetRotation(Rotation.Quaternion());
+			// ★Plan5(동전칩)★ 캡슐도 기본 공격 투사체다 — 동전과 같은 크기 칩을 받는다(D-39).
+			//   이 분기는 SpawnProjectile() 을 타지 않으므로 여기서 따로 넣는다.
+			SpawnTransform.SetScale3D(FVector(GetUpgradedProjectileScale()));
 
 			ADRProjectile* Projectile = GetWorld()->SpawnActorDeferred<ADRProjectile>(
 				SelectedClass, SpawnTransform,
@@ -118,7 +121,11 @@ void UDRVendingMachineBasicAttack::ExecuteShot()
 				ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 
 			Projectile->DamageEffectParams = MakeDamageEffectParamsFromClassDefaults();
-			Projectile->DamageEffectParams.BaseDamage = SelectedDamage;
+			// ★Plan5(동전칩)★ 캡슐 피해도 SkillDamage 칩을 탄다(D-39). 상수를 그대로 넣으면
+			//   ①의 +20% 도, ②③의 −30% 도 캡슐에서만 빠진다(T-1 과 같은 누락 — UDRVacuumAirShot 과 같은 보정).
+			//   GetUpgradedDamage() 와 같은 순서로 런타임 배율까지 곱한다(자판기는 지금 1.0).
+			Projectile->DamageEffectParams.BaseDamage =
+				GetUpgradedFloat(EDRUpgradeStat::SkillDamage, SelectedDamage) * GetRuntimeDamageMultiplier();
 
 			Projectile->FinishSpawning(SpawnTransform);
 		}
@@ -166,26 +173,35 @@ void UDRVendingMachineBasicAttack::ExecuteShot()
 
 float UDRVendingMachineBasicAttack::GetCurrentFireInterval() const
 {
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-	if (!ASC) return BaseFireInterval;
+	// ★Plan5(동전칩)★ 발사 간격 칩(SkillFireInterval, 초 단위)부터 반영한다.
+	//   칩이 없으면 ApplySkill 이 항등이라 BaseFireInterval(BP 0.6초)이 그대로 나온다.
+	//   VM.Asc.CoinHeavy: 0.6 + 0.4 = 1.0초
+	const float ChipInterval = GetUpgradedFloat(EDRUpgradeStat::SkillFireInterval, BaseFireInterval);
 
+	// 공격 속도 버프(스킬 2)는 기존 공식 그대로 ★그 위에서★ 나눈다 — 칩과 버프는 곱으로 합성된다(D-38).
+	// (예전에는 ASC 가 없으면 BaseFireInterval 을 바로 돌려줬는데, 그러면 칩이 무시되므로 계산을 이어 간다)
 	int32 BuffStacks = 0;
-	FGameplayTagContainer BuffTagFilter;
-	BuffTagFilter.AddTag(FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed);
-
-	TArray<FActiveGameplayEffectHandle> ActiveEffects =
-		ASC->GetActiveEffectsWithAllTags(BuffTagFilter);
-
-	for (const FActiveGameplayEffectHandle& EffectHandle : ActiveEffects)
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
-		const FActiveGameplayEffect* ActiveGE = ASC->GetActiveGameplayEffect(EffectHandle);
-		if (ActiveGE)
+		FGameplayTagContainer BuffTagFilter;
+		BuffTagFilter.AddTag(FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed);
+
+		TArray<FActiveGameplayEffectHandle> ActiveEffects =
+			ASC->GetActiveEffectsWithAllTags(BuffTagFilter);
+
+		for (const FActiveGameplayEffectHandle& EffectHandle : ActiveEffects)
 		{
-			BuffStacks = ActiveGE->Spec.GetStackCount();
-			break;
+			const FActiveGameplayEffect* ActiveGE = ASC->GetActiveGameplayEffect(EffectHandle);
+			if (ActiveGE)
+			{
+				BuffStacks = ActiveGE->Spec.GetStackCount();
+				break;
+			}
 		}
 	}
 
 	const float SpeedMultiplier = 1.0f + (BuffStacks * 0.2f);
-	return BaseFireInterval / SpeedMultiplier;
+
+	// ★하한 필수★ — SetTimer 는 Rate <= 0 이면 타이머를 지워서 연사가 조용히 멈춘다(D-44).
+	return FMath::Max(MinFireInterval, ChipInterval / SpeedMultiplier);
 }

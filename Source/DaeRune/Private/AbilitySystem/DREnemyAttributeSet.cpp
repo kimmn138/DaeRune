@@ -91,6 +91,31 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			}
 		}
 
+		// ★Plan5(동전칩)★ 적중 회복 — 자판기 기본 공격이 적에게 ★맞을 때마다★ 고정량 회복.
+		//
+		// 흡혈과 같은 자리인 이유: "적에게 피해가 실제로 들어갔다"가 확정되는 지점이 여기다
+		// (죽은 적은 PostGameplayEffectExecute 가, 0 피해는 위의 > 0 가드가 이미 걸렀다).
+		// 피해량과 무관한 고정량이라 SetHealth 전후는 상관없지만, 튜토리얼 더미의 조기 return 보다는
+		// 반드시 위여야 한다(흡혈과 똑같이 더미에서도 연습이 되게).
+		//
+		// 칩이 없거나 / 기본 공격이 아니거나 / 시전자가 오염 중이면 GetHitHealAmountForDamage 가 0 이다.
+		// 만피·회복 차단이면 GetHealableAmount 가 0 이라 GE 자체를 걸지 않는다(적중이 잦아 헛 적용을 줄인다).
+		{
+			const float HitHeal = UDRAbilitySystemLibrary::GetHitHealAmountForDamage(Props);
+			if (HitHeal > 0.f)
+			{
+				const float Healable = UDRAbilitySystemLibrary::GetHealableAmount(Props.SourceAvatarActor, HitHeal);
+				if (Healable > 0.f)
+				{
+					UDRAbilitySystemLibrary::ApplyHealToActor(
+						Props.SourceAvatarActor,
+						Props.SourceASC,
+						UDRAbilitySystemLibrary::GetChipTuning(Props.SourceAvatarActor).Coin.HealEffect,
+						Healable);
+				}
+			}
+		}
+
 		const float NewHealth = GetHealth() - LocalIncomingDamage;
 
 		// 튜토리얼 더미: 체력을 최소 1로 유지 (무적) + 적중 보고

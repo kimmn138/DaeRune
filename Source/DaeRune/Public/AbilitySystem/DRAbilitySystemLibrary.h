@@ -199,6 +199,20 @@ public:
 	 */
 	static float GetLifestealRatioForDamage(const FEffectProperties& Props);
 
+	/**
+	 * ★Plan5(동전칩)★ 이 피해에 붙는 "적중 회복" 고정량. 대상이 아니면 0.
+	 *
+	 * 세 조건을 ★모두★ 만족해야 한다:
+	 *   ① 소스가 Upgrade.Feature.Skill.Coin.HitHeal 피처를 갖고 있다
+	 *   ② 그 피해가 ★자판기 기본 공격에서★ 나왔다 (컨텍스트의 SourceAbilityTags — 동전·캡슐 둘 다)
+	 *   ③ 소스(시전자)가 ★오염 상태가 아니다★ — 오염 정화는 회복량을 보지 않으므로,
+	 *      막지 않으면 "적 1회 적중 = 즉시 정화 + 컨테이너 1칸" 이 된다
+	 *
+	 * GetLifestealRatioForDamage 의 형제다 — UDREnemyAttributeSet 는 이 둘만 부른다.
+	 * 반환값은 "요청량"이다. 실제로 받을 수 있는 양(만피·회복 차단)은 호출부가 GetHealableAmount 로 자른다.
+	 */
+	static float GetHitHealAmountForDamage(const FEffectProperties& Props);
+
 	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayEffects")
 	static bool IsSuccessfulDebuff(const FGameplayEffectContextHandle& EffectContextHandle);
 

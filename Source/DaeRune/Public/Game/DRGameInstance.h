@@ -188,6 +188,13 @@ public:
 	EDRUpgradeResult CanEquipChip(EPlayerCharacterClass CharacterClass, FName ChipId,
 		int32& OutRequiredSlots, int32& OutFreeSlots) const;
 
+	/**
+	 * ★Plan5(스킬당1칩)★ 이 칩을 끼우면 같은 스킬로 부딪히는 ★이미 장착된★ 칩. 없으면 None.
+	 * 판정은 UDRChipCatalog::FindSkillConflict() 그대로다 — UI 는 이 함수로만 묻는다.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Progression|Chip")
+	FName GetSkillConflictChip(EPlayerCharacterClass CharacterClass, FName ChipId) const;
+
 	// 칩 장착. PreferredSlotIndex(0..MaxSlots-1) 는 드래그앤드롭한 칸(유효하지 않으면 앞에서부터 채운다).
 	UFUNCTION(BlueprintCallable, Category = "Progression|Chip")
 	EDRUpgradeResult EquipChip(EPlayerCharacterClass CharacterClass, FName ChipId, int32 PreferredSlotIndex = -1);
