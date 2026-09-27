@@ -31,6 +31,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Damage")
 	float GetUpgradedDamage() const;
 
+	/**
+	 * ★Plan5(물대포칩)★ 런타임 조건에 따른 피해 배율 훅. 기본 1.0(변화 없음).
+	 *
+	 * 칩 장착 여부처럼 "고정된" 보정은 EDRUpgradeStat::SkillDamage 로 표현한다.
+	 * 이 훅은 ★채널링 스택처럼 매 순간 변하는★ 보정만을 위한 것이다.
+	 *
+	 * GetUpgradedDamage() 가 마지막에 이 값을 곱하므로, 파생 클래스는 이것만 오버라이드하면
+	 * 모든 피해 경로(MakeDamageEffectParamsFromClassDefaults / CauseDamage / GetDamageAtLevel)에
+	 * 자동으로 반영된다.
+	 *
+	 * (선례: UDRGameplayAbility::GetBaseCooldownDuration — 같은 목적의 런타임 훅이다)
+	 */
+	virtual float GetRuntimeDamageMultiplier() const { return 1.f; }
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TSubclassOf<UGameplayEffect> DamageEffectClass;

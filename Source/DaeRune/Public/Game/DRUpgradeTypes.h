@@ -35,19 +35,82 @@ enum class EDRUpgradeStat : uint8
 	SkillCooldown		UMETA(DisplayName = "스킬 딜레이"),
 	SkillProjectileCount UMETA(DisplayName = "스킬 투사체 수"),
 
+	// ===== Plan3(공용칩) 추가 =====
+	// ★신규 값은 반드시 Count 바로 앞에 붙인다.★ 기존 값 사이에 끼워 넣으면
+	// DA_ChipCatalog 에 직렬화된 기존 칩의 효과가 다른 스탯으로 밀린다.
+	// (ECharacterClass 의 MoleBoss 주석과 같은 규칙 — Plan3(공용칩) §4.1 D-4)
+
+	// 캐릭터 단위. ★Flat 전용★ — 컨테이너 1칸 용량이 아니라 "총 최대 체력(HP)" 증가량이다.
+	// ADRCharacter::RefreshUpgradeEffects() 가 NumContainers 로 나눠 칸 용량에 분배하므로
+	// 컨테이너 불변식(MaxHealth = NumContainers × ContainerHealth)이 유지된다.
+	// 비율 증가가 필요하면 ContainerHealth 쪽에 Percent 로 쓴다(수학적으로 동일, 이중 정의 방지).
+	MaxHealth			UMETA(DisplayName = "최대 체력"),
+
+	// 캐릭터 단위. 전투 이탈 → 자동 체력 회복이 시작되기까지의 대기 시간(초). 음수 = 단축.
+	HealthRegenDelay	UMETA(DisplayName = "회복 시작 시간"),
+
+	// 캐릭터 단위. 이 캐릭터가 ★주는★ 모든 피해의 배율.
+	// UExecCalc_Damage 의 소스측에서 적용되므로 스킬/투사체/디버프 DoT 을 전부 포함한다.
+	// (SkillDamage 는 어빌리티 단위라 Stages[] 처럼 그 경로를 안 타는 피해원이 새는 것과 대비
+	//  — Plan3(공용칩) §17.2.1)
+	DamageDealt			UMETA(DisplayName = "주는 피해"),
+
+	// ===== Plan5(씨앗칩) 추가 =====
+	// ★신규 값은 반드시 Count 바로 앞에 붙인다.★ 기존 값 사이에 끼우면
+	// DA_ChipCatalog 에 직렬화된 기존 칩의 효과가 다른 스탯으로 밀린다. (Plan5(씨앗칩) D-4)
+
+	// 스킬 단위. 그 스킬이 ★아군에게 주는 회복량★ 의 배율/가감.
+	// 씨앗 폭탄처럼 내부/외부 두 값을 가진 스킬이면 양쪽에 똑같이 적용한다.
+	SkillHealing		UMETA(DisplayName = "스킬 회복량"),
+
+	// 스킬 단위. 그 스킬의 ★효과 범위(반경)★ 배율/가감. 단위는 언리얼 단위(uu).
+	// 내부/외부 반경이 나뉜 스킬이면 양쪽에 똑같이 적용한다.
+	SkillAreaRadius		UMETA(DisplayName = "스킬 범위"),
+
+	// ===== Plan5(물대포칩) 추가 =====
+	// ★신규 값은 반드시 Count 바로 앞에 붙인다.★ (Plan5(물대포칩) D-17)
+
+	// 스킬 단위. 그 스킬이 ★아군에게 지급하는 물의 양★ 의 배율/가감.
+	// ⚠️ WaterGain(캐릭터 단위, ★받는 쪽★)과 혼동하지 말 것 — 이쪽은 ★주는 쪽★ 스킬의 지급량이다.
+	//    둘은 각자 곱해져서 최종 지급량이 된다.
+	SkillWaterGrant		UMETA(DisplayName = "스킬 물 지급량"),
+
+	// ===== Plan5(발톱칩) 추가 =====
+	// ★신규 값은 반드시 Count 바로 앞에 붙인다.★ 기존 값 사이에 끼우면
+	// DA_ChipCatalog 에 직렬화된 기존 칩의 효과가 다른 스탯으로 밀린다.
+
+	/**
+	 * 스킬 단위. 그 스킬의 ★선딜레이(시전 준비 시간) 배율★.
+	 *
+	 * ★단위가 "초"가 아니라 "배율"이다.★ 기준값 1.0 에 Apply 해서 쓴다 —
+	 *     WindupScale = ApplySkill(SkillWindup, 1.0f);   // 칩이 없으면 정확히 1.0
+	 *     PlayRate    = BasePlayRate / WindupScale;      // 3.0 이면 1/3 속도
+	 * 선딜의 실제 길이는 몽타주 에셋 안에 있어 어빌리티가 초 단위로 알 수 없기 때문이다.
+	 *
+	 * ⚠️ 그래서 DRIsTimeStat 에는 ★넣지 않는다★ — 넣으면 UI 가 "+200초" 로 표시한다.
+	 */
+	SkillWindup			UMETA(DisplayName = "스킬 선딜레이"),
+
 	Count UMETA(Hidden) // 배열 크기 계산용 - 항상 마지막
 };
 
 /**
  * 모디파이어 연산 방식.
- * 최종값 = (Base + 모든 Flat 합) * (1 + 모든 Percent 합)
- * 순서 의존성을 없애기 위해 두 누산기로만 합산한다.
+ * 최종값 = (Base + 모든 Flat 합) * (모든 Percent 의 곱)
+ *
+ * ★Plan5(씨앗칩)★ Percent 는 ★곱연산★ 이다(예전에는 합산이었다).
+ * 합산이면 감소 칩 두 개(-80% / -40%)가 -120% 가 되어 배율이 음수로 뒤집힌다 —
+ * 음수 피해는 곧 회복이라 적 체력이 차오른다. 곱연산은 구조적으로 그 상태가 될 수 없다.
+ * 곱셈도 교환법칙이 성립하므로 "순서 의존성 없음" 이라는 원래 설계 목표는 그대로 유지된다.
  */
 UENUM(BlueprintType)
 enum class EDRUpgradeOp : uint8
 {
 	Flat		UMETA(DisplayName = "합연산(절대값)"),
-	Percent		UMETA(DisplayName = "곱연산(비율, 0.1 = +10%)")
+
+	// 입력은 "비율"이지만 누산은 곱연산이다.
+	// 같은 스탯에 두 칩이 +0.5 를 걸면 ×2.0 이 아니라 ×2.25 가 된다.
+	Percent		UMETA(DisplayName = "곱연산(비율, 0.1 → ×1.1)")
 };
 
 /**
@@ -111,13 +174,20 @@ enum class EDRSlotState : uint8
 	Occupied	UMETA(DisplayName = "장착됨")
 };
 
-/** 스탯이 "스킬 단위"인지 판정. */
+/**
+ * 스탯이 "스킬 단위"인지 판정.
+ * Plan3(공용칩) 의 MaxHealth / HealthRegenDelay 는 둘 다 캐릭터 단위라 여기에 넣지 않는다.
+ */
 FORCEINLINE bool DRIsSkillStat(EDRUpgradeStat Stat)
 {
 	return Stat == EDRUpgradeStat::SkillDamage
 		|| Stat == EDRUpgradeStat::SkillWaterCost
 		|| Stat == EDRUpgradeStat::SkillCooldown
-		|| Stat == EDRUpgradeStat::SkillProjectileCount;
+		|| Stat == EDRUpgradeStat::SkillProjectileCount
+		|| Stat == EDRUpgradeStat::SkillHealing			// Plan5(씨앗칩)
+		|| Stat == EDRUpgradeStat::SkillAreaRadius		// 〃
+		|| Stat == EDRUpgradeStat::SkillWaterGrant		// Plan5(물대포칩)
+		|| Stat == EDRUpgradeStat::SkillWindup;			// Plan5(발톱칩)
 }
 
 /**
@@ -129,7 +199,21 @@ FORCEINLINE bool DRIsLowerBetter(EDRUpgradeStat Stat)
 {
 	return Stat == EDRUpgradeStat::DamageTaken
 		|| Stat == EDRUpgradeStat::SkillWaterCost
-		|| Stat == EDRUpgradeStat::SkillCooldown;
+		|| Stat == EDRUpgradeStat::SkillCooldown
+		|| Stat == EDRUpgradeStat::HealthRegenDelay
+		|| Stat == EDRUpgradeStat::SkillWindup;		// Plan5(발톱칩) 선딜은 짧을수록 좋다
+}
+
+/**
+ * 값의 단위가 "초"인가. 표기에 단위를 붙이는 데만 쓴다.
+ *
+ * 이게 없으면 회복 시작 시간 -0.5 가 화면에 "-0.5" 로만 나와서
+ * 비율(-0.5%)인지 시간(-0.5초)인지 구분이 안 된다. (Plan3(공용칩) §8.3)
+ */
+FORCEINLINE bool DRIsTimeStat(EDRUpgradeStat Stat)
+{
+	return Stat == EDRUpgradeStat::SkillCooldown
+		|| Stat == EDRUpgradeStat::HealthRegenDelay;
 }
 
 /**
@@ -182,9 +266,19 @@ struct FDRUpgradeChipDefinition
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Identity")
 	FName ChipId;
 
-	// 어느 로봇의 칩인지
+	// 어느 로봇의 칩인지. bCommonChip == true 면 무시된다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Identity")
 	EPlayerCharacterClass OwnerClass = EPlayerCharacterClass::Gardener;
+
+	/**
+	 * ★Plan3(공용칩)★ true 면 OwnerClass 를 무시하고 ★모든 로봇★의 목록에 나타난다.
+	 *
+	 * "공용"은 ★사용 가능 여부★ 이지 ★장착 공유★ 가 아니다 —
+	 * 세이브가 로봇별 FDRClassUpgradeState 라서 정원로봇에 끼운 공용 칩이
+	 * 자판기에 자동으로 끼워지지는 않는다. (Plan3(공용칩) §1.1 D-1)
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Identity")
+	bool bCommonChip = false;
 
 	// UI 분류·표기 전용 (필터 탭). 어느 칸에 꽂히는지를 결정하지 않는다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Identity")
@@ -219,6 +313,17 @@ struct FDRUpgradeChipDefinition
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
 	TArray<FDRUpgradeModifier> Modifiers;
 
+	/**
+	 * ★Plan3(공용칩)★ 수치가 아닌 "기능 스위치".
+	 * 장착 중이면 FDRUpgradeRuntime::GrantedTags 에 합쳐진다.
+	 *
+	 * 예: Upgrade.Feature.HUD.Vitals — 이 태그가 있어야 체력/물 HUD 가 보인다.
+	 * ★GAS 의 어빌리티/이펙트 태그와는 무관하다.★ ASC 에 부여되지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect",
+		meta = (Categories = "Upgrade.Feature"))
+	FGameplayTagContainer GrantedTags;
+
 	// 단점 모디파이어가 하나라도 있는가 (UI 경고 아이콘용)
 	bool HasDrawback() const
 	{
@@ -228,9 +333,28 @@ struct FDRUpgradeChipDefinition
 		}
 		return false;
 	}
+
+	/**
+	 * ★이 칩이 그 로봇의 것인가 — 모든 소속 판정의 단일 진입점.★
+	 *
+	 * Chip.OwnerClass == SomeClass 로 직접 비교하는 코드를 남기지 말 것.
+	 * 목록/해석/정화/검증 중 한 곳만 빠뜨려도 "장착은 되는데 다음 실행에 사라지는"
+	 * 형태로 증상이 늦게 나타난다. (Plan3(공용칩) §5)
+	 */
+	bool IsUsableBy(EPlayerCharacterClass InClass) const
+	{
+		return bCommonChip || OwnerClass == InClass;
+	}
+
+	// 수치든 스위치든 효과가 하나라도 있는가 (ValidateCatalog 용).
+	// HUD 표시 칩처럼 Modifiers 가 비어 있고 GrantedTags 만 있는 칩이 정상이다.
+	bool HasAnyEffect() const
+	{
+		return Modifiers.Num() > 0 || GrantedTags.Num() > 0;
+	}
 };
 
-/** 특정 스탯에 대해 합산된 결과. 최종값 = (Base + Flat) * (1 + Percent) */
+/** 특정 스탯에 대해 합산된 결과. 최종값 = (Base + Flat) * Mult */
 USTRUCT(BlueprintType)
 struct FDRResolvedStat
 {
@@ -239,12 +363,28 @@ struct FDRResolvedStat
 	UPROPERTY(BlueprintReadOnly, Category = "Upgrade")
 	float Flat = 0.f;
 
+	/**
+	 * ★Plan5(씨앗칩)★ 곱연산 누산기. ★기본값이 0 이 아니라 1 이다.★
+	 *
+	 * 칩마다 (1 + Modifier.Value) 를 ★곱해서★ 넣는다.
+	 *   예) -80% 칩 + -40% 칩  →  0.2 × 0.6 = 0.12
+	 *
+	 * 합산(Percent += Value)이었을 때는 두 감소 칩이 -120% 가 되어 배율이 ★음수★ 가 됐다.
+	 * 음수 피해는 곧 회복이라 적 체력이 차오른다 — 곱연산은 구조적으로 그 상태가 될 수 없다.
+	 *
+	 * ★이름을 Percent 에서 바꾼 이유★: 기본값이 0 이 아니라 1 이라는 사실을 놓치면
+	 * `1.f + Stat.Percent` 같은 기존 관용구가 조용히 2배가 된다.
+	 * 이름을 바꿔 모든 사용처가 ★컴파일 에러★ 로 드러나게 했다. (Plan5(씨앗칩) D-7)
+	 *
+	 * ⚠️ 이 구조체를 FMemory::Memzero 하거나 {0} 으로 초기화하면 모든 수치가 0 이 된다.
+	 *    TArray::SetNum() 은 기본 생성자를 부르므로 안전하다.
+	 */
 	UPROPERTY(BlueprintReadOnly, Category = "Upgrade")
-	float Percent = 0.f;
+	float Mult = 1.f;
 
-	float Apply(float Base) const { return (Base + Flat) * (1.f + Percent); }
+	float Apply(float Base) const { return (Base + Flat) * Mult; }
 
-	bool IsIdentity() const { return FMath::IsNearlyZero(Flat) && FMath::IsNearlyZero(Percent); }
+	bool IsIdentity() const { return FMath::IsNearlyZero(Flat) && FMath::IsNearlyEqual(Mult, 1.f); }
 };
 
 /** 스킬 1개에 대한 스탯별 합산 결과 (index = (int32)EDRUpgradeStat) */
@@ -285,11 +425,17 @@ struct FDRUpgradeRuntime
 	UPROPERTY()
 	TMap<FGameplayTag, FDRSkillStatBlock> SkillStats;
 
+	// ★Plan3(공용칩)★ 장착 칩들이 부여한 기능 스위치의 합집합.
+	UPROPERTY()
+	FGameplayTagContainer GrantedTags;
+
 	void Reset()
 	{
 		GlobalStats.Reset();
 		GlobalStats.SetNum(static_cast<int32>(EDRUpgradeStat::Count));
 		SkillStats.Reset();
+		// ★이 줄을 빠뜨리면 칩을 빼도 HUD 가 계속 보인다★ (재구축이 누적만 하게 됨)
+		GrantedTags.Reset();
 	}
 
 	void EnsureSize()
@@ -304,6 +450,7 @@ struct FDRUpgradeRuntime
 	// 모디파이어 1건 누적.
 	void AddModifier(const FDRUpgradeModifier& Modifier)
 	{
+		// Percent 의 Value 0 은 배율 1.0 이라 어차피 항등이다.
 		if (FMath::IsNearlyZero(Modifier.Value)) return;
 
 		EnsureSize();
@@ -311,19 +458,28 @@ struct FDRUpgradeRuntime
 		const int32 StatIndex = static_cast<int32>(Modifier.Stat);
 		if (!GlobalStats.IsValidIndex(StatIndex)) return;
 
-		// 스킬 단위 스탯 + 대상 태그 지정 → 태그별 블록에 누적
+		// 누산 대상 결정 — 스킬 단위 스탯 + 대상 태그 지정이면 태그별 블록, 아니면 전역
+		FDRResolvedStat* Target = nullptr;
 		if (DRIsSkillStat(Modifier.Stat) && Modifier.TargetAbilityTag.IsValid())
 		{
 			FDRSkillStatBlock& Block = SkillStats.FindOrAdd(Modifier.TargetAbilityTag);
 			Block.EnsureSize();
-			FDRResolvedStat& Target = Block.Stats[StatIndex];
-			(Modifier.Op == EDRUpgradeOp::Flat ? Target.Flat : Target.Percent) += Modifier.Value;
-			return;
+			Target = &Block.Stats[StatIndex];
+		}
+		else
+		{
+			Target = &GlobalStats[StatIndex];
 		}
 
-		// 전역 스탯 또는 "모든 스킬" 대상
-		FDRResolvedStat& Target = GlobalStats[StatIndex];
-		(Modifier.Op == EDRUpgradeOp::Flat ? Target.Flat : Target.Percent) += Modifier.Value;
+		// ★Plan5(씨앗칩)★ Percent 는 ★곱해서★ 넣는다 (예전에는 더해서 넣었다).
+		if (Modifier.Op == EDRUpgradeOp::Flat)
+		{
+			Target->Flat += Modifier.Value;
+		}
+		else
+		{
+			Target->Mult *= (1.f + Modifier.Value);
+		}
 	}
 
 	// 캐릭터 단위 스탯 적용.
@@ -348,7 +504,8 @@ struct FDRUpgradeRuntime
 				if (Block->Stats.IsValidIndex(StatIndex))
 				{
 					Combined.Flat += Block->Stats[StatIndex].Flat;
-					Combined.Percent += Block->Stats[StatIndex].Percent;
+					// ★Plan5(씨앗칩)★ 전역("모든 스킬") 배율과 이 스킬 전용 배율을 곱한다.
+					Combined.Mult *= Block->Stats[StatIndex].Mult;
 				}
 			}
 		}
@@ -362,6 +519,18 @@ struct FDRUpgradeRuntime
 		return GlobalStats.IsValidIndex(StatIndex) ? GlobalStats[StatIndex] : FDRResolvedStat();
 	}
 
+	// ★Plan3(공용칩)★ 기능 스위치 조회. 호출부가 GrantedTags 를 직접 만지지 않게 한다.
+	bool HasFeature(const FGameplayTag& FeatureTag) const
+	{
+		return FeatureTag.IsValid() && GrantedTags.HasTag(FeatureTag);
+	}
+
+	/**
+	 * ★"수치상" 항등인가.★ GrantedTags 는 보지 않는다.
+	 *
+	 * ADRCharacter::RefreshUpgradeEffects() 가 "스탯 GE 를 얹을 필요가 있나"를 판단하는 데 쓴다.
+	 * HUD 표시 칩만 끼운 상태는 어트리뷰트가 하나도 안 바뀌므로 GE 를 안 얹는 것이 맞다.
+	 */
 	bool IsEmpty() const
 	{
 		if (SkillStats.Num() > 0) return false;

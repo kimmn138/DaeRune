@@ -84,6 +84,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnCrosshairImagesChangedSignature
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCrosshairStateChangedSignature, EDRCrosshairState, NewState);
 // 적 타격 확인 델리게이트 (위젯이 히트마커 이미지 표시 + 애니메이션 재생)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCrosshairHitConfirmedSignature);
+// 업그레이드 칩에 따른 HUD 모듈 표시/숨김 (Plan3(공용칩) §7.2).
+// 체력/물은 WBP_HealthWaterBar 한 위젯이라 하나의 플래그로 묶인다.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnHudFeatureVisibilityChangedSignature, bool, bShowVitals, bool, bShowSkillIcons);
 
 /**
  * ���� ���� UI �������̸� �����ϴ� ��Ʈ�ѷ�
@@ -231,6 +234,26 @@ public:
 
 	// 설치 가능 사이트 라인트레이스 감지 변화 알림 (PlayerController 로컬 감지에서 호출)
 	void SetCrosshairSiteDetected(bool bDetected);
+
+	// ========== 업그레이드 칩 기능 스위치 (Plan3(공용칩) §7.2) ==========
+
+	/**
+	 * HUD 모듈 표시 여부. 칩 CM.Util.HudDisplay 를 빼면 체력·물·스킬 아이콘이 숨는다.
+	 * 위젯은 이 값으로 Visibility 를 Visible / Collapsed 로만 토글한다.
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "GAS|Upgrade")
+	FOnHudFeatureVisibilityChangedSignature OnHudFeatureVisibilityChanged;
+
+	/**
+	 * 현재 PlayerState 의 피처 태그를 읽어 방송한다.
+	 * 위젯 최초 생성 시 1회 + 장착 칩이 바뀔 때마다 호출된다.
+	 *
+	 * ★PlayerState 를 읽는 이유★ (GameInstance 세이브가 아니라)
+	 *  - 실제로 효과가 도는 것은 "서버가 승인해 복제한 EquippedChips" 이므로 그것이 SSOT 다.
+	 *  - 관전 모드에서는 ★보고 있는 대상★ 의 상태를 따라가야 맞다.
+	 */
+	UFUNCTION()
+	void RefreshHudFeatureVisibility();
 
 private:
 	// State.Carrying 태그 변화 콜백 (부품 픽업/드롭/설치 시 조준선 상태 재계산)

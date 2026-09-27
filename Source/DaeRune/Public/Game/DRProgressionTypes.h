@@ -36,6 +36,16 @@ struct FDRClassUpgradeState
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Upgrade")
 	int32 SpentCurrency = 0;
 
+	/**
+	 * ★Plan3(공용칩)★ 기본 장착(UDRGameInstance::ApplyDefaultLoadout)을 이미 적용했는가.
+	 *
+	 * 이 마커가 없으면 플레이어가 기본 칩을 뺀 다음 게임을 껐다 켤 때마다 다시 꽂힌다.
+	 * "로봇당 딱 한 번만 꽂아준다"를 자료구조로 보장하는 유일한 수단이다.
+	 * (순수 필드 추가라 SaveVersion 은 올리지 않는다 — Plan3(공용칩) §4.7)
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Upgrade")
+	bool bDefaultsApplied = false;
+
 	// 해금된 칸 중 비어 있는 칸 수
 	int32 CountFreeSlots() const
 	{
@@ -184,6 +194,11 @@ struct FDRChipViewModel
 
 	UPROPERTY(BlueprintReadOnly, Category = "Chip")
 	EDRChipCategory Category = EDRChipCategory::Stat;
+
+	// ★Plan3(공용칩)★ 모든 로봇 공용 칩인가 (카드의 "공용" 뱃지).
+	// Category(스탯/돌파)와 직교하는 축이라 enum 에 섞지 않고 별도 플래그로 둔다.
+	UPROPERTY(BlueprintReadOnly, Category = "Chip")
+	bool bCommonChip = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Chip")
 	FText DisplayName;

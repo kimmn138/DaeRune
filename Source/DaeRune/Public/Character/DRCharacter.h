@@ -327,6 +327,11 @@ protected:
 	// 현재 적용 중인 업그레이드 GE 핸들 (재적용 시 먼저 제거 — ASC 가 PlayerState 에 있어 리스폰 후에도 남는다)
 	FActiveGameplayEffectHandle UpgradeStatEffectHandle;
 
+	// 시너지 오라(칩 CM.Asc.Synergy) 구동 컴포넌트. 칩이 없으면 타이머가 돌지 않는다.
+	// (Plan3(공용칩) §17.7)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Upgrade")
+	TObjectPtr<class UDRSynergyAuraComponent> SynergyAuraComponent;
+
 	// ========== ��ǰ ���� ==========
 
 	// ��ǰ ���� ����

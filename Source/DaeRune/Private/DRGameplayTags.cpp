@@ -343,6 +343,126 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
+	 * 업그레이드 칩 기능 스위치 (Plan3(공용칩) §4.6)
+	 * 수치가 아닌 On/Off 효과를 칩으로 표현하기 위한 태그. ASC 에는 부여되지 않는다.
+	 */
+
+	GameplayTags.Upgrade_Feature_HUD_Vitals = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.HUD.Vitals"),
+		FString("장착 시 체력/물 HUD 를 표시한다")
+	);
+
+	GameplayTags.Upgrade_Feature_HUD_SkillIcons = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.HUD.SkillIcons"),
+		FString("장착 시 스킬 아이콘 HUD 를 표시한다")
+	);
+
+	GameplayTags.Upgrade_Feature_Combat_Berserk = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Combat.Berserk"),
+		FString("주는 피해 증폭 + 피격 시 체력 컨테이너 1칸 즉시 소모")
+	);
+
+	GameplayTags.Upgrade_Feature_Combat_NoHealing = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Combat.NoHealing"),
+		FString("모든 체력 회복 차단")
+	);
+
+	GameplayTags.Upgrade_Feature_Combat_Synergy = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Combat.Synergy"),
+		FString("근접 팀원 시너지 오라 활성화")
+	);
+
+	GameplayTags.Upgrade_Feature_Combat_BloodCost = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Combat.BloodCost"),
+		FString("스킬 코스트를 물 대신 체력으로 지불")
+	);
+
+	GameplayTags.Buff_Upgrade_Synergy = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.Upgrade.Synergy"),
+		FString("시너지 오라 적용 중 (태그 카운트 = 스택 수)")
+	);
+
+	// ========== 스킬 전용 칩 기능 스위치 (Plan5(씨앗칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_SeedBomb_Refund = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.SeedBomb.Refund"),
+		FString("씨앗 폭탄 직격 시 사용한 물 환급")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_SeedBomb_Slow = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.SeedBomb.Slow"),
+		FString("씨앗 폭탄에 피격된 적 이동 속도 감소")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_SeedBomb_Haste = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.SeedBomb.Haste"),
+		FString("씨앗 폭탄에 닿은 아군 이동 속도 증가")
+	);
+
+	// ========== 물대포 칩 기능 스위치 (Plan5(물대포칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_WaterPump_Ramp = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.WaterPump.Ramp"),
+		FString("물대포 지속 명중 시 피해 누적")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_WaterPump_Slow = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.WaterPump.Slow"),
+		FString("물대포에 피격된 적 이동 속도 감소")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_WaterPump_Vulnerable = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.WaterPump.Vulnerable"),
+		FString("물대포에 피격된 적이 받는 피해 증가")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_WaterPump_Pierce = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.WaterPump.Pierce"),
+		FString("물대포 물줄기가 적을 관통")
+	);
+
+	// ========== 물대포 칩이 쓰는 진짜 GAS 태그 (Plan5(물대포칩)) ==========
+
+	GameplayTags.Buff_WaterPump_Pressure = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.WaterPump.Pressure"),
+		FString("물대포 가압 스택 (태그 카운트 = 스택 수)")
+	);
+
+	GameplayTags.Debuff_Vulnerable = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Debuff.Vulnerable"),
+		FString("이 대상이 받는 모든 피해가 증가한다")
+	);
+
+	// ========== 기본 공격(발톱) 칩 기능 스위치 (Plan5(발톱칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_Claw_Lifesteal = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Claw.Lifesteal"),
+		FString("기본 공격이 적에게 준 피해만큼 시전자 체력 회복")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Claw_AllyHeal = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Claw.AllyHeal"),
+		FString("기본 공격이 아군에게 적중하면 시전자 체력으로 아군 회복")
+	);
+
+	GameplayTags.Data_HealthCost = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.HealthCost"),
+		FString("SetByCaller tag for a self-inflicted health cost (not damage)")
+	);
+
+	// ========== 범용 SetByCaller (Plan5(씨앗칩)) ==========
+
+	GameplayTags.Data_MoveSpeed_Mult = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.MoveSpeed.Mult"),
+		FString("SetByCaller tag for a temporary MoveSpeed multiplier")
+	);
+
+	GameplayTags.Data_Duration = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Duration"),
+		FString("SetByCaller tag for a generic gameplay effect duration (seconds)")
+	);
+
+	/*
 	 * 게임플레이 이벤트 (GA 통지용)
 	 */
 

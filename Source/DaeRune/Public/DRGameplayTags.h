@@ -101,6 +101,60 @@ public:
 	// 어빌리티 쿨다운 Duration SetByCaller (업그레이드로 보정된 쿨다운 주입)
 	FGameplayTag Data_Cooldown;
 
+	// 업그레이드 칩 기능 스위치 (Plan3(공용칩) §4.6).
+	// ★GAS 태그가 아니다★ — ASC 에 부여되지 않고 FDRUpgradeRuntime::GrantedTags 에만 모인다.
+	// 체력/물은 WBP_HealthWaterBar 한 위젯 안에 같이 있어 하나의 태그로 묶는다.
+	FGameplayTag Upgrade_Feature_HUD_Vitals;
+	FGameplayTag Upgrade_Feature_HUD_SkillIcons;
+
+	// 돌파 칩 기능 스위치 (Plan3(공용칩) §17.4.2). 역시 ASC 에 부여되지 않는다 —
+	// ASC 에 Loose 로 얹으면 어빌리티의 ActivationBlockedTags 와 의도치 않게 상호작용한다.
+	FGameplayTag Upgrade_Feature_Combat_Berserk;		// 주는 피해 증폭 + 피격 시 컨테이너 1칸 소모
+	FGameplayTag Upgrade_Feature_Combat_NoHealing;		// 모든 체력 회복 차단 (단독 재사용 가능하게 분리)
+	FGameplayTag Upgrade_Feature_Combat_Synergy;		// 근접 팀원 시너지 오라 구동
+	FGameplayTag Upgrade_Feature_Combat_BloodCost;		// 스킬 코스트를 물 대신 체력으로
+
+	// ★이건 진짜 GAS 태그다★ — GE_Upgrade_Synergy 가 ASC 에 부여하며,
+	// 태그 ★카운트★ 가 곧 시너지 스택 수다 (Plan3(공용칩) §17.7.3).
+	FGameplayTag Buff_Upgrade_Synergy;
+
+	// 스킬 전용 칩 기능 스위치 (Plan5(씨앗칩)).
+	// 역시 ASC 에 부여되지 않고 FDRUpgradeRuntime::GrantedTags 에만 모인다.
+	FGameplayTag Upgrade_Feature_Skill_SeedBomb_Refund;	// 씨앗 폭탄 직격 시 물 환급
+	FGameplayTag Upgrade_Feature_Skill_SeedBomb_Slow;	// 피격된 적 이동 속도 감소
+	FGameplayTag Upgrade_Feature_Skill_SeedBomb_Haste;	// 피격된 아군 이동 속도 증가
+
+	// 물대포 칩 피처 스위치 (Plan5(물대포칩)). 역시 ASC 에 부여되지 않는다.
+	FGameplayTag Upgrade_Feature_Skill_WaterPump_Ramp;			// ① 지속 명중 시 피해 누적
+	FGameplayTag Upgrade_Feature_Skill_WaterPump_Slow;			// ② 피격 적 감속
+	FGameplayTag Upgrade_Feature_Skill_WaterPump_Vulnerable;	// ② 피격 적이 받는 피해 증가
+	FGameplayTag Upgrade_Feature_Skill_WaterPump_Pierce;		// ③ 적 관통
+
+	// ★여기부터는 진짜 GAS 태그다★ — 둘 다 C++ 가 런타임에 읽으므로 네이티브여야 한다
+	// (씨앗칩의 Debuff.SeedBomb.Slow 등은 C++ 가 안 읽어서 에셋에만 있다).
+
+	// GE_WaterPump_Ramp 가 부여. ★태그 카운트 = 가압 스택 수★ (Plan5(물대포칩) D-9)
+	FGameplayTag Buff_WaterPump_Pressure;
+
+	// GE_WaterPump_Vulnerable 이 부여. 이 태그를 가진 대상은 받는 모든 피해가 증가한다.
+	// ★물대포 전용 이름을 쓰지 않은 이유★: 다른 스킬도 같은 표식을 재사용할 수 있게 하기 위함.
+	FGameplayTag Debuff_Vulnerable;
+
+	// 기본 공격(발톱) 칩 피처 스위치 (Plan5(발톱칩)). ASC 에 부여되지 않는다.
+	FGameplayTag Upgrade_Feature_Skill_Claw_Lifesteal;	// ② 적에게 준 피해만큼 자기 회복
+	FGameplayTag Upgrade_Feature_Skill_Claw_AllyHeal;	// ② 아군 적중 시 자기 체력으로 아군 회복
+
+	// 범용 SetByCaller (Plan5(발톱칩)).
+	// 체력을 ★비용으로★ 깎는 GE 가 액수를 밖에서 받게 한다.
+	// ★값은 항상 양수(= 비용 액수)로 넣는다. 부호를 빼는 것은 GE 모디파이어의 몫이다.★
+	FGameplayTag Data_HealthCost;
+
+	// 범용 SetByCaller (Plan5(씨앗칩)).
+	// 이속 증감 GE 가 배율과 지속시간을 밖에서 받게 해, "5초 / 30%" 가
+	// GE 에셋이 아니라 DA_ProgressionConfig 한 곳에만 존재하도록 한다.
+	FGameplayTag Data_MoveSpeed_Mult;
+	FGameplayTag Data_Duration;
+
 	// 게임플레이 이벤트 (GA 통지용)
 	FGameplayTag Event_Dash_Brake;
 

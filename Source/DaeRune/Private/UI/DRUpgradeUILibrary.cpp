@@ -7,12 +7,15 @@
 
 namespace
 {
-	// 수치 표기 공통 포맷 (소수점은 필요할 때만 1자리)
+	// 수치 표기 공통 포맷 (소수점은 필요할 때만 최대 2자리).
+	// 1자리로 두면 0.05 단위 칩이 0.1 로 반올림돼 오표기가 된다.
+	// MinimumFractionalDigits 가 0이라 기존 표기(+20 / +0.5 / 12%)는 전혀 변하지 않는다.
+	// (Plan3(공용칩) §8.3 — FDRUpgradeModifier::GetDetailText 의 같은 포맷과 ★쌍으로★ 유지할 것)
 	FNumberFormattingOptions MakeValueFormat()
 	{
 		FNumberFormattingOptions Options;
 		Options.SetMinimumFractionalDigits(0);
-		Options.SetMaximumFractionalDigits(1);
+		Options.SetMaximumFractionalDigits(2);
 		return Options;
 	}
 }
@@ -105,11 +108,25 @@ FText UDRUpgradeUILibrary::GetStatShortName(EDRUpgradeStat Stat)
 	case EDRUpgradeStat::SkillProjectileCount:
 		return LOCTEXT("StatShort_SkillProjectile", "투사체");			// 정식: 스킬 투사체 수
 
+	case EDRUpgradeStat::HealthRegenDelay:
+		return LOCTEXT("StatShort_RegenDelay", "회복 시작");			// 정식: 회복 시작 시간
+
+	case EDRUpgradeStat::SkillHealing:
+		return LOCTEXT("StatShort_SkillHealing", "회복량");			// 정식: 스킬 회복량
+
+	case EDRUpgradeStat::SkillWaterGrant:
+		return LOCTEXT("StatShort_SkillWaterGrant", "물 지급");		// 정식: 스킬 물 지급량
+
+	case EDRUpgradeStat::SkillWindup:
+		return LOCTEXT("StatShort_SkillWindup", "선딜");			// 정식: 스킬 선딜레이
+
+	// SkillAreaRadius("스킬 범위")는 이미 5자 이내라 폴백으로 충분하다
+
 	default:
 		break;
 	}
 
-	// 최대 물 / 이동 속도 / 받는 피해 / 물 획득량 은 이미 5자 이내다
+	// 최대 체력 / 최대 물 / 이동 속도 / 받는 피해 / 물 획득량 은 이미 5자 이내다
 	return GetStatDisplayName(Stat);
 }
 

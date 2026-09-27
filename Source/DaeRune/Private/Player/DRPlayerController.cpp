@@ -1703,6 +1703,24 @@ void ADRPlayerController::DRAddCurrency(int32 Amount)
 	UE_LOG(LogDR, Warning, TEXT("[Cheat] 재화 %d 지급 → 현재 %d"), Amount, GI->GetCurrency());
 }
 
+void ADRPlayerController::DRResetDefaultChips()
+{
+	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
+	if (!GI)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
+		return;
+	}
+
+	GI->DebugResetDefaultLoadout();
+
+	// 세이브만 바꿔서는 이미 스폰된 캐릭터에 반영되지 않는다 — 서버에 다시 보고해야
+	// PlayerState 의 EquippedChips 가 갱신되고 HUD/스탯이 따라온다.
+	ReportUpgradeLoadout();
+
+	UE_LOG(LogDR, Warning, TEXT("[Cheat] 기본 장착 칩을 다시 적용하고 서버에 재보고했습니다."));
+}
+
 void ADRPlayerController::CloseUpgradeScreen()
 {
 	if (!IsLocalController()) return;

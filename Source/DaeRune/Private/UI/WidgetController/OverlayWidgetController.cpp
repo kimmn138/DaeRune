@@ -10,6 +10,8 @@
 #include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "AbilitySystem/Data/StatusEffectInfo.h"
 #include "Actor/DRCleanserSite.h"
+#include "Game/DRChipCatalog.h"
+#include "Game/DRGameInstance.h"
 #include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
 #include "Phase/DRPhase3.h"
@@ -43,6 +45,44 @@ void UOverlayWidgetController::BroadcastInitialValues()
 
 	// 조준선 초기 상태 (현재 Carrying 태그 기준으로 강제 브로드캐스트)
 	UpdateCrosshairState(true);
+
+	// 업그레이드 칩에 따른 HUD 모듈 표시 여부 (Plan3(공용칩) §7.2)
+	RefreshHudFeatureVisibility();
+}
+
+void UOverlayWidgetController::RefreshHudFeatureVisibility()
+{
+	const ADRPlayerState* DRPS = GetDRPS();
+
+	// ★PlayerState 가 아직 없으면 "보이는" 쪽으로 간다.★
+	// 실패했을 때 UI 가 사라지는 것보다 남아 있는 편이 훨씬 안전하다
+	// (사라지면 원인을 화면에서 볼 수 없어 디버깅이 어렵다).
+	if (!DRPS)
+	{
+		OnHudFeatureVisibilityChanged.Broadcast(true, true);
+		return;
+	}
+
+	const UDRGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance<UDRGameInstance>() : nullptr;
+	const UDRChipCatalog* Catalog = GI ? GI->GetChipCatalog() : nullptr;
+
+	/**
+	 * ★"그 기능을 가두는 칩이 카탈로그에 있을 때만 잠근다."★
+	 *
+	 * 코드가 에셋보다 먼저 들어가는 것이 정상 순서다(C++ → DA_ChipCatalog 작성).
+	 * 이 가드가 없으면 그 사이 기간 동안 모든 플레이어의 HUD 가 통째로 사라진다.
+	 * 카탈로그에서 칩을 지웠을 때도 같은 방식으로 자동 복구된다. (Plan3(공용칩) §7.2)
+	 */
+	auto ShouldShow = [Catalog, DRPS](const FGameplayTag& FeatureTag) -> bool
+	{
+		if (!Catalog || !Catalog->IsFeatureGated(FeatureTag)) return true;
+		return DRPS->HasUpgradeFeature(FeatureTag);
+	};
+
+	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+	OnHudFeatureVisibilityChanged.Broadcast(
+		ShouldShow(GameplayTags.Upgrade_Feature_HUD_Vitals),
+		ShouldShow(GameplayTags.Upgrade_Feature_HUD_SkillIcons));
 }
 
 void UOverlayWidgetController::BindCallbacksToDependencies()
@@ -293,6 +333,13 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 			false  // 한 번만 실행
 		);
 	}
+
+	// 장착 칩 변경 추종 (HUD 표시 칩) — Plan3(공용칩) §7.2
+	if (ADRPlayerState* DRPS = GetDRPS())
+	{
+		DRPS->OnUpgradeRuntimeChanged.AddDynamic(
+			this, &UOverlayWidgetController::RefreshHudFeatureVisibility);
+	}
 }
 
 void UOverlayWidgetController::BindCallbacksCleanserSiteToDependencies()
@@ -336,6 +383,15 @@ void UOverlayWidgetController::UnbindAllDelegates()
 		}
 	}
 	CleanserSiteDelegateHandles.Empty();
+
+	// 장착 칩 변경 델리게이트 언바인딩 (Plan3(공용칩) §7.2).
+	// ★아래 GameState 조기 반환보다 먼저★ 해야 한다 — GameState 가 없을 때도 반드시 풀려야
+	// 관전 전환/오버레이 재생성 시 댕글링 바인딩이 남지 않는다.
+	if (ADRPlayerState* DRPS = GetDRPS())
+	{
+		DRPS->OnUpgradeRuntimeChanged.RemoveDynamic(
+			this, &UOverlayWidgetController::RefreshHudFeatureVisibility);
+	}
 
 	ADRStageGameState* DRGameState = World->GetGameState<ADRStageGameState>();
 	if (!DRGameState) return;

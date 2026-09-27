@@ -2,8 +2,11 @@
 
 
 #include "AbilitySystem/ModMagCalc/MMC_HealthRegen.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystem/DRAttributeSet.h"
 #include "AbilitySystem/DRPlayerAttributeSet.h"
+#include "AbilitySystemComponent.h"
+#include "DRGameplayTags.h"
 
 UMMC_HealthRegen::UMMC_HealthRegen()
 {
@@ -61,6 +64,15 @@ float UMMC_HealthRegen::CalculateBaseMagnitude_Implementation(const FGameplayEff
     if (PlayerAS->IsCorrupted())
     {
         return 0.f; // ���� ���¿����� �ڿ� ȸ�� ����
+    }
+
+    // ★Plan3(공용칩) §17.6.3★ 회복 차단 칩: GE 가 어떤 경로로든 남아 있어도 틱을 0 으로 만든다.
+    // StartHealthRegen 의 진입 차단과 ★2중화★ 하는 것이 목적이다 —
+    // 진입만 막으면 이미 적용돼 있던 GE 가 계속 회복시킨다.
+    if (UDRAbilitySystemLibrary::HasUpgradeFeature(
+            TargetASC, FDRGameplayTags::Get().Upgrade_Feature_Combat_NoHealing))
+    {
+        return 0.f;
     }
 
     // ���� �����̳� ���

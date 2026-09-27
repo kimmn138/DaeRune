@@ -28,6 +28,7 @@
 #include "Game/DRLobbyGameState.h"
 #include "Game/DRTutorialGameMode.h"
 #include "Character/DRFacialExpressionComponent.h"
+#include "AbilitySystem/DRSynergyAuraComponent.h"
 #include "Character/DRRobotVacuumCharacter.h"
 #include "Actor/Stage2/DRS2TrainCar.h"
 #include "DRAbilityTypes.h"
@@ -123,6 +124,10 @@ ADRCharacter::ADRCharacter()
 
 	// 표정 컴포넌트 생성
 	FacialExpressionComponent = CreateDefaultSubobject<UDRFacialExpressionComponent>(TEXT("FacialExpression"));
+
+	// 시너지 오라 컴포넌트 (Plan3(공용칩) §17.7).
+	// 항상 붙여 두되 칩이 없으면 타이머가 아예 돌지 않으므로 비용이 0 이다.
+	SynergyAuraComponent = CreateDefaultSubobject<UDRSynergyAuraComponent>(TEXT("SynergyAura"));
 
 	// 부품 시스템 초기화
 	bIsCarryingPart = false;
@@ -955,12 +960,31 @@ void ADRCharacter::RefreshUpgradeEffects()
 	// 플레이어 체력은 컨테이너 시스템이라 MaxHealth 를 직접 올리면 컨테이너 인덱스 계산과
 	// 오염 해제 로직(NumContainers * ContainerHealth)이 깨진다. 칸 용량 자체를 올린다. (Plan2.md 2.2)
 	const float BaseContainerHealth = ContainerHealth;
+
+	// ★Plan3(공용칩)★ EDRUpgradeStat::MaxHealth 는 "총 HP" 단위 스탯이다.
+	// 불변식(MaxHealth = NumContainers × ContainerHealth)을 지키려면 총량을 칸 수로 나눠
+	// "칸 용량 증가분"으로 환산해 넣어야 한다. 이렇게 해야 칸 수가 4에서 바뀌어도
+	// 카탈로그에 적은 "+100" 이 계속 정확히 +100 이다. (Plan3(공용칩) §7.1 D-3)
+	const float MaxHealthBonusTotal = Runtime.GetGlobalStat(EDRUpgradeStat::MaxHealth).Flat;
+	const float PerContainerBonus = (NumContainers > 0)
+		? MaxHealthBonusTotal / static_cast<float>(NumContainers) : 0.f;
+
 	const float UpgradedContainerHealth = FMath::Max(
-		1.f, Runtime.Apply(EDRUpgradeStat::ContainerHealth, BaseContainerHealth));
+		1.f, Runtime.Apply(EDRUpgradeStat::ContainerHealth, BaseContainerHealth + PerContainerBonus));
 
 	if (UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSets))
 	{
 		PlayerAS->SetContainerInfo(NumContainers, UpgradedContainerHealth);
+	}
+
+	// ===== 1-2) 시너지 오라 (Plan3(공용칩) §17.7) =====
+	// ★반드시 아래 조기 return 들보다 앞에 둔다.★
+	// 시너지 칩은 모디파이어가 없어 Runtime.IsEmpty() 가 true 이고,
+	// UpgradeStatEffectClass 미지정 분기도 return 한다 — 뒤에 두면 오라가 영영 안 켜진다.
+	// (컴포넌트가 내부에서 서버 권한을 검사하므로 여기서 걸러내지 않는다)
+	if (SynergyAuraComponent)
+	{
+		SynergyAuraComponent->RefreshFromUpgrade();
 	}
 
 	// ===== 2) 스탯 GE (서버 전용) =====
@@ -998,13 +1022,15 @@ void ADRCharacter::RefreshUpgradeEffects()
 	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxHealth_Flat, MaxHealthFlat);
 	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxHealth_Mult, 1.f);
 
+	// ★Plan5(씨앗칩)★ FDRResolvedStat::Mult 는 ★이미 배율★ 이다(기본 1.0).
+	// 예전 Percent(기본 0.0) 시절의 `1.f + ...` 관용구를 그대로 두면 칩이 없어도 2배가 된다.
 	const FDRResolvedStat WaterStat = Runtime.GetGlobalStat(EDRUpgradeStat::MaxWater);
 	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxWater_Flat, WaterStat.Flat);
-	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxWater_Mult, 1.f + WaterStat.Percent);
+	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxWater_Mult, WaterStat.Mult);
 
 	const FDRResolvedStat SpeedStat = Runtime.GetGlobalStat(EDRUpgradeStat::MoveSpeed);
 	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MoveSpeed_Flat, SpeedStat.Flat);
-	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MoveSpeed_Mult, 1.f + SpeedStat.Percent);
+	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MoveSpeed_Mult, SpeedStat.Mult);
 
 	// 최대치 변화에 맞춰 현재값 비율을 유지한다.
 	// 스폰 시점엔 만피이므로 그대로 만피가 되고, 컨테이너 시스템에서는 "남은 컨테이너 수 유지"와 같다.

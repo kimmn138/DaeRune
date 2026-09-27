@@ -55,7 +55,12 @@ float UDRDamageGameplayAbility::GetDamageAtLevel() const
 
 float UDRDamageGameplayAbility::GetUpgradedDamage() const
 {
-	return GetUpgradedFloat(EDRUpgradeStat::SkillDamage, Damage.GetValueAtLevel(GetAbilityLevel()));
+	const float Upgraded = GetUpgradedFloat(EDRUpgradeStat::SkillDamage, Damage.GetValueAtLevel(GetAbilityLevel()));
+
+	// ★Plan5(물대포칩)★ 런타임 배율(물대포 가압 스택 등)을 마지막에 곱한다.
+	// 곱셈이라 SkillDamage 와 순서를 다퉈도 결과가 같고, 기본 구현이 1.0 이라
+	// 이 훅을 오버라이드하지 않은 어빌리티는 수치가 그대로다.
+	return Upgraded * GetRuntimeDamageMultiplier();
 }
 
 FTaggedMontage UDRDamageGameplayAbility::GetRandomTaggedMontageFromArray(const TArray<FTaggedMontage>& TaggedMontages) const

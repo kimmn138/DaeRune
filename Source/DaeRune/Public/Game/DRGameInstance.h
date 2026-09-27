@@ -112,6 +112,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Progression|Upgrade")
 	void DebugSetUpgradeSystemUnlocked(bool bUnlocked);
 
+	/**
+	 * ★치트/디버그 전용★ — 기본 장착(DefaultEquippedChips)을 다시 적용한다.
+	 *
+	 * HUD 표시 칩을 빼면 화면에서 체력/물/스킬 아이콘이 사라지는데, 그 상태에서
+	 * "되돌릴 방법이 없다"고 막히는 일을 막기 위한 안전망이다. (Plan3(공용칩) §6.6)
+	 * 빈 칸이 없으면 꽂히지 않는다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Progression|Upgrade")
+	void DebugResetDefaultLoadout();
+
 	UPROPERTY(BlueprintAssignable, Category = "Progression|Upgrade")
 	FOnUpgradeSystemUnlockedSignature OnUpgradeSystemUnlocked;
 
@@ -397,6 +407,19 @@ private:
 	// OutReclaimedCurrency: 해금 수가 줄어들어 환급해야 하는 재화.
 	bool SanitizeClassState(EPlayerCharacterClass CharacterClass, FDRClassUpgradeState& State,
 		int32& OutReclaimedCurrency) const;
+
+	/**
+	 * ★Plan3(공용칩)★ 시작 슬롯 해금 + 기본 칩 장착. ★로봇당 세이브당 1회만★ 동작한다.
+	 *
+	 * EquipChip() 을 쓰지 않는 이유: 그 함수는 IsUpgradeSystemUnlocked() 게이트를 통과해야 하는데,
+	 * 기본 장착은 스테이지1 클리어 전(= 시스템 잠김 상태)에도 반드시 적용돼야 한다. (§6.3 D-5)
+	 *
+	 * 호출 순서 주의: ★SanitizeClassState() 보다 먼저★ 돌아야 한다.
+	 * 이 함수가 SlotChips 배열 길이를 먼저 맞추기 때문이다. (§6.1)
+	 *
+	 * @return 세이브를 건드렸으면 true (호출부가 SaveProgress 를 결정한다)
+	 */
+	bool ApplyDefaultLoadout(EPlayerCharacterClass CharacterClass, FDRClassUpgradeState& State);
 
 	// 환불 비율 (Config 미지정 시 전액 환불로 간주)
 	float GetRefundRatio() const;

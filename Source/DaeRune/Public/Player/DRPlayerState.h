@@ -22,6 +22,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCorruptedStateChangedSignature, b
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnPlayerClassChanged, ADRPlayerState*, PlayerState, EPlayerCharacterClass, NewClass);
 // 준비 상태 변경 알림 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnReadyStateChangedSignature, bool, bIsReady);
+// 장착 칩 수치 캐시 재구축 알림 (UI 가 피처 태그를 다시 읽어야 한다 — Plan3(공용칩) §7.2)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnUpgradeRuntimeChangedSignature);
 
 /**
  * DaeRune �÷��̾��� ���� ���� ���� Ŭ����
@@ -44,6 +46,16 @@ public:
 	void EnterCombat();
 	void ExitCombat();
 	bool IsInCombat() const { return bIsInCombat; }
+
+	/**
+	 * ★Plan3(공용칩)★ 업그레이드가 반영된 전투 이탈 대기 시간(초).
+	 * 이 시간이 지나야 자동 체력 회복이 시작된다.
+	 *
+	 * ★타이머를 거는 시점에 계산한다.★ BeginPlay 에서 캐시하면 칩 목록이 그보다
+	 * 늦게 도착하는 경우(스폰 후 로드아웃 보고)에 반영되지 않는다. (§7.5.2)
+	 */
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	float GetEffectiveCombatExitDelay() const;
 
 	// �����̳� �ý��� ����
 	int32 GetCurrentContainerIndex() const;
@@ -108,6 +120,20 @@ public:
 
 	// 서버 전용: 정화된 장착 목록을 싣고 캐시를 재구축한다.
 	void SetEquippedChips(const TArray<FName>& InChips);
+
+	/**
+	 * ★Plan3(공용칩)★ 장착 칩이 부여한 기능 스위치 조회.
+	 * UI 가 FDRUpgradeRuntime 내부를 직접 뒤지지 않게 하는 단일 경로다.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Upgrade")
+	bool HasUpgradeFeature(FGameplayTag FeatureTag) const
+	{
+		return CachedUpgradeRuntime.HasFeature(FeatureTag);
+	}
+
+	// 수치 캐시가 다시 만들어졌다 (최초 복제 / 로드아웃 변경 / Seamless Travel).
+	UPROPERTY(BlueprintAssignable, Category = "Upgrade")
+	FOnUpgradeRuntimeChangedSignature OnUpgradeRuntimeChanged;
 
 	// ========== 스테이지 처치 수 (업적 판정 / 결과창 표시) ==========
 
@@ -199,6 +225,10 @@ private:
 	// ���� ���� ��� �ð�
 	UPROPERTY(EditDefaultsOnly, Category = "Combat")
 	float CombatExitDelay = 5.0f;
+
+	// 업그레이드로 줄어든 전투 이탈 대기의 하한. 0에 가까우면 "전투 중"이 의미를 잃는다.
+	UPROPERTY(EditDefaultsOnly, Category = "Combat", meta = (ClampMin = "0.1"))
+	float MinCombatExitDelay = 1.0f;
 
 	// ü�� ȸ�� �ý���
 	UPROPERTY(EditDefaultsOnly, Category = "Gameplay Effects")

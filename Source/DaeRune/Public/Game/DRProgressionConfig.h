@@ -9,6 +9,298 @@
 
 class UDRChipCatalog;
 class UDRCosmeticCatalog;
+class UGameplayEffect;
+
+/**
+ * ★Plan5(씨앗칩)★ "일정 시간 이동 속도를 배로 바꾸는 효과" 한 벌.
+ * 감속/가속이 구조가 같아 재사용 가능하게 뽑아 뒀다. 다른 스킬 칩도 이걸 그대로 쓴다.
+ */
+USTRUCT(BlueprintType)
+struct FDRTimedSpeedEffect
+{
+	GENERATED_BODY()
+
+	/**
+	 * 적용할 GE. 요구 사양:
+	 *   - Duration Policy = Has Duration, Duration Magnitude = SetByCaller(Data.Duration)
+	 *   - Modifier: MoveSpeed / Multiplicitive / SetByCaller(Data.MoveSpeed.Mult)
+	 *   - Stacking = Aggregate by Source, Stack Limit 1,
+	 *                Refresh Duration on Successful Application
+	 *     (같은 시전자가 연속으로 맞혀도 중첩되지 않고 지속시간만 갱신된다)
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "SpeedEffect")
+	TSoftClassPtr<UGameplayEffect> Effect;
+
+	// 변화량. 0.3 = ±30%. 실제 배율은 호출부가 (1 - M) 또는 (1 + M) 으로 만든다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "SpeedEffect",
+		meta = (ClampMin = "0.0", ClampMax = "0.95"))
+	float Magnitude = 0.30f;
+
+	// 지속시간(초)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "SpeedEffect", meta = (ClampMin = "0.01"))
+	float Duration = 5.0f;
+};
+
+/**
+ * ★Plan5(씨앗칩)★ 정원로봇 씨앗 폭탄 칩 3종의 동적 상수.
+ *
+ * 카탈로그의 Modifiers 로 표현할 수 없는 값만 여기 둔다 —
+ * "지불한 물의 몇 %를 돌려주는가", "몇 초 동안", "어떤 GE 로" 같은 것들이다.
+ * 정적 수치(회복 ×2, 범위 +50%, 피해 -80% …)는 전부 DA_ChipCatalog 에 있다.
+ */
+USTRUCT(BlueprintType)
+struct FDRSeedBombChipTuning
+{
+	GENERATED_BODY()
+
+	// ========== ① GR.Asc.SeedRefund ==========
+
+	// 직격 시 돌려받는 비율. 1.0 = 사용한 물 전액.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Refund", meta = (ClampMin = "0.0"))
+	float DirectHitRefundRatio = 1.0f;
+
+	/**
+	 * 환급에 쓰는 GE. Instant + Water 에 SetByCaller(Water.SetByCaller.Grant) Additive.
+	 * 기존 GE_WaterGrant(적 처치 물 지급용)를 그대로 지정하면 된다 — 요구 스펙이 같다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Refund")
+	TSoftClassPtr<UGameplayEffect> RefundEffect;
+
+	// ========== ② GR.Asc.SeedSupport ==========
+
+	// 폭발에 피해를 입은 적에게 거는 감속 (기본 30% 감소 / 5초)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Support")
+	FDRTimedSpeedEffect EnemySlow;
+
+	// 폭발에 회복을 받은 아군에게 거는 가속 (기본 30% 증가 / 5초)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Support")
+	FDRTimedSpeedEffect AllyHaste;
+};
+
+/**
+ * ★Plan5(물대포칩)★ 정원로봇 물대포 칩 3종의 동적 상수.
+ *
+ * 카탈로그의 Modifiers 로 표현할 수 없는 값만 여기 둔다 —
+ * "스택 1개당 몇 %인가", "몇 초 동안", "어떤 GE 로" 같은 것들이다.
+ * 정적 수치(피해 0, 급수 ×2, 물 소모 -80% …)는 전부 DA_ChipCatalog 에 있다.
+ */
+USTRUCT(BlueprintType)
+struct FDRWaterPumpChipTuning
+{
+	GENERATED_BODY()
+
+	// ========== ① GR.Asc.PumpRamp (가압 노즐) ==========
+
+	/**
+	 * 가압 스택 GE. 요구 사양:
+	 *   - Duration Policy = Has Duration, Duration Magnitude = SetByCaller(Data.Duration)
+	 *   - Modifier ★없음★ (태그만 부여한다)
+	 *   - Granted Tags = Buff.WaterPump.Pressure
+	 *   - Stacking = Aggregate by Target,
+	 *                Stack Limit = RampMaxDamageBonus / RampDamageBonusPerStack (기본 10)
+	 *   - Stack Duration Refresh = Refresh on Successful Application
+	 *   - Stack Expiration        = ★Clear Entire Stack★  (유예 시간이 지나면 전 스택 소멸)
+	 *   - ★Deny Overflow Application 을 체크하지 말 것★ — 체크하면 상한 도달 후 적용이 거부되고,
+	 *     거부되면 ★지속시간 갱신도 안 돼★ 만렙에서 스택이 통째로 날아간다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ramp")
+	TSoftClassPtr<UGameplayEffect> RampStackEffect;
+
+	// 스택 1개당 물대포 피해 증가분. 0.05 = +5%
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ramp", meta = (ClampMin = "0.0"))
+	float RampDamageBonusPerStack = 0.05f;
+
+	/**
+	 * 피해 증가분 상한. 0.5 = +50%.
+	 * ★이 값이 최종 권위다★ — GE 의 Stack Limit 이 더 크더라도 코드가 여기서 자른다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ramp", meta = (ClampMin = "0.0"))
+	float RampMaxDamageBonus = 0.50f;
+
+	/**
+	 * 이 시간(초) 동안 적을 한 번도 못 맞히면 스택이 전부 사라진다.
+	 * ★피해 틱 간격(TickInterval × DamageApplicationInterval, 기본 1초)보다 반드시 커야 한다.★
+	 * 같거나 작으면 매 틱 경계에서 스택이 끊긴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ramp", meta = (ClampMin = "0.1"))
+	float RampResetGrace = 2.0f;
+
+	// ========== ② GR.Asc.PumpSupport (급수 노즐) ==========
+
+	/**
+	 * 피격된 적에게 거는 감속. ★Plan5(씨앗칩)의 FDRTimedSpeedEffect 를 그대로 재사용한다.★
+	 * ⚠️ Duration 의 구조체 기본값이 5.0(씨앗 폭탄용)이므로 ★에셋에서 반드시 낮춰야 한다★ —
+	 *    피해 틱 간격보다 살짝 길게(기본 권장 1.2) 잡는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Support")
+	FDRTimedSpeedEffect EnemySlow;
+
+	/**
+	 * 피격된 적에게 거는 "받는 피해 증가" GE. 요구 사양:
+	 *   - Duration Policy = Has Duration, Duration Magnitude = SetByCaller(Data.Duration)
+	 *   - Modifier ★없음★ / Granted Tags = Debuff.Vulnerable
+	 *   - Stacking = Aggregate by Source, Stack Limit 1, Refresh on Successful Application
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Support")
+	TSoftClassPtr<UGameplayEffect> VulnerableEffect;
+
+	/**
+	 * Debuff.Vulnerable 을 가진 대상이 받는 피해 증가분. 0.5 = +50%.
+	 * ★중첩하지 않는다★ — 몇 명이 걸든 태그가 있으면 ×1.5 하나뿐이다.
+	 * (Plan5(물대포칩) D-11)
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Support", meta = (ClampMin = "0.0"))
+	float VulnerableDamageTakenBonus = 0.50f;
+
+	// 취약 지속시간(초). 적중마다 갱신된다. 피해 틱 간격과 같으면 경계에서 한 프레임 끊긴다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Support", meta = (ClampMin = "0.01"))
+	float VulnerableDuration = 1.0f;
+};
+
+/**
+ * ★Plan5(발톱칩)★ 정원로봇 기본 공격(발톱) 칩의 동적 상수.
+ *
+ * 카탈로그 Modifiers 로 표현할 수 없는 값만 여기 둔다 —
+ * "준 피해의 몇 %를 회복하는가", "어떤 GE 로", "체력을 얼마까지 쓸 수 있는가" 같은 것들이다.
+ * 정적 수치(피해 ×5, −50%, 범위 +30% …)는 전부 DA_ChipCatalog 에 있다.
+ */
+USTRUCT(BlueprintType)
+struct FDRClawChipTuning
+{
+	GENERATED_BODY()
+
+	// ========== ② GR.Asc.ClawDrain (수혈 삽날) ==========
+
+	/**
+	 * 적에게 준 피해 대비 회복 비율. 1.0 = 준 피해 전액.
+	 *
+	 * ★기준은 "적 체력이 실제로 깎인 양"★ 이다 —
+	 * 엘리트 ×0.7 / 취약 ×1.5 / Phase1 ×0.7 이 전부 끝난 값이고, 오버킬분은 빠진다.
+	 * (체력 5 남은 적을 100 으로 때리면 흡혈은 5)
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Claw|Drain", meta = (ClampMin = "0.0"))
+	float LifestealRatio = 1.0f;
+
+	/**
+	 * 아군을 ★실제로 회복시킨 양★ 대비 자기 체력 소모 비율. 1.0 = 회복시킨 만큼 그대로 잃는다.
+	 *
+	 * ★"회복시킨 양" 이 기준이라 만피 아군을 때리면 체력이 전혀 나가지 않는다.★
+	 * 0.5 로 낮추면 "절반 값에 아군을 살리는" 칩이 된다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Claw|Drain", meta = (ClampMin = "0.0"))
+	float AllyHealHealthCostRatio = 1.0f;
+
+	/**
+	 * 회복에 쓰는 GE. Instant + ExecCalc_Heal + SetByCaller(Heal).
+	 * 기존 GE_Heal 을 그대로 지정하면 된다 — ★흡혈(자기 회복)과 아군 회복이 같은 GE 를 쓴다.★
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Claw|Drain")
+	TSoftClassPtr<UGameplayEffect> HealEffect;
+
+	/**
+	 * 자기 체력을 ★비용으로★ 깎는 GE.
+	 *   - Duration Policy = Instant
+	 *   - Modifier: DRAttributeSet.Health / Add Base / SetByCaller(Data.HealthCost)
+	 *   - ★SetByCaller 값은 양수(비용 액수)로 들어온다. GE 가 빼야 한다★
+	 *     (Modifier Magnitude 의 Coefficient 를 -1 로 두거나, SetByCaller 를 음수로 받도록 하지 말 것)
+	 *
+	 * ⚠️ IncomingDamage 를 쓰면 안 된다 — 컨테이너 오버플로·히트리액트·전투 진입·부품 낙하가
+	 *    전부 발동한다. 이건 피해가 아니라 비용이다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Claw|Drain")
+	TSoftClassPtr<UGameplayEffect> SelfCostEffect;
+
+	/**
+	 * 아군 회복 후 시전자에게 ★반드시 남겨 둘 최소 체력★.
+	 *
+	 * ⚠️ ★0 으로 내리지 말 것.★ 체력을 직접 깎는 경로는 사망 판정(Die())을 타지 않는다 —
+	 *    0 이 되면 죽지 않고 "체력 0 인 채 살아 있는" 상태가 된다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Claw|Drain", meta = (ClampMin = "1.0"))
+	float AllyHealMinSelfHealth = 1.0f;
+};
+
+/**
+ * 돌파 칩(⑥⑦⑧)의 동적 효과 튜닝 상수. (Plan3(공용칩) §17.4.3)
+ *
+ * 이 수치들은 카탈로그의 FDRUpgradeModifier 로 표현할 수 없다 —
+ * "잃은 컨테이너 수"나 "주변 팀원 수"처럼 매 순간 변하는 값에 곱해지기 때문이다.
+ * 그렇다고 C++ 에 상수로 박으면 밸런스를 만질 때마다 재컴파일해야 한다.
+ */
+USTRUCT(BlueprintType)
+struct FDRChipTuning
+{
+	GENERATED_BODY()
+
+	// ========== ⑥ 광폭화 (CM.Asc.Berserk) ==========
+
+	/**
+	 * 체력 컨테이너 1칸을 잃을 때마다 주는 피해 배율에 ★더해지는★ 값.
+	 *
+	 * ⚠️ 컨테이너 4칸 구성에서는 최대 3칸까지만 잃을 수 있다 →
+	 *    0.25 면 실질 최댓값이 2.75(275%)라 BerserkMaxMultiplier(3.0)에 도달하지 못한다.
+	 *    마지막 칸에서 정확히 300% 를 찍고 싶으면 1/(칸수-1) = 0.3334 로 올린다.
+	 *    (Plan3(공용칩) §17.6.5 / 열린 결정 O-10)
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Berserk", meta = (ClampMin = "0.0"))
+	float BerserkBonusPerLostContainer = 0.25f;
+
+	// 주는 피해 배율 상한 (DamageDealt 스탯 + 컨테이너 보너스의 합에 걸린다)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Berserk", meta = (ClampMin = "1.0"))
+	float BerserkMaxMultiplier = 3.0f;
+
+	// ========== ⑦ 시너지 오라 (CM.Asc.Synergy) ==========
+
+	// 팀원 탐지 반경 (3m = 300uu)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Synergy", meta = (ClampMin = "0.0"))
+	float SynergyRadius = 300.f;
+
+	// 오라 갱신 주기(초). 짧을수록 반응이 빠르지만 오버랩 쿼리가 잦아진다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Synergy", meta = (ClampMin = "0.05"))
+	float SynergyTickInterval = 0.25f;
+
+	// 스택 1개당 주는 피해 증가 (0.1 = +10%)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Synergy", meta = (ClampMin = "0.0"))
+	float SynergyDamageDealtPerStack = 0.10f;
+
+	// 스택 1개당 받는 피해 감소 (0.1 = -10%)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Synergy", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float SynergyDamageTakenPerStack = 0.10f;
+
+	// 받는 피해 배율의 하한. 스택이 아무리 쌓여도 이 비율 아래로는 내려가지 않는다(무적 방지).
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Synergy", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float SynergyMinDamageTakenRatio = 0.2f;
+
+	/**
+	 * 오라가 부여하는 GE. Infinite / 모디파이어 없음 / GrantedTags = Buff.Upgrade.Synergy.
+	 * ★Stacking 은 None(기본값)으로 둔다★ — 적용마다 별개 인스턴스가 생겨야
+	 * ASC 태그 카운트가 곧 스택 수가 된다. (Plan3(공용칩) §17.7.3)
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Synergy")
+	TSoftClassPtr<UGameplayEffect> SynergyBuffEffect;
+
+	// ========== ⑧ 피의 계약 (CM.Asc.BloodCost) ==========
+
+	// 물 소모량 대비 체력 소모 비율. 1.0 = 물 소모량의 100% 를 체력으로 낸다.
+	// (기존 "물 부족 시 부족분의 50%" 규칙과는 별개 경로다)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "BloodCost", meta = (ClampMin = "0.0"))
+	float BloodCostHealthRatio = 1.0f;
+
+	// ========== 정원로봇 씨앗 폭탄 칩 (Plan5(씨앗칩)) ==========
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "SeedBomb")
+	FDRSeedBombChipTuning SeedBomb;
+
+	// ========== 정원로봇 물대포 칩 (Plan5(물대포칩)) ==========
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WaterPump")
+	FDRWaterPumpChipTuning WaterPump;
+
+	// ========== 정원로봇 기본 공격 칩 (Plan5(발톱칩)) ==========
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Claw")
+	FDRClawChipTuning Claw;
+};
 
 /**
  * 스테이지 최초 클리어 보상 정의. 계정당 1회만 지급된다.
@@ -122,6 +414,33 @@ public:
 	// 슬롯 환불 시 돌려받는 비율 (1.0 = 전액)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Slot", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float RefundRatio = 1.0f;
+
+	// ========== 기본 제공 (Plan3(공용칩) §6) ==========
+
+	/**
+	 * 새 세이브에서 ★무료로★ 열어 두는 슬롯 수. 기본 장착 칩이 들어갈 자리다.
+	 *
+	 * 이 칸들은 재화를 쓰지 않았으므로 환불 대상이 아니고(UDRGameInstance::RefundSlot),
+	 * 예산 검증(GetSlotUnlockCostForClass)에서도 제외된다.
+	 * 슬롯 가격표(SlotCosts)는 여전히 ★칸 번호 기준★ 이라 3번 칸은 SlotCosts[2] 그대로다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Slot", meta = (ClampMin = "0"))
+	int32 InitialFreeSlots = 2;
+
+	/**
+	 * 새 세이브에서 앞 칸부터 순서대로 자동 장착할 칩 Id. 모든 로봇에 공통 적용된다.
+	 *
+	 * ★여기 넣는 칩의 RequiredSlotTier 는 InitialFreeSlots 이하★ 여야 한다.
+	 * 아니면 SanitizeClassState() 가 "해금 단계 미달"로 판단해 다음 실행에서 조용히 빼 버린다.
+	 * ValidateCurrencyBudget() 이 이 조건을 검사한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Slot")
+	TArray<FName> DefaultEquippedChips;
+
+	// ========== 돌파 칩 동적 효과 튜닝 (Plan3(공용칩) §17.4.3) ==========
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Chip Tuning")
+	FDRChipTuning ChipTuning;
 
 	// ========== 재화 획득 (전부 계정당 1회) ==========
 

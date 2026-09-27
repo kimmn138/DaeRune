@@ -72,7 +72,12 @@ int32 UDRProgressionConfig::GetSlotUnlockCostForClass() const
 	int32 Total = 0;
 
 	const int32 SlotCount = GetMaxSlotCount();
-	for (int32 SlotNumber = 1; SlotNumber <= SlotCount; ++SlotNumber)
+
+	// 무료 시작 슬롯은 재화를 쓰지 않으므로 필요 예산에서 제외한다 (Plan3(공용칩) §4.5).
+	// 빼지 않으면 "전체 해금이 불가능하다"는 거짓 경고가 뜬다.
+	const int32 FirstPaidSlot = FMath::Clamp(InitialFreeSlots, 0, SlotCount) + 1;
+
+	for (int32 SlotNumber = FirstPaidSlot; SlotNumber <= SlotCount; ++SlotNumber)
 	{
 		Total += FMath::Max(0, GetSlotUnlockCost(SlotNumber));
 	}
@@ -158,6 +163,61 @@ bool UDRProgressionConfig::ValidateCurrencyBudget(TArray<FString>& OutErrors) co
 		TArray<FString> CatalogErrors;
 		ChipCatalog->ValidateCatalog(GetMaxSlotCount(), CatalogErrors);
 		OutErrors.Append(CatalogErrors);
+
+		// ===== 기본 장착 칩 검증 (Plan3(공용칩) §6.4) =====
+		// ★칩 정의(카탈로그)와 시작 해금 수(Config)를 ★둘 다★ 알아야 하므로 여기서만 검사할 수 있다.
+		// RequiredSlotTier 가 시작 해금 수보다 크면 SanitizeClassState() 가 다음 실행에서
+		// 그 칩을 조용히 빼 버린다 — 증상이 늦게 나타나 디버깅이 어렵다.
+		const int32 FreeSlots = FMath::Clamp(InitialFreeSlots, 0, GetMaxSlotCount());
+
+		if (DefaultEquippedChips.Num() > FreeSlots)
+		{
+			OutErrors.Add(FString::Printf(
+				TEXT("DefaultEquippedChips 가 %d개인데 InitialFreeSlots 가 %d 라서 일부는 장착되지 않습니다."),
+				DefaultEquippedChips.Num(), FreeSlots));
+		}
+
+		TSet<FName> SeenDefaults;
+		for (const FName& DefaultId : DefaultEquippedChips)
+		{
+			if (DefaultId.IsNone())
+			{
+				OutErrors.Add(TEXT("DefaultEquippedChips 에 비어 있는 항목이 있습니다."));
+				continue;
+			}
+
+			if (SeenDefaults.Contains(DefaultId))
+			{
+				OutErrors.Add(FString::Printf(
+					TEXT("DefaultEquippedChips 에 중복된 칩이 있습니다: %s"), *DefaultId.ToString()));
+			}
+			SeenDefaults.Add(DefaultId);
+
+			const FDRUpgradeChipDefinition* Chip = ChipCatalog->FindChip(DefaultId);
+			if (!Chip)
+			{
+				OutErrors.Add(FString::Printf(
+					TEXT("기본 장착 칩 %s 가 카탈로그에 없습니다."), *DefaultId.ToString()));
+				continue;
+			}
+
+			if (Chip->RequiredSlotTier > FreeSlots)
+			{
+				OutErrors.Add(FString::Printf(
+					TEXT("기본 장착 칩 %s 의 RequiredSlotTier(%d) 가 InitialFreeSlots(%d) 보다 커서 ")
+					TEXT("세이브 정화 시 자동으로 해제됩니다."),
+					*DefaultId.ToString(), Chip->RequiredSlotTier, FreeSlots));
+			}
+
+			// 로봇 전용 칩을 기본 장착으로 지정하면 나머지 로봇에서는 조용히 빠진다
+			if (!Chip->bCommonChip)
+			{
+				OutErrors.Add(FString::Printf(
+					TEXT("기본 장착 칩 %s 가 공용 칩이 아닙니다 — %s 이외의 로봇에서는 장착되지 않습니다."),
+					*DefaultId.ToString(),
+					*UEnum::GetDisplayValueAsText(Chip->OwnerClass).ToString()));
+			}
+		}
 	}
 
 	if (OutErrors.Num() > 0)

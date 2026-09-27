@@ -5,6 +5,8 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystem/Data/GameBalanceConfig.h"
 #include "AbilitySystem/DRAttributeSet.h"
+#include "AbilitySystem/DRPlayerAttributeSet.h"
+#include "Game/DRProgressionConfig.h"
 #include "DRAbilityTypes.h"
 #include "DRGameplayTags.h"
 #include "Actor/DRCleanserSite.h"
@@ -192,6 +194,252 @@ UGameBalanceConfig* UDRAbilitySystemLibrary::GetGameBalanceConfig(const UObject*
 	const ADRGameModeBase* DRGameMode = Cast<ADRGameModeBase>(UGameplayStatics::GetGameMode(WorldContextObject));
 	if (DRGameMode == nullptr) return nullptr;
 	return DRGameMode->GameBalanceConfig;
+}
+
+// ========================= 업그레이드 칩 조회 (Plan3(공용칩) §17.5) =========================
+
+const FDRUpgradeRuntime& UDRAbilitySystemLibrary::GetUpgradeRuntimeForASC(const UAbilitySystemComponent* ASC)
+{
+	// 칩이 없는 대상(적 / 클렌저 사이트)을 위한 항등 캐시.
+	// 호출부가 null 분기를 하지 않아도 되도록 항상 유효한 참조를 돌려준다.
+	static const FDRUpgradeRuntime EmptyRuntime;
+
+	if (!ASC) return EmptyRuntime;
+
+	// 플레이어는 ASC 를 PlayerState 가 소유하므로 OwnerActor 가 곧 PlayerState 다
+	if (const ADRPlayerState* DRPS = Cast<ADRPlayerState>(ASC->GetOwnerActor()))
+	{
+		return DRPS->GetUpgradeRuntime();
+	}
+
+	// 폴백: 아바타의 PlayerState (ASC 소유 구조가 다른 경우 대비)
+	if (const APawn* AvatarPawn = Cast<APawn>(ASC->GetAvatarActor()))
+	{
+		if (const ADRPlayerState* DRPS = AvatarPawn->GetPlayerState<ADRPlayerState>())
+		{
+			return DRPS->GetUpgradeRuntime();
+		}
+	}
+
+	return EmptyRuntime;
+}
+
+bool UDRAbilitySystemLibrary::HasUpgradeFeature(const UAbilitySystemComponent* ASC, FGameplayTag FeatureTag)
+{
+	return GetUpgradeRuntimeForASC(ASC).HasFeature(FeatureTag);
+}
+
+const UDRPlayerAttributeSet* UDRAbilitySystemLibrary::GetPlayerAttributeSetFromASC(const UAbilitySystemComponent* ASC)
+{
+	if (!ASC) return nullptr;
+	return Cast<UDRPlayerAttributeSet>(ASC->GetAttributeSet(UDRPlayerAttributeSet::StaticClass()));
+}
+
+const FDRChipTuning& UDRAbilitySystemLibrary::GetChipTuning(const UObject* WorldContextObject)
+{
+	// Config 미지정/월드 없음이어도 기본값으로 동작하게 한다 —
+	// 튜닝 값이 없다고 전투 계산이 0 으로 무너지면 원인 추적이 훨씬 어려워진다.
+	static const FDRChipTuning DefaultTuning;
+
+	if (!WorldContextObject) return DefaultTuning;
+
+	// GameBalanceConfig 와 달리 GameMode 를 타지 않는다 — 클라이언트에서도 필요하다.
+	if (const UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull))
+	{
+		if (const UDRGameInstance* GI = World->GetGameInstance<UDRGameInstance>())
+		{
+			if (const UDRProgressionConfig* Config = GI->ProgressionConfig)
+			{
+				return Config->ChipTuning;
+			}
+		}
+	}
+
+	return DefaultTuning;
+}
+
+// ========== 액터가 스킬 단위 업그레이드를 읽는 길 (Plan5(씨앗칩)) ==========
+
+FGameplayTag UDRAbilitySystemLibrary::GetUpgradeKeyTagFromAbilityTags(const FGameplayTagContainer& AbilityTags)
+{
+	// UDRAbilitySystemComponent::GetAbilityTagFromSpec 과 동일한 규칙 ("Abilities" 접두 태그)
+	static const FGameplayTag AbilitiesTag = FGameplayTag::RequestGameplayTag(FName("Abilities"));
+
+	for (const FGameplayTag& Tag : AbilityTags)
+	{
+		if (Tag.MatchesTag(AbilitiesTag))
+		{
+			return Tag;
+		}
+	}
+	return FGameplayTag();
+}
+
+float UDRAbilitySystemLibrary::ApplySkillUpgrade(const UAbilitySystemComponent* SourceASC,
+	const FGameplayTagContainer& SourceAbilityTags, EDRUpgradeStat Stat, float Base)
+{
+	const FGameplayTag KeyTag = GetUpgradeKeyTagFromAbilityTags(SourceAbilityTags);
+	return GetUpgradeRuntimeForASC(SourceASC).ApplySkill(KeyTag, Stat, Base);
+}
+
+FActiveGameplayEffectHandle UDRAbilitySystemLibrary::ApplyTimedSpeedEffect(
+	AActor* TargetActor, UAbilitySystemComponent* SourceASC,
+	const FDRTimedSpeedEffect& Config, float SpeedMultiplier)
+{
+	if (!IsValid(TargetActor)) return FActiveGameplayEffectHandle();
+
+	// TSoftClassPtr 는 1회 동기 로드한다 (UDRSynergyAuraComponent 와 같은 방식).
+	// 미지정이면 조용히 넘어간다 — 호출부가 매 적중마다 경고를 쏟지 않도록.
+	UClass* EffectClass = Config.Effect.LoadSynchronous();
+	if (!EffectClass) return FActiveGameplayEffectHandle();
+
+	UAbilitySystemComponent* TargetASC =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
+	if (!TargetASC) return FActiveGameplayEffectHandle();
+
+	// 소스 ASC 가 없으면(발사체 주인이 사라진 경우 등) 대상 자신을 소스로 삼는다.
+	UAbilitySystemComponent* EffectSource = SourceASC ? SourceASC : TargetASC;
+
+	FGameplayEffectContextHandle Context = EffectSource->MakeEffectContext();
+	Context.AddSourceObject(EffectSource->GetAvatarActor());
+
+	FGameplayEffectSpecHandle SpecHandle = EffectSource->MakeOutgoingSpec(EffectClass, 1.f, Context);
+	if (!SpecHandle.IsValid()) return FActiveGameplayEffectHandle();
+
+	// ★Duration 이 SetByCaller 인데 값을 안 넣으면 지속시간 0 으로 즉시 사라진다.★
+	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+	SpecHandle.Data->SetSetByCallerMagnitude(Tags.Data_MoveSpeed_Mult, SpeedMultiplier);
+	SpecHandle.Data->SetSetByCallerMagnitude(Tags.Data_Duration, FMath::Max(0.01f, Config.Duration));
+
+	return TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+}
+
+FActiveGameplayEffectHandle UDRAbilitySystemLibrary::ApplyTimedTagEffect(
+	AActor* TargetActor, UAbilitySystemComponent* SourceASC,
+	const TSoftClassPtr<UGameplayEffect>& Effect, float Duration)
+{
+	if (!IsValid(TargetActor)) return FActiveGameplayEffectHandle();
+
+	// TSoftClassPtr 는 1회 동기 로드한다 (ApplyTimedSpeedEffect 와 같은 방식).
+	// 미지정이면 조용히 넘어간다 — 호출부가 매 적중마다 경고를 쏟지 않도록.
+	UClass* EffectClass = Effect.LoadSynchronous();
+	if (!EffectClass) return FActiveGameplayEffectHandle();
+
+	UAbilitySystemComponent* TargetASC =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
+	if (!TargetASC) return FActiveGameplayEffectHandle();
+
+	// 소스 ASC 가 없으면 대상 자신을 소스로 삼는다.
+	UAbilitySystemComponent* EffectSource = SourceASC ? SourceASC : TargetASC;
+
+	FGameplayEffectContextHandle Context = EffectSource->MakeEffectContext();
+	Context.AddSourceObject(EffectSource->GetAvatarActor());
+
+	FGameplayEffectSpecHandle SpecHandle = EffectSource->MakeOutgoingSpec(EffectClass, 1.f, Context);
+	if (!SpecHandle.IsValid()) return FActiveGameplayEffectHandle();
+
+	// ★Duration 이 SetByCaller 인데 값을 안 넣으면 지속시간 0 으로 즉시 사라진다.★
+	SpecHandle.Data->SetSetByCallerMagnitude(
+		FDRGameplayTags::Get().Data_Duration, FMath::Max(0.01f, Duration));
+
+	return TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+}
+
+// ========================= 회복 / 흡혈 (Plan5(발톱칩)) =========================
+
+void UDRAbilitySystemLibrary::ApplyHealToActor(AActor* TargetActor, UAbilitySystemComponent* SourceASC,
+	TSubclassOf<UGameplayEffect> HealEffect, float HealAmount, const UObject* SourceObject)
+{
+	if (!IsValid(TargetActor) || HealAmount <= 0.f || !HealEffect) return;
+
+	UAbilitySystemComponent* TargetASC =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
+	if (!TargetASC) return;
+
+	// 소스 ASC 가 없으면 대상 자신이 소스가 된다(자가 회복 형태 — 씨앗 발사체가 이 경로를 쓴다).
+	UAbilitySystemComponent* EffectSource = SourceASC ? SourceASC : TargetASC;
+
+	FGameplayEffectContextHandle Context = EffectSource->MakeEffectContext();
+	Context.AddSourceObject(SourceObject ? SourceObject : EffectSource->GetAvatarActor());
+
+	FGameplayEffectSpecHandle SpecHandle = EffectSource->MakeOutgoingSpec(HealEffect, 1.f, Context);
+	if (!SpecHandle.IsValid()) return;
+
+	// GE 는 UExecCalc_Heal 이 이 SetByCaller 를 읽어 IncomingHealing 으로 넘긴다.
+	SpecHandle.Data->SetSetByCallerMagnitude(FDRGameplayTags::Get().Heal, HealAmount);
+
+	TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+}
+
+void UDRAbilitySystemLibrary::ApplyHealToActor(AActor* TargetActor, UAbilitySystemComponent* SourceASC,
+	const TSoftClassPtr<UGameplayEffect>& HealEffect, float HealAmount, const UObject* SourceObject)
+{
+	// TSoftClassPtr 는 1회 동기 로드한다 (ApplyTimedSpeedEffect 와 같은 방식).
+	//
+	// ★TSubclassOf 로 ★명시적으로★ 감싼다.★ LoadSynchronous() 의 반환형은 UClass* 인데,
+	// 그건 TSubclassOf 와 TSoftClassPtr 양쪽으로 암시적 변환이 가능해
+	// 그냥 넘기면 두 오버로드 중 어느 것인지 모호해진다(C2668).
+	const TSubclassOf<UGameplayEffect> LoadedClass = HealEffect.LoadSynchronous();
+	ApplyHealToActor(TargetActor, SourceASC, LoadedClass, HealAmount, SourceObject);
+}
+
+float UDRAbilitySystemLibrary::GetHealableAmount(AActor* TargetActor, float RequestedHeal)
+{
+	if (!IsValid(TargetActor) || RequestedHeal <= 0.f) return 0.f;
+
+	const UAbilitySystemComponent* TargetASC =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
+	if (!TargetASC) return 0.f;
+
+	// ★회복 차단(칩 ⑥ 광폭화)★ — HandleIncomingHealing 이 힐을 통째로 버린다.
+	// 버려질 힐에 대가를 치르면 안 되므로 여기서 0 을 돌려준다.
+	if (HasUpgradeFeature(TargetASC, FDRGameplayTags::Get().Upgrade_Feature_Combat_NoHealing))
+	{
+		return 0.f;
+	}
+
+	const UDRAttributeSet* TargetAS = Cast<UDRAttributeSet>(
+		TargetASC->GetAttributeSet(UDRAttributeSet::StaticClass()));
+	if (!TargetAS) return 0.f;
+
+	// ★오염 상태★ — HandleCorruptionPurification 이 회복량과 무관하게 1회 소비해 정화한다.
+	// 체력이 가득 차 있어도 "쓸모 있는" 회복이므로 요청량 전액을 소비된 것으로 본다.
+	if (const UDRPlayerAttributeSet* TargetPlayerAS = Cast<UDRPlayerAttributeSet>(TargetAS))
+	{
+		if (TargetPlayerAS->IsCorrupted())
+		{
+			return RequestedHeal;
+		}
+	}
+
+	// 일반: 빈 체력만큼만 소비된다. 만피면 0 → 호출부가 비용을 물지 않는다.
+	return FMath::Clamp(TargetAS->GetMaxHealth() - TargetAS->GetHealth(), 0.f, RequestedHeal);
+}
+
+float UDRAbilitySystemLibrary::GetLifestealRatioForDamage(const FEffectProperties& Props)
+{
+	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+
+	// ① 소스가 흡혈 칩을 끼고 있는가
+	if (!HasUpgradeFeature(Props.SourceASC, GameplayTags.Upgrade_Feature_Skill_Claw_Lifesteal))
+	{
+		return 0.f;
+	}
+
+	// ② 이 피해가 ★기본 공격에서★ 나왔는가.
+	//    이 검사를 빠뜨리면 씨앗 폭탄·물대포 피해까지 흡혈된다.
+	//    ApplyDamageEffect 가 컨텍스트에 SourceAbilityTags 를 실어 주므로 추가 배선이 필요 없다.
+	const FDRGameplayEffectContext* DRContext =
+		static_cast<const FDRGameplayEffectContext*>(Props.EffectContextHandle.Get());
+	if (!DRContext) return 0.f;
+
+	if (!DRContext->GetSourceAbilityTags().HasTagExact(GameplayTags.Abilities_GardenRobot_ClawSwipe))
+	{
+		return 0.f;
+	}
+
+	const AActor* TuningContext = Props.SourceASC ? Props.SourceASC->GetAvatarActor() : nullptr;
+	return FMath::Max(0.f, GetChipTuning(TuningContext).Claw.LifestealRatio);
 }
 
 bool UDRAbilitySystemLibrary::IsSuccessfulDebuff(const FGameplayEffectContextHandle& EffectContextHandle)

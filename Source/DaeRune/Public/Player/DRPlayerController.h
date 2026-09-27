@@ -424,6 +424,18 @@ public:
 	void DRDumpUpgrade();
 
 	/**
+	 * 치트: 기본 장착 칩(DefaultEquippedChips)을 다시 꽂는다. (Plan3(공용칩) §6.6)
+	 *
+	 * ★HUD 표시 칩을 뺀 상태에서 빠져나오기 위한 안전망이다.★
+	 * 그 칩을 빼면 체력/물/스킬 아이콘이 전부 사라지는데, 업그레이드 화면 자체는
+	 * 계속 열리므로 원래는 화면에서 되돌릴 수 있다. 다만 로비까지 못 가는 상황
+	 * (스테이지 도중 등)에서는 이 명령이 유일한 복구 수단이다.
+	 * 빈 칸이 없으면 꽂히지 않는다.
+	 */
+	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Upgrade")
+	void DRResetDefaultChips();
+
+	/**
 	 * 치트: 코스메틱 카탈로그의 모든 해금 조건을 달성 처리한다.
 	 * 옷장 UI 를 만들 때 잠긴/해금 상태를 번갈아 확인하기 위한 것이다.
 	 */

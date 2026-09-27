@@ -38,6 +38,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Chips")
 	FText GetSkillDisplayName(const FGameplayTag& AbilityTag) const;
 
+	/**
+	 * ★이 기능 스위치를 부여하는 칩이 카탈로그에 하나라도 있는가.★ (Plan3(공용칩) §7.2)
+	 *
+	 * "기능을 가두는 칩이 아직 없으면 그 기능은 잠기지 않는다" 규칙을 위한 조회다.
+	 * 이게 없으면 카탈로그에 HUD 칩을 만들기 ★전에★ 코드만 먼저 들어간 순간
+	 * 모든 플레이어의 체력/물/스킬 UI 가 통째로 사라진다 —
+	 * 화면에서 원인을 볼 수 없어 가장 찾기 어려운 형태의 회귀가 된다.
+	 * 칩을 카탈로그에서 지웠을 때도 같은 방식으로 복구된다.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Chips")
+	bool IsFeatureGated(FGameplayTag FeatureTag) const;
+
 	// 장착 칩 목록을 즉시 조회 가능한 수치 캐시로 펼친다.
 	// OwnerClass 가 다른 항목은 무시한다(잘못된 목록 방어).
 	void ResolveLoadout(const TArray<FName>& EquippedChips, EPlayerCharacterClass CharacterClass,

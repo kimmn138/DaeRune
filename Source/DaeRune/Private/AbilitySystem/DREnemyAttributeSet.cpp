@@ -4,6 +4,8 @@
 #include "AbilitySystem/DREnemyAttributeSet.h"
 #include "Interaction/CombatInterface.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
+// FDRChipTuning — 받는 피해 증가 배율을 읽는다 (Plan5(물대포칩))
+#include "Game/DRProgressionConfig.h"
 #include "DRGameplayTags.h"
 #include "GameFramework/Character.h"
 #include "Character/DREnemy.h"
@@ -47,6 +49,45 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			if (ADRAIController* AIC = Cast<ADRAIController>(Enemy->GetController()))
 			{
 				AIC->UpdateCombatTime();
+			}
+		}
+
+		// ★Plan5(물대포칩)★ 받는 피해 증가 표식(Debuff.Vulnerable).
+		//
+		// ★ExecCalc_Damage 가 아니라 여기인 이유★: 출혈/화상 같은 디버프 DoT 은
+		// IncomingDamage 에 SetByCaller 로 ★직접★ 꽂혀 ExecCalc 를 지나지 않는다.
+		// "모든 피해"를 늘리려면 IncomingDamage 가 반드시 지나는 이 지점이어야 한다. (D-10)
+		//
+		// ★중첩하지 않는다★ — 태그 ★카운트★ 가 아니라 보유 여부만 본다.
+		// 카운트로 곱하면 정원로봇 N명이 같은 적을 쏠 때 배율이 N제곱으로 튄다. (D-11)
+		if (Props.TargetASC && Props.TargetASC->HasMatchingGameplayTag(
+				FDRGameplayTags::Get().Debuff_Vulnerable))
+		{
+			const FDRChipTuning& ChipTuning =
+				UDRAbilitySystemLibrary::GetChipTuning(Props.TargetAvatarActor);
+			LocalIncomingDamage *= (1.f + FMath::Max(0.f, ChipTuning.WaterPump.VulnerableDamageTakenBonus));
+		}
+
+		// ★Plan5(발톱칩)★ 흡혈 — "적에게 준 피해만큼" 시전자 체력 회복.
+		//
+		// ★여기서 지급하는 이유★: 엘리트 ×0.7 / 취약 ×1.5 / Phase1 ×0.7 이 전부 끝난
+		//   ★최종 피해★ 를 알 수 있는 유일한 지점이다. 어빌리티 쪽에서 지급하면
+		//   화면에 뜬 숫자와 회복량이 어긋난다.
+		//
+		// ★반드시 SetHealth 보다 먼저★ — GetHealth() 로 남은 체력을 읽어
+		//   ★오버킬분을 잘라내야★ 하기 때문이다. 체력 5 남은 적을 100 으로 때려도 흡혈은 5 다.
+		//
+		// 기본 공격이 아닌 피해(씨앗 폭탄·물대포 등)는 GetLifestealRatioForDamage 가 0 을 돌려준다.
+		{
+			const float LifestealRatio = UDRAbilitySystemLibrary::GetLifestealRatioForDamage(Props);
+			if (LifestealRatio > 0.f)
+			{
+				const float ActuallyDealt = FMath::Min(LocalIncomingDamage, FMath::Max(0.f, GetHealth()));
+				UDRAbilitySystemLibrary::ApplyHealToActor(
+					Props.SourceAvatarActor,
+					Props.SourceASC,
+					UDRAbilitySystemLibrary::GetChipTuning(Props.SourceAvatarActor).Claw.HealEffect,
+					ActuallyDealt * LifestealRatio);
 			}
 		}
 

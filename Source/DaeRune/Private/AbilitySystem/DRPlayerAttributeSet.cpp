@@ -12,8 +12,10 @@
 #include "Character/DRCharacter.h"
 #include "Character/DREnemy.h"
 #include "Game/DRLobbyGameMode.h"
+#include "Game/DRProgressionConfig.h"
 #include "Game/DRTutorialGameMode.h"
 #include "Engine/World.h"
+#include "AbilitySystemComponent.h"
 
 void UDRPlayerAttributeSet::SetContainerInfo(int32 InNumContainers, float InContainerHealth)
 {
@@ -180,6 +182,26 @@ void UDRPlayerAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		}
 	}
 
+	// ★Plan3(공용칩) §17.7.4★ 시너지 오라: 받는 피해 감소.
+	// 스택 수는 ASC 태그 카운트 = 나를 버프하고 있는 팀원 수다.
+	if (Props.TargetASC)
+	{
+		const int32 SynergyStacks =
+			Props.TargetASC->GetGameplayTagCount(FDRGameplayTags::Get().Buff_Upgrade_Synergy);
+		if (SynergyStacks > 0)
+		{
+			const FDRChipTuning& Tuning =
+				UDRAbilitySystemLibrary::GetChipTuning(Props.TargetAvatarActor);
+
+			// 스택이 아무리 쌓여도 무적이 되지 않게 하한을 둔다
+			const float Ratio = FMath::Max(
+				Tuning.SynergyMinDamageTakenRatio,
+				1.f - Tuning.SynergyDamageTakenPerStack * SynergyStacks);
+
+			LocalIncomingDamage *= Ratio;
+		}
+	}
+
 	// 로비/튜토리얼에서는 체력이 1 미만으로 내려가지 않도록 데미지 클램프
 	if (ShouldPreventDeath())
 	{
@@ -234,7 +256,32 @@ void UDRPlayerAttributeSet::ProcessCorruptedDamage(const FEffectProperties& Prop
 
 void UDRPlayerAttributeSet::ProcessNormalDamage(const FEffectProperties& Props, float Damage)
 {
-	float NewHealth = CalculateContainerDamage(GetHealth(), Damage);
+	float NewHealth;
+
+	// ★Plan3(공용칩) §17.6.2★ 광폭화 칩: 피해량과 무관하게 현재 컨테이너를 통째로 비운다.
+	//
+	// HandleIncomingDamage 본체가 아니라 여기에 두는 이유:
+	//  ① 오염 상태(ProcessCorruptedDamage)에는 컨테이너 개념이 없다
+	//  ② 모든 배율(부품 1.5배 / DamageTaken / 시너지)이 끝난 뒤라 "피해량 무관"의 의미가 분명하다
+	if (UDRAbilitySystemLibrary::HasUpgradeFeature(
+			Props.TargetASC, FDRGameplayTags::Get().Upgrade_Feature_Combat_Berserk))
+	{
+		// GetCurrentContainerIndex() 는 칸 경계에 정확히 서 있을 때 한 칸 아래로 보정해 주므로,
+		// 경계에서도 "다음 칸"이 아니라 "현재 칸"을 비우게 된다.
+		const int32 ContainerIndex = FMath::Max(0, GetCurrentContainerIndex());
+		NewHealth = ContainerIndex * ContainerHealth;
+
+		// 로비/튜토리얼에서는 죽지 않아야 한다 — 칸은 비우되 체력 1 을 남긴다
+		if (NewHealth <= 0.f && ShouldPreventDeath())
+		{
+			NewHealth = 1.f;
+		}
+	}
+	else
+	{
+		NewHealth = CalculateContainerDamage(GetHealth(), Damage);
+	}
+
 	SetHealth(FMath::Clamp(NewHealth, 0.f, GetMaxHealth()));
 
 	if (NewHealth <= 0.f)
@@ -332,6 +379,16 @@ void UDRPlayerAttributeSet::HandleIncomingHealing(const FEffectProperties& Props
 	SetIncomingHealing(0.f);
 
 	if (LocalIncomingHealing <= 0.f) return;
+
+	// ★Plan3(공용칩) §17.6.3★ 회복 차단 칩: 들어온 힐을 그대로 버린다.
+	// ★IncomingHealing 을 0 으로 비운 "뒤"에 반환해야★ 다음 힐이 누적되지 않는다.
+	// 오염 정화도 이 경로를 타므로 함께 막힌다(열린 결정 O-9 — 정화만 허용하려면
+	// 아래 조건에 !IsCorrupted() 를 추가한다).
+	if (UDRAbilitySystemLibrary::HasUpgradeFeature(
+			Props.TargetASC, FDRGameplayTags::Get().Upgrade_Feature_Combat_NoHealing))
+	{
+		return;
+	}
 
 	const float CurrentHealth = GetHealth();
 	const float MaxHealthValue = GetMaxHealth();
