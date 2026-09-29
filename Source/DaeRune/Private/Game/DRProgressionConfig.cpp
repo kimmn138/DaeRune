@@ -5,6 +5,24 @@
 #include "Game/DRChipCatalog.h"
 #include "DaeRune/DRLogChannels.h"
 
+// ========================= FDRJackpotOdds (Plan5(잭팟칩)) =========================
+
+FDRJackpotOdds FDRJackpotOdds::Normalized(const FDRJackpotOdds& Fallback) const
+{
+	FDRJackpotOdds Out(FMath::Max(0.f, Bronze), FMath::Max(0.f, Silver), FMath::Max(0.f, Gold));
+
+	const float Total = Out.Sum();
+	if (Total <= KINDA_SMALL_NUMBER)
+	{
+		return Fallback;
+	}
+
+	Out.Bronze /= Total;
+	Out.Silver /= Total;
+	Out.Gold /= Total;
+	return Out;
+}
+
 int32 UDRProgressionConfig::GetMaxSlotCount() const
 {
 	return FMath::Max(0, MaxSlots);
@@ -217,6 +235,38 @@ bool UDRProgressionConfig::ValidateCurrencyBudget(TArray<FString>& OutErrors) co
 					*DefaultId.ToString(),
 					*UEnum::GetDisplayValueAsText(Chip->OwnerClass).ToString()));
 			}
+		}
+	}
+
+	// ===== ★Plan5(잭팟칩)★ 잭팟 확률표 검사 (D-61) =====
+	// 합이 1 이 아니어도 코드는 정규화로 버티지만, 그러면 디자이너가 쓴 숫자와 다른 확률이 조용히 나간다.
+	{
+		const FDRJackpotChipTuning& Jackpot = ChipTuning.Jackpot;
+
+		auto CheckOdds = [&OutErrors](const TCHAR* Name, const FDRJackpotOdds& Odds)
+		{
+			if (Odds.Bronze < 0.f || Odds.Silver < 0.f || Odds.Gold < 0.f)
+			{
+				OutErrors.Add(FString::Printf(TEXT("ChipTuning.Jackpot.%s 에 음수 확률이 있습니다."), Name));
+			}
+			if (!FMath::IsNearlyEqual(Odds.Sum(), 1.f, 0.001f))
+			{
+				OutErrors.Add(FString::Printf(
+					TEXT("ChipTuning.Jackpot.%s 의 합이 %.3f 입니다(브론즈 %.3f + 실버 %.3f + 골드 %.3f) — 1.0 이 되게 맞추세요."),
+					Name, Odds.Sum(), Odds.Bronze, Odds.Silver, Odds.Gold));
+			}
+		};
+
+		CheckOdds(TEXT("GoldRushOdds"), Jackpot.GoldRushOdds);
+		CheckOdds(TEXT("PityBaseOdds"), Jackpot.PityBaseOdds);
+
+		if (Jackpot.PityStep <= 0.f)
+		{
+			OutErrors.Add(TEXT("ChipTuning.Jackpot.PityStep 이 0 이하라 적립 카드의 보정이 쌓이지 않습니다."));
+		}
+		if (Jackpot.DoubleShotDelay <= 0.f)
+		{
+			OutErrors.Add(TEXT("ChipTuning.Jackpot.DoubleShotDelay 가 0 이하입니다."));
 		}
 	}
 

@@ -457,6 +457,23 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("자판기 기본 공격이 적에게 적중할 때마다 시전자 체력 고정량 회복")
 	);
 
+	// ========== 자판기 잭팟 칩 기능 스위치 (Plan5(잭팟칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_Jackpot_GoldRush = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Jackpot.GoldRush"),
+		FString("잭팟 확률표를 ChipTuning.Jackpot.GoldRushOdds 로 교체")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Jackpot_Double = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Jackpot.Double"),
+		FString("잭팟 캡슐이 같은 색으로 한 발 더 발사, 골드 확률은 브론즈·실버로 재분배")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Jackpot_Pity = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Jackpot.Pity"),
+		FString("브론즈·실버가 나올 때마다 다음 잭팟의 골드 확률 누적 증가, 골드가 나오면 초기화")
+	);
+
 	// ========== 범용 SetByCaller (Plan5(씨앗칩)) ==========
 
 	GameplayTags.Data_MoveSpeed_Mult = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -544,6 +561,12 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Abilities_VendingMachine_AttackSpeedBuff = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Abilities.VendingMachine.AttackSpeedBuff"),
 		FString("VendingMachine Attack Speed Buff Ability Tag")
+	);
+
+	// ★Plan5(잭팟칩)★ 칩 그룹 키 전용 — GA 에 붙이지 않는다
+	GameplayTags.Abilities_VendingMachine_Jackpot = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.VendingMachine.Jackpot"),
+		FString("Upgrade chip group key for VendingMachine jackpot chips (not granted to any ability)")
 	);
 
 	GameplayTags.Abilities_RobotVacuum_AirShot = UGameplayTagsManager::Get().AddNativeGameplayTag(

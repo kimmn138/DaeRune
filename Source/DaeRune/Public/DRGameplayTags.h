@@ -147,6 +147,11 @@ public:
 	// 자판기 기본 공격(동전) 칩 피처 스위치 (Plan5(동전칩)). ASC 에 부여되지 않는다.
 	FGameplayTag Upgrade_Feature_Skill_Coin_HitHeal;	// ② 적에게 적중할 때마다 고정량 자기 회복
 
+	// 자판기 잭팟 칩 피처 스위치 (Plan5(잭팟칩)). ASC 에 부여되지 않는다.
+	FGameplayTag Upgrade_Feature_Skill_Jackpot_GoldRush;	// ① 확률표 교체 (골드 25 / 실버 0)
+	FGameplayTag Upgrade_Feature_Skill_Jackpot_Double;		// ② 같은 색 캡슐 한 발 더, 골드 0
+	FGameplayTag Upgrade_Feature_Skill_Jackpot_Pity;		// ③ 비골드마다 골드 확률 누적 보정
+
 	// 범용 SetByCaller (Plan5(발톱칩)).
 	// 체력을 ★비용으로★ 깎는 GE 가 액수를 밖에서 받게 한다.
 	// ★값은 항상 양수(= 비용 액수)로 넣는다. 부호를 빼는 것은 GE 모디파이어의 몫이다.★
@@ -176,6 +181,9 @@ public:
 	FGameplayTag Abilities_GardenRobot_SeedCannon;
 	FGameplayTag Abilities_VendingMachine_BasicAttack;
 	FGameplayTag Abilities_VendingMachine_AttackSpeedBuff;
+	// ★Plan5(잭팟칩)★ ★칩 그룹 키 전용★ — 칩 레벨 TargetAbilityTag · SkillDisplayNames 에만 쓴다.
+	// 어떤 GA 의 AbilityTags 에도 넣지 말 것: 업그레이드 키(첫 "Abilities.*" 태그)가 흔들린다 (Plan5 T-51)
+	FGameplayTag Abilities_VendingMachine_Jackpot;
 	FGameplayTag Abilities_RobotVacuum_AirShot;
 	FGameplayTag Abilities_RobotVacuum_JetJump;
 	FGameplayTag Abilities_RobotVacuum_Dash;

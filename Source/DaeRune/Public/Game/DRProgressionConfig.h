@@ -251,6 +251,87 @@ struct FDRCoinChipTuning
 };
 
 /**
+ * ★Plan5(잭팟칩)★ 잭팟 캡슐 확률표(0~1). 합이 1 이어야 한다.
+ * 코드는 Normalized() 로 방어하지만, 합이 틀리면 디자이너 의도와 다른 확률이 조용히 나간다 —
+ * DA_ProgressionConfig 편집 시 검사가 알려 준다 (Plan5 D-61).
+ */
+USTRUCT(BlueprintType)
+struct FDRJackpotOdds
+{
+	GENERATED_BODY()
+
+	FDRJackpotOdds() = default;
+	FDRJackpotOdds(float InBronze, float InSilver, float InGold)
+		: Bronze(InBronze), Silver(InSilver), Gold(InGold) {}
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Jackpot", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float Bronze = 0.5f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Jackpot", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float Silver = 0.4f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Jackpot", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float Gold = 0.1f;
+
+	float Sum() const { return Bronze + Silver + Gold; }
+
+	/** 음수를 0 으로 자르고 합이 1 이 되게 나눈다. 합이 0 이면 Fallback 을 그대로 돌려준다. */
+	FDRJackpotOdds Normalized(const FDRJackpotOdds& Fallback) const;
+};
+
+/**
+ * ★Plan5(잭팟칩)★ 자판기 잭팟 칩 3종의 동적 상수.
+ *
+ * ★칩이 없을 때의 기본 확률·피해는 여기가 아니다★ — GA BP(GA_VendingMachineBasicAttack)의
+ * BronzeCapsuleChance / SilverCapsuleChance / …CapsuleDamage 에 있다.
+ * 여기 있는 값은 전부 "그 칩을 꼈을 때만" 쓰인다.
+ */
+USTRUCT(BlueprintType)
+struct FDRJackpotChipTuning
+{
+	GENERATED_BODY()
+
+	// ========== ① VM.Asc.JackpotGold (황금 레버) ==========
+
+	// 이 칩을 끼면 확률표를 ★통째로★ 이것으로 바꾼다. 기본: 브론즈 75 / 실버 0 / 골드 25
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Jackpot|GoldRush")
+	FDRJackpotOdds GoldRushOdds = FDRJackpotOdds(0.75f, 0.0f, 0.25f);
+
+	// ========== ② VM.Asc.JackpotDouble (쌍둥이 캡슐) ==========
+
+	/**
+	 * 골드를 0 으로 만들 때, 기본 골드 확률 중 ★브론즈로 옮길 비율★(나머지는 실버로).
+	 * 0.5 = 절반씩 → 기본 50/40/10 이면 55/45/0.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Jackpot|Double", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float DoubleGoldToBronzeShare = 0.5f;
+
+	/**
+	 * 같은 색 캡슐을 한 발 더 쏘기까지의 지연(초).
+	 * ★다음 잭팟까지의 최단 시간(MinFireInterval × 11 = 0.55초)보다 짧아야 한다★ — 길면 두 번째 발이 다음 잭팟에 덮인다 (Plan5 T-56)
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Jackpot|Double", meta = (ClampMin = "0.01"))
+	float DoubleShotDelay = 0.15f;
+
+	// ========== ③ VM.Asc.JackpotPity (적립 카드) ==========
+
+	// 이 칩을 끼면 쓰는 ★자기만의 기본 확률★ (단점). 기본: 브론즈 45 / 실버 50 / 골드 5
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Jackpot|Pity")
+	FDRJackpotOdds PityBaseOdds = FDRJackpotOdds(0.45f, 0.50f, 0.05f);
+
+	/**
+	 * 브론즈/실버가 나올 때마다 ★그 색에서 빼서 골드에 더하는 양★ (%p, 절대값). 0.02 = 2%p.
+	 * 한 색이 0 에 닿으면 더 빼지 않고, 골드는 실제로 뺀 만큼만 오른다. 골드가 나오면 초기화 (Plan5 D-57)
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Jackpot|Pity", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float PityStep = 0.02f;
+
+	// 이 칩을 끼면 골드 캡슐 기본 피해가 이 값이 된다 (단점 — BP 의 GoldCapsuleDamage 150 대신)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Jackpot|Pity", meta = (ClampMin = "0.0"))
+	float PityGoldDamage = 120.f;
+};
+
+/**
  * 돌파 칩(⑥⑦⑧)의 동적 효과 튜닝 상수. (Plan3(공용칩) §17.4.3)
  *
  * 이 수치들은 카탈로그의 FDRUpgradeModifier 로 표현할 수 없다 —
@@ -335,6 +416,11 @@ struct FDRChipTuning
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Coin")
 	FDRCoinChipTuning Coin;
+
+	// ========== 자판기 잭팟 칩 (Plan5(잭팟칩)) ==========
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Jackpot")
+	FDRJackpotChipTuning Jackpot;
 };
 
 /**
