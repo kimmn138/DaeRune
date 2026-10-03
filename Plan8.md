@@ -193,10 +193,11 @@ Armature_ProxyTrueRootJoint (루트)
 - BT 구조(사용자 확인): **`TargetToFollow` 가 있으면 그 플레이어를 쫓아가 공격, 없으면 `TargetCleanserSite` 를 쫓아가 공격.**
 - 서비스 동작 (2026-09-29 컴파일된 BP 바이트코드를 직접 풀어 확인):
   - `BTS_FindNearestPlayer_Dog` — 매 틱 먼저 `HasFirstAttacker` 를 본다. **true 면 아무것도 안 한다.** false 면 인지된 플레이어 중 15m(출혈이면 30m) 안의 가장 가까운 대상을 `TargetToFollow` 에 쓰고, 아무도 없고 전투가 3초 넘게 없으면 `TargetToFollow` 를 비운다(→ 사이트로 복귀).
-  - `BTS_CheckValidTarget` — `TargetToFollow` 가 ① 죽었거나 ② 1.5초 넘게 도달 불가거나 ③ 시야 거리(`NormalSightRange`)보다 멀면서 **전투가 3초 넘게 없으면** `TargetToFollow`·`FirstAttacker` 를 비우고 `HasFirstAttacker = false`.
+  - `BTS_CheckValidTarget` — `TargetToFollow` 가 ① 죽었거나 ② **벽에 가렸거나** ③ 시야 거리(`NormalSightRange` — 지상 15m · 잠자리 30m)보다 멀면서 **전투가 3초 넘게 없으면**(`HasCombatTimedOut(3)` — BB `LastCombatTime`) `TargetToFollow`·`FirstAttacker` 를 비우고 `HasFirstAttacker = false`.
+    - ② 는 길찾기가 아니라 `IsActorReachable` = **WorldStatic 라인 트레이스**(벽·지형 가림)다. 가린 틱에 BB `UnreachableSince` 에 시각을 적고, 다음 틱에도 가려 있으면 비운다. 비교가 `경과 < 1.5` 라서 "1.5초 넘게"가 아니라 **서비스 2틱 연속(≈0.5초)** 이면 풀린다(기존 동작 — 이 계획 범위 밖). ①·③ 은 가리지 않았을 때만 검사한다. 서비스 주기는 엔진 기본 0.5±0.1초(BT·CDO 어디서도 안 바꿈).
   - 잠자리 서비스 2개도 `HasFirstAttacker` 를 먼저 따른다(사용자 확인).
   - `BTS_FindNearestPlayer_Mole`(움직이지 않는 두더지 보스) 은 `HasFirstAttacker` 를 보지 않고 매번 가장 가까운 플레이어를 `TargetToFollow` 에 쓴다(에셋에 해당 키 참조 없음) — 기본 공격 대상이 이 키다.
-- → **도발 = C++ 이 키 3개(`TargetToFollow`·`FirstAttacker`·`HasFirstAttacker`)를 벨보이로 쓰고, 도발 동안 짧은 주기로 다시 쓰며 전투 시간을 갱신한다**(D-16). 서비스는 `HasFirstAttacker` 때문에 손을 떼고, `CheckValidTarget` 의 ③은 전투 시간 갱신으로 막힌다. BT 서비스 수정은 두더지 서비스 1곳(선택)뿐.
+- → **도발 = C++ 이 키 3개(`TargetToFollow`·`FirstAttacker`·`HasFirstAttacker`)를 벨보이로 쓰고, 도발 동안 짧은 주기로 다시 쓰며 전투 시간을 갱신하고 `UnreachableSince` 를 0 으로 되돌린다**(D-16). 서비스는 `HasFirstAttacker` 때문에 손을 떼고, `CheckValidTarget` 의 ③은 전투 시간 갱신으로, ②는 `UnreachableSince` 초기화로 막힌다 — 도발 5초 동안은 벨보이만 노린다(①만 남는다). BT 서비스 수정은 두더지 서비스 1곳(선택)뿐.
 - 부품 도둑 BT(`BB_EnemyBlackboard_PartThief`)에는 타깃 키가 없다(D-17).
 
 ### 2.5 엔진(UE 5.5) 확인
@@ -228,8 +229,8 @@ GA_BellBoy_BasicAttack                     GA_BellBoy_Taunt                 GA_B
   ③ HandleIncomingDamage (기존 그대로)
   + UDRCleanserSiteAttributeSet::HandleIncomingDamage 에도 ② 한 줄                 (D-14)
 
-AI   C++ 이 TargetToFollow · FirstAttacker · HasFirstAttacker = 벨보이 + 전투 시간 갱신 (도발 동안 0.2s 주기) (D-16)
-     기존 서비스는 HasFirstAttacker 때문에 손을 뗀다 — BT 수정 없음 (두더지 서비스만 선택적 분기 1개)
+AI   C++ 이 TargetToFollow · FirstAttacker · HasFirstAttacker = 벨보이 + 전투 시간 갱신 + UnreachableSince = 0 (도발 동안 0.2s 주기) (D-16)
+     기존 서비스는 HasFirstAttacker 때문에 손을 떼고, 거리·가림 해제에도 안 걸린다 — BT 수정 없음 (두더지 서비스만 선택적 분기 1개)
 연출 GC_BellBoy_Hat_Single/Double (머리 위 모자) · GC_BellBoy_HatBlock (막는 순간) · GC_BellBoy_Taunted ("!")
 ```
 
@@ -238,8 +239,8 @@ AI   C++ 이 TargetToFollow · FirstAttacker · HasFirstAttacker = 벨보이 + �
 ## 4. 작업 순서 한눈에
 
 - [ ] **STEP 0** 준비
-- [ ] **STEP 1** [C++] 기반 — enum · 태그 · 설정 구조체 · 블랙보드 키 · 라이브러리 헬퍼 · 피해 관문
-- [ ] **STEP 2** [C++] 스킬 클래스 5개 → **빌드**
+- [x] **STEP 1** [C++] 기반 — enum · 태그 · 설정 구조체 · 블랙보드 키 · 라이브러리 헬퍼 · 피해 관문
+- [x] **STEP 2** [C++] 스킬 클래스 5개 → **빌드**
 - [ ] **STEP 3** [에디터] 애니메이션 에셋 — 소켓 · 슬롯 · 시퀀스 설정 · AO · 블렌드스페이스 · 노티파이 스테이트 · 몽타주 6개
 - [ ] **STEP 4** [에디터] `ABP_BellBoy`
 - [ ] **STEP 5** [에디터] `BP_BellBoy` + 클래스 등록 + 대기실 위젯 → **1차 테스트(선택·이동·애니)**
@@ -396,6 +397,8 @@ struct FBellBoyConfig
 	inline const FName TargetToFollow = TEXT("TargetToFollow");
 	// ★Plan8(시선집중)★ 타깃 서비스들이 쓰는 거리 키 (Plan8 D-16)
 	inline const FName DistanceToTarget = TEXT("DistanceToTarget");
+	// ★Plan8(시선집중)★ BTS_CheckValidTarget 의 "벽에 가림" 타이머 — 도발 동안 0 으로 되돌린다 (Plan8 D-16)
+	inline const FName UnreachableSince = TEXT("UnreachableSince");
 ```
 
 ### 1-5. 라이브러리 헬퍼 — `Public/AbilitySystem/DRAbilitySystemLibrary.h` · `Private/.../DRAbilitySystemLibrary.cpp`
@@ -457,9 +460,9 @@ struct FBellBoyConfig
 	/**
 	 * ★도발 어그로 1회 적용★ (Plan8 D-16) — 서버 전용
 	 *  · 도발 중      → 블랙보드 TargetToFollow / FirstAttacker = 도발자, HasFirstAttacker = true, DistanceToTarget,
-	 *                   포커스, 전투 시간(UpdateCombatTime) 을 갱신하고 true.
+	 *                   UnreachableSince = 0, 포커스, 전투 시간(UpdateCombatTime) 을 갱신하고 true.
 	 *                   HasFirstAttacker 가 true 라 기존 FindNearestPlayer 서비스는 타깃을 건드리지 않고,
-	 *                   전투 시간이 갱신돼 CheckValidTarget 의 "멀고 3초간 전투 없음" 조건에도 안 걸린다.
+	 *                   CheckValidTarget 의 "멀고 3초간 전투 없음"(전투 시간)·"벽에 가림"(UnreachableSince) 해제에도 안 걸린다.
 	 *  · 도발자 사망  → 도발 GE 를 지우고 false (타깃 정리는 CheckValidTarget 이 한다 — Plan8 D-12)
 	 *  · 도발 아님    → 아무것도 안 하고 false
 	 * 블랙보드에 없는 키는 건드리지 않는다 — BB 마다 키 구성이 다르다.
@@ -471,6 +474,8 @@ struct FBellBoyConfig
 	 * ★도발 유지 타이머★ (Plan8 D-16) — 서버 전용. 도발을 건 직후 한 번 부른다.
 	 * Interval(0.2초)마다 ApplyTauntAggro 를 다시 부르고, false 가 나오면(도발 GE 만료·도발자 사망) 스스로 멈춘다.
 	 * 적이 도발 GE 를 들고 있는 동안만 돌기 때문에 어빌리티가 끝나도(도발 5초가 모션보다 길다) 계속 유지된다.
+	 * ★Interval 은 0.4초(CheckValidTarget 서비스의 최소 틱 간격)보다 짧아야 한다★ — 서비스 두 틱 사이에
+	 * UnreachableSince 를 한 번은 0 으로 되돌려야 "벽에 가림" 해제가 안 걸린다 (Plan8 T-28).
 	 */
 	static void StartTauntAggroRefresh(AAIController* OwnerController, float Interval = 0.2f);
 
@@ -539,7 +544,8 @@ bool UDRAbilitySystemLibrary::TryConsumeBellBoyHat(UAbilitySystemComponent* Targ
 	// ① Double → Single ★Single 을 먼저 걸고 Double 을 지운다★ (D-20)
 	//    순서를 거꾸로 하면 한 순간 "모자 없음"이 되어 그 사이 들어온 피해를 못 막는다.
 	const TArray<FActiveGameplayEffectHandle> Doubles =
-		TargetASC->GetActiveEffectsWithAllTags(FGameplayTagContainer(Tags.Buff_BellBoy_Hat_Double));
+		TargetASC->GetActiveEffects(
+			FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tags.Buff_BellBoy_Hat_Double)));   // 부여 태그 조회 (T-29)
 	if (Doubles.Num() > 0)
 	{
 		const UGameBalanceConfig* Config = GetGameBalanceConfig(TargetASC->GetAvatarActor());
@@ -559,7 +565,8 @@ bool UDRAbilitySystemLibrary::TryConsumeBellBoyHat(UAbilitySystemComponent* Targ
 
 	// ② Single → 제거
 	const TArray<FActiveGameplayEffectHandle> Singles =
-		TargetASC->GetActiveEffectsWithAllTags(FGameplayTagContainer(Tags.Buff_BellBoy_Hat_Single));
+		TargetASC->GetActiveEffects(
+			FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tags.Buff_BellBoy_Hat_Single)));   // 부여 태그 조회 (T-29)
 	if (Singles.Num() > 0)
 	{
 		TargetASC->RemoveActiveGameplayEffect(Singles[0]);
@@ -636,7 +643,8 @@ bool UDRAbilitySystemLibrary::GetTauntInfo(AActor* Enemy, AActor*& OutTaunter, f
 	if (!ASC || !ASC->HasMatchingGameplayTag(Tags.Debuff_Taunted)) return false;   // 빠른 탈출
 
 	const TArray<FActiveGameplayEffectHandle> Handles =
-		ASC->GetActiveEffectsWithAllTags(FGameplayTagContainer(Tags.Debuff_Taunted));
+		ASC->GetActiveEffects(
+			FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tags.Debuff_Taunted)));   // 부여 태그 조회 (T-29)
 	const FActiveGameplayEffect* Active = Handles.Num() > 0 ? ASC->GetActiveGameplayEffect(Handles[0]) : nullptr;
 	if (!Active) return false;   // 새 도발이 이전 것을 지우므로 항상 1개다 (D-15)
 
@@ -712,6 +720,11 @@ bool UDRAbilitySystemLibrary::ApplyTauntAggro(AAIController* OwnerController)
 	{
 		DRAIC->UpdateCombatTime();
 	}
+	// ★가림 타이머 초기화★ — BTS_CheckValidTarget 은 벨보이가 벽에 가린 채(IsActorReachable = WorldStatic 라인 트레이스)
+	// 서비스 2틱(≈0.5초)이 지나면 타깃을 비운다. 0 으로 되돌려 두면 서비스는 매 틱 "이제 막 가려짐"으로 보고 넘어간다.
+	// 도발 판정은 시야를 안 보므로(D-19) 벽 뒤에서 걸린 적이 흔하다 — 빼면 0.5초마다 사이트 쪽으로 틀었다 돌아온다 (T-28).
+	if (HasKey(DRBlackboardKeys::UnreachableSince)) BB->SetValueAsFloat(DRBlackboardKeys::UnreachableSince, 0.f);
+
 	// 어그로 연출(ABP) — 첫 피격 어그로(DREnemyAttributeSet)와 같은 플래그
 	if (ADREnemy* Enemy = Cast<ADREnemy>(Pawn))
 	{
@@ -2164,7 +2177,8 @@ State Machine "Locomotion" ──► Save Cached Pose [Locomotion]
 - 도발은 C++ `ApplyTauntAggro` + `StartTauntAggroRefresh`(STEP 1-5, 2-2)가 처리한다. **일반 적의 BT·서비스는 고치지 않는다.**
   - BT 는 `TargetToFollow` 가 있으면 그 플레이어를, 없으면 `TargetCleanserSite` 를 쫓는다 → 사이트를 치던 적도 도발 순간 벨보이로 돌아선다.
   - `BTS_FindNearestPlayer_Dog`/`_DragonFly` 는 `HasFirstAttacker = true` 면 아무것도 안 한다 → 타깃을 덮어쓰지 않는다.
-  - `BTS_CheckValidTarget`(계열)의 "멀고 3초간 전투 없음" 해제는 0.2초 주기 전투 시간 갱신으로 막힌다. 죽음·1.5초 도달 불가 해제는 그대로 동작한다(D-16 / T-8).
+  - `BTS_CheckValidTarget`(계열)의 해제 3개(§2.4) 중 ③ "멀고 3초간 전투 없음"은 0.2초 주기 전투 시간 갱신으로, ② "벽에 가림"(≈0.5초)은 `UnreachableSince` 초기화로 막힌다 — **도발 5초 동안은 벽 뒤에 있어도 벨보이만 노린다**(의도 — 사용자 확정 2026-09-29). ① 죽음 해제만 그대로 동작한다(D-16 / T-8 / T-28).
+  - 스턴이 타깃 키를 지워도(`ADREnemy::StunTagChanged`) 0.2초 안에 다시 쓴다 → 스턴이 풀리면 다시 벨보이에게 간다.
 - **두더지 보스(`BTS_FindNearestPlayer_Mole`)** — 움직이지 않고, 튀어나오기(스킬1)는 기존처럼 **무작위 플레이어**, 기본 공격은 `TargetToFollow`(가장 가까운 플레이어)에게 한다.
   도발로 `TargetToFollow` 를 벨보이로 바꾸면 기본 공격이 벨보이에게 간다. 단 이 서비스는 `HasFirstAttacker` 를 보지 않고 매 틱 가장 가까운 플레이어로 덮어쓰므로(§2.4), **서비스에 분기 1개를 넣는다(권장)**:
 ```
@@ -2185,9 +2199,10 @@ Get Taunt Target (Controlled Pawn) ─► Is Valid ── True ──► (아무
 - [ ] 1초 뒤 30m 안 적 전원이 벨보이 쪽으로(더 가까운 아군이 있어도) · 0.5초 판정 동안 새로 들어온 적도 걸린다 · 1.5초 이후 들어온 적은 안 걸린다.
 - [ ] 도발된 적 이속 +10%(지상 적 — 잠자리는 T-12) · 도발된 적이 **누구를 때려도** 피해 ×0.8 · 도발 안 된 적은 그대로.
 - [ ] 적마다 걸린 뒤 5초에 풀린다(모션이 끝난 뒤에도 잠깐 유지).
-- [ ] 벨보이가 죽으면 적들이 곧바로(≤ 서비스 주기) 다른 대상을 찾는다.
+- [ ] 벨보이가 벽 뒤에 숨어 있어도(적→벨보이 직선이 벽에 막힘) 도발된 적이 5초 동안 사이트 쪽으로 틀지 않고 벽을 돌아 벨보이에게 온다. 0.5초마다 사이트 쪽으로 움찔하면 T-28.
+- [ ] 벨보이가 죽으면 적들이 1초 남짓 안에 다른 대상을 찾는다(시야가 트여 있으면 서비스 1틱, 벽 뒤면 2틱 — §2.4).
 - [ ] 부품 도둑은 도발되지 않는다 / 아르마딜로·잠자리·개 모두 끌려온다.
-- [ ] 페이즈3 에서 클렌저 사이트를 치던 적도 벨보이에게 끌려오고, 도발이 끝나면 멀리 있는 적은 3초쯤 뒤 사이트로 돌아간다.
+- [ ] 페이즈3 에서 클렌저 사이트를 치던 적도 벨보이에게 끌려오고, 도발이 끝나면 멀리 있는 적은 3초쯤 뒤(벽에 가려 있으면 1초 안에) 사이트로 돌아간다.
 - [ ] 도발 중 다른 플레이어가 그 적을 때려도 타깃이 바뀌지 않는다.
 - [ ] 두더지 보스: 튀어나오는 위치는 여전히 무작위 · 기본 공격은 도발 5초 동안 벨보이에게만.
 
@@ -2427,7 +2442,7 @@ Event On Remove (My Target, Parameters)
 | **D-13** | 도발 상태 = GE(`Debuff.Taunted` + 이속 모디파이어 + SetByCaller 피해 배율). 도발자 = 컨텍스트 `OriginalInstigatorASC` 의 아바타 | 지속·만료를 GAS 가 관리하고, 배율을 스펙이 들고 다녀 나중에 칩이 시전 시점에 바꿀 수 있다 |
 | **D-14** | 도발 피해 배율은 `UDRAttributeSet::PostGameplayEffectExecute`(플레이어·적 공용 관문) + 클렌저 사이트 AS 에서 곱한다 | Plan5 D-10 과 같은 이유 — 디버프 DoT 은 `ExecCalc_Damage` 를 안 탄다. 사이트 AS 는 공용 관문을 상속하지 않는다 |
 | **D-15** | 새 도발은 기존 도발 GE 를 지우고 건다(마지막 벨보이가 이김). 한 시전에 적당 1회 | 이속 모디파이어가 두 번 곱해지지 않고, 도발자가 늘 하나로 정해진다 |
-| **D-16** | AI 연결 = C++ `ApplyTauntAggro` 가 `TargetToFollow`·`FirstAttacker` = 벨보이, `HasFirstAttacker` = true 를 쓰고 전투 시간을 갱신한다. 도발 GE 가 있는 동안 `StartTauntAggroRefresh` 가 0.2초마다 다시 부른다. BT 서비스는 두더지 1곳만(선택) | 사용자 제안(2026-09-29). BT 는 `TargetToFollow` 를 사이트보다 먼저 보고, FindNearest 서비스는 `HasFirstAttacker` 면 손을 떼며, `CheckValidTarget` 의 거리 해제는 전투 시간 갱신으로 막힌다(바이트코드 확인). 값이 같으면 블랙보드가 옵저버를 깨우지 않아 주기 재기록 비용이 없다 |
+| **D-16** | AI 연결 = C++ `ApplyTauntAggro` 가 `TargetToFollow`·`FirstAttacker` = 벨보이, `HasFirstAttacker` = true 를 쓰고, 전투 시간을 갱신하고, `UnreachableSince` 를 0 으로 되돌린다. 도발 GE 가 있는 동안 `StartTauntAggroRefresh` 가 0.2초마다 다시 부른다 → **도발 5초 동안은 거리·가림 해제가 안 걸리고 벨보이만 노린다(죽음 해제만 남음)**. BT 서비스는 두더지 1곳만(선택) | 사용자 제안(2026-09-29), "5초 동안 벨보이만"은 사용자 확정(2026-09-29). BT 는 `TargetToFollow` 를 사이트보다 먼저 보고, FindNearest 서비스는 `HasFirstAttacker` 면 손을 떼며, `CheckValidTarget` 의 거리 해제는 전투 시간 갱신으로, 가림 해제는 `UnreachableSince` 초기화로 막힌다(바이트코드 확인). 갱신 0.2초 < 서비스 최소 간격 0.4초라 가림 해제가 끼어들 틈이 없다. 값이 같으면 블랙보드가 옵저버를 깨우지 않아 주기 재기록 비용이 없다 |
 | **D-17** | 블랙보드에 `FirstAttacker`/`TargetToFollow` 키가 없는 적(부품 도둑)은 도발하지 않는다 | 도주형이 이속 버프만 받아 더 빨리 도망가는 것을 막는다 |
 | **D-18** | 도발 중 슈퍼아머 — 시선 집중 GA 가 `Effects.HitReact` 를 Block | 같은 슬롯 그룹이라 피격 몽타주가 5초 도발 모션을 끊고, 그러면 어빌리티가 즉시 끝난다(T-24) |
 | **D-19** | 판정 = 0.5초 동안 0.1초 간격 6회, 30m 구, 시야 검사 없음(옵션 `bRequireLineOfSight`) | 요구 "판정 범위 유지 0.5초 / 30m 이내의 모든 적". 창 안에 들어온 적도 걸린다 |
@@ -2478,6 +2493,8 @@ Event On Remove (My Target, Parameters)
 | **T-25** | 모자·도발도 **누르고 있으면 반복** | 입력 규칙이 다른 로봇과 같다(Held → 재발동). RMB 를 누르고 있으면 0.8초마다 물 20 씩 → 의도 확인 |
 | **T-26** | `DA_GameBalanceConfig` 가 없는 게임모드(튜토리얼) | 모자 GE 를 못 찾아 모자가 무동작(경고 로그). 벨보이는 튜토리얼 대상이 아니라 현재는 무해 |
 | **T-27** | 모자를 스택형 GE 1개로 만들면 | 스택이 2→1 로 줄어도 `OverlayWidgetController` 가 방송하지 않아 HUD 숫자가 "2" 로 남는다 → GE 2종(D-20) |
+| **T-28** | 도발 갱신에서 `UnreachableSince` 초기화를 빼거나, 갱신 주기를 0.4초 이상으로 늘림 | `CheckValidTarget` 은 벨보이가 벽에 가린 채 서비스 2틱(≈0.5초)이면 타깃을 비운다(§2.4) → 벽 뒤의 적이 사이트 쪽으로 틀었다가 0.2초 뒤 돌아오기를 반복한다. 도발 판정은 시야를 안 보므로(D-19) 벽 뒤 적이 흔하다 → 초기화 한 줄 + 주기 < 0.4초 (STEP 1-5) |
+| **T-29** | 부여 태그(Target Tags)로 단 GE 를 `GetActiveEffectsWithAllTags` 로 찾음 | 이 함수는 **에셋 태그**만 비교한다 → `HasMatchingGameplayTag` 는 true 인데 핸들이 0개라 도발이 걸려도 `ApplyTauntAggro` 가 "도발 아님"으로 보고 타깃을 안 바꾸고(2026-10-02 실측), 모자는 피해를 못 막는다 → `GetActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(...))` (STEP 1-5) |
 
 ---
 

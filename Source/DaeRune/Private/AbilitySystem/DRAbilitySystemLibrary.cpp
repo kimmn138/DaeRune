@@ -23,6 +23,18 @@
 #include "Engine/OverlapResult.h"
 #include "Game/DRStageGameState.h"
 #include "GameFramework/Character.h"
+// ★Plan8(벨보이)★ 모자·도발·몽타주 헬퍼
+#include "AIController.h"
+#include "AI/DRAIController.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/AnimNotifies/AnimNotify.h"
+#include "BehaviorTree/BlackboardComponent.h"
+#include "BehaviorTree/BehaviorTreeComponent.h"
+#include "BehaviorTree/BehaviorTree.h"
+#include "Character/DRCharacterBase.h"
+#include "Character/DREnemy.h"
+#include "Components/CapsuleComponent.h"
+#include "TimerManager.h"
 
 bool UDRAbilitySystemLibrary::MakeWidgetControllerParams(const UObject* WorldContextObject, FWidgetControllerParams& OutWCParams, ADRHUD*& OutDRHUD)
 {
@@ -926,4 +938,318 @@ void UDRAbilitySystemLibrary::ApplyEffectSpecWithSetByCaller(
 
 	SpecHandle.Data.Get()->SetSetByCallerMagnitude(Tag, Magnitude);
 	ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+}
+
+// ========================= ★Plan8(모자)★ 모자 보호막 =========================
+
+bool UDRAbilitySystemLibrary::HasBellBoyHat(AActor* Target)
+{
+	const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
+	return ASC && ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Buff_BellBoy_Hat);   // 부모 태그 — 자식 둘 다 잡힌다
+}
+
+bool UDRAbilitySystemLibrary::TryEquipBellBoyHat(AActor* Target, UAbilitySystemComponent* SourceASC, int32 Charges)
+{
+	ADRCharacterBase* Character = Cast<ADRCharacterBase>(Target);
+	if (!IsValid(Character) || !Character->HasAuthority()) return false;
+	if (ICombatInterface::Execute_IsDead(Character)) return false;
+
+	UAbilitySystemComponent* TargetASC = Character->GetAbilitySystemComponent();
+	if (!TargetASC) return false;
+
+	// 최대 1개 (D-22) — 이미 쓰고 있으면 호출부가 모자를 남긴다
+	if (TargetASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Buff_BellBoy_Hat)) return false;
+
+	const UGameBalanceConfig* Config = GetGameBalanceConfig(Character);
+	const TSubclassOf<UGameplayEffect> EffectClass = !Config ? nullptr
+		: (Charges >= 2 ? Config->BellBoy.HatDoubleEffect : Config->BellBoy.HatSingleEffect);
+	if (!EffectClass)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[BellBoy] DA_GameBalanceConfig.BellBoy 의 모자 GE 가 비어 있다 — 모자 무동작"));
+		return false;
+	}
+
+	// 소스 ASC 가 없으면(던진 벨보이가 나감 등) 대상 자신을 소스로 — ApplyTimedTagEffect 와 같은 처리
+	UAbilitySystemComponent* Source = SourceASC ? SourceASC : TargetASC;
+	FGameplayEffectContextHandle Context = Source->MakeEffectContext();
+	Context.AddSourceObject(Source->GetAvatarActor());
+
+	const FGameplayEffectSpecHandle Spec = Source->MakeOutgoingSpec(EffectClass, 1.f, Context);
+	return Spec.IsValid() && TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get()).IsValid();
+}
+
+bool UDRAbilitySystemLibrary::TryConsumeBellBoyHat(UAbilitySystemComponent* TargetASC)
+{
+	if (!TargetASC || !TargetASC->IsOwnerActorAuthoritative()) return false;
+
+	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+	// ★빠른 탈출★ — 모든 피해가 이 함수를 지난다. 모자가 없으면 태그 조회 한 번으로 끝난다.
+	if (!TargetASC->HasMatchingGameplayTag(Tags.Buff_BellBoy_Hat)) return false;
+
+	FGameplayCueParameters Cue;
+	Cue.Location = TargetASC->GetAvatarActor() ? TargetASC->GetAvatarActor()->GetActorLocation() : FVector::ZeroVector;
+
+	// ① Double → Single ★Single 을 먼저 걸고 Double 을 지운다★ (D-20)
+	//    순서를 거꾸로 하면 한 순간 "모자 없음"이 되어 그 사이 들어온 피해를 못 막는다.
+	const TArray<FActiveGameplayEffectHandle> Doubles =
+		TargetASC->GetActiveEffects(
+			FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tags.Buff_BellBoy_Hat_Double)));
+	if (Doubles.Num() > 0)
+	{
+		const UGameBalanceConfig* Config = GetGameBalanceConfig(TargetASC->GetAvatarActor());
+		if (Config && Config->BellBoy.HatSingleEffect)
+		{
+			const FGameplayEffectSpecHandle Single = TargetASC->MakeOutgoingSpec(
+				Config->BellBoy.HatSingleEffect, 1.f, TargetASC->MakeEffectContext());
+			if (Single.IsValid())
+			{
+				TargetASC->ApplyGameplayEffectSpecToSelf(*Single.Data.Get());
+			}
+		}
+		TargetASC->RemoveActiveGameplayEffect(Doubles[0]);
+		TargetASC->ExecuteGameplayCue(Tags.GameplayCue_BellBoy_HatBlock, Cue);
+		return true;
+	}
+
+	// ② Single → 제거
+	const TArray<FActiveGameplayEffectHandle> Singles =
+		TargetASC->GetActiveEffects(
+			FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tags.Buff_BellBoy_Hat_Single)));
+	if (Singles.Num() > 0)
+	{
+		TargetASC->RemoveActiveGameplayEffect(Singles[0]);
+		TargetASC->ExecuteGameplayCue(Tags.GameplayCue_BellBoy_HatBlock, Cue);
+		return true;
+	}
+	return false;
+}
+
+USceneComponent* UDRAbilitySystemLibrary::GetHatAttachPoint(AActor* Target, FName& OutSocketName, FVector& OutRelativeOffset)
+{
+	OutSocketName = NAME_None;
+	OutRelativeOffset = FVector::ZeroVector;
+
+	ACharacter* Character = Cast<ACharacter>(Target);
+	if (!Character) return Target ? Target->GetRootComponent() : nullptr;
+
+	static const FName HatSocketName(TEXT("HatSocket"));
+	if (USkeletalMeshComponent* Mesh = Character->GetMesh())
+	{
+		if (Mesh->DoesSocketExist(HatSocketName))
+		{
+			OutSocketName = HatSocketName;
+			return Mesh;
+		}
+	}
+
+	// 폴백: 캡슐 꼭대기 + 10uu (머리를 따라 흔들리지는 않지만 모든 적에게 동작한다)
+	UCapsuleComponent* Capsule = Character->GetCapsuleComponent();
+	OutRelativeOffset = FVector(0.f, 0.f, Capsule->GetScaledCapsuleHalfHeight() + 10.f);
+	return Capsule;
+}
+
+// ========================= ★Plan8(시선집중)★ 도발 =========================
+
+void UDRAbilitySystemLibrary::GetAliveEnemiesWithinRadius(const UObject* WorldContextObject, const FVector& Origin,
+	float Radius, TArray<AActor*>& OutEnemies)
+{
+	OutEnemies.Reset();
+	const UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World) return;
+
+	TArray<FOverlapResult> Overlaps;
+	World->OverlapMultiByObjectType(Overlaps, Origin, FQuat::Identity,
+		FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(Radius));
+
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		ADREnemy* Enemy = Cast<ADREnemy>(Overlap.GetActor());
+		if (!IsValid(Enemy) || ICombatInterface::Execute_IsDead(Enemy)) continue;
+		OutEnemies.AddUnique(Enemy);   // 커스텀 히트박스도 Pawn 타입이라 한 적이 여러 번 잡힌다
+	}
+}
+
+bool UDRAbilitySystemLibrary::CanBeTaunted(AActor* Enemy)
+{
+	const APawn* Pawn = Cast<APawn>(Enemy);
+	const AAIController* AIC = Pawn ? Cast<AAIController>(Pawn->GetController()) : nullptr;
+	const UBlackboardComponent* BB = AIC ? AIC->GetBlackboardComponent() : nullptr;
+	if (!BB) return false;
+
+	return BB->GetKeyID(DRBlackboardKeys::FirstAttacker) != FBlackboard::InvalidKey
+		|| BB->GetKeyID(DRBlackboardKeys::TargetToFollow) != FBlackboard::InvalidKey;
+}
+
+bool UDRAbilitySystemLibrary::GetTauntInfo(AActor* Enemy, AActor*& OutTaunter, float& OutDamageMultiplier,
+	FActiveGameplayEffectHandle* OutHandle)
+{
+	OutTaunter = nullptr;
+	OutDamageMultiplier = 1.f;
+
+	const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Enemy);
+	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+	if (!ASC || !ASC->HasMatchingGameplayTag(Tags.Debuff_Taunted)) return false;   // 빠른 탈출
+
+	// ★OwningTags 쿼리★ — Debuff.Taunted 는 GE 의 "부여 태그"(Target Tags)다. GetActiveEffectsWithAllTags 는
+	// "에셋 태그"만 비교해서 태그가 붙어 있어도 GE 를 못 찾는다 (Plan8 T-29). 모자 조회도 같은 이유
+	const TArray<FActiveGameplayEffectHandle> Handles =
+		ASC->GetActiveEffects(
+			FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tags.Debuff_Taunted)));
+	const FActiveGameplayEffect* Active = Handles.Num() > 0 ? ASC->GetActiveGameplayEffect(Handles[0]) : nullptr;
+	if (!Active) return false;   // 새 도발이 이전 것을 지우므로 항상 1개다 (D-15)
+
+	if (const UAbilitySystemComponent* SourceASC = Active->Spec.GetContext().GetOriginalInstigatorAbilitySystemComponent())
+	{
+		OutTaunter = SourceASC->GetAvatarActor();                  // ★Instigator(PlayerState)가 아니다 (T-6)★
+	}
+	OutDamageMultiplier = Active->Spec.GetSetByCallerMagnitude(Tags.Data_Taunt_DamageMult, false, 1.f);
+	if (OutHandle) *OutHandle = Handles[0];
+	return true;
+}
+
+AActor* UDRAbilitySystemLibrary::GetTauntTarget(AActor* Enemy)
+{
+	AActor* Taunter = nullptr;
+	float Multiplier = 1.f;
+	if (!GetTauntInfo(Enemy, Taunter, Multiplier) || !IsValid(Taunter)) return nullptr;
+	if (Taunter->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Taunter)) return nullptr;
+	return Taunter;
+}
+
+float UDRAbilitySystemLibrary::GetTauntDamageMultiplier(AActor* SourceAvatar)
+{
+	AActor* Taunter = nullptr;
+	float Multiplier = 1.f;
+	if (!IsValid(SourceAvatar) || !GetTauntInfo(SourceAvatar, Taunter, Multiplier)) return 1.f;
+	return FMath::Max(0.f, Multiplier);   // 음수로 피해가 회복으로 뒤집히지 않게
+}
+
+bool UDRAbilitySystemLibrary::ApplyTauntAggro(AAIController* OwnerController)
+{
+	if (!OwnerController || !OwnerController->HasAuthority()) return false;
+
+	APawn* Pawn = OwnerController->GetPawn();
+	UBlackboardComponent* BB = OwnerController->GetBlackboardComponent();
+	auto HasKey = [BB](const FName& Key) { return BB && BB->GetKeyID(Key) != FBlackboard::InvalidKey; };
+
+	AActor* Taunter = nullptr;
+	float Multiplier = 1.f;
+	FActiveGameplayEffectHandle Handle;
+	const bool bTaunted = Pawn && GetTauntInfo(Pawn, Taunter, Multiplier, &Handle);
+
+	const bool bTaunterAlive = bTaunted && IsValid(Taunter)
+		&& !(Taunter->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Taunter));
+
+	if (!bTaunterAlive)
+	{
+		// [임시 진단] 도발 갱신이 멈추는 이유
+		UE_LOG(LogDR, Warning, TEXT("[TauntDiag] 5. 갱신 종료 %s — Taunted=%d Taunter=%s (BB=%d)"),
+			*GetNameSafe(Pawn), bTaunted ? 1 : 0, *GetNameSafe(Taunter), BB ? 1 : 0);
+
+		// 도발자가 죽었거나 사라졌다 → 도발 GE 를 지운다 (D-12).
+		// 블랙보드는 건드리지 않는다 — 죽은 타깃은 BTS_CheckValidTarget 이 알아서 비운다.
+		if (bTaunted)
+		{
+			if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Pawn))
+			{
+				ASC->RemoveActiveGameplayEffect(Handle);
+			}
+		}
+		return false;
+	}
+
+	// ★키 3개를 같이 쓴다★ — TargetToFollow 만 쓰면 HasFirstAttacker 가 false 로 남아
+	// BTS_FindNearestPlayer_* 가 다음 틱에 가장 가까운 플레이어로 덮어쓴다 (바이트코드 확인 — Plan8 §2.4).
+	// 값이 같으면 블랙보드는 옵저버를 깨우지 않으므로 주기적으로 다시 써도 MoveTo 가 재경로를 잡지 않는다.
+
+	// [임시 진단] 타깃이 벨보이가 아닐 때만 찍는다 — 첫 적용, 또는 0.2초 사이에 누가 덮어썼을 때(로그 도배 방지)
+	{
+		const UObject* PrevTarget = HasKey(DRBlackboardKeys::TargetToFollow) ? BB->GetValueAsObject(DRBlackboardKeys::TargetToFollow) : nullptr;
+		if (PrevTarget != Taunter)
+		{
+			const UBehaviorTreeComponent* BTComp = Cast<UBehaviorTreeComponent>(OwnerController->GetBrainComponent());
+			const UBTNode* ActiveNode = BTComp ? BTComp->GetActiveNode() : nullptr;
+			UE_LOG(LogDR, Warning, TEXT("[TauntDiag] 4. 어그로 쓰기 %s : 이전 TargetToFollow=%s → %s | 키 FA=%d HFA=%d TTF=%d Dist=%d Unreach=%d | BT=%s 활성노드=%s"),
+				*GetNameSafe(Pawn), *GetNameSafe(PrevTarget), *GetNameSafe(Taunter),
+				HasKey(DRBlackboardKeys::FirstAttacker) ? 1 : 0, HasKey(DRBlackboardKeys::HasFirstAttacker) ? 1 : 0,
+				HasKey(DRBlackboardKeys::TargetToFollow) ? 1 : 0, HasKey(DRBlackboardKeys::DistanceToTarget) ? 1 : 0,
+				HasKey(DRBlackboardKeys::UnreachableSince) ? 1 : 0,
+				BTComp ? *GetNameSafe(BTComp->GetRootTree()) : TEXT("없음"),
+				ActiveNode ? *ActiveNode->GetNodeName() : TEXT("없음"));
+		}
+	}
+
+	if (HasKey(DRBlackboardKeys::FirstAttacker))    BB->SetValueAsObject(DRBlackboardKeys::FirstAttacker, Taunter);
+	if (HasKey(DRBlackboardKeys::HasFirstAttacker)) BB->SetValueAsBool(DRBlackboardKeys::HasFirstAttacker, true);
+	if (HasKey(DRBlackboardKeys::TargetToFollow))   BB->SetValueAsObject(DRBlackboardKeys::TargetToFollow, Taunter);
+	if (HasKey(DRBlackboardKeys::DistanceToTarget)) BB->SetValueAsFloat(DRBlackboardKeys::DistanceToTarget, Pawn->GetDistanceTo(Taunter));
+
+	OwnerController->SetFocus(Taunter);
+
+	// ★전투 시간 갱신★ — BTS_CheckValidTarget 은 "타깃이 시야 거리보다 멀고 3초간 전투 없음"이면 타깃을 비운다.
+	// 30m 도발은 이 조건에 쉽게 걸리므로, 도발 동안 계속 갱신해 막는다.
+	if (ADRAIController* DRAIC = Cast<ADRAIController>(OwnerController))
+	{
+		DRAIC->UpdateCombatTime();
+	}
+	// ★가림 타이머 초기화★ — BTS_CheckValidTarget 은 벨보이가 벽에 가린 채(IsActorReachable = WorldStatic 라인 트레이스)
+	// 서비스 2틱(≈0.5초)이 지나면 타깃을 비운다. 0 으로 되돌려 두면 서비스는 매 틱 "이제 막 가려짐"으로 보고 넘어간다.
+	// 도발 판정은 시야를 안 보므로(D-19) 벽 뒤에서 걸린 적이 흔하다 — 빼면 0.5초마다 사이트 쪽으로 틀었다 돌아온다 (T-28).
+	if (HasKey(DRBlackboardKeys::UnreachableSince)) BB->SetValueAsFloat(DRBlackboardKeys::UnreachableSince, 0.f);
+
+	// 어그로 연출(ABP) — 첫 피격 어그로(DREnemyAttributeSet)와 같은 플래그
+	if (ADREnemy* Enemy = Cast<ADREnemy>(Pawn))
+	{
+		Enemy->bIsAggroed = true;
+	}
+	return true;
+}
+
+void UDRAbilitySystemLibrary::StartTauntAggroRefresh(AAIController* OwnerController, float Interval)
+{
+	if (!OwnerController || !OwnerController->HasAuthority()) return;
+	UWorld* World = OwnerController->GetWorld();
+	if (!World) return;
+
+	// 타이머 핸들을 람다가 들고 있어야 스스로 멈출 수 있다.
+	// 같은 적에게 다시 도발이 걸려 타이머가 두 개 돌아도 무해하다(같은 값을 쓰고, 둘 다 GE 만료 때 멈춘다).
+	TSharedRef<FTimerHandle> Handle = MakeShared<FTimerHandle>();
+	TWeakObjectPtr<AAIController> WeakController(OwnerController);
+	TWeakObjectPtr<UWorld> WeakWorld(World);
+	World->GetTimerManager().SetTimer(*Handle, FTimerDelegate::CreateLambda([WeakController, WeakWorld, Handle]()
+	{
+		if (!WeakController.IsValid() || !ApplyTauntAggro(WeakController.Get()))
+		{
+			if (UWorld* LiveWorld = WeakWorld.Get())
+			{
+				LiveWorld->GetTimerManager().ClearTimer(*Handle);   // 도발 만료·도발자 사망·적 소멸
+			}
+		}
+	}), FMath::Max(0.05f, Interval), true);
+}
+
+// ========================= ★Plan8(가방)★ 몽타주 =========================
+
+float UDRAbilitySystemLibrary::FindMontageEventTime(const UAnimMontage* Montage, const FGameplayTag& EventTag)
+{
+	if (!Montage || !EventTag.IsValid()) return -1.f;
+
+	static const FName EventTagPropertyName(TEXT("EventTag"));
+	for (const FAnimNotifyEvent& NotifyEvent : Montage->Notifies)
+	{
+		// AN_MontageEvent 는 BP 노티파이다 — C++ 타입을 모르므로 "EventTag" 라는 FGameplayTag 변수를 반사로 찾는다
+		const UAnimNotify* Notify = NotifyEvent.Notify;
+		if (!Notify) continue;
+
+		const FStructProperty* Property =
+			CastField<FStructProperty>(Notify->GetClass()->FindPropertyByName(EventTagPropertyName));
+		if (!Property || Property->Struct != FGameplayTag::StaticStruct()) continue;
+
+		const FGameplayTag* Tag = Property->ContainerPtrToValuePtr<FGameplayTag>(Notify);
+		if (Tag && Tag->MatchesTagExact(EventTag))
+		{
+			return NotifyEvent.GetTriggerTime();
+		}
+	}
+	return -1.f;
 }

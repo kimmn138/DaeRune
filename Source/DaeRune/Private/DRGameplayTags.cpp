@@ -791,4 +791,83 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FName("State.MoleBoss.Burrowed"),
 		FString("MoleBoss is underground and invulnerable")
 	);
+
+	/*
+	 * 벨보이 (Plan8)
+	 */
+
+	GameplayTags.Abilities_BellBoy_BasicAttack = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.BellBoy.BasicAttack"),
+		FString("BellBoy suitcase swing (LMB)")
+	);
+
+	GameplayTags.Abilities_BellBoy_Taunt = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.BellBoy.Taunt"),
+		FString("BellBoy taunt - draws nearby enemies (E)")
+	);
+
+	GameplayTags.Abilities_BellBoy_HatThrow = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.BellBoy.HatThrow"),
+		FString("BellBoy hat throw (RMB)")
+	);
+
+	GameplayTags.Event_Montage_BellBoy_BasicAttack = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Event.Montage.BellBoy.BasicAttack"),
+		FString("BellBoy swing notify - suitcase hit moment")
+	);
+
+	GameplayTags.Event_Montage_BellBoy_Taunt = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Event.Montage.BellBoy.Taunt"),
+		FString("BellBoy taunt notify - detection starts")
+	);
+
+	GameplayTags.Event_Montage_BellBoy_HatThrow = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Event.Montage.BellBoy.HatThrow"),
+		FString("BellBoy throw notify - hat leaves the hand")
+	);
+
+	GameplayTags.Debuff_Taunted = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Debuff.Taunted"),
+		FString("Enemy is taunted by a BellBoy")
+	);
+
+	GameplayTags.Data_Taunt_DamageMult = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Taunt.DamageMult"),
+		FString("SetByCaller - damage multiplier dealt by a taunted enemy")
+	);
+
+	GameplayTags.Buff_BellBoy_Hat = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.BellBoy.Hat"),
+		FString("Wearing a BellBoy hat (parent - query only)")
+	);
+
+	GameplayTags.Buff_BellBoy_Hat_Single = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.BellBoy.Hat.Single"),
+		FString("BellBoy hat - blocks 1 hit")
+	);
+
+	GameplayTags.Buff_BellBoy_Hat_Double = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.BellBoy.Hat.Double"),
+		FString("BellBoy hat - blocks 2 hits (picked up by its thrower)")
+	);
+
+	GameplayTags.GameplayCue_BellBoy_HatBlock = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.BellBoy.HatBlock"),
+		FString("BellBoy hat blocked a hit")
+	);
+
+	GameplayTags.GameplayCue_BellBoy_Hat_Single = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.BellBoy.Hat.Single"),
+		FString("BellBoy hat on head (1 hit)")
+	);
+
+	GameplayTags.GameplayCue_BellBoy_Hat_Double = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.BellBoy.Hat.Double"),
+		FString("BellBoy hat on head (2 hits)")
+	);
+
+	GameplayTags.GameplayCue_BellBoy_Taunted = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.BellBoy.Taunted"),
+		FString("Taunted enemy marker")
+	);
 }

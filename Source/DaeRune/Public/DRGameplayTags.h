@@ -244,6 +244,31 @@ public:
 	FGameplayTag Cooldown_MoleBoss_BurrowStrike;
 	FGameplayTag State_MoleBoss_Burrowed;
 
+	// ========== 벨보이 (Plan8) ==========
+	FGameplayTag Abilities_BellBoy_BasicAttack;
+	FGameplayTag Abilities_BellBoy_Taunt;
+	FGameplayTag Abilities_BellBoy_HatThrow;
+
+	// 몽타주 노티파이(AN_MontageEvent)가 보내는 이벤트
+	FGameplayTag Event_Montage_BellBoy_BasicAttack;	// 가방이 닿는 순간
+	FGameplayTag Event_Montage_BellBoy_Taunt;		// 도발 판정 시작
+	FGameplayTag Event_Montage_BellBoy_HatThrow;	// 모자가 손을 떠나는 순간
+
+	// ★GAS 태그★ — GE_BellBoy_Taunted 가 적에게 부여. C++ 이 읽는다 (Plan8 D-13)
+	FGameplayTag Debuff_Taunted;
+	// SetByCaller — 도발된 적이 "주는" 피해 배율(0.8). 도발 GE 스펙이 들고 다닌다 (Plan8 D-13)
+	FGameplayTag Data_Taunt_DamageMult;
+
+	// ★GAS 태그★ — 모자 보호막 (Plan8 D-20). 부모 태그는 "모자를 쓰고 있나" 조회 전용
+	FGameplayTag Buff_BellBoy_Hat;
+	FGameplayTag Buff_BellBoy_Hat_Single;
+	FGameplayTag Buff_BellBoy_Hat_Double;
+
+	FGameplayTag GameplayCue_BellBoy_HatBlock;
+	FGameplayTag GameplayCue_BellBoy_Hat_Single;
+	FGameplayTag GameplayCue_BellBoy_Hat_Double;
+	FGameplayTag GameplayCue_BellBoy_Taunted;
+
 private:
 	static FDRGameplayTags GameplayTags;
 };
