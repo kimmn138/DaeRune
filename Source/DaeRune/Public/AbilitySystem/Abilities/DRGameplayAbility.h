@@ -76,6 +76,11 @@ public:
     // ActorInfo 를 직접 받는 물 소모량 (CheckCost/ApplyCost 전용)
     float GetEffectiveWaterCostFor(const FGameplayAbilityActorInfo* ActorInfo) const;
 
+    // ★Plan5(공속칩)★ 이 어빌리티 소유자의 공격 속도 배율 (버프가 없으면 1.0).
+    // 계산은 UDRAbilitySystemLibrary::GetAttackSpeedMultiplier 한 곳 (Plan5 D-62).
+    UFUNCTION(BlueprintPure, Category = "Upgrade")
+    float GetAttackSpeedMultiplier() const;
+
 protected:
     // 쿨다운 적용 오버라이드 — CooldownDuration > 0 일 때 업그레이드 보정값을 SetByCaller 로 주입
     virtual void ApplyCooldown(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const override;

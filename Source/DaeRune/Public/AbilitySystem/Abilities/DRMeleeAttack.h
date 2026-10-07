@@ -57,6 +57,8 @@ public:
 	 * 후딜(되돌아오는 동작)은 원래 속도로 재생된다 — 요구사항의 "선딜레이 3배" 가 그 뜻이다.
 	 *
 	 * 이 호출을 BP 에 붙이지 않으면 ★후딜까지 3배★ 가 된다(기능은 동작하지만 체감이 다르다).
+	 *
+	 * ★Plan5(공속칩)★ "기본값" = BaseMontagePlayRate × 공속 배율. 공속 버프를 받은 동안은 후딜도 빨라진다 (D-67).
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Melee|Upgrade")
 	void RestoreMontagePlayRate();

@@ -4,7 +4,7 @@
 > - 정원로봇 9종(씨앗 폭탄 · 물대포 · 발톱): **구현 완료**. 씨앗 폭탄·물대포는 게임 검증 완료, **발톱은 게임 검증이 남았다 → §10**
 > - 자판기 기본 공격(동전) 3종 · 잭팟 3종: **구현 완료**(C++ 빌드 통과 · 에셋 입력 확인 2026-09-28), **게임 검증 남음 → §10**
 > - 장착 규칙 "같은 스킬 칩은 1개만"(§1.6): **구현 완료**, 게임 검증 남음 → §10
-> - 자판기 공속 버프 칩 2종: **계획(미착수) → §12**
+> - 자판기 공속 버프 칩 3종: **C++ 구현 완료**(빌드 통과 2026-10-07), **에디터 작업 남음 → §13**, 게임 검증 남음 → §12.7
 >
 > 최종 갱신: 2026-09-28 / 브랜치 `feat/upgradeskill`
 > 선행 문서: **Plan2.md**(재화·슬롯·칩 시스템) → **Plan3.md**(공용 칩 8종)
@@ -606,9 +606,9 @@ FDRUpgradeRuntime  (복제하지 않는다)
 | **14** | ★동전 ①은 단독 DPS **×0.72**★ — 한 발 +20% 보다 연사 −40% 가 크다(초당 캡슐·초당 ② 회복도 준다) | 사용자 확정값. "한 방은 세고 DPS 는 비슷한" 칩을 원하면 피해 **+67% 이상**이 필요 — 플레이 후 카탈로그 `Value` 만 조정 |
 | **15** | 발톱 흡혈은 오염 중에도 회복된다 → 적 1회 타격으로 **즉시 정화**(동전 ②는 D-42 로 막음) | 발톱에도 막을지 사용자 결정. 막는다면 `GetLifestealRatioForDamage` 에 오염 검사 3줄 |
 | **16** | 동전 ③으로 커져도 임팩트 이펙트(`NS_Basic_3_*`)는 그대로 | 12번과 같은 판단 |
-| **17** | 공격 속도 버프의 스택당 0.2 가 C++ 리터럴(`GetCurrentFireInterval`) | 스킬 2 칩을 만들 때 `ChipTuning` 또는 GE 로 이관 |
+| **17** | ~~공격 속도 버프의 스택당 0.2 가 C++ 리터럴(`GetCurrentFireInterval`)~~ | **해결**(2026-10-07) — `ChipTuning.AttackSpeedBuff.BaseSpeedPerStack` 으로 옮겼다(§12 D-62) |
 | **18** | ~~잭팟 캡슐 분기에 `Projectile` null 체크가 없다~~ | **해결** — `SpawnJackpotCapsule()` 에서 확인한다 |
-| **19** | 주석이 실제 값과 다르다("5회 후"는 고쳤다): `BaseFireInterval = 0.3f`(BP 0.6) / `DRVendingMachineAttackSpeedBuff.h` "+10%"(코드는 스택당 +20%) | 주석만 고치면 된다 |
+| **19** | 주석이 실제 값과 다르다("5회 후"는 고쳤다): `BaseFireInterval = 0.3f`(BP 0.6) / ~~`DRVendingMachineAttackSpeedBuff.h` "+10%"~~(2026-10-07 고침) | `BaseFireInterval` 주석만 남았다 |
 | **20** | ~~D-46 검증 규칙 미적용~~ | **D-51 로 적용됨** |
 | **21** | ★잭팟 기대값 차이가 크다★ — ② +40% / ① +12.5% / ③ 약 +8% | 사용자 확정 수치. 플레이 후 `ChipTuning.Jackpot` 만 조정(재컴파일 없음) |
 | **22** | ③ 기대값(약 43)은 손 계산 근사 | `[Jackpot]` 로그 100회 이상으로 확인 |
@@ -660,21 +660,25 @@ C++ 빌드 통과, 에셋 입력은 2026-09-28 에셋을 직접 읽어 확인했
 
 ## 11. 남은 작업
 
-**필수 에디터 작업은 없다**(2026-09-28 에셋 확인). 선택 사항만 남았다 — §9-25(칩 카드 사유 문구), §9-26(`Detail Override`).
-그다음은 §10 플레이 검증과, 결과에 따른 밸런스 조정(§9-14 · §9-21)이다.
+- **공속 버프 칩 3종(§12)**: 에디터 작업 **§13** 1~9단계가 남았다(필수).
+- 정원로봇 9종 · 동전 · 잭팟(§1~§10): 필수 에디터 작업은 없다(2026-09-28 에셋 확인). 선택 사항만 남았다 — §9-25(칩 카드 사유 문구), §9-26(`Detail Override`).
+- 그다음은 §10 · §12.7 플레이 검증과, 결과에 따른 밸런스 조정(§9-14 · §9-21 · §12.8-27)이다.
 
 ---
 
-## 12. 계획 — 자판기 공속 버프 칩 2종 (미착수)
+## 12. 자판기 공속 버프 칩 3종 (C++ 구현 완료 · 에디터 작업 남음)
 
-> 2026-09-28 요청. 코드 주석 접두 **`Plan5(공속칩)`** · 결정 **D-62 ~ D-71** · 함정 **T-60 ~ T-67** (앞 번호에 이어서 매긴 영구 ID).
-> **아직 코드·에셋은 한 줄도 바꾸지 않았다.** 구현·검증이 끝나면 §1~§9 에 흡수한다.
+> 2026-09-28 요청(①·②), 2026-10-07 ③ 확정·C++ 구현(빌드 통과). 코드 주석 접두 **`Plan5(공속칩)`** · 결정 **D-62 ~ D-76** · 함정 **T-60 ~ T-73** (앞 번호에 이어서 매긴 영구 ID).
+> **에셋은 아직 손대지 않았다** → 에디터에서 할 일은 **§13**(처음 보는 사람용 단계별 안내). 계획과 달라진 점은 **§12.10**.
+> 에디터 작업 전에도 게임은 지금처럼 동작한다(칩 없는 공속 버프 그대로). 검증이 끝나면 §1~§9 에 흡수한다.
 >
 > 사용자 확정(같은 날 질의응답)
 > - 1회 공속 증가량의 **현재값은 +20%** 다(코드 기준 — 헤더 주석의 "+10%"는 낡은 표기). 칩 ①은 **+30%**.
 > - 칩 ②는 본인과 아군 모두 **1회 +10% · 최대 5중첩**. 아군이 자판기가 아니면 그 로봇의 공격 선·후딜이 짧아진다 —
 >   정원로봇은 **기본 공격(발톱) · 씨앗 대포**, 청소기는 **기본 공격(에어샷)**.
-> - **칩 ③은 보류** — 원래 요청(물 −40% · 30% · 6초)은 ①과 증가량이 같아져 ①을 모든 면에서 앞선다. 사용자가 새 컨셉으로 다시 정한다.
+> - 칩 ③(2026-10-07 확정, 처음 요청한 "물 −40% · 30% · 6초"는 폐기): 버프 시간이 끝나면 중첩이 한꺼번에 사라지지 않고 **1초에 1개씩** 사라진다.
+>   1회 증가량은 **+16%**. 지속 20초 · 최대 10중첩 · 물 50 은 **그대로**.
+>   ★줄어드는 도중에 다시 쓰면 중첩 +1, 감소가 멈추고 **다시 20초 유지**한 뒤 1초에 1개씩 줄어든다.
 
 ### 12.0 지금의 공속 버프 (코드·에셋 실측)
 
@@ -693,19 +697,32 @@ C++ 빌드 통과, 에셋 입력은 2026-09-28 에셋을 직접 읽어 확인했
 
 ★세 로봇 모두 **쿨다운이 없다** → "공속"은 쿨다운이 아니라 로봇마다 다른 손잡이로 구현한다(자판기 발사 간격 / 발톱·씨앗 몽타주 재생 속도 / 청소기 차지 간격).
 
-### 12.1 칩 2종 스펙
+**칩 ③에 필요한 엔진 사실** (UE 5.5 소스 `D:\UE_5.5` 실측 — `GameplayEffect.cpp`)
+
+| 항목 | 사실 |
+|---|---|
+| 내장 만료 정책 | GE 의 `Stack Expiration Policy = Remove Single Stack and Refresh Duration` 이면 만료 때 1스택만 빼고 **Spec 지속 전체**로 다시 잰다(`CheckDuration` → `RestartActiveGameplayEffectDuration`). 지속 20초 GE 에 쓰면 **20초마다** 1개씩 빠진다 → 그대로는 "20초 뒤 1초 간격"이 안 된다 |
+| `ASC::ModifyActiveEffectStartTime(Handle, Diff)` | 공개 API. 시작 시각에 Diff 를 더하고 → 만료 타이머를 다시 잡고 → 복제(`MarkItemDirty`). 시작 시각을 미래로 밀면 **첫 만료만** 그만큼 늦어진다 |
+| 재적용(스택 추가) | `Refresh on Successful Application` 이면 시작 시각 = 지금, 지속 = Spec 지속으로 리셋된다 |
+| 스택 감소 알림 | 스택 수가 바뀌면 `OnStackCountChange` → 태그 이벤트 **`AnyCountChange`** 가 서버와 클라 모두에서 발생한다(클라는 `PostReplicatedChange` 에서) |
+| 지금 HUD 의 빈틈 | 자판기 아이콘 숫자는 **적용 때**(`ClientEffectApplied` RPC)와 **완전 제거 때**(`EffectRemovedDelegate`)만 갱신된다 → 중간 감소(10 → 9 → …)는 아이콘에 안 보인다 |
+| 스택 읽기 복붙 | "태그로 첫 핸들 → `Spec.GetStackCount()`" 루프가 `DRVendingMachineBasicAttack.cpp`(`GetCurrentFireInterval`)와 `DRVendingMachineAttackSpeedBuff.cpp`(`NotifySkillActivated`)에 따로 있다 |
+
+### 12.1 칩 3종 스펙
 
 공통: `OwnerClass = VendingMachine`, `Category = Ascension`, `RequiredSlotCount = 1`,
 칩 레벨 `TargetAbilityTag = Abilities.VendingMachine.AttackSpeedBuff`(실제 GA 태그 — §1.6 그룹 키).
-→ ①·②는 동시에 낄 수 없고, 동전칩 · 잭팟칩과는 함께 낄 수 있다.
+→ ①·②·③ 중 하나만 낄 수 있고, 동전칩 · 잭팟칩과는 함께 낄 수 있다.
 
 | # | `ChipId` | 이름(가칭) | Modifiers | GrantedTags | 효과 | Tier | 아이콘(제안) |
 |---|---|---|---|---|---|---|---|
 | ① | `VM.Asc.SpeedOverdrive` | 과부하 모터 | `SkillWaterCost` **+1.6** ★단점★ | `…AttackSpeedBuff.Overdrive` | 1회 공속 **+30%**(20 → 30). 대신 물 **130**(×2.6), 지속 **5초**(20 → 5). 최대 10중첩 그대로 | 3 | 공격-5 |
 | ② | `VM.Asc.SpeedShare` | 공유 회로 | (없음) | `…AttackSpeedBuff.Share` | 사용 시 **본인 + 20m(2000uu) 안 아군**에게 버프. 1회 **+10%**, 최대 **5중첩**, 지속 20초 | 4 | 지원-5 |
+| ③ | `VM.Asc.SpeedDecay` | 잔류 가속 | (없음) | `…AttackSpeedBuff.Decay` | 1회 **+16%**(20 → 16). 지속 20초가 끝나면 **1초에 1개씩** 줄어든다(한꺼번에 사라지지 않음). 줄어드는 중에 다시 쓰면 감소가 멈추고 다시 20초. 최대 10중첩 · 물 50 그대로 | 3(가칭) | 미정 |
 
 - ①의 물 증가는 카탈로그 모디파이어라 기존 물 소모 배관(`GetEffectiveWaterCostFor` → `GE_Cost_AttackSpeedBuff`)이 그대로 처리한다(레시피 유형 1).
-- ②는 단점이 규칙(증가량·중첩 감소)이라 모디파이어가 없다 → **`Description` 필수**(검사).
+- ②·③은 단점이 규칙(증가량·중첩 감소)이라 모디파이어가 없다 → **`Description` 필수**(검사).
+- ③ 이름·Tier·아이콘은 가칭이다(§12.8-33).
 - 아군 판정은 **시전 순간 1회**(오라가 아니다) — 20m 밖에 있던 아군은 그 시전의 버프를 받지 않는다.
 
 **로봇별로 "공속"이 바꾸는 것** (배율 `M` = 1 + 스택 합산, §12.3 D-62)
@@ -724,9 +741,21 @@ C++ 빌드 통과, 에셋 입력은 2026-09-28 에셋을 직접 읽어 확인했
 | (없음) | +20% | ×3.0 (10중첩) | 0.6 → **0.2초** | 물 50 / 20초 안에 1번 |
 | ① | +30% | ×4.0 (10중첩) | → **0.15초** | 물 130 / **5초마다** (초당 약 26) |
 | ② | +10% | ×1.5 (5중첩) | → **0.4초** | 물 50 / 20초 — 대신 **아군 전원** |
+| ③ | +16% | ×2.6 (10중첩) | → **약 0.23초** | 물 50 / 20초 — 놓쳐도 한 번에 안 꺼진다 |
 
 > ⚠️ **밸런스 메모(§12.8-27)** — ①은 최대치를 유지하려면 초당 물 26 이 든다. 자판기 최대 물로 몇 초 버티는지 플레이로 확인한다.
 > ②는 본인 이득이 크게 줄고(×3.0 → ×1.5) 아군에게 나눠 주는 칩이다.
+> ③은 최대치가 낮은(×3.0 → ×2.6) 대신 **끊김에 강하다**. 10중첩을 마지막으로 쓰고 20초 뒤에 감소를 시작해 **29초에 0** 이 된다.
+> 감소 중의 배율은 ×2.6 → 2.44 → 2.28 → … → ×1.16 이다(기본은 20초에 ×3.0 → ×1.0 으로 뚝 떨어진다).
+
+**칩 ③ 타임라인** (마지막 사용 = 0초, 10중첩)
+
+| 시각 | 0 ~ 20초 | 20초 | 21초 | … | 28초 | 29초 |
+|---|---|---|---|---|---|---|
+| 중첩 | 10 | 9 | 8 | … | 1 | 0 (GE 제거) |
+| 발사 간격(0.6초 기준) | 약 0.23 | 약 0.25 | 약 0.26 | … | 약 0.52 | 0.6 |
+
+줄어드는 도중(예: 24초, 중첩 5)에 다시 쓰면 → 중첩 6, 감소가 멈추고 그 시각부터 다시 20초 유지(44초에 감소 재개).
 
 ### 12.2 상호작용
 
@@ -738,6 +767,8 @@ C++ 빌드 통과, 에셋 입력은 2026-09-28 에셋을 직접 읽어 확인했
 | 자판기 2대가 모두 칩 ② | 공유 버프 스택이 **한 더미**(같은 GE, Aggregate by Target)라 누가 걸든 합쳐서 최대 5 |
 | 자판기 아군이 자기 버프 + 남의 공유 버프 | 두 버프가 **더해진다**: M = 1 + 0.2 × 자기 스택 + 0.1 × 공유 스택 |
 | 피의 계약(⑧) | 물 대신 체력으로 — ①의 130 이 체력 130(비율 1.0)이 된다 ⚠️ |
+| ③ + 동전칩 · 잭팟칩 | 함께 낄 수 있다(그룹이 다르다). 동전 ① 고액(간격 1.0초) + ③ 10중첩이면 1.0 / 2.6 ≈ 0.38초 |
+| ③ 자판기가 다른 자판기의 ② 공유 버프를 받음 | 두 버프가 **더해진다**: M = 1 + 0.16 × 자기 스택 + 0.1 × 공유 스택. 감소는 자기 버프에만 일어난다 |
 
 ### 12.3 설계 결정
 
@@ -746,26 +777,32 @@ C++ 빌드 통과, 에셋 입력은 2026-09-28 에셋을 직접 읽어 확인했
 | **D-62** | "공속 배율" M = 1 + 자기 버프 스택 × 자기 스택당 값 + 공유 버프 스택 × 공유 스택당 값. 계산은 **라이브러리 함수 하나** `UDRAbilitySystemLibrary::GetAttackSpeedMultiplier(ASC)`, 어빌리티는 `UDRGameplayAbility::GetAttackSpeedMultiplier()` 로 부른다 | 자판기·발톱·씨앗·청소기 네 곳이 같은 값을 써야 한다. 발사 간격의 0.2 리터럴도 여기로 옮겨 §9-17 을 해소한다 |
 | **D-63** | 공유 버프는 **별도 GE** `GE_AttackSpeedBuff_Share` + 새 GAS 태그 **`Buff.AttackSpeed.Shared`**(로봇 공용 이름), Stack Limit 5 | 기존 GE 로 걸면 자기 버프와 스택이 합쳐져 스택당 값(20% / 10%)을 구분할 수 없다(T-61) |
 | **D-64** | 스택당 값은 **읽는 쪽**이 정한다 — 자기 버프는 자기 칩(①이면 `OverdriveSpeedPerStack` 0.3, 아니면 `BaseSpeedPerStack` 0.2), 공유 버프는 `SharedSpeedPerStack` 0.1. 합성은 덧셈 | 자기 버프는 자기만 건다. 공유 버프를 거는 경로는 칩 ②뿐이라 값이 하나다. 덧셈은 기존 공식과 같은 꼴 |
-| **D-65** | 버프 적용을 **C++ `UDRVendingMachineAttackSpeedBuff::ApplyAttackSpeedBuff()`** 로 옮긴다. 칩 ②가 아니면 자기 GE(지속 SetByCaller: ① 5초 / 아니면 GA 의 새 프로퍼티 `BuffDuration` 20초), 칩 ②면 본인 + 아군에게 공유 GE(지속 `SharedDuration` 20초) | GE 의 고정 지속(20초)으로는 ①의 5초를 표현할 수 없다. BP 에 분기를 늘리면 칩 지식이 BP 로 샌다(1부 원칙). BP 는 두 노드를 이 한 노드로 바꾼다 |
+| **D-65** | 버프 적용을 **C++ `UDRVendingMachineAttackSpeedBuff::ApplyAttackSpeedBuff()`** 로 옮긴다. 칩 ②가 아니면 자기 GE(① 5초 / 아니면 GA 의 새 프로퍼티 `BuffDuration` 20초), 칩 ②면 본인 + 아군에게 공유 GE(지속 `SharedDuration` 20초). ★구현: 지속은 스펙에 `SetDuration(값, 고정)` 으로 넣는다 — GE 에셋의 Duration 설정(고정 20초 / SetByCaller)을 **바꿀 필요가 없다**(§12.10) | GE 의 고정 지속(20초)으로는 ①의 5초를 표현할 수 없다. BP 에 분기를 늘리면 칩 지식이 BP 로 샌다(1부 원칙). BP 는 두 노드를 이 한 노드로 바꾼다 |
 | **D-66** | 아군 탐색 = 새 헬퍼 **`UDRAbilitySystemLibrary::GetAlivePlayersWithinRadius(World, Origin, Radius, Out)`** — Synergy 오라와 같은 필터. **시전 순간 1회** | `GetLiveObjectsWithinRadius` 는 적·사이트까지 모으고 MoleDiag 로그를 찍는다(T-65). 요구는 "사용 시"라 오라가 아니다 |
 | **D-67** | 발톱: `GetWindupPlayRate()` 와 **`RestoreMontagePlayRate()` 둘 다** 배율 M 을 곱한다 | 선딜·후딜 모두 짧아져야 한다(사용자 확정). BP 는 이미 두 함수를 불러 **변경 없음**. 적 GA 는 이 함수를 부르지 않고 버프도 없어 불변(D-35 유지) |
 | **D-68** | 씨앗 대포: `UDRSeedCannon::GetAttackSpeedPlayRate()`(BlueprintPure, `BaseMontagePlayRate` 1.0 × M) 추가 → BP 의 **1P·3P `PlayRate` 핀 2곳**에 연결 | 몽타주 한 개 안에 선딜(노티파이 전)·후딜이 다 들어 있어 전체 배속이 곧 선·후딜 감소다 |
 | **D-69** | 청소기: 선딜 = **차지 간격 ÷ M** — `StartCharging` 에서 `EffectiveChargeInterval` 을 한 번 잡아 `GetChargeStage`·UI 타이머가 같은 값을 쓴다. 후딜 = 강화탄 몽타주 PlayRate × M. C++ 만 | 차지 도중 버프가 끝나 간격이 바뀌면 단계가 뒤로 튄다(T-64). 청소기는 발사 뒤 잠금이 없어 실효는 차지 단축이다 |
 | **D-70** | HUD: `OverlayWidgetController` 가 `Buff.AttackSpeed.Shared` 도 같은 델리게이트(`OnVendingMachineAttackSpeedBuff`)로 방송한다. 다른 로봇은 `DA_StatusEffectInfo` 에 `Buff.AttackSpeed.Shared` 한 줄(에디터). `NotifySkillActivated` 의 음높이 스택도 두 버프 합산으로 | ②를 낀 시전자는 자기 GE 대신 공유 GE 를 받아 자판기 스킬 아이콘 숫자가 사라지기 때문 |
-| **D-71** | 튜닝은 **`ChipTuning.AttackSpeedBuff`**(`FDRAttackSpeedBuffChipTuning`) — `BaseSpeedPerStack` 0.2 · `OverdriveSpeedPerStack` 0.3 · `OverdriveDuration` 5 · `SharedEffect` · `SharedSpeedPerStack` 0.1 · `SharedRadius` 2000 · `SharedDuration` 20. ①의 물 +160% 는 카탈로그 모디파이어 | 1부 D-2 원칙(정적 수치 = 카탈로그 / 동적 상수 = ChipTuning). 물은 모디파이어여야 단점이 카드·미리보기에 빨갛게 뜬다 |
+| **D-71** | 튜닝은 **`ChipTuning.AttackSpeedBuff`**(`FDRAttackSpeedBuffChipTuning`) — `BaseSpeedPerStack` 0.2 · `OverdriveSpeedPerStack` 0.3 · `OverdriveDuration` 5 · `SharedEffect` · `SharedSpeedPerStack` 0.1 · `SharedRadius` 2000 · `SharedDuration` 20 · (③) `DecayEffect` · `DecaySpeedPerStack` 0.16 · `DecayInterval` 1. ①의 물 +160% 는 카탈로그 모디파이어 | 1부 D-2 원칙(정적 수치 = 카탈로그 / 동적 상수 = ChipTuning). 물은 모디파이어여야 단점이 카드·미리보기에 빨갛게 뜬다 |
+| **D-72** | ③은 **감쇠 전용 GE `GE_AttackSpeedBuff_Decay`** 를 쓴다 — `GE_AttackSpeedBuff` 복제, 태그 `Buff.VendingMachine.AttackSpeed` **그대로**, Stack Limit 10, 지속은 코드가 넣으므로 복제한 그대로, Refresh on Successful Application, **Stack Expiration Policy = Remove Single Stack and Refresh Duration**. 경로는 `ChipTuning.AttackSpeedBuff.DecayEffect` | 만료 정책은 에셋 단위라 원본을 고치면 칩 없는 자판기까지 바뀐다(T-68). 태그가 같으니 발사 간격 · HUD · `NotifySkillActivated` 가 고칠 것 없이 그대로 읽는다. ①~③은 동시 장착 불가라 두 GE 가 한 자판기에 같이 걸릴 일이 없다 |
+| **D-73** | "20초 유지 → 1초에 1개" = **내장 정책 + 시작 시각 밀기**. `ApplyAttackSpeedBuff()` ③ 분기(서버)에서 ⓐ `Data.Duration = DecayInterval`(1초)로 적용하고 ⓑ **매 적용 직후** `ModifyActiveEffectStartTime(Handle, BuffDuration − DecayInterval)`(+19초)를 부른다. → 첫 만료는 20초 뒤 → 내장 정책이 1개 빼고 1초로 재시작 → 1초마다 1개 → 마지막 1개가 빠지면 GE 제거. 다시 쓰면 Refresh 로 1초로 리셋된 것을 다시 +19초 → **감소가 멈추고 다시 20초**(사용자 확정) | 엔진 실측(§12.0). 타이머·상태를 직접 들고 있지 않아 사망·리스폰·종료 정리가 따로 필요 없고, 시작 시각은 GAS 가 복제한다. 기각: 서버 타이머 직접 관리(정리할 상태가 늘어난다) / 지속 20초 + RemoveSingle(20초마다 1개씩 빠진다) |
+| **D-74** | ③의 스택당 값 — D-64 의 "읽는 쪽" 분기에 **③이면 `DecaySpeedPerStack` 0.16** 을 넣는다(①이면 0.3, 아니면 0.2 와 같은 자리). 공유 버프와는 기존대로 덧셈 | 자기 버프는 자기만 건다 → 자기 칩만 보면 된다 |
+| **D-75** | HUD 중간 감소: `OverlayWidgetController` 가 **`RegisterGameplayTagEvent(Buff_VendingMachine_AttackSpeed, AnyCountChange)`** 를 등록하고, 콜백에서 현재 스택을 읽어 `OnVendingMachineAttackSpeedBuff` 로 방송한다. D-70 의 공유 태그 방송도 같은 방식으로. 스택 읽기는 새 헬퍼 **`UDRAbilitySystemLibrary::GetEffectStackCountWithTag(ASC, Tag)`** 하나로 모으고, 복붙 루프 2곳(§12.0)과 D-62 가 이 헬퍼를 쓴다 | 스택 감소는 적용·제거 델리게이트를 타지 않는다(T-72). 태그 이벤트는 서버·클라 모두 발생해(§12.0) RPC 가 필요 없다. ①·②·기본에도 무해하다(적용 때 한 번 더 같은 값이 방송될 뿐) |
+| **D-76** | 공속 버프 **남은 시간 그래프**는 위젯이 직접 세지 않고, 매 틱 **`UOverlayWidgetController::GetAttackSpeedBuffFillRatio()`**(0~1)를 읽어 그린다(2026-10-07 사용자 확정 "A 방식"). 실제 걸린 GE 의 남은 시간 ÷ 지속(기본·② 20초, ① 5초). 칩 ③은 유지 구간 = 남은 시간 ÷ GA `BuffDuration`, 1초씩 줄어드는 구간 = 0(그래프는 비고 숫자만 줄어든다). 자기·공유 버프가 같이 있으면 큰 쪽 | 위젯의 20초 하드코딩으로는 ①의 5초를 못 그린다. 이벤트로 시간을 밀어 주면(push) 원격 클라 10중첩 재사용처럼 스택 수가 안 바뀌는 갱신을 놓친다 — 읽어 오기(pull)는 GE 시작 시각이 복제되므로 빠짐이 없다 |
 
 > 기각: ①·②의 "증가량/지속/중첩"을 새 스탯 축(`SkillBuffMagnitude` 등)으로 — Flat 값("+0.1")이 카드에 어색하게 뜨고, 중첩 한도는 GE 에셋이 권위라 축으로 표현이 안 된다.
 > 기각: 공속을 쿨다운 축(`SkillCooldown`)으로 — 세 로봇 모두 쿨다운이 없다.
 
 ### 12.4 C++ 변경 (적용 순서)
 
-**① `DRGameplayTags.h / .cpp`** — 태그 3개(네이티브)
+**① `DRGameplayTags.h / .cpp`** — 태그 4개(네이티브)
 
 | 멤버 | 태그 | 종류 |
 |---|---|---|
 | `Buff_AttackSpeed_Shared` | `Buff.AttackSpeed.Shared` | ★GAS 태그★ — 공유 GE 가 부여, C++ 이 스택을 읽는다 |
 | `Upgrade_Feature_Skill_AttackSpeedBuff_Overdrive` | `Upgrade.Feature.Skill.AttackSpeedBuff.Overdrive` | 칩 ① 기능 스위치 |
 | `Upgrade_Feature_Skill_AttackSpeedBuff_Share` | `Upgrade.Feature.Skill.AttackSpeedBuff.Share` | 칩 ② 기능 스위치 |
+| `Upgrade_Feature_Skill_AttackSpeedBuff_Decay` | `Upgrade.Feature.Skill.AttackSpeedBuff.Decay` | 칩 ③ 기능 스위치 |
 
 **② `Public/Game/DRProgressionConfig.h`** — `FDRJackpotChipTuning` 다음
 
@@ -795,7 +832,7 @@ struct FDRAttackSpeedBuffChipTuning
 	// ========== ② VM.Asc.SpeedShare (공유 회로) ==========
 	/**
 	 * 공유 버프 GE. 요구 사양:
-	 *   - Has Duration + SetByCaller(Data.Duration) / 모디파이어 없음
+	 *   - Has Duration / 모디파이어 없음 (지속 값은 코드가 스펙에 고정해 넣는다 — 에셋의 Duration 값은 무시된다)
 	 *   - Granted Tags(Target Tags 컴포넌트) = Buff.AttackSpeed.Shared
 	 *   - Stacking = Aggregate by Target, Stack Limit = 5, Refresh on Successful Application
 	 * ★비우면 칩 ②가 에러 없이 무동작★
@@ -812,17 +849,42 @@ struct FDRAttackSpeedBuffChipTuning
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff|Share", meta = (ClampMin = "0.1"))
 	float SharedDuration = 20.f;
+
+	// ========== ③ VM.Asc.SpeedDecay (잔류 가속) ==========
+	/**
+	 * 감쇠 버프 GE. 요구 사양(D-72):
+	 *   - GE_AttackSpeedBuff 복제 — Granted Tags = Buff.VendingMachine.AttackSpeed (★원본과 같은 태그★)
+	 *   - Has Duration / 모디파이어 없음 (지속 값은 코드가 스펙에 고정해 넣는다 — 에셋의 Duration 값은 무시된다)
+	 *   - Aggregate by Target, Stack Limit = 10, Refresh on Successful Application
+	 *   - ★Stack Expiration Policy = Remove Single Stack and Refresh Duration★ (원본에는 넣지 않는다 — T-68)
+	 * ★비우면 칩 ③이 기본 GE(한꺼번에 사라짐)로 돌아가고 경고 로그★
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff|Decay")
+	TSoftClassPtr<UGameplayEffect> DecayEffect;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff|Decay", meta = (ClampMin = "0.0"))
+	float DecaySpeedPerStack = 0.16f;
+
+	// 버프 시간(GA 의 BuffDuration)이 끝난 뒤 중첩이 1개씩 빠지는 간격(초)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff|Decay", meta = (ClampMin = "0.1"))
+	float DecayInterval = 1.0f;
 };
 ```
 
 `FDRChipTuning` 끝에 `FDRAttackSpeedBuffChipTuning AttackSpeedBuff;`.
 
-**③ `DRAbilitySystemLibrary.h / .cpp`** — 공속 배율 + 아군 탐색
+**③ `DRAbilitySystemLibrary.h / .cpp`** — 스택 읽기 + 공속 배율 + 아군 탐색
 
 ```cpp
 	/**
+	 * ★Plan5(공속칩)★ Tag 를 부여하는 활성 GE 의 현재 스택 수(없으면 0). Aggregate by Target 이라 첫 핸들만 본다.
+	 * 복붙 루프(GetCurrentFireInterval · NotifySkillActivated)를 이 함수로 바꾼다(D-75).
+	 */
+	static int32 GetEffectStackCountWithTag(const UAbilitySystemComponent* ASC, const FGameplayTag& Tag);
+
+	/**
 	 * ★Plan5(공속칩)★ 이 ASC 의 공격 속도 배율 M (칩·버프가 없으면 정확히 1.0).
-	 *   M = 1 + 자기 버프(Buff.VendingMachine.AttackSpeed) 스택 × (칩①이면 Overdrive, 아니면 Base)
+	 *   M = 1 + 자기 버프(Buff.VendingMachine.AttackSpeed) 스택 × (①이면 Overdrive, ③이면 Decay, 아니면 Base)
 	 *         + 공유 버프(Buff.AttackSpeed.Shared) 스택 × SharedSpeedPerStack
 	 * 스택은 GetCurrentStackCount 로 읽는다(태그 카운트가 아니다 — T-3).
 	 */
@@ -833,7 +895,7 @@ struct FDRAttackSpeedBuffChipTuning
 		TArray<AActor*>& OutPlayers);
 ```
 
-- `GetAttackSpeedMultiplier` 는 두 태그 각각 `GetActiveEffectsWithAllTags` → 첫 핸들의 `GetCurrentStackCount`(Aggregate by Target 이라 인스턴스가 하나).
+- `GetAttackSpeedMultiplier` 는 두 태그 각각 `GetEffectStackCountWithTag`(내부: `GetActiveEffectsWithAllTags` → 첫 핸들의 `GetCurrentStackCount`).
 - `GetAlivePlayersWithinRadius` 는 `UDRSynergyAuraComponent::FindNearestTeammate` 의 필터를 옮긴다(`OverlapMultiByChannel(ECC_Pawn)` → `"Player"` 태그 → `ADRCharacter` → `!IsDead` → ASC 있음 → 실제 거리 ≤ Radius).
 
 **④ `DRGameplayAbility.h / .cpp`** — `UFUNCTION(BlueprintPure) float GetAttackSpeedMultiplier() const` = 라이브러리(자기 ASC).
@@ -841,23 +903,51 @@ struct FDRAttackSpeedBuffChipTuning
 **⑤ `DRVendingMachineAttackSpeedBuff.h / .cpp`**
 
 ```cpp
-	/** 칩이 없을 때 자기 버프 지속(초). GE_AttackSpeedBuff 가 SetByCaller(Data.Duration)로 받는다 */
+	/** 칩이 없을 때 자기 버프 지속(초). 코드가 스펙에 고정해 넣는다 — GE_AttackSpeedBuff 의 Duration 값은 무시된다 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "VendingMachine|Skill", meta = (ClampMin = "0.1"))
 	float BuffDuration = 20.f;
 
 	/**
 	 * ★Plan5(공속칩)★ 버프를 건다(서버). BP 의 MakeOutgoingSpec + ApplyGameplayEffectSpecToSelf 를 대신한다.
 	 *  - 칩 ② : 본인 + SharedRadius 안 아군에게 SharedEffect (지속 SharedDuration)
+	 *  - 칩 ③ : 자기에게 DecayEffect (지속 DecayInterval) + 시작 시각을 BuffDuration − DecayInterval 만큼 민다(D-73)
 	 *  - 그 외: 자기에게 AttackSpeedBuffEffect (지속 ①이면 OverdriveDuration, 아니면 BuffDuration)
-	 * ★두 GE 모두 Duration 이 SetByCaller 라 이 함수 밖에서 직접 걸면 0초가 된다(T-60)★
+	 * 지속시간은 이 함수가 스펙에 고정해 넣는다 — GE 에셋의 Duration 설정(고정값/SetByCaller)과 무관하다 (§12.10)
 	 */
 	UFUNCTION(BlueprintCallable, Category = "VendingMachine|Skill")
 	void ApplyAttackSpeedBuff();
 ```
 
-- 적용은 `UDRAbilitySystemLibrary::ApplyTimedTagEffect(Target, SourceASC, Effect, Duration)` 재사용(Data.Duration 을 채우는 기존 헬퍼).
+- 적용은 `UDRAbilitySystemLibrary::ApplyTimedTagEffect(Target, SourceASC, Effect, Duration)` 재사용(Data.Duration 을 채우는 기존 헬퍼, **핸들을 돌려준다**).
   자기 GE 는 `TSubclassOf` 라 `TSoftClassPtr` 로 감싸 넘기거나, 같은 일을 하는 작은 분기를 둔다.
-- `NotifySkillActivated()` 의 스택 = 자기 버프 스택 + 공유 버프 스택(음높이·표정).
+- ③ 분기(D-73):
+
+```cpp
+	// ★Plan5(공속칩)★ ③ 잔류 가속 — 20초 유지 뒤 1초에 1개씩 감소(D-72 · D-73)
+	if (bDecay)
+	{
+		const FDRAttackSpeedBuffChipTuning& T = /* ChipTuning.AttackSpeedBuff */;
+		if (T.DecayEffect.IsNull())
+		{
+			UE_LOG(LogDR, Warning, TEXT("[AttackSpeedBuff] DecayEffect 미지정 — 칩 ③이 기본 버프로 동작"));
+			// 아래 "그 외" 분기로 떨어진다
+		}
+		else
+		{
+			// ⓐ 지속 = 감소 간격(1초). 스택 추가 시 Refresh 정책이 시작 시각을 '지금'으로 리셋한다
+			const FActiveGameplayEffectHandle H = UDRAbilitySystemLibrary::ApplyTimedTagEffect(
+				Avatar, ASC, T.DecayEffect, T.DecayInterval);
+			// ⓑ ★매 적용 직후★ 첫 만료를 BuffDuration 뒤로 민다(T-69). 이후는 내장 정책이 1초마다 1개씩 뺀다
+			if (H.IsValid())
+			{
+				ASC->ModifyActiveEffectStartTime(H, FMath::Max(0.f, BuffDuration - T.DecayInterval));
+			}
+			return;
+		}
+	}
+```
+
+- `NotifySkillActivated()` 의 스택 = 자기 버프 스택 + 공유 버프 스택(음높이·표정) — 둘 다 `GetEffectStackCountWithTag`.
 
 **⑥ `DRVendingMachineBasicAttack.cpp`** — `GetCurrentFireInterval()` 의 버프 스택 루프와 `0.2f` 를 지우고
 `return FMath::Max(MinFireInterval, ChipInterval / GetAttackSpeedMultiplier());`
@@ -882,38 +972,40 @@ float UDRMeleeAttack::GetWindupPlayRate() const
 - `StartCharging()` 에서 `ChargeInterval / GetAttackSpeedMultiplier()` 로 한 번 잡고, UI 타이머 주기와 `GetChargeStage()` 가 이 값을 쓴다(T-64).
 - `FireShot()` 의 강화탄 몽타주 PlayRate `1.f` → `GetAttackSpeedMultiplier()`.
 
-**⑩ `OverlayWidgetController.cpp`** — 효과 적용/해제 콜백에서 `Buff.AttackSpeed.Shared` 도 `OnVendingMachineAttackSpeedBuff` 로 방송
-(자판기 아이콘 숫자 = 두 버프 스택 합 — 방송 전에 라이브러리로 합산해 넘긴다).
+**⑩ `OverlayWidgetController.cpp`** — 자판기 아이콘 숫자를 **태그 스택 변화 이벤트**로 갱신(D-70 · D-75)
+(아이콘 숫자 = 자기 버프 + 공유 버프 스택 합). `BindCallbacksToDependencies()` 의 `State_Carrying` 등록 옆에:
+
+```cpp
+	// ★Plan5(공속칩)★ 공속 버프 스택이 늘거나 줄 때마다(③의 1초 감소 포함) 아이콘 숫자 갱신 — 서버·클라 모두 발생(T-72)
+	auto BroadcastAttackSpeedStacks = [WeakThis = TWeakObjectPtr<UOverlayWidgetController>(this)](const FGameplayTag, int32)
+	{
+		UOverlayWidgetController* StrongThis = WeakThis.Get();
+		if (!StrongThis || !StrongThis->AbilitySystemComponent) return;
+		const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+		const int32 Stacks =
+			UDRAbilitySystemLibrary::GetEffectStackCountWithTag(StrongThis->AbilitySystemComponent, Tags.Buff_VendingMachine_AttackSpeed) +
+			UDRAbilitySystemLibrary::GetEffectStackCountWithTag(StrongThis->AbilitySystemComponent, Tags.Buff_AttackSpeed_Shared);
+		StrongThis->OnVendingMachineAttackSpeedBuff.Broadcast(Stacks);
+	};
+	AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed,
+		EGameplayTagEventType::AnyCountChange).AddLambda(BroadcastAttackSpeedStacks);
+	AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Buff_AttackSpeed_Shared,
+		EGameplayTagEventType::AnyCountChange).AddLambda(BroadcastAttackSpeedStacks);
+```
+
+- 기존 `EffectAssetTags` / `EffectRemovedDelegate` 의 정확 일치 방송 두 곳은 **지운다**(같은 값이 두 번 나가고, 공유·감소를 모른다).
+  - 완전 제거 때도 태그 카운트가 1 → 0 으로 바뀌어 이벤트가 오므로 0 방송이 빠지지 않는다.
+  - 제거 이벤트 시점에 `GetEffectStackCountWithTag` 가 0 을 돌려주는지(제거 대기 GE 가 안 잡히는지) 구현 때 로그로 확인한다.
 
 ### 12.5 에디터 작업
 
-| 순서 | 에셋 | 할 일 | 안 하면 |
-|---|---|---|---|
-| 1 | (빌드) | 에디터 닫고 빌드(헤더 변경 — T-45) | 새 함수·태그가 안 보인다 |
-| 2 | `GE_AttackSpeedBuff` | `Duration Magnitude` → **Set by Caller**, 태그 `Data.Duration` | ①의 5초가 무시된다 |
-| 3 | `GA_VendingMachine_AttackSpeedBuff` | `MakeOutgoingSpec` + `Apply Gameplay Effect Spec To Self` 두 노드를 지우고 **`Apply Attack Speed Buff`** 한 노드로(`CommitAbilityCost` 다음, `NotifySkillActivated` 앞) | ★2번만 하면 버프가 0초★(T-60) |
-| 4 | 새 GE `GE_AttackSpeedBuff_Share` | `Skill2` 폴더에 `GE_AttackSpeedBuff` 를 복제 → Stack Limit **5**, Target Tags 를 **`Buff.AttackSpeed.Shared`** 로(기존 태그 제거), 지속 SetByCaller(`Data.Duration`) | 칩 ② 무동작 / 스택이 섞인다(T-61) |
-| 5 | `GA_SeedCannon` | `Play Montage and Wait`(3P) · `Play Montage`(1P) 의 **`Play Rate` 핀 2개** ← `Get Attack Speed Play Rate` | 씨앗 대포만 안 빨라진다 |
-| 6 | `DA_ProgressionConfig` | `Chip Tuning → Attack Speed Buff → Shared Effect` = `GE_AttackSpeedBuff_Share`, 나머지는 기본값 확인 | 칩 ② 무동작 |
-| 7 | `DA_ChipCatalog` | 칩 2개(아래 표) + `Skill Display Names` 에 `Abilities.VendingMachine.AttackSpeedBuff → 공속 버프` | — |
-| 8 | `DA_StatusEffectInfo` | `Buff.AttackSpeed.Shared` 한 줄(이름 "공속 증가" + 아이콘) | 다른 로봇 HUD 에 버프가 안 보인다(효과는 정상) |
-
-| 칸 | ① | ② |
-|---|---|---|
-| `Chip Id` | `VM.Asc.SpeedOverdrive` | `VM.Asc.SpeedShare` |
-| `Target Ability Tag` | `Abilities.VendingMachine.AttackSpeedBuff` | 〃 |
-| `Display Name` / `Effect Summary` | 과부하 모터 / 1회 공속 +30% | 공유 회로 / 아군 공속 +10% |
-| `Description` | 공속 버프 1회당 공격 속도가 30% 오릅니다. 대신 물 소모량이 160% 늘고 지속 시간이 5초로 줄어듭니다. | 공속 버프를 쓰면 20m 안의 아군에게도 같은 버프가 걸립니다(정원로봇은 기본 공격·씨앗 대포, 청소기는 기본 공격의 동작이 빨라집니다). 대신 1회당 증가량이 10%로, 최대 중첩이 5회로 줄어듭니다. |
-| `Required Slot Tier` | 3 | 4 |
-| `Modifiers` | `SkillWaterCost` / `…AttackSpeedBuff` / 곱연산 / **1.6** / Is Drawback ☑ | (비움) |
-| `Granted Tags` | `Upgrade.Feature.Skill.AttackSpeedBuff.Overdrive` | `…AttackSpeedBuff.Share` |
-| `Icon` | 공격-5 | 지원-5 |
+→ **§13 으로 옮겼다**(처음 보는 사람도 따라 할 수 있게 단계별로 다시 썼다). 계획 단계의 표는 구현과 달라진 곳(GE Duration 변경 불필요 등 — §12.10)이 있어 지웠다.
 
 ### 12.6 함정
 
 | # | 함정 | 대응 |
 |---|---|---|
-| **T-60** | GE 지속을 SetByCaller 로 바꾸고 BP 를 안 바꿈(또는 반대) | 앞의 경우 버프가 **0초로 즉시 사라진다**, 뒤의 경우 ①의 5초가 무시된다 — 12.5 의 2·3번은 **한 번에** |
+| **T-60** | `GA_VendingMachine_AttackSpeedBuff` BP 의 노드 교체(§13 2단계)를 빠뜨림 | 옛 노드가 `GE_AttackSpeedBuff` 를 20초로 직접 걸어 **칩 ①·②·③이 전부 무동작**(기본 버프만). 에러도 안 난다. ※ 계획 단계의 "GE 지속을 SetByCaller 로 바꾸면 0초" 위험은 구현에서 없앴다(§12.10) — GE 의 Duration 은 건드리지 않는다 |
 | **T-61** | 공유 버프를 기존 `GE_AttackSpeedBuff` 로 걸기 | 자기 버프와 스택이 합쳐져 20% / 10% 를 구분할 수 없고, 한도도 10 으로 섞인다 |
 | **T-62** | 공유 GE 의 Stack Limit 을 5 로 안 바꿈 | "최대 5중첩"은 에셋 값이 권위다 — 코드가 자르지 않는다 |
 | **T-63** | 발톱 `RestoreMontagePlayRate` 에 배율을 빠뜨림 | 선딜만 빨라지고 후딜은 원속 |
@@ -921,6 +1013,12 @@ float UDRMeleeAttack::GetWindupPlayRate() const
 | **T-65** | 아군 탐색에 `GetLiveObjectsWithinRadius` 사용 | 적·클렌저 사이트가 섞이고 `[MoleDiag]` 로그가 쏟아진다 |
 | **T-66** | 클라 예측 몽타주(발톱·씨앗)의 재생 속도 | 클라가 자기 ASC 의 공유 GE 를 알아야 한다 — 플레이어 ASC 는 소유 클라에 GE 가 복제되지만(Mixed) **멀티 테스트로 확인** |
 | **T-67** | 칩의 `Target Ability Tag` 를 `BasicAttack` 으로 넣기 | 동전칩과 같은 그룹이 되어 함께 못 낀다 |
+| **T-68** | 감쇠 정책(Remove Single Stack …)을 원본 `GE_AttackSpeedBuff` 에 넣기 | 칩 없는 자판기도 20초마다 1개씩 빠진다. 감쇠는 **`GE_AttackSpeedBuff_Decay` 에만** |
+| **T-69** | 시작 시각 밀기(`ModifyActiveEffectStartTime`)를 첫 적용에만 하기 | 다시 쓰는 순간 Refresh 정책이 지속을 1초로 리셋해 **1초 뒤부터** 감소가 시작된다 — **매 적용 직후** 민다 |
+| **T-70** | ③의 감소 간격을 GE 에셋의 Duration 으로 바꾸려 하기 | 코드가 지속을 `DecayInterval`(1초)로 **고정해 넣어** 에셋 값은 무시된다. 감소 간격은 `ChipTuning.AttackSpeedBuff.DecayInterval`, 유지 시간은 GA 의 `BuffDuration` 에서 바꾼다(20초는 "밀기"로 만든다) |
+| **T-71** | `Buff.VendingMachine.AttackSpeed` 를 `DA_StatusEffectInfo` 에 넣기 | ③ GE 의 Spec 지속이 1초라 상태효과 위젯이 "1초"로 표시한다. 자판기 아이콘은 스택만 쓰므로 넣지 않는다 |
+| **T-72** | HUD 를 적용·제거 델리게이트로만 갱신 | 스택 감소(10 → 9 …)는 어느 쪽도 타지 않는다 — **`AnyCountChange` 태그 이벤트**로 받는다(D-75) |
+| **T-73** | 칩 ③의 "감소 구간"을 남은 시간만으로 판정 | Spec 지속이 1초라 유지 구간의 **마지막 1초**와 감소 구간을 구분할 수 없다 → 위젯 컨트롤러가 **자기 버프 스택 흐름**으로 판정한다(줄면 감소 중, 늘거나 0 이면 아님). ★이 판정은 스택 방송 **전에** 갱신해야 한다★ — 위젯이 방송을 받자마자 비율을 읽는다 |
 
 ### 12.7 검증
 
@@ -929,22 +1027,339 @@ float UDRMeleeAttack::GetWindupPlayRate() const
 - [ ] **② 본인** 1회 +10% · 5중첩에서 멈춤 · 20초 / 자판기 아이콘 숫자가 공유 스택을 보여 준다
 - [ ] **② 아군** 20m 안 정원로봇: 발톱 스윙·씨앗 대포 동작이 빨라진다 / 청소기: 풀차지 1.5 → 1.0초 / 자판기: 발사 간격 / 20m 밖·죽은 아군은 안 받는다 / 상태 아이콘
 - [ ] **겹침** 자판기 2대 모두 ② → 공유 스택 합쳐 최대 5 / 자기 버프 + 공유 버프 덧셈
-- [ ] **§1.6** ①·② 동시 장착 불가, 동전칩·잭팟칩과는 함께
-- [ ] **멀티** 클라 자판기가 ② 시전 → 호스트·다른 클라가 버프 / 클라 정원로봇이 받은 버프로 **자기 화면 스윙**도 빨라진다(T-66)
+- [ ] **③** 1회 +16%(10중첩 발사 간격 약 0.23초) · 물 50 / 마지막 사용 20초 뒤 9 → 이후 **1초에 1개** → 29초에 0 / 감소 중 발사 간격이 단계적으로 느려진다
+- [ ] **③ 재사용** 감소 도중 다시 쓰면 중첩 +1 · 감소가 멈추고 **20초 뒤** 다시 감소(1초 뒤에 감소하면 T-69)
+- [ ] **③ HUD** 자판기 아이콘 숫자가 10 → 9 → 8 … 으로 줄고 0 에서 꺼진다(T-72) / 기본·①·② 의 숫자 표시도 그대로
+- [ ] **그래프** 기본 20초 · ① **5초**에 맞춰 줄어든다 / ③ 유지 20초 동안 줄고, 1초씩 줄어드는 동안은 비어 있다 · 감소 중 다시 쓰면 다시 꽉 찬다 / **멀티** 원격 클라 자판기가 10중첩에서 다시 쓰면 그래프가 다시 찬다(D-76)
+- [ ] **③ 정리** 감소 중 사망 · 페이즈 전환 · 미션 종료에서 버프가 남거나 에러가 나지 않는다 / `DecayEffect` 를 비우면 경고 로그 + 기본 버프로 동작
+- [ ] **§1.6** ①·②·③ 중 하나만 장착, 동전칩·잭팟칩과는 함께
+- [ ] **멀티** 클라 자판기가 ② 시전 → 호스트·다른 클라가 버프 / 클라 정원로봇이 받은 버프로 **자기 화면 스윙**도 빨라진다(T-66) /
+  클라 자판기의 ③ → 클라 화면 아이콘 숫자도 1초에 1개씩 줄고, 발사 간격도 같이 느려진다
 
 ### 12.8 열린 결정
 
 | # (§9 번호에 이어서) | 내용 | 현재 가정 |
 |---|---|---|
 | **27** | ① 최대치 유지 비용(초당 물 약 26) | 사용자 확정 수치. 플레이 후 카탈로그 `Value` / `OverdriveDuration` 조정 |
-| **28** | 칩 ③ | 보류 — 사용자 재설계 후 이 절에 추가(ID 는 이어서) |
+| **28** | 칩 ③ | ~~보류~~ → **2026-10-07 확정**: 1초에 1개씩 감소 · +16% · 나머지 그대로 · 재사용 시 감소 정지 → D-72 ~ D-75 |
 | **29** | 공유 버프를 여러 자판기가 걸면 한 더미(최대 5) | 가정대로. 따로 쌓으려면 Aggregate by Source 로(대상당 시전자별 5) |
 | **30** | ② 아군 판정은 시전 순간 1회 | 오라(범위 안에 있는 동안만)를 원하면 Synergy 오라처럼 컴포넌트로 — 범위가 커진다 |
 | **31** | 청소기 "후딜"은 지금 거의 없다(발사 즉시 재시전 가능) | 실효는 차지 단축. 강화탄 몽타주만 빨라진다 |
-| **32** | 헤더 주석 "+10%"(실제 +20%) — §9-19 와 같은 건 | D-62 구현 때 주석 정리 → §9-19 닫기 |
+| **32** | ~~헤더 주석 "+10%"(실제 +20%)~~ | **해결**(2026-10-07) — `DRVendingMachineAttackSpeedBuff.h` 주석을 실제 값으로 고쳤다 |
+| **33** | ③ 이름 · Tier · 아이콘 | 가칭 "잔류 가속" · Tier 3 · 아이콘 미정. 사용자가 정하면 카탈로그만 고친다 |
+| **34** | ③ 첫 감소 시점 | 20초가 되는 순간 바로 1개(29초에 0). 21초에 첫 감소를 원하면 밀기 값을 `BuffDuration`(−Interval 없이)으로 |
 
 ### 12.9 작업 순서
 
-1. C++ ①~⑩ → 에디터 닫고 빌드
-2. 에디터 12.5(2·3번은 한 번에)
+1. ~~C++ ①~⑩ → 빌드~~ **완료**(2026-10-07, 경고는 기존 deprecation 뿐)
+2. 에디터 **§13** 1~9단계
 3. 12.7 검증 → §1 · §3 · §5 · §6 에 흡수
+
+### 12.10 구현 결과 — 계획과 달라진 점
+
+| 항목 | 계획 | 구현 | 이유 |
+|---|---|---|---|
+| 버프 지속을 넣는 법 | GE 의 Duration 을 SetByCaller 로 바꾸고 `ApplyTimedTagEffect` 로 채운다 | GA 안의 `ApplyBuffEffect()` 가 `Spec.SetDuration(값, 고정)` + SetByCaller 둘 다 채운다 | **`GE_AttackSpeedBuff` 를 고칠 필요가 없어졌다.** "GE 만 바꾸고 BP 를 안 바꾸면 0초" 위험(옛 T-60)이 사라진다. 엔진 확인: 고정된 지속은 적용 시 재계산이 덮어쓰지 않는다(`FGameplayEffectSpec::SetDuration` · `AttemptCalculateDurationFromDef`) |
+| ②·③ GE 미지정 | ② 무동작 / ③ 기본 버프 | **둘 다** 경고 로그 + 기본 버프 | 물은 이미 냈으므로 아무 효과 없는 것보다 낫다 |
+| 공유 버프 적용 | `ApplyTimedTagEffect` | 같은 `ApplyBuffEffect()`(어빌리티 컨텍스트로 스펙 생성 — BP 의 MakeOutgoingSpec 과 같은 경로) | 세 칩이 한 함수를 지난다 |
+| HUD | ⑩ 람다 | `UOverlayWidgetController::HandleAttackSpeedBuffTagChanged()` 멤버 함수. 기존 정확 일치 방송 2곳(적용 · 제거)은 **지웠다** | 같은 값이 두 번 나가지 않게. 완전 제거 때는 이벤트의 태그 개수가 0 이면 그 태그 몫을 0 으로 본다(제거 대기 GE 를 세지 않게) |
+| 남은 시간 그래프 | (계획 없음 — 위젯이 20초 하드코딩) | `GetAttackSpeedBuffFillRatio()` 를 위젯이 매 틱 읽는다(D-76 · §13.4). 칩 ③ 유지 시간은 `UDRVendingMachineAttackSpeedBuff::FindBuffDuration(ASC)`(부여된 GA 의 `BuffDuration`) | ①의 5초 표시. 덤으로 지난번 구현의 버그 2개를 막는다: ⓐ 칩 ③ 감소 때마다 스택 방송 → 위젯이 그래프를 20초로 리셋 ⓑ 원격 클라 10중첩 재사용 시 스택 이벤트가 없어 그래프가 안 참(예전엔 적용 RPC 가 매번 왔다) |
+| 검사 | (없음) | `DA_ProgressionConfig` 검사에 추가 — ②·③ 칩이 카탈로그에 있으면 `SharedEffect`·`DecayEffect` 가 비었는지, Target Tags · Stack Limit · (③) Stack Expiration Policy 가 맞는지 | 틀리면 칩이 **에러 없이** 기본 버프처럼 동작하기 때문 |
+| 청소기 | 차지 간격 ÷ M | 같음 + 하한 0.05초, 배율은 1 미만으로 내려가지 않게 | 튜닝 실수 방어 |
+| 씨앗 대포 | `BaseMontagePlayRate` 1.0 | 같음 — BP 의 두 Play Rate 핀이 실제로 1.0 인 것을 바이트코드로 확인 | T-20 과 같은 이유 |
+
+**바뀐 C++ 파일**: `DRGameplayTags` · `DRProgressionConfig`(.h 튜닝 구조체 / .cpp 검사) · `DRAbilitySystemLibrary`(`GetEffectStackCountWithTag` · `GetAttackSpeedMultiplier` · `GetAlivePlayersWithinRadius`) ·
+`DRGameplayAbility`(`GetAttackSpeedMultiplier()`) · `DRVendingMachineAttackSpeedBuff`(`ApplyAttackSpeedBuff` · `BuffDuration` · 합산 스택) · `DRVendingMachineBasicAttack`(리터럴 0.2 삭제 — §9-17 해소) ·
+`DRMeleeAttack` · `DRSeedCannon`(`GetAttackSpeedPlayRate`) · `DRVacuumAirShot` · `OverlayWidgetController`.
+
+**BP 실측**(바이트코드): 지금 `GA_VendingMachine_AttackSpeedBuff` 는 `CommitAbilityCost → NotifySkillActivated → MakeOutgoingSpec → BP_ApplyGameplayEffectSpecToSelf → Delay 0.5 → EndAbility` 순서다.
+`NotifySkillActivated` 가 적용 **전**에 불려 연출 음높이가 "사용 전 스택"을 쓰고 있었다 — §13 2단계에서 `Apply Attack Speed Buff` 를 그 **앞**에 둔다.
+
+---
+
+## 13. 에디터에서 할 일 — 자판기 공속 버프 칩 3종 (처음 보는 사람용)
+
+> C++ 는 끝났고 빌드도 통과했다(2026-10-07). 아래 **1~9단계**를 순서대로 하면 칩 3개가 게임에서 동작한다.
+> 걸리는 시간은 20~30분 정도. **블루프린트는 고친 뒤 `Compile` → `Save`(Ctrl+S)**, 데이터 에셋은 `Save` 만 누른다.
+> 이 작업을 하기 전에도 게임은 지금처럼 동작한다 — 중간에 멈춰도 망가지지 않는다.
+
+### 13.0 시작 전에 알아 둘 것
+
+| 용어 | 뜻 |
+|---|---|
+| 콘텐츠 브라우저 | 에디터 아래쪽의 파일 탐색 창. 왼쪽 폴더 트리에서 `Content` 아래 경로를 따라 들어간다 |
+| 디테일 패널 | 에셋을 더블클릭해 연 창의 속성 목록. 위쪽 **검색창**에 속성 이름을 치면 바로 찾는다 |
+| GE | Gameplay Effect. 버프·디버프의 "규칙표" 에셋 (`GE_` 로 시작) |
+| GA | Gameplay Ability. 스킬 블루프린트 (`GA_` 로 시작) |
+| 태그 고르기 | 태그 칸을 누르면 트리가 뜬다. 위 검색창에 `AttackSpeed` 처럼 일부를 치면 빨리 찾는다 |
+
+- 에디터는 `DaeRune.uproject` 를 더블클릭해서 연다. "모듈을 다시 빌드할까요?" 가 뜨면 **예**.
+- 새 태그 `Buff.AttackSpeed.Shared` 와 `Upgrade.Feature.Skill.AttackSpeedBuff.*` 는 C++ 에 들어 있어서 **태그 목록에 자동으로 보인다**(따로 만들지 않는다).
+- 실수하면: 저장하기 전이면 창을 닫고 "저장 안 함", 저장한 뒤면 Git 으로 그 `.uasset` 만 되돌리면 된다.
+
+### 13.1 새 GE 두 개 만들기 (복제해서 조금만 고친다)
+
+**어디서**: 콘텐츠 브라우저 → `Content/Blueprints/AbilitySystem/Player/VendingMachine/Abilities/Skill2/`
+(이 폴더에 `GE_AttackSpeedBuff`, `GA_VendingMachine_AttackSpeedBuff` 가 있다)
+
+**① `GE_AttackSpeedBuff_Share` — 칩 ② "공유 회로" 용**
+
+1. `GE_AttackSpeedBuff` 를 **우클릭 → Duplicate**(또는 클릭 후 Ctrl+D).
+2. 이름을 `GE_AttackSpeedBuff_Share` 로 바꾸고 Enter.
+3. 더블클릭으로 연다. 디테일 패널에서 아래 3곳을 고친다.
+
+| 찾을 곳(디테일 검색창에 입력) | 지금 값 | 바꿀 값 |
+|---|---|---|
+| `Stack Limit Count` | 10 | **5** |
+| `Components` → **Target Tags Gameplay Effect Component** → `Add Tags` | `Buff.VendingMachine.AttackSpeed` | 이 태그를 **지우고**(X) **`Buff.AttackSpeed.Shared`** 를 넣는다 |
+| `Components` → **Asset Tags Gameplay Effect Component** → `Add Tags` | `Buff.VendingMachine.AttackSpeed` | 똑같이 **`Buff.AttackSpeed.Shared`** 로 바꾼다 |
+
+4. 나머지(Duration, Stacking Type = Aggregate by Target 등)는 **그대로 둔다.** 지속 시간은 코드가 넣는다.
+5. `Compile` → `Save`.
+
+> ⚠️ 태그를 안 바꾸면 공유 버프가 자판기 자기 버프와 섞여 1회 증가량(10% / 20%)을 구분할 수 없다(T-61).
+> ⚠️ Stack Limit 을 안 바꾸면 최대 5중첩이 아니라 10중첩이 된다(T-62).
+
+**② `GE_AttackSpeedBuff_Decay` — 칩 ③ "잔류 가속" 용**
+
+1. 다시 `GE_AttackSpeedBuff` 를 **Duplicate** → 이름 `GE_AttackSpeedBuff_Decay`.
+2. 열어서 **딱 한 곳**만 고친다.
+
+| 찾을 곳 | 지금 값 | 바꿀 값 |
+|---|---|---|
+| `Stack Expiration Policy` (Stacking 묶음 안) | Clear Entire Stack | **Remove Single Stack and Refresh Duration** |
+
+3. **태그는 바꾸지 않는다**(`Buff.VendingMachine.AttackSpeed` 그대로). Stack Limit Count 10 그대로.
+   `Stack Duration Refresh Policy` 가 **Refresh on Successful Application** 인지 눈으로만 확인한다(기본값).
+4. `Compile` → `Save`.
+
+> ⚠️ **원본 `GE_AttackSpeedBuff` 는 절대 고치지 않는다.** 원본에 이 정책을 넣으면 칩이 없는 자판기까지 20초마다 1개씩 빠진다(T-68).
+
+### 13.2 공속 버프 스킬 블루프린트의 노드 바꾸기 ★가장 중요★
+
+**어디서**: 같은 폴더의 `GA_VendingMachine_AttackSpeedBuff` 더블클릭 → **Event Graph** 탭.
+
+**지금 모양** (흰 실행선 순서)
+
+```
+Event ActivateAbility → Commit Ability Cost → Notify Skill Activated → Make Outgoing Spec
+  → Apply Gameplay Effect Spec to Self → Delay(0.5) → End Ability
+(Make Outgoing Spec 의 Target 에 Get Avatar Actor From Actor Info → Get Ability System Component 가 꽂혀 있다)
+```
+
+**바꾼 뒤 모양**
+
+```
+Event ActivateAbility → Commit Ability Cost → Apply Attack Speed Buff → Notify Skill Activated → Delay(0.5) → End Ability
+```
+
+순서대로:
+
+1. **`Make Outgoing Spec`** 노드를 클릭 → Delete. **`Apply Gameplay Effect Spec to Self`** 노드도 Delete.
+2. 이제 아무 데도 안 쓰이는 **`Get Ability System Component`** · **`Get Avatar Actor From Actor Info`** 노드도 Delete (남겨 둬도 동작은 같지만 헷갈린다).
+3. 빈 곳 **우클릭** → 검색창에 `Apply Attack Speed Buff` → 선택해서 노드를 만든다(분류: VendingMachine | Skill).
+4. 선 다시 잇기:
+   - `Commit Ability Cost` 의 오른쪽 흰 화살표 → **`Apply Attack Speed Buff`** 의 왼쪽 흰 화살표.
+     (원래 `Commit Ability Cost → Notify Skill Activated` 선은 새로 끌어 놓으면 자동으로 바뀐다. 안 바뀌면 선 위에서 Alt+클릭으로 끊는다)
+   - `Apply Attack Speed Buff` 오른쪽 → **`Notify Skill Activated`** 왼쪽.
+   - `Notify Skill Activated` 오른쪽 → **`Delay`** 왼쪽 (Delay 의 Duration 0.5 는 그대로).
+   - `Delay` 의 Completed → `End Ability` 는 원래대로 이어져 있어야 한다.
+5. 위쪽 툴바 **Class Defaults** 를 눌러 디테일에서 확인만 한다:
+   - `Attack Speed Buff Effect` = `GE_AttackSpeedBuff` (원본 — 이미 들어 있다)
+   - `Buff Duration` = **20** (새로 생긴 칸, 기본값 20 — 칩 없을 때의 지속이자 칩 ③의 "유지 시간")
+6. `Compile` → 에러가 없으면 `Save`.
+
+> ⚠️ 이 단계를 빠뜨리면 **칩 ①·②·③이 전부 아무 효과가 없다**(옛 노드가 기본 버프만 건다). 에러도 안 뜬다(T-60).
+> 💡 `Notify Skill Activated` 를 `Apply Attack Speed Buff` **뒤**에 두는 이유: 사용할 때 나는 소리의 음높이가 "이번 사용으로 쌓인 뒤의 스택"을 따라가게 하려는 것. 예전에는 적용 전에 불려 한 단계 늦었다.
+
+### 13.3 씨앗 대포 블루프린트에 공속 연결하기 (칩 ②의 아군 효과)
+
+**어디서**: `Content/Blueprints/AbilitySystem/Player/GardenRobot/Abilities/Skill3/GA_SeedCannon` → Event Graph.
+
+이 그래프에는 몽타주를 트는 노드가 **두 개** 있다. 둘 다 재생 속도 칸에 숫자 `1.0` 이 들어 있다.
+
+| 노드 | 무엇을 트나 | 고칠 핀 |
+|---|---|---|
+| **Play Montage** (1인칭 손) | `AM_Gardener_SeedBomb`, Target = FirstPersonMesh | **Play Rate** (지금 1.0) |
+| **Play Montage and Wait** (3인칭 몸) | `TaggedMontage` 의 Montage | **Rate** (지금 1.0) |
+
+1. 빈 곳 **우클릭** → `Get Attack Speed Play Rate` 검색 → 노드 생성(초록색, 실행선 없는 노드).
+2. 그 노드의 출력(초록 동그라미)을 **Play Montage 의 `Play Rate`** 에 끌어 놓는다.
+3. 같은 출력을 한 번 더 끌어서 **Play Montage and Wait 의 `Rate`** 에도 놓는다(한 노드에서 두 줄이 나가도 된다).
+4. `Compile` → `Save`.
+
+> ⚠️ 한쪽만 연결하면 손(1P)과 몸(3P)의 속도가 따로 논다.
+> 💡 버프가 없으면 이 노드가 정확히 1.0 을 내보내서 지금과 똑같다. 정원로봇 **발톱**과 청소기 **에어샷**은 C++ 만으로 끝났다(할 일 없음).
+
+### 13.4 자판기 스킬 아이콘 위젯 — 남은 시간 그래프를 C++ 값으로 그리기
+
+**왜 하나**: 지금 그래프는 위젯이 **20초를 스스로 세서** 그린다(변수 `Buff Duration` = 20, `UpdateBuffUI` 안 `FClamp` 의 최대값 20).
+그래서 ① 칩 ①의 5초를 못 그리고, ② 칩 ③에서 스택이 1초마다 줄 때마다 그래프가 꽉 찼다가 다시 줄고,
+③ 멀티에서 원격 클라가 10중첩일 때 다시 쓰면(스택 수가 안 바뀌어서) 그래프가 다시 차지 않는다.
+→ 위젯은 이제 **C++ 함수 `Get Attack Speed Buff Fill Ratio`(0~1)를 매 틱 읽어서 그대로 그리기만** 한다(D-76).
+
+**어디서**: `Content/Blueprints/UI/SkillIcon/WBP_SkillIcon_VendingMachine` 더블클릭 → 오른쪽 위 **Graph** 버튼.
+
+**준비 — 비율 노드 만드는 법** (아래에서 두 번 쓴다)
+1. 왼쪽 **My Blueprint → Variables** 에서 `BP Overlay Widget Controller` 를 그래프로 끌어 놓고 **Get** 을 고른다.
+2. 그 노드의 파란 출력 핀을 끌어 빈 곳에 놓고, 검색창에 `Get Attack Speed Buff Fill Ratio` → 선택.
+   (초록색 출력 `Return Value` 가 0~1 사이 숫자다. 버프가 없으면 0)
+
+**(가) 스택 이벤트 쪽** — 빨간 이벤트 노드 **`OnVendingMachineAttackSpeedBuff_Event`** (입력 `Stack Count`) 에서 시작하는 줄
+
+지금 모양:
+
+```
+OnVendingMachineAttackSpeedBuff_Event → Set Text(Text_BuffStack) → Branch(Stack Count == 0)
+   False → SET Buff Remaining Time(= Buff Duration) → SET bBuffActive(true)
+         → Set Scalar Parameter Value(DurationFill, 'FillRatio', Value = 1.0)
+         → Clear and Invalidate Timer by Handle → Set Timer by Event(UpdateBuffUI, 반복) → SET Buff Timer Handle
+```
+
+1. **`SET Buff Remaining Time`** 노드를 Delete. Branch 의 **False** 핀을 `SET bBuffActive` 의 왼쪽 실행 핀에 바로 잇는다.
+2. `Set Scalar Parameter Value`(Parameter Name = `FillRatio`) 의 **Value** 칸(지금 1.0)에 **`Get Attack Speed Buff Fill Ratio`** 출력을 연결한다.
+   (1.0 을 그대로 두면 칩 ③에서 스택이 줄 때마다 그래프가 한 순간 꽉 찬다)
+3. Branch 의 **True**(스택 0) 쪽은 그대로 비워 둔다 — 아래 타이머가 비율 0 을 보고 스스로 멈춘다.
+
+**(나) 타이머 쪽** — 빨간 이벤트 노드 **`UpdateBuffUI`** 에서 시작하는 줄
+
+지금 모양:
+
+```
+UpdateBuffUI → SET Buff Remaining Time(= FClamp(Buff Remaining Time − Buff Update Rate, 0, 20))
+            → Set Scalar Parameter Value(DurationFill, 'FillRatio', Value = Buff Remaining Time ÷ Buff Duration)
+            → Branch(Buff Remaining Time <= 0)
+                 True → SET bBuffActive(false) → Set Scalar Parameter Value('FillRatio', 0) → Clear and Invalidate Timer by Handle
+```
+
+1. **`SET Buff Remaining Time`** 노드와, 그 입력에 붙은 계산 노드(**FClamp**, **−**)를 Delete. Value 에 붙은 **÷** 노드도 Delete.
+2. `UpdateBuffUI` 의 흰 실행 핀 → `Set Scalar Parameter Value` 의 왼쪽 실행 핀으로 바로 잇는다.
+3. 위 "준비"대로 **`Get Attack Speed Buff Fill Ratio`** 노드를 하나 더 만들고(또는 (가)의 것을 복사), 출력을 **두 곳**에 잇는다:
+   - `Set Scalar Parameter Value` 의 **Value**
+   - Branch 앞의 **`<=`** 노드의 **위쪽 입력**(원래 `Buff Remaining Time` 이 꽂혀 있던 곳). 아래쪽 입력은 0 그대로.
+4. True 쪽(멈추기)은 그대로 둔다.
+5. `Compile` → `Save`.
+
+> 💡 이제 안 쓰는 변수 `Buff Duration` · `Buff Remaining Time` 은 지워도 되고 남겨 둬도 된다(남겨 두면 Compile 경고 없음).
+> 💡 그래프가 보여 주는 것: 기본·칩 ② = 남은 시간 ÷ 20초 / 칩 ① = ÷ 5초 / 칩 ③ = 유지 20초 동안 줄어들고, 1초씩 스택이 빠지는 동안은 **비어 있고 숫자만 줄어든다**(A 방식).
+> ⚠️ (가)·(나) 중 하나만 고치면: (가)만 → 그래프가 여전히 20초로 줄어든다 / (나)만 → 칩 ③에서 스택이 줄 때마다 그래프가 리셋된다.
+
+### 13.5 칩 튜닝에 새 GE 연결하기
+
+**어디서**: `Content/Blueprints/Progression/DA_ProgressionConfig` 더블클릭.
+
+1. 디테일 검색창에 `Attack Speed Buff` → **Chip Tuning → Attack Speed Buff** 묶음을 펼친다.
+2. 두 칸을 채운다(칸 오른쪽 드롭다운에서 이름 검색):
+
+| 칸 | 넣을 것 |
+|---|---|
+| `Shared Effect` | **`GE_AttackSpeedBuff_Share`** (13.1-①에서 만든 것) |
+| `Decay Effect` | **`GE_AttackSpeedBuff_Decay`** (13.1-②에서 만든 것) |
+
+3. 나머지 숫자는 **기본값 그대로인지 확인만** 한다:
+
+| 칸 | 기본값 | 뜻 |
+|---|---|---|
+| Base Speed Per Stack | 0.2 | 칩 없을 때 1회 +20% |
+| Overdrive Speed Per Stack / Overdrive Duration | 0.3 / 5 | 칩 ① 1회 +30%, 지속 5초 |
+| Shared Speed Per Stack / Shared Radius / Shared Duration | 0.1 / 2000 / 20 | 칩 ② 1회 +10%, 20m, 20초 |
+| Decay Speed Per Stack / Decay Interval | 0.16 / 1 | 칩 ③ 1회 +16%, 1초에 1개씩 감소 |
+
+4. `Save`.
+
+> 💡 밸런스를 바꿀 때는 **여기 숫자만** 고치면 된다(재컴파일 필요 없음). 칩 ①의 물 +160% 만 예외 — 13.6 의 카탈로그 값이다.
+
+### 13.6 칩 카탈로그에 칩 3개 추가하기
+
+**어디서**: `Content/Blueprints/Progression/DA_ChipCatalog` 더블클릭.
+
+1. `Chips` 배열 오른쪽 **+** 를 세 번 눌러 빈 칸 3개를 만든다(맨 아래에 생긴다).
+2. 각 칸을 펼쳐 아래 표대로 채운다. **표에 없는 칸은 기본값 그대로.**
+
+| 칸 | ① 과부하 모터 | ② 공유 회로 | ③ 잔류 가속 |
+|---|---|---|---|
+| `Chip Id` | `VM.Asc.SpeedOverdrive` | `VM.Asc.SpeedShare` | `VM.Asc.SpeedDecay` |
+| `Owner Class` | Vending Machine | Vending Machine | Vending Machine |
+| `Common Chip` | ☐ (끔) | ☐ | ☐ |
+| `Category` | Ascension | Ascension | Ascension |
+| `Target Ability Tag` | `Abilities.VendingMachine.AttackSpeedBuff` | 〃 | 〃 |
+| `Display Name` | 과부하 모터 | 공유 회로 | 잔류 가속 |
+| `Effect Summary` | 1회 공속 +30% | 아군 공속 +10% | 버프가 천천히 꺼진다 |
+| `Description` | 공속 버프 1회당 공격 속도가 30% 오릅니다. 대신 물 소모량이 160% 늘고 지속 시간이 5초로 줄어듭니다. | 공속 버프를 쓰면 20m 안의 아군에게도 같은 버프가 걸립니다(정원로봇은 기본 공격·씨앗 대포, 청소기는 기본 공격의 동작이 빨라집니다). 대신 1회당 증가량이 10%로, 최대 중첩이 5회로 줄어듭니다. | 공속 버프 시간이 끝나도 중첩이 한꺼번에 사라지지 않고 1초에 1개씩 줄어듭니다. 줄어드는 중에 다시 쓰면 다시 20초 동안 유지됩니다. 대신 1회당 증가량이 16%로 줄어듭니다. |
+| `Icon` | `공격-5` | `지원-5` | `편의-5` (가칭 — §12.8-33) |
+| `Required Slot Count` | 1 | 1 | 1 |
+| `Required Slot Tier` | 3 | 4 | 3 (가칭) |
+| `Modifiers` | **1개 추가**(아래 표) | 비움 | 비움 |
+| `Granted Tags` | `Upgrade.Feature.Skill.AttackSpeedBuff.Overdrive` | `Upgrade.Feature.Skill.AttackSpeedBuff.Share` | `Upgrade.Feature.Skill.AttackSpeedBuff.Decay` |
+
+아이콘은 `Content/DaeRuneAssets/UI/Upgrade/Icon/Vending/` 에 있다(아직 아무 칩도 안 쓰는 `-5` 번).
+
+**칩 ①의 Modifiers 한 줄** (`Modifiers` 옆 **+** 한 번 → 펼치기)
+
+| 칸 | 값 |
+|---|---|
+| `Stat` | **스킬 물 소모량** (Skill Water Cost) |
+| `Target Ability Tag` | `Abilities.VendingMachine.AttackSpeedBuff` |
+| `Op` | **곱연산(비율, 0.1 → ×1.1)** |
+| `Value` | **1.6** (= +160% → 물 50 이 130 이 된다) |
+| `Is Drawback` | ☑ (켬 — 카드에 빨간 단점으로 뜬다) |
+
+3. 같은 에셋 아래쪽 **`Skill Display Names`** 맵에서 **+** → 한 줄 추가:
+   - 키(왼쪽) = `Abilities.VendingMachine.AttackSpeedBuff`
+   - 값(오른쪽) = `공속 버프`
+   (같은 스킬 칩을 두 개 끼려고 할 때 나오는 "공속 버프 칩은 하나만" 같은 안내에 쓰인다)
+4. `Save`.
+
+> ⚠️ `Target Ability Tag` 를 `Abilities.VendingMachine.BasicAttack` 으로 넣으면 동전칩과 같은 무리가 되어 함께 못 낀다(T-67).
+> ⚠️ ②·③은 `Description` 을 비우면 검사에서 오류가 난다 — 단점이 숫자로 안 보이는 칩이라 글로 알려 줘야 한다.
+
+### 13.7 (권장) 다른 로봇 화면에 공유 버프 아이콘 띄우기
+
+**어디서**: `Content/Blueprints/AbilitySystem/Data/DA_StatusEffectInfo`.
+
+1. `Effects Information` 배열 **+** → 새 칸을 펼친다.
+
+| 칸 | 값 |
+|---|---|
+| `Effect Tag` | **`Buff.AttackSpeed.Shared`** |
+| `Effect Name` | 공속 증가 |
+| `Effect Icon` | `SkillIcon_AttackSpeedBuff` (`Content/DaeRuneAssets/UI/SkillIcon/VendingMachine/`) — 다른 그림을 써도 된다 |
+
+2. `Save`.
+
+> 💡 안 해도 효과는 정상이다. 정원로봇·청소기 화면에 "버프 받는 중" 아이콘이 안 뜰 뿐.
+> ⚠️ `Buff.VendingMachine.AttackSpeed` 는 여기 **넣지 않는다** — 칩 ③에서 남은 시간이 "1초"로 잘못 표시된다(T-71). 자판기는 원래 스킬 아이콘의 숫자로 스택을 보여 준다.
+
+### 13.8 검사 돌리기
+
+1. `DA_ProgressionConfig` 를 다시 연다. 아무 숫자 하나를 바꿨다가 원래대로 되돌리고 `Save`(편집하면 검사가 돈다).
+   또는 콘텐츠 브라우저에서 `DA_ProgressionConfig` 우클릭 → **Asset Actions → Validate Assets**.
+2. 아래쪽 **Output Log** 창(없으면 메뉴 Window → Output Log) 검색창에 `ProgressionConfig` 를 친다.
+3. **`[ProgressionConfig] DA_ProgressionConfig: 검증 통과`** 가 보이면 끝.
+
+오류가 보이면 아래 표에서 찾아 고친다.
+
+| 오류 문구(일부) | 고칠 곳 |
+|---|---|
+| `AttackSpeedBuff.SharedEffect 가 비어 있어…` / `DecayEffect 가 비어 있어…` | 13.5 의 두 칸 |
+| `…Target Tags 에 Buff.AttackSpeed.Shared 가 없습니다` | 13.1-① 의 태그 |
+| `…Target Tags 에 Buff.VendingMachine.AttackSpeed 가 없습니다` | 13.1-② 에서 태그를 실수로 바꿨다 — 되돌린다 |
+| `…Stack Limit Count 가 1 이하라…` | 13.1 의 Stack Limit Count |
+| `…Stack Expiration Policy 가 'Remove Single Stack and Refresh Duration' 이 아니라…` | 13.1-② |
+| `단점이 코드 구동인 돌파 칩은 Description 에…` | 13.6 의 ②·③ Description |
+
+### 13.9 바로 해 보는 확인 (5분)
+
+1. 업그레이드 화면에서 자판기에 칩을 하나 끼운다(①·②·③ 중 **하나만** 끼워진다 — 정상).
+2. Play(PIE)로 들어가 **E** 를 여러 번 누른다. Output Log 검색창에 `AttackSpeedBuff` 를 쳐 둔다.
+
+| 낀 칩 | 보이면 정상 |
+|---|---|
+| (없음) | 예전과 같다 — 20초 뒤 스택이 한꺼번에 사라진다 |
+| ① | 물이 130 씩 빠진다 · 5초 뒤 스택이 한꺼번에 사라진다 · 연사가 눈에 띄게 빠르다 · 남은 시간 그래프가 **5초** 만에 비워진다 |
+| ② | 로그 `[AttackSpeedBuff] Share: … → N명(본인 포함)` · 스택이 5에서 멈춘다 · (멀티) 20m 안 정원로봇의 발톱·씨앗 동작이 빨라진다 |
+| ③ | 그래프가 20초 동안 줄어 비면, 그때부터 스킬 아이콘 숫자가 **10 → 9 → 8 …** 1초마다 줄어든다(그래프는 빈 채로) · 줄어드는 중 E → 숫자 +1 · 그래프가 다시 꽉 차고 20초 유지 |
+
+- 로그에 `DecayEffect 미지정` / `SharedEffect 미지정` 경고가 보이면 13.5 를 다시 본다.
+- 칩을 껴도 아무 변화가 없으면 **13.2(노드 교체)** 를 빠뜨린 것이다.
+- 자세한 검증 목록은 **§12.7**. 다 끝나면 §12.7 체크박스를 채운다.

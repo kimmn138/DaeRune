@@ -30,10 +30,15 @@ void UDRVacuumAirShot::StartCharging()
 	ChargeStartTime = World->GetTimeSeconds();
 	bCharging = true;
 	LastNotifiedStage = -1;
+
+	// ★Plan5(공속칩)★ 공속 버프(자판기 칩 ②)를 받은 동안은 단계가 빨리 오른다 — 선딜 단축 (D-69).
+	//   버프가 없으면 배율 1.0 이라 ChargeInterval 그대로.
+	EffectiveChargeInterval = FMath::Max(0.05f, ChargeInterval / FMath::Max(1.f, GetAttackSpeedMultiplier()));
+
 	NotifyGauge(0);
 
 	// 로컬 연출용 단계 상승 통지 타이머 (서버/클라 양쪽에서 돌지만 UI/SFX는 BP에서 소유 클라만 처리)
-	World->GetTimerManager().SetTimer(ChargeUITimerHandle, this, &UDRVacuumAirShot::TickChargeUI, ChargeInterval, true);
+	World->GetTimerManager().SetTimer(ChargeUITimerHandle, this, &UDRVacuumAirShot::TickChargeUI, EffectiveChargeInterval, true);
 }
 
 void UDRVacuumAirShot::TickChargeUI()
@@ -77,7 +82,7 @@ int32 UDRVacuumAirShot::GetChargeStage() const
 	if (!World) return 0;
 
 	const double HoldTime = World->GetTimeSeconds() - ChargeStartTime;
-	return FMath::Clamp(FMath::FloorToInt32(HoldTime / ChargeInterval), 0, Stages.Num() - 1);
+	return FMath::Clamp(FMath::FloorToInt32(HoldTime / EffectiveChargeInterval), 0, Stages.Num() - 1);
 }
 
 void UDRVacuumAirShot::ReleaseAndFire()
@@ -130,10 +135,11 @@ void UDRVacuumAirShot::FireShot(int32 Stage)
 	// ===== 최종 단계 (강화탄) =====
 
 	// 강화 공격 몽타주 (fire-and-forget — 직후 EndAbility가 몽타주를 끊지 않도록 bStopWhenAbilityEnds=false, §13.5-③)
+	// ★Plan5(공속칩)★ 재생 속도 = 공속 배율 — 버프를 받은 동안 후딜(강화탄 동작)도 짧아진다 (D-69). 버프가 없으면 1.0
 	if (EnhancedAttackMontage)
 	{
 		UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-			this, NAME_None, EnhancedAttackMontage, 1.f, NAME_None, /*bStopWhenAbilityEnds*/ false);
+			this, NAME_None, EnhancedAttackMontage, FMath::Max(1.f, GetAttackSpeedMultiplier()), NAME_None, /*bStopWhenAbilityEnds*/ false);
 		if (MontageTask)
 		{
 			MontageTask->ReadyForActivation();

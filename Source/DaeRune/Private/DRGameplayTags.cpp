@@ -196,6 +196,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("VendingMachine Attack Speed Buff")
 	);
 
+	GameplayTags.Buff_AttackSpeed_Shared = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.AttackSpeed.Shared"),
+		FString("자판기 공속 버프 칩 ②가 본인·아군에게 거는 공유 공속 버프 (스택당 ChipTuning.AttackSpeedBuff.SharedSpeedPerStack)")
+	);
+
 	GameplayTags.Buff_RobotVacuum_DashSpeed = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Buff.RobotVacuum.DashSpeed"),
 		FString("RobotVacuum Dash Move Speed Buff (stackable)")
@@ -472,6 +477,23 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Upgrade_Feature_Skill_Jackpot_Pity = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Upgrade.Feature.Skill.Jackpot.Pity"),
 		FString("브론즈·실버가 나올 때마다 다음 잭팟의 골드 확률 누적 증가, 골드가 나오면 초기화")
+	);
+
+	// ========== 자판기 공속 버프 칩 기능 스위치 (Plan5(공속칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_AttackSpeedBuff_Overdrive = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.AttackSpeedBuff.Overdrive"),
+		FString("공속 버프 스택당 증가량을 OverdriveSpeedPerStack 으로, 지속을 OverdriveDuration 으로")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_AttackSpeedBuff_Share = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.AttackSpeedBuff.Share"),
+		FString("공속 버프를 본인 + SharedRadius 안 아군에게 SharedEffect 로 건다")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_AttackSpeedBuff_Decay = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.AttackSpeedBuff.Decay"),
+		FString("공속 버프를 DecayEffect 로 걸어 만료 후 DecayInterval 마다 1스택씩 감소, 스택당 DecaySpeedPerStack")
 	);
 
 	// ========== 범용 SetByCaller (Plan5(씨앗칩)) ==========

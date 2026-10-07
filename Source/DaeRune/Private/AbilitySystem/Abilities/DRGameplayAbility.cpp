@@ -166,6 +166,13 @@ float UDRGameplayAbility::GetEffectiveWaterCost() const
     return GetEffectiveWaterCostFor(GetCurrentActorInfo());
 }
 
+float UDRGameplayAbility::GetAttackSpeedMultiplier() const
+{
+    // GetAbilitySystemComponentFromActorInfo() 는 ActorInfo 가 없으면 ensure 를 띄운다 — BP Pure 노드라 직접 확인한다
+    return UDRAbilitySystemLibrary::GetAttackSpeedMultiplier(
+        CurrentActorInfo ? CurrentActorInfo->AbilitySystemComponent.Get() : nullptr);
+}
+
 float UDRGameplayAbility::GetEffectiveWaterCostFor(const FGameplayAbilityActorInfo* ActorInfo) const
 {
     if (WaterCost <= 0.f) return 0.f;

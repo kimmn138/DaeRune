@@ -332,6 +332,74 @@ struct FDRJackpotChipTuning
 };
 
 /**
+ * ★Plan5(공속칩)★ 자판기 공속 버프(스킬 2) 칩 3종의 동적 상수.
+ *
+ * 칩이 없을 때의 스택당 증가량(BaseSpeedPerStack)도 여기 둔다 — 예전에는 GetCurrentFireInterval 의 리터럴 0.2 였다.
+ * 버프 지속(칩 없을 때 20초)은 GA 의 BuffDuration, 최대 중첩은 GE 에셋의 Stack Limit 이 권위다.
+ * ①의 물 +160% 는 여기가 아니라 DA_ChipCatalog 의 SkillWaterCost 모디파이어다.
+ */
+USTRUCT(BlueprintType)
+struct FDRAttackSpeedBuffChipTuning
+{
+	GENERATED_BODY()
+
+	// 칩이 없을 때 자기 버프 1스택당 공속 증가 (0.2 = +20%)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff", meta = (ClampMin = "0.0"))
+	float BaseSpeedPerStack = 0.2f;
+
+	// ========== ① VM.Asc.SpeedOverdrive (과부하 모터) ==========
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff|Overdrive", meta = (ClampMin = "0.0"))
+	float OverdriveSpeedPerStack = 0.3f;
+
+	// 이 칩을 끼면 자기 버프 지속(초). 단점 — 기본 20초 대신
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff|Overdrive", meta = (ClampMin = "0.1"))
+	float OverdriveDuration = 5.0f;
+
+	// ========== ② VM.Asc.SpeedShare (공유 회로) ==========
+
+	/**
+	 * 공유 버프 GE. 요구 사양 (Plan5 D-63):
+	 *   - Has Duration / 모디파이어 없음 (지속 값은 코드가 스펙에 고정해 넣는다 — 에셋의 Duration 값은 무시된다)
+	 *   - Granted Tags(Target Tags 컴포넌트) = Buff.AttackSpeed.Shared
+	 *   - Aggregate by Target, Stack Limit = 5, Refresh on Successful Application
+	 * ★비우면 칩 ②가 경고 로그와 함께 무동작★
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff|Share")
+	TSoftClassPtr<UGameplayEffect> SharedEffect;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff|Share", meta = (ClampMin = "0.0"))
+	float SharedSpeedPerStack = 0.1f;
+
+	// 아군 판정 반경(uu). 2000 = 20m. 시전 순간 1회 판정 (오라가 아니다)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff|Share", meta = (ClampMin = "0.0"))
+	float SharedRadius = 2000.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff|Share", meta = (ClampMin = "0.1"))
+	float SharedDuration = 20.f;
+
+	// ========== ③ VM.Asc.SpeedDecay (잔류 가속) ==========
+
+	/**
+	 * 감쇠 버프 GE. 요구 사양 (Plan5 D-72):
+	 *   - GE_AttackSpeedBuff 복제 — Granted Tags = Buff.VendingMachine.AttackSpeed (★원본과 같은 태그★)
+	 *   - Has Duration / 모디파이어 없음 (지속 값은 코드가 스펙에 고정해 넣는다 — 에셋의 Duration 값은 무시된다)
+	 *   - Aggregate by Target, Stack Limit = 10, Refresh on Successful Application
+	 *   - ★Stack Expiration Policy = Remove Single Stack and Refresh Duration★ (원본에는 넣지 않는다 — T-68)
+	 * ★비우면 칩 ③이 경고 로그와 함께 기본 버프(한꺼번에 사라짐)로 동작★
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff|Decay")
+	TSoftClassPtr<UGameplayEffect> DecayEffect;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff|Decay", meta = (ClampMin = "0.0"))
+	float DecaySpeedPerStack = 0.16f;
+
+	// 버프 시간(GA 의 BuffDuration)이 끝난 뒤 중첩이 1개씩 빠지는 간격(초)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff|Decay", meta = (ClampMin = "0.1"))
+	float DecayInterval = 1.0f;
+};
+
+/**
  * 돌파 칩(⑥⑦⑧)의 동적 효과 튜닝 상수. (Plan3(공용칩) §17.4.3)
  *
  * 이 수치들은 카탈로그의 FDRUpgradeModifier 로 표현할 수 없다 —
@@ -421,6 +489,11 @@ struct FDRChipTuning
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Jackpot")
 	FDRJackpotChipTuning Jackpot;
+
+	// ========== 자판기 공속 버프 칩 (Plan5(공속칩)) ==========
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff")
+	FDRAttackSpeedBuffChipTuning AttackSpeedBuff;
 };
 
 /**

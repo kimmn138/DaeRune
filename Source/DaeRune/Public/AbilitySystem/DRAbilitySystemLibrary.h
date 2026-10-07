@@ -97,6 +97,32 @@ public:
 	 */
 	static const struct FDRChipTuning& GetChipTuning(const UObject* WorldContextObject);
 
+	// ========== 공격 속도 (Plan5(공속칩)) ==========
+
+	/**
+	 * ★Plan5(공속칩)★ Tag 를 부여하는 활성 GE 의 현재 스택 수. 없으면 0.
+	 * 공속 버프 GE 는 Aggregate by Target 이라 인스턴스가 하나 — 첫 핸들만 본다.
+	 * 스택 수는 태그 카운트가 아니다(태그 카운트는 GE 개수) — 반드시 이 함수로 읽는다.
+	 */
+	static int32 GetEffectStackCountWithTag(const UAbilitySystemComponent* ASC, const FGameplayTag& Tag);
+
+	/**
+	 * ★Plan5(공속칩)★ 이 ASC 의 공격 속도 배율 M. 칩·버프가 없으면 정확히 1.0 (Plan5 D-62).
+	 *   M = 1 + 자기 버프(Buff.VendingMachine.AttackSpeed) 스택 × (칩①이면 Overdrive, ③이면 Decay, 아니면 Base)
+	 *         + 공유 버프(Buff.AttackSpeed.Shared) 스택 × SharedSpeedPerStack
+	 * 자판기 발사 간격 · 발톱 · 씨앗 대포 · 청소기 에어샷이 모두 이 값 하나를 쓴다.
+	 * 서버·클라 어디서 불러도 된다 (GE 스택·칩 캐시·튜닝 모두 클라에 있다).
+	 */
+	static float GetAttackSpeedMultiplier(const UAbilitySystemComponent* ASC);
+
+	/**
+	 * ★Plan5(공속칩)★ Origin 반경 안의 살아 있는 플레이어 캐릭터(ASC 보유). 적·클렌저 사이트 제외, 로그 없음.
+	 * 판정은 UDRSynergyAuraComponent::FindNearestTeammate 와 같다 ("Player" 태그 → ADRCharacter → 생존).
+	 * ★GetLiveObjectsWithinRadius 를 쓰지 않는 이유★: 적·사이트가 섞이고 호출마다 진단 로그가 찍힌다 (Plan5 T-65).
+	 */
+	static void GetAlivePlayersWithinRadius(const UObject* WorldContextObject, const FVector& Origin,
+		float Radius, TArray<AActor*>& OutPlayers);
+
 	// ========== 액터가 스킬 단위 업그레이드를 읽는 길 (Plan5(씨앗칩)) ==========
 	//
 	// 폭발 수치를 발사체 액터가 들고 있는 스킬(씨앗 폭탄 등)은 어빌리티 밖에서

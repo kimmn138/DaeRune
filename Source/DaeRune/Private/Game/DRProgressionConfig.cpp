@@ -4,6 +4,9 @@
 #include "Game/DRProgressionConfig.h"
 #include "Game/DRChipCatalog.h"
 #include "DaeRune/DRLogChannels.h"
+// Plan5(공속칩) — 공속 버프 칩 GE 검사
+#include "DRGameplayTags.h"
+#include "GameplayEffect.h"
 
 // ========================= FDRJackpotOdds (Plan5(잭팟칩)) =========================
 
@@ -267,6 +270,59 @@ bool UDRProgressionConfig::ValidateCurrencyBudget(TArray<FString>& OutErrors) co
 		if (Jackpot.DoubleShotDelay <= 0.f)
 		{
 			OutErrors.Add(TEXT("ChipTuning.Jackpot.DoubleShotDelay 가 0 이하입니다."));
+		}
+	}
+
+	// ===== ★Plan5(공속칩)★ 공속 버프 칩 GE 검사 =====
+	// GE 를 비우거나 설정을 틀리면 칩이 ★에러 없이★ 기본 버프처럼 동작한다(경고 로그는 시전할 때만 찍힌다).
+	// 칩이 카탈로그에 있을 때만 검사한다 — 코드가 에셋보다 먼저 들어가는 기간에 오류가 쏟아지지 않게.
+	{
+		const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+		const FDRAttackSpeedBuffChipTuning& Speed = ChipTuning.AttackSpeedBuff;
+
+		auto CheckBuffEffect = [&OutErrors](const TCHAR* FieldName, const TSoftClassPtr<UGameplayEffect>& Effect,
+			const FGameplayTag& RequiredTag, bool bRequireDecayPolicy)
+		{
+			if (Effect.IsNull())
+			{
+				OutErrors.Add(FString::Printf(
+					TEXT("ChipTuning.AttackSpeedBuff.%s 가 비어 있어 칩이 기본 공속 버프로 동작합니다."), FieldName));
+				return;
+			}
+
+			const UClass* EffectClass = Effect.LoadSynchronous();
+			const UGameplayEffect* CDO = EffectClass ? EffectClass->GetDefaultObject<UGameplayEffect>() : nullptr;
+			if (!CDO) return;
+
+			if (!CDO->GetGrantedTags().HasTagExact(RequiredTag))
+			{
+				OutErrors.Add(FString::Printf(
+					TEXT("ChipTuning.AttackSpeedBuff.%s(%s)의 Target Tags 에 %s 가 없습니다 — 공속 계산이 이 버프를 못 읽습니다."),
+					FieldName, *CDO->GetName(), *RequiredTag.ToString()));
+			}
+			if (CDO->GetStackLimitCount() <= 1)
+			{
+				OutErrors.Add(FString::Printf(
+					TEXT("ChipTuning.AttackSpeedBuff.%s(%s)의 Stack Limit Count 가 1 이하라 중첩이 쌓이지 않습니다."),
+					FieldName, *CDO->GetName()));
+			}
+			if (bRequireDecayPolicy
+				&& CDO->GetStackExpirationPolicy() != EGameplayEffectStackingExpirationPolicy::RemoveSingleStackAndRefreshDuration)
+			{
+				OutErrors.Add(FString::Printf(
+					TEXT("ChipTuning.AttackSpeedBuff.%s(%s)의 Stack Expiration Policy 가 'Remove Single Stack and Refresh Duration' 이 아니라 ")
+					TEXT("중첩이 1개씩 줄지 않습니다 (Plan5 D-72)."),
+					FieldName, *CDO->GetName()));
+			}
+		};
+
+		if (ChipCatalog && ChipCatalog->IsFeatureGated(Tags.Upgrade_Feature_Skill_AttackSpeedBuff_Share))
+		{
+			CheckBuffEffect(TEXT("SharedEffect"), Speed.SharedEffect, Tags.Buff_AttackSpeed_Shared, false);
+		}
+		if (ChipCatalog && ChipCatalog->IsFeatureGated(Tags.Upgrade_Feature_Skill_AttackSpeedBuff_Decay))
+		{
+			CheckBuffEffect(TEXT("DecayEffect"), Speed.DecayEffect, Tags.Buff_VendingMachine_AttackSpeed, true);
 		}
 	}
 

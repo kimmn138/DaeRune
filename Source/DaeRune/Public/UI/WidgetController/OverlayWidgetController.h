@@ -209,6 +209,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "GAS|SkillIcon")
 	bool IsAbilityBlockedNow(FGameplayTag AbilityTag) const;
 
+	/**
+	 * ★Plan5(공속칩)★ 자판기 공속 버프 남은 시간 그래프의 채움 비율(0~1). 버프가 없으면 0.
+	 * WBP_SkillIcon_VendingMachine 의 UpdateBuffUI 타이머가 매 틱 부른다 — 위젯이 20초를 직접 세지 않는다 (Plan5 D-76).
+	 *  - 기본·칩 ②: 남은 시간 ÷ 20초 / 칩 ①: 남은 시간 ÷ 5초 (실제 걸린 GE 의 지속을 그대로 읽는다)
+	 *  - 칩 ③: 유지 구간은 남은 시간 ÷ BuffDuration(20초), 1초씩 줄어드는 구간은 0 (그래프는 비고 숫자만 줄어든다)
+	 * 자기 버프와 공유 버프가 같이 있으면 더 많이 남은 쪽을 보여 준다.
+	 * GE 의 시작 시각은 서버가 복제하므로, 10중첩에서 다시 써서 스택 수가 안 바뀌어도 그래프가 다시 찬다.
+	 */
+	UFUNCTION(BlueprintPure, Category = "GAS|VendingMachine")
+	float GetAttackSpeedBuffFillRatio() const;
+
 	// 캐릭터 클래스에 맞는 스킬아이콘 위젯 클래스를 브로드캐스트
 	void BroadcastSkillIconWidgetClass();
 
@@ -258,6 +269,15 @@ public:
 private:
 	// State.Carrying 태그 변화 콜백 (부품 픽업/드롭/설치 시 조준선 상태 재계산)
 	void HandleCarryingTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+
+	// ★Plan5(공속칩)★ 공속 버프 스택이 늘거나 줄 때마다(칩 ③의 1초 감소 포함) 자판기 스킬 아이콘 숫자 갱신.
+	// 적용·제거 델리게이트는 "스택만 줄어드는" 순간을 모른다 — 태그 AnyCountChange 로 받는다 (Plan5 D-75 · T-72)
+	void HandleAttackSpeedBuffTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+
+	// ★Plan5(공속칩)★ 칩 ③의 "1초씩 줄어드는 구간" 판별용 — 자기 버프 스택이 줄면 true, 늘거나 0 이 되면 false.
+	// 남은 시간만으로는 유지 구간의 마지막 1초와 감소 구간을 구분할 수 없어 스택 흐름으로 본다 (Plan5 T-73)
+	int32 LastSelfAttackSpeedStacks = 0;
+	bool bAttackSpeedBuffDecaying = false;
 
 	// 현재 조건으로 조준선 상태 재계산 후 변경 시에만 브로드캐스트
 	void UpdateCrosshairState(bool bForceBroadcast = false);

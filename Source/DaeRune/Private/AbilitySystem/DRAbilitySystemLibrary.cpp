@@ -32,6 +32,7 @@
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "Character/DRCharacterBase.h"
+#include "Character/DRCharacter.h"
 #include "Character/DREnemy.h"
 #include "Components/CapsuleComponent.h"
 #include "TimerManager.h"
@@ -268,6 +269,85 @@ const FDRChipTuning& UDRAbilitySystemLibrary::GetChipTuning(const UObject* World
 	}
 
 	return DefaultTuning;
+}
+
+// ========================= 공격 속도 (Plan5(공속칩)) =========================
+
+int32 UDRAbilitySystemLibrary::GetEffectStackCountWithTag(const UAbilitySystemComponent* ASC, const FGameplayTag& Tag)
+{
+	if (!ASC || !Tag.IsValid()) return 0;
+
+	FGameplayTagContainer Filter;
+	Filter.AddTag(Tag);
+
+	for (const FActiveGameplayEffectHandle& Handle : ASC->GetActiveEffectsWithAllTags(Filter))
+	{
+		const int32 Stacks = ASC->GetCurrentStackCount(Handle);
+		if (Stacks > 0) return Stacks;
+	}
+	return 0;
+}
+
+float UDRAbilitySystemLibrary::GetAttackSpeedMultiplier(const UAbilitySystemComponent* ASC)
+{
+	if (!ASC) return 1.f;
+
+	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+	const int32 SelfStacks = GetEffectStackCountWithTag(ASC, Tags.Buff_VendingMachine_AttackSpeed);
+	const int32 SharedStacks = GetEffectStackCountWithTag(ASC, Tags.Buff_AttackSpeed_Shared);
+	if (SelfStacks <= 0 && SharedStacks <= 0) return 1.f;
+
+	const FDRAttackSpeedBuffChipTuning& Tuning = GetChipTuning(ASC).AttackSpeedBuff;
+
+	// 자기 버프는 자기만 건다 → 스택당 값은 ★내 칩★ 으로 정한다 (D-64 · D-74).
+	// ②(Share)를 낀 자판기는 자기 버프 대신 공유 버프를 받으므로 SelfStacks 가 0 이다.
+	float SelfPerStack = Tuning.BaseSpeedPerStack;
+	if (SelfStacks > 0)
+	{
+		const FDRUpgradeRuntime& Runtime = GetUpgradeRuntimeForASC(ASC);
+		if (Runtime.HasFeature(Tags.Upgrade_Feature_Skill_AttackSpeedBuff_Overdrive))
+		{
+			SelfPerStack = Tuning.OverdriveSpeedPerStack;
+		}
+		else if (Runtime.HasFeature(Tags.Upgrade_Feature_Skill_AttackSpeedBuff_Decay))
+		{
+			SelfPerStack = Tuning.DecaySpeedPerStack;
+		}
+	}
+
+	// 공유 버프를 거는 길은 칩 ②뿐이라 스택당 값이 하나다. 두 버프는 더한다 (D-64).
+	return 1.f + SelfStacks * SelfPerStack + SharedStacks * Tuning.SharedSpeedPerStack;
+}
+
+void UDRAbilitySystemLibrary::GetAlivePlayersWithinRadius(const UObject* WorldContextObject, const FVector& Origin,
+	float Radius, TArray<AActor*>& OutPlayers)
+{
+	OutPlayers.Reset();
+	if (Radius <= 0.f) return;
+
+	const UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World) return;
+
+	// 오버랩은 여유를 두고 넓게, 실제 판정은 아래 거리로 한다 (FindNearestTeammate 와 같은 방식)
+	TArray<FOverlapResult> Overlaps;
+	World->OverlapMultiByChannel(Overlaps, Origin, FQuat::Identity, ECC_Pawn,
+		FCollisionShape::MakeSphere(Radius + 200.f));
+
+	const float RadiusSq = FMath::Square(Radius);
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		AActor* Candidate = Overlap.GetActor();
+		if (!IsValid(Candidate) || OutPlayers.Contains(Candidate)) continue;
+
+		// 팀원 판정 = 액터 태그 (IsNotFriend · FindNearestTeammate 와 같은 기준)
+		if (!Candidate->ActorHasTag(FName("Player"))) continue;
+		if (!Cast<ADRCharacter>(Candidate)) continue;
+		if (Candidate->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Candidate)) continue;
+		if (!UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Candidate)) continue;
+		if (FVector::DistSquared(Origin, Candidate->GetActorLocation()) > RadiusSq) continue;
+
+		OutPlayers.Add(Candidate);
+	}
 }
 
 // ========== 액터가 스킬 단위 업그레이드를 읽는 길 (Plan5(씨앗칩)) ==========

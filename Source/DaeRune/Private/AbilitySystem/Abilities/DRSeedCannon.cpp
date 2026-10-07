@@ -5,6 +5,12 @@
 #include "Actor/DRSeedProjectile.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 
+float UDRSeedCannon::GetAttackSpeedPlayRate() const
+{
+	// ★Plan5(공속칩)★ 버프가 없으면 GetAttackSpeedMultiplier() 가 1.0 이라 BaseMontagePlayRate 그대로 (D-68)
+	return BaseMontagePlayRate * GetAttackSpeedMultiplier();
+}
+
 void UDRSeedCannon::SpawnSeedProjectile(const FVector& ForwardVector, const FVector& SocketLocation)
 {
     const bool bIsServer = GetAvatarActorFromActorInfo()->HasAuthority();

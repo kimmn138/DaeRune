@@ -33,7 +33,9 @@ float UDRMeleeAttack::GetWindupPlayRate() const
 	const float WindupScale = FMath::Max(0.01f, GetUpgradedFloat(EDRUpgradeStat::SkillWindup, 1.f));
 
 	// 선딜 3배 → 재생 속도 1/3. 노티파이까지의 실시간이 3배가 된다.
-	return BaseMontagePlayRate / WindupScale;
+	// ★Plan5(공속칩)★ 공속 배율(자판기 칩 ② 공유 버프 등)을 곱한다 — 버프가 없으면 1.0 (D-67).
+	//   선딜 배율과는 곱으로 합성된다: PlayRate = Base × M / WindupScale
+	return BaseMontagePlayRate * GetAttackSpeedMultiplier() / WindupScale;
 }
 
 void UDRMeleeAttack::RestoreMontagePlayRate()
@@ -41,8 +43,11 @@ void UDRMeleeAttack::RestoreMontagePlayRate()
 	ACharacter* Avatar = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 	if (!Avatar) return;
 
+	// ★Plan5(공속칩)★ 후딜(노티파이 뒤)도 공속 배율만큼 빨라야 한다 — 선딜 배율만 걷어 낸다 (D-67 · T-63)
+	const float RestoredPlayRate = BaseMontagePlayRate * GetAttackSpeedMultiplier();
+
 	// ★1P·3P 두 메시 모두★ 되돌려야 손과 몸이 따로 놀지 않는다.
-	auto RestoreOn = [this](USkeletalMeshComponent* Mesh)
+	auto RestoreOn = [RestoredPlayRate](USkeletalMeshComponent* Mesh)
 	{
 		if (!Mesh) return;
 
@@ -51,7 +56,7 @@ void UDRMeleeAttack::RestoreMontagePlayRate()
 
 		if (UAnimMontage* ActiveMontage = AnimInstance->GetCurrentActiveMontage())
 		{
-			AnimInstance->Montage_SetPlayRate(ActiveMontage, BaseMontagePlayRate);
+			AnimInstance->Montage_SetPlayRate(ActiveMontage, RestoredPlayRate);
 		}
 	};
 

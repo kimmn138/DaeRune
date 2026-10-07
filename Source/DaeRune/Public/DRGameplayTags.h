@@ -67,6 +67,8 @@ public:
 	FGameplayTag Buff_Elite;
 	FGameplayTag Buff_Elite_Roar;
 	FGameplayTag Buff_VendingMachine_AttackSpeed;
+	// ★GAS 태그★ (Plan5(공속칩) D-63). 자판기 칩 ② 가 본인·아군에게 거는 공유 공속 버프. 로봇 공용 이름.
+	FGameplayTag Buff_AttackSpeed_Shared;
 	FGameplayTag Buff_RobotVacuum_DashSpeed;
 	
 	// ����� ȿ��
@@ -151,6 +153,11 @@ public:
 	FGameplayTag Upgrade_Feature_Skill_Jackpot_GoldRush;	// ① 확률표 교체 (골드 25 / 실버 0)
 	FGameplayTag Upgrade_Feature_Skill_Jackpot_Double;		// ② 같은 색 캡슐 한 발 더, 골드 0
 	FGameplayTag Upgrade_Feature_Skill_Jackpot_Pity;		// ③ 비골드마다 골드 확률 누적 보정
+
+	// 자판기 공속 버프(스킬 2) 칩 피처 스위치 (Plan5(공속칩)). ASC 에 부여되지 않는다.
+	FGameplayTag Upgrade_Feature_Skill_AttackSpeedBuff_Overdrive;	// ① 1회 +30%, 지속 5초
+	FGameplayTag Upgrade_Feature_Skill_AttackSpeedBuff_Share;		// ② 본인 + 반경 안 아군에게 공유 버프
+	FGameplayTag Upgrade_Feature_Skill_AttackSpeedBuff_Decay;		// ③ 1회 +16%, 만료 후 1초에 1스택씩 감소
 
 	// 범용 SetByCaller (Plan5(발톱칩)).
 	// 체력을 ★비용으로★ 깎는 GE 가 액수를 밖에서 받게 한다.

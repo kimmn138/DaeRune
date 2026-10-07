@@ -145,29 +145,10 @@ float UDRVendingMachineBasicAttack::GetCurrentFireInterval() const
 	//   VM.Asc.CoinHeavy: 0.6 + 0.4 = 1.0초
 	const float ChipInterval = GetUpgradedFloat(EDRUpgradeStat::SkillFireInterval, BaseFireInterval);
 
-	// 공격 속도 버프(스킬 2)는 기존 공식 그대로 ★그 위에서★ 나눈다 — 칩과 버프는 곱으로 합성된다(D-38).
-	// (예전에는 ASC 가 없으면 BaseFireInterval 을 바로 돌려줬는데, 그러면 칩이 무시되므로 계산을 이어 간다)
-	int32 BuffStacks = 0;
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
-	{
-		FGameplayTagContainer BuffTagFilter;
-		BuffTagFilter.AddTag(FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed);
-
-		TArray<FActiveGameplayEffectHandle> ActiveEffects =
-			ASC->GetActiveEffectsWithAllTags(BuffTagFilter);
-
-		for (const FActiveGameplayEffectHandle& EffectHandle : ActiveEffects)
-		{
-			const FActiveGameplayEffect* ActiveGE = ASC->GetActiveGameplayEffect(EffectHandle);
-			if (ActiveGE)
-			{
-				BuffStacks = ActiveGE->Spec.GetStackCount();
-				break;
-			}
-		}
-	}
-
-	const float SpeedMultiplier = 1.0f + (BuffStacks * 0.2f);
+	// 공격 속도 버프(스킬 2)는 ★그 위에서★ 나눈다 — 칩과 버프는 곱으로 합성된다(D-38).
+	// ★Plan5(공속칩)★ 배율은 라이브러리 한 곳에서 — 자기 버프(칩 ①·③이 스택당 값을 바꿈) + 공유 버프(칩 ②) (D-62).
+	//   예전의 리터럴 0.2 는 ChipTuning.AttackSpeedBuff.BaseSpeedPerStack 으로 옮겼다(§9-17).
+	const float SpeedMultiplier = FMath::Max(1.f, GetAttackSpeedMultiplier());
 
 	// ★하한 필수★ — SetTimer 는 Rate <= 0 이면 타이머를 지워서 연사가 조용히 멈춘다(D-44).
 	return FMath::Max(MinFireInterval, ChipInterval / SpeedMultiplier);
