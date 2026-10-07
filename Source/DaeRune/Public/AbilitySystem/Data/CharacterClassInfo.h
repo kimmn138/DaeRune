@@ -36,6 +36,9 @@ enum class EPlayerCharacterClass : uint8
 	VendingMachine,
 	RobotVacuum,
 
+	// ★Plan8(벨보이)★ 반드시 Count 바로 앞에 — 앞에 끼우면 저장된 값(세이브·칩 소속·에셋)이 밀린다 (Plan8 D-2)
+	BellBoy,
+
 	Count UMETA(Hidden) // 클래스 개수 계산용 - 항상 마지막에 유지
 };
 

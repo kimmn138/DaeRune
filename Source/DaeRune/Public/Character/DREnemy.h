@@ -36,6 +36,10 @@ namespace DRBlackboardKeys
 	inline const FName FirstAttacker = TEXT("FirstAttacker");
 	inline const FName HasFirstAttacker = TEXT("HasFirstAttacker");
 	inline const FName TargetToFollow = TEXT("TargetToFollow");
+	// ★Plan8(시선집중)★ 타깃 서비스들이 쓰는 거리 키 (Plan8 D-16)
+	inline const FName DistanceToTarget = TEXT("DistanceToTarget");
+	// ★Plan8(시선집중)★ BTS_CheckValidTarget 의 "벽에 가림" 타이머 — 도발 동안 0 으로 되돌린다 (Plan8 D-16)
+	inline const FName UnreachableSince = TEXT("UnreachableSince");
 
 	// DragonFly 전용
 	inline const FName IsLockedDown = TEXT("IsLockedDown");

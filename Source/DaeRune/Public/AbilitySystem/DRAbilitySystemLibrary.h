@@ -11,7 +11,9 @@
 #include "ActiveGameplayEffectHandle.h"
 #include "DRAbilitySystemLibrary.generated.h"
 
+class AAIController;
 class UAbilityInfo;
+class UAnimMontage;
 class UAbilitySystemComponent;
 class UGameBalanceConfig;
 class UOverlayWidgetController;
@@ -341,4 +343,86 @@ public:
 		FGameplayEffectSpecHandle& SpecHandle,
 		const FGameplayTag& Tag,
 		float Magnitude);
+
+	// ========== ★Plan8(모자)★ 모자 보호막 ==========
+
+	/** 대상이 모자를 쓰고 있나 (Single/Double 무관 — 부모 태그 Buff.BellBoy.Hat) */
+	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|BellBoy")
+	static bool HasBellBoyHat(AActor* Target);
+
+	/**
+	 * 대상에게 모자를 씌운다. ★서버 전용★
+	 * 조건: 살아 있는 캐릭터(ADRCharacterBase) + ASC + ★아직 모자가 없다★ (최대 1개 — Plan8 D-22)
+	 * @param Charges 1 = 일반 / 2 이상 = Double (던진 벨보이 본인이 주웠을 때 — Plan8 D-23)
+	 * @return 씌웠으면 true. false 면 호출부가 모자를 남긴다(투사체는 바닥에 떨어지고, 픽업은 그대로).
+	 */
+	static bool TryEquipBellBoyHat(AActor* Target, UAbilitySystemComponent* SourceASC, int32 Charges);
+
+	/**
+	 * 들어온 피해 1회를 모자로 막는다. ★서버 전용★ — UDRAttributeSet::PostGameplayEffectExecute 에서만 부른다.
+	 * Double → (Single 을 먼저 걸고) Double 제거 / Single → 제거. 막았으면 HatBlock 큐를 실행한다.
+	 * @return 막았으면 true — 호출부는 IncomingDamage 를 0 으로 만들고 피해 처리를 건너뛴다 (Plan8 D-21)
+	 */
+	static bool TryConsumeBellBoyHat(UAbilitySystemComponent* TargetASC);
+
+	/**
+	 * 모자 비주얼(GameplayCue)이 붙을 자리. 메시에 HatSocket 이 있으면 그 소켓, 없으면 캡슐 꼭대기.
+	 * 적 BP·스켈레톤을 하나하나 고치지 않아도 되게 폴백을 둔다 (Plan8 D-26).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|BellBoy")
+	static USceneComponent* GetHatAttachPoint(AActor* Target, FName& OutSocketName, FVector& OutRelativeOffset);
+
+	// ========== ★Plan8(시선집중)★ 도발 ==========
+
+	/** Origin 반경 안의 살아 있는 적(ADREnemy). 캡슐·히트박스 중복 제거, 로그 없음 (Plan8 T-7) */
+	static void GetAliveEnemiesWithinRadius(const UObject* WorldContextObject, const FVector& Origin,
+		float Radius, TArray<AActor*>& OutEnemies);
+
+	/** 이 적을 도발할 수 있나 — 살아 있고 AI 블랙보드에 FirstAttacker 또는 TargetToFollow 키가 있다 (Plan8 D-17) */
+	static bool CanBeTaunted(AActor* Enemy);
+
+	/**
+	 * 이 적에게 걸린 도발 GE 의 정보. 도발 중이 아니면 false.
+	 * ★도발자 = 컨텍스트 OriginalInstigatorASC 의 아바타★ — GetInstigator() 는 플레이어면 PlayerState 다 (Plan8 T-6).
+	 * 도발자가 죽었어도 GE 가 남아 있으면 true (살아 있는지는 호출부가 본다).
+	 */
+	static bool GetTauntInfo(AActor* Enemy, AActor*& OutTaunter, float& OutDamageMultiplier,
+		FActiveGameplayEffectHandle* OutHandle = nullptr);
+
+	/** BP·BT 용 — 이 적을 도발 중인 ★살아 있는★ 벨보이. 아니면 nullptr */
+	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|BellBoy")
+	static AActor* GetTauntTarget(AActor* Enemy);
+
+	/** 피해를 주는 쪽(Source)이 도발된 적이면 그 배율(0.8), 아니면 1.0 — 피해 관문 전용 (Plan8 D-14) */
+	static float GetTauntDamageMultiplier(AActor* SourceAvatar);
+
+	/**
+	 * ★도발 어그로 1회 적용★ (Plan8 D-16) — 서버 전용
+	 *  · 도발 중      → 블랙보드 TargetToFollow / FirstAttacker = 도발자, HasFirstAttacker = true, DistanceToTarget,
+	 *                   UnreachableSince = 0, 포커스, 전투 시간(UpdateCombatTime) 을 갱신하고 true.
+	 *                   HasFirstAttacker 가 true 라 기존 FindNearestPlayer 서비스는 타깃을 건드리지 않고,
+	 *                   CheckValidTarget 의 "멀고 3초간 전투 없음"(전투 시간)·"벽에 가림"(UnreachableSince) 해제에도 안 걸린다.
+	 *  · 도발자 사망  → 도발 GE 를 지우고 false (타깃 정리는 CheckValidTarget 이 한다 — Plan8 D-12)
+	 *  · 도발 아님    → 아무것도 안 하고 false
+	 * 블랙보드에 없는 키는 건드리지 않는다 — BB 마다 키 구성이 다르다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|BellBoy")
+	static bool ApplyTauntAggro(AAIController* OwnerController);
+
+	/**
+	 * ★도발 유지 타이머★ (Plan8 D-16) — 서버 전용. 도발을 건 직후 한 번 부른다.
+	 * Interval(0.2초)마다 ApplyTauntAggro 를 다시 부르고, false 가 나오면(도발 GE 만료·도발자 사망) 스스로 멈춘다.
+	 * 적이 도발 GE 를 들고 있는 동안만 돌기 때문에 어빌리티가 끝나도(도발 5초가 모션보다 길다) 계속 유지된다.
+	 * ★Interval 은 0.4초(CheckValidTarget 서비스의 최소 틱 간격)보다 짧아야 한다★ — 서비스 두 틱 사이에
+	 * UnreachableSince 를 한 번은 0 으로 되돌려야 "벽에 가림" 해제가 안 걸린다 (Plan8 T-28).
+	 */
+	static void StartTauntAggroRefresh(AAIController* OwnerController, float Interval = 0.2f);
+
+	// ========== ★Plan8(가방)★ 몽타주 ==========
+
+	/**
+	 * 몽타주에서 EventTag 를 보내는 노티파이(AN_MontageEvent 처럼 "EventTag" 변수를 가진 노티파이)의 시각(초). 없으면 -1.
+	 * ★노티파이를 옮겨도 코드 값을 따로 고칠 필요가 없게 한다 (Plan8 D-5)★
+	 */
+	static float FindMontageEventTime(const UAnimMontage* Montage, const FGameplayTag& EventTag);
 };
