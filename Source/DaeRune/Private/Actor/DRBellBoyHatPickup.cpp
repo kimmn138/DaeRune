@@ -7,6 +7,8 @@
 #include "Character/DRCharacterBase.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/OverlapResult.h"
+#include "Engine/World.h"
 #include "Interaction/CombatInterface.h"
 #include "TimerManager.h"
 
@@ -56,11 +58,17 @@ void ADRBellBoyHatPickup::OnPickupOverlap(UPrimitiveComponent* OverlappedCompone
 
 void ADRBellBoyHatPickup::RecheckOverlaps()
 {
-	TArray<AActor*> Overlapping;
-	PickupSphere->GetOverlappingActors(Overlapping, ADRCharacterBase::StaticClass());
-	for (AActor* Actor : Overlapping)
+	// ★겹침 이벤트가 아니라 직접 구 쿼리★ (Plan8 T-30) — 캐릭터 캡슐은 C++ 기본값이 GenerateOverlapEvents=false 라
+	// (DRCharacterBase) BP 에서 켜 둔 캐릭터(아르마딜로·플레이어)만 겹침이 잡히고 개 등은 지나가도 못 줍는다.
+	// 오브젝트 타입 쿼리는 그 설정과 무관하게 Pawn 캡슐을 찾는다.
+	TArray<FOverlapResult> Overlaps;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(BellBoyHatPickup), false, this);
+	GetWorld()->OverlapMultiByObjectType(Overlaps, PickupSphere->GetComponentLocation(), FQuat::Identity,
+		FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(PickupSphere->GetScaledSphereRadius()), Params);
+
+	for (const FOverlapResult& Overlap : Overlaps)
 	{
-		TryGiveTo(Actor);
+		TryGiveTo(Overlap.GetActor());   // 히트박스·캡슐이 같은 캐릭터로 여러 번 나와도 TryGiveTo 가 걸러낸다
 		if (bConsumed) return;
 	}
 }
