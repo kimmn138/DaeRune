@@ -34,6 +34,8 @@
 #include "Character/DRCharacterBase.h"
 #include "Character/DRCharacter.h"
 #include "Character/DREnemy.h"
+#include "Character/DRRobotVacuumCharacter.h"
+#include "AbilitySystemGlobals.h"
 #include "Components/CapsuleComponent.h"
 #include "TimerManager.h"
 
@@ -277,10 +279,11 @@ int32 UDRAbilitySystemLibrary::GetEffectStackCountWithTag(const UAbilitySystemCo
 {
 	if (!ASC || !Tag.IsValid()) return 0;
 
-	FGameplayTagContainer Filter;
-	Filter.AddTag(Tag);
-
-	for (const FActiveGameplayEffectHandle& Handle : ASC->GetActiveEffectsWithAllTags(Filter))
+	// ★Plan5(공기탄칩)★ OwningTags 쿼리 — 에셋 태그 ∪ 부여(Target) 태그를 본다.
+	// 예전의 GetActiveEffectsWithAllTags 는 ★에셋 태그만★ 비교해서(UE 5.5 FGameplayEffectQuery::Matches),
+	// 부여 태그만 단 GE(흡착 표식 등)는 스택이 늘 0 으로 읽혔다. 공속 GE 들은 두 태그를 다 달고 있어 결과는 같다.
+	for (const FActiveGameplayEffectHandle& Handle :
+		ASC->GetActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tag))))
 	{
 		const int32 Stacks = ASC->GetCurrentStackCount(Handle);
 		if (Stacks > 0) return Stacks;
@@ -530,6 +533,14 @@ float UDRAbilitySystemLibrary::GetLifestealRatioForDamage(const FEffectPropertie
 		return 0.f;
 	}
 
+	// ③ ★시전자가 오염 중이면 막는다★ (2026-10-08 사용자 결정 — Plan5 §9-15) — 동전 ② 적중 회복(D-42)과 같은 이유.
+	//    HandleCorruptionPurification 은 회복량과 무관하게 정화 + 컨테이너 1칸을 주므로,
+	//    막지 않으면 오염되자마자 적 한 대로 즉시 정화된다. 오염 해제는 아군 회복으로만 하는 팀 메커니즘이다.
+	if (const UDRPlayerAttributeSet* SourcePlayerAS = GetPlayerAttributeSetFromASC(Props.SourceASC))
+	{
+		if (SourcePlayerAS->IsCorrupted()) return 0.f;
+	}
+
 	const AActor* TuningContext = Props.SourceASC ? Props.SourceASC->GetAvatarActor() : nullptr;
 	return FMath::Max(0.f, GetChipTuning(TuningContext).Claw.LifestealRatio);
 }
@@ -691,21 +702,9 @@ void UDRAbilitySystemLibrary::GetLiveObjectsWithinRadius(const UObject* WorldCon
 	{
 		TArray<FOverlapResult> Overlaps;
 		World->OverlapMultiByObjectType(Overlaps, SphereOrigin, FQuat::Identity, FCollisionObjectQueryParams(FCollisionObjectQueryParams::InitType::AllDynamicObjects), FCollisionShape::MakeSphere(Radius), SphereParams);
-		// [임시 진단]
-		UE_LOG(LogDR, Warning, TEXT("[MoleDiag] A. 반경 %.0f 오버랩 %d개 (중심 %s)"),
-			Radius, Overlaps.Num(), *SphereOrigin.ToCompactString());
 
 		for (FOverlapResult& Overlap : Overlaps)
 		{
-			// [임시 진단] 두더지만 골라 출력
-			if (Overlap.GetActor() && Overlap.GetActor()->GetClass()->GetName().Contains(TEXT("Mole")))
-			{
-				UE_LOG(LogDR, Warning, TEXT("[MoleDiag] B. 두더지 발견: %s / Implements=%d / IsDead=%d"),
-					*Overlap.GetActor()->GetName(),
-					Overlap.GetActor()->Implements<UCombatInterface>() ? 1 : 0,
-					Overlap.GetActor()->Implements<UCombatInterface>() ? (ICombatInterface::Execute_IsDead(Overlap.GetActor()) ? 1 : 0) : -1);
-			}
-
 			if (Overlap.GetActor()->Implements<UCombatInterface>() && !ICombatInterface::Execute_IsDead(Overlap.GetActor()))
 			{
 				OutOverlappingActors.AddUnique(ICombatInterface::Execute_GetAvatar(Overlap.GetActor()));
@@ -837,12 +836,6 @@ FGameplayEffectContextHandle UDRAbilitySystemLibrary::ApplyDamageEffect(const FD
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 	AActor* SourceAvatarActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
 
-	// [임시 진단] 이 함수에 도달한 모든 공격
-	UE_LOG(LogDR, Warning, TEXT("[MoleDiag] F. ApplyDamageEffect 진입: 대상아바타=%s"),
-		DamageEffectParams.TargetAbilitySystemComponent
-			? *GetNameSafe(DamageEffectParams.TargetAbilitySystemComponent->GetAvatarActor())
-			: TEXT("★TargetASC 없음"));
-
 	// ===== 근접 전용 피격 대상 가로채기 (Plan6 §5.11) =====
 	// 홀로그램 두더지처럼 "2m 안에서의 공격만 유효하고 그 밖은 투과"하는 대상을 여기서 처리한다.
 	// 모든 공격이 이 함수를 지나므로 공격 종류마다 손대지 않아도 된다.
@@ -852,10 +845,6 @@ FGameplayEffectContextHandle UDRAbilitySystemLibrary::ApplyDamageEffect(const FD
 		AActor* TargetAvatarActor = DamageEffectParams.TargetAbilitySystemComponent->GetAvatarActor();
 		if (IDRProximityHitOnly* ProximityTarget = Cast<IDRProximityHitOnly>(TargetAvatarActor))
 		{
-			// [임시 진단]
-			UE_LOG(LogDR, Warning, TEXT("[MoleDiag] D. ApplyDamageEffect 도달: 대상=%s / Accepts=%d"),
-				*GetNameSafe(TargetAvatarActor), ProximityTarget->AcceptsHitFrom(SourceAvatarActor) ? 1 : 0);
-
 			if (ProximityTarget->AcceptsHitFrom(SourceAvatarActor))
 			{
 				ProximityTarget->HandleProximityHit(SourceAvatarActor);
@@ -1332,4 +1321,126 @@ float UDRAbilitySystemLibrary::FindMontageEventTime(const UAnimMontage* Montage,
 		}
 	}
 	return -1.f;
+}
+
+// ========== 로봇 청소기 탑승 칩 (Plan5(탑승칩)) ==========
+
+float UDRAbilitySystemLibrary::GetRideDamageMultiplier(const AActor* SourceAvatar)
+{
+	const ADRCharacter* Rider = Cast<ADRCharacter>(SourceAvatar);
+	if (!Rider || !IsValid(Rider->MountedOn)) return 1.f;   // 빠른 탈출 — 거의 모든 피해가 여기서 끝난다
+
+	const ADRRobotVacuumCharacter* Bottom = Rider->MountedOn->GetStackBottom();   // 맨 아래만 (D-79)
+	if (!IsValid(Bottom) || Bottom->bDead) return 1.f;
+	if (!HasUpgradeFeature(Bottom->GetAbilitySystemComponent(), FDRGameplayTags::Get().Upgrade_Feature_Skill_Ride_Power)) return 1.f;
+
+	const FDRRideChipTuning& Tuning = GetChipTuning(SourceAvatar).Ride;
+	const float Bonus = FMath::Min(Tuning.PowerDamagePerRider * Bottom->GetRiderCountAbove(), Tuning.PowerMaxDamageBonus);
+	return 1.f + FMath::Max(0.f, Bonus);
+}
+
+ADRRobotVacuumCharacter* UDRAbilitySystemLibrary::FindRideGuard(const ADRCharacter* Rider)
+{
+	if (!Rider) return nullptr;
+	const FGameplayTag& GuardTag = FDRGameplayTags::Get().Upgrade_Feature_Skill_Ride_Guard;
+
+	// 아래로 내려가며 가장 가까운 칩② 청소기 ("위 전원" 보호 — D-83). 상한 8 은 순환 방어용(CanBeMountedBy 가 이미 막는다)
+	int32 Steps = 0;
+	for (ADRRobotVacuumCharacter* Below = Rider->MountedOn; IsValid(Below) && Steps++ < 8; Below = Below->MountedOn)
+	{
+		if (!Below->bDead && HasUpgradeFeature(Below->GetAbilitySystemComponent(), GuardTag))   // 죽은 청소기 건너뛰기 (T-89)
+		{
+			return Below;
+		}
+	}
+	return nullptr;
+}
+
+bool UDRAbilitySystemLibrary::TransferRideDamageToGuard(ADRCharacter* Rider, ADRRobotVacuumCharacter* Guard, float Damage)
+{
+	if (!IsValid(Rider) || !IsValid(Guard) || Guard->bDead) return false;
+
+	// 80% 감소는 ★이전분에만★ — 피격 자체의 1칸 공유는 호출부가 PropagateSharedDamage(L) 로 그대로 보낸다 (D-85 · T-93)
+	const float Ratio = FMath::Clamp(GetChipTuning(Rider).Ride.GuardTransferRatio, 0.f, 1.f);
+	return Rider->ApplyMountSharedDamageTo(Guard, Damage * Ratio);
+}
+
+void UDRAbilitySystemLibrary::TryRideEmergencyEject(ADRCharacter* Rider, bool bEnteredCorruptionThisHit)
+{
+	if (!IsValid(Rider) || !Rider->HasAuthority() || Rider->bDead) return;   // 사망 하차가 이미 일어났다
+
+	ADRRobotVacuumCharacter* Mount = Rider->MountedOn;   // ★바로 위 1명만★ (D-88)
+	if (!IsValid(Mount) || Mount->bDead) return;
+	if (!HasUpgradeFeature(Mount->GetAbilitySystemComponent(), FDRGameplayTags::Get().Upgrade_Feature_Skill_Ride_Eject)) return;
+
+	const UDRPlayerAttributeSet* RiderAS = GetPlayerAttributeSetFromASC(Rider->GetAbilitySystemComponent());
+	if (!RiderAS) return;
+
+	// 오염 진입은 체력이 오염 최대치로 다시 차서 비율로는 못 잡는다 → 따로 받는다 (T-79)
+	const float Ratio = GetChipTuning(Rider).Ride.EjectHealthRatio;
+	const bool bLow = bEnteredCorruptionThisHit
+		|| (RiderAS->GetMaxHealth() > 0.f && RiderAS->GetHealth() <= RiderAS->GetMaxHealth() * Ratio);
+	if (bLow)
+	{
+		Mount->EmergencyEjectRider();
+	}
+}
+
+bool UDRAbilitySystemLibrary::IsRideBannedFrom(const AActor* Rider, const ADRRobotVacuumCharacter* Mount)
+{
+	const UAbilitySystemComponent* RiderASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Rider);
+	const UAbilitySystemComponent* MountASC = Mount ? Mount->GetAbilitySystemComponent() : nullptr;
+	if (!RiderASC || !MountASC) return false;
+
+	const FGameplayTag& BanTag = FDRGameplayTags::Get().Debuff_Ride_Banned;
+	if (!RiderASC->HasMatchingGameplayTag(BanTag)) return false;   // 빠른 탈출
+
+	// ★OwningTags 쿼리★ — 금지 태그는 GE 의 부여 태그다 (T-82, Plan8 T-29 와 같은 이유)
+	for (const FActiveGameplayEffectHandle& Handle :
+		RiderASC->GetActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(BanTag))))
+	{
+		const FActiveGameplayEffect* Active = RiderASC->GetActiveGameplayEffect(Handle);
+		// 시전자 ASC(복제됨)로 "어느 청소기"인지 가린다 (T-83)
+		if (Active && Active->Spec.GetContext().GetOriginalInstigatorAbilitySystemComponent() == MountASC)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+// ========== 청소기 기본 공격 칩 (Plan5(공기탄칩)) ==========
+
+float UDRAbilitySystemLibrary::GetAirShotDragDamageTakenMultiplier(const UAbilitySystemComponent* TargetASC)
+{
+	const FGameplayTag& DragTag = FDRGameplayTags::Get().Debuff_AirShot_Drag;
+	if (!TargetASC || !TargetASC->HasMatchingGameplayTag(DragTag)) return 1.f;   // 빠른 탈출
+
+	const FDRAirShotChipTuning& Tuning = GetChipTuning(TargetASC->GetAvatarActor()).AirShot;
+	// ★스택 수는 태그 카운트가 아니다★ — Aggregate by Target 이라 인스턴스 하나의 스택 (T-98)
+	const int32 Stacks = FMath::Min(GetEffectStackCountWithTag(TargetASC, DragTag), FMath::Max(1, Tuning.DragMaxStacks));
+	return 1.f + FMath::Max(0.f, Tuning.DragDamageTakenPerStack) * Stacks;
+}
+
+void UDRAbilitySystemLibrary::TryApplyAirShotDrag(const FEffectProperties& Props)
+{
+	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+	if (!HasUpgradeFeature(Props.SourceASC, Tags.Upgrade_Feature_Skill_AirShot_Drag)) return;
+
+	// 공기탄 피해만 — 같은 청소기의 돌진 충돌 피해로는 쌓이지 않는다 (T-99)
+	const FDRGameplayEffectContext* DRContext = static_cast<const FDRGameplayEffectContext*>(Props.EffectContextHandle.Get());
+	if (!DRContext || !DRContext->GetSourceAbilityTags().HasTagExact(Tags.Abilities_RobotVacuum_AirShot)) return;
+
+	ADREnemy* Enemy = Cast<ADREnemy>(Props.TargetAvatarActor);
+	if (!IsValid(Enemy) || Enemy->IsBoss()) return;   // 보스는 감속 · 피해 증가 둘 다 없다 (T-100)
+
+	const FDRAirShotChipTuning& Tuning = GetChipTuning(Enemy).AirShot;
+	ApplyTimedSpeedEffect(Enemy, Props.SourceASC, Tuning.Drag, 1.f - Tuning.Drag.Magnitude);   // 0.9 — 스택은 GE 가 쌓는다
+}
+
+// ========== 무적 (Plan5(물점프칩)) ==========
+
+bool UDRAbilitySystemLibrary::IsInvulnerable(const UAbilitySystemComponent* ASC)
+{
+	return ASC && ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Invulnerable);
 }

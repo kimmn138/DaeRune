@@ -496,6 +496,74 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("공속 버프를 DecayEffect 로 걸어 만료 후 DecayInterval 마다 1스택씩 감소, 스택당 DecaySpeedPerStack")
 	);
 
+	// ========== 로봇 청소기 탑승 칩 (Plan5(탑승칩)) ==========
+
+	GameplayTags.Abilities_RobotVacuum_Ride = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.RobotVacuum.Ride"),
+		FString("청소기 탑승(패시브) 칩 그룹 키 — 칩 TargetAbilityTag · SkillDisplayNames 전용, GA 에 넣지 않는다")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Ride_Power = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Ride.Power"),
+		FString("맨 아래 청소기 위 인원당 탑승자 전원 주는 피해 증가, 그 청소기 이속 감소")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Ride_Guard = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Ride.Guard"),
+		FString("이 청소기 위 탑승자의 최종 피해를 GuardTransferRatio 만큼 줄여 이 청소기가 대신 받는다")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Ride_Eject = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Ride.Eject"),
+		FString("바로 위 탑승자 체력이 EjectHealthRatio 이하가 되면 비상 탈출 + 회복 + 이 청소기 탑승 금지")
+	);
+
+	GameplayTags.Debuff_RobotVacuum_RideLoad = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Debuff.RobotVacuum.RideLoad"),
+		FString("탑승칩① 감속 GE(GE_RideLoad)가 부여 — 코드가 이 태그로 지운다")
+	);
+
+	GameplayTags.Debuff_Ride_Banned = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Debuff.Ride.Banned"),
+		FString("탑승칩③ 비상 탈출 뒤 그 청소기 탑승 금지(GE_RideBan, 시전자 ASC 로 청소기 구분)")
+	);
+
+	// ========== 로봇 청소기 기본 공격 칩 (Plan5(공기탄칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_AirShot_FriendlyFire = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.AirShot.FriendlyFire"),
+		FString("공기탄이 아군에게도 적과 같은 피해를 준다(탑승 연결은 통과)")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_AirShot_Drag = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.AirShot.Drag"),
+		FString("공기탄에 맞은 적에게 흡착 스택(감속 · 받는 피해 증가, 보스 제외)")
+	);
+
+	GameplayTags.Debuff_AirShot_Drag = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Debuff.AirShot.Drag"),
+		FString("공기탄칩② 흡착 표식(GE_AirShot_Drag, Aggregate by Target 스택) — 스택당 받는 피해 증가")
+	);
+
+	// ========== 로봇 청소기 물 점프 칩 (Plan5(물점프칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_JetJump_Guard = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.JetJump.Guard"),
+		FString("물 점프를 쓰는 순간부터 GuardDuration 동안 무적")
+	);
+
+	GameplayTags.State_Invulnerable = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.Invulnerable"),
+		FString("무적 — 기본 피해 관문이 모든 피해를 통째로 무효로 한다(모자보다 먼저)")
+	);
+
+	// ========== 로봇 청소기 돌진 칩 (Plan5(돌진칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_Dash_PassAllies = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Dash.PassAllies"),
+		FString("돌진하는 동안 다른 플레이어와 충돌하지 않고 통과")
+	);
+
 	// ========== 범용 SetByCaller (Plan5(씨앗칩)) ==========
 
 	GameplayTags.Data_MoveSpeed_Mult = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -506,6 +574,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Data_Duration = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Data.Duration"),
 		FString("SetByCaller tag for a generic gameplay effect duration (seconds)")
+	);
+
+	GameplayTags.Data_SelfDamage = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.SelfDamage"),
+		FString("SetByCaller tag for self damage amount (Plan5 돌진칩 — GE_VacuumDashSelfDamage)")
 	);
 
 	/*

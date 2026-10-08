@@ -400,6 +400,136 @@ struct FDRAttackSpeedBuffChipTuning
 };
 
 /**
+ * ★Plan5(탑승칩)★ 로봇 청소기 탑승(패시브) 칩 3종의 동적 상수.
+ * ②의 최대 체력 −100 은 여기가 아니라 DA_ChipCatalog 의 MaxHealth 모디파이어다.
+ */
+USTRUCT(BlueprintType)
+struct FDRRideChipTuning
+{
+	GENERATED_BODY()
+
+	// ========== ① RV.Asc.RidePower ==========
+
+	// 맨 아래 청소기 위 인원 1명당 탑승자 전원의 주는 피해 증가 (0.08 = +8%)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Power", meta = (ClampMin = "0.0"))
+	float PowerDamagePerRider = 0.08f;
+
+	// 위 증가의 상한 (0.24 = +24%). 맨 아래 위로 최대 3명이라 기본값이면 딱 닿는다
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Power", meta = (ClampMin = "0.0"))
+	float PowerMaxDamageBonus = 0.24f;
+
+	// 인원 1명당 그 청소기의 이동 속도 감소 (0.05 = −5%)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Power", meta = (ClampMin = "0.0", ClampMax = "0.3"))
+	float PowerSpeedPenaltyPerRider = 0.05f;
+
+	/**
+	 * 감속 GE. 요구 사양 (Plan5 D-80):
+	 *   - Duration = Infinite / Stacking = None
+	 *   - Modifier: MoveSpeed / ★Multiply (Compound)★ / SetByCaller(Data.MoveSpeed.Mult)
+	 *   - Target Tags(Granted) = Debuff.RobotVacuum.RideLoad  ★코드가 이 태그로 지운다 — 없으면 감속이 쌓인다 (T-84)★
+	 * ★비우면 경고 로그와 함께 감속 없이 공격력만 오른다★
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Power")
+	TSoftClassPtr<UGameplayEffect> PowerLoadEffect;
+
+	// ========== ② RV.Asc.RideGuard ==========
+
+	// 보호받는 사람이 최종적으로 받아야 할 피해 중 칩② 청소기로 넘어가는 비율 (0.2 = 80% 감소).
+	// ★이전분에만★ 곱한다 — 칩② 청소기 자신이 받는 공유분은 그대로다 (Plan5 D-85 · T-93)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Guard", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float GuardTransferRatio = 0.2f;
+
+	// ========== ③ RV.Asc.RideEject ==========
+
+	// 바로 위 탑승자의 체력 비율이 이 값 이하가 되면 탈출 (0.3 = 30%)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Eject", meta = (ClampMin = "0.01", ClampMax = "1.0"))
+	float EjectHealthRatio = 0.3f;
+
+	// 탈출 때 탑승자 · 청소기가 각각 회복하는 체력(고정량)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Eject", meta = (ClampMin = "0.0"))
+	float EjectHealAmount = 100.f;
+
+	// 회복 GE — GE_Heal 그대로. ★Claw · Coin 의 HealEffect 와 별개 필드 — 비우면 회복 없이 탈출 · 금지만★
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Eject")
+	TSoftClassPtr<UGameplayEffect> EjectHealEffect;
+
+	// 탈출한 탑승자가 그 청소기에 다시 탈 수 없는 시간(초)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Eject", meta = (ClampMin = "0.1"))
+	float EjectBanDuration = 20.f;
+
+	/**
+	 * 탑승 금지 GE. 요구 사양 (Plan5 D-90):
+	 *   - Has Duration / Duration = SetByCaller(Data.Duration) / 모디파이어 없음
+	 *   - Target Tags(Granted) = Debuff.Ride.Banned  (HUD 아이콘을 원하면 Asset Tags 에도)
+	 *   - ★Stacking = None★ (청소기마다 따로 — T-81)
+	 * ★비우면 경고 로그와 함께 금지 없이 탈출 · 회복만★
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Eject")
+	TSoftClassPtr<UGameplayEffect> EjectBanEffect;
+};
+
+/**
+ * ★Plan5(공기탄칩)★ 청소기 기본 공격(공기탄) 칩의 동적 상수.
+ * 피해 +50% · −20% · 차지 간격 · 단계 증가분은 여기가 아니라 DA_ChipCatalog 모디파이어다.
+ */
+USTRUCT(BlueprintType)
+struct FDRAirShotChipTuning
+{
+	GENERATED_BODY()
+
+	FDRAirShotChipTuning()
+	{
+		// FDRTimedSpeedEffect 기본값(0.3 / 5초)을 그대로 쓰지 않는다 — 스택당 −10% · 2초 (Plan5 D-96)
+		Drag.Magnitude = 0.1f;
+		Drag.Duration = 2.f;
+	}
+
+	/**
+	 * ② 흡착 — 맞은 적 1스택. Magnitude 0.1 = 스택당 이속 −10%, Duration 2 = 마지막 적중 뒤 유지 시간.
+	 * GE 요구 사양 (Plan5 D-96):
+	 *   - Has Duration / Duration = SetByCaller(Data.Duration)
+	 *   - Modifier: MoveSpeed / ★Multiply (Additive)★ / SetByCaller(Data.MoveSpeed.Mult)  ★Compound 금지 — 스택하면 가속 (T-95)★
+	 *   - Target Tags(Granted) = Debuff.AirShot.Drag
+	 *   - Stacking = Aggregate by Target · Limit = DragMaxStacks(3) · Refresh on Successful Application
+	 *     · Expiration = Clear Entire Stack · ★Deny Overflow Application 끔★ (T-96)
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AirShot|Drag")
+	FDRTimedSpeedEffect Drag;
+
+	// 스택당 받는 피해 증가 (0.05 = +5%). 누가 · 무엇으로 때리든 (Plan5 D-98)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AirShot|Drag", meta = (ClampMin = "0.0"))
+	float DragDamageTakenPerStack = 0.05f;
+
+	// 받는 피해 계산에 쓰는 스택 상한. ★GE 의 Stack Limit 과 같아야 한다★ — 검사가 비교한다
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AirShot|Drag", meta = (ClampMin = "1"))
+	int32 DragMaxStacks = 3;
+};
+
+/**
+ * ★Plan5(물점프칩)★ 청소기 물 점프 칩의 동적 상수.
+ * 피해 · 상승 높이 · 물 · 공중 횟수는 여기가 아니라 DA_ChipCatalog 모디파이어다.
+ */
+USTRUCT(BlueprintType)
+struct FDRJetJumpChipTuning
+{
+	GENERATED_BODY()
+
+	/**
+	 * ② 무적 표식. 요구 사양 (Plan5 D-108):
+	 *   - Has Duration / Duration = ★SetByCaller(Data.Duration)★ (Scalable Float 면 GuardDuration 이 무시된다 — T-113)
+	 *   - Modifier 없음 / Target Tags(Granted) = State.Invulnerable
+	 *   - Stacking = Aggregate by Target · Limit 1 · Refresh on Successful Application
+	 * ★비우면 칩 ②가 무적 없이 피해 0 만 남는다★ — 검사가 잡는다
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "JetJump|Guard")
+	TSoftClassPtr<UGameplayEffect> GuardEffect;
+
+	// 무적 시간(초). 물 점프를 쓰는 순간부터
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "JetJump|Guard", meta = (ClampMin = "0.01"))
+	float GuardDuration = 0.3f;
+};
+
+/**
  * 돌파 칩(⑥⑦⑧)의 동적 효과 튜닝 상수. (Plan3(공용칩) §17.4.3)
  *
  * 이 수치들은 카탈로그의 FDRUpgradeModifier 로 표현할 수 없다 —
@@ -494,6 +624,22 @@ struct FDRChipTuning
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackSpeedBuff")
 	FDRAttackSpeedBuffChipTuning AttackSpeedBuff;
+
+	// ========== 로봇 청소기 탑승 칩 (Plan5(탑승칩)) ==========
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride")
+	FDRRideChipTuning Ride;
+
+	// ========== 로봇 청소기 기본 공격 칩 (Plan5(공기탄칩)) ==========
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AirShot")
+	FDRAirShotChipTuning AirShot;
+
+	// ========== 로봇 청소기 물 점프 칩 (Plan5(물점프칩)) ==========
+	// (돌진칩은 동적 상수가 없어 여기 항목이 없다 — Plan5 D-111)
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "JetJump")
+	FDRJetJumpChipTuning JetJump;
 };
 
 /**

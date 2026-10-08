@@ -147,7 +147,7 @@ float UDRVendingMachineBasicAttack::GetCurrentFireInterval() const
 
 	// 공격 속도 버프(스킬 2)는 ★그 위에서★ 나눈다 — 칩과 버프는 곱으로 합성된다(D-38).
 	// ★Plan5(공속칩)★ 배율은 라이브러리 한 곳에서 — 자기 버프(칩 ①·③이 스택당 값을 바꿈) + 공유 버프(칩 ②) (D-62).
-	//   예전의 리터럴 0.2 는 ChipTuning.AttackSpeedBuff.BaseSpeedPerStack 으로 옮겼다(§9-17).
+	//   예전의 리터럴 0.2 는 ChipTuning.AttackSpeedBuff.BaseSpeedPerStack 으로 옮겼다.
 	const float SpeedMultiplier = FMath::Max(1.f, GetAttackSpeedMultiplier());
 
 	// ★하한 필수★ — SetTimer 는 Rate <= 0 이면 타이머를 지워서 연사가 조용히 멈춘다(D-44).
@@ -172,7 +172,7 @@ FDRJackpotOdds UDRVendingMachineBasicAttack::GetJackpotOdds() const
 	const FDRJackpotChipTuning& Tuning = UDRAbilitySystemLibrary::GetChipTuning(GetAvatarActorFromActorInfo()).Jackpot;
 	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
 
-	// §12 규칙(같은 그룹 칩은 1개)으로 잭팟 칩은 하나만 끼울 수 있다 — 아래 분기는 서로 배타적이다.
+	// Plan5(스킬당1칩) 규칙(같은 그룹 칩은 1개 — D-47)으로 잭팟 칩은 하나만 끼울 수 있다 — 아래 분기는 서로 배타적이다.
 
 	// ③ 적립 카드 — 자기 기본표에서 색마다 누적 보정을 빼고, ★실제로 뺀 만큼만★ 골드에 더한다 (D-57)
 	if (HasJackpotFeature(Tags.Upgrade_Feature_Skill_Jackpot_Pity))

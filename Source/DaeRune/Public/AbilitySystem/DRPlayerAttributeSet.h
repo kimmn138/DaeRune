@@ -31,6 +31,10 @@ class DAERUNE_API UDRPlayerAttributeSet : public UDRAttributeSet
 
 	bool IsCorrupted() const { return bCorrupted; }
 
+	// ★Plan5(탑승칩)★ 오염 중이면 최대 체력을 CorruptMaxHealth(100)로 다시 맞추고 체력을 KeepHealth(≤ 100)로 되돌린다 (Plan5 D-87).
+	// ADRCharacter::RefreshUpgradeEffects 가 칩 GE 를 다시 붙이거나 뗀 뒤 부른다(서버)
+	void ReapplyCorruptMaxHealth(float KeepHealth);
+
 protected:
 	virtual void HandleIncomingDamage(const FEffectProperties& Props) override;
 	virtual void HandleIncomingHealing(const FEffectProperties& Props) override;
@@ -46,6 +50,10 @@ private:
 	float CalculateContainerDamage(float CurrentHealth, float Damage) const;
 	void ApplyHitReactAndKnockback(const FEffectProperties& Props);
 	void HandleCorruptionPurification(const FEffectProperties& Props, float HealAmount);
+
+	// ★Plan5(탑승칩)★ MaxHealth 의 ★현재값★을 Desired 로 맞춘다 (Plan5 D-87).
+	// SetMaxHealth 는 BaseValue 를 바꿔 칩 GE(AddBase)의 가산이 그 위에 다시 붙는다 — 그 몫을 빼고 넣는다
+	void SetMaxHealthCurrentValue(float Desired);
 
 	// 로비/튜토리얼 등 사망 방지가 필요한 모드인지 확인
 	bool ShouldPreventDeath() const;

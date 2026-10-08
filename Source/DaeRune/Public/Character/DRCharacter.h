@@ -192,6 +192,11 @@ public:
 	// 서버 전용: 피격 데미지를 마운트 링크(위/아래 1홉)로 전파 (Damage.MountShared 태그로 재전파 방지)
 	void PropagateSharedDamage(float Damage, const FGameplayEffectContextHandle& SourceContext);
 
+	// ★Plan5(탑승칩)★ 서버: Target 에게 탑승 공유 피해 1건(MountSharedDamageEffectClass · 물리 · Damage.MountShared · 소스 = 나).
+	// PropagateSharedDamage 의 GE 적용부를 뽑아낸 것 — 칩② 이전분도 이 함수로 건다 (Plan5 D-83 · D-91).
+	// 못 걸면(대상 사망 · ASC/GE 없음) false. Damage ≤ 0 이면 아무것도 안 하고 true
+	bool ApplyMountSharedDamageTo(ADRCharacter* Target, float Damage);
+
 	// 탑승 공유 데미지에 사용할 GE (기존 공용 GE_Damage 지정 — BP에서 설정)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mount")
 	TSubclassOf<UGameplayEffect> MountSharedDamageEffectClass;
@@ -323,6 +328,9 @@ protected:
 	// 스폰 시점엔 만피라 그대로 만피가 되고, 중간 재적용에서 공짜 회복이 생기지 않는다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade")
 	bool bPreserveVitalRatioOnUpgradeApply = true;
+
+	// ★Plan5(탑승칩)★ RefreshUpgradeEffects 가 모든 머신에서 부른다. 청소기가 탑승칩① 감속 GE 를 다시 맞춘다 (Plan5 D-81)
+	virtual void OnUpgradeEffectsRefreshed() {}
 
 	// 현재 적용 중인 업그레이드 GE 핸들 (재적용 시 먼저 제거 — ASC 가 PlayerState 에 있어 리스폰 후에도 남는다)
 	FActiveGameplayEffectHandle UpgradeStatEffectHandle;

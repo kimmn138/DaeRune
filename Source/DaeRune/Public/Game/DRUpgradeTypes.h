@@ -119,6 +119,57 @@ enum class EDRUpgradeStat : uint8
 	 */
 	SkillProjectileScale	UMETA(DisplayName = "스킬 투사체 크기"),
 
+	// ===== Plan5(공기탄칩) 추가 =====
+	// ★신규 값은 반드시 Count 바로 앞에 붙인다.★ 기존 값 사이에 끼우면
+	// DA_ChipCatalog 에 직렬화된 기존 칩의 효과가 다른 스탯으로 밀린다. (Plan5 T-30)
+
+	/**
+	 * 스킬 단위. 차지형 스킬의 ★단계당 증가분 배율★ — 기준 1.0 에 Apply 해서 쓴다.
+	 *     단계 피해 = 0단계 + (그 단계 − 0단계) × ApplySkill(SkillChargeGrowth, 1.0)
+	 * 0단계(즉발)는 바뀌지 않는다. 배율이라 DRIsTimeStat · DRIsLowerBetter 에 ★넣지 않는다★ (Plan5 D-100 · T-103)
+	 */
+	SkillChargeGrowth		UMETA(DisplayName = "스킬 차지 증가량"),
+
+	// ===== Plan5(물점프칩) 추가 =====
+
+	/**
+	 * 스킬 단위. 판정이 두 겹(내부 강판정 / 외부 약판정)인 스킬의 ★외부(약판정) 피해에만★ 곱하는 배율.
+	 * SkillDamage 는 양쪽에 걸리고, 이 축은 그 위에 외부에만 한 번 더 곱해진다 —
+	 *     외부 피해 = ApplySkill(SkillOuterDamage, ApplySkill(SkillDamage, OuterDamage))
+	 * ⚠️ 지금은 물 점프만 읽는다. 씨앗 폭탄 등에 쓰려면 그 스킬도 읽게 해야 한다 (Plan5 D-104)
+	 */
+	SkillOuterDamage		UMETA(DisplayName = "스킬 외곽 피해"),
+
+	/**
+	 * 스킬 단위. 점프 · 발사형 이동기의 ★실제 최고 높이 배율★ — 기준 1.0 에 Apply 해서 쓴다.
+	 * ★높이는 속도의 제곱에 비례★ 하므로 임펄스에는 √배율을 곱한다 —
+	 *     임펄스 = BaseImpulse × Sqrt(ApplySkill(SkillLaunchHeight, 1.0))   // 0.7 → ×0.837 → 높이 ×0.70
+	 * 배율이라 DRIsTimeStat 에 ★넣지 않는다★ (Plan5 D-105 · T-109)
+	 */
+	SkillLaunchHeight		UMETA(DisplayName = "스킬 상승 높이"),
+
+	/**
+	 * 스킬 단위. 공중(떨어지는 중)에서 그 스킬을 쓸 수 있는 ★횟수★. 착지하면 다시 채워진다.
+	 * Flat 으로 쓴다(+1 = 한 번 더). 정수 — GA 가 반올림해 읽는다. (Plan5 D-107)
+	 */
+	SkillAirUseCount		UMETA(DisplayName = "스킬 공중 사용 횟수"),
+
+	// ===== Plan5(돌진칩) 추가 =====
+
+	/**
+	 * 스킬 단위. 그 스킬이 ★시전자 자신에게 주는 피해(자해)★ 의 배율 — 낮을수록 좋다.
+	 *     자해 = ApplySkill(SkillSelfDamage, 기본 자해량)   // +1.0 → 50 → 100
+	 * DRIsLowerBetter 에 ★넣는다★ (안 넣으면 "+100%" 가 초록으로 뜬다 — Plan5 T-130) (Plan5 D-114)
+	 */
+	SkillSelfDamage			UMETA(DisplayName = "스킬 자해 피해"),
+
+	/**
+	 * 스킬 단위. 그 스킬이 시전자에게 주는 ★이동 속도 증가분(칸 · 스택당)★ 의 배율.
+	 *     칸당 증가 = ApplySkill(SkillSpeedBonus, 0.2)   // −0.3 → 0.14 → GE 배율 1.14
+	 * 배율 자체가 아니라 "증가분"에 곱한다 — 1.2 에 곱하면 1.2 × 0.7 = 0.84(감속)가 된다 (Plan5 D-118)
+	 */
+	SkillSpeedBonus			UMETA(DisplayName = "스킬 이속 버프"),
+
 	Count UMETA(Hidden) // 배열 크기 계산용 - 항상 마지막
 };
 
@@ -221,7 +272,13 @@ FORCEINLINE bool DRIsSkillStat(EDRUpgradeStat Stat)
 		|| Stat == EDRUpgradeStat::SkillWaterGrant		// Plan5(물대포칩)
 		|| Stat == EDRUpgradeStat::SkillWindup			// Plan5(발톱칩)
 		|| Stat == EDRUpgradeStat::SkillFireInterval	// Plan5(동전칩)
-		|| Stat == EDRUpgradeStat::SkillProjectileScale;	// 〃
+		|| Stat == EDRUpgradeStat::SkillProjectileScale	// 〃
+		|| Stat == EDRUpgradeStat::SkillChargeGrowth	// Plan5(공기탄칩)
+		|| Stat == EDRUpgradeStat::SkillOuterDamage		// Plan5(물점프칩)
+		|| Stat == EDRUpgradeStat::SkillLaunchHeight	// 〃
+		|| Stat == EDRUpgradeStat::SkillAirUseCount		// 〃
+		|| Stat == EDRUpgradeStat::SkillSelfDamage		// Plan5(돌진칩)
+		|| Stat == EDRUpgradeStat::SkillSpeedBonus;		// 〃
 }
 
 /**
@@ -236,7 +293,8 @@ FORCEINLINE bool DRIsLowerBetter(EDRUpgradeStat Stat)
 		|| Stat == EDRUpgradeStat::SkillCooldown
 		|| Stat == EDRUpgradeStat::HealthRegenDelay
 		|| Stat == EDRUpgradeStat::SkillWindup		// Plan5(발톱칩) 선딜은 짧을수록 좋다
-		|| Stat == EDRUpgradeStat::SkillFireInterval;	// Plan5(동전칩) 발사 간격도 짧을수록 좋다
+		|| Stat == EDRUpgradeStat::SkillFireInterval	// Plan5(동전칩) 발사 간격도 짧을수록 좋다
+		|| Stat == EDRUpgradeStat::SkillSelfDamage;	// Plan5(돌진칩) 자해는 적을수록 좋다
 }
 
 /**

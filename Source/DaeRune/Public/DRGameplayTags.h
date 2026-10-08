@@ -159,6 +159,27 @@ public:
 	FGameplayTag Upgrade_Feature_Skill_AttackSpeedBuff_Share;		// ② 본인 + 반경 안 아군에게 공유 버프
 	FGameplayTag Upgrade_Feature_Skill_AttackSpeedBuff_Decay;		// ③ 1회 +16%, 만료 후 1초에 1스택씩 감소
 
+	// 로봇 청소기 탑승(패시브) 칩 (Plan5(탑승칩)). 피처 스위치는 ASC 에 부여되지 않는다.
+	// ★Abilities_RobotVacuum_Ride 는 칩 그룹 키 전용 — 어떤 GA 의 AbilityTags 에도 넣지 말 것 (Plan5 T-90)★
+	FGameplayTag Abilities_RobotVacuum_Ride;
+	FGameplayTag Upgrade_Feature_Skill_Ride_Power;		// ① 맨 아래에서 위 인원당 탑승자 공격력 +8%, 청소기 이속 −5%
+	FGameplayTag Upgrade_Feature_Skill_Ride_Guard;		// ② 위 탑승자의 최종 피해를 80% 줄여 대신 받음
+	FGameplayTag Upgrade_Feature_Skill_Ride_Eject;		// ③ 바로 위 탑승자 체력 30% 이하 → 비상 탈출
+	FGameplayTag Debuff_RobotVacuum_RideLoad;			// ★GAS 태그★ GE_RideLoad 가 부여 — C++ 이 이 태그로 지운다
+	FGameplayTag Debuff_Ride_Banned;					// ★GAS 태그★ GE_RideBan 이 탑승자에게 부여
+
+	// 로봇 청소기 기본 공격(공기탄) 칩 (Plan5(공기탄칩))
+	FGameplayTag Upgrade_Feature_Skill_AirShot_FriendlyFire;	// ① 아군에게도 같은 피해
+	FGameplayTag Upgrade_Feature_Skill_AirShot_Drag;			// ② 맞은 적 감속 · 받는 피해 증가(스택)
+	FGameplayTag Debuff_AirShot_Drag;							// ★GAS 태그★ GE_AirShot_Drag 가 적에게 부여 — C++ 이 스택을 읽는다
+
+	// 로봇 청소기 물 점프 칩 (Plan5(물점프칩))
+	FGameplayTag Upgrade_Feature_Skill_JetJump_Guard;	// ② 쓰는 순간 0.3초 무적
+	FGameplayTag State_Invulnerable;					// ★GAS 태그★ 모든 피해 무효 — 기본 피해 관문이 읽는다(범용)
+
+	// 로봇 청소기 돌진 칩 (Plan5(돌진칩))
+	FGameplayTag Upgrade_Feature_Skill_Dash_PassAllies;	// ② 돌진 중 아군 통과
+
 	// 범용 SetByCaller (Plan5(발톱칩)).
 	// 체력을 ★비용으로★ 깎는 GE 가 액수를 밖에서 받게 한다.
 	// ★값은 항상 양수(= 비용 액수)로 넣는다. 부호를 빼는 것은 GE 모디파이어의 몫이다.★
@@ -169,6 +190,9 @@ public:
 	// GE 에셋이 아니라 DA_ProgressionConfig 한 곳에만 존재하도록 한다.
 	FGameplayTag Data_MoveSpeed_Mult;
 	FGameplayTag Data_Duration;
+
+	// 범용 SetByCaller (Plan5(돌진칩)). 시전자 자신에게 주는 피해(자해) 양 — 값은 양수
+	FGameplayTag Data_SelfDamage;
 
 	// 게임플레이 이벤트 (GA 통지용)
 	FGameplayTag Event_Dash_Brake;

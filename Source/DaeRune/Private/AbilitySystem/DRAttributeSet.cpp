@@ -95,6 +95,16 @@ void UDRAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 	}
 	else if (Data.EvaluatedData.Attribute == GetIncomingDamageAttribute())
 	{
+		// ★Plan5(물점프칩)★ 무적(State.Invulnerable) — 어떤 피해든 통째로 무효 (Plan5 D-108).
+		// 모자와 같은 자리 · 같은 이유: 근접 · 원거리 · DoT · 탑승 공유가 전부 지나는 유일한 관문이고,
+		// 여기서 return 하면 히트리액트 · 넉백 · 디버프 · 탑승 공유 · 전투 진입이 모두 없다.
+		// ★모자보다 먼저★ — 무적 중에 들어온 피해에 모자가 닳으면 안 된다 (Plan5 T-111)
+		if (GetIncomingDamage() > 0.f && UDRAbilitySystemLibrary::IsInvulnerable(Props.TargetASC))
+		{
+			SetIncomingDamage(0.f);
+			return;
+		}
+
 		// ★Plan8(모자)★ 모자 보호막 — 어떤 피해든 1회 무효 (Plan8 D-21)
 		// 근접·원거리·DoT·탑승 공유 피해가 전부 지나는 유일한 관문이라 여기서 가로챈다.
 		// 막으면 HandleIncomingDamage 를 아예 타지 않는다 → 히트리액트·넉백·디버프·어그로·부품 낙하 모두 없음.

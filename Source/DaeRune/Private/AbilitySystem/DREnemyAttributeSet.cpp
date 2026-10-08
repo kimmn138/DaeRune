@@ -68,6 +68,10 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			LocalIncomingDamage *= (1.f + FMath::Max(0.f, ChipTuning.WaterPump.VulnerableDamageTakenBonus));
 		}
 
+		// ★Plan5(공기탄칩)★ ② 흡착 — 스택당 받는 피해 +5%(최대 3). 취약과 같은 자리 · 같은 이유(D-10) — 모든 피해에 (D-98).
+		// ★이번 적중이 쌓을 스택은 아직 없다★ — 직전 스택으로 계산하고, 스택은 아래에서 쌓는다 (D-97)
+		LocalIncomingDamage *= UDRAbilitySystemLibrary::GetAirShotDragDamageTakenMultiplier(Props.TargetASC);
+
 		// ★Plan5(발톱칩)★ 흡혈 — "적에게 준 피해만큼" 시전자 체력 회복.
 		//
 		// ★여기서 지급하는 이유★: 엘리트 ×0.7 / 취약 ×1.5 / Phase1 ×0.7 이 전부 끝난
@@ -115,6 +119,10 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 				}
 			}
 		}
+
+		// ★Plan5(공기탄칩)★ ② 공기탄이 적에게 들어갔다 — 흡착 1스택(보스 제외). 판정은 라이브러리가 한다 (D-97).
+		// 더미 분기 · SetHealth 보다 위 — 튜토리얼 더미에도 걸린다(연습용)
+		UDRAbilitySystemLibrary::TryApplyAirShotDrag(Props);
 
 		const float NewHealth = GetHealth() - LocalIncomingDamage;
 

@@ -451,4 +451,53 @@ public:
 	 * ★노티파이를 옮겨도 코드 값을 따로 고칠 필요가 없게 한다 (Plan8 D-5)★
 	 */
 	static float FindMontageEventTime(const UAnimMontage* Montage, const FGameplayTag& EventTag);
+
+	// ========== 로봇 청소기 탑승 칩 (Plan5(탑승칩)) ==========
+
+	/**
+	 * ★Plan5(탑승칩)★ ① 이 캐릭터가 주는 피해의 탑승 배율. 칩이 없거나 탑승 중이 아니면 정확히 1.0.
+	 *   탑의 ★맨 아래★ 청소기가 살아 있고 Ride.Power 면 1 + min(PowerDamagePerRider × 그 위 인원, PowerMaxDamageBonus)
+	 * 위층 청소기의 칩①은 보지 않는다 (D-79). ExecCalc_Damage 에서만 부른다(서버, 공유 · 이전 피해 제외 — D-82).
+	 */
+	static float GetRideDamageMultiplier(const AActor* SourceAvatar);
+
+	/** ★Plan5(탑승칩)★ ② 이 캐릭터 ★아래★ 에서 가장 가까운, 살아 있는 Ride.Guard 청소기. 있으면 "보호받는 사람"이다 (D-83) */
+	static class ADRRobotVacuumCharacter* FindRideGuard(const class ADRCharacter* Rider);
+
+	/**
+	 * ★Plan5(탑승칩)★ ② 보호받는 Rider 가 최종적으로 받아야 할 피해 Damage 의 GuardTransferRatio(0.2)만큼을 Guard 에게 넘긴다(서버).
+	 * 공유와 같은 ApplyMountSharedDamageTo(Damage.MountShared) 로 건다 (D-83).
+	 * 못 넘기면(청소기 사망 · GE 미지정) false — 호출부는 탑승자가 그대로 받게 한다 (T-89)
+	 */
+	static bool TransferRideDamageToGuard(class ADRCharacter* Rider, class ADRRobotVacuumCharacter* Guard, float Damage);
+
+	/**
+	 * ★Plan5(탑승칩)★ ③ 피격 처리 ★맨 끝★ 에서 부른다(서버). 이 캐릭터가 Ride.Eject 청소기의 ★바로 위★ 탑승자이고
+	 * 체력 ≤ EjectHealthRatio 이거나 이번 피격으로 오염에 들어갔으면 그 청소기가 비상 탈출시킨다 (D-88).
+	 */
+	static void TryRideEmergencyEject(class ADRCharacter* Rider, bool bEnteredCorruptionThisHit);
+
+	/**
+	 * ★Plan5(탑승칩)★ ③ Rider 가 Mount 에 탑승 금지 중인가 — 서버(CanBeMountedBy)와 소유 클라(프롬프트)가 같이 쓴다.
+	 * 금지 GE 중 시전자 ASC 가 Mount 의 ASC 인 것이 있으면 true (D-90). SourceAbilityTags 는 클라에 없어 쓰지 않는다 (T-83).
+	 */
+	static bool IsRideBannedFrom(const AActor* Rider, const class ADRRobotVacuumCharacter* Mount);
+
+	// ========== 청소기 기본 공격 칩 (Plan5(공기탄칩)) ==========
+
+	/** ★Plan5(공기탄칩)★ ② 이 적이 받는 피해 배율 = 1 + DragDamageTakenPerStack × min(흡착 스택, DragMaxStacks). 표식이 없으면 정확히 1.0 */
+	static float GetAirShotDragDamageTakenMultiplier(const UAbilitySystemComponent* TargetASC);
+
+	/**
+	 * ★Plan5(공기탄칩)★ ② 적 피해 관문에서 부른다(서버). 세 조건을 ★모두★ 만족하면 흡착 1스택(지속 갱신):
+	 *   ① 소스가 Upgrade.Feature.Skill.AirShot.Drag  ② 컨텍스트 SourceAbilityTags 에 Abilities.RobotVacuum.AirShot
+	 *   ③ 대상이 ADREnemy · 보스(bIsBoss) 아님
+	 * ②를 빠뜨리면 그 청소기의 돌진 충돌 피해까지 쌓인다 (T-99)
+	 */
+	static void TryApplyAirShotDrag(const FEffectProperties& Props);
+
+	// ========== 무적 (Plan5(물점프칩)) ==========
+
+	/** ★Plan5(물점프칩)★ 대상이 무적(State.Invulnerable)인가. 기본 피해 관문이 ★모든 피해마다★ 부른다 — 태그 조회 한 번 */
+	static bool IsInvulnerable(const UAbilitySystemComponent* ASC);
 };

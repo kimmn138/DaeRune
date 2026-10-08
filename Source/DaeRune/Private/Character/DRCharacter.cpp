@@ -46,6 +46,7 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "DaeRune/DRLogChannels.h"
+#include "Misc/ScopeExit.h"
 
 ADRCharacter::ADRCharacter()
 {
@@ -244,37 +245,42 @@ void ADRCharacter::PropagateSharedDamage(float Damage, const FGameplayEffectCont
 			LinkedCharacters.Add(SelfVacuum->RiderOnTop);
 		}
 	}
-	if (LinkedCharacters.IsEmpty()) return;
+	// ★Plan5(탑승칩)★ GE 적용부는 ApplyMountSharedDamageTo 로 뽑았다 — ② 이전분도 같은 함수를 지난다 (D-91). 동작은 그대로
+	for (ADRCharacter* Linked : LinkedCharacters)
+	{
+		ApplyMountSharedDamageTo(Linked, Damage);
+	}
+}
+
+bool ADRCharacter::ApplyMountSharedDamageTo(ADRCharacter* Target, float Damage)
+{
+	if (!HasAuthority() || !IsValid(Target) || Target->bDead) return false;
+	if (Damage <= 0.f) return true;
 
 	if (!MountSharedDamageEffectClass)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("PropagateSharedDamage: MountSharedDamageEffectClass 미설정 (%s BP에서 GE_Damage 지정 필요)"), *GetName());
-		return;
+		return false;
 	}
 
 	UAbilitySystemComponent* SelfASC = GetAbilitySystemComponent();
-	if (!SelfASC) return;
+	UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent();
+	if (!SelfASC || !TargetASC) return false;
 
+	// Source = 넘겨주는 사람 ASC (플레이어→플레이어라 물 보상/킬크레딧 왜곡 없음).
+	// 주는 피해 배율은 ExecCalc 가 MountShared 를 보고 건너뛴다 (Plan5 D-82)
 	const FDRGameplayTags& DRTags = FDRGameplayTags::Get();
-	for (ADRCharacter* Linked : LinkedCharacters)
-	{
-		if (Linked->bDead) continue;
+	FDamageEffectParams Params;
+	Params.WorldContextObject = this;
+	Params.DamageGameplayEffectClass = MountSharedDamageEffectClass;
+	Params.SourceAbilitySystemComponent = SelfASC;
+	Params.TargetAbilitySystemComponent = TargetASC;
+	Params.BaseDamage = Damage;
+	Params.DamageType = DRTags.Damage_Physical;
+	Params.SourceAbilityTags.AddTag(DRTags.Damage_MountShared);   // ★필수★ — 빠지면 탑 안에서 무한 반복 (Plan5 T-74)
 
-		UAbilitySystemComponent* LinkedASC = Linked->GetAbilitySystemComponent();
-		if (!LinkedASC) continue;
-
-		// Source = 원 피격자 ASC (플레이어→플레이어라 물 보상/킬크레딧 왜곡 없음)
-		FDamageEffectParams Params;
-		Params.WorldContextObject = this;
-		Params.DamageGameplayEffectClass = MountSharedDamageEffectClass;
-		Params.SourceAbilitySystemComponent = SelfASC;
-		Params.TargetAbilitySystemComponent = LinkedASC;
-		Params.BaseDamage = Damage;
-		Params.DamageType = DRTags.Damage_Physical;
-		Params.SourceAbilityTags.AddTag(DRTags.Damage_MountShared);
-
-		UDRAbilitySystemLibrary::ApplyDamageEffect(Params);
-	}
+	UDRAbilitySystemLibrary::ApplyDamageEffect(Params);
+	return true;
 }
 
 void ADRCharacter::PossessedBy(AController* NewController)
@@ -987,8 +993,25 @@ void ADRCharacter::RefreshUpgradeEffects()
 		SynergyAuraComponent->RefreshFromUpgrade();
 	}
 
+	// ===== 1-3) ★Plan5(탑승칩)★ 파생 클래스 훅 =====
+	// 탑승칩 ①·③은 모디파이어가 없어 Runtime.IsEmpty() 가 true 일 수 있다 — 시너지와 같은 이유로 조기 return 앞에 둔다 (D-81)
+	OnUpgradeEffectsRefreshed();
+
 	// ===== 2) 스탯 GE (서버 전용) =====
 	if (!HasAuthority()) return;
+
+	// ★Plan5(탑승칩)★ 오염 중이면 아래 ★모든 return 경로의 끝★ 에서 최대 체력을 100 으로 다시 맞춘다 (D-87).
+	// 칩 GE 를 떼고 붙이는 사이 비율 유지 로직이 체력을 바꾸므로 오염 체력은 시작 값으로 되돌린다 (T-88)
+	UDRPlayerAttributeSet* CorruptAS = Cast<UDRPlayerAttributeSet>(AttributeSets);
+	const bool bCorruptedAtStart = CorruptAS && CorruptAS->IsCorrupted();
+	const float CorruptHealthAtStart = bCorruptedAtStart ? CorruptAS->GetHealth() : 0.f;
+	ON_SCOPE_EXIT
+	{
+		if (bCorruptedAtStart)
+		{
+			CorruptAS->ReapplyCorruptMaxHealth(CorruptHealthAtStart);
+		}
+	};
 
 	// 재적용 전에 이전 핸들 제거 (클래스 변경 / 로드아웃 갱신 대응)
 	if (UpgradeStatEffectHandle.IsValid())

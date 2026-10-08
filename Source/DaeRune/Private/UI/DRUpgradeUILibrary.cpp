@@ -130,6 +130,24 @@ FText UDRUpgradeUILibrary::GetStatShortName(EDRUpgradeStat Stat)
 	case EDRUpgradeStat::SkillProjectileScale:
 		return LOCTEXT("StatShort_SkillProjectileScale", "탄 크기");		// 정식: 스킬 투사체 크기 (Plan5(동전칩))
 
+	case EDRUpgradeStat::SkillChargeGrowth:
+		return LOCTEXT("StatShort_SkillChargeGrowth", "차지 증가");		// 정식: 스킬 차지 증가량 (Plan5(공기탄칩))
+
+	case EDRUpgradeStat::SkillOuterDamage:
+		return LOCTEXT("StatShort_SkillOuterDamage", "외곽 피해");		// 정식: 스킬 외곽 피해 (Plan5(물점프칩))
+
+	case EDRUpgradeStat::SkillLaunchHeight:
+		return LOCTEXT("StatShort_SkillLaunchHeight", "상승 높이");		// 정식: 스킬 상승 높이 (Plan5(물점프칩))
+
+	case EDRUpgradeStat::SkillAirUseCount:
+		return LOCTEXT("StatShort_SkillAirUseCount", "공중 횟수");		// 정식: 스킬 공중 사용 횟수 (Plan5(물점프칩))
+
+	case EDRUpgradeStat::SkillSelfDamage:
+		return LOCTEXT("StatShort_SkillSelfDamage", "자해 피해");		// 정식: 스킬 자해 피해 (Plan5(돌진칩))
+
+	case EDRUpgradeStat::SkillSpeedBonus:
+		return LOCTEXT("StatShort_SkillSpeedBonus", "이속 버프");		// 정식: 스킬 이속 버프 (Plan5(돌진칩))
+
 	// SkillAreaRadius("스킬 범위")는 이미 5자 이내라 폴백으로 충분하다
 
 	default:

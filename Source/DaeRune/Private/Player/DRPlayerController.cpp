@@ -23,6 +23,7 @@
 #include "Character/DRCharacter.h"
 #include "Character/DREnemy.h"
 #include "Character/DRRobotVacuumCharacter.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Camera/CameraComponent.h"
 #include "Game/DRStageGameMode.h"
 #include "Phase/DRPhase3.h"
@@ -289,7 +290,9 @@ ADRRobotVacuumCharacter* ADRPlayerController::FindMountByLineTrace()
 		if (HitVacuum &&
 			OverlappedMounts.Contains(HitVacuum) &&
 			!HitVacuum->bDead &&
-			HitVacuum->RiderOnTop == nullptr) // 이미 라이더가 있으면 프롬프트도 안 띄움 (서버가 최종 검증)
+			HitVacuum->RiderOnTop == nullptr && // 이미 라이더가 있으면 프롬프트도 안 띄움 (서버가 최종 검증)
+			// ★Plan5(탑승칩)★ ③ 이 청소기에서 비상 탈출한 뒤 20초는 프롬프트도 안 띄운다 (서버도 같은 함수로 거부 — D-90)
+			!UDRAbilitySystemLibrary::IsRideBannedFrom(DRCharacter, HitVacuum))
 		{
 			return HitVacuum;
 		}

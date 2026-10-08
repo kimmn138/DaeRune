@@ -82,7 +82,15 @@ void UExecCalc_Damage::Execute_Implementation(const FGameplayEffectCustomExecuti
 	//
 	// 적/클렌저 사이트가 소스인 경우 GetUpgradeRuntimeForASC 가 빈 캐시를 돌려주므로
 	// 배율이 정확히 1.0 이 되어 기존 동작이 그대로 유지된다.
-	if (SourceASC)
+	//
+	// ★Plan5(탑승칩)★ 탑승 공유 · 이전 피해(Damage.MountShared)는 ★받는 피해★ 다 — 넘겨주는 사람의
+	// "주는 피해" 배율((a) DamageDealt · (b) 광폭화 · (c) 시너지 · (d) 탑승)을 전부 건너뛴다 (D-82 · T-77).
+	// 넘어오는 양은 그 사람이 받은 최종 피해(받는 쪽 배율 · 데미지 디버프 반영)라 여기서 더 곱할 것이 없다.
+	// (SourceAbilityTags 는 서버 전용 필드지만 ExecCalc 는 서버에서만 돈다)
+	const bool bMountShared = UDRAbilitySystemLibrary::GetSourceAbilityTags(Spec.GetContext())
+		.HasTagExact(FDRGameplayTags::Get().Damage_MountShared);
+
+	if (SourceASC && !bMountShared)
 	{
 		const FDRGameplayTags& UpgradeTags = FDRGameplayTags::Get();
 		const FDRUpgradeRuntime& SourceRuntime = UDRAbilitySystemLibrary::GetUpgradeRuntimeForASC(SourceASC);
@@ -118,6 +126,11 @@ void UExecCalc_Damage::Execute_Implementation(const FGameplayEffectCustomExecuti
 			const FDRChipTuning& Tuning = UDRAbilitySystemLibrary::GetChipTuning(SourceAvatar);
 			OutgoingMultiplier *= (1.f + Tuning.SynergyDamageDealtPerStack * SynergyStacks);
 		}
+
+		// (d) ★Plan5(탑승칩)★ ① 탑승 공격력 — 탑의 맨 아래 청소기가 칩①이면 위 인원 × 8% (상한 24%).
+		//     시너지처럼 광폭화 상한 밖에서 곱한다 (D-78). 칩 · 탑승이 없으면 정확히 1.0.
+		//     블록 자체가 공유 · 이전 피해를 건너뛰므로 여기서 따로 거를 것이 없다 (D-82)
+		OutgoingMultiplier *= UDRAbilitySystemLibrary::GetRideDamageMultiplier(SourceAvatar);
 
 		if (!FMath::IsNearlyEqual(OutgoingMultiplier, 1.f))
 		{

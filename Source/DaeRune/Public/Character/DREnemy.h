@@ -169,6 +169,9 @@ public:
 
 	void TriggerEnrage();
 
+	// ★Plan5(공기탄칩)★ 보스 여부(bIsBoss) 읽기 전용 — 공기탄칩② 흡착이 보스를 거른다 (Plan5 T-100)
+	bool IsBoss() const { return bIsBoss; }
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void InitAbilityActorInfo() override;

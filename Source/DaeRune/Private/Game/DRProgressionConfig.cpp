@@ -326,6 +326,141 @@ bool UDRProgressionConfig::ValidateCurrencyBudget(TArray<FString>& OutErrors) co
 		}
 	}
 
+	// ===== ★Plan5(탑승칩 · 공기탄칩 · 물점프칩)★ 청소기 칩 GE 검사 =====
+	// 공속칩과 같은 이유 — 비우거나 설정을 틀리면 칩이 에러 없이 일부만 동작한다. 칩이 카탈로그에 있을 때만 검사한다.
+	{
+		const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+
+		// 필드가 비었으면 오류를 남기고 nullptr, 아니면 GE CDO
+		auto LoadEffectCDO = [&OutErrors](const TCHAR* FieldName, const TSoftClassPtr<UGameplayEffect>& Effect,
+			const TCHAR* WhatBreaks) -> const UGameplayEffect*
+		{
+			if (Effect.IsNull())
+			{
+				OutErrors.Add(FString::Printf(TEXT("ChipTuning.%s 가 비어 있어 %s"), FieldName, WhatBreaks));
+				return nullptr;
+			}
+			const UClass* EffectClass = Effect.LoadSynchronous();
+			return EffectClass ? EffectClass->GetDefaultObject<UGameplayEffect>() : nullptr;
+		};
+
+		auto RequireGrantedTag = [&OutErrors](const TCHAR* FieldName, const UGameplayEffect* CDO, const FGameplayTag& Tag,
+			const TCHAR* WhatBreaks)
+		{
+			if (CDO && !CDO->GetGrantedTags().HasTagExact(Tag))
+			{
+				OutErrors.Add(FString::Printf(TEXT("ChipTuning.%s(%s)의 Target Tags 에 %s 가 없습니다 — %s"),
+					FieldName, *CDO->GetName(), *Tag.ToString(), WhatBreaks));
+			}
+		};
+
+		// 이 속성에 이 연산의 모디파이어가 있나
+		auto HasModifier = [](const UGameplayEffect* CDO, const FName& AttributeName, EGameplayModOp::Type Op) -> bool
+		{
+			for (const FGameplayModifierInfo& Mod : CDO->Modifiers)
+			{
+				if (Mod.Attribute.GetName() == AttributeName.ToString() && Mod.ModifierOp == Op) return true;
+			}
+			return false;
+		};
+
+		// ① 탑승 감속 (Plan5 D-80 · T-84 · T-86)
+		if (ChipCatalog && ChipCatalog->IsFeatureGated(Tags.Upgrade_Feature_Skill_Ride_Power))
+		{
+			if (const UGameplayEffect* CDO = LoadEffectCDO(TEXT("Ride.PowerLoadEffect"), ChipTuning.Ride.PowerLoadEffect,
+					TEXT("탑승칩①이 감속 없이 공격력만 올립니다.")))
+			{
+				RequireGrantedTag(TEXT("Ride.PowerLoadEffect"), CDO, Tags.Debuff_RobotVacuum_RideLoad,
+					TEXT("코드가 감속을 못 지워 갱신마다 쌓입니다 (Plan5 T-84)."));
+				if (CDO->DurationPolicy != EGameplayEffectDurationType::Infinite)
+				{
+					OutErrors.Add(FString::Printf(TEXT("ChipTuning.Ride.PowerLoadEffect(%s)가 Infinite 가 아니라 감속이 저절로 사라집니다."), *CDO->GetName()));
+				}
+				if (!HasModifier(CDO, TEXT("MoveSpeed"), EGameplayModOp::MultiplyCompound))
+				{
+					OutErrors.Add(FString::Printf(TEXT("ChipTuning.Ride.PowerLoadEffect(%s)에 MoveSpeed · Multiply (Compound) 모디파이어가 없습니다 (Plan5 T-86)."), *CDO->GetName()));
+				}
+			}
+		}
+
+		// ③ 비상 탈출 회복 · 금지 (Plan5 D-89 · D-90 · T-81)
+		if (ChipCatalog && ChipCatalog->IsFeatureGated(Tags.Upgrade_Feature_Skill_Ride_Eject))
+		{
+			LoadEffectCDO(TEXT("Ride.EjectHealEffect"), ChipTuning.Ride.EjectHealEffect, TEXT("탑승칩③이 회복 없이 탈출 · 금지만 합니다."));
+			if (const UGameplayEffect* CDO = LoadEffectCDO(TEXT("Ride.EjectBanEffect"), ChipTuning.Ride.EjectBanEffect,
+					TEXT("탑승칩③이 탑승 금지 없이 탈출 · 회복만 합니다.")))
+			{
+				RequireGrantedTag(TEXT("Ride.EjectBanEffect"), CDO, Tags.Debuff_Ride_Banned,
+					TEXT("탑승 금지가 판정되지 않습니다."));
+				if (CDO->StackingType == EGameplayEffectStackingType::AggregateByTarget)
+				{
+					OutErrors.Add(FString::Printf(TEXT("ChipTuning.Ride.EjectBanEffect(%s)가 Aggregate by Target 이라 두 번째 청소기의 금지가 첫 GE 에 합쳐집니다 — Stacking None (Plan5 T-81)."), *CDO->GetName()));
+				}
+			}
+			if (ChipTuning.Ride.EjectBanDuration <= 0.f)
+			{
+				OutErrors.Add(TEXT("ChipTuning.Ride.EjectBanDuration 이 0 이하입니다."));
+			}
+		}
+
+		// 공기탄② 흡착 (Plan5 D-96 · T-95 · T-96 · T-97)
+		if (ChipCatalog && ChipCatalog->IsFeatureGated(Tags.Upgrade_Feature_Skill_AirShot_Drag))
+		{
+			const FDRAirShotChipTuning& AirShot = ChipTuning.AirShot;
+			if (const UGameplayEffect* CDO = LoadEffectCDO(TEXT("AirShot.Drag.Effect"), AirShot.Drag.Effect,
+					TEXT("공기탄칩②가 감속 · 받는 피해 증가 없이 피해 −20% 만 남습니다.")))
+			{
+				RequireGrantedTag(TEXT("AirShot.Drag.Effect"), CDO, Tags.Debuff_AirShot_Drag,
+					TEXT("받는 피해 증가가 읽히지 않습니다."));
+				if (CDO->StackingType != EGameplayEffectStackingType::AggregateByTarget)
+				{
+					OutErrors.Add(FString::Printf(TEXT("ChipTuning.AirShot.Drag.Effect(%s)가 Aggregate by Target 이 아니라 청소기마다 따로 쌓입니다."), *CDO->GetName()));
+				}
+				if (CDO->GetStackLimitCount() != AirShot.DragMaxStacks)
+				{
+					OutErrors.Add(FString::Printf(TEXT("ChipTuning.AirShot.Drag.Effect(%s)의 Stack Limit(%d)이 DragMaxStacks(%d)와 달라 감속 스택과 피해 증가 스택이 어긋납니다."),
+						*CDO->GetName(), CDO->GetStackLimitCount(), AirShot.DragMaxStacks));
+				}
+				if (CDO->GetStackExpirationPolicy() != EGameplayEffectStackingExpirationPolicy::ClearEntireStack)
+				{
+					OutErrors.Add(FString::Printf(TEXT("ChipTuning.AirShot.Drag.Effect(%s)의 Stack Expiration Policy 가 Clear Entire Stack 이 아닙니다 (Plan5 T-97)."), *CDO->GetName()));
+				}
+				if (CDO->bDenyOverflowApplication)
+				{
+					OutErrors.Add(FString::Printf(TEXT("ChipTuning.AirShot.Drag.Effect(%s)의 Deny Overflow Application 이 켜져 있어 3스택에서 지속이 갱신되지 않습니다 (Plan5 T-96)."), *CDO->GetName()));
+				}
+				if (!HasModifier(CDO, TEXT("MoveSpeed"), EGameplayModOp::MultiplyAdditive))
+				{
+					OutErrors.Add(FString::Printf(TEXT("ChipTuning.AirShot.Drag.Effect(%s)에 MoveSpeed · ★Multiply (Additive)★ 모디파이어가 없습니다 — Compound 면 3스택에서 오히려 빨라집니다 (Plan5 T-95)."), *CDO->GetName()));
+				}
+			}
+			if (AirShot.Drag.Magnitude <= 0.f || AirShot.Drag.Magnitude >= 1.f || AirShot.Drag.Duration <= 0.f)
+			{
+				OutErrors.Add(TEXT("ChipTuning.AirShot.Drag 의 Magnitude 는 0~1 사이, Duration 은 0 보다 커야 합니다."));
+			}
+		}
+
+		// 물 점프② 무적 (Plan5 D-108 · T-113)
+		if (ChipCatalog && ChipCatalog->IsFeatureGated(Tags.Upgrade_Feature_Skill_JetJump_Guard))
+		{
+			if (const UGameplayEffect* CDO = LoadEffectCDO(TEXT("JetJump.GuardEffect"), ChipTuning.JetJump.GuardEffect,
+					TEXT("물점프칩②가 무적 없이 피해 0 만 남습니다.")))
+			{
+				RequireGrantedTag(TEXT("JetJump.GuardEffect"), CDO, Tags.State_Invulnerable,
+					TEXT("무적이 판정되지 않습니다."));
+				if (CDO->DurationPolicy != EGameplayEffectDurationType::HasDuration
+					|| CDO->DurationMagnitude.GetMagnitudeCalculationType() != EGameplayEffectMagnitudeCalculation::SetByCaller)
+				{
+					OutErrors.Add(FString::Printf(TEXT("ChipTuning.JetJump.GuardEffect(%s)는 Has Duration · Duration = Set by Caller(Data.Duration) 이어야 합니다 (Plan5 T-113)."), *CDO->GetName()));
+				}
+			}
+			if (ChipTuning.JetJump.GuardDuration <= 0.f)
+			{
+				OutErrors.Add(TEXT("ChipTuning.JetJump.GuardDuration 이 0 이하입니다."));
+			}
+		}
+	}
+
 	if (OutErrors.Num() > 0)
 	{
 		UE_LOG(LogDR, Warning, TEXT("[ProgressionConfig] %s: 검증 오류 %d건 (첫 항목: %s)"),
