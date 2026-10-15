@@ -533,7 +533,7 @@ float UDRAbilitySystemLibrary::GetLifestealRatioForDamage(const FEffectPropertie
 		return 0.f;
 	}
 
-	// ③ ★시전자가 오염 중이면 막는다★ (2026-10-08 사용자 결정 — Plan5 §9-15) — 동전 ② 적중 회복(D-42)과 같은 이유.
+	// ③ ★시전자가 오염 중이면 막는다★ (2026-10-08 사용자 결정) — 동전 ② 적중 회복(D-42)과 같은 이유.
 	//    HandleCorruptionPurification 은 회복량과 무관하게 정화 + 컨테이너 1칸을 주므로,
 	//    막지 않으면 오염되자마자 적 한 대로 즉시 정화된다. 오염 해제는 아군 회복으로만 하는 팀 메커니즘이다.
 	if (const UDRPlayerAttributeSet* SourcePlayerAS = GetPlayerAttributeSetFromASC(Props.SourceASC))

@@ -1,11 +1,11 @@
-# Plan5 — 로봇 전용 칩 18종 (정원로봇 9 · 자판기 동전 3 · 잭팟 3 · 공속 버프 3) + 스킬당 1칩 규칙
+# Plan5 — 로봇 전용 칩 30종 (정원로봇 9 · 자판기 9 · 청소기 12) + 스킬당 1칩 규칙
 
 > **상태**
 > - 정원로봇 9종(씨앗 폭탄 · 물대포 · 발톱): **구현 완료**. 씨앗 폭탄·물대포는 게임 검증 완료, **발톱은 게임 검증이 남았다 → §10**
 > - 자판기 기본 공격(동전) 3종 · 잭팟 3종: **구현 완료**(C++ 빌드 통과 · 에셋 입력 확인 2026-09-28), **게임 검증 남음 → §10**
 > - 자판기 공속 버프 3종(§1.6): **구현 완료**(C++ 빌드 통과 · 에셋 입력 확인 2026-10-07), **게임 검증 남음 → §10.3**
 > - 장착 규칙 "같은 스킬 칩은 1개만"(§1.7): **구현 완료**, 게임 검증 남음 → §10
-> - 로봇 청소기 칩 12종(탑승 §12 · 공기탄 §13 · 물 점프 §14 · 돌진 §15): **C++ 구현 완료**(빌드 통과 2026-10-08) — **남은 것 = 에디터 작업(§16 안내서) → 게임 검증**. 칩 없이도 동작이 바뀌는 선행 변경 5건 포함(공유 피해에서 공격 배율 제거 · 오염 최대 체력 100 · 공기탄 단계 피해 10/30/50/70 · 물 점프 물 30 실제 소모 · 돌진 지형 충돌 자해 50)
+> - 로봇 청소기 칩 12종(탑승 · 공기탄 · 물 점프 · 돌진 — §1.9~§1.13): **구현 완료**(C++ 빌드 통과 · 에셋 입력 확인 2026-10-08, 커밋 `89120e20`), **게임 검증 남음 → §10.4**. 칩 없이도 바뀐 것 5건(§1.13)
 >
 > 최종 갱신: 2026-10-08 / 브랜치 `feat/upgradeskill`
 > 선행 문서: **Plan2.md**(재화·슬롯·칩 시스템) → **Plan3.md**(공용 칩 8종)
@@ -28,10 +28,10 @@
 
 ---
 
-## 1. 칩 18종 최종 스펙
+## 1. 칩 30종 최종 스펙
 
 공통: 로봇 전용(`bCommonChip = false`), `Category = Ascension`, `RequiredSlotCount = 1`. ★칩 레벨 `TargetAbilityTag` 가 같은 칩은 동시에 1개만 장착된다(§1.7)★.
-모디파이어는 동전 ①의 발사 간격(`Flat`)을 빼면 전부 `Op = Percent`(곱연산)이며 **각 모디파이어마다 `TargetAbilityTag` 를 지정**한다
+모디파이어는 `Flat` 표시가 있는 것(동전 ① 발사 간격 · 탑승 ② 최대 체력 · 물 점프 ③ 물 · 공중 횟수)을 빼면 전부 `Op = Percent`(곱연산)이며 **각 모디파이어마다 `TargetAbilityTag` 를 지정**한다
 (칩 레벨의 `TargetAbilityTag` 는 표기용이다 — 모디파이어에서 빠뜨리면 그 로봇의 **모든 스킬**에 퍼진다.
 실제로 `GR.Asc.SeedSupport` 가 이렇게 빠져 정원로봇 전 스킬 피해가 −80% 였다 — 커밋 `0612381c` 에서 수정).
 
@@ -152,7 +152,7 @@
 ### 1.7 장착 규칙 — 같은 스킬 칩은 동시에 1개만
 
 - 묶음 키 = **칩 레벨 `TargetAbilityTag`**(정확히 일치 — D-47). 공용 칩 · 태그 없는 칩은 제한 없음.
-- 그룹 6개 × 3칩: 씨앗 폭탄 / 물대포 / 발톱 / 동전(`…VendingMachine.BasicAttack`) / 잭팟(`…VendingMachine.Jackpot`) / 공속 버프(`…VendingMachine.AttackSpeedBuff`).
+- 그룹 10개 × 3칩: 씨앗 폭탄 / 물대포 / 발톱 / 동전(`…VendingMachine.BasicAttack`) / 잭팟(`…VendingMachine.Jackpot`) / 공속 버프(`…VendingMachine.AttackSpeedBuff`) / 청소기 탑승(`…RobotVacuum.Ride` — 그룹 키 전용) / 공기탄(`…RobotVacuum.AirShot`) / 물 점프(`…RobotVacuum.JetJump`) / 돌진(`…RobotVacuum.Dash`).
 - 같은 그룹 칩이 있으면 빈 칸 장착은 **거부**(`EDRUpgradeResult::SkillConflict`), **그 칩이 있는 칸에 드롭하면 교체**(D-48). 칸 이동은 검사하지 않는다.
 - 겹친 칩도 목록에서 **드래그는 된다**(드롭 교체를 위해 — 사용자 확인 2026-09-28).
 - 서버 정화 · 세이브 정화(앞 칸 칩만 남김 — D-50) · 칩 카드 사유(`ConflictingChipName`) · 미리보기(충돌 칩을 뺀 수치)가 모두 `UDRChipCatalog::FindSkillConflict()` 하나를 쓴다(D-49).
@@ -221,6 +221,127 @@
 | ⑧ 피의 계약 + 공속 ① | 물 130 대신 ★체력 130★ 을 낸다(비율 1.0) |
 | 발톱 ① 중량 삽날 + 공유 버프 | 선딜 배율과 곱해진다 — `PlayRate = Base × M ÷ WindupScale` |
 
+### 1.9 청소기 탑승(패시브) 3종 — `OwnerClass = RobotVacuum`, `TargetAbilityTag = Abilities.RobotVacuum.Ride`(그룹 키 전용 — GA 에 없다)
+
+| # | `ChipId` | 이름 | Modifiers | GrantedTags | Tier | 아이콘 |
+|---|---|---|---|---|---|---|
+| ① | `RV.Asc.RidePower` | 합승 부스터 | (없음) | `…Ride.Power` | 3 | 인간타워 |
+| ② | `RV.Asc.RideGuard` | 대신 맞는 범퍼 | `MaxHealth` **Flat −100** ★단점★(태그 비움) | `…Ride.Guard` | 4 | 완충 |
+| ③ | `RV.Asc.RideEject` | 비상 탈출 좌석 | (없음) | `…Ride.Eject` | 3 | 긴급하차 |
+
+"탑" = 청소기 위에 청소기가 타는 기존 탑승(맨 아래 위로 최대 3명 — 새 기능 아님). 탑승 공유 = 받은 피해를 **바로 위 · 아래 1칸**에 그대로(D-92).
+
+- ① 탑의 **맨 아래**(직접 달리는) 청소기가 ①이면 위 인원 N명당 **탑승자 전원**의 주는 피해 +8%(최대 +24%), 그 청소기 이속 −5%/명.
+  위층 청소기의 ①은 업혀 있는 동안 쉰다(D-79). 청소기 자신 · 탑승자의 DoT · 공유분에는 안 붙는다.
+- ② 이 청소기 **위의 전원**이 보호된다 — 그 사람이 최종적으로 받아야 할 피해 L(받는 쪽 배율 · 데미지 디버프 반영)을 받지 않고,
+  **L × 0.2** 가 아래의 가장 가까운 ② 청소기로 넘어간다(피격 자체의 1칸 공유 L 은 그대로). 디버프는 보호받는 사람에게도 걸리고 그 DoT 틱이 20% 로 넘어간다(D-84).
+  대신 최대 체력 400 → **300**(칸 75 × 4). 오염 최대는 칩과 무관하게 100(D-87).
+- ③ **바로 위 1명**이 피격 직후 체력 ≤ 30% 이거나 그 피격으로 오염에 들어가면 → 점프 하차 + 탑승자 · 청소기 각각 **+100** →
+  그 사람은 **20초** 동안 **이 청소기에** 못 탄다(서버 거부 + F 프롬프트 없음, 다른 청소기는 탈 수 있다). 체력 **비용**(⑧ · 발톱 수혈)으로는 발동 안 함.
+
+| ① N | 탑승자 주는 피해 | 청소기 이속(550) |
+|---|---|---|
+| 0 / 1 / 2 / 3 | ×1.0 / 1.08 / 1.16 / **1.24** | 550 / 522.5 / 495 / 467.5 |
+
+| ② 상황 (피해 20) | 칩 없음 | ② |
+|---|---|---|
+| 2층 V② ← R, R 또는 V 가 맞음 | 둘 다 20 | R **0** / V **24** (20 + 4) |
+| 3층 A② ← B ← C — C / B / A 가 맞음 | A 0 · 20 · 20 | A **8** / **28** / **24**, B · C 0 |
+| ② 두 대 A② ← B② ← C, B 가 맞음 | 셋 다 20 | A **24.8** (0.2 가 두 번 — §9-46) |
+| 화상 틱 5 (V② ← R) / 지형 충돌 자해 50 (V② ← R) | 5 · 5 / 50 · 50 | V **6** / V **60**, R 0 |
+
+### 1.10 청소기 기본 공격(공기탄) 3종 — `TargetAbilityTag = Abilities.RobotVacuum.AirShot`
+
+| # | `ChipId` | 이름 | Modifiers | GrantedTags | Tier | 아이콘 |
+|---|---|---|---|---|---|---|
+| ① | `RV.Asc.ShotPower` | 고압 공기탄 | `SkillDamage` **+0.5** | `…AirShot.FriendlyFire` | 3 | 고압노즐 |
+| ② | `RV.Asc.ShotDrag` | 흡착 공기탄 | `SkillDamage` **−0.2** ★단점★ | `…AirShot.Drag` | 4 | 감속벨브 |
+| ③ | `RV.Asc.ShotQuick` | 속사 압축기 | `SkillWindup` **−0.3**<br>`SkillChargeGrowth` **−0.4** ★단점★ | (없음) | 3 | 저압밸브 |
+
+기준(C++ — BP 가 안 덮는다): 차지 간격 0.5초, 단계 피해 **10 / 30 / 50 / 70**(+20/단계 — 예전 10/15/22/35, D-101), 3단계 = 강화탄(넉백 · 반동).
+
+- ① 피해 ×1.5. 대신 **아군에게도 같은 피해**(공격 배율 포함, 강화탄은 피해 + 넉백). 탑승 연결(내 위 탑승자 · 내가 탄 청소기)은 통과.
+- ② 맞은 적 1스택: 이속 −10% · **받는 모든 피해** +5%(누가 · 무엇으로든), 2초 · 적중마다 갱신, **적 한 마리당 합쳐 최대 3**(−30% / +15%), 마지막 적중 2초 뒤 한꺼번에 해제.
+  **보스(`bIsBoss` — 엘리트 곰 · 두더지 보스)는 둘 다 없음**, 일반 엘리트는 걸림. 받는 피해는 그 적중 **직전** 스택으로 계산(첫 적중 +0%). 대신 피해 ×0.8.
+- ③ 차지 간격 0.5 → **0.35초**(공속 버프와 곱). 대신 단계당 증가 +20 → **+12**(0단계 10 은 그대로).
+
+| 단계 피해 | 0 | 1 | 2 | 3 | 풀차지 | 홀드 기준 초당 피해(1 / 2 / 3단계) |
+|---|---|---|---|---|---|---|
+| 칩 없음 | 10 | 30 | 50 | 70 | 1.5초 | 60 / 50 / 46.7 |
+| ① | 15 | 45 | 75 | 105 | 1.5초 | 90 / 75 / 70 |
+| ② | 8 | 24 | 40 | 56 | 1.5초 | 48 / 40 / 37.3 (+ 3스택 적 ×1.15) |
+| ③ | 10 | 22 | 34 | 46 | **1.05초** | 62.9 / 48.6 / 43.8 — 이득은 강화탄까지 30% 빨리 |
+
+### 1.11 청소기 물 점프(스킬 1 · Q) 3종 — `TargetAbilityTag = Abilities.RobotVacuum.JetJump`
+
+| # | `ChipId` | 이름 | Modifiers | GrantedTags | Tier | 아이콘 |
+|---|---|---|---|---|---|---|
+| ① | `RV.Asc.JumpBlast` | 폭압 분사구 | `SkillDamage` **+1.0**<br>`SkillOuterDamage` **+0.5**<br>`SkillLaunchHeight` **−0.3** ★단점★ | (없음) | 3 | 고압분사 |
+| ② | `RV.Asc.JumpGuard` | 완충 분사구 | `SkillDamage` **−1.0** ★단점★ | `…JetJump.Guard` | 4 | 완충_버스트 |
+| ③ | `RV.Asc.JumpMulti` | 다단 분사구 | `SkillWaterCost` **Flat −10**<br>`SkillAirUseCount` **Flat +1**<br>`SkillLaunchHeight` **−0.25** ★단점★ | (없음) | 3 | 저압버스트 |
+
+기준(C++ — BP 가 안 덮는다): 물 **30**(실제로 빠진다 — 예전엔 확인만 했다, D-103) · 점프 임펄스 900(중력 −980 → 최고 높이 ≈ 413uu) ·
+2D 반경 200 안 강판정 **20** / 200~400 약판정 **5** · 공중 사용 1회(지상 Q → 공중 Q) · 쿨다운 GE 0.3초.
+
+- ① 강판정 20 → **40**, 약판정 5 → **15**. 대신 최고 높이 ×0.70(임펄스 ×√0.7).
+- ② 쓰는 순간부터 **0.3초 무적** — 피격 통째로 무효(피해 · 경직 · 넉백 · 디버프 · DoT 틱 · 탑승 공유, **모자보다 먼저**라 모자가 안 닳는다). 대신 물 점프 피해 0(판정 생략).
+  물값으로 내는 체력은 막지 않는다. 적 GA 가 피해 없이 직접 거는 넉백 · 스턴은 못 막는다(§9-58).
+- ③ 물 30 → **20**, 공중 사용 1 → **2회**. 대신 최고 높이 ×0.75.
+- "상승 높이" · "상승력"은 둘 다 **실제 최고 높이** 기준(사용자 확정) — 높이 ∝ 임펄스² 이라 임펄스에는 √배율.
+
+| | 강 / 약 | 1회 높이 | 물 | 공중 | 한 번 뜰 때 최대(정점마다 Q) |
+|---|---|---|---|---|---|
+| 칩 없음 | 20 / 5 | 413uu | 30 | 1 | 2회 826uu · 물 60 · 약 3.1초 |
+| ① | **40 / 15** | 289uu | 30 | 1 | 579uu · 2.6초 |
+| ② | 0 | 413uu | 30 | 1 | 826uu · Q 마다 0.3초 무적(연속이면 0.6초) |
+| ③ | 20 / 5 | 310uu | **20** | **2** | 3회 **930uu** · 물 60 · 3.8초 |
+
+### 1.12 청소기 돌진(스킬 2 · RMB) 3종 — `TargetAbilityTag = Abilities.RobotVacuum.Dash`
+
+| # | `ChipId` | 이름 | Modifiers | GrantedTags | Tier | 아이콘 |
+|---|---|---|---|---|---|---|
+| ① | `RV.Asc.DashRam` | 충각 범퍼 | `SkillDamage` **+0.8**<br>`SkillSelfDamage` **+1.0** ★단점★ | (없음) | 3 | 과충전_코일 |
+| ② | `RV.Asc.DashPass` | 유령 주행 | `SkillDamage` **−0.15** ★단점★ | `…Dash.PassAllies` | 4 | 무해코팅 |
+| ③ | `RV.Asc.DashQuick` | 급속 충전기 | `SkillWindup` **−0.3**<br>`SkillSpeedBonus` **−0.3** ★단점★ | (없음) | 3 | 저항_브레이크 |
+
+기준(C++ — BP 가 안 덮는다): 칸당 충전 0.5초 · 물 20, 최대 5칸. 칸당 이속 +20%(550 → 5칸 1100), 1~4칸은 1초에 1칸 감쇠, 5칸 = 지속 돌진.
+충돌 피해 = 칸 수 × (적 10 / 다른 플레이어 5), 부딪히면 끝. **자해 = 5칸 지속 돌진 중 지형(Pawn 아닌 것) 충돌만 50**(예전엔 BP 오배선으로 0, D-112).
+
+- ① **적** 충돌 피해 칸당 10 → **18**(아군 5 는 그대로). 대신 지형 충돌 자해 50 → **100**.
+- ② 돌진 중 **다른 플레이어를 통과**(충돌 · 피해 · 정지 없음, 끝나면 다시 막힌다). 대신 적 충돌 피해 칸당 **8.5**.
+- ③ 칸당 충전 0.5 → **0.35초**(5칸 2.5 → 1.75초, 충전 중 초당 물 40 → 57). 대신 칸당 이속 +20% → **+14%**(5칸 1100 → 935).
+
+| 적 충돌 피해 1 / 2 / 3 / 4 / 5칸 | 칩 없음 10 · 20 · 30 · 40 · 50 / ① 18 · 36 · 54 · 72 · 90 / ② 8.5 · 17 · 25.5 · 34 · 42.5 |
+|---|---|
+| 이속 1 / … / 5칸 | 칩 없음 660 · 770 · 880 · 990 · 1100 / ③ 627 · 704 · 781 · 858 · 935 |
+| 4칸 일반 돌진 거리(가속 무시) | 칩 없음 3300uu / ③ 2970uu |
+
+### 1.13 청소기 칩 — 칩 없이도 바뀐 것 · 상호작용
+
+★선행 변경 5건(2026-10-08 — 칩을 안 껴도 적용된다)★
+
+| # | 바뀐 것 | 결정 |
+|---|---|---|
+| 1 | 탑승 공유 피해에 넘겨주는 사람의 **주는 피해** 배율(광폭화 · 시너지 · `DamageDealt` · 탑승①)이 안 붙는다 — 광폭화 탑승자 20 피격 → 청소기 45~55 였던 것이 **20** | D-82 |
+| 2 | 오염 최대 체력은 칩과 무관하게 **항상 100**(+100 칩 오염 200 → 100, ⑧ 900 → 100 / 정화 뒤 ⑧ 2000 → 1200) | D-87 |
+| 3 | 공기탄 단계 피해 10 / 15 / 22 / 35 → **10 / 30 / 50 / 70** | D-101 |
+| 4 | 물 점프가 물 30 을 **실제로 소모**(물이 모자라면 기존 규칙대로 체력 대납) | D-103 |
+| 5 | 5칸 돌진 **지형 충돌 자해 50**(예전 0). 적 · 아군 충돌 자해는 없음 | D-112 |
+
+| 조합 | 결과 |
+|---|---|
+| 공용 ⑥ 광폭화 · ⑦ 시너지 · `DamageDealt` · 탑승① | 공기탄 · 물 점프 · 돌진 피해에 ExecCalc 소스측에서 추가로 곱. 공기탄① 아군 피해에도 붙는다 / 탑승 공유 · 이전분에는 **안 붙는다** |
+| 탑승② + 모자 쓴 탑승자 / 도발된 적 | 모자가 먼저 막는다(아무도 피해 없음) / ×0.8 이 먼저 적용된 양이 공유 · 이전 |
+| 탑승② + 광폭화 **청소기** | 피격 1회가 여러 번(공유분 + 이전분마다) 들어와 칸을 그만큼 비운다 — 3층 가운데 피격이면 3칸 ★최악의 조합★ (§9-37) |
+| 탑승③ + 회복 차단(⑥) / 오염 탑승자 | 탈출 · 금지만 / 회복 100 = 정화 |
+| 물 점프② 무적 + 모자 · 탑승 공유 · 오염 | 모자 유지 · 내가 맞으면 공유도 안 감(탑승자가 맞으면 탑승자만 맞음) · 오염 피해도 0 |
+| 공기탄② + 물대포② 취약 / 씨앗 · 물대포 감속 | ×1.5 × 1.15 = **×1.725** / Compound 와 곱(×0.7 × ×0.7 = ×0.49) |
+| 공기탄② + 비행 적 · 튜토리얼 더미 | 감속 없이 피해 증가만(§9-1) / 걸린다 |
+| 공기탄③ · 돌진③ 의 `SkillWindup` | 모디파이어 태그가 각 GA 라 서로 · 발톱에 안 퍼진다. 공속 버프(M)는 공기탄에만 곱(돌진 충전엔 원래 없음) |
+| 돌진 자해 + 탑승 · 탑승② · 모자 · 물 점프② | 공유된다(②면 청소기 60 / ①이면 120) · 모자가 1회 막음 · 무적 중이면 0 |
+| 돌진① ② + 클렌저 사이트 | 사이트는 "적" 판정이라 충돌 피해(18 · 8.5)를 받고, Pawn 이 아니라 **지형**이기도 해서 5칸이면 자해도 받는다(§9-67) |
+| 네 그룹 | 서로 다른 그룹이라 그룹마다 1개씩 동시에 낄 수 있다 |
+
 ---
 
 ## 2. 시스템 구조
@@ -275,8 +396,19 @@ FDRUpgradeRuntime  (복제하지 않는다)
    └─► 자판기 발사 간격 · 발톱 GetWindupPlayRate/RestoreMontagePlayRate · 씨앗 GetAttackSpeedPlayRate · 청소기 StartCharging/강화탄
 HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 스택) / 위젯 타이머 → GetAttackSpeedBuffFillRatio()
 
+청소기 칩 (판정 · 정산은 전부 서버)
+   주는 쪽  ExecCalc_Damage (d) GetRideDamageMultiplier(SourceAvatar)   ★Damage.MountShared 면 (a)~(d) 전부 건너뜀★
+   받는 쪽  UDRAttributeSet 기본 관문  [사망 무시 → ★무적 State.Invulnerable★ → 모자 → 도발 ×0.8] → HandleIncomingDamage
+              플레이어: 맨 위 FindRideGuard → … 받는 쪽 배율 → (보호받는 사람) TransferRideDamageToGuard(L×0.2) + Debuff + PropagateSharedDamage(L) → return
+                        … → Process · Debuff · PropagateSharedDamage → ★맨 끝★ TryRideEmergencyEject
+              적:       엘리트 → 취약 → ×GetAirShotDragDamageTakenMultiplier → 흡혈 → 적중 회복 → TryApplyAirShotDrag → 더미 / SetHealth
+   탑승 감속  MountRider · DismountRider 끝 / RefreshUpgradeEffects → OnUpgradeEffectsRefreshed → RefreshRideLoad (맨 아래 청소기만, 태그로 지우고 다시)
+   물 점프   ActivateAbility(서버): 무적 GE → AirJumpsUsed++ → Launch(900 × √SkillLaunchHeight) → AoE(Inner × SkillDamage / Outer × SkillDamage × SkillOuterDamage)
+   돌진      StartChargingGauge(간격 × SkillWindup) → ApplyBuffStacks(SetByCaller 1 + 0.2 × SkillSpeedBonus) → ReleaseGauge: SetDashPassThroughAllies(복제)
+             → 모든 머신 OnRep → ApplyAllyPassThrough(양방향 IgnoreActorWhenMoving) / HandleDashImpact: 적만 × SkillDamage, 지속 + 지형이면 자해(Data.SelfDamage)
+
 [DA_ProgressionConfig.ChipTuning]  숫자로 표현 못 하는 동적 상수
-   └ .SeedBomb / .WaterPump / .Claw / .Coin / .Jackpot / .AttackSpeedBuff  →  UDRAbilitySystemLibrary::GetChipTuning(WorldContext)
+   └ .SeedBomb / .WaterPump / .Claw / .Coin / .Jackpot / .AttackSpeedBuff / .Ride / .AirShot / .JetJump  →  UDRAbilitySystemLibrary::GetChipTuning(WorldContext)
 ```
 
 ### 2.2 스탯 축 (`EDRUpgradeStat`) — 전부 곱연산
@@ -284,15 +416,21 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 | 구분 | 축 |
 |---|---|
 | 캐릭터 단위 | `ContainerHealth` `MaxWater` `MoveSpeed` `DamageTaken` `WaterGain` `MaxHealth` `HealthRegenDelay` `DamageDealt` |
-| 스킬 단위 | `SkillDamage` `SkillWaterCost` `SkillCooldown` `SkillProjectileCount` **`SkillHealing`** **`SkillAreaRadius`** **`SkillWaterGrant`** **`SkillWindup`** **`SkillFireInterval`** **`SkillProjectileScale`** |
+| 스킬 단위 | `SkillDamage` `SkillWaterCost` `SkillCooldown` `SkillProjectileCount` **`SkillHealing`** **`SkillAreaRadius`** **`SkillWaterGrant`** **`SkillWindup`** **`SkillFireInterval`** **`SkillProjectileScale`** **`SkillChargeGrowth`** **`SkillOuterDamage`** **`SkillLaunchHeight`** **`SkillAirUseCount`** **`SkillSelfDamage`** **`SkillSpeedBonus`** |
 
-★굵은 6개가 Plan5 에서 추가됐다.★ 스킬 단위 축은 **반드시 `DRIsSkillStat()` 에도 추가**해야 한다(T-12).
+★굵은 12개가 Plan5 에서 추가됐다(이 순서로 `Count` 앞에 붙였다).★ 스킬 단위 축은 **반드시 `DRIsSkillStat()` 에도 추가**해야 한다(T-12).
 
 | 축 | 단위 | `DRIsLowerBetter` | `DRIsTimeStat` | 이유 |
 |---|---|---|---|---|
-| `SkillWindup` | 기준 1.0 배율 | ✓ | ✗ (T-25) | 선딜 길이는 몽타주 안에 있어 어빌리티가 초를 모른다(D-21) |
+| `SkillWindup` | 기준 1.0 배율 | ✓ | ✗ (T-25) | 선딜 길이는 몽타주 안에 있어 어빌리티가 초를 모른다(D-21). 공기탄 · 돌진의 **충전 간격**에도 쓴다(D-99 · D-117) |
 | `SkillFireInterval` | **초** | ✓ | **✓** | 발사 간격은 GA 프로퍼티라 초를 안다(D-37). 빠뜨리면 미리보기 색·단위가 틀린다(T-37) |
 | `SkillProjectileScale` | 기준 1.0 배율 | ✗ | ✗ | 투사체 반경은 발사체 BP 에 있다(D-40) |
+| `SkillChargeGrowth` | 단계 **증가분** 배율 | ✗ | ✗ | 0단계는 그대로(D-100 · T-104) |
+| `SkillOuterDamage` | 외부(약)판정 피해 배율 | ✗ | ✗ | `SkillDamage` 위에 외부에만 한 번 더(D-104). 지금은 물 점프만 읽는다 |
+| `SkillLaunchHeight` | **실제 최고 높이** 배율 | ✗ | ✗ | 임펄스엔 √배율(D-105 · T-109) |
+| `SkillAirUseCount` | 횟수(`Flat`) | ✗ | ✗ | GA 가 반올림해 읽는다(D-107) |
+| `SkillSelfDamage` | 자해 배율 | **✓** | ✗ | 빠뜨리면 "+100%" 가 초록(T-130) |
+| `SkillSpeedBonus` | 칸당 이속 **증가분** 배율 | ✗ | ✗ | 1.2 가 아니라 0.2 에 곱한다(D-118) |
 
 **`Mult` 는 곱연산 누산기다** — `Percent` 에서 이름을 바꾼 이유가 그것이다(D-7).
 `Mult *= (1 + Value)` 로 누적되므로 감소 칩을 아무리 겹쳐도 부호가 뒤집히지 않는다
@@ -305,13 +443,14 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 | 어디에 사나 | `FDRUpgradeRuntime::GrantedTags` — **ASC 에 없다** | **ASC 에 있다** (GE 의 Granted Tags) | GE 스펙 안 — 크기를 넘기는 키일 뿐, 어디에도 부여되지 않는다 |
 | 언제 변하나 | 로드아웃이 바뀔 때만 | 런타임에 수시로 | GE 를 적용할 때마다 |
 | 쓰는 법 | `HasUpgradeFeature(ASC, Tag)` | `HasMatchingGameplayTag()` / GE 핸들의 `GetCurrentStackCount()` | `SetSetByCallerMagnitude(Tag, 값)` |
-| Plan5 에서 추가 | `…SeedBomb.{Refund,Slow,Haste}`<br>`…WaterPump.{Ramp,Slow,Vulnerable,Pierce}`<br>`…Claw.{Lifesteal,AllyHeal}`<br>`…Coin.HitHeal`<br>`…Jackpot.{GoldRush,Double,Pity}`<br>`…AttackSpeedBuff.{Overdrive,Share,Decay}` | `Buff.WaterPump.Pressure`<br>`Debuff.Vulnerable`<br>`Buff.AttackSpeed.Shared`<br>(에셋 전용) `Debuff.SeedBomb.Slow` `Buff.SeedBomb.Haste` `Debuff.WaterPump.Slow` | `Data.MoveSpeed.Mult`<br>`Data.Duration`<br>`Data.HealthCost` |
+| Plan5 에서 추가 | `…SeedBomb.{Refund,Slow,Haste}`<br>`…WaterPump.{Ramp,Slow,Vulnerable,Pierce}`<br>`…Claw.{Lifesteal,AllyHeal}`<br>`…Coin.HitHeal`<br>`…Jackpot.{GoldRush,Double,Pity}`<br>`…AttackSpeedBuff.{Overdrive,Share,Decay}`<br>`…Ride.{Power,Guard,Eject}`<br>`…AirShot.{FriendlyFire,Drag}`<br>`…JetJump.Guard`<br>`…Dash.PassAllies` | `Buff.WaterPump.Pressure`<br>`Debuff.Vulnerable`<br>`Buff.AttackSpeed.Shared`<br>`Debuff.RobotVacuum.RideLoad`<br>`Debuff.Ride.Banned`<br>`Debuff.AirShot.Drag`<br>`State.Invulnerable`(범용)<br>(에셋 전용) `Debuff.SeedBomb.Slow` `Buff.SeedBomb.Haste` `Debuff.WaterPump.Slow` | `Data.MoveSpeed.Mult`<br>`Data.Duration`<br>`Data.HealthCost`<br>`Data.SelfDamage` |
 
 - 피처 태그를 **ASC 에 Loose 로 얹지 말 것** — 어빌리티의 `ActivationBlockedTags` 와 의도치 않게 상호작용한다.
 - C++ 이 읽는 GAS 태그만 **네이티브**로 등록한다. VFX/에셋에서만 쓰는 태그는 에디터에서 만들면 된다.
 - 발톱칩·동전칩·잭팟칩은 새 GAS 태그가 없다 — 지속 상태 없이 즉발 효과뿐이다.
   공속칩은 `Buff.AttackSpeed.Shared` 하나(② 공유 버프 — 자기 버프와 스택을 섞지 않으려고, D-63).
-- `Abilities.VendingMachine.Jackpot` 은 ★칩 그룹 키 전용★ 이다 — 어떤 GA 에도 붙이지 않는다(T-51).
+- `Abilities.VendingMachine.Jackpot` · `Abilities.RobotVacuum.Ride` 는 ★칩 그룹 키 전용★ 이다 — 어떤 GA 에도 붙이지 않는다(T-51 · T-90).
+- ★GE 를 태그로 찾을 때는 `MakeQuery_MatchAnyOwningTags`★ — `GetActiveEffectsWithAllTags` 는 에셋 태그만 본다(T-82 / T-131).
 
 ### 2.4 공용 배관 (한 번만 깔면 되는 것)
 
@@ -335,6 +474,12 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 | **P** | 공속 배율 · 스택 읽기 | `GetAttackSpeedMultiplier()` / `GetEffectStackCountWithTag()`(라이브러리) + `UDRGameplayAbility::GetAttackSpeedMultiplier()`(BP Pure) |
 | **Q** | 살아 있는 아군 탐색 | `GetAlivePlayersWithinRadius()` — 로그 없음, 적·사이트 제외 |
 | **R** | 시한 버프의 지속을 코드가 고정 | `UDRVendingMachineAttackSpeedBuff::ApplyBuffEffect()` — `Spec.SetDuration(값, true)` + SetByCaller 둘 다 |
+| **S** | 탑승 공유 GE 적용 한 곳 + 공유는 받는 피해 | `ADRCharacter::ApplyMountSharedDamageTo()` / ExecCalc 가 `Damage.MountShared` 면 (a)~(d) 건너뜀 |
+| **T** | 오염 최대 체력 = 현재값 기준 고정 | `UDRPlayerAttributeSet::SetMaxHealthCurrentValue()` · `ReapplyCorruptMaxHealth()` + `RefreshUpgradeEffects` 의 `ON_SCOPE_EXIT` |
+| **U** | 파생 캐릭터의 업그레이드 훅 | `ADRCharacter::OnUpgradeEffectsRefreshed()` — 모든 머신, 조기 return 앞 |
+| **V** | 무적 | `State.Invulnerable` + `IsInvulnerable()` — 기본 관문 맨 앞(모자보다 먼저) |
+| **W** | 발사체 피해 적용 추출 | `ADRProjectile::ApplyImpactDamage(Target)` — 팀 판정 없음(호출부 책임) |
+| **X** | GE 스택 조회 = OwningTags | `GetEffectStackCountWithTag()` — 에셋 ∪ 부여 태그(2026-10-08 전환, 공속 GE 결과 불변) |
 
 ---
 
@@ -414,8 +559,55 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 | **D-73** | "20초 유지 → 1초에 1개" = 지속 `DecayInterval`(1초)로 걸고 **매 적용 직후** `ModifyActiveEffectStartTime(+BuffDuration − Interval)`. 이후는 내장 정책이 1초마다 1개를 뺀다. 다시 쓰면 Refresh 로 리셋 → 다시 밀기 → 감소 정지 | 엔진 실측: 내장 정책은 Spec 지속 전체로 다시 잰다(20초 GE 면 20초마다 1개). 서버 타이머를 들고 있지 않아 사망·리스폰 정리가 필요 없고, 시작 시각은 GAS 가 복제한다 |
 | **D-75** | 아이콘 숫자는 태그 **`AnyCountChange`** 이벤트로(`HandleAttackSpeedBuffTagChanged`). 스택 읽기는 `GetEffectStackCountWithTag()` 하나. 예전의 정확 일치 방송(적용 · 제거) 2곳은 지웠다 | 스택만 줄 때는 적용·제거 델리게이트가 안 온다(T-72). 태그 이벤트는 서버·클라 모두 온다 |
 | **D-76** | 남은 시간 그래프는 위젯이 **세지 않고** 매 틱 `GetAttackSpeedBuffFillRatio()`(0~1)를 읽는다 — 실제 GE 남은 시간 ÷ 지속(① 5초), ③ = 유지 구간 ÷ `BuffDuration` · 감소 구간 0(사용자 확정 "A 방식"), 자기·공유 중 큰 쪽 | 위젯의 20초 하드코딩으로는 ①을 못 그린다. 시간을 이벤트로 밀어 주면 원격 클라 10중첩 재사용(스택 불변)을 놓친다 — 읽어 오면 복제된 시작 시각을 보므로 빠짐이 없다 |
+| **D-77** | 탑승 그룹 키 = 새 태그 `Abilities.RobotVacuum.Ride`(칩 레벨 · `SkillDisplayNames` 전용, GA 에 없음). 스위치 `Upgrade.Feature.Skill.Ride.{Power,Guard,Eject}` | 탑승은 GA 가 없는 패시브 — 잭팟(D-53)과 같은 처리. `Skill` 하위라 D-51 검사가 칩 태그를 강제한다 |
+| **D-78** | 탑승① 공격력은 **상태 없이** ExecCalc (d) `GetRideDamageMultiplier(SourceAvatar)` — 시너지처럼 광폭화 상한 밖 | 탑 구조(`MountedOn`/`RiderOnTop`)는 이미 복제된다. 탑승자에게 GE 를 걸면 탑승 · 하차 · 사망마다 걸고 지울 곳이 생긴다(대신 HUD 표시 없음 — §9-38) |
+| **D-79** | 탑승①은 **맨 아래 청소기의 칩만** — 위층 ①은 쉰다 | 사용자 확정. 단점(감속)이 항상 의미를 갖고, 여러 ①의 합산 문제가 없다 |
+| **D-80** | 탑승① 감속 = 무한 `GE_RideLoad`(MoveSpeed **Compound** ← `Data.MoveSpeed.Mult` = 1 − 0.05N). `RefreshRideLoad()` 가 **태그로** 지우고 조건이 맞으면 다시 건다(멱등) | GE 라야 서버 · 소유 클라 CMC 가 같은 속도를 쓴다. Compound = 돌진 버프까지 포함한 최종 속도에 −5%/명. 태그로 지우는 이유는 T-84 |
+| **D-81** | 감속 갱신 = `MountRider` · `DismountRider` 끝(오르내린 청소기 + 나부터 맨 아래까지) + `RefreshUpgradeEffects` 의 가상 훅 `OnUpgradeEffectsRefreshed()` | 사망 · EndPlay · 하차 · ③ 탈출이 전부 `DismountRider` 를 지난다. 위층끼리 타고 내려도 맨 아래 인원이 바뀐다(T-85) |
+| **D-82** | ★선행★ 탑승 공유 · 이전 피해(`Damage.MountShared`)는 **받는 피해** — ExecCalc 의 주는 피해 배율 (a)~(d)를 전부 건너뛴다 | 사용자 확정. 예전엔 소스가 원 피격자라 그 사람의 광폭화가 공유분을 키웠다(20 → 45~55) |
+| **D-83** | 탑승② = **보호받는 사람의 관문**에서 넘긴다 — `FindRideGuard` → 받는 쪽 배율 뒤 `TransferRideDamageToGuard`(L × 0.2, `ApplyMountSharedDamageTo`) + 1칸 공유 L 그대로 + 자기 처리 생략 | 관문 한 곳으로 직접 피격 · 공유 · DoT · 자해 · 여러 층이 같은 규칙으로 풀린다. `MountShared` 라 재공유 없음(T-74) |
+| **D-84** | 보호받는 사람: 그 피격의 큐 · 히트리액트 · 넉백 · 표정 · 숫자 없음, **디버프는 건다**(DoT 틱이 다시 관문을 지나 20% 로 넘어감), 전투 진입은 남김. 모자 · 도발은 관문 앞이라 먼저 | 사용자 확정(2차 정정 — "디버프로 받는 피해도 넘긴다"). 스턴 같은 피해 없는 디버프도 탑승자가 받는다(§9-40) |
+| **D-85** | 이전 비율 = `ChipTuning.Ride.GuardTransferRatio` 0.2 — **이전분에만** | ② 청소기 자신의 공유분은 100%(T-93). ② 두 대가 겹치면 0.2 가 두 번(§9-46) |
+| **D-86** | 탑승② 최대 체력 −100 = 카탈로그 `MaxHealth Flat −100`(모디파이어 태그 비움) → 칸 75 × 4 | Plan3 분배 규칙 그대로. ★D-87 없이는 오염 최대가 0★ |
+| **D-87** | ★선행★ 오염 최대 체력은 칩과 무관하게 **항상 100** — `SetMaxHealthCurrentValue`(Base = 목표 − (현재 − Base))로 진입 · 해제 · 정화 3곳 + 오염 중 `RefreshUpgradeEffects` 끝(`ON_SCOPE_EXIT`)에서 다시 100 · 체력 복원 | 사용자 확정. `SetMaxHealth` 는 BaseValue 라 칩 AddBase 가 다시 붙었다(+100 칩 오염 200, ⑧ 900, 칩② 0) |
+| **D-88** | 탑승③ = **바로 위 1명**, 피격 처리 **맨 끝**, 체력 ≤ 30% **또는** 이번 피격 오염 진입, 매번. 체력 비용으로는 안 함 | 사용자 확정. 오염 진입은 비율로 못 잡고(T-79), 맨 끝이라야 공유가 먼저 나간다(T-78). 비용 발동은 자해로 회복을 뽑는다 |
+| **D-89** | 탑승③ 실행 `EmergencyEjectRider()`: 점프 하차 → 둘 다 `ApplyHealToActor` → 탑승자에게 금지 GE | 먼저 내려야 회복 · 금지가 탑 상태와 무관하다 |
+| **D-90** | 금지 = 탑승자에게 `GE_RideBan`(`Debuff.Ride.Banned`, **Stacking None**, 소스 = ③ 청소기 ASC). `IsRideBannedFrom()` 하나를 서버 `CanBeMountedBy` 와 소유 클라 프롬프트가 같이 쓴다 | 만료 · 복제는 GAS 몫. ASC(PlayerState)로 비교해 청소기가 리스폰해도 이어진다 |
+| **D-91** | 칩 판정은 라이브러리(`GetRideDamageMultiplier` · `FindRideGuard` · `TransferRideDamageToGuard` · `TryRideEmergencyEject` · `IsRideBannedFrom`), 공유 · 이전 GE 적용은 `ApplyMountSharedDamageTo` 하나 | D-23 원칙. 공유와 이전이 같은 함수라 GE · 태그가 어긋날 수 없다 |
+| **D-92** | 탑승 공유 범위 = **바로 위 · 아래 1칸**(기존 그대로) | 사용자 확정(탑 전체 공유를 검토한 뒤 기각). ② 수치가 이 범위 전제. 넓히는 법은 T-92 |
+| **D-93** | 공기탄 그룹 키 = GA 태그 `Abilities.RobotVacuum.AirShot`. 스위치 `…AirShot.{FriendlyFire,Drag}` | GA 의 `AbilityTags` 와 일치 — 동전칩과 같은 방식 |
+| **D-94** | 공기탄① 피해 = `SkillDamage +0.5`. 아군 피해 = `FireShot` 이 스폰 때 `bHitsAllies`(복제)를 싣고 `ADRVacuumAirProjectile` 아군 분기가 `ADRProjectile::ApplyImpactDamage`(추출한 범용 함수)를 부른다 | 비행 중 로드아웃 불변(D-5). 칩 지식은 청소기 자식 클래스에만(T-106). 탑승 연결 통과는 유지(사용자 확정) |
+| **D-95** | 공기탄① 아군 피해 = 적에게 주는 것과 **같은 계산**(소스측 배율 포함), 강화탄이면 피해 + 넉백 | "동일한 피해". 적 전용 배율(엘리트 · 취약 · 흡혈)은 적 어트리뷰트셋에만 있어 아군엔 원래 없다 |
+| **D-96** | 공기탄② 표식 = `GE_AirShot_Drag`(SetByCaller 2초 · by Target · Limit 3 · Refresh · Clear Entire Stack · Deny Overflow 끔 · MoveSpeed **Additive** 0.9 · `Debuff.AirShot.Drag`), `ApplyTimedSpeedEffect` 재사용 | 적 한 마리당 합산 3 · 적중마다 갱신(사용자 확정). Additive 라야 0.9 / 0.8 / 0.7(T-95), Deny Overflow 면 3스택에서 풀린다(T-96) |
+| **D-97** | 공기탄② 적용 = 적 관문(적중 회복 블록 다음) `TryApplyAirShotDrag` — 피처 **AND** `SourceAbilityTags` 에 `AirShot` **AND** `ADREnemy` · 비보스(`IsBoss()`). 이번 적중의 배율은 **직전** 스택 | 피해가 확정되는 유일한 지점(D-41). `AirShot` 검사 없으면 돌진 충돌도 쌓는다(T-99) |
+| **D-98** | 공기탄② 받는 피해 = 적 관문 **취약 다음** × (1 + 0.05 × 스택) — 누가 · 무엇으로든(DoT 포함). 스택 = `GetEffectStackCountWithTag`, `DragMaxStacks` 로 자름 | D-10. 태그 카운트는 항상 1(T-98) |
+| **D-99** | 공기탄③ 간격 = `SkillWindup −0.3` → `EffectiveChargeInterval = ChargeInterval × WindupScale ÷ M` | 차지가 곧 선딜. 0.5 × 0.7 = 0.35. 공속(D-69)과 곱 |
+| **D-100** | 공기탄③ 단계 증가 = 새 축 `SkillChargeGrowth −0.4` → 단계 피해 = 0단계 + (그 단계 − 0단계) × Growth | 정적 수치라 카탈로그(D-2). 배율이라 기본값이 바뀌어도 "증가분의 60%" 유지 |
+| **D-101** | ★선행★ 공기탄 단계 피해 10 / 15 / 22 / 35 → **10 / 30 / 50 / 70** — C++ 생성자 | 사용자 확정. BP 가 `Stages` 를 덮지 않아 C++ 값이 곧 게임 값(T-102) |
+| **D-102** | 물 점프 그룹 키 = `Abilities.RobotVacuum.JetJump`. 스위치는 ② 하나 `…JetJump.Guard` | ①③ 은 모디파이어만 |
+| **D-103** | ★선행★ `GA_VacuumJetJump` 의 Cost GE = `GE_Cost_VacuumJetJump`(예전엔 비어 있어 물이 안 빠졌다) | 사용자 확정. `ApplyCost` 가 `Cost.Water` 를 이미 넣는다 — 칩③ 물 감소도 그대로 흐른다 |
+| **D-104** | 물 점프① 강판정 = Inner × `SkillDamage`, 약판정 = Outer × `SkillDamage` × 새 축 `SkillOuterDamage`(+0.5). 물 점프가 이때부터 `SkillDamage` 를 읽는다 | 두 판정의 배율이 달라(×2 / ×3) 축 하나로는 안 된다. ②의 "피해 0" 이 한 줄로 양쪽을 덮는다 |
+| **D-105** | 상승 = 새 축 `SkillLaunchHeight`(**실제 최고 높이** 배율) → 임펄스 × √배율. ① −0.3 · ③ −0.25 | 사용자 확정(둘 다 높이). 높이 = v² ÷ 2g(T-109) |
+| **D-106** | 물 점프③ 물 = `SkillWaterCost` **Flat −10** | Percent −1/3 은 20.000001 → 물 20 에서 시전 실패(T-110) |
+| **D-107** | 물 점프③ 공중 횟수 = 새 축 `SkillAirUseCount` **Flat +1** + GA `MaxAirJumps`(1) + 캐릭터 `AirJumpsUsed`(uint8 — 예전 `bAirJumpUsed`). `CanActivateAbility` 는 `GetUpgradeRuntimeFor(ActorInfo)` | 정적 정수라 카탈로그. CDO 에서 불릴 수 있다(T-114) |
+| **D-108** | 물 점프② 무적 = `GE_JetJump_Guard`(SetByCaller 0.3초 · `State.Invulnerable`)를 `CommitAbility` 뒤 · 발사 앞에 → **기본 관문 맨 앞(모자보다 먼저)** 에서 피해 0 + return | 사용자 확정(피격 통째로 무효). 모자와 같은 자리 · 같은 이유. 태그는 범용 — 다른 스킬도 GE 만 걸면 된다 |
+| **D-109** | 물 점프② 피해 0 = `SkillDamage −1.0`. 강 · 약 둘 다 0 이면 AoE 판정 자체를 건너뛴다(연출은 그대로) | 단점이 카드에 보이고, 0 피해 GE 를 적에게 걸지 않는다 |
+| **D-110** | 청소기 칩의 새 축 6개(§2.2)는 전부 스킬 단위, `Count` 바로 앞, `DRIsSkillStat` 필수 | T-30 · T-12 |
+| **D-111** | 돌진 그룹 키 = `Abilities.RobotVacuum.Dash`. 스위치는 ② 하나 `…Dash.PassAllies`. 동적 상수가 없어 `ChipTuning` · Config 검사가 없다 | D-2 — 수치가 전부 정적 |
+| **D-112** | ★선행★ 돌진 자해 수정: `SelfDamageEffect` = `GE_VacuumDashSelfDamage`(예전엔 이속 GE — 자해 0) · 조건 = **지속 돌진 + Pawn 이 아닌 충돌(지형)** · 양 = GA `SustainedImpactSelfDamage`(50) → `Data.SelfDamage` | 사용자 확정(지형만). 기준은 `OnCapsuleHit` 의 Pawn 분류와 같다(T-128) |
+| **D-113** | 돌진①② 는 **적** 충돌 피해만 `SkillDamage`(×1.8 / ×0.85) — 아군 충돌 칸당 5 는 그대로 | 사용자 확정("적에게 주는"). 8.5 소수 그대로 |
+| **D-114** | 돌진① 자해 = 새 축 `SkillSelfDamage +1.0`(낮을수록 좋음) | 정적 수치 — 카드에 빨갛게 |
+| **D-115** | 돌진② 아군 통과 = 복제 플래그 `bDashPassThroughAllies` → **모든 머신** `OnRep` 에서 내 캡슐 ↔ 아군 캡슐 `IgnoreActorWhenMoving` **양방향**(이 머신에서 넣은 목록만 되돌림). 서버 `OnCapsuleHit` 는 통과 중 아군 충돌 무시(안전망). 끄기 = `FinishDash` · `EndAbility` · `EndPlay` | 적 · 플레이어가 같은 Pawn 채널이라 채널로는 안 된다(T-126). 이동 무시는 복제되지 않는다(T-123) |
+| **D-116** | 통과 대상 = 다른 플레이어 캐릭터 전부(`!IsNotFriend`). 적 · 사이트 · 지형은 부딪힌다 | 원문 "아군" |
+| **D-117** | 돌진③ 충전 = `SkillWindup −0.3` → 타이머 = `ChargeInterval × WindupScale`(하한 0.05). 감쇠에는 안 곱한다 | D-99 와 같은 해석. 감쇠까지 줄이면 돌진이 짧아진다(T-129) |
+| **D-118** | 돌진③ 이속 = 새 축 `SkillSpeedBonus −0.3` → 칸당 `ApplySkill(SkillSpeedBonus, SpeedBonusPerGauge 0.2)`. `GE_VacuumDashSpeedBuff` 크기 = SetByCaller `Data.MoveSpeed.Mult`(1 + 칸당), Additive · by Target 5 유지 | GE 에 1.2 가 박혀 있으면 칩이 못 바꾼다. Compound 면 ×5.7(T-122) |
+| **D-119** | 새 축 중 `SkillSelfDamage` 만 `DRIsLowerBetter`. 나머지는 높을수록 좋음 · 초 아님 | T-130 |
 
 > 기각(공속칩): 증가량·지속·중첩을 새 스탯 축으로 — 중첩 한도는 GE 에셋이 권위라 축으로 표현이 안 된다 / 공속을 쿨다운 축으로 — 세 로봇 모두 쿨다운이 없다.
+
+> 기각(청소기 칩): 탑승① 공격력을 탑승자 GE 로 — 걸고 지울 곳이 늘어난다(D-78) / 탑 전체 공유 — 사용자 기각(D-92) / 오염 최대를 `PostAttributeChange` 에서 매번 100 — 바깥 갱신 뒤 옛 값이 한 번 더 방송된다 /
+> 금지를 청소기 복제 배열로 — 만료 · 정리를 직접(D-90) / 흡착을 Compound + 코드 재적용 — Additive 한 줄로 끝난다 / 물 점프① 을 `ChipTuning` 절대값으로 — 카드에 안 뜬다 /
+> 무적을 콜리전 끄기로 — DoT · 공유는 못 막는다 / 아군 통과를 콜리전 채널 · 새 오브젝트 채널로 — 적까지 통과 / 범위가 너무 크다 / 자해 ×2 를 GE 두 번 적용으로 — 모자 · 무적이 두 번 판정된다.
 
 > 보류: `EDRUpgradeOp::Override`("값을 N 으로 **고정**")는 소비자가 없어 범위에서 뺐다.
 > (동전 ①의 "1.0초로 변경"도 Override 대신 `Flat +0.4` 로 풀었다 — T-38)
@@ -430,26 +622,36 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 |---|---|
 | `Public/Game/DRUpgradeTypes.h` | 스탯 축 열거형, `DRIsSkillStat()` / `DRIsLowerBetter()`, `FDRResolvedStat{Flat,Mult}`, `AddModifier`/`ApplySkill`(곱연산) |
 | `Public/Game/DRProgressionConfig.h` | `FDRTimedSpeedEffect` / `FDRSeedBombChipTuning` / `FDRWaterPumpChipTuning` / `FDRClawChipTuning` / `FDRChipTuning` |
-| `Public/DRGameplayTags.h` · `.cpp` | 칩 피처 태그 전부(§2.3) + GAS 태그 3개(`Buff.WaterPump.Pressure` · `Debuff.Vulnerable` · `Buff.AttackSpeed.Shared`) + SetByCaller `Data.MoveSpeed.Mult` / `Data.Duration` / `Data.HealthCost` |
-| `AbilitySystem/DRAbilitySystemLibrary` | `GetUpgradeRuntimeForASC` / `HasUpgradeFeature` / `GetChipTuning` / `GetUpgradeKeyTagFromAbilityTags` / `ApplySkillUpgrade` / `ApplyTimedSpeedEffect` / `ApplyTimedTagEffect` / **`ApplyHealToActor`**(오버로드 2개 — `UClass*` 를 넘기면 C2668 모호 에러, `TSubclassOf` 로 감쌀 것) / **`GetHealableAmount`** / **`GetLifestealRatioForDamage`** / **`GetHitHealAmountForDamage`** / **`GetEffectStackCountWithTag`** / **`GetAttackSpeedMultiplier`** / **`GetAlivePlayersWithinRadius`** |
+| `Public/DRGameplayTags.h` · `.cpp` | 칩 피처 태그 전부(§2.3) + GAS 태그 3개(`Buff.WaterPump.Pressure` · `Debuff.Vulnerable` · `Buff.AttackSpeed.Shared`) + SetByCaller `Data.MoveSpeed.Mult` / `Data.Duration` / `Data.HealthCost` + 청소기 칩 태그(`Abilities.RobotVacuum.Ride` · `…Ride/AirShot/JetJump/Dash` 스위치 · `Debuff.RobotVacuum.RideLoad` · `Debuff.Ride.Banned` · `Debuff.AirShot.Drag` · `State.Invulnerable` · `Data.SelfDamage`) |
+| `AbilitySystem/DRAbilitySystemLibrary` | `GetUpgradeRuntimeForASC` / `HasUpgradeFeature` / `GetChipTuning` / `GetUpgradeKeyTagFromAbilityTags` / `ApplySkillUpgrade` / `ApplyTimedSpeedEffect` / `ApplyTimedTagEffect` / **`ApplyHealToActor`**(오버로드 2개 — `UClass*` 를 넘기면 C2668 모호 에러, `TSubclassOf` 로 감쌀 것) / **`GetHealableAmount`** / **`GetLifestealRatioForDamage`** / **`GetHitHealAmountForDamage`** / **`GetEffectStackCountWithTag`** / **`GetAttackSpeedMultiplier`** / **`GetAlivePlayersWithinRadius`** / 청소기: **`GetRideDamageMultiplier`** · **`FindRideGuard`** · **`TransferRideDamageToGuard`** · **`TryRideEmergencyEject`** · **`IsRideBannedFrom`** · **`GetAirShotDragDamageTakenMultiplier`** · **`TryApplyAirShotDrag`** · **`IsInvulnerable`** / `GetEffectStackCountWithTag` = OwningTags 쿼리(T-131) |
 | `Abilities/DRGameplayAbility` | `GetUpgradedFloat` / `GetEffectiveWaterCostFor` / `ApplyCooldown` / `GetAttackSpeedMultiplier()`(BP Pure) |
 | `Abilities/DRDamageGameplayAbility` | `GetUpgradedDamage()` = `ApplySkill(SkillDamage) × ` **`GetRuntimeDamageMultiplier()`**(가상 훅, 기본 1.0) |
 | **`Abilities/DRWaterPump`** | 칩 해석 캐시 `Resolved` / 관통 트레이스 `TraceBeamBlocker` / 대상 수집 `CollectTargetsInBeam` + 칩 규칙 필터 `NarrowTargetsToChipRules` / `ApplyChipDebuffs` / `HasEnemyTarget` + `AdvanceRampStack` + `RampStackHandle` / `ClearRampStacks` / `GrantWaterToAlly` / `GetRuntimeDamageMultiplier` 오버라이드 |
 | **`Abilities/DRMeleeAttack`** | `AttackRadius` / `BaseMontagePlayRate` / `GetUpgradedAttackRadius` / `GetWindupPlayRate` / `RestoreMontagePlayRate`(1P·3P 메시 모두, 둘 다 × 공속 배율) / `TryHealAllyWithOwnHealth` — 피해량 → D-33 으로 자르기 → D-26 으로 자르기 → **비용 먼저, 회복 나중**("깎였으면 회복도 갔다"가 항상 성립) |
 | **`Actor/DRSeedProjectile`** | `FDRSeedBombResolved` 캐시 / 직격 판정 `bDirectHitOnEnemy` / `GrantWaterRefund` / 감속·가속 부여 / 아군 회복은 `ApplyHealToActor` 위임(D-34) |
 | `Abilities/DRSeedCannon` | `SpentWaterCost` 주입(환급 근거) / `BaseMontagePlayRate`(1.0) · `GetAttackSpeedPlayRate()`(BP PlayRate 핀용) |
-| `ExecCalc/ExecCalc_Damage` | 주는 피해 관문 — `DamageDealt`·광폭화·시너지, **음수 피해 0 클램프** |
-| **`DREnemyAttributeSet`** | 받는 피해 관문 — 엘리트 배율 + **`Debuff.Vulnerable` ×1.5** + **흡혈 지급**(★`SetHealth` 전★ — T-24) + **적중 회복 지급**(흡혈 바로 아래, 더미 분기 위 — T-40) |
+| `ExecCalc/ExecCalc_Damage` | 주는 피해 관문 — `DamageDealt`·광폭화·시너지, **음수 피해 0 클램프** / **(d) 탑승 배율** · ★`Damage.MountShared` 면 (a)~(d) 전부 건너뜀★(D-82) |
+| **`DREnemyAttributeSet`** | 받는 피해 관문 — 엘리트 배율 + **`Debuff.Vulnerable` ×1.5** + **흡혈 지급**(★`SetHealth` 전★ — T-24) + **적중 회복 지급**(흡혈 바로 아래, 더미 분기 위 — T-40) + **흡착 배율**(취약 다음) + **`TryApplyAirShotDrag`**(적중 회복 다음, 더미 분기 위) |
 | `DRChipCatalog.cpp` | `ValidateCatalog()` — 스킬 태그/공용 칩/`MaxHealth` Flat 전용/**`Percent ≥ −1.0`**/D-51 칩 태그 검사 · **`FindSkillConflict()`** · `SanitizeLoadout` 스킬 중복 제거 |
 | `DRGameInstance.cpp` | `CanEquipChip`(→ `SkillConflict`) · `GetSkillConflictChip` · `CanEquipChipAtSlot`(충돌 칩 칸이면 교체 허용) · `SanitizeClassState` 3차 패스 · `MakeChipViewModel`(`ConflictingChipId/Name`) · `BuildPreviewRuntime`(충돌 칩 제외) |
-| `DRProgressionConfig.h/.cpp` | `FDRCoinChipTuning` · `FDRJackpotOdds`(`Normalized`) · `FDRJackpotChipTuning` · `FDRAttackSpeedBuffChipTuning` / 검사: 잭팟 확률표(D-61) · 공속 ②③ GE(비었는지 · Target Tags · Stack Limit · ③ 만료 정책 — 그 칩이 카탈로그에 있을 때만) |
+| `DRProgressionConfig.h/.cpp` | `FDRCoinChipTuning` · `FDRJackpotOdds`(`Normalized`) · `FDRJackpotChipTuning` · `FDRAttackSpeedBuffChipTuning` / 검사: 잭팟 확률표(D-61) · 공속 ②③ GE(비었는지 · Target Tags · Stack Limit · ③ 만료 정책 — 그 칩이 카탈로그에 있을 때만) / `FDRRideChipTuning` · `FDRAirShotChipTuning`(생성자에서 Drag 0.1 · 2.0) · `FDRJetJumpChipTuning` / 검사: 탑승 ①③ · 흡착 · 무적 GE(태그 · 스택 · Op · Duration) |
 | `UI/Widget/DRUpgradeChipWidget.h` | `IsDraggable()` = 해금 && 미장착 — `SkillConflict` 칩도 드래그된다(드롭 교체용) |
-| `UI/DRUpgradeUILibrary.cpp` | 스탯 짧은 이름(5자 제한) — `SkillWindup` = "선딜" / `SkillFireInterval` = "발사 간격" / `SkillProjectileScale` = "탄 크기" |
+| `UI/DRUpgradeUILibrary.cpp` | 스탯 짧은 이름(5자 제한) — `SkillWindup` = "선딜" / `SkillFireInterval` = "발사 간격" / `SkillProjectileScale` = "탄 크기" / "차지 증가" · "외곽 피해" · "상승 높이" · "공중 횟수" · "자해 피해" · "이속 버프" |
 | **`Abilities/DRVendingMachineBasicAttack`** | `GetCurrentFireInterval()` = 칩 간격 ÷ 공속 배율, `MinFireInterval` 바닥 / 잭팟: `GetJackpotOdds` · `RollJackpotTier` · `GetJackpotCapsuleBaseDamage` · `SpawnJackpotCapsule`(스케일 + `SkillDamage` + null 체크 + 사운드 — T-36) · `AdvanceJackpotPity` · `FireJackpotDoubleShot` / `[Jackpot]` 로그 |
 | **`Abilities/DRProjectileSpell`** | `GetUpgradedProjectileScale()` + `SpawnProjectile()` 스폰 트랜스폼 Scale3D (적 GA 도 지나가지만 항상 1.0) |
 | **`Abilities/DRVendingMachineAttackSpeedBuff`** | `ApplyAttackSpeedBuff()`(서버 — ② / ③ / 그 외 분기, ②③ GE 가 비면 경고 로그 + 기본 버프) · `ApplyBuffEffect()`(지속 고정) · `BuffDuration`(20) · `FindBuffDuration(ASC)` · `NotifySkillActivated()`(자기 + 공유 스택) |
-| **`Abilities/DRVacuumAirShot`** | `EffectiveChargeInterval`(`StartCharging` 에서 고정, 하한 0.05초) · 강화탄 몽타주 PlayRate = 공속 배율 |
+| **`Abilities/DRVacuumAirShot`** | `EffectiveChargeInterval`(`StartCharging` 에서 고정, 하한 0.05초) · 강화탄 몽타주 PlayRate = 공속 배율 / `Stages` 10/30/50/70 · `SkillWindup` 을 간격에 · `SkillChargeGrowth` 를 단계 증가분에 · `bHitsAllies` 주입(강화탄 분기 위) |
 | **`UI/WidgetController/OverlayWidgetController`** | `HandleAttackSpeedBuffTagChanged`(아이콘 숫자 + ③ 감소 구간 판정 `bAttackSpeedBuffDecaying` — ★방송 전에 갱신★) · `GetAttackSpeedBuffFillRatio()`(그래프) |
+| **`Character/DRCharacter`** | `ApplyMountSharedDamageTo()`(공유 · 탑승② 이전 공용 GE 적용 — `Damage.MountShared` 필수) · `PropagateSharedDamage`(1칸) · 가상 훅 `OnUpgradeEffectsRefreshed()` · `RefreshUpgradeEffects` 오염 재고정(`ON_SCOPE_EXIT`) |
+| **`Character/DRRobotVacuumCharacter`** | 탑승: `GetRiderCountAbove` · `GetStackBottom` · `RefreshRideLoad`(+ `RefreshRideLoadsAfterLinkChange` — Mount/Dismount 끝) · `EmergencyEjectRider` · `CanBeMountedBy` 금지 검사 / 물 점프: `AirJumpsUsed`(uint8, `Landed` 에서 0) / 돌진: `bDashPassThroughAllies`(복제) · `ApplyAllyPassThrough` · `OnCapsuleHit` 안전망 · `EndPlay` 해제 |
+| **`DRPlayerAttributeSet`** | 탑승② 관문(맨 위 `FindRideGuard` → 받는 쪽 배율 뒤 이전 · `Debuff` · 공유 → return) · ③ `TryRideEmergencyEject`(★맨 끝★) · `SetMaxHealthCurrentValue` / `ReapplyCorruptMaxHealth`(D-87) |
+| **`DRAttributeSet`**(기본 관문) | `PostGameplayEffectExecute` IncomingDamage: **무적(`IsInvulnerable`)** → 모자 → 도발 → `HandleIncomingDamage` |
+| **`Abilities/DRVacuumJetJump`** | `MaxAirJumps` · `GetMaxAirJumpsFor(ActorInfo)` · 무적 GE(없으면 `[JetJump]` 경고) · 임펄스 × √`SkillLaunchHeight` · Inner × `SkillDamage` / Outer × `SkillDamage` × `SkillOuterDamage`, 둘 다 0 이면 판정 생략 |
+| **`Abilities/DRVacuumDash`** | `SpeedBonusPerGauge`(0.2) · `SustainedImpactSelfDamage`(50) · 충전 × `SkillWindup` · 이속 SetByCaller(매 스펙) · 적 충돌만 × `SkillDamage` · 지속 + 지형 자해(`Data.SelfDamage`) · 통과 켜기(`ReleaseGauge`) · 끄기(`FinishDash` · `EndAbility`) |
+| **`Actor/DRVacuumAirProjectile`** | `bHitsAllies`(복제) — 아군 분기는 탑승 연결 통과 **다음**, 강화탄 아군(넉백만) 분기 **앞** |
+| **`Actor/DRProjectile`** | `ApplyImpactDamage(Target)` — 피해 적용부 추출(팀 판정 없음, 동작 불변) |
+| `Character/DREnemy` | `IsBoss()` — protected `bIsBoss` 읽기 전용 |
+| `Player/DRPlayerController` | `FindMountByLineTrace` — 탑승 금지 중이면 프롬프트 없음(`IsRideBannedFrom`) |
 
 **BP 쪽 계약** (깨지면 조용히 오동작한다)
 
@@ -466,6 +668,10 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 | `GA_SeedCannon` | `Play Montage`(1P) `Play Rate` · `Play Montage and Wait`(3P) `Rate` ← `Get Attack Speed Play Rate` | 씨앗 대포만 안 빨라진다 / 한쪽만이면 손·몸이 따로 논다 |
 | `WBP_SkillIcon_VendingMachine` | 스택 이벤트: `FillRatio` ← `Get Attack Speed Buff Fill Ratio`(남은 시간 리셋 없음) / `UpdateBuffUI`: `FillRatio` ← 같은 함수, `<= 0` 이면 타이머 정지. 변수 `Buff Duration` · `Buff Remaining Time` 은 안 쓴다 | ①의 5초를 못 그리거나, ③ 감소마다 그래프가 리셋된다(D-76) |
 | `WBP_UpgradeSlot` | ★계약 없음★ — 이 위젯의 `EDRUpgradeResult` Switch 는 **슬롯 해금 버튼** 결과용이라 `SkillConflict` 가 나오지 않는다. `CanEquipChipAtSlot` 은 Switch 없이 쓰인다 | — |
+| `GA_VacuumJetJump` | **Cost Gameplay Effect Class = `GE_Cost_VacuumJetJump`** | 물이 안 빠진다(예전 상태 — D-103) |
+| `GA_VacuumDash` | **Self Damage Effect = `GE_VacuumDashSelfDamage`**(이속 GE 가 들어가 있었다) | 자해 0 / 이속 GE 가 값 없이 걸려 이속 0(T-121) |
+| `GA_VacuumAirShot` | `Stages` · `ChargeInterval` 을 BP 에서 덮지 않는다 | 덮는 순간 C++ 기본값(10/30/50/70)이 무시된다(T-102) |
+| 플레이어 캐릭터 BP 4종 | `MountSharedDamageEffectClass` = `GE_Damage` | 탑승 공유 · ② 이전이 무동작(경고 로그) |
 
 ---
 
@@ -578,6 +784,44 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 > 카탈로그 `SkillDisplayNames` 에 `Abilities.GardenRobot.WaterPump → 물대포`, `…SeedCannon → 씨앗 폭탄`,
 > `…ClawSwipe → 기본 공격` 이 있어야 미리보기 라벨이 한글로 나온다.
 
+### 5.9 `ChipTuning.Ride`
+
+| 필드 | 값 | 비고 |
+|---|---|---|
+| `PowerDamagePerRider` / `PowerMaxDamageBonus` / `PowerSpeedPenaltyPerRider` | 0.08 / 0.24 / 0.05 | ① |
+| `PowerLoadEffect` | `GE_RideLoad` | ① ★비우면 감속 없이 공격력만★ |
+| `GuardTransferRatio` | 0.2 | ② 이전분에만(0 = 피해가 사라짐, 1 = 안 줄임) |
+| `EjectHealthRatio` / `EjectHealAmount` / `EjectBanDuration` | 0.3 / 100 / 20 | ③ |
+| `EjectHealEffect` | `GE_Heal` | ③ ★`Claw` · `Coin` 의 `HealEffect` 와 별개 필드★ |
+| `EjectBanEffect` | `GE_RideBan` | ③ |
+
+### 5.10 `ChipTuning.AirShot` · `ChipTuning.JetJump` (돌진칩은 `ChipTuning` 없음 — D-111)
+
+| 필드 | 값 | 비고 |
+|---|---|---|
+| `AirShot.Drag` { Effect / Magnitude / Duration } | `GE_AirShot_Drag` / 0.1 / 2.0 | 0.1 · 2.0 은 구조체 생성자 기본값(에셋엔 Effect 만 저장) |
+| `AirShot.DragDamageTakenPerStack` / `DragMaxStacks` | 0.05 / 3 | ★`DragMaxStacks` = GE 의 Stack Limit — 검사가 비교★ |
+| `JetJump.GuardEffect` / `GuardDuration` | `GE_JetJump_Guard` / 0.3 | |
+
+칩 없을 때의 기본 수치는 전부 **GA 의 C++ 기본값**이다(BP 가 덮지 않는다 — 에셋 확인):
+공기탄 `Stages` 10/30/50/70 · `ChargeInterval` 0.5 / 물 점프 `JumpImpulseZ` 900 · `Inner/OuterRadius` 200/400 · `Inner/OuterDamage` 20/5 · `WaterCost` 30 · `MaxAirJumps` 1 /
+돌진 `ChargeInterval` 0.5 · `DecayInterval` 1 · `WaterPerGauge` 20 · `MaxGauge` 5 · `Enemy/PlayerDamagePerGauge` 10/5 · `SpeedBonusPerGauge` 0.2 · `SustainedImpactSelfDamage` 50.
+카탈로그 `SkillDisplayNames` 에 `Abilities.RobotVacuum.{Ride → 탑승, AirShot → 기본 공격, JetJump → 물 점프, Dash → 돌진}`. 아이콘은 `Content/DaeRuneAssets/UI/Upgrade/Icon/Vacuum/`(이름은 §1.9~§1.12 표).
+
+### 5.11 청소기 GE · GA 에셋 요구 사양
+
+모두 `Content/Blueprints/AbilitySystem/Player/VacuumCleaner/` 아래(`Effects/` · `Abilities/Skill1` 공기탄 · `Skill2` 돌진 · `Skill3` 물 점프).
+
+| 에셋 | 핵심 설정 |
+|---|---|
+| `GE_RideLoad` (`Effects/`) | Infinite / MoveSpeed **`Multiply (Compound)`** ← SetByCaller `Data.MoveSpeed.Mult` / Target Tags **`Debuff.RobotVacuum.RideLoad`**(★코드가 이 태그로 지운다★) / Stacking None |
+| `GE_RideBan` (`Effects/`) | HasDuration · SetByCaller `Data.Duration` / 모디파이어 없음 / Target Tags `Debuff.Ride.Banned` / ★Stacking None★ |
+| `GE_AirShot_Drag` (`Skill1/`) | HasDuration · SetByCaller `Data.Duration` / MoveSpeed ★**`Multiply (Additive)`**★ ← `Data.MoveSpeed.Mult` / Target Tags `Debuff.AirShot.Drag` / Aggregate by Target · Limit 3 · Refresh on Successful Application · Clear Entire Stack · Deny Overflow 끔 |
+| `GE_JetJump_Guard` (`Skill3/`) | HasDuration · SetByCaller `Data.Duration` / 모디파이어 없음 / Target Tags `State.Invulnerable` / Aggregate by Target · Limit 1 · Refresh |
+| `GE_VacuumDashSpeedBuff` (`Skill2/`) | Infinite / MoveSpeed **`Multiply (Additive)`** ← ★SetByCaller `Data.MoveSpeed.Mult`★(예전 1.2 고정) / Aggregate by Target · Limit 5 / Asset Tags `Buff.RobotVacuum.DashSpeed`(공기탄 반동 예외가 읽는다) |
+| `GE_VacuumDashSelfDamage` (`Skill2/`) | Instant / IncomingDamage `Add (Base)` ← ★SetByCaller `Data.SelfDamage`★(예전 50 고정) |
+| `GA_VacuumJetJump` · `GA_VacuumDash` | §4 BP 쪽 계약 참조. `GA_VacuumDash` 의 `CostGameplayEffectClass = GE_Cost_VacuumJetJump` 는 돌진 `WaterCost` 0 이라 무해 — 그대로(§9-63) |
+
 ---
 
 ## 6. ★함정★ — 다시 밟지 말 것
@@ -658,6 +902,62 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 | **T-71** | `Buff.VendingMachine.AttackSpeed` 를 `DA_StatusEffectInfo` 에 넣기 | ③ GE 의 Spec 지속이 1초라 상태효과 위젯이 "1초"로 표시한다 |
 | **T-72** | 공속 HUD 를 적용·제거 델리게이트로만 갱신 | 스택 감소와 (원격 클라) 10중첩 재사용을 놓친다 — 숫자는 태그 `AnyCountChange`, 그래프는 읽어 오기(D-75 · D-76) |
 | **T-73** | ③ 감소 구간을 남은 시간만으로 판정 | 유지 구간의 마지막 1초와 구분이 안 된다 → 자기 버프 스택 흐름으로 판정하고, ★스택 방송 **전에** 갱신★ 한다(위젯이 방송을 받자마자 비율을 읽는다) |
+| **T-74** | 탑승 공유 · 이전 피해를 `ApplyMountSharedDamageTo` 밖의 GE 로 걸며 `Damage.MountShared` 를 빠뜨림 | 받은 쪽이 다시 공유 → 탑 안 핑퐁 → **무한 반복** |
+| **T-75** | 탑승② 분기를 로비 클램프 · 오염 분기 **뒤**에 | 넘길 양이 깎이거나 탑승자가 이미 맞았다 — 받는 쪽 배율 직후 · 클램프 전 |
+| **T-76** | 보호 여부를 ② 분기에서 처음 구함 | 피격 큐가 함수 맨 위라 이미 나갔다 — 맨 위에서 먼저 |
+| **T-77** | ExecCalc 의 `MountShared` 제외를 빼거나 일부 배율만 뺌 | 공유분이 넘겨주는 사람의 공격 배율로 커진다 — (a)~(d) ★전부★ |
+| **T-78** | 탑승③ 판정을 `PropagateSharedDamage` **앞**에 | 하차가 먼저라 그 피격의 공유분이 덜 나간다 — 맨 끝 |
+| **T-79** | 탑승③ 을 체력 비율로만 | 피해로 오염 진입(체력이 오염 최대로 다시 참)을 놓친다 — 진입 여부를 따로 넘긴다 |
+| **T-80** | 탑승③ 을 Health 변경 델리게이트에 | 공유 전에 하차 · 체력 비용에도 발동 · 오염 재충전에 덮인다 |
+| **T-81** | 금지 GE 를 Aggregate by Target | 두 번째 청소기의 금지가 첫 GE 에 합쳐져 그 청소기에 탈 수 있다 — Stacking None(검사가 잡는다) |
+| **T-82 / T-131** | GE 존재 · 스택 조회에 `GetActiveEffectsWithAllTags`(= `MakeQuery_MatchAllEffectTags`) | ★GE 의 **에셋 태그만** 본다(UE 5.5 `FGameplayEffectQuery::Matches`)★ — 부여 태그만 단 GE(금지 · 흡착)를 못 찾는다. `MakeQuery_MatchAnyOwningTags` 를 쓴다(`GetEffectStackCountWithTag` 는 2026-10-08 이걸로 바꿨다) |
+| **T-83** | 금지 판정에 컨텍스트 `SourceAbilityTags` | 복제되지 않아 클라 프롬프트가 틀린다 — 시전자 ASC 로 |
+| **T-84** | 탑승 감속 GE 를 핸들로만 지움 / GE 에 `Debuff.RobotVacuum.RideLoad` 가 없음 | 리스폰 뒤 감속이 남는다(ASC = PlayerState) / ★태그로 못 지워 갱신마다 쌓인다★ — 검사가 잡는다 |
+| **T-85** | 감속을 `RiderOnTop` 이 바뀐 청소기만 갱신 | 위층끼리 타고 내리면 맨 아래 인원이 그대로 — 나부터 맨 아래까지 + 오르내린 청소기 |
+| **T-86** | 탑승 감속 GE 의 Op 를 Additive 로 | 돌진 버프(Additive)와 더해져 −5% 가 다르게 먹는다 — Compound |
+| **T-87** | 오염 최대 보정(D-87)을 진입에만 | 해제 · 정화에서 다시 어긋난다 — 세 곳 + `RefreshUpgradeEffects` 재고정 |
+| **T-88** | D-87 의 전제: MaxHealth 에 **곱 모디파이어가 없다** / 오염 중 `RefreshUpgradeEffects` 의 비율 유지 | 곱을 쓰기 시작하면 다시 볼 것. 칩 GE 를 떼는 순간 체력이 바뀌므로 시작 체력을 저장했다가 `ON_SCOPE_EXIT` 에서 되돌린다 |
+| **T-89** | 이전 실패(청소기 사망 직후 · GE 미지정)에도 탑승자 처리를 건너뜀 | 피해가 **사라진다** — `TransferRideDamageToGuard` 가 false 면 그대로 받는다, `FindRideGuard` 는 죽은 청소기를 건너뛴다 |
+| **T-90** | `Abilities.RobotVacuum.Ride` 를 GA `AbilityTags` 에 | 업그레이드 키가 흔들린다(T-51 과 같다) |
+| **T-91** | `HandleIncomingDamage` 에 `TargetDRCharacter` 를 두 번 선언 | 그림자 변수(C4456) — 바깥 변수 하나로 |
+| **T-92** | 공유 범위를 탑 전체로 넓힘 | 탑승② 수치가 전부 바뀐다(3층 C 피격 A 8 → 28). 넓힐 땐 한 칸씩 이어 전달하지 말고 피격자가 전원에게 직접 1번씩(배율이 겹치지 않게) |
+| **T-93** | 80% 감소를 피격 자체의 공유에까지 | ② 청소기 자신의 몫까지 준다(2층 24 → 8) |
+| **T-94** | 보호 분기에서 `Debuff(Props)` 누락 | 화상 DoT 같은 디버프 피해가 통째로 사라진다 |
+| **T-95** | ★스택형 감속 GE 에 Multiply (Compound)★ | UE 5.5 Compound 바이어스 0 → 0.9 × 3스택 = **×2.7(가속)**. Additive(0.9/0.8/0.7). 검사가 잡는다. ※Limit 1 감속(씨앗 · 물대포)은 Compound 가 맞다(T-8) |
+| **T-96** | 흡착 GE 에 Deny Overflow 켬 | 3스택에서 갱신이 거부돼 계속 맞혀도 2초 뒤 통째로 풀린다(T-4 와 같다) |
+| **T-97** | 흡착 GE 의 Expiration 이 Clear Entire Stack 이 아님 | 1개씩 빠진다 |
+| **T-98** | 흡착 받는 피해를 태그 카운트로 계산 | Aggregate by Target 이라 항상 1 → 항상 +5%(T-3) |
+| **T-99** | 흡착 판정에서 `SourceAbilityTags` 의 `AirShot` 검사 누락 | 같은 청소기의 돌진 충돌 피해로도 쌓인다 |
+| **T-100** | 보스를 `Buff.Elite` · 캐릭터 클래스로 판정 | 일반 엘리트가 빠지거나 두더지 보스가 걸린다 — `ADREnemy::IsBoss()` |
+| **T-101** | `bHitsAllies` · `bEnhanced` 는 `SpawnProjectile`(= `FinishSpawning`) **뒤**에 들어간다 | 스폰 순간 총구와 겹쳐 있던 대상은 첫 오버랩에서 플래그를 모른다. 문제가 되면 지연 초기화 훅 |
+| **T-102** | 공기탄 단계 피해를 BP 에서도 바꿈 | BP 가 한 번 덮으면 C++ 기본값은 무시 — 한 곳만(지금은 C++) |
+| **T-103 / T-117** | 새 축을 `Count` 앞이 아닌 곳에 넣거나 `DRIsSkillStat` 에서 빠뜨림 | 기존 칩 효과가 밀리거나(T-30) 청소기 모든 스킬로 퍼진다(T-12). `ValidateCatalog` 가 잡는다 |
+| **T-104** | 단계 증가 배율을 단계 피해 전체에 곱함 | 0단계까지 줄어든다(10 → 6) |
+| **T-105** | `SkillWindup` 을 UI 타이머나 `GetChargeStage` 한쪽에만 | 게이지와 실제 단계가 어긋난다 — `EffectiveChargeInterval` 하나 |
+| **T-106** | 아군 피해 분기를 `ADRProjectile` 에 | 적 투사체와 공유 클래스라 적 탄이 적을 맞힌다 — 범용 `ApplyImpactDamage` 만 부모에 |
+| **T-107** | 공기탄①+강화탄을 "아군 = 넉백만" 분기로 | 강화탄이 아군에게 피해를 못 준다 — ① 분기를 그 앞에 |
+| **T-108** | 물 점프 Cost GE 연결(D-103) 없이 ③ | 물이 원래 안 빠져 "30 → 20" 이 시전 기준만 바꾼다 |
+| **T-109** | 높이 배율을 임펄스에 그대로 곱함 | 높이 ∝ 임펄스² 이라 ×0.7 이 높이 ×0.49 가 된다 — √배율 |
+| **T-110** | 물 점프③ 물을 Percent −0.3333 으로 | 20.000001 → 물이 정확히 20 일 때 시전 실패 — Flat −10 |
+| **T-111** | 무적 검사를 모자 **뒤**에 | 무적 중 맞은 피해에 모자가 닳는다 |
+| **T-112** | 무적 검사를 `UDRPlayerAttributeSet::HandleIncomingDamage` 안에 | 디버프 · 공유 · 전투 진입이 먼저 지나가고, 적 · 사이트에는 같은 태그가 안 먹는다 — 기본 관문 맨 앞 |
+| **T-113** | `GE_JetJump_Guard` Duration 을 Scalable Float 로 | `GuardDuration` 이 무시된다(0 이면 즉시 사라짐) — 검사가 잡는다 |
+| **T-114** | `CanActivateAbility` 에서 `GetUpgradedInt`(현재 ActorInfo 판) | CDO 경로에서 칩이 안 읽혀 공중 1회로 막힌다 — `GetUpgradeRuntimeFor(ActorInfo)`(CheckCost 와 같은 이유) |
+| **T-115** | `bAirJumpUsed` → `AirJumpsUsed` 를 일부만 바꿈 | `Landed` 리셋 누락 → 착지 후에도 공중 불가 / 증가 누락 → 무한 공중 점프 |
+| **T-116** | `SkillOuterDamage` 를 강판정에도 곱함 | 강판정 60 |
+| **T-118** | 물 점프 피해를 `GetUpgradedDamage()` 로 읽음 | 그 기준인 GA `Damage`(스케일러블)가 이 스킬에선 0 — `GetUpgradedFloat(SkillDamage, Inner/OuterDamage)` |
+| **T-119** | 돌진 자해 GE 연결(D-112) 없이 ① | 자해가 원래 0 이라 ①이 단점 없는 칩이 된다 |
+| **T-120** | 자해 GE 를 SetByCaller 로 바꾼 순서 | GE 만 먼저면 자해 0 + 에러, C++ 만이면 칩 무시(늘 50) — **C++ → GE** |
+| **T-121** | `GE_VacuumDashSpeedBuff` 를 SetByCaller 로 바꾼 뒤 값 없이 거는 경로 | 크기 0 → (0 − 1) × 스택 = **이속 0 이하(멈춤)**. 예전 `SelfDamageEffect` 오배선이 그런 경로였다 — 거는 곳은 `ApplyBuffStacks` 하나 |
+| **T-122** | 돌진 이속 GE 의 Op 를 Compound 로 | 1.14 × 5 = **×5.7**(T-95 와 같은 함정) |
+| **T-123** | 아군 통과의 이동 무시를 서버에서만 | 소유 클라 CMC 는 여전히 막혀 보정이 튀고, 아군 클라에서는 아군이 막힌다 — 모든 머신 `OnRep` |
+| **T-124** | 한쪽(청소기 → 아군)만 무시 | 아군이 움직일 때 막히거나 겹친 채 밀어낸다 — 양방향 |
+| **T-125** | 통과 해제를 `FinishDash` 에만 | 사망 · 스턴 · 강제 취소 경로에서 **영구 통과** — `FinishDash` · `EndAbility` · `EndPlay` |
+| **T-126** | 통과를 콜리전 채널로(캡슐 Pawn 응답) | 적도 같은 Pawn 채널이라 같이 통과 → 충돌 피해가 사라진다 |
+| **T-127** | `SkillDamage` 를 아군 충돌 피해에도 | 사용자 확정 위반(5 → 9 / 4.25) |
+| **T-128** | "지형"을 "ASC 없음"으로 판정 | 사이트(ASC 있음 · Pawn 아님)가 빠지고 `OnCapsuleHit` 기준과 달라진다 — Pawn 여부 |
+| **T-129** | `SkillWindup` 을 돌진 감쇠에도 곱함 | 일반 돌진 시간 · 거리가 30% 준다 |
+| **T-130** | `SkillSelfDamage` 를 `DRIsLowerBetter` 에서 빠뜨림 | 카드에 "자해 +100%" 가 초록(장점)으로 뜬다 |
 
 ---
 
@@ -666,7 +966,7 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 | 유형 | 예 | 해야 할 일 |
 |---|---|---|
 | **1. 순수 수치** (C++ 0줄) | "물대포 쿨다운 −20%" / "에어샷 투사체 크기 +30%"(`SkillProjectileScale` 은 `SpawnProjectile` 공용이라 이미 읽힌다) | 카탈로그에 `{Stat, TargetAbilityTag, Op, Value, bIsDrawback}` 한 줄. **조건**: 그 스탯을 이미 `Apply()`/`ApplySkill()` 로 읽고 있어야 한다 |
-| **2. 새 수치 손잡이** (2~3줄) | "제트점프 높이 +30%" | ① `EDRUpgradeStat` 에 축 추가(**`Count` 바로 앞**) ② `DRIsSkillStat()` 등록 ③ 그 숫자를 쓰는 곳을 감싼다 — 어빌리티면 `GetUpgradedFloat`, 액터면 `ApplySkillUpgrade`, BP 리터럴이면 유형 7 ④ (선택) 5자 짧은 이름 |
+| **2. 새 수치 손잡이** (2~3줄) | "물대포 사거리 +30%" (선례: 청소기 칩의 `SkillLaunchHeight` · `SkillSpeedBonus`) | ① `EDRUpgradeStat` 에 축 추가(**`Count` 바로 앞**) ② `DRIsSkillStat()` 등록 ③ 그 숫자를 쓰는 곳을 감싼다 — 어빌리티면 `GetUpgradedFloat`, 액터면 `ApplySkillUpgrade`, BP 리터럴이면 유형 7 ④ (선택) 5자 짧은 이름 |
 | **3. 규칙 변경** (10~30줄) | "○○ 적중 시 감속" | ① `Upgrade.Feature.*` 태그 1개 ② `FDRChipTuning` 아래 구조체 ③ 적용 지점에서 `HasUpgradeFeature()` 분기 ④ 카탈로그의 `GrantedTags` 에 태그 ⑤ Ascension 이면 `Description` 에 단점 명시(검증이 강제) |
 | **4. 런타임 상태로 변하는 수치** (5~15줄) | "연속 명중 시 강해짐" | ① 상태를 **스택형 GE** 로 ② `GetRuntimeDamageMultiplier()` 오버라이드 ③ 스택을 쌓는/지우는 지점 결정.<br>★`Stacking` 을 켰으면 `GetCurrentStackCount(Handle)`, `None` 이면 `GetGameplayTagCount(Tag)`★ (T-3) |
 | **5. 대상에게 붙는 표식** (4줄 + GE 1개) | "표식 찍힌 적은 받는 피해 증가" | ① `Debuff.<이름>` 네이티브 태그 + 태그만 부여하는 시한 GE ② `ApplyTimedTagEffect()` 로 부여 ③ **읽는 곳은 `HandleIncomingDamage`** — `ExecCalc_Damage` 가 아니다(D-10) |
@@ -697,6 +997,10 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 | 칩 그룹 키 태그(`…Jackpot`)를 GA 에 붙이기 | 업그레이드 키가 흔들린다(T-51) |
 | 칩마다 지속이 다른 버프 GE 를 BP 에서 직접 Apply | 칩 지식이 BP 로 샌다 — 지속은 C++ 이 스펙에 고정해 넣는다(D-65 · T-60) |
 | HUD 위젯이 버프 시간을 직접 세기 | 칩마다 지속이 달라지면 틀린다 — 남은 시간은 GE 에서 읽는다(D-76) |
+| 탑승 공유 · 이전 피해를 `ApplyMountSharedDamageTo` 밖에서 걸기 | `Damage.MountShared` 가 빠지면 탑 안에서 무한 반복(T-74) |
+| 스택형 감속 · 가속 GE 에 `Multiply (Compound)` | 스택하면 오히려 빨라진다(T-95 · T-122) |
+| 아군만 통과시키려고 콜리전 채널을 바꾸기 | 적과 플레이어가 같은 Pawn 채널이라 적까지 통과한다(T-126) |
+| GE 를 태그로 찾는 데 `GetActiveEffectsWithAllTags` | 에셋 태그만 본다(T-131) |
 
 ---
 
@@ -739,6 +1043,42 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 | **33** | ③ 이름 "잔류 가속" · Tier 3 · `편의-5` 는 가안을 그대로 입력했다 | 바꾸려면 카탈로그만 |
 | **34** | ③ 첫 감소 = 20초가 되는 순간(29초에 0) | 21초를 원하면 밀기 값을 `BuffDuration` 으로(−Interval 없이) |
 | **35** | `DA_StatusEffectInfo` 에 `Buff.AttackSpeed.Shared` 가 없다 — 공유 버프를 받은 정원로봇·청소기 화면에 버프 아이콘이 안 뜬다(효과는 정상) | 선택. 한 줄(태그 · "공속 증가" · `SkillIcon_AttackSpeedBuff`). ★`Buff.VendingMachine.AttackSpeed` 는 넣지 말 것(T-71)★ |
+| **36 / 48 / 56 / 65** | ~~청소기 칩 12종의 이름 · Tier · 아이콘 · `ChipId` 가칭~~ | **확정**(2026-10-08, 사용자) — 가칭 그대로 입력, 아이콘은 사용자가 따로 만들어 넣었다(§1.9~§1.12) |
+| **37** | 탑승② 청소기에 피해가 **여러 번** 들어온다(공유분 + 보호받는 사람마다 이전분) — 숫자 여러 개, 광폭화면 칸도 그만큼 | 그대로(사용자 확인 2026-10-08). 한 번으로 합치려면 청소기 관문에 별도 분기가 필요하다 |
+| **38** | 탑승① 탑승자 공격력이 HUD 에 안 보인다(상태 없는 계산) | 원하면 탑승자에게 표시 전용 GE(스택 = 인원) |
+| **39** | 위층 청소기의 탑승①이 "쉬는 중"임을 알려 주지 않는다 | `Description` 문구로만 안내 |
+| **40** | 탑승② 보호받는 사람도 스턴 · 둔화 같은 **피해 없는** 디버프는 받는다 | 그대로(사용자 확인 2026-10-08) |
+| **41** | 탑승③ 탈출 연출은 기존 점프 하차(위 300 · 앞 200) | 더 세게면 튜닝 필드 추가 |
+| **42** | ★선행 변경(D-82 · D-87)이 칩 없이도 체감을 바꾼다★ — 광폭화 · 시너지 탑승자의 공유분이 받은 만큼(45~55 → 20) / 오염 최대 항상 100(⑧ 900 → 100, 정화 뒤 2000 → 1200) | 사용자 확정. 플레이로 확인(§10.4) |
+| **43** | (범위 밖) Stage2 부활(`Revive`)은 오염을 풀지 않는다 | D-87 뒤에는 칩과 무관하게 100 |
+| **44** | 탑승③ 금지 중 "N초 후 탑승 가능" 표시가 없다(프롬프트가 안 뜰 뿐) | 원하면 `GetActiveEffectsTimeRemaining` 으로 위젯 |
+| **45** | ~~탑승① 배율을 공유분에서 뺄지~~ | **해결** — 공유 · 이전은 받는 피해라 주는 피해 배율이 전부 빠진다(D-82) |
+| **46** | 탑승② 청소기 두 대가 겹치면 이전분에 0.2 가 두 번(0.04) — B 피격 → A 24.8 | 그대로(사용자 확인 2026-10-08) |
+| **47** | ~~광폭화 탑승자의 "최종 피해"를 칸으로 볼지 수치로 볼지~~ | **해결** — 피해 수치 |
+| **49** | ★선행 변경(D-101)으로 칩 없는 공기탄이 강해졌다★ — 풀차지 35 → 70, 1단계 15 → 30 | 사용자 확정. 플레이 후 C++ `Stages` 만 조정 |
+| **50** | 공기탄③ 은 초당 피해가 칩 없음과 비슷하거나 조금 낮다(+5% / −3% / −6%) — 이득은 "강화탄(넉백 · 로켓 점프)까지 30% 빨리" | 사용자 확정 수치. 약하면 카탈로그 `SkillChargeGrowth` 만 |
+| **51** | 공기탄① 아군 피해로 아군이 오염 · 사망할 수 있다. 아군을 맞혔다는 별도 HUD 표시는 없다 | 원문 "동일한 피해". 로비 · 튜토리얼은 체력 1 클램프 |
+| **52** | 공기탄① 아군 피해에도 시전자의 공격 배율(광폭화 · 시너지 · 탑승①)이 붙는다 | 그대로(사용자 확인 2026-10-08) |
+| **53** | 공기탄② 비행 적에게는 감속이 안 걸린다(§9-1) — 받는 피해 증가는 걸린다 | §9-1 과 같은 판단 |
+| **54** | 흡착 스택 표시(연출)가 없다 | 원하면 `GE_AirShot_Drag` 에 GameplayCue 하나 |
+| **55** | 흡착 받는 피해는 그 적중 **직전** 스택으로 계산 — 첫 적중 +0% | 그대로(사용자 확인 2026-10-08). 바꾸려면 적 관문의 적용 순서만 |
+| **57** | ★선행 변경(D-103)으로 칩 없는 물 점프가 물 30 을 실제로 쓴다★ | 사용자 확정. 플레이 후 C++ `WaterCost` 만 |
+| **58** | 물 점프② 무적은 **피해 GE 를 지나는 것만** 막는다 — 적 GA 가 직접 거는 `LaunchCharacter` · 스턴 GE 는 못 막는다(그런 공격이 있는지는 조사하지 않았다) | 그대로(사용자 확인 2026-10-08). 필요하면 그 GA 에 `State.Invulnerable` 검사 한 줄 |
+| **59** | 물 점프② 무적 연출이 없다 | 선택: `GE_JetJump_Guard` 에 GameplayCue |
+| **60** | `SkillOuterDamage` 는 지금 물 점프만 읽는다 | 씨앗 폭탄 등에 쓰려면 그 스킬도 읽게 한다 |
+| **61** | 물 점프 공중 횟수는 서버 전용 카운터 — 한도를 넘긴 Q 가 클라에서 잠깐 발동했다 취소될 수 있다(예전 두 번째 공중 Q 와 같은 현상) | 기존 구조 유지. 거슬리면 `AirJumpsUsed` 를 OwnerOnly 복제 |
+| **62** | 물 점프 높이 수치는 중력 −980 · GravityScale 1 가정 | 중력을 바꿔도 비율(×0.70 · ×0.75)은 그대로 |
+| **63** | `GA_VacuumDash` 가 `GE_Cost_VacuumJetJump` 를 Cost GE 로 들고 있다 | 돌진 `WaterCost` 0 이라 무해 — 건드리지 않는다 |
+| **64** | 물 점프② 지상 Q → 0.3초 뒤 공중 Q 로 한 번 뜰 때 최대 0.6초 연속 무적 · 물 60 | 의도(사용 1회당 0.3초). 쿨다운이 무적보다 짧아지면 끊김 없이 이어질 수 있다 — 지금 그런 칩은 없다 |
+| **66** | ★선행 변경(D-112)으로 칩 없는 5칸 돌진도 지형 충돌 자해 50(예전 0)★, 원래 코드의 적 · 아군 충돌 자해는 없어졌다 | 사용자 확정. 플레이 후 GA `SustainedImpactSelfDamage` 만 |
+| **67** | 클렌저 사이트는 Pawn 이 아니라 **지형**으로 분류 — 5칸 돌진으로 박으면 자해, 사이트는 "적"이라 충돌 피해도 받는다(기존 동작) | 그대로(사용자 확인 2026-10-08). 빼려면 `HandleDashImpact` 에 `ADRCleanserSite` 예외 한 줄 |
+| **68** | 돌진② 시작 순간 아군과 붙어 있으면 소유 클라가 플래그를 받기 전 한 번 막혔다가 보정될 수 있다 | 허용. 거슬리면 소유 클라에서 `ReleaseGauge` 때 로컬로 먼저 켠다 |
+| **69** | 돌진 중 새로 생긴 아군 폰(부활 · 중도 입장)은 통과 목록에 없다 — 물리적으로는 막히지만 피해 · 종료는 없다(서버 안전망) | 허용 |
+| **70** | 아군과 겹친 채 돌진이 끝나면 엔진이 밀어낸다(겹침 해소) | 허용 |
+| **71** | 돌진② 적 피해 8.5/칸은 소수다 | 의도(D-113) |
+| **72** | 돌진③ 은 같은 물 100 을 1.75초에 쓴다 — 충전 중 초당 물 40 → 57 | 사용자 확정 수치 |
+| **73** | 돌진③ 지속 돌진 최고 속도 1100 → 935(−15%), 4칸 일반 돌진 거리 −10% | 사용자 확정 수치. 약하면 `SkillSpeedBonus` 만 |
+| **74** | 돌진① 자해 100 은 받는 쪽 배율(`DamageTaken` · 오염)과 탑승 공유를 탄다 | 일반 피해와 같은 규칙(D-112) |
 
 ---
 
@@ -796,2303 +1136,28 @@ C++ 빌드 통과, 에셋 입력은 2026-09-28 에셋을 직접 읽어 확인했
 
 전부 통과하면 §10.3 을 지우고 머리말 상태를 "완료"로 바꾼다.
 
+### 10.4 청소기 칩 12종
+
+C++ 빌드 통과, 에셋 입력은 2026-10-08 에셋을 직접 읽어 확인했다(커밋 `89120e20` — 선행 4곳 · 새 GE 4개 · `ChipTuning.Ride/AirShot/JetJump` · 카탈로그 12칩 + `SkillDisplayNames` 4줄 · 아이콘 12).
+준비: PIE Listen Server · 플레이어 3~4(탑승 3층용 청소기 2~3), 콘솔 `DRUnlockUpgrade` → `DRUnlockSlot 6`. 수치는 데미지 숫자 · `showdebug abilitysystem`(MoveSpeed · MaxHealth · 활성 GE 스택), 서버 로그 `[RideLoad]` · `[RideEject]`.
+
+- [ ] **선행 변경(칩 없음)** 광폭화 탑승자 20 피격 → 청소기 20 / 오염 100 → 정화 400(+100 칩 오염 100 → 500, ⑧ 100 → 1200) / 공기탄 10 · 30 · 50 · 70 / 물 점프 물 −30(물 20 이면 물 0 + 체력 5) / 5칸 돌진 지형 충돌 자해 50, 적 · 아군 · 1~4칸 충돌은 없음 / 돌진 이속 660 … 1100 그대로 / 3층 A ← B ← C 에서 C 피격 → A 0(공유 1칸)
+- [ ] **탑승①** 위 1 · 2 · 3명 → 탑승자 피해 ×1.08 · 1.16 · 1.24, 맨 아래 청소기 MoveSpeed 522.5 · 495 · 467.5 / 하차 · 사망 · 위층끼리 하차에 즉시 갱신 / 위층 ①은 효과 없음 / 리스폰 뒤 감속 잔류 없음 / 공유분은 ×1.24 가 아니다
+- [ ] **탑승②** 2층 탑승자 20 피격 → 탑승자 체력 · 숫자 · 히트리액트 없음, 청소기 20 + 4 / 3층 A② ← B ← C: C · B · A 피격 → A 8 · 28 · 24 / 화상 탑승자 → 틱마다 청소기에 공유분 + 20% / 최대 체력 300 · 오염 100 / 모자 쓴 탑승자 → 모자만 소모 / ② 청소기 사망 → 하차 후 정상 피격
+- [ ] **탑승③** 30% 이하로 맞으면 튕겨 내림 + 둘 다 +100 / 30% 이하로 탄 뒤 맞아도 / 아래층 공유로 30% 이하여도 / 오염 진입 → 탈출 + 정화 / 20초 그 청소기만 F 프롬프트 없음 · 서버 거부, 다른 청소기는 OK / ⑧ 비용 · 발톱 수혈로는 발동 안 함
+- [ ] **공기탄** ① 15 · 45 · 75 · 105, 아군에게 같은 피해(강화탄 = 피해 + 넉백), 내 위 탑승자 · 내가 탄 청소기는 통과 / ② 8 · 24 · 40 · 56, 적 이속 ×0.9 · 0.8 · 0.7(★1.8 · 2.7 이면 T-95★) · 4번째부터 유지 · 마지막 적중 2초 뒤 해제 · 다른 플레이어 피해도 +5 · 10 · 15% · 보스 없음 · 일반 엘리트 걸림 · 돌진으로는 안 쌓임 / ③ 0.35 · 0.70 · 1.05초에 단계(게이지와 일치), 10 · 22 · 34 · 46
+- [ ] **물 점프** ① 2m 안 40 · 2~4m 15, 높이 약 ×0.7 / ② 피해 숫자 · 히트리액트 없음(물 분사 연출은 있음), Q 직후 0.3초 안 피격 무효 · 모자 유지 · 지상 Q → 0.3초 뒤 공중 Q 면 0.6초 / ③ 물 −20(물 정확히 20 에서도), 지상 Q → 공중 Q × 2(4번째 거부), 착지하면 다시 2회, 높이 약 ×0.75
+- [ ] **돌진** ① 적 18/칸 · 아군 5/칸 · 5칸 지형 자해 100 / ② 아군을 피해 · 정지 없이 통과(호스트 · 아군 · 내 화면 모두), 아군이 다가와도 안 막힘, 끝나면 다시 막힘, 사망 · 브레이크 · 자연 감쇠 뒤 잔류 없음, 적 8.5/칸 / ③ 0.35초마다 1칸, 칸당 이속 627 … 935, 감쇠는 1초에 1칸 그대로
+- [ ] **스킬당 1칩** 그룹마다 1개, 네 그룹 동시 가능 / 미리보기 라벨 "탑승 · 기본 공격 · 물 점프 · 돌진" / 카드 문구(Detail Override)
+- [ ] **멀티** 클라 청소기 탑승① 감속이 호스트 화면에서도 / 클라 탑승자 ③ 금지 → 클라 프롬프트 사라짐 · 20초 뒤 다시 / 클라 공기탄② 감속이 호스트 화면에서도 / 클라 돌진② 통과 시 보정 튐 없음(시작 순간 붙어 있으면 1회 — §9-68) / 클라 물 점프③ 공중 3번째 Q 서버 거부
+- [ ] **검사** `DA_ProgressionConfig` 편집 → 오류 0건(청소기 GE 검사 포함)
+
+전부 통과하면 §10.4 를 지우고 머리말 상태를 "완료"로 바꾼다.
+
 ---
 
 ## 11. 남은 작업
 
-- **청소기 칩 12종(§12~§15)**: C++ 구현 완료(빌드 통과 2026-10-08). **남은 것 = 에디터 작업 → §16 안내서**(이미 있는 에셋 4곳 수정 · 새 GE 4개 · `DA_ProgressionConfig` · 카탈로그 12칩 · `SkillDisplayNames` 4줄) → 각 절의 검증(§12.7 · §13.7 · §14.7 · §15.7) → §1~§9 흡수(§1.7 그룹 6 → 10개, 칩 18 → 30종). 아이콘은 사용자가 따로 넣는다.
-- 청소기 칩을 빼면 **필수 에디터 작업은 없다**(2026-10-07 에셋 확인 — 정원로봇 · 동전 · 잭팟 · 공속 전부).
-  선택 사항만 남았다 — §9-35(공유 버프 상태 아이콘), §9-25(칩 카드 사유 문구), §9-26(`Detail Override`).
-- 그다음은 §10 플레이 검증과, 결과에 따른 밸런스 조정(§9-14 · §9-21 · §9-27)이다.
-
----
-
-## 12. 로봇 청소기 탑승(패시브) 칩 3종 (C++ 구현 완료 — 에디터 · 검증 남음)
-
-> 2026-10-07 요청 · 같은 날 질의응답과 두 번의 정정으로 확정. 코드 주석 접두 **`Plan5(탑승칩)`** · 결정 **D-77 ~ D-92** · 함정 **T-74 ~ T-94** (앞 번호에 이어서 매긴 영구 ID).
-> **C++ 구현 완료**(2026-10-08 빌드 통과). 에디터 작업은 **§16 안내서**, 그다음 §12.7 검증. 계획과 달라진 점은 §12.10. 검증이 끝나면 §1~§9 에 흡수한다.
-> ★선행 변경 2건 — **D-82**(공유 피해에서 '주는 피해' 배율 제거) · **D-87**(오염 최대 체력 100 고정) — 은 칩이 없어도 지금 동작을 바꾼다(§12.8-42). 공유 범위는 지금처럼 1칸(D-92 — 2차 정정).★
->
-> 사용자 확정
-> - ① 탑의 **맨 아래(직접 달리는) 청소기의 칩만** 유효. 그 위 인원 1명당 **탑승자 전원** 공격력 +8%(최대 24%), **그 청소기** 이속 −5%.
->   "여러 명 탑승" = 청소기 위에 청소기가 타고 … 맨 위에 다른 캐릭터 — 새 기능이 아니라 **지금의 탑승 그대로**다(맨 아래 위로 최대 3명).
-> - ② 칩② 청소기 **위의 전원**이 보호된다. 보호받는 사람이 **최종적으로 받아야 할 피해**(받는 쪽 배율 · 데미지 디버프 반영)를 **80% 줄여서** 칩② 청소기가 대신 받는다.
->   칩② 청소기 자신의 공유분은 그대로다. 예: 2층 V② ← R 에서 누가 20 맞든 V 24(20 + 4), R 0. 대신 최대 체력 −100.
-> - ③ **바로 위 1명**만 본다. **피격 직후 체력 30% 이하면 매번**(30% 이하로 탔어도 다음 피격에), 피해로 오염에 들어가도 발동.
->   즉시 탈출 + 탑승자·청소기 체력 +100, 그 사람은 20초 동안 **이 청소기에** 못 탄다. 체력 **비용**(피의 계약 등)으로는 발동하지 않는다.
-> - (2차 정정) 탑승 공유는 **지금처럼 바로 위 · 아래 1칸**이다(D-92). 3층 A② ← B ← C 에서 C 가 맞으면 A = 4 + 4 = **8**, B 가 맞으면 **28**, A 가 맞으면 **24**.
-> - (2차 정정) **디버프로 받는 피해도 넘긴다** — 보호받는 사람에게도 디버프는 그대로 걸리고, 그 DoT 틱이 20% 로 넘어간다(D-84).
-> - (2차 정정) 광폭화 탑승자는 칸이 아니라 **피해 수치**로 계산한다(§12.8-47).
-> - 공유 · 이전 피해는 **받는 피해** 기준이다 — 탑승자가 **주는 피해**(공격력 · 광폭화 · 시너지 · 칩①)는 상관없다. 탑승자에게 걸린 데미지 디버프(받는 피해 증가)는 포함 (D-82).
-> - 오염 상태의 최대 체력은 칩과 무관하게 **항상 100** (D-87).
-
-### 12.0 지금의 탑승 (코드·에셋 실측)
-
-| 항목 | 지금 | 어디 |
-|---|---|---|
-| 탑승 | **F**(상호작용) → `ServerRequestInteract` → `CanBeMountedBy`(위에 라이더 없음 · 후보 미탑승 · 둘 다 생존 · 후보 부품 없음 · 후보 스턴 아님 · 순환 없음) + 거리 ≤ 800 → `MountRider` | `DRPlayerController.cpp` · `DRRobotVacuumCharacter.cpp` |
-| 감지·프롬프트 | 반경 300 스피어 오버랩 → 카메라 레이 250uu(Pawn 오브젝트) → `!bDead && RiderOnTop == nullptr` 면 프롬프트(로컬, 서버가 최종 검증) | `FindMountByLineTrace` |
-| 하차 | 점프키 → `ServerRequestDismount` → `DismountRider(true)`(마운트 위 60 · 앞 80 으로 옮기고 위 300 · 앞 200 발사). 사망 · EndPlay 는 `DismountRider(false)` | 〃 |
-| 상태 | `RiderOnTop`(청소기 쪽) ↔ `MountedOn`(탑승자 쪽) 둘 다 복제. 탑승자는 `MOVE_None` · 이동 입력 차단 · `State.Riding`(Loose + Replicated). 시점·스킬은 쓴다(`State.Riding` 을 막는 GA 없음 — 에셋 검색) | `DRCharacter` |
-| 탑(여러 층) | **별도 기능 없음** — `CanBeMountedBy` 가 "위에 사람을 태운 후보"를 막지 않아 청소기 위에 청소기가 탄다. 4인 → 맨 아래 위로 최대 3명 | |
-| 피해 공유 | `UDRPlayerAttributeSet::HandleIncomingDamage` 맨 끝 → `PropagateSharedDamage(L)` → **바로 위 · 아래 1칸에만** 같은 L. 받은 쪽은 `Damage.MountShared` 라 다시 퍼뜨리지 않는다 → **3층 A ← B ← C 에서 C 가 맞으면 A 는 0**. 옛 청소기 계획서(git `f1c21fba:Plan3.md`)의 결정 3 "직접 연결 1홉 — 3층 전체 공유가 원하는 동작이면 확장"을 따른 것. 사용자 확정으로 **그대로 둔다**(D-92) | `DRCharacter.cpp` |
-| 공유 GE | 캐릭터 BP 의 `MountSharedDamageEffectClass`(4종 모두 `GE_Damage` — 에셋 확인), 물리, 소스 = 원 피격자 ASC. L = 받는 쪽 배율(부품 ×1.5 · `DamageTaken` · 시너지 · 로비 클램프)이 끝난 값 — 받는 피해 기준이라 의도와 같다 | 〃 |
-| ★공유 피해 증폭(기존 버그)★ | `GE_Damage` 는 `ExecCalc_Damage` 를 탄다 → 소스(원 피격자)의 DamageDealt · 광폭화 · 시너지가 **공유분에 곱해진다** — 광폭화 탑승자가 20 맞으면 청소기 45~55. 공유는 받는 피해라 주는 피해 배율과 무관해야 한다(사용자 확정) | `ExecCalc_Damage.cpp` → D-82 |
-| 사망 | 탑승자 사망 → 그 청소기에서 하차 / 청소기 사망 → 위 탑승자 하차 + 자기도 아래 청소기에서 하차 (둘 다 `bDead` 세팅 **전**) | `MulticastHandleDeath` 2곳 |
-| 체력 | 컨테이너 4칸 × 100 = 400(`DA_GameBalanceConfig` 가 덮지 않음). 일반 체력 0 → 오염(최대 100) → 오염 체력 0 → 사망 | `DRPlayerAttributeSet.cpp` |
-| ★오염 × 최대 체력 칩(기존 버그)★ | 오염 진입·해제·정화가 `SetMaxHealth`(= **BaseValue**)를 쓴다 → `GE_Upgrade_Stats`(Infinite, MaxHealth **AddBase**)의 칩 가산이 그 위에 다시 붙는다. +100 칩: 오염 200 · 정화 후 600 / ⑧ 피의 계약(칸 ×3): 오염 900 · 정화 후 2000 | → D-87 (오염 최대 **항상 100**) |
-| 이동 속도 | 청소기 550(`GE_DRPrimaryAttributes_RobotVacuum`). MoveSpeed 어트리뷰트 → `OnMoveSpeedChanged` → `MaxWalkSpeed`. 돌진 = `GE_VacuumDashSpeedBuff`(Infinite · **MultiplyAdditive** · by Target 5) | |
-| 돌진 자해 | 지속 돌진 충돌 → `GE_VacuumDashSelfDamage`(IncomingDamage +50) → 일반 피해처럼 탑승자에게도 공유된다 | `DRVacuumDash.cpp` |
-| 청소기 칩 | **없음** — 카탈로그 26종 = 공용 8 · 정원로봇 9 · 자판기 9. 아이콘 폴더도 `Common` · `Gardener` · `Vending` 뿐 | `DA_ChipCatalog` |
-
-**이 설계가 기대는 엔진·코드 사실**
-
-| 항목 | 사실 |
-|---|---|
-| 탑 구조 | 청소기마다 `RiderOnTop` 1명 · 캐릭터마다 `MountedOn` 1개 → 탑은 항상 **한 줄**(가지가 없다). 맨 아래까지 내려간 뒤 `RiderOnTop` 사슬로 올라가면 전원이 나온다 |
-| MoveSpeed 합성 | `((Base + AddBase) × MultiplyAdditive ÷ DivideAdditive × MultiplyCompound) + AddFinal` (UE 5.5 `GameplayEffectTypes.h`) — Compound 는 돌진 버프까지 포함한 값에 곱해진다 |
-| `SetMaxHealth` | `ATTRIBUTE_ACCESSORS` 세터 = `SetNumericAttributeBase` → **BaseValue**. 현재값 = Base + 활성 GE 모디파이어 |
-| 어트리뷰트 갱신 순서 | `FActiveGameplayEffectsContainer::InternalUpdateNumericalAttribute` 는 값을 넣은 **뒤에**(Pre/PostAttributeChange 포함) 값 변경 델리게이트를 방송한다 — `PostAttributeChange` 안에서 Base 를 다시 바꾸면 안쪽 방송(새 값) 뒤에 바깥 방송(옛 값)이 나간다 |
-| 플레이어 ASC | PlayerState 소유 · **Mixed** 복제 → 활성 GE(스펙 · 컨텍스트 포함)는 소유 클라에 온다. ★리스폰해도 ASC 의 GE 는 남는다★ |
-| 컨텍스트 복제 | `FDRGameplayEffectContext::NetSerialize` 는 Instigator · EffectCauser 를 보내고 받는 쪽이 `AddInstigator` 로 시전자 ASC 를 복원한다. **`SourceAbilityTags` 는 보내지 않는다**(서버 전용) |
-| 피해 관문 순서 | `UDRAttributeSet::PostGameplayEffectExecute`: 사망 대상 무시 → **모자(Plan8) 1회 무효** → 도발 ×0.8 → `HandleIncomingDamage` |
-| `GE_Damage` | `ExecCalc_Damage` 하나(에셋 확인) |
-| GE 필드 | UE 5.5 `UGameplayEffect` 의 `DurationPolicy` · `Modifiers` · `StackingType` 는 공개 UPROPERTY — 검사 코드가 CDO 에서 바로 읽는다 |
-| `CorruptMaxHealth` | `UDRPlayerAttributeSet` 의 `UPROPERTY()` 100 (에디터 노출 없음) — 오염 최대 체력의 유일한 값 |
-
-### 12.1 칩 3종 스펙
-
-공통: `OwnerClass = RobotVacuum`, `Category = Ascension`, `RequiredSlotCount = 1`,
-칩 레벨 `TargetAbilityTag = Abilities.RobotVacuum.Ride`(**그룹 키 전용** — D-77). → ①·②·③ 중 하나만 낄 수 있다(청소기의 첫 칩 그룹).
-
-| # | `ChipId` | 이름(가칭) | Modifiers | GrantedTags | 효과 | 단점 | Tier | 아이콘(제안) |
-|---|---|---|---|---|---|---|---|---|
-| ① | `RV.Asc.RidePower` | 합승 부스터 | (없음) | `…Ride.Power` | 맨 아래에서 달릴 때, 위 인원 1명당 **탑승자 전원** 주는 피해 **+8%**(최대 **24%**) | 1명당 **이 청소기** 이속 **−5%** | 3 | 공격-6 |
-| ② | `RV.Asc.RideGuard` | 대신 맞는 범퍼 | `MaxHealth` **Flat −100** ★단점★ | `…Ride.Guard` | 이 청소기 **위의 전원**이 피해를 받지 않고, 그 사람들이 받아야 할 최종 피해를 **80% 줄여** 이 청소기가 받는다(자기 공유분에 더해 — 3층에서 누가 20 맞든 이 청소기 28) | 최대 체력 400 → **300**(칸 75 × 4) | 4 | 지원-6 |
-| ③ | `RV.Asc.RideEject` | 비상 탈출 좌석 | (없음) | `…Ride.Eject` | **바로 위** 탑승자가 피격 후 체력 **30% 이하** → 즉시 탈출 + 탑승자·청소기 체력 **+100** | 탈출한 사람은 **20초** 동안 **이 청소기에** 못 탄다 | 3 | 편의-6 |
-
-`…` = `Upgrade.Feature.Skill`. ①·③은 단점이 규칙이라 모디파이어 없이 **`Description` 필수**(검사가 강제 — D-1 규칙).
-`ChipId` 접두 `RV` = RobotVacuum(정원로봇 `GR` · 자판기 `VM` 과 같은 방식). 이름 · Tier · 아이콘은 가칭(§12.8-36).
-
-**① 수치** (기본 이속 550, N = 맨 아래 청소기 위 인원)
-
-| N | 탑승자 주는 피해 | 청소기 이속 |
-|---|---|---|
-| 0 | ×1.0 | 550 |
-| 1 | ×1.08 | 522.5 |
-| 2 | ×1.16 | 495 |
-| 3 | ×1.24 (상한) | 467.5 |
-
-- 위층 청소기의 칩①은 업혀 있는 동안 **쉰다**(공격력도 감속도 없음). 내려서 맨 아래가 되는 순간 켜진다.
-- 맨 아래 청소기가 칩①이 아니면 탑 전체에 효과가 없다. 청소기 **자신**은 오르지 않는다(탑승자만).
-- 돌진 속도에도 −5%/명이 곱해진다(Compound — D-80).
-- 탑승자의 DoT(화상 등)는 오르지 않는다 — ⑥ 광폭화 · ⑦ 시너지와 같다(ExecCalc 를 안 탄다).
-- **공유 · 이전 피해에는 붙지 않는다**(D-82 — 공유는 받는 피해 기준).
-
-**② 수치** (피해 20, 받는 쪽 배율 없음, 공유는 지금처럼 1칸 — D-92)
-
-| 상황 | 칩 없음 (D-82 뒤) | 칩② |
-|---|---|---|
-| 2층 V② ← R, R 이 맞음 | R 20 / V 20 | R **0** / V **24** (20 + 4) |
-| 〃 V 가 맞음 | V 20 / R 20 | V **24** (20 + 4) / R **0** |
-| 3층 A② ← B ← C, C 가 맞음 | C 20 / B 20 / A 0 | A **8** (C 몫 4 + B 몫 4) · B · C 0 |
-| 〃 B 가 맞음 | A 20 / B 20 / C 20 | A **28** (20 + 4 + 4) · B · C 0 |
-| 〃 A 가 맞음 | A 20 / B 20 / C 0 | A **24** (20 + 4) · B · C 0 |
-| 3층 A ← B② ← C, C 가 맞음 | C 20 / B 20 / A 0 | B **24** (20 + 4) · A · C 0 |
-| 〃 B 가 맞음 | A 20 / B 20 / C 20 | A 20 / B **24** / C 0 |
-| 칩② 두 대 A② ← B② ← C, B 가 맞음 | A 20 / B 20 / C 20 | A **24.8** (20 + 4 + 0.8) · B · C 0 (§12.8-46) |
-| 화상 DoT 틱 5 (V② ← R, 화상은 R 에게) | R 5 / V 5 | R **0** / V **6** (5 + 1) |
-| 돌진 충돌 자해 50 (V② ← R) | V 50 / R 50 | V **60** (50 + 10) / R 0 |
-| 광폭화 탑승자 R 이 맞음 (V② ← R) | R 칸 1개 / V 20 | R **0** / V **24** — 칸이 아니라 피해 수치(사용자 확정) |
-| 청소기 최대 체력 | 400 (100 × 4) | **300 (75 × 4)** · 오염 최대 **100**(D-87) |
-
-- 보호받는 사람은 **어디서 온 피해든**(직접 피격 · 공유 · 디버프 DoT · 자해) 0 이고, 그 최종 피해(받는 쪽 배율 · 데미지 디버프 반영)의 20% 가 아래의 **가장 가까운** 칩② 청소기로 간다.
-- 공유는 지금처럼 **바로 위 · 아래 1칸**(D-92) — 그래서 3층에서 맨 위가 맞으면 맨 아래 칩② 청소기는 이전분(4 + 4)만 받는다.
-- **80% 감소는 이전분에만** 걸린다 — 칩② 청소기 자신의 공유분은 그대로다(T-93).
-- 탑승자가 **주는** 피해(공격력 · 광폭화 · 시너지 · 칩①)는 공유 · 이전 어디에도 붙지 않는다(D-82).
-- 보호받는 사람에게도 **디버프는 걸린다** — 그 DoT 틱이 같은 관문을 지나 20% 로 넘어간다(D-84). 스턴 같은 피해 없는 디버프도 탑승자가 받는다(§12.8-40).
-- 칩② 청소기 쪽 데미지 숫자는 **여러 번** 뜬다(공유분 + 이전분마다) (§12.8-37).
-
-**③ 수치**
-
-| 항목 | 값 |
-|---|---|
-| 발동 | **바로 위 탑승자**가 피해를 받은 직후 체력 ≤ 최대의 30%(최대 400 이면 120) **또는** 이번 피해로 오염 진입 |
-| 효과 | 즉시 하차(기존 점프 하차) → 탑승자 +100 · 청소기 +100 (`GE_Heal`) |
-| 금지 | 그 탑승자는 **20초** 동안 **이 청소기**에 못 탄다 — 서버가 거부하고 F 프롬프트도 안 뜬다. 다른 청소기는 탈 수 있다 |
-| 발동 안 함 | 체력 비용(⑧ 피의 계약 · 발톱 수혈), 칩② 보호 중(맞지 않으므로), 사망(사망 하차가 먼저) |
-
-- 오염 탑승자는 회복 100 이 곧 **정화**(칸 1개)다 → "피해로 0 → 오염 진입"이 사실상 구조가 된다.
-- 바로 아래 청소기가 맞으면 1칸 공유로 탑승자 체력도 깎이므로 그때도 발동한다.
-- 20초 뒤 다시 타면 다시 발동할 수 있다(금지 중에는 못 타므로 그 사이엔 없다).
-
-### 12.2 상호작용
-
-| 조합 | 결과 |
-|---|---|
-| 공유 · 이전 피해 + 넘겨주는 사람의 광폭화(⑥) · 시너지(⑦) · `DamageDealt` · 칩① | **붙지 않는다**(D-82) — 공유는 받는 피해다. 광폭화 탑승자 20 피격 → 청소기 20(지금 45~55), 칩②면 탑승자 0 · 청소기 24 |
-| ① + 광폭화(⑥) · 시너지(⑦) · `DamageDealt` 탑승자의 공격 | ExecCalc 소스측에서 전부 곱해진다. 광폭화 상한(3.0)은 DamageDealt + 광폭화에만 걸리고, 탑승 배율은 시너지처럼 그 밖(D-78) |
-| ① + 다른 로봇 칩(동전 · 발톱 · 공속 …) | 별개 축이라 그대로 곱 — 예: 동전 ① 고액(×1.2) 자판기가 3명 탑 위 → 동전 ×1.2 × 1.24 |
-| ① 탑에 칩② 청소기도 (A① ← B② ← C) | 둘 다 동작 — B · C 공격력 +16%. C 가 20 맞으면 A 0 · B 24(20 + C 몫 4) · C 0 |
-| ② + 광폭화(⑥) **청소기** | 탑 피격 1회가 청소기에 **여러 번**(자기 공유분 + 이전분마다) 들어와 이전분이 4 여도 칸을 그만큼 비운다 — 3층 가운데가 맞으면 3칸 ★최악의 조합★ (§12.8-37) |
-| ② + 광폭화(⑥) 탑승자 | 탑승자는 맞지 않아 칸을 잃지 않는다 |
-| ② + 시너지(⑦) | 탑승자의 받는 피해 감소가 적용된 최종 피해의 20% → 청소기의 받는 피해 감소가 한 번 더 |
-| ② + 모자(Plan8) 쓴 탑승자 | 모자가 먼저 막는다(관문 순서) — 모자 1개 소모, 그 피격은 **아무도** 피해 없음(공유도 없다) |
-| ② + 도발(Plan8)된 적의 공격 | ×0.8 이 먼저 적용된 양이 공유 · 이전된다 |
-| ② + 돌진 충돌 자해 | 청소기 50 + 탑승자 몫 50 × 0.2 = **60** |
-| ② + 오염 청소기 | 오염 체력(최대 100 — D-87)으로 받는다 → 빨리 죽는다. 죽으면 탑승자 하차(기존) 뒤 탑승자가 직접 맞는다 |
-| 칩② 청소기 두 대 (A② ← B② ← C) | C 몫이 B 를 거쳐 A 로 가며 0.2 가 두 번(0.04) — B 가 20 맞으면 A 24.8, C 가 맞으면 A 4.8 (§12.8-46) |
-| ② 청소기 위에 ③ 청소기 (A② ← B③ ← C) | C 는 A 의 보호로 맞지 않아 B 의 ③ 이 발동하지 않는다 |
-| ③ + 회복 차단(⑥) | 탈출 · 금지는 되고 그 대상의 회복만 빠진다 |
-| ③ + 오염 탑승자 / 오염 청소기 | 회복 100 = 정화(칸 1개) |
-| ③ + 피의 계약(⑧) · 발톱 ② 수혈 | 체력 **비용**으로는 발동 안 함(D-88) |
-| ①②③ 같은 청소기 | 불가 — 같은 그룹(§1.7) |
-
-### 12.3 설계 결정
-
-| # | 결정 | 근거 |
-|---|---|---|
-| **D-77** | 그룹 키 = 새 태그 **`Abilities.RobotVacuum.Ride`** — 칩 레벨 `TargetAbilityTag` · `SkillDisplayNames` 에만, 어떤 GA 에도 안 붙인다. 기능 스위치 `Upgrade.Feature.Skill.Ride.{Power,Guard,Eject}` | 탑승은 GA 가 없는 캐릭터 패시브라 잭팟(D-53)과 같은 처리. `Skill` 하위라 D-51 검사가 칩 태그를 강제한다 |
-| **D-78** | ① 탑승자 공격력은 **상태 없이** `ExecCalc_Damage` "주는 피해" 블록에서 계산 — `GetRideDamageMultiplier(SourceAvatar)`. 시너지(c)처럼 광폭화 상한 밖에서 곱한다 | 탑 구조(`MountedOn`/`RiderOnTop`)는 이미 복제되는 액터 상태다. 탑승자에게 GE 를 걸면 탑승 · 하차 · 사망 · 이탈마다 걸고 지울 곳이 생긴다(광폭화가 컨테이너 수를 매번 읽는 것과 같은 방식). 대신 HUD 표시가 없다(§12.8-38) |
-| **D-79** | ① 은 **맨 아래 청소기의 칩만** — 위층 칩①은 업혀 있는 동안 쉰다 | 사용자 확정. 단점(이속)이 항상 의미를 갖고, 칩① 여러 개의 합산/최대 문제가 없다 |
-| **D-80** | ① 감속 = 무한 GE **`GE_RideLoad`**(MoveSpeed **Multiply Compound** ← SetByCaller `Data.MoveSpeed.Mult` = 1 − 0.05 × N)를 맨 아래 청소기에. `RefreshRideLoad()`(서버)가 **태그로 지우고** 조건이 맞으면 다시 건다(멱등) | `MaxWalkSpeed` 는 MoveSpeed 어트리뷰트 → `OnMoveSpeedChanged` 경로라 GE 여야 서버 · 소유 클라 CMC 가 같은 속도를 쓴다(씨앗 가속·감속과 같은 경로). 태그로 지우는 이유는 T-84. Compound = 돌진 버프까지 포함한 최종 속도에 −5%/명 |
-| **D-81** | 갱신 지점 = `MountRider` · `DismountRider` 끝(서버): 오르내린 탑승자(청소기면) + **이 청소기부터 맨 아래까지**. 사망 · EndPlay · 하차 입력 · ③ 탈출은 전부 `DismountRider` 를 지나 따로 걸 곳이 없다. 로드아웃 변경 · 빙의는 `RefreshUpgradeEffects` 의 새 가상 훅 `OnUpgradeEffectsRefreshed()` | 3층 탑에서 위층끼리 타고 내려도 맨 아래 인원이 바뀐다(T-85). 빙의 때 한 번 돌면 리스폰 뒤 남은 감속도 지워진다 |
-| **D-82** | ★선행 변경★ 공유 · 이전 피해(`Damage.MountShared`)는 **받는 피해**다 — `ExecCalc_Damage` 의 "주는 피해" 배율((a) DamageDealt · (b) 광폭화 · (c) 시너지 · (d) 탑승)을 **전부 건너뛴다**. 넘기는 양 = 넘겨주는 사람이 최종적으로 받아야 할 피해 L(받는 쪽 배율 · 데미지 디버프 반영) | 사용자 확정(2026-10-07 정정): "받는 피해와 관련 — 탑승자의 공격력 증가는 상관없다", "탑승자에게 가해지는 데미지 디버프는 포함". 지금은 소스가 원 피격자라 그 사람의 공격 배율이 공유분을 키운다(광폭화 탑승자 20 → 청소기 45~55). 받는 쪽 디버프는 L 에 이미 들어 있다 |
-| **D-83** | ② = **보호받는 사람의 관문에서 넘긴다**. `UDRPlayerAttributeSet::HandleIncomingDamage` 에서 `FindRideGuard()` 가 아래의 가장 가까운 칩② 청소기를 찾으면: 그 사람이 받아야 할 최종 피해 L(받는 쪽 배율 적용 후)의 **20%** 를 `TransferRideDamageToGuard()` 로 그 청소기에 넘기고(공유와 같은 `ApplyMountSharedDamageTo` — `Damage.MountShared`), 피격 자체의 1칸 공유(`PropagateSharedDamage(L)`)는 그대로 보내고, 자기 처리는 건너뛴다 | 사용자 확정("위 전원" · "둘 다 이전" · "최종 피해의 80% 감소"). 관문 한 곳만 고치면 직접 피격 · 공유 · DoT · 자해 · 여러 층이 전부 같은 규칙으로 풀린다(§12.1 표). `MountShared` 라 칩② 청소기가 다시 공유하지 않는다(T-74) |
-| **D-84** | 보호받는 탑승자에게 그 피격의 **피격 큐 · 히트리액트 · 넉백 · 표정 · 데미지 숫자가 없다**. **디버프는 그대로 건다** — 디버프로 받는 피해(화상 DoT 등)는 매 틱 같은 관문을 지나 20% 로 넘어간다. 전투 진입(`NotifyEnterCombat`)은 남긴다. 모자(Plan8) · 도발 ×0.8 은 관문 앞이라 먼저 적용된다 | 사용자 확정(2026-10-07 2차 정정): "디버프로 받는 데미지도 넘겨야 한다". 디버프를 막으면 그 피해가 통째로 사라지고, 칩② 청소기에 걸면 80% 감소를 건너뛴다 — 탑승자에게 그대로 걸어야 DoT 틱이 일반 피해와 같은 규칙(이전 20% + 1칸 공유)을 탄다(T-94). 스턴처럼 피해 없는 디버프도 탑승자가 받는다(§12.8-40) |
-| **D-85** | 이전 비율 = **`ChipTuning.Ride.GuardTransferRatio` 0.2**(80% 감소). **이전분에만** 곱한다 — 칩② 청소기 자신이 받는 공유분은 100% | 사용자 확정 — "최종적으로 탑승자에게 들어가야 할 피해의 80% 가 감소된 만큼". 숫자는 D-2 대로 Config 에 둔다. 칩② 청소기 둘이 겹치면 위쪽 칩② 청소기를 거치며 0.2 가 한 번 더 곱해진다(§12.8-46) |
-| **D-86** | ② 최대 체력 −100 = 카탈로그 **`MaxHealth Flat −100`**(단점, 모디파이어 태그 비움) — 기존 분배로 칸 75 × 4 | Plan3 의 "총 HP 를 칸 수로 나눠 칸 용량에" 규칙 그대로. ★D-87 없이는 오염 최대 체력이 0 이 된다★ |
-| **D-87** | ★선행 변경★ **오염 상태의 최대 체력은 칩과 무관하게 항상 100**(`CorruptMaxHealth`). 오염 진입 · 해제 · 정화의 `SetMaxHealth` 3곳을 새 헬퍼 `SetMaxHealthCurrentValue(목표)`(Base = 목표 − (현재 − Base))로 바꾸고, 오염 중에 `RefreshUpgradeEffects` 가 칩 GE 를 다시 붙이거나 떼도 끝에서 100 으로 다시 맞춘다(체력은 그대로) | 사용자 확정. `SetMaxHealth` 는 BaseValue 를 바꾸고 `GE_Upgrade_Stats`(AddBase)의 칩 가산이 그 위에 다시 붙는다 — 칩②면 오염 최대 **0**(다음 피격 즉사). 기존 칩도 틀려 있다(+100 칩 오염 200 · 정화 후 600 — Plan3 T-3 기대값 500, ⑧ 오염 900 · 정화 후 2000). 정화 · 해제 뒤는 지금 의도대로 칸 수 × 칸 용량 |
-| **D-88** | ③ = **바로 위 1명**. 발동 = 피격 처리 **맨 끝**에서 그 탑승자 체력 ≤ 30% **또는** 이번 피격으로 오염 진입. 이미 30% 이하로 탔어도 다음 피격마다 발동. 체력 **비용**으로는 발동 안 함 | 사용자 확정. 1명만 보면 "이 청소기 20초 금지"와 정확히 맞물리고, 탑의 다른 청소기로 갈아타 회복을 반복하는 악용이 없다. 오염 진입은 체력을 오염 최대치로 다시 채워 비율로는 못 잡는다(T-79). 맨 끝이어야 그 피격의 공유분이 먼저 나간다(T-78). 비용 발동을 허용하면 자해로 회복을 뽑는다 |
-| **D-89** | ③ 실행 = `EmergencyEjectRider()`: `DismountRider(true)`(기존 점프 하차) → 탑승자 · 청소기에 `ApplyHealToActor`(`GE_Heal`, 소스 = 청소기) → 탑승자에게 금지 GE | 먼저 내려야 회복 · 금지가 탑 상태와 무관하다. 회복 대상은 방금까지 내 위에 있던 아군과 나 자신이라 팀 판정이 필요 없다(T-33 의 "호출부 책임" 충족) |
-| **D-90** | 20초 금지 = 탑승자에게 거는 시한 GE **`GE_RideBan`**(`Debuff.Ride.Banned`, 지속 SetByCaller, **Stacking None**), 소스 = 칩③ 청소기 ASC. 판정 `IsRideBannedFrom(탑승자, 청소기)` 하나를 서버(`CanBeMountedBy`)와 소유 클라(`FindMountByLineTrace` 프롬프트)가 같이 쓴다 | 진실이 하나다 — 만료 · 복제는 GAS 가 하고, `DA_StatusEffectInfo` 한 줄이면 20초 아이콘이 생긴다. 청소기 쪽 배열로 들면 복제 · 만료 · 사망 정리를 따로 해야 한다. ASC(PlayerState)로 비교해 청소기가 리스폰해도 금지가 이어진다 |
-| **D-91** | 칩 판정은 라이브러리 함수로 — 어트리뷰트셋은 `FindRideGuard` · `TransferRideDamageToGuard` · `TryRideEmergencyEject` 셋, ExecCalc 는 `GetRideDamageMultiplier` 하나만 부른다. 청소기 자기 GE(감속) · 탈출 실행은 청소기 메서드, 공유 · 이전 GE 적용은 `ADRCharacter::ApplyMountSharedDamageTo` 하나 | D-23 과 같은 원칙 — 칩 지식이 어트리뷰트셋 · ExecCalc 로 새지 않게. 공유와 이전이 같은 함수를 지나 GE · 태그가 어긋날 수 없다 |
-| **D-92** | 탑승 공유 범위 = **지금처럼 바로 위 · 아래 1칸**(옛 청소기 계획서 결정 3 그대로). 탑 전체로 넓히지 않는다 | 사용자 확정(2026-10-07 2차 정정 — 탑 전체 공유를 검토한 뒤 기각). ② 의 수치(3층 A② ← B ← C: C 피격 8 · B 피격 28 · A 피격 24)는 이 범위를 전제로 한다. 넓히는 방법은 T-92 |
-
-> 기각: ① 공격력을 탑승자에게 거는 GE(스택 = 인원)로 — HUD 아이콘은 생기지만 걸고 지울 곳이 탑승 · 하차 · 사망 · 이탈 · 로드아웃마다 생긴다(D-78).
-> 기각: ② 를 청소기 쪽에서 "먼저 키워 받고 + 탑승자 공유 생략"으로 — 숫자가 한 번에 뜨지만 직접 피격 · 공유 · 여러 층마다 분기가 갈라진다(§12.8-37).
-> 기각: 탑 전체 공유를 "받은 방향 반대쪽으로 한 칸씩" 이어 전달(옛 계획서의 방향 플래그안) — 단계마다 받는 쪽 배율이 겹치고 칩② 이전과 얽힌다(D-92 · T-92).
-> 기각: 오염 최대 체력을 `PostAttributeChange` 에서 매번 100 으로 고정 — 바깥 갱신이 끝난 뒤 옛 값으로 델리게이트가 한 번 더 방송돼(§12.0 엔진 사실) 호스트 HUD 가 틀린 값을 본다.
-> 기각: ③ 금지를 청소기의 복제 배열로 — 만료 · 정리 · 복제를 직접 관리해야 한다(D-90).
-
-### 12.4 C++ 변경 (적용 순서)
-
-① · ③ 은 **선행 변경**(칩 없이도 동작이 바뀐다), ② · ④~⑫ 는 칩 3종을 위한 것이다(② 는 동작 불변).
-
-**① ★선행★ `ExecCalc_Damage.cpp`** — 공유 · 이전 피해는 "주는 피해" 배율 제외 (D-82)
-
-```cpp
-	// ★Plan5(탑승칩)★ 탑승 공유 · 이전 피해(Damage.MountShared)는 ★받는 피해★ 다 — 넘겨주는 사람의
-	// "주는 피해" 배율((a) DamageDealt · (b) 광폭화 · (c) 시너지 · (d) 탑승)을 전부 건너뛴다 (D-82 · T-77).
-	// 넘어오는 양은 그 사람이 받은 최종 피해(받는 쪽 배율 · 데미지 디버프 반영)라 여기서 더 곱할 것이 없다.
-	// (SourceAbilityTags 는 서버 전용 필드지만 ExecCalc 는 서버에서만 돈다)
-	const bool bMountShared = UDRAbilitySystemLibrary::GetSourceAbilityTags(Spec.GetContext())
-		.HasTagExact(FDRGameplayTags::Get().Damage_MountShared);
-
-	if (SourceASC && !bMountShared)   // ← 기존 if (SourceASC)
-	{
-		... (a) DamageDealt / (b) 광폭화 / (c) 시너지 그대로 ...
-		... (d) 는 ⑦ 에서 추가 ...
-	}
-```
-
-- 포효 ×1.2 · Phase1 ×0.7 은 적 소스 전용이라 공유(소스 = 플레이어)에 원래 안 붙는다 — 손대지 않는다.
-
-**② `DRCharacter.h / .cpp`** — 공유 GE 적용부 추출 (D-91 · **동작 불변**)
-
-`PropagateSharedDamage` 의 대상(바로 위 · 아래 1칸 — D-92)과 재전파 방지는 그대로 두고, GE 를 거는 부분만 `ApplyMountSharedDamageTo` 로 뽑는다. ② 이전분도 이 함수를 지난다.
-(탑 전체 공유 예시 코드는 2차 정정으로 기각돼 지웠다 — 넓히는 방법은 T-92.)
-
-```cpp
-// .h public — PropagateSharedDamage 바로 아래
-	bool ApplyMountSharedDamageTo(ADRCharacter* Target, float Damage);
-
-// .cpp PropagateSharedDamage — 1칸 대상 수집 · 재전파 방지는 그대로, 루프 본문만
-	for (ADRCharacter* Linked : LinkedCharacters)
-	{
-		ApplyMountSharedDamageTo(Linked, Damage);
-	}
-
-bool ADRCharacter::ApplyMountSharedDamageTo(ADRCharacter* Target, float Damage)
-{
-	if (!HasAuthority() || !IsValid(Target) || Target->bDead) return false;
-	if (Damage <= 0.f) return true;
-	if (!MountSharedDamageEffectClass) { /* 경고 로그 */ return false; }
-
-	UAbilitySystemComponent* SelfASC = GetAbilitySystemComponent();
-	UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent();
-	if (!SelfASC || !TargetASC) return false;
-
-	// Source = 넘겨주는 사람 ASC. 주는 피해 배율은 ExecCalc 가 MountShared 를 보고 건너뛴다 (D-82)
-	FDamageEffectParams Params;
-	Params.WorldContextObject = this;
-	Params.DamageGameplayEffectClass = MountSharedDamageEffectClass;
-	Params.SourceAbilitySystemComponent = SelfASC;
-	Params.TargetAbilitySystemComponent = TargetASC;
-	Params.BaseDamage = Damage;
-	Params.DamageType = FDRGameplayTags::Get().Damage_Physical;
-	Params.SourceAbilityTags.AddTag(FDRGameplayTags::Get().Damage_MountShared);   // ★필수★ — 빠지면 무한 반복 (T-74)
-	UDRAbilitySystemLibrary::ApplyDamageEffect(Params);
-	return true;
-}
-```
-
-**③ ★선행★ `DRPlayerAttributeSet.h / .cpp` + `DRCharacter.cpp`** — 오염 최대 체력 항상 100 (D-87)
-
-```cpp
-// DRPlayerAttributeSet.h public
-	// ★Plan5(탑승칩)★ 오염 중이면 최대 체력을 CorruptMaxHealth(100)로 다시 맞추고 체력을 KeepHealth(≤ 100)로 되돌린다 (D-87).
-	// ADRCharacter::RefreshUpgradeEffects 가 칩 GE 를 다시 붙이거나 뗀 뒤 부른다(서버)
-	void ReapplyCorruptMaxHealth(float KeepHealth);
-
-// DRPlayerAttributeSet.h private
-	// ★Plan5(탑승칩)★ MaxHealth 의 ★현재값★을 Desired 로 맞춘다 (D-87)
-	void SetMaxHealthCurrentValue(float Desired);
-
-// DRPlayerAttributeSet.cpp
-void UDRPlayerAttributeSet::SetMaxHealthCurrentValue(float Desired)
-{
-	// SetMaxHealth 는 BaseValue 를 바꾼다 — GE_Upgrade_Stats(Infinite, AddBase)의 칩 가산이 그 위에 다시 붙으므로
-	// 그 몫(현재 − Base)을 빼고 넣는다. ★MaxHealth 에 곱 모디파이어가 없다는 전제★ (T-88)
-	const UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent();
-	const float ModifierOffset = ASC ? GetMaxHealth() - ASC->GetNumericAttributeBase(GetMaxHealthAttribute()) : 0.f;
-	SetMaxHealth(Desired - ModifierOffset);
-}
-
-void UDRPlayerAttributeSet::ReapplyCorruptMaxHealth(float KeepHealth)
-{
-	if (!bCorrupted) return;
-	SetMaxHealthCurrentValue(GetCorruptMaxHealth());
-	SetHealth(FMath::Clamp(KeepHealth, 0.f, GetMaxHealth()));
-}
-```
-
-- `EnterCorruptedState` → `SetMaxHealthCurrentValue(GetCorruptMaxHealth())`
-- `ExitCorruptedState` · `HandleCorruptionPurification` → `SetMaxHealthCurrentValue(NormalMaxHealth)` (★세 곳 모두 — T-87★). 뒤의 `SetHealth` 는 그대로.
-- 칩 없는 플레이어는 오프셋 0 → 지금과 완전히 같다.
-
-`DRCharacter.cpp` `RefreshUpgradeEffects()` — `if (!HasAuthority()) return;` 바로 다음(`#include "Misc/ScopeExit.h"`):
-
-```cpp
-	// ★Plan5(탑승칩)★ 오염 중이면 아래 ★모든 return 경로의 끝★ 에서 최대 체력을 100 으로 다시 맞춘다 (D-87).
-	// 칩 GE 를 떼고 붙이는 사이 비율 유지 로직이 체력을 바꾸므로 오염 체력은 시작 값으로 되돌린다 (T-88)
-	UDRPlayerAttributeSet* CorruptAS = Cast<UDRPlayerAttributeSet>(AttributeSets);
-	const bool bCorruptedAtStart = CorruptAS && CorruptAS->IsCorrupted();
-	const float CorruptHealthAtStart = bCorruptedAtStart ? CorruptAS->GetHealth() : 0.f;
-	ON_SCOPE_EXIT
-	{
-		if (bCorruptedAtStart)
-		{
-			CorruptAS->ReapplyCorruptMaxHealth(CorruptHealthAtStart);
-		}
-	};
-```
-
-**④ `DRGameplayTags.h / .cpp`** — 태그 6개(네이티브)
-
-| 멤버 | 태그 | 종류 |
-|---|---|---|
-| `Abilities_RobotVacuum_Ride` | `Abilities.RobotVacuum.Ride` | ★칩 그룹 키 전용★ — GA 에 넣지 말 것(T-90) |
-| `Upgrade_Feature_Skill_Ride_Power` | `Upgrade.Feature.Skill.Ride.Power` | ① 기능 스위치 |
-| `Upgrade_Feature_Skill_Ride_Guard` | `Upgrade.Feature.Skill.Ride.Guard` | ② 기능 스위치 |
-| `Upgrade_Feature_Skill_Ride_Eject` | `Upgrade.Feature.Skill.Ride.Eject` | ③ 기능 스위치 |
-| `Debuff_RobotVacuum_RideLoad` | `Debuff.RobotVacuum.RideLoad` | ★GAS 태그★ — `GE_RideLoad` 가 부여, C++ 이 이 태그로 지운다 |
-| `Debuff_Ride_Banned` | `Debuff.Ride.Banned` | ★GAS 태그★ — `GE_RideBan` 이 탑승자에게 부여(로봇 공용 이름), C++ 이 조회 |
-
-**⑤ `DRProgressionConfig.h`** — `FDRAttackSpeedBuffChipTuning` 다음
-
-```cpp
-/**
- * ★Plan5(탑승칩)★ 로봇 청소기 탑승(패시브) 칩 3종의 동적 상수.
- * ②의 최대 체력 −100 은 여기가 아니라 DA_ChipCatalog 의 MaxHealth 모디파이어다.
- */
-USTRUCT(BlueprintType)
-struct FDRRideChipTuning
-{
-	GENERATED_BODY()
-
-	// ========== ① RV.Asc.RidePower ==========
-
-	// 맨 아래 청소기 위 인원 1명당 탑승자 전원의 주는 피해 증가 (0.08 = +8%)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Power", meta = (ClampMin = "0.0"))
-	float PowerDamagePerRider = 0.08f;
-
-	// 위 증가의 상한 (0.24 = +24%). 맨 아래 위로 최대 3명이라 기본값이면 딱 닿는다
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Power", meta = (ClampMin = "0.0"))
-	float PowerMaxDamageBonus = 0.24f;
-
-	// 인원 1명당 그 청소기의 이동 속도 감소 (0.05 = −5%)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Power", meta = (ClampMin = "0.0", ClampMax = "0.3"))
-	float PowerSpeedPenaltyPerRider = 0.05f;
-
-	/**
-	 * 감속 GE. 요구 사양 (Plan5 D-80):
-	 *   - Duration = Infinite / Stacking = None
-	 *   - Modifier: MoveSpeed / ★Multiply (Compound)★ / SetByCaller(Data.MoveSpeed.Mult)
-	 *   - Target Tags(Granted) = Debuff.RobotVacuum.RideLoad  ★코드가 이 태그로 지운다 — 없으면 감속이 쌓인다 (T-84)★
-	 * ★비우면 경고 로그와 함께 감속 없이 공격력만 오른다★
-	 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Power")
-	TSoftClassPtr<UGameplayEffect> PowerLoadEffect;
-
-	// ========== ② RV.Asc.RideGuard ==========
-
-	// 보호받는 사람이 최종적으로 받아야 할 피해 중 칩② 청소기로 넘어가는 비율 (0.2 = 80% 감소).
-	// ★이전분에만★ 곱한다 — 칩② 청소기 자신이 받는 공유분은 그대로다 (Plan5 D-85 · T-93)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Guard", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float GuardTransferRatio = 0.2f;
-
-	// ========== ③ RV.Asc.RideEject ==========
-
-	// 바로 위 탑승자의 체력 비율이 이 값 이하가 되면 탈출 (0.3 = 30%)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Eject", meta = (ClampMin = "0.01", ClampMax = "1.0"))
-	float EjectHealthRatio = 0.3f;
-
-	// 탈출 때 탑승자 · 청소기가 각각 회복하는 체력(고정량)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Eject", meta = (ClampMin = "0.0"))
-	float EjectHealAmount = 100.f;
-
-	// 회복 GE — GE_Heal 그대로. ★Claw · Coin 의 HealEffect 와 별개 필드 — 비우면 회복 없이 탈출 · 금지만★
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Eject")
-	TSoftClassPtr<UGameplayEffect> EjectHealEffect;
-
-	// 탈출한 탑승자가 그 청소기에 다시 탈 수 없는 시간(초)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Eject", meta = (ClampMin = "0.1"))
-	float EjectBanDuration = 20.f;
-
-	/**
-	 * 탑승 금지 GE. 요구 사양 (Plan5 D-90):
-	 *   - Has Duration / Duration = SetByCaller(Data.Duration) / 모디파이어 없음
-	 *   - Target Tags(Granted) = Debuff.Ride.Banned  (HUD 아이콘을 원하면 Asset Tags 에도)
-	 *   - ★Stacking = None★ (청소기마다 따로 — T-81)
-	 * ★비우면 경고 로그와 함께 금지 없이 탈출 · 회복만★
-	 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride|Eject")
-	TSoftClassPtr<UGameplayEffect> EjectBanEffect;
-};
-```
-
-`FDRChipTuning` 끝에:
-
-```cpp
-	// ========== 로봇 청소기 탑승 칩 (Plan5(탑승칩)) ==========
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ride")
-	FDRRideChipTuning Ride;
-```
-
-**⑥ `DRAbilitySystemLibrary.h / .cpp`** — 칩 판정 5개(D-91). cpp 에 `#include "Character/DRRobotVacuumCharacter.h"`
-
-```cpp
-	// ========== 로봇 청소기 탑승 칩 (Plan5(탑승칩)) ==========
-
-	/**
-	 * ★Plan5(탑승칩)★ ① 이 캐릭터가 주는 피해의 탑승 배율. 칩이 없거나 탑승 중이 아니면 정확히 1.0.
-	 *   탑의 ★맨 아래★ 청소기가 살아 있고 Ride.Power 면 1 + min(PowerDamagePerRider × 그 위 인원, PowerMaxDamageBonus)
-	 * 위층 청소기의 칩①은 보지 않는다 (D-79). ExecCalc_Damage 에서만 부른다(서버, 공유 · 이전 피해 제외 — D-82).
-	 */
-	static float GetRideDamageMultiplier(const AActor* SourceAvatar);
-
-	/** ★Plan5(탑승칩)★ ② 이 캐릭터 ★아래★ 에서 가장 가까운, 살아 있는 Ride.Guard 청소기. 있으면 "보호받는 사람"이다 (D-83) */
-	static class ADRRobotVacuumCharacter* FindRideGuard(const class ADRCharacter* Rider);
-
-	/**
-	 * ★Plan5(탑승칩)★ ② 보호받는 Rider 가 최종적으로 받아야 할 피해 Damage 의 GuardTransferRatio(0.2)만큼을 Guard 에게 넘긴다(서버).
-	 * 공유와 같은 ApplyMountSharedDamageTo(Damage.MountShared) 로 건다 (D-83).
-	 * 못 넘기면(청소기 사망 · GE 미지정) false — 호출부는 탑승자가 그대로 받게 한다 (T-89)
-	 */
-	static bool TransferRideDamageToGuard(class ADRCharacter* Rider, class ADRRobotVacuumCharacter* Guard, float Damage);
-
-	/**
-	 * ★Plan5(탑승칩)★ ③ 피격 처리 ★맨 끝★ 에서 부른다(서버). 이 캐릭터가 Ride.Eject 청소기의 ★바로 위★ 탑승자이고
-	 * 체력 ≤ EjectHealthRatio 이거나 이번 피격으로 오염에 들어갔으면 그 청소기가 비상 탈출시킨다 (D-88).
-	 */
-	static void TryRideEmergencyEject(class ADRCharacter* Rider, bool bEnteredCorruptionThisHit);
-
-	/**
-	 * ★Plan5(탑승칩)★ ③ Rider 가 Mount 에 탑승 금지 중인가 — 서버(CanBeMountedBy)와 소유 클라(프롬프트)가 같이 쓴다.
-	 * 금지 GE 중 시전자 ASC 가 Mount 의 ASC 인 것이 있으면 true (D-90). SourceAbilityTags 는 클라에 없어 쓰지 않는다 (T-83).
-	 */
-	static bool IsRideBannedFrom(const AActor* Rider, const class ADRRobotVacuumCharacter* Mount);
-```
-
-```cpp
-float UDRAbilitySystemLibrary::GetRideDamageMultiplier(const AActor* SourceAvatar)
-{
-	const ADRCharacter* Rider = Cast<ADRCharacter>(SourceAvatar);
-	if (!Rider || !IsValid(Rider->MountedOn)) return 1.f;   // 빠른 탈출 — 거의 모든 피해가 여기서 끝난다
-
-	const ADRRobotVacuumCharacter* Bottom = Rider->MountedOn->GetStackBottom();   // 맨 아래만 (D-79)
-	if (!IsValid(Bottom) || Bottom->bDead) return 1.f;
-	if (!HasUpgradeFeature(Bottom->GetAbilitySystemComponent(), FDRGameplayTags::Get().Upgrade_Feature_Skill_Ride_Power)) return 1.f;
-
-	const FDRRideChipTuning& Tuning = GetChipTuning(SourceAvatar).Ride;
-	const float Bonus = FMath::Min(Tuning.PowerDamagePerRider * Bottom->GetRiderCountAbove(), Tuning.PowerMaxDamageBonus);
-	return 1.f + FMath::Max(0.f, Bonus);
-}
-
-ADRRobotVacuumCharacter* UDRAbilitySystemLibrary::FindRideGuard(const ADRCharacter* Rider)
-{
-	if (!Rider) return nullptr;
-	const FGameplayTag& GuardTag = FDRGameplayTags::Get().Upgrade_Feature_Skill_Ride_Guard;
-
-	// 아래로 내려가며 가장 가까운 칩② 청소기 ("위 전원" 보호 — D-83). 상한 8 은 순환 방어용(CanBeMountedBy 가 이미 막는다)
-	int32 Steps = 0;
-	for (ADRRobotVacuumCharacter* Below = Rider->MountedOn; IsValid(Below) && Steps++ < 8; Below = Below->MountedOn)
-	{
-		if (!Below->bDead && HasUpgradeFeature(Below->GetAbilitySystemComponent(), GuardTag))   // 죽은 청소기 건너뛰기 (T-89)
-		{
-			return Below;
-		}
-	}
-	return nullptr;
-}
-
-bool UDRAbilitySystemLibrary::TransferRideDamageToGuard(ADRCharacter* Rider, ADRRobotVacuumCharacter* Guard, float Damage)
-{
-	if (!IsValid(Rider) || !IsValid(Guard) || Guard->bDead) return false;
-
-	// 80% 감소는 ★이전분에만★ — 피격 자체의 1칸 공유는 호출부가 PropagateSharedDamage(L) 로 그대로 보낸다 (D-85 · T-93)
-	const float Ratio = FMath::Clamp(GetChipTuning(Rider).Ride.GuardTransferRatio, 0.f, 1.f);
-	return Rider->ApplyMountSharedDamageTo(Guard, Damage * Ratio);
-}
-
-void UDRAbilitySystemLibrary::TryRideEmergencyEject(ADRCharacter* Rider, bool bEnteredCorruptionThisHit)
-{
-	if (!IsValid(Rider) || !Rider->HasAuthority() || Rider->bDead) return;   // 사망 하차가 이미 일어났다
-
-	ADRRobotVacuumCharacter* Mount = Rider->MountedOn;   // ★바로 위 1명만★ (D-88)
-	if (!IsValid(Mount) || Mount->bDead) return;
-	if (!HasUpgradeFeature(Mount->GetAbilitySystemComponent(), FDRGameplayTags::Get().Upgrade_Feature_Skill_Ride_Eject)) return;
-
-	const UDRPlayerAttributeSet* RiderAS = GetPlayerAttributeSetFromASC(Rider->GetAbilitySystemComponent());
-	if (!RiderAS) return;
-
-	// 오염 진입은 체력이 오염 최대치로 다시 차서 비율로는 못 잡는다 → 따로 받는다 (T-79)
-	const float Ratio = GetChipTuning(Rider).Ride.EjectHealthRatio;
-	const bool bLow = bEnteredCorruptionThisHit
-		|| (RiderAS->GetMaxHealth() > 0.f && RiderAS->GetHealth() <= RiderAS->GetMaxHealth() * Ratio);
-	if (bLow)
-	{
-		Mount->EmergencyEjectRider();
-	}
-}
-
-bool UDRAbilitySystemLibrary::IsRideBannedFrom(const AActor* Rider, const ADRRobotVacuumCharacter* Mount)
-{
-	const UAbilitySystemComponent* RiderASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Rider);
-	const UAbilitySystemComponent* MountASC = Mount ? Mount->GetAbilitySystemComponent() : nullptr;
-	if (!RiderASC || !MountASC) return false;
-
-	const FGameplayTag& BanTag = FDRGameplayTags::Get().Debuff_Ride_Banned;
-	if (!RiderASC->HasMatchingGameplayTag(BanTag)) return false;   // 빠른 탈출
-
-	// ★OwningTags 쿼리★ — 금지 태그는 GE 의 부여 태그다 (T-82, Plan8 T-29 와 같은 이유)
-	for (const FActiveGameplayEffectHandle& Handle :
-		RiderASC->GetActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(BanTag))))
-	{
-		const FActiveGameplayEffect* Active = RiderASC->GetActiveGameplayEffect(Handle);
-		// 시전자 ASC(복제됨)로 "어느 청소기"인지 가린다 (T-83)
-		if (Active && Active->Spec.GetContext().GetOriginalInstigatorAbilitySystemComponent() == MountASC)
-		{
-			return true;
-		}
-	}
-	return false;
-}
-```
-
-**⑦ `ExecCalc_Damage.cpp`** — ① 에서 만든 `if (SourceASC && !bMountShared)` 블록 안, 시너지(c) 다음 · `if (!FMath::IsNearlyEqual(OutgoingMultiplier, 1.f))` 앞에
-
-```cpp
-		// (d) ★Plan5(탑승칩)★ ① 탑승 공격력 — 탑의 맨 아래 청소기가 칩①이면 위 인원 × 8% (상한 24%).
-		//     시너지처럼 광폭화 상한 밖에서 곱한다 (D-78). 칩 · 탑승이 없으면 정확히 1.0.
-		//     블록 자체가 공유 · 이전 피해를 건너뛰므로 여기서 따로 거를 것이 없다 (D-82)
-		OutgoingMultiplier *= UDRAbilitySystemLibrary::GetRideDamageMultiplier(SourceAvatar);
-```
-
-**⑧ `DRCharacter.h / .cpp`** — 파생 클래스 훅(D-81)
-
-```cpp
-// .h protected
-	// ★Plan5(탑승칩)★ RefreshUpgradeEffects 가 모든 머신에서 부른다. 청소기가 ① 감속 GE 를 다시 맞춘다 (D-81)
-	virtual void OnUpgradeEffectsRefreshed() {}
-
-// .cpp RefreshUpgradeEffects() — "1-2) 시너지 오라" 블록 바로 다음 (★아래 조기 return 들보다 앞★)
-	// ===== 1-3) ★Plan5(탑승칩)★ 파생 클래스 훅 =====
-	// ①·③은 모디파이어가 없어 Runtime.IsEmpty() 가 true 일 수 있다 — 시너지와 같은 이유로 조기 return 앞에 둔다
-	OnUpgradeEffectsRefreshed();
-```
-
-- 같은 함수의 서버 구간 맨 앞에는 ③ 의 오염 재고정(`ON_SCOPE_EXIT`)이 들어간다.
-
-**⑨ `DRRobotVacuumCharacter.h / .cpp`**
-
-```cpp
-// .h public — "탑승 (마운트 측)" 아래
-	// ========== 탑승 칩 (Plan5(탑승칩)) ==========
-
-	// 내 위로 쌓인 인원(RiderOnTop 사슬 길이). 맨 아래 기준 최대 3
-	int32 GetRiderCountAbove() const;
-
-	// MountedOn 을 끝까지 내려간 청소기 (내가 맨 아래면 나)
-	const ADRRobotVacuumCharacter* GetStackBottom() const;
-
-	// 서버: ① 감속 GE 를 ★태그로★ 지우고, 맨 아래 && 칩① && 인원 > 0 이면 다시 건다 (D-80). 몇 번 불러도 안전
-	void RefreshRideLoad();
-
-	// 서버: ③ 바로 위 탑승자를 비상 탈출시킨다 — 하차 → 둘 다 회복 → 이 청소기 탑승 금지 (D-89)
-	void EmergencyEjectRider();
-
-// .h protected
-	virtual void OnUpgradeEffectsRefreshed() override;   // → RefreshRideLoad()
-
-// .h private
-	// 서버: 탑승 · 하차 직후 — Rider(청소기면) + 나부터 맨 아래까지 RefreshRideLoad (D-81 · T-85)
-	void RefreshRideLoadsAfterLinkChange(ADRCharacter* Rider);
-```
-
-```cpp
-void ADRRobotVacuumCharacter::RefreshRideLoad()
-{
-	if (!HasAuthority()) return;
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
-	if (!ASC) return;
-
-	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
-
-	// ★핸들이 아니라 태그로 지운다★ — ASC 는 PlayerState 소유라 리스폰 · 클래스 변경 뒤에도 GE 가 남는다 (T-84)
-	ASC->RemoveActiveEffectsWithGrantedTags(FGameplayTagContainer(Tags.Debuff_RobotVacuum_RideLoad));
-
-	if (bDead || MountedOn) return;   // ① 은 맨 아래(직접 달리는) 청소기만 (D-79)
-	if (!UDRAbilitySystemLibrary::HasUpgradeFeature(ASC, Tags.Upgrade_Feature_Skill_Ride_Power)) return;
-
-	const int32 Riders = GetRiderCountAbove();
-	if (Riders <= 0) return;
-
-	const FDRRideChipTuning& Tuning = UDRAbilitySystemLibrary::GetChipTuning(this).Ride;
-	UClass* EffectClass = Tuning.PowerLoadEffect.LoadSynchronous();
-	if (!EffectClass)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[RideLoad] ChipTuning.Ride.PowerLoadEffect 미지정 — 칩①이 감속 없이 동작"));
-		return;
-	}
-
-	const float SpeedMult = FMath::Clamp(1.f - Tuning.PowerSpeedPenaltyPerRider * Riders, 0.05f, 1.f);
-	FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
-	Context.AddSourceObject(this);
-	const FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(EffectClass, 1.f, Context);
-	if (!Spec.IsValid()) return;
-	Spec.Data->SetSetByCallerMagnitude(Tags.Data_MoveSpeed_Mult, SpeedMult);
-	ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
-
-	UE_LOG(LogDR, Log, TEXT("[RideLoad] %s 위 %d명 → 이속 ×%.2f"), *GetName(), Riders, SpeedMult);
-}
-
-void ADRRobotVacuumCharacter::RefreshRideLoadsAfterLinkChange(ADRCharacter* Rider)
-{
-	// 탑승한 청소기는 맨 아래가 아니게 됐고, 내린 청소기는 맨 아래가 됐다
-	if (ADRRobotVacuumCharacter* RiderVacuum = Cast<ADRRobotVacuumCharacter>(Rider))
-	{
-		RiderVacuum->RefreshRideLoad();
-	}
-	// 인원이 바뀐 것은 나부터 맨 아래까지 전부다 (T-85)
-	int32 Steps = 0;
-	for (ADRRobotVacuumCharacter* V = this; IsValid(V) && Steps++ < 8; V = V->MountedOn)
-	{
-		V->RefreshRideLoad();
-	}
-}
-
-void ADRRobotVacuumCharacter::EmergencyEjectRider()
-{
-	if (!HasAuthority() || bDead || !IsValid(RiderOnTop)) return;
-
-	ADRCharacter* Rider = RiderOnTop;
-	UAbilitySystemComponent* SelfASC = GetAbilitySystemComponent();
-	const FDRRideChipTuning& Tuning = UDRAbilitySystemLibrary::GetChipTuning(this).Ride;
-
-	// ① 먼저 내린다 — 이후 회복 · 금지는 탑 상태와 무관해진다 (D-89). 감속 갱신도 DismountRider 가 한다
-	DismountRider(/*bLaunchOff*/ true);
-
-	// ② 둘 다 회복. 대상은 방금까지 내 위에 있던 아군과 나 자신이라 팀 판정이 필요 없다 (T-33)
-	UDRAbilitySystemLibrary::ApplyHealToActor(Rider, SelfASC, Tuning.EjectHealEffect, Tuning.EjectHealAmount, this);
-	UDRAbilitySystemLibrary::ApplyHealToActor(this, SelfASC, Tuning.EjectHealEffect, Tuning.EjectHealAmount, this);
-
-	// ③ 이 청소기 탑승 금지 — 소스 = 내 ASC 로 "어느 청소기"인지 구분한다 (D-90)
-	const FActiveGameplayEffectHandle Ban =
-		UDRAbilitySystemLibrary::ApplyTimedTagEffect(Rider, SelfASC, Tuning.EjectBanEffect, Tuning.EjectBanDuration);
-
-	UE_LOG(LogDR, Log, TEXT("[RideEject] %s → %s 비상 탈출 · 회복 %.0f · 금지 %.0f초%s"),
-		*GetName(), *GetNameSafe(Rider), Tuning.EjectHealAmount, Tuning.EjectBanDuration,
-		Ban.IsValid() ? TEXT("") : TEXT(" ★EjectBanEffect 미지정 — 금지 없음★"));
-}
-
-void ADRRobotVacuumCharacter::OnUpgradeEffectsRefreshed()
-{
-	RefreshRideLoad();   // 서버에서만 실제로 동작. 빙의 때 리스폰 잔류 감속도 지운다
-}
-```
-
-- `GetRiderCountAbove()` / `GetStackBottom()`: `RiderOnTop` / `MountedOn` 사슬을 상한 8 로 따라간다(순환 방어 — `CanBeMountedBy` 가 이미 막는다).
-- `MountRider()` 끝(`OnRep_RiderOnTop()` 앞): `RefreshRideLoadsAfterLinkChange(Rider);`
-- `DismountRider()` 의 **두 return 경로 모두**: 무효 라이더 분기는 `RefreshRideLoadsAfterLinkChange(nullptr);`, 정상 분기는 `MountedOn = nullptr` 뒤 `RefreshRideLoadsAfterLinkChange(Rider);`
-- `CanBeMountedBy()` 의 스턴 검사 다음:
-
-```cpp
-	// ★Plan5(탑승칩)★ ③ 비상 탈출 뒤 이 청소기 탑승 금지 (D-90) — 클라 프롬프트와 같은 함수
-	if (UDRAbilitySystemLibrary::IsRideBannedFrom(Candidate, this)) return false;
-```
-
-**⑩ `DRPlayerAttributeSet.cpp` `HandleIncomingDamage`** — ② 관문 · ③ 훅. `#include "Character/DRRobotVacuumCharacter.h"`
-
-```cpp
-	float LocalIncomingDamage = GetIncomingDamage();
-	SetIncomingDamage(0.f);
-	if (LocalIncomingDamage <= 0.f) return;
-
-	ADRCharacter* TargetDRCharacter = Cast<ADRCharacter>(Props.TargetAvatarActor);
-
-	// ★Plan5(탑승칩)★ ② 아래에 칩② 청소기가 있으면 이 피해는 그 청소기가 줄여서 대신 받는다 (D-83 · D-84).
-	// ★맨 위에서 먼저 구한다★ — 바로 아래 피격 큐를 건너뛰어야 한다 (T-76)
-	ADRRobotVacuumCharacter* RideGuard = UDRAbilitySystemLibrary::FindRideGuard(TargetDRCharacter);
-
-	if (Props.TargetASC && !RideGuard) { ... 피격 큐 그대로 ... }
-
-	NotifyEnterCombat(Props);                       // 그대로 (D-84)
-	... 적 AIC UpdateCombatTime 그대로 ...
-	... 부품 ×1.5 — 안쪽 `if (ADRCharacter* TargetDRCharacter = …)` 선언을 바깥 변수로 바꾼다 (T-91) ...
-	... DamageTaken / 시너지 그대로 ...      ← 여기까지가 "최종적으로 받아야 할 피해" L
-
-	// ★Plan5(탑승칩)★ ② 보호받는 사람 — L 의 20% 를 칩② 청소기로 넘기고, 피격 자체의 1칸 공유는 L 그대로 보낸다(T-93).
-	// 이 사람은 맞지 않았다. ★로비 클램프 · 오염 분기 전★ (T-75). 못 넘기면 그대로 받는다 (T-89)
-	if (RideGuard && UDRAbilitySystemLibrary::TransferRideDamageToGuard(TargetDRCharacter, RideGuard, LocalIncomingDamage))
-	{
-		// ★디버프는 그대로 건다★ — 화상 DoT 같은 디버프 피해는 매 틱 이 관문을 다시 지나 20% 로 넘어간다 (D-84 · T-94)
-		if (UDRAbilitySystemLibrary::IsSuccessfulDebuff(Props.EffectContextHandle))
-		{
-			Debuff(Props);
-		}
-		TargetDRCharacter->PropagateSharedDamage(LocalIncomingDamage, Props.EffectContextHandle);   // 공유로 들어온 피해면 안에서 멈춘다
-		return;
-	}
-
-	... ShouldPreventDeath 클램프 그대로 ...
-
-	const bool bWasCorrupted = bCorrupted;   // ★Plan5(탑승칩)★ ③ 이번 피격의 오염 진입 감지 (T-79)
-	... Process / FloatingText / Debuff / PropagateSharedDamage 그대로 ...
-
-	// ★Plan5(탑승칩)★ ③ 비상 탈출 — ★반드시 맨 끝★. 하차가 공유보다 먼저면 이번 공유분이 탑에 다 안 나간다 (T-78)
-	UDRAbilitySystemLibrary::TryRideEmergencyEject(TargetDRCharacter, !bWasCorrupted && bCorrupted);
-```
-
-- 맨 끝의 기존 `if (ADRCharacter* MountLinkedCharacter = Cast<ADRCharacter>(Props.TargetAvatarActor))` 는 `TargetDRCharacter` 로 바꿔도 같다.
-
-**⑪ `DRPlayerController.cpp` `FindMountByLineTrace()`** — 프롬프트 조건에 한 줄(D-90)
-
-```cpp
-			HitVacuum->RiderOnTop == nullptr &&
-			// ★Plan5(탑승칩)★ ③ 이 청소기에서 비상 탈출한 뒤 20초는 프롬프트도 안 띄운다 (서버도 같은 함수로 거부)
-			!UDRAbilitySystemLibrary::IsRideBannedFrom(DRCharacter, HitVacuum))
-```
-
-**⑫ `DRProgressionConfig.cpp`** — 공속칩 검사 다음, 칩이 카탈로그에 있을 때만(코드가 에셋보다 먼저 들어가는 기간 대비)
-
-| 조건 | 검사 | 틀리면 |
-|---|---|---|
-| `IsFeatureGated(Ride.Power)` | `PowerLoadEffect` 비었나 / CDO `GetGrantedTags()` 에 `Debuff.RobotVacuum.RideLoad` / `DurationPolicy == Infinite` / `Modifiers` 에 MoveSpeed · **MultiplyCompound** 가 있나 | 감속 없음 / ★감속이 갱신마다 쌓임(T-84)★ / 감속이 사라짐 / 돌진 중 비율이 달라짐(T-86) |
-| `IsFeatureGated(Ride.Eject)` | `EjectHealEffect` 비었나 / `EjectBanEffect` 비었나 · `Debuff.Ride.Banned` 부여 · **`StackingType != AggregateByTarget`** / `EjectBanDuration > 0` | 회복 없음 / 금지 없음 · 두 번째 청소기 금지가 첫 GE 에 합쳐짐(T-81) |
-| (검사 없음) | `GuardTransferRatio` 는 meta 로 0~1 | 0 이면 보호받는 사람의 피해가 사라진다 · 1 이면 줄이지 않는다 — 둘 다 의도면 허용 |
-
-**바뀔 C++ 파일**: `ExecCalc_Damage` · `DRCharacter`(.h/.cpp — 공유 GE 함수 추출 · 훅 · 오염 재고정) · `DRPlayerAttributeSet`(.h/.cpp) · `DRGameplayTags`(.h/.cpp) ·
-`DRProgressionConfig`(.h 구조체 / .cpp 검사) · `DRAbilitySystemLibrary`(.h/.cpp) · `DRRobotVacuumCharacter`(.h/.cpp) · `DRPlayerController.cpp`.
-**새 스탯 축 없음**(② 는 기존 `MaxHealth`) → `DRUpgradeTypes.h` · UI 짧은 이름 불변.
-
-### 12.5 에디터 작업 (C++ 빌드 뒤)
-
-1. **`GE_RideLoad`** — `Content/Blueprints/AbilitySystem/Player/VacuumCleaner/Effects/` 에 새 GameplayEffect BP
-   - Duration Policy **Infinite** / Stacking **None**
-   - Modifiers +1: Attribute `DRAttributeSet.MoveSpeed` · Modifier Op **Multiply (Compound)** · Magnitude **Set by Caller** · Data Tag `Data.MoveSpeed.Mult`
-   - Components → **Target Tags**(Grant Tags to Target Actor) `Debuff.RobotVacuum.RideLoad` ★필수 — 코드가 이 태그로 지운다★ (HUD 아이콘을 원하면 Asset Tags 에도 — 선택)
-2. **`GE_RideBan`** — 같은 폴더
-   - Duration Policy **Has Duration** · Duration Magnitude **Set by Caller** `Data.Duration` / 모디파이어 없음
-   - Target Tags `Debuff.Ride.Banned` (+ 선택: Asset Tags 같은 태그 — 20초 아이콘)
-   - **Stacking None** (T-81)
-3. **`DA_ProgressionConfig` → Chip Tuning → Ride**: `PowerLoadEffect = GE_RideLoad` / `EjectHealEffect = GE_Heal`(`Player/Effects/`) / `EjectBanEffect = GE_RideBan`. 숫자는 C++ 기본값 그대로(0.08 · 0.24 · 0.05 · **0.2** · 0.3 · 100 · 20).
-4. **`DA_ChipCatalog`** → Chips +3 (§12.1 표). 공통: `OwnerClass RobotVacuum` · `bCommonChip` 끔 · `Category Ascension` · `TargetAbilityTag Abilities.RobotVacuum.Ride` · `RequiredSlotCount 1`
-   - ① `RV.Asc.RidePower` · 합승 부스터 · 요약 "탑승 1명당 탑승자 공격력 +8%" · Tier 3 · Modifiers 없음 · GrantedTags `Upgrade.Feature.Skill.Ride.Power`
-     · Description "이 청소기가 탑의 맨 아래에서 달릴 때, 위에 탄 사람 1명당 탑승자 전원의 공격력이 8% 오릅니다(최대 24%). 대신 1명당 이 청소기의 이동 속도가 5% 줄어듭니다. 다른 청소기 위에 업혀 있는 동안에는 동작하지 않습니다."
-   - ② `RV.Asc.RideGuard` · 대신 맞는 범퍼 · 요약 "탑승자 피해를 줄여서 대신 받음" · Tier 4 · GrantedTags `…Ride.Guard`
-     · Modifiers 1줄: Stat `MaxHealth` · **TargetAbilityTag 비움**(캐릭터 단위 — 넣으면 검사 오류) · Op `Flat` · Value **−100** · `bIsDrawback` ✓
-     · Description "이 청소기보다 위에 탄 사람은 피해를 받지 않고, 그 사람이 받았어야 할 피해를 80% 줄여 이 청소기가 대신 받습니다(원래 함께 받던 피해에 더해집니다). 대신 최대 체력이 100 줄어듭니다."
-   - ③ `RV.Asc.RideEject` · 비상 탈출 좌석 · 요약 "위험한 탑승자 탈출 + 체력 100" · Tier 3 · Modifiers 없음 · GrantedTags `…Ride.Eject`
-     · Description "바로 위에 탄 사람이 피해를 받아 체력이 30% 이하가 되면 즉시 튕겨 내리고, 그 사람과 이 청소기 모두 체력을 100 회복합니다. 대신 탈출한 사람은 20초 동안 이 청소기에 다시 탈 수 없습니다."
-   - `SkillDisplayNames` 에 `Abilities.RobotVacuum.Ride → 탑승`
-5. (선택) `DA_StatusEffectInfo` — `Debuff.Ride.Banned`("탑승 금지", 남은 시간) · `Debuff.RobotVacuum.RideLoad`("탑승 하중"). ★그 GE 의 **Asset Tags** 에도 태그가 있어야 위젯에 온다(HUD 경로는 에셋 태그를 본다)★
-6. (선택) 아이콘 `Content/DaeRuneAssets/UI/Upgrade/Icon/Vacuum/공격-6 · 지원-6 · 편의-6` (자판기가 -3~-5)
-7. 검사: `DA_ProgressionConfig` 를 한 번 편집 → 출력 로그 `[ProgressionConfig] … 검증 통과` / 카탈로그 정합성 오류 0건
-
-> C++ 구현 뒤 필요하면 공속칩 때처럼 "처음 보는 사람용" 단계별 안내서(§13)로 풀어 쓴다.
-
-### 12.6 함정
-
-| # | 함정 | 대응 |
-|---|---|---|
-| **T-74** | 공유 · 이전 피해를 `ApplyMountSharedDamageTo` 를 거치지 않고 따로 만든 GE 로 걸면서 `Damage.MountShared` 를 빠뜨린다 | 받은 쪽이 다시 공유 → 탑 안에서 핑퐁 → **무한 반복**(스택 오버플로) |
-| **T-75** | ② 분기를 로비 클램프 · 오염 분기 **뒤**에 둔다 | 탑승자 체력이 넘길 양을 깎거나(로비 · 튜토리얼), 탑승자가 이미 맞았다. 받는 쪽 배율 직후 · 클램프 전 |
-| **T-76** | 보호 여부를 ② 분기에서 처음 구한다 | 피격 큐가 함수 맨 위라 이미 나갔다 — 보호 여부를 맨 위에서 먼저 구한다 |
-| **T-77** | ExecCalc 의 `MountShared` 제외(D-82)를 빠뜨리거나 일부 배율만 뺀다 | 공유 · 이전분이 넘겨주는 사람의 공격 배율로 커진다 — 광폭화 탑승자 20 피격 → 청소기 45~55, 칩① 탑승자 → ×1.24. 공유는 받는 피해라 (a)~(d) ★전부★ 빠져야 한다(사용자 확정) |
-| **T-78** | ③ 판정을 `PropagateSharedDamage` **앞**에 둔다 | 하차가 먼저 일어나 그 피격의 공유분이 탑에 다 안 나간다 |
-| **T-79** | ③ 을 체력 비율로만 판정 | 피해로 체력 0 → 오염 진입(체력이 오염 최대치로 다시 참)을 놓친다 — 이번 피격의 오염 진입을 따로 넘긴다 |
-| **T-80** | ③ 을 Health 어트리뷰트 변경 델리게이트에 건다 | `SetHealth` 도중(공유 전)에 하차하고, 체력 비용에도 발동하고, 오염 진입 재충전에 덮인다 |
-| **T-81** | 금지 GE 를 Aggregate by Target 으로 | 두 번째 청소기의 금지가 첫 GE 에 합쳐져 시전자가 첫 청소기로 남는다(두 번째에 탈 수 있다) — Stacking None |
-| **T-82** | 금지 조회에 `GetActiveEffectsWithAllTags` | 에셋 태그만 비교해 못 찾는다(Plan8 T-29) — `MakeQuery_MatchAnyOwningTags` |
-| **T-83** | 금지 판정에 컨텍스트 `SourceAbilityTags` 를 쓴다 | 복제되지 않아 클라 프롬프트가 틀린다 — 시전자 ASC(복제됨)로 비교 |
-| **T-84** | 감속 GE 를 핸들로만 지운다 / GE 에 `Debuff.RobotVacuum.RideLoad` 태그가 없다 | 전자: 리스폰 · 클래스 변경 뒤 핸들을 잃어 감속이 남는다(ASC = PlayerState). 후자: ★태그로 못 지워 감속이 갱신마다 쌓인다★ — 검사가 잡는다 |
-| **T-85** | 감속을 `RiderOnTop` 이 바뀐 청소기만 갱신 | 3층 탑에서 위층끼리 타고 내리면 맨 아래 인원이 그대로 — 마운트부터 맨 아래까지 + 탑승자 자신 |
-| **T-86** | 감속 GE 의 ModOp 를 Multiply (Additive) 로 | 돌진 버프(MultiplyAdditive)와 더해져 돌진 중 −5% 가 다르게 먹는다 — Compound |
-| **T-87** | 오염 최대 체력 보정(D-87)을 진입에만 | 해제 · 정화에서 다시 어긋난다 — 세 곳 모두 + `RefreshUpgradeEffects` 재고정 |
-| **T-88** | D-87 은 MaxHealth 에 **곱 모디파이어가 없다**는 전제(`Data.Upgrade.MaxHealth.Mult` 는 항상 1.0) / 오염 중 `RefreshUpgradeEffects` 의 비율 유지 | 곱을 쓰기 시작하면 다시 볼 것. 오염 중 칩 GE 를 뗀 순간 최대 체력이 100 이 아니라 비율 유지 로직이 체력을 바꾼다(⑧이면 Base 가 음수로 보이기도 한다) → 시작 체력을 저장했다가 `ON_SCOPE_EXIT` 에서 되돌린다 |
-| **T-89** | 이전 실패(청소기 사망 직후 · GE 미지정)에도 탑승자 처리를 건너뛴다 | 피해가 **사라진다**(무적) — `TransferRideDamageToGuard` 가 false 면 그대로 받는다. `FindRideGuard` 도 죽은 청소기를 건너뛴다 |
-| **T-90** | `Abilities.RobotVacuum.Ride` 를 청소기 GA 의 `AbilityTags` 에 넣는다 | 업그레이드 키(첫 `Abilities.*` 태그)가 흔들린다(T-51 과 같다) |
-| **T-91** | `HandleIncomingDamage` 맨 위에 `TargetDRCharacter` 를 선언하고 부품 블록의 같은 이름 선언을 남긴다 | 그림자 변수(C4456) — UE 빌드는 오류. 안쪽을 `if (TargetDRCharacter && TargetDRCharacter->IsCarryingPart())` 로 |
-| **T-92** | 공유 범위를 탑 전체로 넓힌다 | 사용자 확정은 1칸(D-92) — 넓히면 ② 수치가 모두 바뀐다(3층 C 피격 A 8 → 28). 넓힐 때는 받은 쪽이 한 칸씩 이어 전달하지 말고 피격자가 탑 전원을 모아 각자에게 1번씩 건다(배율이 겹치지 않게) |
-| **T-93** | 80% 감소를 피격 자체의 공유에까지 건다 | 칩② 청소기 자신의 몫까지 줄어 지금보다 덜 맞는다(2층 24 → 8) — 감소는 이전분에만, 공유는 `PropagateSharedDamage(L)` 그대로 |
-| **T-94** | 보호받는 사람 분기에서 `Debuff(Props)` 를 빠뜨린다 | 디버프가 안 걸려 화상 DoT 같은 "디버프 피해"가 통째로 사라진다(사용자 확정 위반) — ② 분기에서도 `IsSuccessfulDebuff` 면 `Debuff(Props)` |
-
-### 12.7 검증
-
-준비: PIE **Listen Server · 플레이어 4**(청소기 2~3명 — 3층 탑용). 콘솔 `DRUnlockUpgrade` → `DRUnlockSlot 6`(§10.2 와 같다).
-수치는 `showdebug abilitysystem`(MaxHealth · MoveSpeed · 활성 GE), 서버 로그 `[RideLoad]` · `[RideEject]`.
-
-- [ ] **회귀 — 공유 범위(칩 없음)** 지금과 같다 — 3층 A ← B ← C 에서 C 가 맞으면 B 만 20, A 0 (D-92)
-- [ ] **선행 변경 — 공유 배율(칩 없음)** 광폭화(⑥) 탑승자 20 피격 → 청소기 **20**(지금 45~55) / 시너지 탑승자도 받은 만큼만 / 받는 쪽 디버프(부품 ×1.5 등)가 붙은 피해는 그 값 그대로 공유
-- [ ] **선행 변경 — 오염** 칩 없음: 오염 100 → 정화 후 400 / +100 칩: 오염 **100**(예전 200) → 정화 후 **500**(예전 600) / ⑧: 오염 **100**(예전 900) → 정화 후 **1200**(예전 2000) / 칩②: 오염 **100**(수정 전 0) → 정화 후 **300**
-- [ ] **①** 맨 아래 칩① 청소기 위 1 · 2 · 3명 → 탑승자 데미지 숫자 ×1.08 · 1.16 · 1.24 / 청소기 MoveSpeed 522.5 · 495 · 467.5 / 하차 · 사망 · 위층끼리 하차에 즉시 갱신 / 돌진 중에도 감속 / 위층 청소기의 칩①은 효과 없음 → 그 청소기가 내려 맨 아래가 되면 켜짐 / 청소기 자신의 공격은 그대로 / 리스폰 뒤 감속 잔류 없음 / ★칩① 탑승자가 맞아도 공유분은 ×1.24 가 아니다★
-- [ ] **②** 2층: 탑승자 20 피격 → 탑승자 체력 · 숫자 · 히트리액트 · 넉백 · 디버프 없음, 청소기 **20 + 4**(숫자 2개) / 청소기 20 피격 → 청소기 24, 탑승자 0 / 3층 A② ← B ← C: C 피격 **A 8** · B 피격 **A 28** · A 피격 **A 24**, B · C 0 / 화상 걸린 보호 탑승자: 체력 불변 · 틱마다 청소기에 공유분 + 20% / 광폭화 탑승자 → 청소기 24(칸 아님) / 가운데 B② · 칩② 두 대 · 4층이 §12.1 표대로 / 돌진 자해 50 → 청소기 60 / 최대 체력 300 · 칸 75 / 모자 쓴 탑승자 → 모자만 소모, 아무도 피해 없음 / 칩② 청소기 사망 → 탑승자 하차 후 정상 피격 / `GuardTransferRatio` 를 0.5 로 바꾸면 2층 24 → 30
-- [ ] **③** 30% 초과 → 이하로 맞으면 즉시 튕겨 내림 · 둘 다 +100 / 30% 이하로 탄 뒤 맞아도 발동 / 아래층 피격의 공유로 30% 이하가 돼도 발동 / 피해로 오염 진입 → 탈출 + 정화 / 20초 동안 그 청소기 F 프롬프트 없음 · 서버 거부, 다른 청소기는 탈 수 있음 / 20초 뒤 다시 탈 수 있음 / ⑧ 체력 비용 · 발톱 수혈로는 발동 안 함 / 회복 차단(⑥) 대상은 탈출 · 금지만 / 3층 탑의 맨 위 사람(바로 위가 아님)은 감시 안 함
-- [ ] **스킬당 1칩** ①②③ 중 하나만, 공용 칩과는 함께 / 미리보기 라벨 "탑승" / ② 카드에 "최대 체력 −100" 빨강
-- [ ] **멀티** 클라 청소기 ① → 호스트 화면에서도 느려지고 끊김 · 되돌림 없음 / 클라 탑승자의 ③ 금지 → 클라 화면 프롬프트 사라짐 · 20초 뒤 다시 / 클라 ② 탑승자 체력바 불변 / 클라 청소기 ② 의 오염 최대 체력 100(클라 HUD 도)
-- [ ] **검사** `DA_ProgressionConfig` 편집 → 오류 0건 / `GE_RideLoad` 의 태그를 빼면 검사 오류(T-84) / `GE_RideBan` 을 by Target 으로 바꾸면 검사 오류(T-81)
-
-### 12.8 열린 결정 · 알려진 제약 (§9 번호에 이어서)
-
-| # | 내용 | 현재 판단 |
-|---|---|---|
-| **36** | 이름 · Tier · 아이콘 · `ChipId`(`RV.Asc.*`)는 가칭 | 사용자가 정하면 카탈로그만(`ChipId` 는 첫 입력 전에 확정 — 세이브 키) |
-| **37** | ② 청소기에 피해가 **여러 번**(자기 공유분 + 보호받는 사람마다 이전분 — 2층이면 20 · 4) 들어온다 — 숫자 여러 개, 광폭화면 그만큼 칸, 컨테이너 넘침 규칙도 그만큼 | 그대로 둔다. 한 번으로 합치려면 청소기 관문에서 "먼저 키워 받고 + 위 사람 공유 생략" 분기가 필요하다(기각안 — 범위가 커진다) |
-| **38** | ① 탑승자 공격력이 HUD 에 안 보인다(상태 없는 계산) | 원하면 탑승자에게 표시 전용 GE(스택 = 인원) — 걸고 지울 곳이 늘어난다(D-78) |
-| **39** | ① 위층 청소기의 칩①이 "쉬는 중"임을 알려 주지 않는다 | `Description` 문구로만 안내 |
-| **40** | ② 보호받는 사람에게도 디버프는 그대로 걸린다 — 화상 등 DoT 피해는 20% 로 넘어간다(**사용자 확정**). 스턴 · 둔화처럼 피해 없는 디버프도 탑승자가 받는다(설계 판단) | 피해 없는 디버프까지 막으려면 ② 분기에서 DoT 디버프만 골라 건다 |
-| **41** | ③ 탈출 연출은 기존 점프 하차(위 300 · 앞 200) | 더 세게 튕기려면 튜닝 필드 추가 |
-| **42** | ★선행 변경 2건이 칩 없이도 체감을 바꾼다★ — D-82: 광폭화 · 시너지 탑승자의 공유분이 받은 만큼으로(45~55 → 20) / D-87: +100 칩 · ⑧ 의 오염 · 정화 후 최대 체력(⑧ 오염 900 → 100, 정화 후 2000 → 1200). 공유 범위는 그대로 1칸(D-92) | 사용자 확정. 패치 노트 · 플레이 확인 |
-| **43** | (관찰 · 범위 밖) Stage2 부활(`Revive`)은 오염을 풀지 않는다 — 오염 중 사망 → 부활해도 최대 체력은 오염값 | D-87 뒤에는 칩과 무관하게 100. 지금은 ⑧ 이면 900 이었다 |
-| **44** | ③ 금지 중 프롬프트를 "N초 후 탑승 가능"으로 바꾸지 않는다(그냥 안 뜬다) | 원하면 `GetActiveEffectsTimeRemaining` 으로 위젯 작업 |
-| **45** | ~~칩① 배율을 공유분에서 뺄지 — 설계 판단~~ | **해결**(2026-10-07) — 사용자 확정: 공유 · 이전은 받는 피해라 주는 피해 배율은 칩①을 포함해 전부 빠진다(D-82) |
-| **46** | 칩② 청소기 두 대가 겹치면 위쪽 칩② 청소기를 거치며 이전분에 0.2 가 두 번 곱해진다(0.04) — B 가 맞으면 A 24.8 | 그대로 둔다 — 겹칠수록 보호가 강해진다. 한 번만 줄이려면 이전분(MountShared)을 받은 칩② 청소기는 다시 줄이지 않게 분기한다 |
-| **47** | ~~광폭화 탑승자의 "최종 피해"를 칸으로 볼지 수치로 볼지~~ | **해결**(2026-10-07) — 사용자 확정: 칸이 아니라 피해 수치 L |
-
-### 12.9 작업 순서
-
-1. 선행 변경 ① · ③(ExecCalc 공유 배율 제외 · 오염 최대 체력 100) + ②(동작 불변 추출) → 빌드 → §12.7 회귀 · "선행 변경" 항목(칩 없이 확인 — 오염은 +100 칩 · ⑧ 로)
-2. 칩 C++ ④~⑫ → 빌드 (태그 · USTRUCT 추가라 **에디터를 닫고** — T-45)
-3. 에디터 §12.5
-4. §12.7 검증 → §1 · §3 · §5 · §6 · §9 에 흡수(§1.7 그룹 6 → 7개, 머리말 칩 수 18 → 21), 머리말 상태 갱신
-
-### 12.10 구현 결과 — 계획과 달라진 점
-
-2026-10-08 C++ 구현 · 빌드 통과. 계획(§12.4 ①~⑫)대로 넣었고, 다른 점은 아래뿐이다. 에디터 작업 · 게임 검증은 아직이다.
-
-- ② 공유 GE 함수 추출은 **1칸 공유 그대로**(동작 불변). §12.4 ② 에 남아 있던 "탑 전체" 예시 코드는 지웠다.
-- `RefreshRideLoad` 의 지역 변수 이름은 `DRTags` — `Tags` 는 `AActor::Tags` 를 가려 C4458 빌드 오류가 난다.
-- `HandleIncomingDamage` 의 `TargetDRCharacter` 는 `Props.TargetAvatarActor` 에서 구한다(부품 블록이 쓰던 `Props.TargetCharacter` 와 같은 액터). 맨 끝 공유 호출도 이 변수를 쓴다.
-- ③ 검사(⑫)는 표대로 — 회복 GE 는 "비었나"만, 금지 GE 는 태그 · Stacking 까지 본다.
-
----
-
-## 13. 로봇 청소기 기본 공격(공기탄) 칩 3종 (C++ 구현 완료 — 에디터 · 검증 남음)
-
-> 2026-10-07 요청 · 같은 날 질의응답으로 확정. 코드 주석 접두 **`Plan5(공기탄칩)`** · 결정 **D-93 ~ D-101** · 함정 **T-95 ~ T-107** (앞 번호에 이어서 매긴 영구 ID).
-> **C++ 구현 완료**(2026-10-08 빌드 통과). 에디터 작업은 **§16 안내서**, 그다음 §13.7 검증. 계획과 달라진 점은 §13.10. 검증이 끝나면 §1~§9 에 흡수한다.
-> ★선행 변경 1건 — **D-101**(공기탄 단계 피해 10 / 15 / 22 / 35 → **10 / 30 / 50 / 70**) — 은 칩이 없어도 공기탄을 바꾼다(§13.8-49).★
->
-> 사용자 확정
-> - ① 기본 공격 피해 **+50%**. 대신 **아군에게도 같은 피해**를 입힌다. 탑승으로 직접 붙어 있는 사람(내 위 탑승자 · 내가 탄 청소기)은 지금처럼 통과한다.
-> - ② 기본 공격에 맞은 적: 이속 **−10%** · 받는 피해 **+5%**(2초, 적중마다 갱신), **최대 3중첩**(−30% / +15%), **적 한 마리당 합쳐서 3**(청소기 여러 대가 같이 쌓는다).
->   **보스에게는 감속 · 피해 증가 둘 다 없다**. 대신 기본 공격 피해 **−20%**.
-> - ③ 차지 단계 간격 **0.5 → 0.35초**. 대신 단계당 피해 증가 **+20 → +12**.
->   단계 피해 기본값은 지금(10 / 15 / 22 / 35)이 아니라 **10 / 30 / 50 / 70(+20/단계)으로 바꾼다** → 칩③이면 **10 / 22 / 34 / 46**.
-
-### 13.0 지금의 공기탄 (코드·에셋 실측)
-
-| 항목 | 지금 | 어디 |
-|---|---|---|
-| 스킬 | `GA_VacuumAirShot`(LMB) — `UDRVacuumAirShot : UDRProjectileSpell`. `AbilityTags = Abilities.RobotVacuum.AirShot`(업그레이드 키), 물 소모 · 쿨다운 없음 | GA BP CDO |
-| 차지 | `StartCharging` 이 시각을 잡고 `GetChargeStage = floor(홀드 ÷ EffectiveChargeInterval)`(0~3). `EffectiveChargeInterval = ChargeInterval(0.5) ÷ 공속 배율 M`(Plan5 D-69), 하한 0.05초. UI 타이머도 같은 값 | `DRVacuumAirShot.cpp` |
-| 단계 피해 | `Stages[]` = **10 / 15 / 22 / 35**, 탄속 1500 / 1800 / 2200 / 2600 — ★BP 가 `Stages` · `ChargeInterval` 을 덮지 않는다(에셋 확인) → C++ 생성자 값이 곧 게임 값★ | `UDRVacuumAirShot()` |
-| 피해 주입 | `FireShot`(서버): `BaseDamage = GetUpgradedFloat(SkillDamage, Stages[단계].Damage)` — `SkillDamage` 칩은 이미 읽힌다. 3단계 = 강화탄(넉백 100% · 1000, 시전자 반동, 몽타주) | 〃 |
-| 발사체 | `BP_VacuumAirProjectile`(`ADRVacuumAirProjectile`) — 2초 뒤 페이드. `bEnhanced`(복제)는 `SpawnProjectile` ★뒤에★ 넣는다(`FinishSpawning` 은 `SpawnProjectile` 안) | `DRVacuumAirProjectile.cpp` |
-| 아군 처리 | ① 탑승 연결(내 위 탑승자 · 내가 탄 청소기)은 통과 ② 강화탄 + 아군 = 피해 없이 넉백만 ③ 그 외 아군은 부모 `ADRProjectile::OnSphereOverlap` 이 `IsNotFriend` 로 걸러 **그냥 통과** | 〃 · `DRProjectile.cpp` |
-| 적 피해 관문 | `UDREnemyAttributeSet::HandleIncomingDamage`: 엘리트 배율 → **취약 ×1.5** → 흡혈 → 적중 회복 → 더미 → `SetHealth` | `DREnemyAttributeSet.cpp` |
-| 보스 | `ADREnemy::bIsBoss`(원래 "처치 시 전체 물 지급" 플래그) — `BP_ElteBear`(Stage1 Phase3 엘리트 보스) **True**, `ADRS2MoleBoss`(Stage2 두더지 보스) 생성자 **True**. 일반 엘리트(`Buff.Elite`)는 False | 에셋 · `DRS2MoleBoss.cpp` |
-| 적 감속 선례 | 씨앗 · 물대포 칩 감속 = `ApplyTimedSpeedEffect` + `FDRTimedSpeedEffect`(GE · 배율 · 지속, SetByCaller `Data.MoveSpeed.Mult` · `Data.Duration`), GE 는 **Multiply(Compound) · by Source · Limit 1** | Plan5 §5.2 · §5.3 |
-| 청소기 칩 | 탑승칩 3종(§12, 계획) 뿐 — 기본 공격 그룹은 새로 생긴다 | |
-
-**이 설계가 기대는 엔진·코드 사실**
-
-| 항목 | 사실 |
-|---|---|
-| ★스택 모디파이어 크기★ | UE 5.5 `GameplayEffectUtilities::ComputeStackedModifierMagnitude` = (값 − 바이어스) × 스택 + 바이어스. 바이어스 `{AddBase 0, MultiplyAdditive 1, DivideAdditive 1, Override 0, **MultiplyCompound 0**, AddFinal 0}` → 0.9 를 3스택 하면 **Additive 0.7 / Compound 2.7(가속!)** |
-| 스택 수 읽기 | Aggregate by Target 이면 GE 인스턴스 하나 — `GetEffectStackCountWithTag`(Plan5 D-75)로 읽는다. 태그 카운트는 1(T-3) |
-| 발사체 스폰 순서 | `SpawnActorDeferred` → `FinishSpawning`(초기 오버랩 판정) → 그 뒤에 `FireShot` 이 `bEnhanced` 등을 넣는다 — 스폰 순간 겹친 대상은 플래그를 모른다 |
-| 디버프 DoT | `IncomingDamage` 에 직접 꽂혀 `ExecCalc` 를 안 탄다 — "받는 모든 피해" 배율은 적 관문에서 곱해야 DoT 까지 덮는다(Plan5 D-10) |
-| 아군 판정 | `IsNotFriend(A, B)` 가 false = 둘 다 `Player` 태그(또는 둘 다 `Enemy`) — 클렌저 사이트는 "적"으로 나온다(D-3) |
-
-### 13.1 칩 3종 스펙
-
-공통: `OwnerClass = RobotVacuum`, `Category = Ascension`, `RequiredSlotCount = 1`,
-칩 레벨 `TargetAbilityTag = Abilities.RobotVacuum.AirShot`(실제 GA 태그 — D-93). → ①·②·③ 중 하나만, **탑승칩(§12)과는 함께** 낄 수 있다.
-
-| # | `ChipId` | 이름(가칭) | Modifiers | GrantedTags | 효과 | 단점 | Tier | 아이콘(제안) |
-|---|---|---|---|---|---|---|---|---|
-| ① | `RV.Asc.ShotPower` | 고압 공기탄 | `SkillDamage` **+0.5** | `…AirShot.FriendlyFire` | 기본 공격 피해 **×1.5** | **아군에게도 같은 피해**(탑승 연결은 통과) | 3 | 공격-7 |
-| ② | `RV.Asc.ShotDrag` | 흡착 공기탄 | `SkillDamage` **−0.2** ★단점★ | `…AirShot.Drag` | 맞은 적 1스택: 이속 **−10%** · 받는 피해 **+5%**, 2초(적중마다 갱신), 최대 **3**(적 한 마리당 합산). **보스 제외** | 기본 공격 피해 ×0.8 | 4 | 지원-7 |
-| ③ | `RV.Asc.ShotQuick` | 속사 압축기 | `SkillWindup` **−0.3**<br>`SkillChargeGrowth` **−0.4** ★단점★ | (없음) | 차지 단계 간격 **0.5 → 0.35초**(×0.7) | 단계당 피해 증가 **+20 → +12**(×0.6) | 3 | 편의-7 |
-
-`…` = `Upgrade.Feature.Skill`. ①은 단점이 규칙이라 `Description` 필수(검사가 강제 — D-1).
-③ 카드 표기: `DetailOverride` — `SkillWindup` 줄 "차지 간격 0.5 → 0.35초", `SkillChargeGrowth` 줄 "단계당 피해 +20 → +12".
-이름 · Tier · 아이콘 · `ChipId` 는 가칭(§13.8-48).
-
-**단계 피해** (탄 1발, 공용 칩 · 버프 없음)
-
-| | 0단계 | 1단계 | 2단계 | 3단계(강화탄) | 풀차지 시간 |
-|---|---|---|---|---|---|
-| 지금(선행 변경 전) | 10 | 15 | 22 | 35 | 1.5초 |
-| **칩 없음(D-101 뒤)** | 10 | 30 | 50 | 70 | 1.5초 |
-| ① ×1.5 | 15 | 45 | 75 | 105 | 1.5초 |
-| ② ×0.8 | 8 | 24 | 40 | 56 | 1.5초 |
-| ③ +12/단계 · 0.35초 | 10 | 22 | 34 | 46 | **1.05초** |
-
-**단계까지 홀드 시간 기준 초당 피해** (뗀 뒤 다시 누르는 시간 제외 — 상대 비교용)
-
-| | 1단계 | 2단계 | 3단계 |
-|---|---|---|---|
-| 칩 없음 | 30 / 0.5 = **60** | 50 / 1.0 = **50** | 70 / 1.5 = **46.7** |
-| ① | 90 | 75 | 70 |
-| ② | 48 (+ 아군 전원 받는 피해 최대 +15%) | 40 | 37.3 |
-| ③ | 22 / 0.35 = **62.9** | 34 / 0.7 = **48.6** | 46 / 1.05 = **43.8** |
-
-- ③ 은 초당 피해가 칩 없음과 거의 같거나 조금 낮다(+5% / −3% / −6%) — 대신 **강화탄(넉백 · 로켓 점프)까지 30% 빨리** 간다(§13.8-50).
-- ② 3스택 적에게 ② 청소기 자신의 풀차지 = 56 × 1.15 = **64.4**, 아군의 모든 피해 +15%.
-
-**② 중첩 타임라인** (적 1마리, 같은 청소기 또는 여러 청소기)
-
-| 시각 | 0초 적중 | 0.5초 적중 | 1.0초 적중 | 2.0초 적중 | (마지막 적중 + 2초) |
-|---|---|---|---|---|---|
-| 스택 | 1 | 2 | 3 | 3(갱신) | 0 (한꺼번에) |
-| 이속 | ×0.9 | ×0.8 | ×0.7 | ×0.7 | ×1.0 |
-| 이 적중의 받는 피해 | ×1.0 | ×1.05 | ×1.10 | ×1.15 | — |
-
-- 받는 피해 배율은 **그 적중 직전 스택**으로 계산하고, 스택은 그 뒤에 쌓는다(D-97).
-
-### 13.2 상호작용
-
-| 조합 | 결과 |
-|---|---|
-| ① + 공용 칩(광폭화 · 시너지 · `DamageDealt`) · 탑승칩① | 적에게 주는 피해처럼 **아군 피해에도** 곱해진다(ExecCalc 소스측 — "같은 피해"). 광폭화 청소기의 아군 피해 최대 ×3 |
-| ① + 강화탄 | 아군에게 **피해 + 넉백**(지금의 "넉백만" 분기 대신 적과 같은 경로) |
-| ① 아군 피격 → 그 아군의 받는 쪽 효과 | 아군의 `DamageTaken` · 시너지 · 모자(Plan8 — 1회 무효) · 오염 · 탑승 공유 · 탑승칩②③이 평소처럼 동작한다 |
-| ① + 로비 · 튜토리얼 | 아군도 체력 1 아래로 안 내려간다(`ShouldPreventDeath`) |
-| ① + 클렌저 사이트 | 지금과 같다(사이트는 "적"으로 판정 — 기존 동작) |
-| ② + 물대포 ② 취약(×1.5) | 둘 다 곱한다 — 3스택이면 ×1.5 × 1.15 = **×1.725** |
-| ② + 씨앗 · 물대포 감속(Compound) | 따로 곱해진다 — 물대포 ②(×0.7) + ② 3스택(×0.7) = ×0.49 |
-| ② + 비행 적(잠자리 등) | 감속은 안 걸리고(§9-1) **받는 피해 증가만** 걸린다 |
-| ② + 보스(`bIsBoss`) | 스택 자체를 안 건다 — 감속 · 피해 증가 둘 다 없음. 일반 엘리트(`Buff.Elite`)는 걸린다 |
-| ② + 디버프 DoT · 다른 사람의 피해 | 받는 피해 +5%/스택은 **누가 · 무엇으로 때리든** 붙는다(적 관문 — D-98) |
-| ② + 튜토리얼 더미 | 걸린다(연습용) |
-| ③ + 자판기 공속 ② 공유 버프 | 간격 = 0.5 × 0.7 ÷ M — 5중첩(M 1.5)이면 **0.233초** |
-| ③ + 발톱처럼 `SkillWindup` 을 읽는 다른 스킬 | 없음 — 모디파이어 태그가 `AirShot` 이라 공기탄에만 걸린다(T-12) |
-| ①②③ + 탑승칩 ①②③ | 다른 그룹이라 하나씩 함께 낄 수 있다 |
-
-### 13.3 설계 결정
-
-| # | 결정 | 근거 |
-|---|---|---|
-| **D-93** | 그룹 키 = 실제 GA 태그 **`Abilities.RobotVacuum.AirShot`**(동전칩 `BasicAttack` 과 같은 방식). 기능 스위치 `Upgrade.Feature.Skill.AirShot.{FriendlyFire,Drag}` | GA 의 `AbilityTags` 가 이미 이 태그 하나라 업그레이드 키와 그룹 키가 일치한다. 탑승칩(`…Ride`)과 다른 그룹이라 함께 낄 수 있다 |
-| **D-94** | ① 피해 +50% = 카탈로그 `SkillDamage +0.5`(레시피 유형 1 — `FireShot` 이 이미 읽는다). 아군 피해 = 기능 스위치를 **스폰 때 1회** 해석해 발사체 `bHitsAllies`(복제)에 싣고, `ADRVacuumAirProjectile::OnSphereOverlap` 의 아군 분기에서 적과 같은 피해를 건다. 피해 적용부는 `ADRProjectile::ApplyImpactDamage(Target)`(팀 판정 없는 범용 함수)로 뽑아 부모 · 자식이 같이 쓴다 | 발사체는 비행 중 로드아웃이 바뀔 일이 없다(D-5). `ADRProjectile` 은 적 투사체와 공유라 칩 지식을 넣지 않는다(§8) — 청소기 전용 자식 클래스에만. 탑승 연결 통과는 그대로(사용자 확정 — 총구 근처 오폭 방지) |
-| **D-95** | ① 아군 피해 = **적에게 주는 것과 같은 피해**(ExecCalc 소스측 배율 포함), 받는 쪽은 아군 자신의 효과(DamageTaken · 오염 · 모자 · 탑승 공유 …). 강화탄이면 피해 + 넉백(일반 피해 경로의 넉백) | "동일한 피해"(사용자 원문). 적 전용 배율(엘리트 · 취약 · 흡혈)은 적 어트리뷰트셋에만 있어 아군에겐 원래 없다 |
-| **D-96** | ② 표식 = 스택형 GE **`GE_AirShot_Drag`**: Has Duration(SetByCaller `Data.Duration` 2초) · **Aggregate by Target · Limit 3 · Refresh on Successful Application · Clear Entire Stack · Deny Overflow 끔** · MoveSpeed **Multiply (Additive)** ← SetByCaller `Data.MoveSpeed.Mult`(0.9) · 부여 태그 `Debuff.AirShot.Drag`. 적용은 기존 `ApplyTimedSpeedEffect` + `FDRTimedSpeedEffect` 재사용 | 사용자 확정(적 한 마리당 합산 3, 적중마다 갱신). Additive 라야 스택 감속이 0.9 / 0.8 / 0.7 이 된다(Compound 는 바이어스 0 → T-95). Deny Overflow 를 켜면 3스택에서 갱신이 거부돼 2초 뒤 통째로 풀린다(T-96). 마지막 적중 2초 뒤 한꺼번에 사라진다 |
-| **D-97** | ② 적용 지점 = **적 피해 관문**(`UDREnemyAttributeSet::HandleIncomingDamage`, 적중 회복 블록 다음) — 판정은 라이브러리 `TryApplyAirShotDrag(Props)` 하나(피처 **AND** 컨텍스트 `SourceAbilityTags` 에 `AirShot` **AND** `ADREnemy` · `!bIsBoss`). 이번 적중의 받는 피해는 **이전 스택**으로 계산하고 스택은 그 뒤에 쌓는다 | "적에게 피해가 들어갔다"가 확정되는 유일한 지점(D-41 과 같은 이유) — 벽 · 사이트 · 아군 · 죽은 적 · 두더지 홀로그램은 구조적으로 안 온다. `AirShot` 태그 검사가 없으면 청소기의 돌진 충돌 피해까지 쌓인다(T-99). 보스는 `bIsBoss`(사용자 확정 "보스들") |
-| **D-98** | ② 받는 피해 증가 = 적 관문에서 **취약 바로 다음**에 `× (1 + 0.05 × 스택)` — **누가 · 무엇으로 때리든**(DoT 포함). 스택은 `GetEffectStackCountWithTag`, `DragMaxStacks`(3)로 자른다. 취약과는 곱 | 원문 "적이 받는 피해량 +5%". DoT 까지 덮으려면 ExecCalc 가 아니라 여기(D-10). 스택 수는 태그 카운트가 아니다(T-98) |
-| **D-99** | ③ 차지 간격 = 기존 축 **`SkillWindup`**(배율) −0.3 → `EffectiveChargeInterval = ChargeInterval × WindupScale ÷ M`(하한 0.05초) | 차지가 곧 공기탄의 선딜이다 — 새 축 없이 0.5 × 0.7 = 0.35. 배율이라 기본 간격을 바꿔도 칩이 비례해 따라간다. 공속 버프(D-69)와 곱 |
-| **D-100** | ③ 단계 피해 증가 = 새 축 **`SkillChargeGrowth`**(스킬 단위 배율, 기준 1.0, 높을수록 좋음, 초 아님) −0.4 → `단계 피해 = 0단계 + (그 단계 − 0단계) × Growth`. 0단계는 그대로 | 정적 수치라 카탈로그 모디파이어로(D-2) — 단점이 카드에 빨갛게 뜬다. 배율이라 기본 +20 이 바뀌어도 "증가분의 60%"가 유지된다. 전체 피해에 곱하면 0단계까지 줄어든다(T-104) |
-| **D-101** | ★선행 변경★ 공기탄 단계 피해 기본값 **10 / 15 / 22 / 35 → 10 / 30 / 50 / 70**(+20/단계, 탄속은 그대로). `UDRVacuumAirShot` 생성자 값을 바꾼다 | 사용자 확정. BP 가 `Stages` 를 덮지 않아(에셋 확인) C++ 기본값이 곧 게임 값이다 — 한 곳만 바꾼다(T-102). 칩 없이도 공기탄이 강해진다(§13.8-49) |
-
-> 기각: ③ 간격을 새 초 단위 축(`SkillChargeInterval`)으로 — 축을 하나 더 늘릴 이유가 없다(0.5 × 0.7 = 0.35 가 정확히 맞는다).
-> 기각: ③ 단계 증가를 `ChipTuning` 절대값(+12)으로 — 정적 수치는 카탈로그가 원칙(D-2)이고, 기본 단계값을 바꾸면 절대값은 어긋난다.
-> 기각: ② 를 발사체/GA 에서 적용 — 벽 · 사이트 · 아군 · 죽은 적을 따로 걸러야 한다(D-97).
-> 기각: ② 감속을 Compound + 코드가 스택마다 다시 걸기 — 스택 · 지속 · 정리를 GAS 대신 코드가 들고 있어야 한다(Additive 한 줄로 끝난다).
-
-### 13.4 C++ 변경 (적용 순서)
-
-**① ★선행★ `DRVacuumAirShot.cpp` 생성자** — 단계 피해 10 / 30 / 50 / 70 (D-101)
-
-```cpp
-	// 기본 4단계 ([0] 즉발 ~ [3] 강화) — ★BP 가 이 배열을 덮지 않는다(에셋 확인) → 이 값이 곧 게임 값★
-	// ★Plan5(공기탄칩)★ 단계당 +20 (사용자 확정 2026-10-07, 예전 10/15/22/35). 칩③은 증가분을 ×0.6 (D-100 · D-101)
-	Stages.SetNum(4);
-	Stages[0].Damage = 10.f;  Stages[0].ProjectileSpeed = 1500.f;
-	Stages[1].Damage = 30.f;  Stages[1].ProjectileSpeed = 1800.f;
-	Stages[2].Damage = 50.f;  Stages[2].ProjectileSpeed = 2200.f;
-	Stages[3].Damage = 70.f;  Stages[3].ProjectileSpeed = 2600.f;
-```
-
-**② `DRUpgradeTypes.h` · `DRUpgradeUILibrary.cpp`** — 새 축 `SkillChargeGrowth` (D-100)
-
-```cpp
-	// ===== Plan5(공기탄칩) 추가 =====
-	// ★신규 값은 반드시 Count 바로 앞에 붙인다.★ (T-30)
-
-	/**
-	 * 스킬 단위. 차지형 스킬의 ★단계당 증가분 배율★ — 기준 1.0 에 Apply 해서 쓴다.
-	 *     단계 피해 = 0단계 + (그 단계 − 0단계) × ApplySkill(SkillChargeGrowth, 1.0)
-	 * 0단계(즉발)는 바뀌지 않는다. 배율이라 DRIsTimeStat · DRIsLowerBetter 에 ★넣지 않는다★ (Plan5 D-100 · T-103)
-	 */
-	SkillChargeGrowth	UMETA(DisplayName = "스킬 차지 증가량"),
-
-	Count UMETA(Hidden)
-```
-
-- `DRIsSkillStat()` 에 `|| Stat == EDRUpgradeStat::SkillChargeGrowth	// Plan5(공기탄칩)` (★빠뜨리면 전역 블록에 쌓여 청소기 모든 스킬에 퍼진다 — T-12★).
-- `DRUpgradeUILibrary.cpp` 짧은 이름: `case EDRUpgradeStat::SkillChargeGrowth: return LOCTEXT("StatShort_SkillChargeGrowth", "차지 증가");`(5자 제한).
-
-**③ `DRGameplayTags.h / .cpp`** — 태그 3개(네이티브)
-
-| 멤버 | 태그 | 종류 |
-|---|---|---|
-| `Upgrade_Feature_Skill_AirShot_FriendlyFire` | `Upgrade.Feature.Skill.AirShot.FriendlyFire` | ① 기능 스위치 |
-| `Upgrade_Feature_Skill_AirShot_Drag` | `Upgrade.Feature.Skill.AirShot.Drag` | ② 기능 스위치 |
-| `Debuff_AirShot_Drag` | `Debuff.AirShot.Drag` | ★GAS 태그★ — `GE_AirShot_Drag` 가 적에게 부여, C++ 이 스택을 읽는다 |
-
-**④ `DRProgressionConfig.h`** — `FDRRideChipTuning` 다음
-
-```cpp
-/**
- * ★Plan5(공기탄칩)★ 청소기 기본 공격(공기탄) 칩의 동적 상수.
- * 피해 +50% · −20% · 차지 간격 · 단계 증가분은 여기가 아니라 DA_ChipCatalog 모디파이어다.
- */
-USTRUCT(BlueprintType)
-struct FDRAirShotChipTuning
-{
-	GENERATED_BODY()
-
-	/**
-	 * ② 흡착 — 맞은 적 1스택. Magnitude 0.1 = 스택당 이속 −10%, Duration 2 = 마지막 적중 뒤 유지 시간.
-	 * GE 요구 사양 (Plan5 D-96):
-	 *   - Has Duration / Duration = SetByCaller(Data.Duration)
-	 *   - Modifier: MoveSpeed / ★Multiply (Additive)★ / SetByCaller(Data.MoveSpeed.Mult)  ★Compound 금지 — 스택하면 가속 (T-95)★
-	 *   - Target Tags(Granted) = Debuff.AirShot.Drag
-	 *   - Stacking = Aggregate by Target · Limit = DragMaxStacks(3) · Refresh on Successful Application
-	 *     · Expiration = Clear Entire Stack · ★Deny Overflow Application 끔★ (T-96)
-	 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AirShot|Drag")
-	FDRTimedSpeedEffect Drag;   // 기본값을 Magnitude 0.1 · Duration 2.0 으로 둔다 (생성자 · 기본 멤버 초기화)
-
-	// 스택당 받는 피해 증가 (0.05 = +5%). 누가 · 무엇으로 때리든 (D-98)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AirShot|Drag", meta = (ClampMin = "0.0"))
-	float DragDamageTakenPerStack = 0.05f;
-
-	// 받는 피해 계산에 쓰는 스택 상한. ★GE 의 Stack Limit 과 같아야 한다★ — 검사가 비교한다
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AirShot|Drag", meta = (ClampMin = "1"))
-	int32 DragMaxStacks = 3;
-};
-```
-
-- `FDRTimedSpeedEffect` 기본값은 0.3 / 5.0 이다 → `Drag` 는 **0.1 / 2.0** 으로 초기화한다(`FDRAirShotChipTuning() { Drag.Magnitude = 0.1f; Drag.Duration = 2.f; }`). 물대포 `EnemySlow` 처럼 "구조체 기본값이 5.0" 함정(§5.3)을 반복하지 않게.
-- `FDRChipTuning` 끝에 `UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AirShot") FDRAirShotChipTuning AirShot;`
-
-**⑤ `DRAbilitySystemLibrary.h / .cpp`** — 판정 2개(D-97 · D-98)
-
-```cpp
-	// ========== 청소기 기본 공격 칩 (Plan5(공기탄칩)) ==========
-
-	/** ★Plan5(공기탄칩)★ ② 이 적이 받는 피해 배율 = 1 + DragDamageTakenPerStack × min(흡착 스택, DragMaxStacks). 표식이 없으면 정확히 1.0 */
-	static float GetAirShotDragDamageTakenMultiplier(const UAbilitySystemComponent* TargetASC);
-
-	/**
-	 * ★Plan5(공기탄칩)★ ② 적 피해 관문에서 부른다(서버). 세 조건을 ★모두★ 만족하면 흡착 1스택(지속 갱신):
-	 *   ① 소스가 Upgrade.Feature.Skill.AirShot.Drag  ② 컨텍스트 SourceAbilityTags 에 Abilities.RobotVacuum.AirShot
-	 *   ③ 대상이 ADREnemy · 보스(bIsBoss) 아님
-	 * ②를 빠뜨리면 그 청소기의 돌진 충돌 피해까지 쌓인다 (T-99)
-	 */
-	static void TryApplyAirShotDrag(const FEffectProperties& Props);
-```
-
-```cpp
-float UDRAbilitySystemLibrary::GetAirShotDragDamageTakenMultiplier(const UAbilitySystemComponent* TargetASC)
-{
-	if (!TargetASC || !TargetASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Debuff_AirShot_Drag)) return 1.f;   // 빠른 탈출
-
-	const FDRAirShotChipTuning& Tuning = GetChipTuning(TargetASC->GetAvatarActor()).AirShot;
-	// ★스택 수는 태그 카운트가 아니다★ — Aggregate by Target 이라 인스턴스 하나의 스택 (T-98)
-	const int32 Stacks = FMath::Min(GetEffectStackCountWithTag(TargetASC, FDRGameplayTags::Get().Debuff_AirShot_Drag),
-		FMath::Max(1, Tuning.DragMaxStacks));
-	return 1.f + FMath::Max(0.f, Tuning.DragDamageTakenPerStack) * Stacks;
-}
-
-void UDRAbilitySystemLibrary::TryApplyAirShotDrag(const FEffectProperties& Props)
-{
-	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
-	if (!HasUpgradeFeature(Props.SourceASC, Tags.Upgrade_Feature_Skill_AirShot_Drag)) return;
-
-	const FDRGameplayEffectContext* DRContext = static_cast<const FDRGameplayEffectContext*>(Props.EffectContextHandle.Get());
-	if (!DRContext || !DRContext->GetSourceAbilityTags().HasTagExact(Tags.Abilities_RobotVacuum_AirShot)) return;
-
-	ADREnemy* Enemy = Cast<ADREnemy>(Props.TargetAvatarActor);
-	if (!IsValid(Enemy) || Enemy->bIsBoss) return;   // 보스는 감속 · 피해 증가 둘 다 없다 (사용자 확정)
-
-	const FDRAirShotChipTuning& Tuning = GetChipTuning(Enemy).AirShot;
-	ApplyTimedSpeedEffect(Enemy, Props.SourceASC, Tuning.Drag, 1.f - Tuning.Drag.Magnitude);   // 0.9 — 스택은 GE 가 쌓는다
-}
-```
-
-**⑥ `DREnemyAttributeSet.cpp` `HandleIncomingDamage`** — 두 줄 (D-97 · D-98)
-
-```cpp
-		// (취약 블록 바로 다음)
-		// ★Plan5(공기탄칩)★ ② 흡착 — 스택당 받는 피해 +5%(최대 3). 취약과 같은 자리 · 같은 이유(D-10) — 모든 피해에.
-		// ★이번 적중이 쌓을 스택은 아직 없다★ — 직전 스택으로 계산하고, 스택은 아래에서 쌓는다 (D-97)
-		LocalIncomingDamage *= UDRAbilitySystemLibrary::GetAirShotDragDamageTakenMultiplier(Props.TargetASC);
-
-		...(흡혈 · 적중 회복 그대로)...
-
-		// (적중 회복 블록 다음, 더미 분기 · SetHealth 위)
-		// ★Plan5(공기탄칩)★ ② 공기탄이 적에게 들어갔다 — 흡착 1스택(보스 제외). 판정은 라이브러리가 한다 (D-97)
-		UDRAbilitySystemLibrary::TryApplyAirShotDrag(Props);
-```
-
-**⑦ `DRVacuumAirShot.cpp`** — ③ 간격 · 단계 증가 · ① 아군 플래그 (D-94 · D-99 · D-100)
-
-```cpp
-// StartCharging()
-	// ★Plan5(공기탄칩)★ ③ 칩 선딜 배율(SkillWindup — 0.7 이면 0.5 → 0.35초)을 곱한 뒤 공속 배율로 나눈다 (D-99).
-	//   칩 · 버프가 없으면 둘 다 1.0 이라 ChargeInterval 그대로. GetChargeStage · UI 타이머가 이 값 하나를 쓴다 (T-105)
-	const float WindupScale = FMath::Max(0.01f, GetUpgradedFloat(EDRUpgradeStat::SkillWindup, 1.f));
-	EffectiveChargeInterval = FMath::Max(0.05f, ChargeInterval * WindupScale / FMath::Max(1.f, GetAttackSpeedMultiplier()));
-
-// FireShot() — 피해 주입부
-	// ★Plan5(공기탄칩)★ ③ 단계 피해 = 0단계 + (그 단계 − 0단계) × 차지 증가 배율 — 0단계는 그대로 (D-100 · T-104)
-	const float Growth = FMath::Max(0.f, GetUpgradedFloat(EDRUpgradeStat::SkillChargeGrowth, 1.f));
-	const float StageDamage = Stages[0].Damage + (StageData.Damage - Stages[0].Damage) * Growth;
-	Projectile->DamageEffectParams.BaseDamage = GetUpgradedFloat(EDRUpgradeStat::SkillDamage, StageDamage);
-
-	// ★Plan5(공기탄칩)★ ① 아군에게도 피해 — 스폰 때 1회 해석해 발사체에 싣는다 (D-94).
-	//   ★강화탄 분기(if (!bMaxStage) return;) 보다 위★ — 0~2단계 탄도 아군을 맞혀야 한다
-	if (ADRVacuumAirProjectile* AirProjectile = Cast<ADRVacuumAirProjectile>(Projectile))
-	{
-		AirProjectile->bHitsAllies = UDRAbilitySystemLibrary::HasUpgradeFeature(
-			GetAbilitySystemComponentFromActorInfo(), FDRGameplayTags::Get().Upgrade_Feature_Skill_AirShot_FriendlyFire);
-	}
-```
-
-**⑧ `DRProjectile.h / .cpp`** — 피해 적용부 추출(동작 불변)
-
-```cpp
-// .h protected
-	// 서버: Target 에게 이 발사체의 피해(넉백 확률 · 사망 임펄스 포함)를 건다.
-	// ★팀 판정은 하지 않는다 — 호출부 책임★. 칩 지식은 없다(적 투사체와 공유 클래스 — Plan5 §8) (Plan5(공기탄칩) D-94)
-	void ApplyImpactDamage(AActor* Target);
-```
-
-- `OnSphereOverlap` 의 `if (HasAuthority()) { … ApplyDamageEffect … Destroy(); }` 안쪽 피해 부분을 그대로 옮기고, 원래 자리는 `ApplyImpactDamage(OtherActor); Destroy();` — 적 투사체 · 다른 플레이어 투사체 동작 불변.
-
-**⑨ `DRVacuumAirProjectile.h / .cpp`** — ① 아군 분기 (D-94 · D-95)
-
-```cpp
-// .h public
-	// ★Plan5(공기탄칩)★ ① 아군에게도 피해 — FireShot 이 스폰 직후 넣는다(서버). 클라 적중 연출용으로 복제 (bEnhanced 와 같다)
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "AirShot")
-	bool bHitsAllies = false;
-
-// .cpp GetLifetimeReplicatedProps: DOREPLIFETIME(ADRVacuumAirProjectile, bHitsAllies);
-
-// .cpp OnSphereOverlap — 탑승 연결 통과 검사 ★다음★, 강화탄 아군 분기 ★앞★
-	// ★Plan5(공기탄칩)★ ① 아군도 적과 같은 피해 — 강화탄이면 넉백도 일반 피해 경로로 (D-94 · D-95).
-	//   탑승 연결(내 위 탑승자 · 내가 탄 청소기)은 바로 위에서 이미 통과했다 (사용자 확정)
-	if (bHitsAllies && !UDRAbilitySystemLibrary::IsNotFriend(SourceAvatarActor, OtherActor))
-	{
-		if (!bHit) OnHit();
-		if (HasAuthority())
-		{
-			ApplyImpactDamage(OtherActor);
-			Destroy();
-		}
-		else
-		{
-			bHit = true;
-		}
-		return;
-	}
-```
-
-**⑩ `DRProgressionConfig.cpp`** — 검사(칩이 카탈로그에 있을 때만)
-
-| 조건 | 검사 | 틀리면 |
-|---|---|---|
-| `IsFeatureGated(AirShot.Drag)` | `Drag.Effect` 비었나 / 부여 태그 `Debuff.AirShot.Drag` / `StackingType == AggregateByTarget` / `GetStackLimitCount() == DragMaxStacks` / `GetStackExpirationPolicy() == ClearEntireStack` / `!bDenyOverflowApplication` / MoveSpeed 모디파이어가 ★**MultiplyAdditive**★ / `Drag.Magnitude` 0~1 · `Drag.Duration > 0` | 감속 · 피해 증가 없음 / 받는 피해 증가 안 읽힘 / 청소기마다 따로 쌓임 / 표시 스택과 계산 스택 불일치 / 1개씩 빠짐 / ★3스택에서 갱신 실패 → 2초 뒤 통째로 풀림(T-96)★ / ★Compound 면 3스택 가속(T-95)★ |
-
-**바뀔 C++ 파일**: `DRVacuumAirShot`(.cpp) · `DRUpgradeTypes.h` · `DRUpgradeUILibrary.cpp` · `DRGameplayTags`(.h/.cpp) · `DRProgressionConfig`(.h/.cpp) · `DRAbilitySystemLibrary`(.h/.cpp) ·
-`DREnemyAttributeSet.cpp` · `DRProjectile`(.h/.cpp — 추출만) · `DRVacuumAirProjectile`(.h/.cpp). **BP 재배선 없음.**
-
-### 13.5 에디터 작업 (C++ 빌드 뒤)
-
-1. **`GE_AirShot_Drag`** — `Content/Blueprints/AbilitySystem/Player/VacuumCleaner/Abilities/Skill1/` 에 새 GameplayEffect BP
-   - Duration Policy **Has Duration** · Duration Magnitude **Set by Caller** `Data.Duration`
-   - Modifiers +1: Attribute `DRAttributeSet.MoveSpeed` · Modifier Op ★**Multiply (Additive)**★ · Magnitude **Set by Caller** `Data.MoveSpeed.Mult` (★Compound 금지 — T-95★)
-   - Components → **Target Tags** `Debuff.AirShot.Drag`
-   - Stacking **Aggregate by Target** · Stack Limit Count **3** · Stack Duration Refresh Policy **Refresh on Successful Application** · Stack Expiration Policy **Clear Entire Stack** · **Deny Overflow Application 끔**
-2. **`DA_ProgressionConfig` → Chip Tuning → Air Shot**: `Drag.Effect = GE_AirShot_Drag`. 숫자는 C++ 기본값(0.1 · 2.0 · 0.05 · 3).
-3. **`DA_ChipCatalog`** → Chips +3 (§13.1 표). 공통: `OwnerClass RobotVacuum` · `bCommonChip` 끔 · `Category Ascension` · `TargetAbilityTag Abilities.RobotVacuum.AirShot` · `RequiredSlotCount 1`. ★모든 스킬 단위 모디파이어의 `TargetAbilityTag` 도 `Abilities.RobotVacuum.AirShot`★(D-51)
-   - ① `RV.Asc.ShotPower` · 고압 공기탄 · 요약 "기본 공격 피해 +50%" · Tier 3 · Modifiers `SkillDamage` Percent +0.5 · GrantedTags `Upgrade.Feature.Skill.AirShot.FriendlyFire`
-     · Description "기본 공격의 피해가 50% 늘어납니다. 대신 아군에게도 같은 피해를 줍니다(내가 태운 사람 · 나를 태운 청소기는 맞지 않습니다)."
-   - ② `RV.Asc.ShotDrag` · 흡착 공기탄 · 요약 "맞은 적 감속 · 받는 피해 증가" · Tier 4 · Modifiers `SkillDamage` Percent −0.2 `bIsDrawback` ✓ · GrantedTags `Upgrade.Feature.Skill.AirShot.Drag`
-     · Description "기본 공격에 맞은 적은 2초 동안 이동 속도가 10% 줄고 받는 피해가 5% 늘어납니다. 맞힐 때마다 시간이 갱신되고 최대 3번까지 쌓입니다(이동 속도 −30%, 받는 피해 +15%). 보스에게는 걸리지 않습니다. 대신 기본 공격의 피해가 20% 줄어듭니다."
-   - ③ `RV.Asc.ShotQuick` · 속사 압축기 · 요약 "차지가 30% 빨라짐" · Tier 3
-     · Modifiers: `SkillWindup` Percent **−0.3**(`DetailOverride` "차지 간격 0.5 → 0.35초") / `SkillChargeGrowth` Percent **−0.4** `bIsDrawback` ✓(`DetailOverride` "단계당 피해 +20 → +12")
-     · Description "기본 공격의 차지 단계가 0.35초마다 오릅니다(기존 0.5초). 대신 단계마다 늘어나는 피해가 20에서 12로 줄어듭니다."
-   - `SkillDisplayNames` 에 `Abilities.RobotVacuum.AirShot → 기본 공격`
-4. (선택) 아이콘 `Content/DaeRuneAssets/UI/Upgrade/Icon/Vacuum/공격-7 · 지원-7 · 편의-7`
-5. (선택) 흡착 표식 연출 — 적 머리 위 스택 표시가 필요하면 `GameplayCue`(부여 태그 기반) 하나. 지금 HUD 의 상태 효과 위젯은 플레이어 전용이다
-6. 검사: `DA_ProgressionConfig` 편집 → `[ProgressionConfig] … 검증 통과` / 카탈로그 오류 0건(새 축 `SkillChargeGrowth` 가 스킬 단위로 잡히는지 포함)
-
-### 13.6 함정
-
-| # | 함정 | 대응 |
-|---|---|---|
-| **T-95** | ★스택형 감속 GE 에 Multiply (Compound)★ | UE 5.5 Compound 바이어스가 0 이라 0.9 × 스택 → 3스택 **×2.7(가속)**. **Multiply (Additive)**(바이어스 1 → 0.9 / 0.8 / 0.7). 검사가 잡는다. ※씨앗 · 물대포 감속은 Limit 1 이라 Compound 가 맞다(T-8) — 규칙을 그대로 옮기지 말 것 |
-| **T-96** | `Deny Overflow Application` 을 켠다 | 3스택에서 다음 적중이 거부돼 지속이 갱신되지 않는다 → 계속 맞혀도 2초 뒤 통째로 풀린다(T-4 와 같다) |
-| **T-97** | Stack Expiration Policy 가 `Clear Entire Stack` 이 아니다 | 1개씩 빠지거나(Remove Single) 남은 시간이 꼬인다 — 마지막 적중 2초 뒤 한꺼번에 사라져야 한다 |
-| **T-98** | 받는 피해 증가를 태그 카운트로 계산 | Aggregate by Target 이라 태그 카운트는 항상 1 → 항상 +5%. `GetEffectStackCountWithTag`(T-3) |
-| **T-99** | ② 판정에서 `SourceAbilityTags` 의 `AirShot` 검사를 빠뜨린다 | 소스가 같은 청소기면 **돌진 충돌 피해**에도 스택이 쌓인다 |
-| **T-100** | 보스를 `Buff.Elite` · 캐릭터 클래스로 판정 | 일반 엘리트까지 빠지거나 두더지 보스가 걸린다 — `ADREnemy::bIsBoss`(엘리트 곰 BP · 두더지 보스 C++) |
-| **T-101** | `bHitsAllies` · `bEnhanced` 는 `SpawnProjectile`(=`FinishSpawning`) **뒤**에 들어간다 | 스폰 순간 총구와 겹쳐 있던 아군은 첫 오버랩에서 플래그를 모른다(지금 `bEnhanced` 도 같다). 문제가 되면 `SpawnProjectile` 에 지연 초기화 훅을 넣는다 |
-| **T-102** | 단계 피해를 BP 와 C++ 양쪽에서 바꾼다 / 나중에 BP 에서 `Stages` 를 건드린다 | 지금은 BP 가 덮지 않아 C++ 이 권위다. BP 에서 한 번이라도 바꾸면 그때부터 C++ 기본값은 무시된다 — 한 곳만(지금은 C++) |
-| **T-103** | `SkillChargeGrowth` 를 `Count` 앞이 아닌 곳에 넣거나 `DRIsSkillStat` 에서 빠뜨린다 | 기존 칩 효과가 밀리거나(T-30) 전역 블록에 쌓여 청소기 모든 스킬로 퍼진다(T-12). 배율이라 `DRIsTimeStat` · `DRIsLowerBetter` 에는 넣지 않는다 |
-| **T-104** | 증가 배율을 단계 피해 전체에 곱한다 | 0단계까지 줄어든다(10 → 6) — `0단계 + (단계 − 0단계) × Growth` |
-| **T-105** | `SkillWindup` 을 UI 타이머에만(또는 `GetChargeStage` 에만) 적용 | 게이지와 실제 단계가 어긋난다 — `EffectiveChargeInterval` 하나를 둘 다 쓴다 |
-| **T-106** | 아군 피해 분기를 `ADRProjectile` 에 넣는다 | 적 투사체와 공유 클래스라 적 탄이 적을 맞히는 사고가 난다(§8) — 범용 `ApplyImpactDamage` 만 부모에, 분기는 청소기 자식에 |
-| **T-107** | ①+강화탄을 기존 "아군 = 넉백만" 분기로 보낸다 | 강화탄은 아군에게 피해를 못 준다 — ① 분기를 그 분기 ★앞★ 에 둔다 |
-
-### 13.7 검증
-
-준비: PIE Listen Server · 플레이어 2~3(청소기 1 + 아군). 콘솔 `DRUnlockUpgrade` → `DRUnlockSlot 6`. 수치는 데미지 숫자 · `showdebug abilitysystem`(적 MoveSpeed · 활성 GE 스택).
-
-- [ ] **선행 변경(칩 없음)** 0 · 0.5 · 1.0 · 1.5초 홀드 → 피해 10 / 30 / 50 / 70, 탄속 · 넉백 · 반동 그대로 / 아군은 지금처럼 통과(강화탄은 넉백만)
-- [ ] **①** 적 15 / 45 / 75 / 105 / 아군에게 같은 피해(아군 체력 · 컨테이너 · 오염 · 탑승 공유가 평소처럼) / 강화탄 = 아군 피해 + 넉백 / 내 위 탑승자 · 내가 탄 청소기는 통과 / 로비에서 아군 체력 1 아래로 안 감 / 클라 청소기의 탄이 호스트 아군을 맞히면 클라 화면에서도 그 자리에서 터진다
-- [ ] **②** 피해 8 / 24 / 40 / 56 / 1 · 2 · 3번 맞히면 적 이속 ×0.9 · 0.8 · 0.7(★1.8 · 2.7 이면 T-95★) / 4번째부터 ×0.7 유지 · 지속 갱신(★3스택에서 2초 뒤 풀리면 T-96★) / 마지막 적중 2초 뒤 한꺼번에 해제 / 받는 피해: 같은 적을 정원로봇이 때려도 +5 · 10 · 15% / 엘리트 곰 · 두더지 보스는 감속도 피해 증가도 없음, 일반 엘리트는 걸림 / 청소기 2대가 같이 쌓아도 최대 3 / 돌진 충돌 · 씨앗 폭탄으로는 안 쌓임 / 물대포 ② 취약과 함께면 ×1.725 / 비행 적은 감속 없이 피해 증가만
-- [ ] **③** 단계가 0.35 · 0.70 · 1.05초에 오른다(게이지와 실제 일치) / 피해 10 / 22 / 34 / 46 / 공유 공속 버프 5중첩이면 0.233초 간격 / 발톱 · 돌진 등 다른 스킬은 그대로
-- [ ] **스킬당 1칩** ①②③ 중 하나만, 탑승칩과는 함께 / 미리보기 라벨 "기본 공격" / ③ 카드에 "차지 간격 0.5 → 0.35초"(초록) · "단계당 피해 +20 → +12"(빨강)
-- [ ] **멀티** 클라 청소기 ② → 호스트 화면의 적이 느려지고(복제) 다른 플레이어 피해도 늘어남 / 클라 ③ → 클라 게이지 · 서버 단계 일치
-- [ ] **검사** `DA_ProgressionConfig` 편집 → 오류 0건 / `GE_AirShot_Drag` 를 Compound 로 바꾸면 오류(T-95) · Deny Overflow 를 켜면 오류(T-96)
-
-### 13.8 열린 결정 · 알려진 제약 (§9 번호에 이어서)
-
-| # | 내용 | 현재 판단 |
-|---|---|---|
-| **48** | 이름 · Tier · 아이콘 · `ChipId`(`RV.Asc.Shot*`)는 가칭 | 사용자가 정하면 카탈로그만(`ChipId` 는 첫 입력 전에 확정 — 세이브 키) |
-| **49** | ★선행 변경(D-101)으로 칩 없는 공기탄이 크게 강해진다★ — 풀차지 35 → 70, 1단계 15 → 30 | 사용자 확정. 플레이 확인 후 `Stages` 만 조정 |
-| **50** | ③ 은 초당 피해가 칩 없음과 비슷하거나 조금 낮다(1단계 +5% · 2단계 −3% · 3단계 −6%) — 이득은 "강화탄(넉백 · 로켓 점프)까지 30% 빨리" | 사용자 확정 수치. 약하면 카탈로그 `SkillChargeGrowth` 값만 조정 |
-| **51** | ① 아군 피해로 아군이 오염 · 사망할 수 있다. 아군을 맞혔다는 별도 HUD 표시는 없다 | 원문 "동일한 피해" 그대로. 로비 · 튜토리얼은 체력 1 클램프 |
-| **52** | ① 아군 피해에도 시전자의 공격 배율(광폭화 · 시너지 · 탑승칩①)이 붙는다 | "같은 피해" — 적에게 주는 것과 같은 계산 |
-| **53** | ② 비행 적에게는 감속이 안 걸린다(§9-1) — 받는 피해 증가는 걸린다 | §9-1 과 같은 판단(범위 밖) |
-| **54** | ② 스택 표시(연출)가 없다 — 적 머리 위 아이콘 · 나이아가라 없음 | 원하면 `GameplayCue` 하나(§13.5-5) |
-| **55** | ② 받는 피해 증가는 그 적중 **직전** 스택으로 계산 — 첫 적중은 +0% | 설계 판단(D-97). 첫 적중부터 +5% 를 원하면 적용 순서만 바꾼다 |
-
-### 13.9 작업 순서
-
-1. 선행 변경 ①(단계 피해 10 / 30 / 50 / 70) → 빌드 → §13.7 "선행 변경"
-2. 칩 C++ ②~⑩ → 빌드 (`UENUM` · 태그 · `USTRUCT` 추가라 **에디터를 닫고** — T-45)
-3. 에디터 §13.5
-4. §13.7 검증 → §1 · §3 · §5 · §6 · §9 에 흡수(§1.7 그룹 +1, 스탯 축 표에 `SkillChargeGrowth`), 머리말 상태 갱신
-
-### 13.10 구현 결과 — 계획과 달라진 점
-
-2026-10-08 C++ 구현 · 빌드 통과. 다른 점:
-
-- ★`UDRAbilitySystemLibrary::GetEffectStackCountWithTag` 를 **OwningTags 쿼리**(에셋 태그 ∪ 부여 태그)로 바꿨다★.
-  UE 5.5 `GetActiveEffectsWithAllTags` 는 GE 의 **에셋 태그만** 비교한다(엔진 `FGameplayEffectQuery::Matches` 의 `EffectTagQuery` — `Spec.GetAllAssetTags` 만 본다).
-  그래서 부여(Target) 태그만 단 `GE_AirShot_Drag` 는 스택이 늘 0 으로 읽혀 받는 피해 증가가 안 붙는다. 공속 GE 3개는 두 태그를 다 달고 있어(에셋 확인) 결과가 같다.
-  → 흡수할 때 §6 함정에 올릴 것("스택 · 존재 조회에 `GetActiveEffectsWithAllTags` 금지 — `MakeQuery_MatchAnyOwningTags`", T-82 와 같은 원인).
-- `ADREnemy::bIsBoss` 가 protected 라 공개 읽기 함수 `IsBoss()` 를 추가했다(값 변경 없음).
-- 단계 피해 10 / 30 / 50 / 70(D-101)은 C++ 생성자에 들어갔다 — 에셋 작업 없음.
-
----
-
-## 14. 로봇 청소기 물 점프(스킬 1 · Q) 칩 3종 (C++ 구현 완료 — 에디터 · 검증 남음)
-
-> 2026-10-07 요청 · 같은 날 질의응답으로 확정. 코드 주석 접두 **`Plan5(물점프칩)`** · 결정 **D-102 ~ D-110** · 함정 **T-108 ~ T-118** (앞 번호에 이어서 매긴 영구 ID).
-> **C++ 구현 완료**(2026-10-08 빌드 통과). 에디터 작업은 **§16 안내서**, 그다음 §14.7 검증. 계획과 달라진 점은 §14.10. 검증이 끝나면 §1~§9 에 흡수한다.
-> ★선행 변경 1건 — **D-103**(물 점프가 물 30 을 ★실제로★ 소모 — 지금은 30 이 있는지 확인만 하고 빼지 않는다) — 은 칩이 없어도 물 점프를 바꾼다(§14.8-57).★
->
-> 사용자 확정
-> - ① 강판정(반경 2m 안) 피해 **20 → 40**, 약판정(2~4m) **5 → 15**. 대신 상승 높이 **−30%**.
-> - ② 쓰는 순간부터 **0.3초 무적** — **피격을 통째로 무효**(피해 · 경직 · 넉백 · 디버프 · DoT 틱 · 탑승 공유 — 벨보이 모자와 같은 방식, 모자보다 먼저). 대신 물 점프 피해 **0**.
-> - ③ 물 소모 **30 → 20**, 공중 사용 **1 → 2회**. 대신 상승 높이 **−25%**.
-> - "상승 높이"(①)와 "상승력"(③)은 둘 다 **실제 최고 높이** 기준이다 — 높이는 속도의 제곱에 비례하므로 점프 임펄스에는 √배율을 곱한다(D-105).
-> - 물 점프가 지금 물을 빼지 않는 것은 **버그로 보고 고친다**(D-103).
-
-### 14.0 지금의 물 점프 (코드·에셋 실측)
-
-| 항목 | 지금 | 어디 |
-|---|---|---|
-| 스킬 | `GA_VacuumJetJump`(Q) — `UDRVacuumJetJump : UDRDamageGameplayAbility`. `AbilityTags = Abilities.RobotVacuum.JetJump`(업그레이드 키). **즉발**(ActivateAbility 안에서 End). `BlockAbilitiesWithTag` = HitReact · Carrying / `ActivationBlockedTags` = Carrying | GA BP CDO |
-| ★물★ | `WaterCost` **30**(C++ 생성자, BP 미변경). ★`CostGameplayEffectClass` 가 비어 있다★ → `CheckCost` 는 물 30(부족하면 체력 대납 가능 여부)을 확인하지만 `ApplyCost` 는 `GetCostGameplayEffect()` 가 null 이라 **아무것도 빼지 않는다**. `GE_Cost_VacuumJetJump`(ExecCalc_WaterCost)는 엉뚱하게 **`GA_VacuumDash` 의 Cost GE** 로 들어가 있고, 돌진은 `WaterCost` 0 이라 무동작 | 에셋 · `DRGameplayAbility.cpp` |
-| 쿨다운 | `GE_Cooldown_VacuumJetJump` **0.3초**(`Cooldown.RobotVacuum.JetJump` — Q 홀드 연타 방지, 고정값) | 에셋 |
-| 점프 | 서버에서 `LaunchCharacter((0, 0, JumpImpulseZ), XY 유지, Z 덮어쓰기)` — `JumpImpulseZ` **900**(BP 미변경). `BP_DRVacuumCleaner` 의 이동 컴포넌트는 덮은 값이 없다 → 중력 −980 · GravityScale 1 → **최고 높이 900² ÷ (2 × 980) ≈ 413uu**, 정점까지 0.92초. (스페이스 점프 = `JumpZVelocity` 기본 420 → 약 90uu) | `DRVacuumJetJump.cpp` · `BP_DRVacuumCleaner` |
-| 공중 사용 | `ADRRobotVacuumCharacter::bAirJumpUsed`(서버 전용 · 복제 안 함). 떨어지는 중에 쓰면 true, `Landed()` 에서 false. `CanActivateAbility` 가 `IsFalling() && bAirJumpUsed` 면 거부 → **지상 Q → 공중 Q 2회 / 스페이스 → 공중 Q 1회 / 낭떠러지 낙하 중 1회**. 클라는 값이 늘 false 라 예측은 통과하고 서버가 거부한다 | `DRRobotVacuumCharacter` · `DRVacuumJetJump` |
-| 피해 | 시전 지점 **2D** 반경(Z 무시): 200 안 `InnerDamage` **20**(강판정), 200~400 `OuterDamage` **5**(약판정). 적만(`IsNotFriend`). 넉백 · 디버프 0. ★**`SkillDamage` 를 읽지 않는다**★ — `MakeDamageEffectParamsFromClassDefaults` 의 `BaseDamage`(= `GetUpgradedDamage()` = GA `Damage` 0 기준)를 Inner/OuterDamage 로 그냥 덮는다 | 〃 · GA CDO |
-| 연출 | `GameplayCue.Skill.VacuumJetJump`(서버 Execute) / 애님 `bIsJetJumping` · `JetJumpCounter`(복제) | 〃 |
-| 피해 관문 | `UDRAttributeSet::PostGameplayEffectExecute` IncomingDamage 분기: 죽음 검사 → ★**모자**(1회 무효 — 피해 0 + return)★ → 도발 ×0.8 → `HandleIncomingDamage`(플레이어: 받는 쪽 배율 → 로비 클램프 → 디버프 → 탑승 공유 → 체력 · 컨테이너 → 히트리액트 · 넉백) | `DRAttributeSet.cpp` · `DRPlayerAttributeSet.cpp` |
-| 무적 선례 | **플레이어 무적은 없다.** 모자(Plan8)가 위 관문에서 "피해 0 + return" 으로 피격을 통째로 지운다. 적 쪽은 튜토리얼 더미(체력 1 클램프) · 두더지 보스 잠수(숨김 + 콜리전 끔 + 디버프 정리) | `DRAbilitySystemLibrary::TryConsumeBellBoyHat` |
-| 물값 지불 | `ExecCalc_WaterCost` 는 Water · Health 어트리뷰트를 **직접** 깎는다(IncomingDamage 아님) → 무적 · 모자에 막히지 않는다 | `ExecCalc_WaterCost.cpp` |
-| 청소기 칩 | 탑승(§12) · 기본 공격(§13) 계획뿐 — 물 점프 그룹은 새로 생긴다 | |
-
-### 14.1 칩 3종 스펙
-
-공통: `OwnerClass = RobotVacuum`, `Category = Ascension`, `RequiredSlotCount = 1`,
-칩 레벨 · **모든 모디파이어**의 `TargetAbilityTag = Abilities.RobotVacuum.JetJump`(실제 GA 태그 — D-102). → ①·②·③ 중 하나만, **탑승칩(§12) · 공기탄칩(§13)과는 함께** 낄 수 있다.
-
-| # | `ChipId` | 이름(가칭) | Modifiers | GrantedTags | 효과 | 단점 | Tier | 아이콘(제안) |
-|---|---|---|---|---|---|---|---|---|
-| ① | `RV.Asc.JumpBlast` | 폭압 분사구 | `SkillDamage` **+1.0**<br>`SkillOuterDamage` **+0.5**<br>`SkillLaunchHeight` **−0.3** ★단점★ | (없음) | 강판정 **20 → 40**, 약판정 **5 → 15** | 상승 높이 **×0.70**(413 → 289uu) | 3 | 공격-8 |
-| ② | `RV.Asc.JumpGuard` | 완충 분사구 | `SkillDamage` **−1.0** ★단점★ | `…JetJump.Guard` | 쓰는 순간부터 **0.3초 무적**(피격 통째로 무효) | 물 점프 피해 **0** | 4 | 지원-8 |
-| ③ | `RV.Asc.JumpMulti` | 다단 분사구 | `SkillWaterCost` **Flat −10**<br>`SkillAirUseCount` **Flat +1**<br>`SkillLaunchHeight` **−0.25** ★단점★ | (없음) | 물 **30 → 20**, 공중 사용 **1 → 2회** | 상승 높이 **×0.75**(413 → 310uu) | 3 | 편의-8 |
-
-`…` = `Upgrade.Feature.Skill`. 모디파이어 Op 는 `Flat` 표기가 없으면 `Percent`(곱연산).
-카드 표기(`DetailOverride`): ① `SkillDamage` "강판정 피해 20 → 40" · `SkillOuterDamage` "약판정 피해 5 → 15" / ② `SkillDamage` "피해 0" /
-③ `SkillWaterCost` "물 소모 30 → 20" · `SkillAirUseCount` "공중 사용 1 → 2회". `SkillLaunchHeight` 줄은 기본 표기("상승 높이 −30% / −25%") 그대로.
-②는 단점이 모디파이어라 검사상 `Description` 필수는 아니지만, 무적 범위를 알려야 하므로 쓴다. 이름 · Tier · 아이콘 · `ChipId` 는 가칭(§14.8-56).
-
-**1회 수치** (공용 칩 · 버프 없음 / 높이는 중력 −980 기준)
-
-| | 강판정(≤2m) | 약판정(2~4m) | 점프 임펄스 | 1회 최고 높이 | 정점까지 | 물 | 공중 사용 |
-|---|---|---|---|---|---|---|---|
-| 지금(선행 변경 전) | 20 | 5 | 900 | 413uu | 0.92초 | **0**(30 확인만) | 1 |
-| **칩 없음(D-103 뒤)** | 20 | 5 | 900 | 413uu | 0.92초 | **30** | 1 |
-| ① | **40** | **15** | 753 (×√0.7) | **289uu** | 0.77초 | 30 | 1 |
-| ② | **0**(판정 생략) | **0** | 900 | 413uu | 0.92초 | 30 | 1 |
-| ③ | 20 | 5 | 779 (×√0.75) | **310uu** | 0.80초 | **20** | **2** |
-
-- ① 계산: 강판정 20 × 2 = 40 / 약판정 5 × 2(`SkillDamage`) × 1.5(`SkillOuterDamage`) = 15.
-- `SkillLaunchHeight` −0.3 은 "높이 ×0.7" 이고 임펄스는 ×√0.7 = ×0.837 이다 — 임펄스에 0.7 을 그대로 곱하면 높이가 ×0.49 가 된다(T-109).
-
-**한 번 떴을 때 최대** (지상 Q 후 정점마다 공중 Q — 높이 단순 합, 수평 이동 · 천장 무시)
-
-| | Q 횟수 | 최대 높이 | 물 | 체공(대략) | 무적 |
-|---|---|---|---|---|---|
-| 칩 없음 | 2 | 826uu | 60 | 3.1초 | — |
-| ① | 2 | 579uu | 60 | 2.6초 | — |
-| ② | 2 | 826uu | 60 | 3.1초 | Q 마다 0.3초 — 지상 Q 직후 0.3초(쿨다운) 만에 공중 Q 를 쓰면 **0.6초 연속** |
-| ③ | **3** | **930uu** | 60 (20 × 3) | 3.8초 | — |
-
-- ③은 1회 높이는 낮지만 같은 물 60 으로 더 높이(+13%) · 더 오래 뜬다. 스페이스 점프로 시작하면 90uu + 공중 Q 2회.
-
-### 14.2 상호작용
-
-| 조합 | 결과 |
-|---|---|
-| ① + 공용 칩(⑥ 광폭화 · ⑦ 시너지 · `DamageDealt`) · 탑승칩① | ExecCalc 소스측에서 40 / 15 에 추가로 곱해진다 |
-| ② + 같은 배율들 | 0 이라 무효 — 판정 자체를 건너뛴다(D-109) |
-| ② + 벨보이 모자 | **무적이 먼저** — 0.3초 동안 맞아도 모자가 닳지 않는다(D-108 · T-111) |
-| ② + 디버프 DoT(화상 · 출혈) | 이미 걸린 DoT 의 틱도 0.3초 동안 0. 새 디버프는 안 걸린다(피격이 통째로 무효) |
-| ② + 탑승 공유 | **내가 맞으면** 통째로 무효 → 내 위 탑승자 · 내가 탄 청소기로 공유도 안 간다. **탑승자가 맞으면** 탑승자는 맞고 나에게 오는 공유분만 0 |
-| ② + 탑승칩② 대신 맞는 범퍼(§12) | 나에게 넘어오는 20% 도 0.3초 동안 0 |
-| ② + 공기탄칩① 아군 오폭(§13) | 0.3초 동안 0 |
-| ② + 오염 | 오염 중 체력 피해도 0 |
-| ② + 물 부족 체력 대납 · ⑧ 피의 계약 | 물값으로 내는 체력은 **막지 않는다** — `ExecCalc_WaterCost` 가 Health 를 직접 깎고, `CommitAbility` 가 무적보다 먼저다 |
-| ② + 피해 GE 밖의 효과(적 GA 가 직접 거는 `LaunchCharacter` · 스턴 GE 등) | 막지 못한다(§14.8-58) |
-| ③ + 쿨다운 0.3초 | 공중 Q 2회도 0.3초 간격 |
-| ③ + ⑧ 피의 계약 | 체력 20 × 비율 |
-| 선행 변경 + ⑧ 피의 계약 | 이제 점프마다 체력 30 × 비율(지금은 0) |
-| ①②③ + 탑승칩 · 공기탄칩 | 다른 그룹이라 하나씩 함께 낄 수 있다 |
-
-### 14.3 설계 결정
-
-| # | 결정 | 근거 |
-|---|---|---|
-| **D-102** | 그룹 키 = 실제 GA 태그 **`Abilities.RobotVacuum.JetJump`**. 기능 스위치는 ② 하나 — `Upgrade.Feature.Skill.JetJump.Guard`. ①③ 은 모디파이어만 | GA 의 `AbilityTags` 가 이 태그 하나라 업그레이드 키 = 그룹 키(D-93 과 같은 방식). ①③ 은 전부 정적 수치라 카탈로그로 끝난다(D-2) |
-| **D-103** | ★선행 변경★ 물 소모 버그 수정 = `GA_VacuumJetJump` 의 **Cost Gameplay Effect Class = `GE_Cost_VacuumJetJump`**(에셋만, C++ 변경 없음). 돌진의 Cost GE 는 건드리지 않는다 | 사용자 확정. `ApplyCost` 가 이미 SetByCaller `Cost.Water = GetEffectiveWaterCostFor()` 로 채우므로 GE 만 붙이면 `SkillWaterCost`(칩③)까지 그대로 흐른다. 돌진은 `WaterCost` 0 이라 그 GE 를 들고 있어도 무해(§14.8-63) |
-| **D-104** | ① 피해 = 기존 축 `SkillDamage` **+1.0**(양쪽 ×2) + 새 축 **`SkillOuterDamage`**(약판정에만 곱하는 배율) **+0.5** → 40 / 15. 물 점프가 이때 처음으로 `SkillDamage` 를 읽는다: 강판정 = `Inner × SkillDamage`, 약판정 = `Outer × SkillDamage × SkillOuterDamage` | 두 판정의 배율이 달라(×2 / ×3) 축 하나로는 안 된다. `SkillDamage` 를 양쪽에 걸어 두면 ②의 "피해 0" 이 모디파이어 한 줄로 양쪽을 덮는다. 절대값(`ChipTuning`)은 카드에 단점 · 수치가 안 뜬다(D-2) |
-| **D-105** | 상승 = 새 축 **`SkillLaunchHeight`**(스킬 단위 배율, 기준 1.0, ★**실제 최고 높이**★ 기준) → 임펄스 = `JumpImpulseZ × √배율`. ① **−0.3** · ③ **−0.25** | 사용자 확정(둘 다 실제 높이). 높이 = v² ÷ 2g 라 임펄스에 배율을 그대로 곱하면 높이는 제곱으로 준다(T-109). 카드의 "−30%" 가 플레이어가 보는 높이와 일치한다 |
-| **D-106** | ③ 물 = `SkillWaterCost` **Flat −10**(30 → 20) | Percent −1/3 은 30 × 0.6666667 = 20.000001 이라 **물이 정확히 20 일 때 시전 실패**(T-110). Flat 은 정수로 떨어진다. 낮을수록 좋은 축이라 카드에 초록으로 뜬다 |
-| **D-107** | ③ 공중 횟수 = 새 축 **`SkillAirUseCount`**(Flat, 정수) **+1** + GA `MaxAirJumps`(기본 1) + 캐릭터 `bAirJumpUsed`(bool) → **`AirJumpsUsed`(uint8 횟수)**. `CanActivateAbility` 는 `GetUpgradeRuntimeFor(ActorInfo)` 로 읽는다 | 정적 수치라 카탈로그(D-2). "지상 Q → 공중 Q × 한도" · "스페이스 → 공중 Q × 한도" 규칙이 그대로 일반화된다. `CanActivateAbility` 는 CDO 에서도 불릴 수 있어 현재 ActorInfo 판(`GetUpgradedInt`)을 쓰면 칩이 안 읽힌다(T-114) |
-| **D-108** | ② 무적 = GE **`GE_JetJump_Guard`**(Has Duration · SetByCaller `Data.Duration` 0.3초 · 모디파이어 없음 · Target Tags **`State.Invulnerable`**)를 `ActivateAbility`(서버) **`CommitAbility` 뒤 · 발사 앞**에 `ApplyTimedTagEffect` 로 건다. 판정은 **기본 관문 `UDRAttributeSet::PostGameplayEffectExecute` IncomingDamage 분기 맨 앞 — ★모자보다 먼저★** — 에서 `State.Invulnerable` 이면 피해 0 + return | 사용자 확정(피격 통째로 무효). 모자와 같은 자리 · 같은 이유 — 근접 · 원거리 · DoT · 탑승 공유가 전부 지나는 유일한 관문이고, return 하면 히트리액트 · 넉백 · 디버프 · 전투 진입이 모두 없다. 모자 뒤에 두면 무적 중에 모자가 닳는다(T-111). 태그는 범용(`State.*`) — 적 · 다른 스킬도 GE 만 걸면 같은 무적을 쓴다 |
-| **D-109** | ② 피해 0 = `SkillDamage` **−1.0**(×0, 카드에 빨간 "피해 0"). 최종 강판정 · 약판정이 **둘 다 0 이하면 AoE 판정 자체를 건너뛴다**(한쪽만 0 이면 그 대상만 건너뜀). 큐(물 분사 연출)는 그대로 | 단점이 카드에 보이고(D-2), 0 피해 GE 를 적에게 걸지 않아 ExecCalc · 큐 · 적 관문을 헛돌지 않는다(적 관문은 0 피해를 이미 무시하지만 명시적으로 끊는다) |
-| **D-110** | 새 축 3개(`SkillOuterDamage` · `SkillLaunchHeight` · `SkillAirUseCount`)는 모두 **스킬 단위 · 높을수록 좋음 · 초 아님** → `DRIsSkillStat` 에만 넣는다. 위치는 **구현 시점의 `Count` 바로 앞**(§13 `SkillChargeGrowth` 보다 먼저 구현하면 그 앞) | T-30 · T-12. 배율 · 횟수라 `DRIsTimeStat` · `DRIsLowerBetter` 에 넣으면 카드 색 · 단위가 틀린다 |
-
-> 기각: ① 을 `ChipTuning` 절대값(강 40 / 약 15)으로 — 카드에 수치 · 단점이 안 뜨고, 기본 피해를 바꾸면 어긋난다(D-2).
-> 기각: ③ 공중 횟수를 기능 스위치 + `ChipTuning` 으로 — 정적 정수라 카탈로그가 원칙이다.
-> 기각: ② 무적을 플레이어 `HandleIncomingDamage` 안에서 — 배율 · 로비 클램프가 이미 지나가고, 적 · 사이트에서 같은 태그를 못 쓴다(T-112).
-> 기각: ② 무적을 콜리전 끄기(두더지 잠수 방식)로 — DoT · 탑승 공유 피해는 콜리전과 무관하게 들어온다.
-
-### 14.4 C++ 변경 (적용 순서)
-
-**① ★선행★ — C++ 없음.** 에셋 1곳(§14.5-1). `ApplyCost` · `ExecCalc_WaterCost` 는 그대로 쓴다(D-103).
-
-**② `DRUpgradeTypes.h` · `DRUpgradeUILibrary.cpp`** — 새 축 3개 (D-104 · D-105 · D-107 · D-110)
-
-```cpp
-	// ===== Plan5(물점프칩) 추가 =====
-	// ★신규 값은 반드시 Count 바로 앞에 붙인다.★ (T-30) — Plan5(공기탄칩) SkillChargeGrowth 보다 먼저 구현하면 그 앞이 된다
-
-	/**
-	 * 스킬 단위. 판정이 두 겹(내부 강판정 / 외부 약판정)인 스킬의 ★외부(약판정) 피해에만★ 곱하는 배율.
-	 * SkillDamage 는 양쪽에 걸리고, 이 축은 그 위에 외부에만 한 번 더 곱해진다 —
-	 *     외부 피해 = ApplySkill(SkillOuterDamage, ApplySkill(SkillDamage, OuterDamage))
-	 * ⚠️ 지금은 물 점프만 읽는다. 씨앗 폭탄 등에 쓰려면 그 스킬도 읽게 해야 한다 (Plan5 D-104 · §9-60)
-	 */
-	SkillOuterDamage		UMETA(DisplayName = "스킬 외곽 피해"),
-
-	/**
-	 * 스킬 단위. 점프 · 발사형 이동기의 ★실제 최고 높이 배율★ — 기준 1.0 에 Apply 해서 쓴다.
-	 * ★높이는 속도의 제곱에 비례★ 하므로 임펄스에는 √배율을 곱한다 —
-	 *     임펄스 = BaseImpulse × Sqrt(ApplySkill(SkillLaunchHeight, 1.0))   // 0.7 → ×0.837 → 높이 ×0.70
-	 * 배율이라 DRIsTimeStat 에 ★넣지 않는다★ (Plan5 D-105 · T-109)
-	 */
-	SkillLaunchHeight		UMETA(DisplayName = "스킬 상승 높이"),
-
-	/**
-	 * 스킬 단위. 공중(떨어지는 중)에서 그 스킬을 쓸 수 있는 ★횟수★. 착지하면 다시 채워진다.
-	 * Flat 으로 쓴다(+1 = 한 번 더). 정수 — GA 가 반올림해 읽는다. (Plan5 D-107)
-	 */
-	SkillAirUseCount		UMETA(DisplayName = "스킬 공중 사용 횟수"),
-
-	Count UMETA(Hidden)
-```
-
-- `DRIsSkillStat()` 에 세 줄 추가(`// Plan5(물점프칩)`) — ★빠뜨리면 전역 블록에 쌓여 청소기 모든 스킬에 퍼진다(T-12 · T-117)★. `DRIsLowerBetter` · `DRIsTimeStat` 에는 넣지 않는다.
-- `DRUpgradeUILibrary.cpp` 짧은 이름(5자 제한): `SkillOuterDamage` → `"외곽 피해"` · `SkillLaunchHeight` → `"상승 높이"` · `SkillAirUseCount` → `"공중 횟수"`.
-
-**③ `DRGameplayTags.h / .cpp`** — 태그 2개(네이티브)
-
-| 멤버 | 태그 | 종류 |
-|---|---|---|
-| `Upgrade_Feature_Skill_JetJump_Guard` | `Upgrade.Feature.Skill.JetJump.Guard` | ② 기능 스위치 |
-| `State_Invulnerable` | `State.Invulnerable` | ★GAS 태그★ — `GE_JetJump_Guard` 가 부여, 기본 피해 관문이 읽는다. 범용(적 · 다른 스킬도 GE 만 걸면 같은 무적) |
-
-**④ `DRProgressionConfig.h`** — `FDRAirShotChipTuning` 다음(§13 보다 먼저 구현하면 `FDRAttackSpeedBuffChipTuning` / `FDRRideChipTuning` 다음 — 구현 순서대로)
-
-```cpp
-/**
- * ★Plan5(물점프칩)★ 청소기 물 점프 칩의 동적 상수.
- * 피해 · 상승 높이 · 물 · 공중 횟수는 여기가 아니라 DA_ChipCatalog 모디파이어다.
- */
-USTRUCT(BlueprintType)
-struct FDRJetJumpChipTuning
-{
-	GENERATED_BODY()
-
-	/**
-	 * ② 무적 표식. 요구 사양 (Plan5 D-108):
-	 *   - Has Duration / Duration = ★SetByCaller(Data.Duration)★ (Scalable Float 면 GuardDuration 이 무시된다 — T-113)
-	 *   - Modifier 없음 / Target Tags(Granted) = State.Invulnerable
-	 *   - Stacking = Aggregate by Target · Limit 1 · Refresh on Successful Application
-	 * ★비우면 칩 ②가 무적 없이 피해 0 만 남는다★ — 검사가 잡는다
-	 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "JetJump|Guard")
-	TSoftClassPtr<UGameplayEffect> GuardEffect;
-
-	// 무적 시간(초). 물 점프를 쓰는 순간부터
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "JetJump|Guard", meta = (ClampMin = "0.01"))
-	float GuardDuration = 0.3f;
-};
-```
-
-- `FDRChipTuning` 끝에 `UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "JetJump") FDRJetJumpChipTuning JetJump;`
-
-**⑤ `DRAbilitySystemLibrary.h / .cpp`** — 무적 판정 1개 (D-108)
-
-```cpp
-	// ========== 무적 (Plan5(물점프칩)) ==========
-
-	/** ★Plan5(물점프칩)★ 대상이 무적(State.Invulnerable)인가. 기본 피해 관문이 ★모든 피해마다★ 부른다 — 태그 조회 한 번 */
-	static bool IsInvulnerable(const UAbilitySystemComponent* ASC);
-```
-
-```cpp
-bool UDRAbilitySystemLibrary::IsInvulnerable(const UAbilitySystemComponent* ASC)
-{
-	return ASC && ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Invulnerable);
-}
-```
-
-**⑥ `DRAttributeSet.cpp` `PostGameplayEffectExecute`** — IncomingDamage 분기 맨 앞, 모자 **위** (D-108)
-
-```cpp
-	else if (Data.EvaluatedData.Attribute == GetIncomingDamageAttribute())
-	{
-		// ★Plan5(물점프칩)★ 무적(State.Invulnerable) — 어떤 피해든 통째로 무효 (D-108).
-		// 모자와 같은 자리 · 같은 이유: 근접 · 원거리 · DoT · 탑승 공유가 전부 지나는 유일한 관문이고,
-		// 여기서 return 하면 히트리액트 · 넉백 · 디버프 · 탑승 공유 · 전투 진입이 모두 없다.
-		// ★모자보다 먼저★ — 무적 중에 들어온 피해에 모자가 닳으면 안 된다 (T-111)
-		if (GetIncomingDamage() > 0.f && UDRAbilitySystemLibrary::IsInvulnerable(Props.TargetASC))
-		{
-			SetIncomingDamage(0.f);
-			return;
-		}
-
-		// ★Plan8(모자)★ 모자 보호막 — 어떤 피해든 1회 무효 (Plan8 D-21)
-		...(그대로)...
-```
-
-**⑦ `DRRobotVacuumCharacter.h / .cpp`** — 공중 사용 bool → 횟수 (D-107)
-
-```cpp
-// .h  "========== 더블 점프 ==========" 아래 — bAirJumpUsed 를 대체
-	// 공중 Q 사용 횟수 (서버 전용 판정 값 — 복제 불필요). Landed()에서 0 으로
-	// ★Plan5(물점프칩)★ bool(bAirJumpUsed) → 횟수. 한도는 GA 의 MaxAirJumps(칩③ SkillAirUseCount +1) (D-107)
-	uint8 AirJumpsUsed = 0;
-
-// .cpp Landed()
-		AirJumpsUsed = 0;   // ★Plan5(물점프칩)★ (예전 bAirJumpUsed = false)
-```
-
-- `bAirJumpUsed` 는 **4곳**(헤더 · `Landed` · `CanActivateAbility` · `ActivateAbility`)뿐이다(UPROPERTY 가 아니라 BP 참조 없음) — grep 으로 전부 바꾼다(T-115).
-
-**⑧ `DRVacuumJetJump.h / .cpp`** — ① 피해 · ①③ 높이 · ② 무적 · ③ 공중 횟수 (D-104 · D-105 · D-107 · D-108 · D-109)
-
-```cpp
-// .h — 클래스 주석의 "공중 사용은 bAirJumpUsed로 1회 제한" 을 "AirJumpsUsed 로 MaxAirJumps(칩 반영)회 제한" 으로
-// .h protected
-	// ★Plan5(물점프칩)★ 공중 사용 가능 횟수 기본값 (칩③ SkillAirUseCount Flat +1 → 2). 착지하면 다시 채워진다
-	UPROPERTY(EditDefaultsOnly, Category = "JetJump", meta = (ClampMin = "0"))
-	int32 MaxAirJumps = 1;
-
-	// ★Plan5(물점프칩)★ 칩이 반영된 공중 사용 가능 횟수.
-	// ★CanActivateAbility 는 CDO 에서 불릴 수 있어 ActorInfo 를 직접 받는다★ — GetUpgradedInt 는 현재 ActorInfo 판이다 (T-114)
-	int32 GetMaxAirJumpsFor(const FGameplayAbilityActorInfo* ActorInfo) const;
-```
-
-```cpp
-int32 UDRVacuumJetJump::GetMaxAirJumpsFor(const FGameplayAbilityActorInfo* ActorInfo) const
-{
-	const float Upgraded = GetUpgradeRuntimeFor(ActorInfo)
-		.ApplySkill(GetUpgradeKeyTag(), EDRUpgradeStat::SkillAirUseCount, static_cast<float>(MaxAirJumps));
-	return FMath::Max(0, FMath::RoundToInt(Upgraded));
-}
-
-// CanActivateAbility()
-	// 공중 사용 횟수 제한 — AirJumpsUsed 는 서버 전용 값이므로 실제 차단은 서버 판정에서 이뤄짐 (Plan3 §7.1)
-	// ★Plan5(물점프칩)★ 1회 고정 → GetMaxAirJumpsFor (칩③ +1) (D-107)
-	if (const ADRRobotVacuumCharacter* Vacuum = Cast<ADRRobotVacuumCharacter>(ActorInfo->AvatarActor.Get()))
-	{
-		if (Vacuum->GetCharacterMovement()->IsFalling() && Vacuum->AirJumpsUsed >= GetMaxAirJumpsFor(ActorInfo))
-		{
-			return false;
-		}
-	}
-```
-
-```cpp
-// ActivateAbility() — CommitAbility 성공 뒤, 서버 블록
-	if (Avatar && Avatar->HasAuthority())
-	{
-		UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-
-		// ★Plan5(물점프칩)★ ② 0.3초 무적 — 쓰는 순간부터. 물값은 위 CommitAbility 에서 이미 냈다 (D-108).
-		//   여기서는 표식(State.Invulnerable)만 건다. 막는 건 기본 피해 관문(UDRAttributeSet)이다
-		if (UDRAbilitySystemLibrary::HasUpgradeFeature(ASC, FDRGameplayTags::Get().Upgrade_Feature_Skill_JetJump_Guard))
-		{
-			const FDRJetJumpChipTuning& Tuning = UDRAbilitySystemLibrary::GetChipTuning(Avatar).JetJump;
-			UDRAbilitySystemLibrary::ApplyTimedTagEffect(Avatar, ASC, Tuning.GuardEffect, Tuning.GuardDuration);
-		}
-
-		ADRRobotVacuumCharacter* Vacuum = Cast<ADRRobotVacuumCharacter>(Avatar);
-		if (Vacuum)
-		{
-			// 공중 사용만 센다 → "지상 Q → 공중 Q × 한도" / "스페이스 점프 → 공중 Q × 한도"
-			if (Vacuum->GetCharacterMovement()->IsFalling())
-			{
-				++Vacuum->AirJumpsUsed;   // ★Plan5(물점프칩)★ bool → 횟수 (D-107)
-			}
-			// 애님 플래그 (Landed()에서 해제)
-			Vacuum->SetJetJumping(true);
-
-			// ★Plan5(물점프칩)★ ①③ 상승 높이 배율 — ★높이는 속도의 제곱에 비례★ 하므로 임펄스에는 √배율 (D-105 · T-109).
-			//   0.7 → 임펄스 ×0.837 → 최고 높이 ×0.70. 칩이 없으면 1.0 이라 JumpImpulseZ 그대로
-			const float HeightScale = FMath::Max(0.f, GetUpgradedFloat(EDRUpgradeStat::SkillLaunchHeight, 1.f));
-			Vacuum->LaunchCharacter(FVector(0.f, 0.f, JumpImpulseZ * FMath::Sqrt(HeightScale)), false, true);
-		}
-
-		// ===== AoE 데미지: Z 무관 2D 반경 (Plan3 §7.1) =====
-		// ★Plan5(물점프칩)★ 강판정 = Inner × SkillDamage / 약판정 = Outer × SkillDamage × SkillOuterDamage (D-104).
-		//   ★GetUpgradedDamage() 를 쓰지 않는다★ — 그 기준인 GA Damage(스케일러블)는 이 스킬에서 0 이다 (T-118)
-		const float FinalInner = GetUpgradedFloat(EDRUpgradeStat::SkillDamage, InnerDamage);
-		const float FinalOuter = GetUpgradedFloat(EDRUpgradeStat::SkillOuterDamage,
-			GetUpgradedFloat(EDRUpgradeStat::SkillDamage, OuterDamage));
-
-		// ★Plan5(물점프칩)★ ② 피해 0 이면 판정 자체를 건너뛴다 — 0 피해 GE 를 적에게 걸지 않는다 (D-109)
-		const FVector Origin = Avatar->GetActorLocation();
-		if (FinalInner > 0.f || FinalOuter > 0.f)
-		{
-			TArray<AActor*> Candidates;
-			UDRAbilitySystemLibrary::GetLiveObjectsWithinRadius(this, Candidates, { Avatar }, OuterRadius * 1.5f, Origin);
-
-			for (AActor* Target : Candidates)
-			{
-				if (!IsValid(Target)) continue;
-				if (!UDRAbilitySystemLibrary::IsNotFriend(Avatar, Target)) continue;   // 적만
-
-				const float Dist2D = FVector::DistXY(Origin, Target->GetActorLocation());
-				if (Dist2D > OuterRadius) continue;
-
-				const float HitDamage = (Dist2D <= InnerRadius) ? FinalInner : FinalOuter;   // SeedProjectile 내/외 패턴
-				if (HitDamage <= 0.f) continue;
-
-				FDamageEffectParams Params = MakeDamageEffectParamsFromClassDefaults(Target);
-				Params.BaseDamage = HitDamage;
-				UDRAbilitySystemLibrary::ApplyDamageEffect(Params);
-			}
-		}
-
-		// 물 분사 VFX/SFX — ②(피해 0)여도 그대로 (기존 코드)
-		...
-	}
-```
-
-**⑨ `DRProgressionConfig.cpp`** — 검사(칩이 카탈로그에 있을 때만)
-
-| 조건 | 검사 | 틀리면 |
-|---|---|---|
-| `IsFeatureGated(JetJump.Guard)` | `GuardEffect` 비었나 / 부여 태그 `State.Invulnerable` / `DurationPolicy == HasDuration` / Duration 이 **SetByCaller** / `GuardDuration > 0` | 무적 없음(피해 0 만 남음) / 무적이 안 읽힘 / 영구 무적 · 즉시 사라짐 / 튜닝 값 무시(T-113) |
-
-**바뀔 C++ 파일**: `DRUpgradeTypes.h` · `DRUpgradeUILibrary.cpp` · `DRGameplayTags`(.h/.cpp) · `DRProgressionConfig`(.h/.cpp) · `DRAbilitySystemLibrary`(.h/.cpp) ·
-`DRAttributeSet.cpp` · `DRRobotVacuumCharacter`(.h/.cpp) · `DRVacuumJetJump`(.h/.cpp). **BP 재배선 없음**(에셋은 GA Cost GE 1칸 + 새 GE 1개 + 데이터).
-
-### 14.5 에디터 작업
-
-1. ★**선행 (C++ 빌드 전에도 가능)**★ `GA_VacuumJetJump`(`Content/Blueprints/AbilitySystem/Player/VacuumCleaner/Abilities/Skill3/`) → Class Defaults → Costs → **Cost Gameplay Effect Class = `GE_Cost_VacuumJetJump`**. 돌진(`GA_VacuumDash`)의 Cost GE 는 그대로 둔다(D-103).
-2. **`GE_JetJump_Guard`** — 같은 Skill3 폴더에 새 GameplayEffect BP
-   - Duration Policy **Has Duration** · Duration Magnitude **Set by Caller** `Data.Duration` (★Scalable Float 금지 — T-113★)
-   - Modifiers 없음 / Components → **Target Tags** `State.Invulnerable`
-   - Stacking **Aggregate by Target** · Stack Limit Count **1** · **Refresh on Successful Application**
-   - (선택) GameplayCue — 0.3초 무적 연출(물막 · 반짝임). §14.8-59
-3. **`DA_ProgressionConfig` → Chip Tuning → Jet Jump**: `GuardEffect = GE_JetJump_Guard` · `GuardDuration 0.3`(C++ 기본값).
-4. **`DA_ChipCatalog`** → Chips +3 (§14.1 표). 공통: `OwnerClass RobotVacuum` · `bCommonChip` 끔 · `Category Ascension` · `TargetAbilityTag Abilities.RobotVacuum.JetJump` · `RequiredSlotCount 1`.
-   ★**모든 모디파이어**(Flat 포함)의 `TargetAbilityTag` 도 `Abilities.RobotVacuum.JetJump`★(D-51 — 빠지면 청소기 모든 스킬에 퍼진다)
-   - ① `RV.Asc.JumpBlast` · 폭압 분사구 · 요약 "물 점프 피해 강화" · Tier 3
-     · Modifiers: `SkillDamage` Percent **+1.0**(`DetailOverride` "강판정 피해 20 → 40") / `SkillOuterDamage` Percent **+0.5**(`DetailOverride` "약판정 피해 5 → 15") / `SkillLaunchHeight` Percent **−0.3** `bIsDrawback` ✓
-     · Description "물 점프의 피해가 커집니다 — 가까운 적(2m 안) 20 → 40, 먼 적(2~4m) 5 → 15. 대신 점프 높이가 30% 낮아집니다."
-   - ② `RV.Asc.JumpGuard` · 완충 분사구 · 요약 "점프 순간 0.3초 무적" · Tier 4 · GrantedTags `Upgrade.Feature.Skill.JetJump.Guard`
-     · Modifiers: `SkillDamage` Percent **−1.0** `bIsDrawback` ✓(`DetailOverride` "피해 0")
-     · Description "물 점프를 쓰는 순간부터 0.3초 동안 어떤 공격도 받지 않습니다(피해 · 경직 · 넉백 · 디버프 모두). 대신 물 점프가 적에게 피해를 주지 않습니다."
-   - ③ `RV.Asc.JumpMulti` · 다단 분사구 · 요약 "공중 2회 · 물 20" · Tier 3
-     · Modifiers: `SkillWaterCost` **Flat −10**(`DetailOverride` "물 소모 30 → 20") / `SkillAirUseCount` **Flat +1**(`DetailOverride` "공중 사용 1 → 2회") / `SkillLaunchHeight` Percent **−0.25** `bIsDrawback` ✓
-     · Description "물 점프의 물 소모가 30에서 20으로 줄고, 공중에서 2번까지 쓸 수 있습니다. 대신 점프 높이가 25% 낮아집니다."
-   - `SkillDisplayNames` 에 `Abilities.RobotVacuum.JetJump → 물 점프`
-5. (선택) 아이콘 `Content/DaeRuneAssets/UI/Upgrade/Icon/Vacuum/공격-8 · 지원-8 · 편의-8` (탑승 -6 · 공기탄 -7)
-6. (선택) 무적 상태 아이콘은 넣지 않는다 — 0.3초라 `DA_StatusEffectInfo` 위젯이 깜빡이기만 한다. 연출이 필요하면 2번의 GameplayCue
-7. 검사: `DA_ProgressionConfig` 편집 → `[ProgressionConfig] … 검증 통과` / 카탈로그 오류 0건(새 축 3개가 스킬 단위로 잡히는지 포함)
-
-### 14.6 함정
-
-| # | 함정 | 대응 |
-|---|---|---|
-| **T-108** | 선행 변경(Cost GE 연결) 없이 칩③만 넣는다 | 물이 원래 안 빠지므로 "30 → 20" 은 시전 가능 기준만 낮춘다 — 칩이 사실상 단점만 남는다. §14.5-1 을 먼저 |
-| **T-109** | 높이 배율을 임펄스에 그대로 곱한다 | 높이 = v² ÷ 2g 라 ×0.7 이 높이 ×0.49(① 202uu), ×0.75 가 ×0.56(③ 232uu)이 된다 — 임펄스엔 `√배율` |
-| **T-110** | ③ 물을 `SkillWaterCost` Percent −0.3333 으로 | 30 × 0.6666667 = 20.000001 → 물이 정확히 20 일 때 `CheckCost` 실패. **Flat −10** |
-| **T-111** | 무적 검사를 모자 **뒤**에 둔다 | 무적 0.3초 동안 맞은 피해에 모자가 닳는다(D-108) |
-| **T-112** | 무적 검사를 `UDRPlayerAttributeSet::HandleIncomingDamage` 안에 둔다 | 위치에 따라 디버프 · 탑승 공유 · 전투 진입이 먼저 지나가고, 적 · 사이트에서는 같은 태그가 안 먹는다 — 기본 관문 맨 앞 |
-| **T-113** | `GE_JetJump_Guard` Duration 을 Scalable Float 로 둔다 | `ApplyTimedTagEffect` 가 넣는 `Data.Duration` 이 무시되고 에셋 값으로 돈다(0 이면 즉시 사라짐). 검사가 잡는다 |
-| **T-114** | `CanActivateAbility` 에서 `GetUpgradedInt`(현재 ActorInfo 판)로 공중 횟수를 읽는다 | CDO 경로에서 업그레이드 캐시가 비어 칩이 안 읽힌다 → 공중 1회로 막힌다. `GetUpgradeRuntimeFor(ActorInfo)`(CheckCost 와 같은 이유) |
-| **T-115** | `bAirJumpUsed` 를 일부만 바꾼다 | `Landed` 리셋을 빠뜨리면 착지 후에도 공중 Q 불가, `ActivateAbility` 를 빠뜨리면 무한 공중 점프. 4곳 전부(§14.4-⑦) |
-| **T-116** | `SkillOuterDamage` 를 강판정에도 곱한다 | ① 강판정이 60 이 된다 — 약판정에만 |
-| **T-117** | 새 축 3개를 `Count` 앞이 아닌 곳에 넣거나 `DRIsSkillStat` 에서 빠뜨린다 | 기존 칩 효과가 밀리거나(T-30) 전역 블록에 쌓여 청소기 모든 스킬로 퍼진다(T-12 — 예: `SkillDamage` 처럼 같은 칩의 스킬 단위 값과 섞인다). `ValidateCatalog` 가 오류를 내준다 |
-| **T-118** | 피해를 `GetUpgradedDamage()` 로 읽는다 | 그 기준은 GA `Damage`(스케일러블) = 0 이라 칩 유무와 무관하게 0 이 된다 — `GetUpgradedFloat(SkillDamage, InnerDamage / OuterDamage)` |
-
-### 14.7 검증
-
-준비: PIE Listen Server · 플레이어 2(청소기 1 + 아군). 콘솔 `DRUnlockUpgrade` → `DRUnlockSlot 6`. 수치는 HUD 물 · 데미지 숫자 · `showdebug abilitysystem`(태그 · 활성 GE). 높이는 같은 자리 벽 · 지붕 높이와 비교.
-
-- [ ] **선행 변경(칩 없음)** Q 1회 → 물 −30 / 물 20 에서 Q → 물 0 + 체력 5(부족분 10 × 0.5) / 물 0 · 체력 낮으면 시전 불가(기존 규칙) / 피해 20 · 5, 높이 · 공중 1회 그대로 / 돌진 동작 변화 없음
-- [ ] **①** 2m 안 적 40, 2~4m 적 15 / 높이 약 ×0.7(정점 0.77초) / 물 30 / 광폭화면 40 · 15 에 추가 배율
-- [ ] **②** 피해 숫자 없음 · 적 히트리액트 · 어그로 없음 · 물 분사 연출은 나옴 / Q 직후 0.3초 안에 맞으면 체력 · 컨테이너 그대로, 경직 · 넉백 · 새 디버프 없음 / 화상 중이면 0.3초 동안 틱 0 / 모자가 있으면 모자 유지 / 0.3초 뒤엔 정상 피격 / 지상 Q → 0.3초 뒤 공중 Q → 0.6초 연속 무적 / 내 위 탑승자가 맞으면 탑승자만 맞음 · 내가 맞으면 탑승자에게도 공유 없음 / 물이 모자라 체력으로 낼 때 그 체력은 빠짐 / `showdebug` 에 `State.Invulnerable` 0.3초
-- [ ] **③** 물 −20(물 정확히 20 에서도 시전) / 지상 Q → 공중 Q → 공중 Q(3회) · 4번째 거부 / 스페이스 → 공중 Q 2회 / 착지하면 다시 2회 / 높이 약 ×0.75
-- [ ] **스킬당 1칩** ①②③ 중 하나만, 탑승칩 · 공기탄칩과는 함께 / 미리보기 라벨 "물 점프" / 카드: ① "강판정 피해 20 → 40" · "약판정 피해 5 → 15"(초록) · "상승 높이 −30%"(빨강) / ② "피해 0"(빨강) / ③ "물 소모 30 → 20" · "공중 사용 1 → 2회"(초록) · "상승 높이 −25%"(빨강)
-- [ ] **멀티** 클라 청소기 ② → 호스트 쪽 적이 그 청소기를 0.3초 안에 때려도 0 / 클라 청소기 ③ → 공중 3번째 Q 가 서버에서 거부되고 클라 화면이 튀지 않음(예측 취소 — §14.8-61)
-- [ ] **검사** `DA_ProgressionConfig` 편집 → 오류 0건 / `GuardEffect` 를 비우거나 Duration 을 Scalable Float 로 바꾸면 오류
-
-### 14.8 열린 결정 · 알려진 제약 (§9 번호에 이어서)
-
-| # | 내용 | 현재 판단 |
-|---|---|---|
-| **56** | 이름 · Tier · 아이콘 · `ChipId`(`RV.Asc.Jump*`)는 가칭 | 사용자가 정하면 카탈로그만(`ChipId` 는 첫 입력 전에 확정 — 세이브 키) |
-| **57** | ★선행 변경(D-103)으로 칩 없는 물 점프가 물 30 을 실제로 쓴다★ — 이동기 사용 빈도 · 물 경제가 바뀐다 | 사용자 확정. 플레이 확인 후 `WaterCost`(C++ 생성자 — BP 미변경)만 조정 |
-| **58** | ② 무적은 **피해 GE(IncomingDamage)를 지나는 것만** 막는다 — 적 GA 가 직접 거는 `LaunchCharacter` · 스턴 GE 등은 못 막는다 | 그런 공격이 있는지는 이번 조사 범위 밖. 필요하면 그 GA 에 `State.Invulnerable` 검사 한 줄 |
-| **59** | ② 무적 연출이 없다 — 막았다는 표시(모자의 `HatBlock` 큐 같은 것) 없음 | 선택: `GE_JetJump_Guard` 에 GameplayCue(§14.5-2), 막을 때 큐가 필요하면 관문에 한 줄 |
-| **60** | `SkillOuterDamage` 는 지금 물 점프만 읽는다 | 씨앗 폭탄 등 다른 2단 판정 스킬에 쓰려면 그 스킬도 읽게 한다 |
-| **61** | 공중 횟수는 서버 전용 카운터 — 클라는 늘 허용으로 예측해, 한도를 넘긴 Q 가 클라에서 잠깐 발동했다 취소될 수 있다(지금의 3번째 Q 와 같은 현상) | 기존 구조 유지. 거슬리면 `AirJumpsUsed` 를 OwnerOnly 복제 |
-| **62** | 높이 수치는 중력 −980 · GravityScale 1 · 공기 저항 없음 가정 | 중력을 바꿔도 비율(×0.70 · ×0.75)은 그대로다 |
-| **63** | `GA_VacuumDash` 가 `GE_Cost_VacuumJetJump` 를 Cost GE 로 들고 있다 | 돌진 `WaterCost` 0 이라 무해 — 건드리지 않는다. 정리하려면 비운다(선택) |
-| **64** | ② 지상 Q → 공중 Q 로 한 번 뜰 때 최대 0.6초 연속 무적 · 물 60 | 의도대로(사용 1회당 0.3초). 쿨다운(0.3초 고정 GE)이 무적보다 짧아지면 무적이 끊김 없이 이어질 수 있다 — 지금 그런 칩은 없다 |
-
-### 14.9 작업 순서
-
-1. 선행 변경(§14.5-1, 에셋만) → PIE → §14.7 "선행 변경"
-2. 칩 C++ ②~⑨ → 빌드 (`UENUM` · 태그 · `USTRUCT` 추가라 **에디터를 닫고** — T-45)
-3. 에디터 §14.5-2~7
-4. §14.7 검증 → §1 · §3 · §5 · §6 · §9 에 흡수(§1.7 그룹 +1, 스탯 축 표에 새 축 3개), 머리말 상태 갱신
-
-### 14.10 구현 결과 — 계획과 달라진 점
-
-2026-10-08 C++ 구현 · 빌드 통과. 다른 점:
-
-- 칩② 인데 `ChipTuning.JetJump.GuardEffect` 가 비어 있으면 물 점프를 쓸 때마다 경고 로그 `[JetJump] … 미지정` 을 남긴다(계획에는 Config 검사만 있었다).
-- `AirJumpsUsed` 는 255 에서 더 오르지 않는다(uint8 넘침 방지).
-- 선행 변경(D-103 — Cost GE 연결)은 에셋 작업이라 아직이다 → §16.1-1.
-
----
-
-## 15. 로봇 청소기 돌진(스킬 2 · RMB) 칩 3종 (C++ 구현 완료 — 에디터 · 검증 남음)
-
-> 2026-10-07 요청 · 같은 날 질의응답으로 확정. 코드 주석 접두 **`Plan5(돌진칩)`** · 결정 **D-111 ~ D-119** · 함정 **T-119 ~ T-130** (앞 번호에 이어서 매긴 영구 ID).
-> **C++ 구현 완료**(2026-10-08 빌드 통과). 에디터 작업은 **§16 안내서**, 그다음 §15.7 검증. 계획과 달라진 점은 §15.10. 검증이 끝나면 §1~§9 에 흡수한다.
-> ★선행 변경 1건 — **D-112**(돌진 자해가 지금은 **한 번도 안 들어간다** → 고치면서 조건을 "지속 돌진 중 지형 충돌"로) — 은 칩이 없어도 돌진을 바꾼다(§15.8-66).★
->
-> 사용자 확정
-> - ① 게이지 1칸당 **적에게** 주는 충돌 피해 **10 → 18**(아군 충돌 피해 칸당 5 는 그대로). 대신 지형지물 충돌 시 받는 피해 **50 → 100**.
-> - ② 돌진 중 **아군과 부딪히지 않고 통과**한다. 대신 **적에게** 주는 충돌 피해 **−15%**.
-> - ③ 게이지 1칸 충전 시간 **0.5 → 0.35초**. 대신 칸당 이속 버프 **+20% → +14%**.
-> - 돌진 자해(지금 0 — 버그)는 고치고, 조건은 **5칸 지속 돌진 중 벽 · 지형지물에 부딪힐 때만**이다(적 · 아군과 부딪힐 때는 자해 없음).
-
-### 15.0 지금의 돌진 (코드·에셋 실측)
-
-| 항목 | 지금 | 어디 |
-|---|---|---|
-| 스킬 | `GA_VacuumDash`(RMB) — `UDRVacuumDash : UDRDamageGameplayAbility`. `AbilityTags = Abilities.RobotVacuum.Dash`(업그레이드 키). BP 그래프는 `StartChargingGauge`(누름) · `ReleaseGauge`(뗌) · `OnBrakePressed`(S 브레이크 이벤트) 세 노드를 부르기만 한다. 게이지 · 물 · 버프 · 충돌 처리는 전부 **서버** | GA BP · `DRVacuumDash.cpp` |
-| 수치 | BP 가 덮은 값 없음 → C++ 기본값 그대로: `MaxGauge` **5** · `ChargeInterval` **0.5초** · `DecayInterval` **1초** · `WaterPerGauge` **20** · `EnemyDamagePerGauge` **10** · `PlayerDamagePerGauge` **5** | GA CDO |
-| 충전 | 누르는 동안 `ChargeInterval` 마다 1칸(물 20, 부족분 ×0.5 는 체력 대납, 그마저 부족하면 충전 일시 정지). 5칸이면 대기. HUD 는 칸 수만 받는다(시간 정보 없음) | `TickCharge` · `NotifyVacuumDashGaugeChanged` |
-| 돌진 | 떼면 `GE_VacuumDashSpeedBuff` 를 칸 수만큼 쌓고 충돌 판정을 켠다. **1~4칸** = 1초마다 1칸 감쇠, 0 이면 끝 / **5칸** = 지속 돌진(자동 전진 · 감쇠 없음) — 충돌 · S 브레이크로만 끝 | `ReleaseGauge` · `TickDecay` |
-| 이속 버프 | `GE_VacuumDashSpeedBuff`: Infinite · MoveSpeed **MultiplyAdditive 1.2**(ScalableFloat) · Aggregate by Target · Limit 5 · 에셋 태그 `Buff.RobotVacuum.DashSpeed`(공기탄 반동 예외 판정이 읽는다). 기본 이속 550 → 칸당 +110(5칸 1100) | 에셋 |
-| 충돌 감지 | 캡슐 `OnComponentHit`(서버 · 돌진 중에만 · 1회). **Pawn**(적 · 다른 플레이어)이면 무조건, Pawn 이 아니면 **수직면**(노말 Z < 0.7)이고 속도 350 이상일 때만. 내 위 탑승자 · 내가 탄 청소기는 제외 | `ADRRobotVacuumCharacter::OnCapsuleHit` |
-| 충돌 피해 | 맞은 액터에 ASC 가 있으면 `G × (적 10 / 아군 5)` — `IsNotFriend` 로 적 · 아군 구분, `ApplyDamageEffect` 직접(아군 필터 없음). 그리고 **돌진이 끝난다**(Crush 몽타주). ★`SkillDamage` 를 읽지 않는다★(BaseDamage 를 위 값으로 덮는다). 클렌저 사이트는 Pawn 이 아니고 ASC 가 있어 "적"으로 계산된다(D-3) | `HandleDashImpact` |
-| ★자해★ | 코드: 지속 돌진(5칸) 중 **무엇이든** 부딪히면 `SelfDamageEffect` 적용. 그런데 ★BP 의 `SelfDamageEffect` 칸에 `GE_VacuumDashSpeedBuff`(이속 버프)가 들어가 있다★ — `GE_VacuumDashSelfDamage`(IncomingDamage AddBase **50**)는 어디서도 참조하지 않는다. → **지금 자해는 0**(이속 버프 1스택이 더해졌다가 바로 `FinishDash` 가 전부 지운다) | GA CDO · 에셋 참조 |
-| 기타 BP 값 | `CostGameplayEffectClass = GE_Cost_VacuumJetJump`(돌진 `WaterCost` 0 이라 무동작 — §14.8-63) | GA CDO |
-| 아군 충돌 | 청소기 캡슐은 기본 `Pawn` 프로필 — 적과 플레이어가 **같은 Pawn 오브젝트 채널**이라 채널로는 아군만 골라 통과시킬 수 없다. 탑승 · 착석 중인 캐릭터는 이미 `ECC_Pawn` 응답을 Ignore 로 바꾼다 | `BP_DRVacuumCleaner` · `DefaultEngine.ini` · `ADRCharacter::OnRep_MountedOn` |
-| 청소기 칩 | 탑승(§12) · 공기탄(§13) · 물 점프(§14) 계획뿐 — 돌진 그룹은 새로 생긴다 | |
-
-**이 설계가 기대는 엔진·코드 사실**
-
-| 항목 | 사실 |
-|---|---|
-| 이동 무시 목록 | `UPrimitiveComponent::IgnoreActorWhenMoving(Actor, bShouldIgnore)` 는 그 컴포넌트가 **스스로 움직일 때**의 스윕 · 바닥 검사 · 겹침 해소에서 그 액터를 뺀다. ★복제되지 않는다★ — 이동을 시뮬레이션하는 머신(서버 · 각 소유 클라)마다 따로 넣어야 하고, 한쪽만 넣으면 상대가 움직일 때 다시 막힌다 |
-| 스택 GE 크기 | MultiplyAdditive 바이어스 1 → 값 v 를 n 스택 = 1 + (v − 1) × n (1.14 × 5 = ×1.7). Compound 면 바이어스 0 이라 v × n(T-95) |
-| SetByCaller + 스택 | 같은 GE 를 다시 걸면 기존 인스턴스의 스택만 오르고 크기는 첫 스펙 값을 쓴다 — 한 번 돌진 안에서 칸당 값이 같으니 문제없다. 값을 안 넣고 걸면 에러 로그 + 크기 0 |
-| 자해 경로 | `IncomingDamage` 에 직접 → 기본 관문(무적 · 모자 · 받는 쪽 배율 · 탑승 공유)을 모두 탄다. ExecCalc(공격 배율)는 안 탄다 |
-
-### 15.1 칩 3종 스펙
-
-공통: `OwnerClass = RobotVacuum`, `Category = Ascension`, `RequiredSlotCount = 1`,
-칩 레벨 · **모든 모디파이어**의 `TargetAbilityTag = Abilities.RobotVacuum.Dash`(실제 GA 태그 — D-111). → ①·②·③ 중 하나만, **탑승 · 공기탄 · 물 점프 칩과는 함께** 낄 수 있다.
-
-| # | `ChipId` | 이름(가칭) | Modifiers | GrantedTags | 효과 | 단점 | Tier | 아이콘(제안) |
-|---|---|---|---|---|---|---|---|---|
-| ① | `RV.Asc.DashRam` | 충각 범퍼 | `SkillDamage` **+0.8**<br>`SkillSelfDamage` **+1.0** ★단점★ | (없음) | 적 충돌 피해 칸당 **10 → 18** | 지속 돌진 지형 충돌 자해 **50 → 100** | 3 | 공격-9 |
-| ② | `RV.Asc.DashPass` | 유령 주행 | `SkillDamage` **−0.15** ★단점★ | `…Dash.PassAllies` | 돌진 중 **아군을 통과**(충돌 · 피해 · 정지 없음) | 적 충돌 피해 칸당 **10 → 8.5** | 4 | 지원-9 |
-| ③ | `RV.Asc.DashQuick` | 급속 충전기 | `SkillWindup` **−0.3**<br>`SkillSpeedBonus` **−0.3** ★단점★ | (없음) | 칸당 충전 **0.5 → 0.35초** | 칸당 이속 **+20% → +14%** | 3 | 편의-9 |
-
-`…` = `Upgrade.Feature.Skill`. 모디파이어 Op 는 전부 `Percent`(곱연산).
-카드 표기(`DetailOverride`): ① `SkillDamage` "칸당 충돌 피해 10 → 18" · `SkillSelfDamage` "벽 충돌 자해 50 → 100" / ② `SkillDamage` "칸당 충돌 피해 10 → 8.5" /
-③ `SkillWindup` "칸당 충전 0.5 → 0.35초" · `SkillSpeedBonus` "칸당 이속 +20% → +14%".
-②는 단점이 모디파이어라 검사상 `Description` 필수는 아니지만, 통과 대상을 알려야 하므로 쓴다. 이름 · Tier · 아이콘 · `ChipId` 는 가칭(§15.8-65).
-
-**적 충돌 피해** (공용 칩 · 버프 없음, G = 해소 순간 칸 수)
-
-| | 1칸 | 2칸 | 3칸 | 4칸 | 5칸(지속) | 아군 충돌 |
-|---|---|---|---|---|---|---|
-| 칩 없음 | 10 | 20 | 30 | 40 | 50 | 칸당 5 · 돌진 끝 |
-| ① | **18** | **36** | **54** | **72** | **90** | 칸당 5 · 돌진 끝 |
-| ② | **8.5** | **17** | **25.5** | **34** | **42.5** | **통과**(0 · 계속 달린다) |
-| ③ | 10 | 20 | 30 | 40 | 50 | 칸당 5 · 돌진 끝 |
-
-**자해** (5칸 지속 돌진 중 지형 충돌만 — 적 · 아군 충돌은 0)
-
-| | 지금(버그) | 칩 없음(D-112 뒤) | ① | ② | ③ |
-|---|---|---|---|---|---|
-| 자해 | 0 | **50** | **100** | 50 | 50 |
-
-**충전 · 이속** (기본 이속 550, 가속 무시)
-
-| | 1칸 | 2칸 | 3칸 | 4칸 | 5칸 | 충전 중 초당 물 |
-|---|---|---|---|---|---|---|
-| 칩 없음 — 도달 시간 | 0.5초 | 1.0 | 1.5 | 2.0 | **2.5** | 40 |
-| ③ — 도달 시간 | 0.35초 | 0.70 | 1.05 | 1.40 | **1.75** | 57 |
-| 칩 없음 — 이속 | 660 | 770 | 880 | 990 | **1100** | |
-| ③ — 이속 | 627 | 704 | 781 | 858 | **935** | |
-
-- 일반 돌진(1~4칸)은 1초에 1칸씩 줄며 달린다 → 4칸 이동 거리 ≈ 550 × (4 + 0.2 × 10) = **3300uu**, ③ 은 550 × (4 + 0.14 × 10) = **2970uu**(−10%).
-- 물은 칸당 20 그대로(5칸 = 100) — ③ 은 같은 물을 더 빨리 쓴다.
-
-### 15.2 상호작용
-
-| 조합 | 결과 |
-|---|---|
-| ①② + 공용 칩(⑥ 광폭화 · ⑦ 시너지 · `DamageDealt`) · 탑승칩① | ExecCalc 소스측에서 18 · 8.5 에 추가로 곱해진다(아군 충돌 칸당 5 에도 지금처럼 곱해진다) |
-| ①② + 공기탄칩② 흡착 · 물대포② 취약 | 적 관문에서 받는 피해 배율이 곱해진다. 돌진 피해로는 흡착 스택이 안 쌓인다(T-99) |
-| ①② + 클렌저 사이트 | 사이트는 "적" 판정이라 18 · 8.5 로 계산된다(기존 동작). 사이트는 Pawn 이 아니라 **지형**이기도 해서 지속 돌진으로 부딪히면 자해도 받는다(§15.8-67) |
-| 자해 + 탑승 | 자해는 일반 피해라 탑승 공유를 탄다 — 내 위 탑승자도 50(①이면 100) / 탑승칩② 대신 맞는 범퍼면 청소기 50 + 10 = **60**(①이면 100 + 20 = **120**, §12.2) |
-| 자해 + 벨보이 모자 | 모자가 1회 막는다(자해도 "어떤 피해든") |
-| 자해 + 물 점프칩② 무적(§14) | 0.3초 무적 안이면 0 |
-| 자해 + 받는 피해 칩(`DamageTaken`) · 시너지 · 오염 · 로비 | 받는 쪽 배율이 그대로 걸린다 / 로비 · 튜토리얼은 체력 1 클램프 |
-| ② + 탑승 | 내 위 탑승자 · 내가 탄 청소기는 원래 충돌 판정에서 빠진다 — 그대로 |
-| ② + 적 · 지형 | 그대로 부딪혀 피해(−15%) · 종료 · 자해(지속 · 지형) |
-| ② + 다른 플레이어의 돌진 · 이동 | 서로 통과(양쪽 다 무시 — D-115). 돌진이 끝나면 다시 막힌다 |
-| ③ + 자판기 공속 버프(M) | 돌진 충전에는 원래 공속이 안 걸린다 — 그대로(0.35초 고정) |
-| ③ 이속 + 다른 이속 효과(씨앗② 가속 · 탑승칩① 하중 · 공용 이동 속도 칩) | Compound · 기본값 쪽과 곱해진다 — 탑승자 1명(하중 −5%)을 태운 청소기의 ③ 5칸 = 550 × 1.7 × 0.95 ≈ **888** |
-| ③ + 공기탄 반동 예외(`HasDashBuff`) | 에셋 태그 `Buff.RobotVacuum.DashSpeed` 를 그대로 두므로 변화 없음 |
-| ①②③ + 탑승 · 공기탄 · 물 점프 칩 | 다른 그룹이라 하나씩 함께 낄 수 있다 |
-
-### 15.3 설계 결정
-
-| # | 결정 | 근거 |
-|---|---|---|
-| **D-111** | 그룹 키 = 실제 GA 태그 **`Abilities.RobotVacuum.Dash`**. 기능 스위치는 ② 하나 — `Upgrade.Feature.Skill.Dash.PassAllies`. ①③ 은 모디파이어만. ★동적 상수가 없어 `ChipTuning` · Config 검사는 추가하지 않는다★ | D-93 · D-102 와 같은 방식. 수치가 전부 정적이라 카탈로그(D-2)로 끝난다 |
-| **D-112** | ★선행 변경★ 자해 수정 = ① BP `SelfDamageEffect = GE_VacuumDashSelfDamage`(에셋) ② 조건을 **지속 돌진 + Pawn 이 아닌 충돌(지형)** 로(C++) ③ 자해량을 GE 고정값 50 에서 GA `SustainedImpactSelfDamage`(50) → SetByCaller **`Data.SelfDamage`** 로 옮긴다 | 사용자 확정(지속 돌진 + 지형만). "지형" 기준은 `OnCapsuleHit` 의 분류(Pawn 여부)와 같다 — ASC 유무로 하면 사이트가 빠진다(T-128). 칩①이 배율을 곱하려면 값이 코드에 있어야 한다 |
-| **D-113** | ①② 적 충돌 피해 = `G × ApplySkill(SkillDamage, EnemyDamagePerGauge)` — **적에게만**. 아군 충돌(`PlayerDamagePerGauge` 5)은 `SkillDamage` 를 안 탄다. ① **+0.8**(10 → 18) · ② **−0.15**(10 → 8.5) | 사용자 확정("적에게 주는 충돌 피해"). 돌진이 이때 처음으로 `SkillDamage` 를 읽는다. ②의 8.5 는 소수 그대로 둔다(반올림하면 −15% 가 −10%(9)나 −20%(8)이 된다) |
-| **D-114** | ① 자해 = 새 축 **`SkillSelfDamage`**(스킬 단위 배율, **낮을수록 좋음**) **+1.0** → `ApplySkill(SkillSelfDamage, 50)` = 100 | 정적 수치라 카탈로그(D-2) — 단점이 카드에 빨갛게 뜬다. 다른 자해 스킬이 생겨도 같은 축을 쓴다 |
-| **D-115** | ② 아군 통과 = 캐릭터 복제 플래그 **`bDashPassThroughAllies`**(서버가 `ReleaseGauge` 에서 켜고 `FinishDash` · `EndAbility` 에서 끈다) → **모든 머신**의 `OnRep` 에서 내 캡슐 ↔ 아군 캡슐을 **서로** `IgnoreActorWhenMoving`. 이 머신에서 넣은 아군만 기억했다가 그대로 되돌린다. 서버 `OnCapsuleHit` 는 통과 중 아군 충돌을 무시한다(안전망) | 적 · 아군이 같은 Pawn 채널이라 채널 변경은 적까지 통과시킨다(T-126). 이동 무시는 복제가 안 돼 머신마다(T-123), 한쪽만이면 상대가 움직일 때 막혀서 양쪽 다(T-124). 안전망은 돌진 중 새로 생긴 아군 폰 대비 — 피해 · 종료는 절대 없다 |
-| **D-116** | ② 통과 대상 = **다른 플레이어 캐릭터 전부**(`ADRCharacter` 중 `!IsNotFriend`). 적 · 사이트 · 지형은 그대로 부딪힌다 | 원문 "아군과 충돌하지 않고 통과". 사이트는 아군이 아니다(D-3) |
-| **D-117** | ③ 충전 = 기존 축 **`SkillWindup`** **−0.3** → 타이머 간격 = `ChargeInterval × WindupScale`(하한 0.05초). 감쇠(`DecayInterval`)에는 곱하지 않는다 | §13 D-99 와 같은 해석 — 충전이 곧 이 스킬의 선딜이다. 0.5 × 0.7 = 0.35 가 정확히 맞는다. 감쇠까지 줄이면 돌진 시간이 짧아진다(T-129) |
-| **D-118** | ③ 이속 = 새 축 **`SkillSpeedBonus`**(스킬 단위, 칸당 이속 증가분의 배율, 높을수록 좋음) **−0.3** → 칸당 `ApplySkill(SkillSpeedBonus, SpeedBonusPerGauge 0.2)` = 0.14. `GE_VacuumDashSpeedBuff` 크기를 ScalableFloat 1.2 → **SetByCaller `Data.MoveSpeed.Mult`**(= 1 + 칸당 값)로 바꾸고 **MultiplyAdditive · by Target 5 는 유지** | 값이 GE 에 박혀 있으면 칩이 못 바꾼다. 기존 태그 `Data.MoveSpeed.Mult`(최종 배율 의미)를 그대로 쓴다. Additive 라야 5칸이 1 + 0.14 × 5 = ×1.7(Compound 면 ×5.7 — T-122) |
-| **D-119** | 새 축 2개 — `SkillSelfDamage`(스킬 · **낮을수록 좋음** · 초 아님) · `SkillSpeedBonus`(스킬 · 높을수록 좋음 · 초 아님). `DRIsSkillStat` 에 둘 다, `DRIsLowerBetter` 에 `SkillSelfDamage` 만. 위치는 **구현 시점의 `Count` 바로 앞** | T-30 · T-12. `SkillSelfDamage` 를 `DRIsLowerBetter` 에서 빠뜨리면 "자해 +100%" 가 초록으로 뜬다(T-130) |
-
-> 기각: ② 를 콜리전 채널(Pawn → Overlap/Ignore)로 — 적도 Pawn 이라 같이 통과해 충돌 피해 자체가 사라진다.
-> 기각: ② 를 "아군 전용 오브젝트 채널" 신설로 — 프로젝트 전체 콜리전 프로필 · 모든 캐릭터 BP 를 바꿔야 한다. 칩 하나에 비해 너무 크다.
-> 기각: ③ 이속을 기능 스위치 + 별도 GE(1.14)로 — 정적 수치는 카탈로그가 원칙이고 GE 가 둘이 되면 공기탄 반동 예외 · HUD 가 둘 다 알아야 한다.
-> 기각: ① 자해를 GE 를 두 번 적용해 100 으로 — 받는 쪽 배율 · 모자 · 무적이 두 번 판정된다(모자가 한 번만 막는 등).
-
-### 15.4 C++ 변경 (적용 순서)
-
-**① `DRGameplayTags.h / .cpp`** — 태그 2개(네이티브)
-
-| 멤버 | 태그 | 종류 |
-|---|---|---|
-| `Upgrade_Feature_Skill_Dash_PassAllies` | `Upgrade.Feature.Skill.Dash.PassAllies` | ② 기능 스위치 |
-| `Data_SelfDamage` | `Data.SelfDamage` | SetByCaller — `GE_VacuumDashSelfDamage` 의 자해량(D-112) |
-
-**② `DRUpgradeTypes.h` · `DRUpgradeUILibrary.cpp`** — 새 축 2개 (D-114 · D-118 · D-119)
-
-```cpp
-	// ===== Plan5(돌진칩) 추가 =====
-	// ★신규 값은 반드시 Count 바로 앞에 붙인다.★ (T-30) — §13 · §14 의 축보다 먼저 구현하면 그 앞이 된다
-
-	/**
-	 * 스킬 단위. 그 스킬이 ★시전자 자신에게 주는 피해(자해)★ 의 배율 — 낮을수록 좋다.
-	 *     자해 = ApplySkill(SkillSelfDamage, 기본 자해량)   // +1.0 → 50 → 100
-	 * DRIsLowerBetter 에 ★넣는다★ (안 넣으면 "+100%" 가 초록으로 뜬다 — T-130) (Plan5 D-114)
-	 */
-	SkillSelfDamage			UMETA(DisplayName = "스킬 자해 피해"),
-
-	/**
-	 * 스킬 단위. 그 스킬이 시전자에게 주는 ★이동 속도 증가분(칸 · 스택당)★ 의 배율.
-	 *     칸당 증가 = ApplySkill(SkillSpeedBonus, 0.2)   // −0.3 → 0.14 → GE 배율 1.14
-	 * 배율 자체가 아니라 "증가분"에 곱한다 — 1.2 에 곱하면 1.2 × 0.7 = 0.84(감속)가 된다 (Plan5 D-118)
-	 */
-	SkillSpeedBonus			UMETA(DisplayName = "스킬 이속 버프"),
-
-	Count UMETA(Hidden)
-```
-
-- `DRIsSkillStat()` 에 두 줄(`// Plan5(돌진칩)`), `DRIsLowerBetter()` 에 `SkillSelfDamage` 한 줄. `DRIsTimeStat` 에는 넣지 않는다.
-- `DRUpgradeUILibrary.cpp` 짧은 이름(5자 제한): `SkillSelfDamage` → `"자해 피해"` · `SkillSpeedBonus` → `"이속 버프"`.
-
-**③ `DRVacuumDash.h`** — 값 2개를 GE 에서 C++ 로, 클래스 주석 갱신
-
-```cpp
-// 클래스 주석: "5칸(최대): 지속 돌진 — 자동 전진 + 감쇠 없음, 충돌(50 자해) 또는 S 브레이크(무피해)로 종료"
-//   → "… 지형 충돌(자해 50 — 적 · 아군 충돌은 자해 없음) 또는 적 · 아군 충돌 · S 브레이크(무피해)로 종료"
-// SpeedBuffEffect 주석: "MoveSpeed ×(1+0.2×스택)" → "MultiplyAdditive · SetByCaller(Data.MoveSpeed.Mult) = 1 + 칸당 증가 · by Target 5"
-// SelfDamageEffect 주석: "(GE_VacuumDashSelfDamage — 50)" → "(GE_VacuumDashSelfDamage — IncomingDamage · SetByCaller(Data.SelfDamage))"
-
-	// ★Plan5(돌진칩)★ 칸당 이속 증가분 (0.2 = +20%). 예전엔 GE 에 1.2 로 박혀 있었다 — 칩③ SkillSpeedBonus 가 곱해진다 (D-118)
-	UPROPERTY(EditDefaultsOnly, Category = "Dash", meta = (ClampMin = "0.0"))
-	float SpeedBonusPerGauge = 0.2f;
-
-	// ★Plan5(돌진칩)★ 지속 돌진 지형 충돌 자해량. 예전엔 GE 에 50 으로 박혀 있었다 — 칩① SkillSelfDamage 가 곱해진다 (D-112 · D-114)
-	UPROPERTY(EditDefaultsOnly, Category = "Dash", meta = (ClampMin = "0.0"))
-	float SustainedImpactSelfDamage = 50.f;
-```
-
-**④ `DRVacuumDash.cpp`** — ③ 충전 · ③ 이속 · ② 통과 · 선행 · ①② 피해 (D-112 · D-113 · D-115 · D-117 · D-118)
-
-```cpp
-// StartChargingGauge() — 타이머 간격
-	// ★Plan5(돌진칩)★ ③ 칸당 충전 시간 × 선딜 배율(SkillWindup — 0.7 이면 0.5 → 0.35초) (D-117).
-	//   감쇠(DecayInterval)에는 곱하지 않는다 — 돌진 시간이 짧아진다 (T-129)
-	const float WindupScale = FMath::Max(0.01f, GetUpgradedFloat(EDRUpgradeStat::SkillWindup, 1.f));
-	const float EffectiveChargeInterval = FMath::Max(0.05f, ChargeInterval * WindupScale);
-	GetWorld()->GetTimerManager().SetTimer(ChargeTimerHandle, this, &UDRVacuumDash::TickCharge, EffectiveChargeInterval, true);
-```
-
-```cpp
-// ApplyBuffStacks() — 스펙마다 SetByCaller
-	// ★Plan5(돌진칩)★ ③ 칸당 이속 = SpeedBonusPerGauge × SkillSpeedBonus (0.2 → 0.14). GE 는 SetByCaller · MultiplyAdditive · by Target 5 (D-118).
-	//   ★모든 스펙에 넣는다★ — 빠지면 크기 0 → (0 − 1) × 스택 = 이속 0 이하 (T-121)
-	const float BonusPerGauge = FMath::Max(0.f, GetUpgradedFloat(EDRUpgradeStat::SkillSpeedBonus, SpeedBonusPerGauge));
-	for (int32 i = 0; i < Stacks; ++i)
-	{
-		const FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(SpeedBuffEffect, GetAbilityLevel(), ContextHandle);
-		if (SpecHandle.IsValid())
-		{
-			SpecHandle.Data->SetSetByCallerMagnitude(FDRGameplayTags::Get().Data_MoveSpeed_Mult, 1.f + BonusPerGauge);
-			SpeedBuffHandle = ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-		}
-	}
-```
-
-```cpp
-// ReleaseGauge() — SetDashCollisionEnabled(true) 바로 다음
-	// ★Plan5(돌진칩)★ ② 아군 통과 — 돌진하는 동안만. 실제 무시 목록은 캐릭터가 모든 머신에서 맞춘다 (D-115)
-	if (UDRAbilitySystemLibrary::HasUpgradeFeature(
-			GetAbilitySystemComponentFromActorInfo(), FDRGameplayTags::Get().Upgrade_Feature_Skill_Dash_PassAllies))
-	{
-		Vacuum->SetDashPassThroughAllies(true);
-	}
-```
-
-```cpp
-// HandleDashImpact() — 피해 · 자해 블록 교체
-	// ★Plan5(돌진칩)★ "지형" = Pawn 이 아닌 충돌 — OnCapsuleHit 의 분류와 같다 (사이트도 여기 든다 — D-112 · T-128)
-	const bool bHitPawn = Cast<APawn>(HitActor) != nullptr;
-
-	// 대상 데미지: 적 = G × 10(칩 반영), 타 플레이어 = G × 5. ASC 없는 지형은 대상 데미지 없음.
-	if (IsValid(HitActor) && UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor))
-	{
-		const bool bEnemy = UDRAbilitySystemLibrary::IsNotFriend(Avatar, HitActor);
-		// ★Plan5(돌진칩)★ ①② 적 충돌 피해만 SkillDamage 를 탄다 — 아군 충돌(칸당 5)은 그대로 (D-113 · 사용자 확정)
-		const float DamagePerGauge = bEnemy
-			? GetUpgradedFloat(EDRUpgradeStat::SkillDamage, EnemyDamagePerGauge)
-			: PlayerDamagePerGauge;
-		FDamageEffectParams Params = MakeDamageEffectParamsFromClassDefaults(HitActor);
-		Params.BaseDamage = G * DamagePerGauge;
-		// ApplyDamageEffect 직접 호출 — 아군 필터에 걸리지 않음 (Plan3 §8.2)
-		UDRAbilitySystemLibrary::ApplyDamageEffect(Params);
-	}
-
-	// ★Plan5(돌진칩)★ 자해 = 지속 돌진 + 지형 충돌만 (사용자 확정 — 적 · 아군 충돌은 자해 없음). 기본 50, 칩① ×2 (D-112 · D-114)
-	//   자해량은 SetByCaller(Data.SelfDamage) — GE 에 값을 박지 않는다 (T-120)
-	if (bWasSustained && !bHitPawn && SelfDamageEffect)
-	{
-		UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-		FGameplayEffectSpecHandle SpecHandle = UDRAbilitySystemLibrary::CreateEffectSpec(ASC, SelfDamageEffect, Avatar);
-		UDRAbilitySystemLibrary::ApplyEffectSpecWithSetByCaller(ASC, SpecHandle, FDRGameplayTags::Get().Data_SelfDamage,
-			FMath::Max(0.f, GetUpgradedFloat(EDRUpgradeStat::SkillSelfDamage, SustainedImpactSelfDamage)));
-	}
-
-	FinishDash(true, HitActor);
-```
-
-```cpp
-// FinishDash() · EndAbility() — SetDashCollisionEnabled(false) 바로 다음 (두 곳 모두 — T-125)
-		Vacuum->SetDashPassThroughAllies(false);   // ★Plan5(돌진칩)★ ② (D-115)
-```
-
-**⑤ `DRRobotVacuumCharacter.h / .cpp`** — ② 아군 통과 (D-115 · D-116)
-
-```cpp
-// .h public — "========== 돌진 ==========" 블록
-	// ★Plan5(돌진칩)★ ② 돌진 중 아군 통과. GA 가 서버에서 켜고 끈다 → 모든 머신의 OnRep 이 이동 무시 목록을 맞춘다 (D-115)
-	UPROPERTY(ReplicatedUsing = OnRep_DashPassThroughAllies, BlueprintReadOnly, Category = "Dash")
-	bool bDashPassThroughAllies = false;
-
-	void SetDashPassThroughAllies(bool bEnabled);   // 서버 전용
-
-	UFUNCTION()
-	void OnRep_DashPassThroughAllies();
-
-// .h private
-	// ★Plan5(돌진칩)★ 이 머신에서 "서로 이동 무시"로 넣은 아군 — 끌 때 정확히 이것만 되돌린다 (이동 무시는 복제되지 않는다)
-	TArray<TWeakObjectPtr<ADRCharacter>> PassThroughAllies;
-
-	void ApplyAllyPassThrough(bool bEnable);
-```
-
-```cpp
-// .cpp — #include "EngineUtils.h"(TActorIterator) · "AbilitySystem/DRAbilitySystemLibrary.h"
-// GetLifetimeReplicatedProps: DOREPLIFETIME(ADRRobotVacuumCharacter, bDashPassThroughAllies);
-
-void ADRRobotVacuumCharacter::SetDashPassThroughAllies(bool bEnabled)
-{
-	if (!HasAuthority() || bDashPassThroughAllies == bEnabled) return;
-	bDashPassThroughAllies = bEnabled;
-	OnRep_DashPassThroughAllies();   // 리슨 서버 parity (OnRep_SustainedDash 와 같은 관례)
-}
-
-void ADRRobotVacuumCharacter::OnRep_DashPassThroughAllies()
-{
-	ApplyAllyPassThrough(bDashPassThroughAllies);
-}
-
-void ADRRobotVacuumCharacter::ApplyAllyPassThrough(bool bEnable)
-{
-	UCapsuleComponent* MyCapsule = GetCapsuleComponent();
-	if (!MyCapsule) return;
-
-	// 먼저 이 머신에서 넣었던 것을 전부 되돌린다 (켜기 · 끄기 공통 — 중복 등록 방지)
-	for (const TWeakObjectPtr<ADRCharacter>& Weak : PassThroughAllies)
-	{
-		if (ADRCharacter* Ally = Weak.Get())
-		{
-			MyCapsule->IgnoreActorWhenMoving(Ally, false);
-			if (UCapsuleComponent* AllyCapsule = Ally->GetCapsuleComponent())
-			{
-				AllyCapsule->IgnoreActorWhenMoving(this, false);
-			}
-		}
-	}
-	PassThroughAllies.Reset();
-
-	if (!bEnable) return;
-
-	// ★양쪽 다★ — 내가 움직일 때도, 아군이 움직일 때도 서로 막지 않는다 (T-124)
-	for (TActorIterator<ADRCharacter> It(GetWorld()); It; ++It)
-	{
-		ADRCharacter* Ally = *It;
-		if (Ally == this || UDRAbilitySystemLibrary::IsNotFriend(this, Ally)) continue;   // 플레이어끼리만 (D-116)
-
-		MyCapsule->IgnoreActorWhenMoving(Ally, true);
-		if (UCapsuleComponent* AllyCapsule = Ally->GetCapsuleComponent())
-		{
-			AllyCapsule->IgnoreActorWhenMoving(this, true);
-		}
-		PassThroughAllies.Add(Ally);
-	}
-}
-
-// EndPlay() — Super 앞에
-	ApplyAllyPassThrough(false);   // ★Plan5(돌진칩)★ 돌진 중 파괴 · 레벨 전환 — 아군 캡슐에 내 항목이 남지 않게 (T-125)
-```
-
-```cpp
-// OnCapsuleHit() — "탑 상태에서 서로 충돌 판정 금지" 다음
-	// ★Plan5(돌진칩)★ ② 아군 통과 중이면 아군 충돌은 무시 — 무시 목록에 없던 아군(돌진 중 부활 · 입장)의 안전망.
-	//   피해 · 돌진 종료가 절대 없다 (물리적으로는 막힐 수 있다 — §15.8-69) (D-115)
-	if (bDashPassThroughAllies && !UDRAbilitySystemLibrary::IsNotFriend(this, OtherActor)) return;
-```
-
-**바뀔 C++ 파일**: `DRGameplayTags`(.h/.cpp) · `DRUpgradeTypes.h` · `DRUpgradeUILibrary.cpp` · `DRVacuumDash`(.h/.cpp) · `DRRobotVacuumCharacter`(.h/.cpp).
-**`DRProgressionConfig` · `DRAbilitySystemLibrary` 는 바뀌지 않는다**(동적 상수 · 새 판정 없음 — D-111). BP 그래프 재배선 없음.
-
-### 15.5 에디터 작업 (★C++ 빌드 뒤★ — 순서가 거꾸로면 T-120 · T-121)
-
-1. ★**선행**★ `GA_VacuumDash`(`…/VacuumCleaner/Abilities/Skill2/`) → Class Defaults → Dash → **Self Damage Effect = `GE_VacuumDashSelfDamage`**(지금은 `GE_VacuumDashSpeedBuff` — 버그). `Cost Gameplay Effect Class` 는 그대로(§14.8-63).
-2. **`GE_VacuumDashSelfDamage`** → Modifiers[0](IncomingDamage · Add) → Magnitude Calculation Type **Set by Caller** · Data Tag **`Data.SelfDamage`**(예전 Scalable Float 50 → 값은 GA `SustainedImpactSelfDamage` 로 이사)
-3. **`GE_VacuumDashSpeedBuff`** → Modifiers[0](MoveSpeed) → Magnitude **Set by Caller** · Data Tag **`Data.MoveSpeed.Mult`**. ★Modifier Op 는 **Multiply (Additive)** 그대로★(T-122) · Stacking(by Target · 5) · Infinite · 에셋 태그 `Buff.RobotVacuum.DashSpeed` 모두 그대로
-4. **`DA_ChipCatalog`** → Chips +3 (§15.1 표). 공통: `OwnerClass RobotVacuum` · `bCommonChip` 끔 · `Category Ascension` · `TargetAbilityTag Abilities.RobotVacuum.Dash` · `RequiredSlotCount 1`.
-   ★**모든 모디파이어**의 `TargetAbilityTag` 도 `Abilities.RobotVacuum.Dash`★(D-51 — 특히 ③의 `SkillWindup` 이 빠지면 공기탄 · 물 점프에도 걸린다)
-   - ① `RV.Asc.DashRam` · 충각 범퍼 · 요약 "돌진 충돌 피해 +80%" · Tier 3
-     · Modifiers: `SkillDamage` Percent **+0.8**(`DetailOverride` "칸당 충돌 피해 10 → 18") / `SkillSelfDamage` Percent **+1.0** `bIsDrawback` ✓(`DetailOverride` "벽 충돌 자해 50 → 100")
-     · Description "돌진으로 적에게 부딪힐 때 게이지 1칸당 피해가 10에서 18로 늘어납니다. 대신 최대 충전(지속 돌진) 중 벽이나 지형지물에 부딪히면 받는 피해가 50에서 100으로 늘어납니다."
-   - ② `RV.Asc.DashPass` · 유령 주행 · 요약 "돌진 중 아군 통과" · Tier 4 · GrantedTags `Upgrade.Feature.Skill.Dash.PassAllies`
-     · Modifiers: `SkillDamage` Percent **−0.15** `bIsDrawback` ✓(`DetailOverride` "칸당 충돌 피해 10 → 8.5")
-     · Description "돌진하는 동안 다른 플레이어와 부딪히지 않고 그대로 지나갑니다(아군에게 피해를 주거나 멈추지 않습니다). 대신 적에게 부딪힐 때의 피해가 15% 줄어듭니다."
-   - ③ `RV.Asc.DashQuick` · 급속 충전기 · 요약 "돌진 충전 30% 빨라짐" · Tier 3
-     · Modifiers: `SkillWindup` Percent **−0.3**(`DetailOverride` "칸당 충전 0.5 → 0.35초") / `SkillSpeedBonus` Percent **−0.3** `bIsDrawback` ✓(`DetailOverride` "칸당 이속 +20% → +14%")
-     · Description "돌진 게이지가 0.35초마다 1칸씩 찹니다(기존 0.5초). 대신 1칸당 이동 속도 증가가 20%에서 14%로 줄어듭니다."
-   - `SkillDisplayNames` 에 `Abilities.RobotVacuum.Dash → 돌진`
-5. (선택) 아이콘 `Content/DaeRuneAssets/UI/Upgrade/Icon/Vacuum/공격-9 · 지원-9 · 편의-9` (탑승 -6 · 공기탄 -7 · 물 점프 -8)
-6. 검사: 카탈로그 오류 0건(새 축 2개가 스킬 단위로 잡히는지 포함). Config 검사 항목은 없다(D-111)
-
-### 15.6 함정
-
-| # | 함정 | 대응 |
-|---|---|---|
-| **T-119** | 선행 변경(§15.5-1) 없이 칩①만 넣는다 | 자해가 원래 0 이라 "50 → 100" 이 아무 일도 안 한다 — 칩①이 단점 없는 칩이 된다 |
-| **T-120** | `GE_VacuumDashSelfDamage` 를 SetByCaller 로 바꿨는데 C++ 가 아직 옛 코드(`CreateAndApplyEffectSpec`) / 반대로 C++ 만 바꾸고 GE 는 Scalable Float 50 그대로 | 앞은 자해 0 + 에러 로그, 뒤는 칩① 이 무시된다(늘 50). **C++ 빌드 → GE 변경** 순서 |
-| **T-121** | `GE_VacuumDashSpeedBuff` 를 SetByCaller 로 바꾼 뒤 값을 안 넣고 거는 경로가 남는다 | 크기 0 → MultiplyAdditive (0 − 1) × 스택 → **이속 0 이하**. 지금의 `SelfDamageEffect` 오배선(이속 GE)이 바로 그런 경로다 — 선행 ①로 같이 없어진다. 이 GE 를 거는 곳은 `ApplyBuffStacks` 하나여야 한다 |
-| **T-122** | 이속 GE 를 SetByCaller 로 바꾸면서 Op 를 Multiply (Compound)로 | 스택 바이어스 0 → 1.14 × 5 = **×5.7**(T-95 와 같은 함정). Additive 유지 |
-| **T-123** | 이동 무시를 서버에서만 넣는다 | 소유 클라 CMC 는 여전히 아군에 막혀 위치 보정이 튀고, 아군 클라에서는 아군이 청소기에 막힌다. 모든 머신의 `OnRep` 에서 |
-| **T-124** | 한쪽(청소기 → 아군)만 무시 | 아군이 움직일 때 청소기에 막히거나, 겹친 채로 밀어낸다. 양쪽 다 |
-| **T-125** | 해제를 `FinishDash` 에만 둔다 | 사망 · 스턴 · 강제 취소(`EndAbility`) 경로에서 **영구 통과**가 남는다. `FinishDash` · `EndAbility` · 캐릭터 `EndPlay` 세 곳 |
-| **T-126** | 통과를 콜리전 채널로(캡슐 Pawn 응답 Overlap/Ignore) | 적도 같은 Pawn 채널이라 같이 통과 → 충돌 피해 자체가 사라진다 |
-| **T-127** | `SkillDamage` 를 아군 충돌 피해에도 곱한다 | 사용자 확정 위반 — 칸당 5 가 ① 9 · ② 4.25 가 된다 |
-| **T-128** | "지형"을 "ASC 없음"으로 판정 | 사이트(ASC 있음 · Pawn 아님)가 빠지고, 판정 기준이 `OnCapsuleHit` 와 달라진다 — Pawn 여부로 |
-| **T-129** | `SkillWindup` 을 `DecayInterval` 에도 곱한다 | 감쇠가 빨라져 일반 돌진 시간 · 거리가 30% 준다 — 칩 의도 아님. 충전에만 |
-| **T-130** | 새 축 2개를 `Count` 앞이 아닌 곳에 / `DRIsSkillStat` 누락 / `SkillSelfDamage` 를 `DRIsLowerBetter` 에서 누락 | 기존 칩 효과가 밀리거나(T-30) 전역 블록에 쌓이거나(T-12), 카드에 "자해 +100%" 가 초록(장점)으로 뜬다 |
-
-### 15.7 검증
-
-준비: PIE Listen Server · 플레이어 2~3(청소기 1 + 아군 1~2, 클라 청소기도 1회). 콘솔 `DRUnlockUpgrade` → `DRUnlockSlot 6`. 수치는 데미지 숫자 · HUD 체력 · `showdebug abilitysystem`(MoveSpeed · 활성 GE 스택).
-
-- [ ] **선행 변경(칩 없음)** 5칸 지속 돌진으로 벽 → 자해 50(숫자 · 체력) / 5칸으로 적 · 아군 → 자해 없음 / 1~4칸으로 벽 → 자해 없음 / 칸당 이속 660 · 770 … 1100 그대로(GE SetByCaller 전환 확인) / 탑승자가 있으면 자해가 공유된다 / 모자가 있으면 모자가 막는다
-- [ ] **①** 적 1칸 18 · 3칸 54 · 5칸 90 / 아군 충돌은 칸당 5 그대로 / 5칸 벽 충돌 자해 100 / 카드 "벽 충돌 자해 50 → 100" 빨강
-- [ ] **②** 아군을 향해 1~5칸 돌진 → 피해 · 정지 · Crush 없이 지나감(호스트 화면 · 아군 클라 화면 · 내 클라 화면 모두) / 아군이 달려오는 청소기 쪽으로 걸어도 막히지 않음 / 적에게는 1칸 8.5 · 5칸 42.5 로 부딪혀 끝남 / 돌진이 끝나면 다시 막힘 / 돌진 중 사망 · S 브레이크 · 자연 감쇠 뒤에도 통과가 남지 않음 / 내 위 탑승자 · 내가 탄 청소기는 지금처럼 문제없음
-- [ ] **③** 0.35 · 0.70 · 1.05 · 1.40 · 1.75초에 1~5칸(HUD 칸 수) / 물 칸당 20 그대로 / 칸당 이속 627 · 704 … 935 / 감쇠는 여전히 1초에 1칸 / 공기탄 강화탄 반동 예외(돌진 중) 그대로
-- [ ] **스킬당 1칩** ①②③ 중 하나만, 탑승 · 공기탄 · 물 점프 칩과는 함께 / 미리보기 라벨 "돌진" / ③ 의 `SkillWindup` 이 공기탄 차지 간격을 바꾸지 않음
-- [ ] **멀티** 클라 청소기 ② → 호스트 플레이어를 통과(보정 튐 없음 — 돌진 시작 순간 붙어 있으면 1회 튈 수 있다, §15.8-68) / 클라 청소기 ③ → 이속이 클라 화면에서도 935
-
-### 15.8 열린 결정 · 알려진 제약 (§9 번호에 이어서)
-
-| # | 내용 | 현재 판단 |
-|---|---|---|
-| **65** | 이름 · Tier · 아이콘 · `ChipId`(`RV.Asc.Dash*`)는 가칭 | 사용자가 정하면 카탈로그만(`ChipId` 는 첫 입력 전에 확정 — 세이브 키) |
-| **66** | ★선행 변경(D-112)으로 칩 없는 5칸 지속 돌진도 벽에 부딪히면 자해 50(지금은 0)★. 대신 원래 코드의 "적 · 아군 충돌 자해"는 없어진다. §12(탑승칩)의 "돌진 자해 50" 예시는 이 수정을 전제로 한다 | 사용자 확정. 플레이 확인 후 GA `SustainedImpactSelfDamage` 만 조정 |
-| **67** | 클렌저 사이트는 Pawn 이 아니라 **지형**으로 분류된다 — 지속 돌진으로 부딪히면 자해를 받고, 사이트는 "적" 판정이라 충돌 피해 계산 대상이기도 하다(기존 동작) | `OnCapsuleHit` 분류를 그대로 따른다. 사이트를 지형에서 빼고 싶으면 `HandleDashImpact` 에서 `ADRCleanserSite` 예외 한 줄 |
-| **68** | ② 돌진 시작 순간 아군과 붙어 있으면 소유 클라가 플래그를 받기 전(복제 지연) 한 번 막혔다가 보정될 수 있다 | 허용. 거슬리면 소유 클라에서 `ReleaseGauge` 때 로컬로 먼저 켠다(업그레이드 캐시는 소유 클라에도 있다) |
-| **69** | ② 돌진 중 새로 생긴 아군 폰(부활 · 중도 입장)은 통과 목록에 없다 — 물리적으로는 막히지만 피해 · 종료는 없다(서버 안전망) | 드문 경우라 허용 |
-| **70** | ② 아군과 겹친 채로 돌진이 끝나면 충돌이 돌아오면서 엔진이 밀어낸다(겹침 해소) | 허용 — 짧은 밀림 |
-| **71** | ② 적 피해 8.5/칸은 소수다(1칸 8.5 · 5칸 42.5) | 의도대로(D-113). 화면 숫자는 기존 표시 방식 그대로 |
-| **72** | ③ 은 같은 물 100 을 1.75초에 쓴다 — 충전 중 초당 물 40 → 57. 물이 모자라면 충전이 멈추는 규칙은 그대로 | 사용자 확정 수치 |
-| **73** | ③ 지속 돌진 최고 속도 1100 → 935(−15%), 4칸 일반 돌진 거리 −10% | 사용자 확정 수치. 약하면 `SkillSpeedBonus` 값만 조정 |
-| **74** | ① 자해 100 은 받는 쪽 배율을 탄다 — `DamageTaken` 칩 · 오염이면 더 크다. 탑승자에게도 공유된다 | 일반 피해와 같은 규칙(D-112) |
-
-### 15.9 작업 순서
-
-1. C++ ①~⑤ → 빌드 (`UENUM` · 태그 · 복제 프로퍼티 추가라 **에디터를 닫고** — T-45)
-2. 에디터 §15.5-1~3(선행 · GE 2개) → PIE → §15.7 "선행 변경"
-3. 에디터 §15.5-4~6(카탈로그)
-4. §15.7 검증 → §1 · §3 · §5 · §6 · §9 에 흡수(§1.7 그룹 +1, 스탯 축 표에 새 축 2개), 머리말 상태 갱신
-
-### 15.10 구현 결과 — 계획과 달라진 점
-
-2026-10-08 C++ 구현 · 빌드 통과. 계획대로이고 다른 점:
-
-- `ApplyAllyPassThrough` 는 켤 때도 먼저 이 머신의 이전 목록을 되돌린 뒤 다시 넣는다(중복 등록 방지).
-- ★지금 상태(에디터 작업 전)로 플레이해도 깨지지 않는다★ — 코드가 SetByCaller 값을 넣어도 GE 가 아직 고정값(이속 1.2 · 자해 50)이라 그 값이 쓰인다.
-  다만 자해는 `SelfDamageEffect` 오배선(§16.1-2)을 고치기 전까지 여전히 0 이고, 그 사이 칩①③ 의 수치는 반영되지 않는다.
-  ★순서★: 이 C++ 가 들어간 뒤에 GE 두 개를 SetByCaller 로 바꾼다(반대면 이속 0 · 자해 0 — T-120 · T-121).
-
----
-
-## 16. 청소기 칩 12종 — 에디터 작업 안내서 (처음 보는 사람용)
-
-> C++ 는 전부 들어갔다(2026-10-08 빌드 통과). 이 절은 **에디터에서 손으로 할 일만** 위에서부터 순서대로 적었다.
-> "왜 그렇게 하는가"는 §12~§15 에 있다. 여기서는 **어디를 눌러 무엇을 넣는가**만 본다.
-> 아이콘은 사용자가 따로 넣는다(이 안내서에서 뺐다).
-> ★순서를 지킨다★ — 16.1 → 16.2 → 16.3 → 16.4 → 16.5. 특히 16.1 은 꼭 먼저 한다.
-
-### 16.0 시작 전에 알아 둘 것
-
-- 에디터를 연다. "모듈을 다시 빌드할까요?"가 뜨면 **예**.
-- 저장: 에셋 하나는 `Ctrl + S`, 전부는 `Ctrl + Shift + S`.
-- **GE 만들기** = 콘텐츠 브라우저에서 폴더를 연다 → 빈 곳 **우클릭** → `Blueprint Class` → 창 아래 검색칸에 `GameplayEffect` → 고르고 `Select` → 이름 입력.
-- **에셋 열기** = 더블클릭. 블루프린트(GA)는 툴바의 **Class Defaults** 를 눌러야 오른쪽 디테일 패널에 칸이 보인다.
-- 디테일 패널 맨 위의 **검색칸**에 칸 이름을 치면 바로 찾아진다.
-- **Set by Caller** = "숫자를 에셋에 적지 않고 코드가 넣는다"는 뜻. 고르면 바로 아래 `Data Tag` 칸이 생긴다 → 그 칸을 눌러 태그를 고른다.
-- **태그 고르기** = 태그 칸을 누르면 목록 창이 뜬다 → 위 검색칸에 태그 이름 일부(예: `RideLoad`)를 치고 → 체크.
-- **Target Tags 추가**(GE 에 "이 태그를 대상에게 붙여라") = 디테일의 **Components** 옆 `+` → `Grant Tags to Target Actor` → 그 항목을 펼쳐 **Add Tags → Added** 의 `+` → 태그 선택.
-
-### 16.1 이미 있는 에셋 4곳 고치기 ★먼저★
-
-칩이 없어도 게임이 바뀌는 수정이다(선행 변경 — 지금 잘못 연결돼 있는 것들).
-
-| # | 에셋 (폴더) | 할 일 | 결과 |
-|---|---|---|---|
-| 1 | `GA_VacuumJetJump`<br>`Content/Blueprints/AbilitySystem/Player/VacuumCleaner/Abilities/Skill3/` | 열기 → **Class Defaults** → 검색 `Cost` → **Cost Gameplay Effect Class** = `GE_Cost_VacuumJetJump` | 물 점프가 물 30 을 실제로 쓴다(지금은 안 빠진다) |
-| 2 | `GA_VacuumDash`<br>`…/VacuumCleaner/Abilities/Skill2/` | 열기 → **Class Defaults** → 검색 `Self Damage` → **Self Damage Effect** = `GE_VacuumDashSelfDamage`<br>(지금 `GE_VacuumDashSpeedBuff` 가 잘못 들어가 있다) | 5칸 돌진으로 벽에 부딪히면 자해가 들어간다 |
-| 3 | `GE_VacuumDashSelfDamage`<br>`…/Abilities/Skill2/` | 열기 → **Modifiers** → `[0]` 펼치기 → **Modifier Magnitude** → **Magnitude Calculation Type** = `Set by Caller` → **Data Tag** = `Data.SelfDamage` | 자해량(50, 돌진칩①이면 100)을 코드가 넣는다 |
-| 4 | `GE_VacuumDashSpeedBuff`<br>`…/Abilities/Skill2/` | 열기 → **Modifiers** → `[0]` → ★**Modifier Op 는 `Multiply (Additive)` 그대로**★ → Magnitude Calculation Type = `Set by Caller` → **Data Tag** = `Data.MoveSpeed.Mult` | 칸당 이속(+20%, 돌진칩③이면 +14%)을 코드가 넣는다 |
-
-- ⚠️ 4번에서 Op 를 `Multiply (Compound)` 로 바꾸면 5칸 돌진이 5배 넘게 빨라진다. 건드리지 않는다.
-- ⚠️ 3 · 4 의 Data Tag 를 다른 태그로 고르면 자해 0 · 이속 0(멈춤)이 된다. 철자를 한 번 더 본다.
-- 확인(PIE, 칩 없이): 물 점프 → 물 30 이 줄어든다 / 돌진 5칸 → 속도가 예전과 같다 / 5칸 돌진으로 벽에 박으면 체력 −50, 적에게 박으면 자해 없음.
-
-### 16.2 새 GE 4개 만들기
-
-**① `GE_RideLoad`** — 폴더 `Content/Blueprints/AbilitySystem/Player/VacuumCleaner/Effects/` · 탑승칩① 감속
-
-| 칸 | 값 |
-|---|---|
-| Duration Policy | `Infinite` |
-| Modifiers | `+` 1개 → **Attribute** `DRAttributeSet.MoveSpeed` · **Modifier Op** `Multiply (Compound)` · **Magnitude Calculation Type** `Set by Caller` · **Data Tag** `Data.MoveSpeed.Mult` |
-| Components | `Grant Tags to Target Actor` → `Debuff.RobotVacuum.RideLoad` ★빠지면 감속이 계속 쌓인다★ |
-| Stacking Type | `None`(기본값 그대로) |
-
-**② `GE_RideBan`** — 같은 폴더 · 탑승칩③ 20초 탑승 금지
-
-| 칸 | 값 |
-|---|---|
-| Duration Policy | `Has Duration` |
-| Duration Magnitude | **Magnitude Calculation Type** `Set by Caller` · **Data Tag** `Data.Duration` |
-| Modifiers | 없음 |
-| Components | `Grant Tags to Target Actor` → `Debuff.Ride.Banned` |
-| Stacking Type | `None` ★`Aggregate by Target` 으로 바꾸지 말 것★ |
-
-**③ `GE_AirShot_Drag`** — 폴더 `…/VacuumCleaner/Abilities/Skill1/` · 공기탄칩② 흡착(감속 · 받는 피해 증가)
-
-| 칸 | 값 |
-|---|---|
-| Duration Policy | `Has Duration` |
-| Duration Magnitude | `Set by Caller` · `Data.Duration` |
-| Modifiers | `+` 1개 → `DRAttributeSet.MoveSpeed` · ★`Multiply (Additive)`★ · `Set by Caller` · `Data.MoveSpeed.Mult` |
-| Components | `Grant Tags to Target Actor` → `Debuff.AirShot.Drag` |
-| Stacking Type | `Aggregate by Target` |
-| Stack Limit Count | `3` |
-| Stack Duration Refresh Policy | `Refresh on Successful Application` |
-| Stack Expiration Policy | `Clear Entire Stack` |
-| Deny Overflow Application | **체크 해제** |
-
-- ⚠️ 여기는 ①과 반대로 **Additive** 다. Compound 로 하면 3번 맞힌 적이 오히려 빨라진다.
-
-**④ `GE_JetJump_Guard`** — 폴더 `…/VacuumCleaner/Abilities/Skill3/` · 물점프칩② 0.3초 무적
-
-| 칸 | 값 |
-|---|---|
-| Duration Policy | `Has Duration` |
-| Duration Magnitude | `Set by Caller` · `Data.Duration` |
-| Modifiers | 없음 |
-| Components | `Grant Tags to Target Actor` → `State.Invulnerable` |
-| Stacking Type | `Aggregate by Target` |
-| Stack Limit Count | `1` |
-| Stack Duration Refresh Policy | `Refresh on Successful Application` |
-
-- (선택) 무적 연출이 필요하면 이 GE 에 GameplayCue 를 하나 붙인다.
-
-### 16.3 `DA_ProgressionConfig` 에 GE 연결
-
-`Content/Blueprints/Progression/DA_ProgressionConfig` 열기 → **Chip Tuning** 펼치기 → 아래 칸을 채운다.
-
-| 위치 | 넣을 것 |
-|---|---|
-| Ride → **Power Load Effect** | `GE_RideLoad` |
-| Ride → **Eject Heal Effect** | `GE_Heal` (`Content/Blueprints/AbilitySystem/Player/Effects/`) |
-| Ride → **Eject Ban Effect** | `GE_RideBan` |
-| Air Shot → Drag → **Effect** | `GE_AirShot_Drag` |
-| Jet Jump → **Guard Effect** | `GE_JetJump_Guard` |
-
-- 숫자 칸은 **건드리지 않는다** — 코드 기본값이 맞다. 다만 Air Shot → Drag 의 **Magnitude 0.1 · Duration 2** 인지만 본다(다르면 0.1 / 2 로).
-- 저장. (검사는 칩을 다 넣은 뒤 16.5 에서 한 번에 한다.)
-
-### 16.4 `DA_ChipCatalog` 에 칩 12개 넣기
-
-`Content/Blueprints/Progression/DA_ChipCatalog` 열기 → **Chips** 배열 옆 `+` 를 12번 → 맨 아래 새 칸부터 하나씩 채운다.
-
-**12개 모두 같은 칸**
-
-| 칸 | 값 |
-|---|---|
-| Owner Class | `RobotVacuum` |
-| B Common Chip | 체크 해제 |
-| Category | `돌파 칩` |
-| Required Slot Count | `1` |
-
-**모디파이어 넣는 법** — 칩의 **Modifiers** `+` → 한 줄마다 아래 6칸:
-- **Stat**: 표의 이름(한글 표시 그대로 고른다)
-- **Target Ability Tag**: ★그 칩의 Target Ability Tag 와 같은 태그★. 단 탑승칩②의 `최대 체력` 만 **비워 둔다**(캐릭터 전체 스탯)
-- **Op**: 표에 "곱" = `곱연산(비율, 0.1 → ×1.1)`, "합" = `합연산(절대값)`
-- **Value**: 표의 숫자(음수는 앞에 `-`)
-- **B Is Drawback**: 표에 ✓ 면 체크(카드에 빨갛게 뜬다)
-- **Detail Override**: 표에 문구가 있으면 그대로 입력(카드에 이 문구가 대신 뜬다). 없으면 비워 둔다
-
-Tier 는 **Required Slot Tier** 칸이다. GrantedTags 는 **Granted Tags** 칸(태그 고르기와 같은 방법).
-
-#### ① 탑승 3종 — Target Ability Tag = `Abilities.RobotVacuum.Ride`
-
-| Chip Id | Display Name | Effect Summary | Required Slot Tier | Modifiers | Granted Tags |
-|---|---|---|---|---|---|
-| `RV.Asc.RidePower` | 합승 부스터 | 탑승 1명당 탑승자 공격력 +8% | 3 | (없음) | `Upgrade.Feature.Skill.Ride.Power` |
-| `RV.Asc.RideGuard` | 대신 맞는 범퍼 | 탑승자 피해를 줄여서 대신 받음 | 4 | `최대 체력` · Tag **비움** · 합 · `-100` · ✓ | `Upgrade.Feature.Skill.Ride.Guard` |
-| `RV.Asc.RideEject` | 비상 탈출 좌석 | 위험한 탑승자 탈출 + 체력 100 | 3 | (없음) | `Upgrade.Feature.Skill.Ride.Eject` |
-
-Description(그대로 복사):
-- RidePower — 이 청소기가 탑의 맨 아래에서 달릴 때, 위에 탄 사람 1명당 탑승자 전원의 공격력이 8% 오릅니다(최대 24%). 대신 1명당 이 청소기의 이동 속도가 5% 줄어듭니다. 다른 청소기 위에 업혀 있는 동안에는 동작하지 않습니다.
-- RideGuard — 이 청소기보다 위에 탄 사람은 피해를 받지 않고, 그 사람이 받았어야 할 피해를 80% 줄여 이 청소기가 대신 받습니다(원래 함께 받던 피해에 더해집니다). 대신 최대 체력이 100 줄어듭니다.
-- RideEject — 바로 위에 탄 사람이 피해를 받아 체력이 30% 이하가 되면 즉시 튕겨 내리고, 그 사람과 이 청소기 모두 체력을 100 회복합니다. 대신 탈출한 사람은 20초 동안 이 청소기에 다시 탈 수 없습니다.
-
-#### ② 기본 공격(공기탄) 3종 — Target Ability Tag = `Abilities.RobotVacuum.AirShot`
-
-| Chip Id | Display Name | Effect Summary | Required Slot Tier | Modifiers | Granted Tags |
-|---|---|---|---|---|---|
-| `RV.Asc.ShotPower` | 고압 공기탄 | 기본 공격 피해 +50% | 3 | `스킬 피해량` · 곱 · `0.5` | `Upgrade.Feature.Skill.AirShot.FriendlyFire` |
-| `RV.Asc.ShotDrag` | 흡착 공기탄 | 맞은 적 감속 · 받는 피해 증가 | 4 | `스킬 피해량` · 곱 · `-0.2` · ✓ | `Upgrade.Feature.Skill.AirShot.Drag` |
-| `RV.Asc.ShotQuick` | 속사 압축기 | 차지가 30% 빨라짐 | 3 | `스킬 선딜레이` · 곱 · `-0.3` · Detail `차지 간격 0.5 → 0.35초`<br>`스킬 차지 증가량` · 곱 · `-0.4` · ✓ · Detail `단계당 피해 +20 → +12` | (없음) |
-
-Description:
-- ShotPower — 기본 공격의 피해가 50% 늘어납니다. 대신 아군에게도 같은 피해를 줍니다(내가 태운 사람 · 나를 태운 청소기는 맞지 않습니다).
-- ShotDrag — 기본 공격에 맞은 적은 2초 동안 이동 속도가 10% 줄고 받는 피해가 5% 늘어납니다. 맞힐 때마다 시간이 갱신되고 최대 3번까지 쌓입니다(이동 속도 −30%, 받는 피해 +15%). 보스에게는 걸리지 않습니다. 대신 기본 공격의 피해가 20% 줄어듭니다.
-- ShotQuick — 기본 공격의 차지 단계가 0.35초마다 오릅니다(기존 0.5초). 대신 단계마다 늘어나는 피해가 20에서 12로 줄어듭니다.
-
-#### ③ 물 점프 3종 — Target Ability Tag = `Abilities.RobotVacuum.JetJump`
-
-| Chip Id | Display Name | Effect Summary | Required Slot Tier | Modifiers | Granted Tags |
-|---|---|---|---|---|---|
-| `RV.Asc.JumpBlast` | 폭압 분사구 | 물 점프 피해 강화 | 3 | `스킬 피해량` · 곱 · `1.0` · Detail `강판정 피해 20 → 40`<br>`스킬 외곽 피해` · 곱 · `0.5` · Detail `약판정 피해 5 → 15`<br>`스킬 상승 높이` · 곱 · `-0.3` · ✓ | (없음) |
-| `RV.Asc.JumpGuard` | 완충 분사구 | 점프 순간 0.3초 무적 | 4 | `스킬 피해량` · 곱 · `-1.0` · ✓ · Detail `피해 0` | `Upgrade.Feature.Skill.JetJump.Guard` |
-| `RV.Asc.JumpMulti` | 다단 분사구 | 공중 2회 · 물 20 | 3 | `스킬 물 소모량` · ★합★ · `-10` · Detail `물 소모 30 → 20`<br>`스킬 공중 사용 횟수` · ★합★ · `1` · Detail `공중 사용 1 → 2회`<br>`스킬 상승 높이` · 곱 · `-0.25` · ✓ | (없음) |
-
-Description:
-- JumpBlast — 물 점프의 피해가 커집니다 — 가까운 적(2m 안) 20 → 40, 먼 적(2~4m) 5 → 15. 대신 점프 높이가 30% 낮아집니다.
-- JumpGuard — 물 점프를 쓰는 순간부터 0.3초 동안 어떤 공격도 받지 않습니다(피해 · 경직 · 넉백 · 디버프 모두). 대신 물 점프가 적에게 피해를 주지 않습니다.
-- JumpMulti — 물 점프의 물 소모가 30에서 20으로 줄고, 공중에서 2번까지 쓸 수 있습니다. 대신 점프 높이가 25% 낮아집니다.
-
-- ⚠️ JumpMulti 의 물 소모는 **합**(-10)이다. 곱(-0.3333)으로 넣으면 물이 정확히 20 일 때 점프가 안 된다.
-
-#### ④ 돌진 3종 — Target Ability Tag = `Abilities.RobotVacuum.Dash`
-
-| Chip Id | Display Name | Effect Summary | Required Slot Tier | Modifiers | Granted Tags |
-|---|---|---|---|---|---|
-| `RV.Asc.DashRam` | 충각 범퍼 | 돌진 충돌 피해 +80% | 3 | `스킬 피해량` · 곱 · `0.8` · Detail `칸당 충돌 피해 10 → 18`<br>`스킬 자해 피해` · 곱 · `1.0` · ✓ · Detail `벽 충돌 자해 50 → 100` | (없음) |
-| `RV.Asc.DashPass` | 유령 주행 | 돌진 중 아군 통과 | 4 | `스킬 피해량` · 곱 · `-0.15` · ✓ · Detail `칸당 충돌 피해 10 → 8.5` | `Upgrade.Feature.Skill.Dash.PassAllies` |
-| `RV.Asc.DashQuick` | 급속 충전기 | 돌진 충전 30% 빨라짐 | 3 | `스킬 선딜레이` · 곱 · `-0.3` · Detail `칸당 충전 0.5 → 0.35초`<br>`스킬 이속 버프` · 곱 · `-0.3` · ✓ · Detail `칸당 이속 +20% → +14%` | (없음) |
-
-Description:
-- DashRam — 돌진으로 적에게 부딪힐 때 게이지 1칸당 피해가 10에서 18로 늘어납니다. 대신 최대 충전(지속 돌진) 중 벽이나 지형지물에 부딪히면 받는 피해가 50에서 100으로 늘어납니다.
-- DashPass — 돌진하는 동안 다른 플레이어와 부딪히지 않고 그대로 지나갑니다(아군에게 피해를 주거나 멈추지 않습니다). 대신 적에게 부딪힐 때의 피해가 15% 줄어듭니다.
-- DashQuick — 돌진 게이지가 0.35초마다 1칸씩 찹니다(기존 0.5초). 대신 1칸당 이동 속도 증가가 20%에서 14%로 줄어듭니다.
-
-#### ⑤ 미리보기 라벨 4줄 — 같은 `DA_ChipCatalog` 의 **Skill Display Names**
-
-`+` 4번 → 왼쪽 칸(태그) · 오른쪽 칸(이름):
-
-| 태그 | 이름 |
-|---|---|
-| `Abilities.RobotVacuum.Ride` | 탑승 |
-| `Abilities.RobotVacuum.AirShot` | 기본 공격 |
-| `Abilities.RobotVacuum.JetJump` | 물 점프 |
-| `Abilities.RobotVacuum.Dash` | 돌진 |
-
-- 저장.
-- ⚠️ **Chip Id 는 세이브 파일의 열쇠**다. 한 번 넣고 플레이한 뒤에는 바꾸지 않는다(바꾸면 장착해 둔 칩이 사라진다). 이름 · 설명 · Tier 는 언제 바꿔도 된다.
-
-### 16.5 검사 — 저장만으로는 안 돈다, 한 번 "편집"해야 돈다
-
-1. 메뉴 **창(Window) → 출력 로그(Output Log)** 를 연다.
-2. `DA_ProgressionConfig` 를 열고 아무 숫자 칸 하나를 바꿨다가 원래대로 되돌린다(검사는 편집할 때 돈다) → 저장.
-3. 출력 로그에서 확인:
-   - ✅ `[ProgressionConfig] DA_ProgressionConfig: 검증 통과 …` → 끝.
-   - ❌ `[ProgressionConfig] …` 줄이 여러 개 → **그 문장에 틀린 칸 이름이 적혀 있다**. 아래 표로 찾아 고친 뒤 2번을 다시.
-
-| 로그에 이런 말이 있으면 | 고칠 곳 |
-|---|---|
-| `Ride.PowerLoadEffect … Target Tags 에 Debuff.RobotVacuum.RideLoad 가 없습니다` | 16.2 ① Components |
-| `… Multiply (Compound) 모디파이어가 없습니다` | 16.2 ① Modifier Op |
-| `Ride.EjectBanEffect … Aggregate by Target` | 16.2 ② Stacking Type → `None` |
-| `AirShot.Drag.Effect … Multiply (Additive)` | 16.2 ③ Modifier Op |
-| `… Deny Overflow Application 이 켜져` | 16.2 ③ 체크 해제 |
-| `… Stack Limit(…)이 DragMaxStacks(3)와 달라` | 16.2 ③ Stack Limit Count `3` |
-| `JetJump.GuardEffect … Set by Caller(Data.Duration)` | 16.2 ④ Duration |
-| `ChipTuning.… 가 비어 있어` | 16.3 해당 칸 |
-| 칩 Id 와 함께 `TargetAbilityTag` · `Description` 이야기 | 16.4 그 칩의 태그 칸 / 설명 칸 |
-
-### 16.6 빠른 확인 (PIE)
-
-1. **Play** 옆 ⋮ → Net Mode `Play As Listen Server`, 플레이어 2명(탑승 확인은 3~4명).
-2. 게임 안에서 `~` 키(콘솔) → `DRUnlockUpgrade` → `DRUnlockSlot 6`.
-3. 청소기로 업그레이드 화면을 열어 칩을 낀다. 같은 스킬 칩은 하나만 낄 수 있다(정상).
-4. 한 칩씩 확인한다 — 무엇을 보면 되는지는 각 절의 검증 목록:
-   탑승 **§12.7** · 공기탄 **§13.7** · 물 점프 **§14.7** · 돌진 **§15.7**.
-   서버 로그에서 `[RideLoad]` · `[RideEject]` 줄이 보이면 탑승칩①③이 동작한 것이다.
-
-### 16.7 이상하면
-
-| 증상 | 대부분의 원인 |
-|---|---|
-| 칩이 업그레이드 목록에 안 보인다 | Owner Class 가 `RobotVacuum` 이 아니다 / `B Common Chip` 이 켜져 있다 |
-| 돌진하면 청소기가 안 움직인다(이속 0) | 16.1-4 의 Data Tag 가 `Data.MoveSpeed.Mult` 가 아니다 |
-| 5칸 돌진이 엄청 빠르다 | 16.1-4 의 Modifier Op 를 Compound 로 바꿨다 |
-| 벽에 박아도 자해가 없다 | 16.1-2(Self Damage Effect) 또는 16.1-3(Data Tag `Data.SelfDamage`) |
-| 물 점프해도 물이 안 준다 | 16.1-1 |
-| 흡착 3번 맞힌 적이 오히려 빠르다 | 16.2 ③ Op 가 Compound 다 |
-| 탑승칩①이면 청소기가 점점 느려진다 | 16.2 ① 에 `Debuff.RobotVacuum.RideLoad` 태그가 없다 |
-| 칩 하나가 청소기의 다른 스킬까지 바꾼다 | 그 칩 모디파이어의 Target Ability Tag 가 비어 있다(탑승칩② `최대 체력` 만 비워야 한다) |
-| 카드 숫자가 이상하다(예: "+100%") | Detail Override 문구를 안 넣었다 — 틀린 건 아니다, 표의 문구를 넣으면 깔끔해진다 |
+- **필수 에디터 작업은 없다**(2026-10-08 에셋 확인 — 청소기 칩 12종 포함 전부).
+  선택 사항만 남았다 — §9-35(공유 버프 상태 아이콘), §9-25(칩 카드 사유 문구), §9-26(`Detail Override`), 청소기 연출 · 표시(§9-38 · 44 · 54 · 59).
+- 그다음은 §10 플레이 검증과, 결과에 따른 밸런스 조정(§9-14 · 21 · 27 · 49 · 50 · 73)이다.

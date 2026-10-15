@@ -535,7 +535,7 @@ void ADRRobotVacuumCharacter::OnCapsuleHit(UPrimitiveComponent* HitComponent, AA
 	if (OtherActor == RiderOnTop || OtherActor == MountedOn) return;
 
 	// ★Plan5(돌진칩)★ ② 아군 통과 중이면 아군 충돌은 무시 — 무시 목록에 없던 아군(돌진 중 부활 · 입장)의 안전망.
-	//   피해 · 돌진 종료가 절대 없다 (물리적으로는 막힐 수 있다 — §9-69) (D-115)
+	//   피해 · 돌진 종료가 절대 없다 (물리적으로는 막힐 수 있다) (D-115)
 	if (bDashPassThroughAllies && !UDRAbilitySystemLibrary::IsNotFriend(this, OtherActor)) return;
 
 	// Pawn(적/타 플레이어) 또는 수직면(벽/지형지물 — 바닥 착지는 노말 Z가 커서 제외)
