@@ -284,6 +284,7 @@ public:
 	FGameplayTag Event_Montage_BellBoy_BasicAttack;	// 가방이 닿는 순간
 	FGameplayTag Event_Montage_BellBoy_Taunt;		// 도발 판정 시작
 	FGameplayTag Event_Montage_BellBoy_HatThrow;	// 모자가 손을 떠나는 순간
+	FGameplayTag Event_Montage_BellBoy_FPSync;		// ★Plan8(FP)★ FP 몽타주 동기 지점 — 아무 GA 도 기다리지 않는다 (D-35)
 
 	// ★GAS 태그★ — GE_BellBoy_Taunted 가 적에게 부여. C++ 이 읽는다 (Plan8 D-13)
 	FGameplayTag Debuff_Taunted;

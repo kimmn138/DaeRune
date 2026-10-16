@@ -35,7 +35,7 @@ void UDRBellBoyBasicAttack::ActivateAbility(const FGameplayAbilitySpecHandle Han
 	const bool bCombo = (GetWorld()->GetTimeSeconds() - LastSwingEndTime) <= ComboResetTime;
 	if (!bCombo)
 	{
-		NextSwingIndex = 0;   // 첫 타는 항상 오른쪽부터
+		NextSwingIndex = 0;   // 첫 타는 항상 [0] 부터
 	}
 
 	UAnimMontage* Montage = SwingMontages.IsValidIndex(NextSwingIndex) ? SwingMontages[NextSwingIndex].Get() : nullptr;
@@ -45,6 +45,7 @@ void UDRBellBoyBasicAttack::ActivateAbility(const FGameplayAbilitySpecHandle Han
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
+	const int32 SwingIndex = NextSwingIndex;   // FP 배열도 같은 인덱스 (Plan8 T-32)
 	NextSwingIndex = (NextSwingIndex + 1) % SwingMontages.Num();
 
 	// ── ② 선딜·후딜 → 재생 속도 (D-4) ──
@@ -63,6 +64,17 @@ void UDRBellBoyBasicAttack::ActivateAbility(const FGameplayAbilitySpecHandle Han
 
 	const float WindupRate = HitTime / FMath::Max(0.01f, WindupTime);                                  // 0.4/0.4=1.0 · 0.4/0.2=2.0
 	PendingRecoveryRate = FMath::Max(0.01f, Montage->GetPlayLength() - HitTime) / FMath::Max(0.01f, RecoveryTime); // 1.0 · 4.0
+
+	// Plan8(FP) FP 는 자기 동기 프레임이 TP 타격과 같은 실시간(WindupTime)에 오도록 속도를 따로 준다 (D-36)
+	UAnimMontage* FPMontage = FirstPersonSwingMontages.IsValidIndex(SwingIndex) ? FirstPersonSwingMontages[SwingIndex].Get() : nullptr;
+	float FPWindupRate = WindupRate;
+	PendingFirstPersonRecoveryRate = PendingRecoveryRate;
+	if (FPMontage)
+	{
+		const float FPHitTime = UDRAbilitySystemLibrary::GetFirstPersonSyncTime(FPMontage, FirstPersonSyncTag, Montage, HitTime);
+		FPWindupRate = FPHitTime / FMath::Max(0.01f, WindupTime);
+		PendingFirstPersonRecoveryRate = FMath::Max(0.01f, FPMontage->GetPlayLength() - FPHitTime) / FMath::Max(0.01f, RecoveryTime);
+	}
 
 	// ── ③ 다른 스킬 차단 (선딜 + 0.4초) — 활성화 순간이라 예측 키가 살아 있어 클라 UI 도 즉시 막힌다 (D-7) ──
 	if (SkillSwitchLockEffect)
@@ -95,7 +107,8 @@ void UDRBellBoyBasicAttack::ActivateAbility(const FGameplayAbilitySpecHandle Han
 	MontageTask->OnCancelled.AddDynamic(this, &UDRBellBoyBasicAttack::OnMontageAborted);
 	MontageTask->ReadyForActivation();
 
-	// (STEP 11) FP 에셋이 오면 여기서 FirstPersonMesh 에 같은 속도로 1P 몽타주를 튼다
+	// Plan8(FP) 로컬 제어일 때만 FP 메시에 — 서버의 리모트 폰에서는 헬퍼가 건너뛴다 (D-33)
+	ActiveFirstPersonMontage = UDRAbilitySystemLibrary::PlayFirstPersonMontage(GetAvatarActorFromActorInfo(), FPMontage, FPWindupRate);
 }
 
 void UDRBellBoyBasicAttack::OnHitEvent(FGameplayEventData Payload)
@@ -103,7 +116,7 @@ void UDRBellBoyBasicAttack::OnHitEvent(FGameplayEventData Payload)
 	bHitEventReceived = true;
 
 	// ① 후딜 속도로 — 서버·소유 클라 모두 (D-4 / D-10)
-	SetSwingPlayRate(PendingRecoveryRate);
+	SetSwingPlayRate(PendingRecoveryRate, PendingFirstPersonRecoveryRate);
 
 	// ② 판정은 서버만. 클라는 판정 창이 없는 것으로 친다
 	if (!HasAuthority(&CurrentActivationInfo))
@@ -191,8 +204,11 @@ void UDRBellBoyBasicAttack::TryFinishSwing()
 	}
 }
 
-void UDRBellBoyBasicAttack::SetSwingPlayRate(float NewRate)
+void UDRBellBoyBasicAttack::SetSwingPlayRate(float NewRate, float FPRate)
 {
+	// Plan8(FP) 리슨 호스트 자기 폰은 서버이면서 FP 도 보므로 TP 분기와 무관하게 먼저 (D-36 / T-37)
+	UDRAbilitySystemLibrary::SetFirstPersonMontagePlayRate(GetAvatarActorFromActorInfo(), ActiveFirstPersonMontage, FPRate);
+
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
 	if (!ASC) return;
 
@@ -214,7 +230,6 @@ void UDRBellBoyBasicAttack::SetSwingPlayRate(float NewRate)
 			}
 		}
 	}
-	// (STEP 11) FP 메시 몽타주도 같은 속도로
 }
 
 void UDRBellBoyBasicAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -224,5 +239,11 @@ void UDRBellBoyBasicAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, 
 	{
 		LastSwingEndTime = GetWorld()->GetTimeSeconds();   // 연속 판정 기준 (D-6)
 	}
+	else
+	{
+		// Plan8(FP) 끊기면(피격·서버 거절) FP 스윙도 멈춘다. 정상 종료면 다음 스윙이 같은 슬롯에서 밀어낸다 (D-37)
+		UDRAbilitySystemLibrary::StopFirstPersonMontage(GetAvatarActorFromActorInfo(), ActiveFirstPersonMontage);
+	}
+	ActiveFirstPersonMontage = nullptr;
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

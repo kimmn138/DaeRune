@@ -1,6 +1,6 @@
 # Plan8 — 벨보이(BellBoy) 1인칭(FP) 적용 계획
 
-> **작성일** 2026-10-15 · **상태** 계획(미착수 — 이 문서를 쓰면서 코드·에셋은 바꾸지 않았다) · **작업 브랜치** `feat/bellboy_fp`
+> **작성일** 2026-10-15 · **상태** C++(STEP 1~3) 구현·빌드 완료 2026-10-16 · 남은 작업: 에디터(STEP 0, 4~9) · **작업 브랜치** `feat/bellboy_fp`
 > **선행** 벨보이 TP 구현 완료(`3fe5b9f9`, PR #44) — 그때의 계획서는 git `3fe5b9f9^:Plan8.md` 에 있다. 이 문서 부록 B/C/E 에 그 결정·함정을 요약해 둔다.
 > **범위** 벨보이 FP 메시·FP ABP·FP 몽타주 · 스킬 3종(가방/시선 집중/모자)의 FP 재생과 TP 동기화 · FP 피격/스턴/점프/걷기 · FP 손의 모자 소품 · 모자 발사 위치(FP 기준) · 부품 운반 소켓
 > **비범위** 스킨(코스메틱 FP 부착물) · 벨보이 칩 · 다른 로봇의 FP 피격 몽타주 연결(구조만 열어 둔다 — E-19)
@@ -129,9 +129,9 @@ Armature_ProxyTrueRootJoint
 
 ## 3. 작업 순서 한눈에
 - [ ] STEP 0 준비 · 에셋 점검(모자 유무 분기)
-- [ ] STEP 1 [C++] 라이브러리 FP 헬퍼 + 태그
-- [ ] STEP 2 [C++] GA 3종 FP 재생 · 모자 발사 위치
-- [ ] STEP 3 [C++] FP 피격 · 소품 노티파이 스테이트 → 빌드
+- [x] STEP 1 [C++] 라이브러리 FP 헬퍼 + 태그
+- [x] STEP 2 [C++] GA 3종 FP 재생 · 모자 발사 위치
+- [x] STEP 3 [C++] FP 피격 · 소품 노티파이 스테이트 → 빌드
 - [ ] STEP 4 [에디터] FP 스켈레톤 소켓 · 시퀀스 설정
 - [ ] STEP 5 [에디터] FP 몽타주 5개
 - [ ] STEP 6 [에디터] `ABP_FP_BellBoy`
@@ -328,11 +328,12 @@ if (FirstPersonHitReactMontage)
 | 몽타주 | 원본 | 노티파이 | Blend In / Out |
 |---|---|---|---|
 | `AM_FP_BB_BasicAttack_L` | `FP_BasicAttack_Left` | `AN_MontageEvent` · Event Tag **`Event.Montage.BellBoy.FPSync`** — 가방이 화면 중앙을 지나는 프레임(비례 기준값 0.383) | 0.05 / 0.05 (T-4 와 같은 이유) |
-| `AM_FP_BB_BasicAttack_R` | `FP_BasicAttack_Right` | 같은 태그 — (비례 0.256) | 0.05 / 0.05 |
-| `AM_FP_BB_Taunt` | `FP_Taunt` | `FPSync` — 포즈 잡히는 프레임(비례 0.986) | 0.15 / 0.25 (TP 와 같게) |
-| `AM_FP_BB_ThrowCap` | `FP_ThrowCap` | `FPSync` — **모자가 손을 떠나는 프레임**(비례 0.331) + **`Attach Prop (DR)`** 노티파이 스테이트 0 → FPSync 프레임(PropMesh `Bellboy_Cap`, Socket `FPCapSocket`) | 0.1 / 0.15 |
+| `AM_FP_BB_BasicAttack_R` | `FP_BasicAttack_Right` | `AN_MontageEvent` · Event Tag **`Event.Montage.BellBoy.FPSync`** — 가방이 화면 중앙을 지나는 프레임(비례 0.256) | 0.05 / 0.05 |
+| `AM_FP_BB_Taunt` | `FP_Taunt` | `AN_MontageEvent` · Event Tag **`Event.Montage.BellBoy.FPSync`** — 포즈 잡히는 프레임(비례 0.986) | 0.15 / 0.25 (TP 와 같게) |
+| `AM_FP_BB_ThrowCap` | `FP_ThrowCap` | `AN_MontageEvent` · Event Tag **`Event.Montage.BellBoy.FPSync`** — **모자가 손을 떠나는 프레임**(비례 0.331) + **`Attach Prop (DR)`** 노티파이 스테이트 0 → 그 FPSync 노티파이 프레임(PropMesh `Bellboy_Cap`, Socket `FPCapSocket`) | 0.1 / 0.15 |
 | `AM_FP_BB_HitReact` | `FP_HitReact` | 없음 | 0.05 / 0.1 |
 
+- ★**FP 몽타주 4개(공격 L/R · 도발 · 던지기) 모두 같은 노티파이(`AN_MontageEvent`)·같은 태그(`Event.Montage.BellBoy.FPSync`)** 를 하나씩 단다 — 몽타주마다 위치(프레임)만 다르다. 각 GA 는 자기 FP 몽타주에서 이 태그의 시각을 읽어 재생 속도를 정한다.
 - ★**`Event.Montage.BellBoy.BasicAttack` / `.Taunt` / `.HatThrow` 태그를 FP 몽타주에 절대 넣지 않는다**(T-30).
 - `FPSync` 를 안 달아도 동작한다(길이 비례 — D-35). 달면 그 프레임이 TP 판정 순간과 정확히 겹친다.
 - 노티파이 시각은 Details › Link › Time 으로 정확히.
@@ -408,8 +409,8 @@ State Machine "Main States" ──► Slot 'DefaultGroup.DefaultSlot' ──► 
 | `GA_BellBoy_BasicAttack` | First Person Swing Montages | **[0] `AM_FP_BB_BasicAttack_L`, [1] `AM_FP_BB_BasicAttack_R`** — TP 배열 순서(Left, Right)와 같게(T-32) |
 | 〃 | First Person Sync Tag | `Event.Montage.BellBoy.FPSync` |
 | 〃 | (겸사) Draw Debug Hit | **끄기**(현재 True — E-17) |
-| `GA_BellBoy_Taunt` | First Person Taunt Montage / Sync Tag | `AM_FP_BB_Taunt` / `FPSync` |
-| `GA_BellBoy_HatThrow` | First Person Throw Montage / Sync Tag | `AM_FP_BB_ThrowCap` / `FPSync` |
+| `GA_BellBoy_Taunt` | First Person Taunt Montage / First Person Sync Tag | `AM_FP_BB_Taunt` / `Event.Montage.BellBoy.FPSync` |
+| `GA_BellBoy_HatThrow` | First Person Throw Montage / First Person Sync Tag | `AM_FP_BB_ThrowCap` / `Event.Montage.BellBoy.FPSync` |
 | 〃 | First Person Release Socket Name | `CapReleaseSocket` (비우면 TP `CapSocket` — D-39) |
 
 2차 테스트

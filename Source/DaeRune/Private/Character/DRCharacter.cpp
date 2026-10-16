@@ -1151,6 +1151,16 @@ void ADRCharacter::InitAbilityActorInfo()
 		EGameplayTagEventType::NewOrRemoved
 	).AddUObject(this, &ADRCharacter::StunTagChanged);
 
+	// Plan8(FP) TP 가 실제로 경직할 때만 FP 도 — GA_HitReact 가 차단되면 태그가 안 붙는다 (D-40).
+	// 바인딩은 로컬 제어와 무관하게 — 클라 OnRep_PlayerState 시점엔 컨트롤러가 아직 없을 수 있다 (T-38)
+	if (FirstPersonHitReactMontage)
+	{
+		AbilitySystemComponent->RegisterGameplayTagEvent(
+			FDRGameplayTags::Get().Effects_HitReact,
+			EGameplayTagEventType::NewOrRemoved
+		).AddUObject(this, &ADRCharacter::FirstPersonHitReactTagChanged);
+	}
+
 	// 표정 시스템은 명시적 멀티캐스트(MulticastPlayHitReactFacial /
 	// MulticastPlayVendingSkillUse)에서 트리거하므로 태그 바인딩 불필요.
 
@@ -1183,6 +1193,15 @@ void ADRCharacter::MulticastPlayHitReactFacial_Implementation()
 	if (FacialExpressionComponent)
 	{
 		FacialExpressionComponent->OnHitReact();
+	}
+}
+
+void ADRCharacter::FirstPersonHitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
+{
+	// 로컬 제어 · FP 메시 가시성은 헬퍼가 본다 — 서버의 리모트 폰에서는 아무 일도 없다 (Plan8 D-33)
+	if (NewCount > 0)
+	{
+		UDRAbilitySystemLibrary::PlayFirstPersonMontage(this, FirstPersonHitReactMontage);
 	}
 }
 

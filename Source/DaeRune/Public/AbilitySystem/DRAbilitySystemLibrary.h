@@ -452,6 +452,32 @@ public:
 	 */
 	static float FindMontageEventTime(const UAnimMontage* Montage, const FGameplayTag& EventTag);
 
+	// ========== ★Plan8(FP)★ 1인칭 몽타주 ==========
+
+	/**
+	 * 로컬 제어 플레이어의 FirstPersonMesh 에 몽타주를 튼다. 재생했으면 그 몽타주, 아니면 nullptr.
+	 * ADRCharacter 가 아니거나 · 로컬 제어가 아니거나 · FP 메시가 숨겨져 있으면(사망·고정 카메라) 건너뛴다 (Plan8 D-33 / T-39).
+	 * 서버의 리모트 폰에서 불러도 안전하다 — FP 메시는 주인만 보므로 다른 기계에서 틀 이유가 없다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|FirstPerson")
+	static UAnimMontage* PlayFirstPersonMontage(AActor* Avatar, UAnimMontage* Montage, float PlayRate = 1.f);
+
+	/** FP 몽타주가 재생 중이면 속도만 바꾼다. FP 는 로컬 전용이라 ASC 경로(CurrentMontageSetPlayRate)를 쓰지 않는다 (Plan8 T-37) */
+	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|FirstPerson")
+	static void SetFirstPersonMontagePlayRate(AActor* Avatar, UAnimMontage* Montage, float PlayRate);
+
+	/** FP 몽타주가 재생 중이면 BlendOutTime 으로 멈춘다 (Plan8 D-37) */
+	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|FirstPerson")
+	static void StopFirstPersonMontage(AActor* Avatar, UAnimMontage* Montage, float BlendOutTime = 0.1f);
+
+	/**
+	 * FP 몽타주에서 "TP 이벤트와 같은 순간"이어야 하는 시각(FP 몽타주 초).
+	 * SyncTag 노티파이가 있으면 그 시각, 없으면 길이 비례값 TPEventTime × FP길이 / TP길이 (Plan8 D-35).
+	 */
+	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|FirstPerson")
+	static float GetFirstPersonSyncTime(const UAnimMontage* FPMontage, const FGameplayTag& SyncTag,
+		const UAnimMontage* TPMontage, float TPEventTime);
+
 	// ========== 로봇 청소기 탑승 칩 (Plan5(탑승칩)) ==========
 
 	/**

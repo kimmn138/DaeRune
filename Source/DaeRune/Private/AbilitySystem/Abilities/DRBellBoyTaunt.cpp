@@ -46,6 +46,15 @@ void UDRBellBoyTaunt::ActivateAbility(const FGameplayAbilitySpecHandle Handle, c
 	MontageTask->OnInterrupted.AddDynamic(this, &UDRBellBoyTaunt::OnMontageAborted);
 	MontageTask->OnCancelled.AddDynamic(this, &UDRBellBoyTaunt::OnMontageAborted);
 	MontageTask->ReadyForActivation();
+
+	// Plan8(FP) FP 포즈 프레임이 TP 판정 시작과 같은 순간에 오도록 (D-35). TP 는 속도 1
+	float FPRate = 1.f;
+	const float TPEventTime = UDRAbilitySystemLibrary::FindMontageEventTime(TauntMontage, TauntStartEventTag);
+	if (FirstPersonTauntMontage && TPEventTime > 0.f)
+	{
+		FPRate = UDRAbilitySystemLibrary::GetFirstPersonSyncTime(FirstPersonTauntMontage, FirstPersonSyncTag, TauntMontage, TPEventTime) / TPEventTime;
+	}
+	ActiveFirstPersonMontage = UDRAbilitySystemLibrary::PlayFirstPersonMontage(GetAvatarActorFromActorInfo(), FirstPersonTauntMontage, FPRate);
 }
 
 void UDRBellBoyTaunt::OnTauntStart(FGameplayEventData Payload)
@@ -154,4 +163,17 @@ void UDRBellBoyTaunt::OnMontageFinished()
 void UDRBellBoyTaunt::OnMontageAborted()
 {
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
+}
+
+void UDRBellBoyTaunt::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+{
+	// Plan8(FP) 끊기면(서버 거절 등) FP 도발 모션도 멈춘다 (D-37)
+	if (bWasCancelled)
+	{
+		UDRAbilitySystemLibrary::StopFirstPersonMontage(GetAvatarActorFromActorInfo(), ActiveFirstPersonMontage);
+	}
+	ActiveFirstPersonMontage = nullptr;
+
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

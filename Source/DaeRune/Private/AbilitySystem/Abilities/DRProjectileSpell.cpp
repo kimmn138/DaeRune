@@ -22,7 +22,15 @@ ADRProjectile* UDRProjectileSpell::SpawnProjectile(const FVector& ProjectileTarg
 	const FVector SocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(
 		GetAvatarActorFromActorInfo(),
 		SocketTag);
-	FRotator Rotation = (ProjectileTargetLocation - SocketLocation).Rotation();
+	return SpawnProjectileAt(SocketLocation, ProjectileTargetLocation, bOverridePitch, PitchOverride);
+}
+
+ADRProjectile* UDRProjectileSpell::SpawnProjectileAt(const FVector& SpawnLocation, const FVector& ProjectileTargetLocation, bool bOverridePitch, float PitchOverride)
+{
+	const bool bIsServer = GetAvatarActorFromActorInfo()->HasAuthority();
+	if (!bIsServer) return nullptr;
+
+	FRotator Rotation = (ProjectileTargetLocation - SpawnLocation).Rotation();
 
 	if (bOverridePitch)
 	{ 
@@ -30,7 +38,7 @@ ADRProjectile* UDRProjectileSpell::SpawnProjectile(const FVector& ProjectileTarg
 	}
 
 	FTransform SpawnTransform;
-	SpawnTransform.SetLocation(SocketLocation);
+	SpawnTransform.SetLocation(SpawnLocation);
 	SpawnTransform.SetRotation(Rotation.Quaternion());
 	// ★Plan5(동전칩)★ 투사체 크기 칩(SkillProjectileScale). 칩이 없으면 1.0 이라 기존과 완전히 같다 —
 	// 이 함수를 쓰는 적 GA(원거리·잠자리)는 칩 캐시가 비어 있어 항상 1.0 이다.

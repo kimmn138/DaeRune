@@ -38,6 +38,13 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = "Projectile")
 	ADRProjectile* SpawnProjectile(const FVector& ProjectileTargetLocation, const FGameplayTag& SocketTag, bool bOverridePitch = false, float PitchOverride = 0.f);
 
+	/**
+	 * ★Plan8(FP)★ 스폰 위치를 직접 주는 버전 — SpawnProjectile 은 소켓 위치를 구해 이걸 부른다.
+	 * 소켓 태그로 표현할 수 없는 위치(벨보이 모자의 FP 메시 고정 소켓 — Plan8 D-39)에서 쏠 때 쓴다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Projectile")
+	ADRProjectile* SpawnProjectileAt(const FVector& SpawnLocation, const FVector& ProjectileTargetLocation, bool bOverridePitch = false, float PitchOverride = 0.f);
+
 	// 카메라 시점 라인트레이스로 조준점(크로스헤어 지점) 계산 — 투사체 계열 GA 공용 유틸
 	UFUNCTION(BlueprintPure, Category = "Projectile")
 	FVector CalculateTargetLocation() const;

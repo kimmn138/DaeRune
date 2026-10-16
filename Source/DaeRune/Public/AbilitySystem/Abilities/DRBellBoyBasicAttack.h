@@ -38,7 +38,7 @@ public:
 protected:
 	// ========== 에셋 ==========
 
-	/** 3P 스윙 몽타주. [0] 오른쪽 → [1] 왼쪽 → … 연속 공격마다 번갈아 쓴다. 전부 UpperBody 슬롯 (Plan8 T-2) */
+	/** 3P 스윙 몽타주. [0] → [1] → … 연속 공격마다 번갈아 쓴다(현재 BP: [0] Left, [1] Right — Plan8 T-32). 전부 UpperBody 슬롯 (Plan8 T-2) */
 	UPROPERTY(EditDefaultsOnly, Category = "BellBoy|BasicAttack")
 	TArray<TObjectPtr<UAnimMontage>> SwingMontages;
 
@@ -94,6 +94,19 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BellBoy|Hit")
 	bool bDrawDebugHit = false;
 
+	// ========== ★Plan8(FP)★ 1인칭 ==========
+
+	/**
+	 * FP 스윙 몽타주 — ★SwingMontages 와 같은 순서·같은 개수★ (Plan8 T-32). 비우면 FP 재생 없음.
+	 * DefaultSlot. ★타격 이벤트 태그(HitEventTag) 노티파이를 넣지 말 것★ — 판정이 FP 타이밍으로 바뀐다 (Plan8 T-30)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "BellBoy|FirstPerson")
+	TArray<TObjectPtr<UAnimMontage>> FirstPersonSwingMontages;
+
+	/** FP 몽타주에서 "TP 타격과 같은 순간"을 표시하는 노티파이 태그 (Event.Montage.BellBoy.FPSync). 없으면 길이 비례 (Plan8 D-35) */
+	UPROPERTY(EditDefaultsOnly, Category = "BellBoy|FirstPerson")
+	FGameplayTag FirstPersonSyncTag;
+
 private:
 	UFUNCTION()
 	void OnHitEvent(FGameplayEventData Payload);
@@ -111,7 +124,8 @@ private:
 	void OnMontageAborted();
 
 	// 서버 = ASC::CurrentMontageSetPlayRate(프록시 복제) / 소유 클라 = 로컬 AnimInstance (Plan8 D-10)
-	void SetSwingPlayRate(float NewRate);
+	// FP 몽타주는 FPRate 로 따로 — 로컬 제어일 때만 (Plan8 D-36)
+	void SetSwingPlayRate(float NewRate, float FPRate);
 
 	// 몽타주와 판정 창이 ★둘 다★ 끝나야 어빌리티를 끝낸다
 	void TryFinishSwing();
@@ -122,6 +136,8 @@ private:
 
 	// ── 이번 스윙 ──
 	float PendingRecoveryRate = 1.f;
+	float PendingFirstPersonRecoveryRate = 1.f;
+	TObjectPtr<UAnimMontage> ActiveFirstPersonMontage;   // 로컬 제어일 때만 채워진다 (Plan8 D-33)
 	bool bHitEventReceived = false;
 	bool bMontageDone = false;
 	bool bHitWindowDone = false;

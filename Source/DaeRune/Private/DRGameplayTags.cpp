@@ -921,6 +921,12 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("BellBoy throw notify - hat leaves the hand")
 	);
 
+	// ★Plan8(FP)★ FP 몽타주에서 "TP 이벤트와 같은 순간"을 표시 — 재생 속도 계산용 (D-35 / T-30)
+	GameplayTags.Event_Montage_BellBoy_FPSync = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Event.Montage.BellBoy.FPSync"),
+		FString("BellBoy FP montage sync point - frame that must line up with the TP event")
+	);
+
 	GameplayTags.Debuff_Taunted = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Debuff.Taunted"),
 		FString("Enemy is taunted by a BellBoy")

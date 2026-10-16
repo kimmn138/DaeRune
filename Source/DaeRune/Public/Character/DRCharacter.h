@@ -248,6 +248,13 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Part System")
 	TObjectPtr<UStaticMeshComponent> ThirdPersonPartMesh;
 
+	/**
+	 * ★Plan8(FP)★ 소유 클라가 FirstPersonMesh 에 트는 피격 몽타주. 비우면 FP 피격 없음(기본값).
+	 * Effects.HitReact 태그가 붙을 때 재생 — GA_HitReact 가 실제로 켜질 때만 붙으므로 슈퍼아머·스킬 중 차단을 그대로 따른다 (Plan8 D-40)
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mesh|FirstPerson")
+	TObjectPtr<UAnimMontage> FirstPersonHitReactMontage;
+
 	// �޽� ���ü� ������Ʈ
 	void UpdateMeshVisibility();
 
@@ -306,6 +313,9 @@ public:
 	void MulticastPlayHitReactFacial();
 
 protected:
+	// ★Plan8(FP)★ Effects.HitReact 태그 → FP 피격 몽타주. 로컬 제어 검사는 호출 시점에 (Plan8 T-38)
+	void FirstPersonHitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
