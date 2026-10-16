@@ -28,6 +28,9 @@ public:
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 
+	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
+
 protected:
 	/** 도발 모션 (BB_Taunt 5초, UpperBody 슬롯 — 걸으면서 도발) */
 	UPROPERTY(EditDefaultsOnly, Category = "BellBoy|Taunt")
@@ -72,6 +75,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "BellBoy|Taunt")
 	FGameplayTag TauntStartCueTag;
 
+	// ========== ★Plan8(FP)★ 1인칭 ==========
+
+	/** FP 도발 몽타주(FP_Taunt 5초, DefaultSlot). 비우면 FP 재생 없음. ★TauntStartEventTag 노티파이 금지★ (Plan8 T-30) */
+	UPROPERTY(EditDefaultsOnly, Category = "BellBoy|FirstPerson")
+	TObjectPtr<UAnimMontage> FirstPersonTauntMontage;
+
+	/** FP 몽타주에서 "TP 판정 시작과 같은 순간"을 표시하는 노티파이 태그 (Event.Montage.BellBoy.FPSync). 없으면 길이 비례 (Plan8 D-35) */
+	UPROPERTY(EditDefaultsOnly, Category = "BellBoy|FirstPerson")
+	FGameplayTag FirstPersonSyncTag;
+
 private:
 	UFUNCTION()
 	void OnTauntStart(FGameplayEventData Payload);
@@ -90,4 +103,6 @@ private:
 
 	// 이번 시전에 이미 도발한 적 — 한 시전에 적당 1회 (Plan8 D-15)
 	TSet<TWeakObjectPtr<AActor>> TauntedThisCast;
+
+	TObjectPtr<UAnimMontage> ActiveFirstPersonMontage;   // 로컬 제어일 때만 채워진다 (Plan8 D-33)
 };

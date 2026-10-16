@@ -26,6 +26,7 @@
 // ★Plan8(벨보이)★ 모자·도발·몽타주 헬퍼
 #include "AIController.h"
 #include "AI/DRAIController.h"
+#include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimNotifies/AnimNotify.h"
 #include "BehaviorTree/BlackboardComponent.h"
@@ -1321,6 +1322,73 @@ float UDRAbilitySystemLibrary::FindMontageEventTime(const UAnimMontage* Montage,
 		}
 	}
 	return -1.f;
+}
+
+// ========================= ★Plan8(FP)★ 1인칭 몽타주 =========================
+
+namespace
+{
+	// 로컬 제어 + FP 메시가 보일 때만 FP AnimInstance 를 돌려준다 (D-33 / T-39)
+	UAnimInstance* GetLocalFirstPersonAnimInstance(AActor* Avatar)
+	{
+		const ADRCharacter* DRChar = Cast<ADRCharacter>(Avatar);
+		if (!DRChar || !DRChar->IsLocallyControlled()) return nullptr;
+
+		USkeletalMeshComponent* FPMesh = DRChar->FirstPersonMesh;
+		if (!FPMesh || !FPMesh->IsVisible()) return nullptr;
+
+		return FPMesh->GetAnimInstance();
+	}
+}
+
+UAnimMontage* UDRAbilitySystemLibrary::PlayFirstPersonMontage(AActor* Avatar, UAnimMontage* Montage, float PlayRate)
+{
+	if (!Montage) return nullptr;
+
+	UAnimInstance* AnimInstance = GetLocalFirstPersonAnimInstance(Avatar);
+	if (!AnimInstance) return nullptr;
+
+	return AnimInstance->Montage_Play(Montage, FMath::Max(0.01f, PlayRate)) > 0.f ? Montage : nullptr;
+}
+
+void UDRAbilitySystemLibrary::SetFirstPersonMontagePlayRate(AActor* Avatar, UAnimMontage* Montage, float PlayRate)
+{
+	if (!Montage) return;
+
+	UAnimInstance* AnimInstance = GetLocalFirstPersonAnimInstance(Avatar);
+	if (AnimInstance && AnimInstance->Montage_IsPlaying(Montage))
+	{
+		AnimInstance->Montage_SetPlayRate(Montage, FMath::Max(0.01f, PlayRate));
+	}
+}
+
+void UDRAbilitySystemLibrary::StopFirstPersonMontage(AActor* Avatar, UAnimMontage* Montage, float BlendOutTime)
+{
+	if (!Montage) return;
+
+	// 숨겨진 뒤에도 멈출 수 있게 가시성은 보지 않는다 — 사망으로 숨긴 FP 메시에 스윙이 남지 않도록
+	const ADRCharacter* DRChar = Cast<ADRCharacter>(Avatar);
+	if (!DRChar || !DRChar->IsLocallyControlled() || !DRChar->FirstPersonMesh) return;
+
+	UAnimInstance* AnimInstance = DRChar->FirstPersonMesh->GetAnimInstance();
+	if (AnimInstance && AnimInstance->Montage_IsPlaying(Montage))
+	{
+		AnimInstance->Montage_Stop(BlendOutTime, Montage);
+	}
+}
+
+float UDRAbilitySystemLibrary::GetFirstPersonSyncTime(const UAnimMontage* FPMontage, const FGameplayTag& SyncTag,
+	const UAnimMontage* TPMontage, float TPEventTime)
+{
+	if (!FPMontage) return TPEventTime;
+
+	const float NotifyTime = FindMontageEventTime(FPMontage, SyncTag);
+	if (NotifyTime > 0.f) return NotifyTime;
+
+	// 노티파이가 없으면 길이 비례 — FP·TP 애니는 같은 동작이라 거의 맞는다 (경고 없음, D-35)
+	const float TPLength = TPMontage ? TPMontage->GetPlayLength() : 0.f;
+	if (TPLength <= KINDA_SMALL_NUMBER) return TPEventTime;
+	return TPEventTime * FPMontage->GetPlayLength() / TPLength;
 }
 
 // ========== 로봇 청소기 탑승 칩 (Plan5(탑승칩)) ==========
