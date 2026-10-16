@@ -67,11 +67,10 @@ public:
 	/**
 	 * ★Plan5(스킬당1칩)★ ChipId 를 EquippedChips 에 더하면 ★같은 스킬로 부딪히는 칩★. 없으면 NAME_None.
 	 *
-	 * IgnoreChipId 는 "곧 빠질 칩"(드롭 교체 대상)으로 보고 건너뛴다.
 	 * 클라 장착 판정 · 서버 정화(SanitizeLoadout) · 세이브 정화 · 뷰모델 · 미리보기가 ★전부 이 함수만★ 쓴다 —
 	 * 한 곳이라도 따로 판정하면 "장착은 되는데 다음 실행/멀티에서 사라지는" 늦은 증상이 난다 (Plan5 D-49).
 	 */
-	FName FindSkillConflict(const TArray<FName>& EquippedChips, FName ChipId, FName IgnoreChipId = NAME_None) const;
+	FName FindSkillConflict(const TArray<FName>& EquippedChips, FName ChipId) const;
 
 	// 카탈로그 정합성 검사 (중복 Id, 슬롯 수 범위, 효과 누락 등). 콘텐츠 작업 후 1회 실행.
 	UFUNCTION(BlueprintCallable, Category = "Chips")

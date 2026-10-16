@@ -2012,9 +2012,10 @@ public:
     UFUNCTION(BlueprintPure, Category = "Upgrade|UI")
     static FText FormatCurrency(int32 Amount);
 
-    // 칩 정의 → 슬롯 카드용 2행 짧은 라벨 ("ATK" / "+5").
-    // 규칙: 첫 번째 비-단점 모디파이어를 대표로 삼고, Flat 은 정수, Percent 는 % 로.
-    // 카탈로그의 EffectSummary 가 "ATK +5" 형태면 공백 기준으로 쪼개 그대로 쓴다.
+    // 칩 정의 → 칩/슬롯 카드용 2행 짧은 라벨 ("ATK" / "+5").
+    // 규칙(2026-10-16 개정): 0) 카탈로그 CardLabelTop/Bottom 을 직접 정했으면 그대로
+    //   1) EffectSummary "이름 +수치" — 이름 공백 빼고 5자 이내 + 수치가 숫자 표기일 때만 쪼개 쓴다
+    //   2) 첫 번째 ★장점★ 모디파이어 → [짧은 스탯명] / [±수치]   3) 장점이 없으면 DisplayName 만(수치 없음)
     UFUNCTION(BlueprintPure, Category = "Upgrade|UI")
     static void MakeShortLabel(const FDRUpgradeChipDefinition& Chip, FText& OutTop, FText& OutBottom);
 
@@ -2587,7 +2588,7 @@ WBP_UpgradeChip                          부모 클래스: DRUpgradeChipWidget
 | 텍스트 | 영역 | 줄 수 | 세로 한계 | 가로 한계 | **채택** |
 |---|---|---|---|---|---|
 | `Txt_ChipName` | 폭 100 × 높이 26 | **1** | 26÷1.3 = **20** | 100÷20 = **한글 5자** | **20pt** |
-| `Txt_ChipValue` | 폭 100 × 높이 39 | 1 | 39÷1.3 = **30** | "+100%" 6자 → 숫자는 폭 0.55배라 여유 | **30pt** |
+| `Txt_ChipValue` | 폭 100 × 높이 39 | 1 | 39÷1.3 = **30** | ~~"+100%" 6자 → 숫자는 폭 0.55배라 여유~~ ★틀렸다★ — BrunoAceSC 는 넓은 글꼴이라 "+100%" 107px · "+200%" 120px(실측 2026-10-16) → **Scale Box 로 줄인다**(아래 ⚠️) | **30pt** |
 | `Txt_UnlockReq` | 폭 104 × 높이 64 | 3~4 | 64÷3÷1.3 = **16** | "해금 조건: 슬롯 3칸" | **14pt** |
 | `Txt_SlotCount` | 뱃지 안 41×13 | 1 | 13÷1.3 = **10** | "SLOT 1" 6자(영문) | **10pt** |
 
@@ -2613,6 +2614,16 @@ WBP_UpgradeChip                          부모 클래스: DRUpgradeChipWidget
 >
 > 카탈로그에서 `EffectSummary` 를 `"ATK +5"` 형태로 직접 써 두면 그쪽이 우선한다(§21.5 규칙 1).
 > 그래도 부족하면 §18.3 의 칩 그리드를 **4열 120×228 → 3열 150×285** 로 바꾼다(폭 130 확보).
+>
+> ⚠️ **2026-10-16 개정 — 라벨이 깨지거나 넘치던 문제** (칩 47개 중 19개가 걸렸다)
+> - 원인 ① 규칙 1 이 문장형 요약도 받아 윗줄이 3줄로 늘고 SLOT 배지를 덮었다("근처 팀원과 함께 공격 +10%, 방어").
+>   ② 수치 폰트 **BrunoAceSC 에 한글이 0자**(383자 — 숫자 · `+ - . %` · `× x s m` 은 있다)라 "2배"의 '배'가 깨진 상자로 나왔다.
+>   ③ 수치가 폭 100 을 넘어도 줄이는 장치가 없었다. 슬롯 카드(폭 120)의 이름은 줄바꿈도 없어 옆으로 넘쳤다.
+> - C++: 규칙 1 은 **이름 공백 빼고 5자 + 수치가 숫자 표기**일 때만 쓰고(`IsValidCardTopLabel` · `IsValidCardValueLabel`),
+>   규칙 2 는 **장점** 모디파이어만 본다 — 장점이 없으면 이름만(사용자 결정: 단점 수치를 대표로 띄우지 않는다).
+>   직접 정하려면 카탈로그 `CardLabelTop` / `CardLabelBottom`(같은 규칙을 `ValidateCatalog` 가 검사).
+> - BP: `WBP_UpgradeChip` · `WBP_ChipDragVisual` · `WBP_UpgradeSlot` 의 이름 · 수치 텍스트를 각각 **Scale Box**
+>   (Stretch = Scale to Fit · Stretch Direction = Down Only)로 감싸고 이름의 Auto Wrap Text 를 끈다 — 넘칠 때만 줄어든다.
 
 **5-6. 애니메이션 2개 — 무엇을 알리는가**
 

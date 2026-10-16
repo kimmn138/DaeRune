@@ -262,7 +262,7 @@ enum class EDRUpgradeResult : uint8
 	SlotOccupied,			// 환불 대상 슬롯이 칩에 점유 중 (먼저 칩을 해제해야 함)
 	PreviousSlotLocked,		// 아직 해금되지 않은 칸 (순차 해금 — 앞 칸을 먼저 해금해야 한다)
 
-	// ★Plan5(스킬당1칩)★ 같은 스킬 칩이 이미 장착돼 있다 — 그 칩이 있는 칸에 드롭하면 교체된다.
+	// ★Plan5(스킬당1칩)★ 같은 스킬 칩이 이미 장착돼 있다 — 그 칩을 먼저 해제해야 한다(드롭 교체 없음 — D-139).
 	// ★반드시 맨 끝에 붙인다★ — 중간에 끼우면 BP 의 Switch 핀·바이트 값이 밀린다 (Plan5 D-52)
 	SkillConflict
 };
@@ -416,6 +416,21 @@ struct FDRUpgradeChipDefinition
 	// 이해하기 쉬운 효과 요약 (기본 표시 — 정확한 수치는 세부 정보 토글에서)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	FText EffectSummary;
+
+	/**
+	 * 칩 카드 2행 라벨을 직접 정한다 (선택). 윗줄이 비어 있으면 자동으로 만든다 —
+	 * EffectSummary → 첫 번째 장점 모디파이어 → DisplayName (UDRUpgradeUILibrary::MakeShortLabel).
+	 *
+	 * 윗줄: 공백 빼고 5자 이내 (칩 카드 텍스트 폭 100px · Pretendard 15 기준 한 줄).
+	 * 아랫줄: 숫자 표기만 — [+ - × x] 숫자 [. ,] [% s m x]. 비워도 된다.
+	 *   수치 폰트(BrunoAceSC)에 ★한글이 없어★ "2배" 의 '배'가 깨진 상자로 나온다 → "×2" 로 쓴다.
+	 * 어기면 DA_ProgressionConfig 검사(ValidateCatalog)가 알려 준다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	FText CardLabelTop;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	FText CardLabelBottom;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	FText Description;

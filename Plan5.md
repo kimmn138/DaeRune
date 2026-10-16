@@ -4,7 +4,7 @@
 > - 정원로봇 9종(씨앗 폭탄 · 물대포 · 발톱): **구현 완료**. 씨앗 폭탄·물대포는 게임 검증 완료, **발톱은 게임 검증이 남았다 → §10**
 > - 자판기 기본 공격(동전) 3종 · 잭팟 3종: **구현 완료**(C++ 빌드 통과 · 에셋 입력 확인 2026-09-28), **게임 검증 남음 → §10**
 > - 자판기 공속 버프 3종(§1.6): **구현 완료**(C++ 빌드 통과 · 에셋 입력 확인 2026-10-07), **게임 검증 남음 → §10.3**
-> - 장착 규칙 "같은 스킬 칩은 1개만"(§1.7): **구현 완료**, 게임 검증 남음 → §10
+> - 장착 규칙 "같은 스킬 칩은 1개만"(§1.7): **구현 완료**, 게임 검증 남음 → §10. 2026-10-16 **드롭 교체 폐지** — 겹친 칩은 목록에서 집히지 않고, 기존 칩을 해제해야 장착된다(D-139 · C++ 만, BP 무변경)
 > - 로봇 청소기 칩 12종(탑승 · 공기탄 · 물 점프 · 돌진 — §1.9~§1.13): **구현 완료**(C++ 빌드 통과 · 에셋 입력 확인 2026-10-08, 커밋 `89120e20`), **게임 검증 남음 → §10.4**. 칩 없이도 바뀐 것 5건(§1.13)
 > - 벨보이 칩 9종(기본 공격 · 시선 집중 · 모자 던지기 — §12) + 벨보이 공속 연동: **C++ 구현 완료**(빌드 통과 2026-10-16), **에디터 작업(§13) · 게임 검증(§12.7) 남음**. 칩 없이도 바뀌는 것 = 벨보이 연속 공격 0.3초(D-122)
 >
@@ -155,8 +155,9 @@
 
 - 묶음 키 = **칩 레벨 `TargetAbilityTag`**(정확히 일치 — D-47). 공용 칩 · 태그 없는 칩은 제한 없음.
 - 그룹 10개 × 3칩: 씨앗 폭탄 / 물대포 / 발톱 / 동전(`…VendingMachine.BasicAttack`) / 잭팟(`…VendingMachine.Jackpot`) / 공속 버프(`…VendingMachine.AttackSpeedBuff`) / 청소기 탑승(`…RobotVacuum.Ride` — 그룹 키 전용) / 공기탄(`…RobotVacuum.AirShot`) / 물 점프(`…RobotVacuum.JetJump`) / 돌진(`…RobotVacuum.Dash`).
-- 같은 그룹 칩이 있으면 빈 칸 장착은 **거부**(`EDRUpgradeResult::SkillConflict`), **그 칩이 있는 칸에 드롭하면 교체**(D-48). 칸 이동은 검사하지 않는다.
-- 겹친 칩도 목록에서 **드래그는 된다**(드롭 교체를 위해 — 사용자 확인 2026-09-28).
+- 같은 그룹 칩이 있으면 장착은 **거부**(`EDRUpgradeResult::SkillConflict`) — 빈 칸이든 그 칩이 있는 칸이든(D-48 · D-139). 바꾸려면 **기존 칩을 먼저 해제**한 뒤 장착한다. 칸 이동은 검사하지 않는다.
+- 겹친 칩은 목록에서 **드래그되지 않는다**(`IsDraggable()` — D-139, 사용자 확정 2026-10-16). 기존 칩을 빼는 순간 다시 집힌다. ~~겹친 칩도 드래그된다(드롭 교체용 — 2026-09-28)~~
+- 다른 그룹 칩을 점유 칸에 놓아 바꿔 끼우는 **일반 교체**(`SwapOrEquipChip`)와 칸 이동(`MoveChip`)은 그대로다.
 - 서버 정화 · 세이브 정화(앞 칸 칩만 남김 — D-50) · 칩 카드 사유(`ConflictingChipName`) · 미리보기(충돌 칩을 뺀 수치)가 모두 `UDRChipCatalog::FindSkillConflict()` 하나를 쓴다(D-49).
 
 ### 1.8 칩별 수치 (같은 스킬 조합은 §1.7 규칙으로 불가능 — 단일 칩 기준)
@@ -531,7 +532,8 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 | **D-46** | (미적용 · 권장) `ValidateCatalog` 에 "칩 레벨 대상 스킬이 있는 전용 칩의 스킬 단위 모디파이어는 `TargetAbilityTag` 필수" | `GR.Asc.SeedSupport` 누락 같은 실수를 검사로 막는다(§9) |
 
 | **D-47** | 스킬당 1칩 묶음 키 = **칩 레벨 `TargetAbilityTag`**(정확히 일치). 모디파이어 태그로 추론하지 않는다 | 카드의 "적용 대상 스킬" 표기와 같은 값. `GrantedTags` 만 있는 칩에서 추론이 틀린다. 태그 누락은 D-51 로 막는다 |
-| **D-48** | 충돌 시 **거부**(`SkillConflict`) + **충돌 칩 칸에 드롭하면 교체**. 자동 교체 없음 | 사용자 확정. 드롭 교체는 기존 규칙이라 새 UI 불필요 |
+| **D-48** | 충돌 시 **거부**(`SkillConflict`). 자동 교체 없음. ~~충돌 칩 칸에 드롭하면 교체~~ → **D-139 로 폐지** | 사용자 확정 |
+| **D-139** | 같은 스킬 칩은 **해제 → 장착** 두 단계로만 바꾼다. ① `UDRUpgradeChipWidget::IsDraggable()` = 해금 && 미장착 && `EquipBlockReason != SkillConflict` → 겹친 칩은 **집히지 않는다** ② `CanEquipChipAtSlot` 은 `SkillConflict` 를 **칸과 무관하게 그대로** 반환(교체 예외 삭제 → `SwapOrEquipChip` 도 거부). `FindSkillConflict` 의 `IgnoreChipId` 인자는 쓰는 곳이 없어져 지웠다 | 사용자 확정(2026-10-16 — D-48 의 드롭 교체 취소). UI 와 판정 **둘 다** 막는다(T-154). `NotEnoughSlots` 칩은 계속 집힌다 — 다른 칩 칸에 놓는 일반 교체용. `WBP_UpgradeChip.OnMouseButtonDown` 이 이 C++ 함수로 드래그를 거른다(바이트코드 확인) → BP 무변경 |
 | **D-49** | 판정은 `FindSkillConflict()` **하나** — 장착 판정 · 서버 정화 · 세이브 정화 · 뷰모델 · 미리보기 | 한 곳이라도 따로 판정하면 "다음 실행/멀티에서 사라지는" 늦은 증상 |
 | **D-50** | 옛 세이브에 같은 그룹 칩이 2개 이상이면 **앞 칸 칩만** 남긴다(`SanitizeClassState` 3차 패스) | 칩은 사는 게 아니라 환급 불필요 |
 | **D-51** | `ValidateCatalog`: 전용 칩에 스킬 단위 모디파이어나 `Upgrade.Feature.Skill.*` 가 있으면 칩 태그 필수 + 모디파이어 태그 = 칩 태그 | 칩 태그가 비면 규칙을 빠져나간다. SeedSupport 같은 모디파이어 태그 누락도 잡는다(D-46 대체) |
@@ -635,9 +637,9 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 | `ExecCalc/ExecCalc_Damage` | 주는 피해 관문 — `DamageDealt`·광폭화·시너지, **음수 피해 0 클램프** / **(d) 탑승 배율** · ★`Damage.MountShared` 면 (a)~(d) 전부 건너뜀★(D-82) |
 | **`DREnemyAttributeSet`** | 받는 피해 관문 — 엘리트 배율 + **`Debuff.Vulnerable` ×1.5** + **흡혈 지급**(★`SetHealth` 전★ — T-24) + **적중 회복 지급**(흡혈 바로 아래, 더미 분기 위 — T-40) + **흡착 배율**(취약 다음) + **`TryApplyAirShotDrag`**(적중 회복 다음, 더미 분기 위) |
 | `DRChipCatalog.cpp` | `ValidateCatalog()` — 스킬 태그/공용 칩/`MaxHealth` Flat 전용/**`Percent ≥ −1.0`**/D-51 칩 태그 검사 · **`FindSkillConflict()`** · `SanitizeLoadout` 스킬 중복 제거 |
-| `DRGameInstance.cpp` | `CanEquipChip`(→ `SkillConflict`) · `GetSkillConflictChip` · `CanEquipChipAtSlot`(충돌 칩 칸이면 교체 허용) · `SanitizeClassState` 3차 패스 · `MakeChipViewModel`(`ConflictingChipId/Name`) · `BuildPreviewRuntime`(충돌 칩 제외) |
+| `DRGameInstance.cpp` | `CanEquipChip`(→ `SkillConflict`) · `GetSkillConflictChip` · `CanEquipChipAtSlot`(`SkillConflict` 는 칸과 무관하게 거부 — D-139) · `SanitizeClassState` 3차 패스 · `MakeChipViewModel`(`ConflictingChipId/Name`) · `BuildPreviewRuntime`(충돌 칩 제외) |
 | `DRProgressionConfig.h/.cpp` | `FDRCoinChipTuning` · `FDRJackpotOdds`(`Normalized`) · `FDRJackpotChipTuning` · `FDRAttackSpeedBuffChipTuning` / 검사: 잭팟 확률표(D-61) · 공속 ②③ GE(비었는지 · Target Tags · Stack Limit · ③ 만료 정책 — 그 칩이 카탈로그에 있을 때만) / `FDRRideChipTuning` · `FDRAirShotChipTuning`(생성자에서 Drag 0.1 · 2.0) · `FDRJetJumpChipTuning` / 검사: 탑승 ①③ · 흡착 · 무적 GE(태그 · 스택 · Op · Duration) |
-| `UI/Widget/DRUpgradeChipWidget.h` | `IsDraggable()` = 해금 && 미장착 — `SkillConflict` 칩도 드래그된다(드롭 교체용) |
+| `UI/Widget/DRUpgradeChipWidget.h` | `IsDraggable()` = 해금 && 미장착 && `SkillConflict` 아님 — 겹친 칩은 집히지 않는다(D-139) |
 | `UI/DRUpgradeUILibrary.cpp` | 스탯 짧은 이름(5자 제한) — `SkillWindup` = "선딜" / `SkillFireInterval` = "발사 간격" / `SkillProjectileScale` = "탄 크기" / "차지 증가" · "외곽 피해" · "상승 높이" · "공중 횟수" · "자해 피해" · "이속 버프" |
 | **`Abilities/DRVendingMachineBasicAttack`** | `GetCurrentFireInterval()` = 칩 간격 ÷ 공속 배율, `MinFireInterval` 바닥 / 잭팟: `GetJackpotOdds` · `RollJackpotTier` · `GetJackpotCapsuleBaseDamage` · `SpawnJackpotCapsule`(스케일 + `SkillDamage` + null 체크 + 사운드 — T-36) · `AdvanceJackpotPity` · `FireJackpotDoubleShot` / `[Jackpot]` 로그 |
 | **`Abilities/DRProjectileSpell`** | `GetUpgradedProjectileScale()` + `SpawnProjectile()` 스폰 트랜스폼 Scale3D (적 GA 도 지나가지만 항상 1.0) |
@@ -670,6 +672,7 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 | `GA_SeedCannon` | `Play Montage`(1P) `Play Rate` · `Play Montage and Wait`(3P) `Rate` ← `Get Attack Speed Play Rate` | 씨앗 대포만 안 빨라진다 / 한쪽만이면 손·몸이 따로 논다 |
 | `WBP_SkillIcon_VendingMachine` | 스택 이벤트: `FillRatio` ← `Get Attack Speed Buff Fill Ratio`(남은 시간 리셋 없음) / `UpdateBuffUI`: `FillRatio` ← 같은 함수, `<= 0` 이면 타이머 정지. 변수 `Buff Duration` · `Buff Remaining Time` 은 안 쓴다 | ①의 5초를 못 그리거나, ③ 감소마다 그래프가 리셋된다(D-76) |
 | `WBP_UpgradeSlot` | ★계약 없음★ — 이 위젯의 `EDRUpgradeResult` Switch 는 **슬롯 해금 버튼** 결과용이라 `SkillConflict` 가 나오지 않는다. `CanEquipChipAtSlot` 은 Switch 없이 쓰인다 | — |
+| `WBP_UpgradeChip` | `OnMouseButtonDown` = `Is Draggable`(C++) 이 참일 때만 `Detect Drag If Pressed`, 아니면 `Unhandled`. `bUnlocked` · `bEquipped` 를 BP 에서 직접 조합하지 않는다(2026-10-16 바이트코드 확인) | 겹친 칩이 다시 집힌다(D-139) |
 | `GA_VacuumJetJump` | **Cost Gameplay Effect Class = `GE_Cost_VacuumJetJump`** | 물이 안 빠진다(예전 상태 — D-103) |
 | `GA_VacuumDash` | **Self Damage Effect = `GE_VacuumDashSelfDamage`**(이속 GE 가 들어가 있었다) | 자해 0 / 이속 GE 가 값 없이 걸려 이속 0(T-121) |
 | `GA_VacuumAirShot` | `Stages` · `ChargeInterval` 을 BP 에서 덮지 않는다 | 덮는 순간 C++ 기본값(10/30/50/70)이 무시된다(T-102) |
@@ -877,7 +880,8 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 | **T-44** | 클라 로그로 발사 간격 디버깅 | 발사는 ★서버 타이머★ 가 정한다(`ExecuteShot` 권한 체크). 서버(호스트) 로그를 볼 것 |
 | **T-45** | 헤더 변경을 Live Coding 으로 반영 | `UENUM` 값 · `USTRUCT` 필드 추가는 리플렉션 변경 — 에디터를 닫고 빌드한다 |
 | **T-46** | 스킬당 1칩 판정을 `CanEquipChip` 에만 넣기 | 옛 세이브·조작된 보고는 2개가 그대로 적용된다 — `SanitizeLoadout` · `SanitizeClassState` 도(D-49) |
-| **T-47** | `CanEquipChipAtSlot` 이 `SkillConflict` 를 그대로 반환 | 충돌 칩 칸에 드롭해도 교체가 안 된다 — "목적 칸 칩을 빼면 더는 안 부딪히는가"로 판정 |
+| **T-47** | ~~`CanEquipChipAtSlot` 이 `SkillConflict` 를 그대로 반환 → 충돌 칩 칸에 드롭해도 교체가 안 된다~~ | **D-139 로 뒤집혔다** — 지금은 그대로 반환하는 것이 정답이다(드롭 교체 폐지) |
+| **T-154** | 같은 스킬 교체 폐지(D-139)를 **한쪽에만** 반영 | `IsDraggable` 만 → 판정은 여전히 교체를 허용해 다른 경로로 드래그가 생기면 되살아난다 / `CanEquipChipAtSlot` 만 → 칩이 집혔다가 놓을 때 조용히 거부된다(요구는 "아예 안 집힘"). 둘 다 막는다 |
 | **T-48** | `SkillConflict` 를 enum 중간에 삽입 | BP Switch 핀·바이트 값이 밀린다(D-52) |
 | **T-49** | 스킬 칩의 칩 레벨 `TargetAbilityTag` 를 비움 | 제한을 조용히 빠져나간다 — D-51 검사가 잡는다 |
 | **T-50** | 미리보기가 충돌 칩을 안 빼고 계산 | 불가능한 "두 칩 합친 수치"를 보여 준다 |
@@ -1034,7 +1038,7 @@ HUD: 태그 AnyCountChange → OnVendingMachineAttackSpeedBuff(자기 + 공유 �
 | **22** | ③ 기대값(약 43)은 손 계산 근사 | `[Jackpot]` 로그 100회 이상으로 확인 |
 | **23** | `[Jackpot]` 로그가 잭팟마다 1줄 남는다(`LogDR`, Log) | 검증용. 수 초에 한 줄이라 그대로 둬도 되고, 지운다면 `ExecuteShot()` 의 한 줄 |
 | **24** | ③의 "현재 골드 확률"을 HUD 에 안 보여 준다 | 보여 주려면 `PityBronzeSteps/PitySilverSteps` 소유자 전용 복제 + BP 표시(T-53) |
-| **25** | 칩 카드에 `SkillConflict` 사유 문구가 없다 — 겹친 칩은 흐리게만 보인다 | 선택. `WBP_UpgradeChip` 에서 `EquipBlockReason == SkillConflict` 이면 `ConflictingChipName` 으로 "'○○'과 같은 스킬 — 그 칸에 놓으면 교체" |
+| **25** | 칩 카드에 `SkillConflict` 사유 문구가 없다 — 겹친 칩은 흐리게 보이고 집히지도 않는데(D-139) 이유를 알려 주지 않는다. `GetUpgradeResultText(SkillConflict)` 문구("…장착된 칩을 먼저 해제하세요.")는 고쳐 두었지만 지금 이 문구를 띄우는 BP 는 없다(`WBP_UpgradeToolTip` 은 빈 위젯) | 선택. `WBP_UpgradeChip` 에서 `EquipBlockReason == SkillConflict` 이면 `ConflictingChipName` 으로 "'○○'과 같은 스킬 — 먼저 해제하세요" |
 | **26** | 고액 동전 발사 간격 줄의 `Detail Override` 가 비어 있다 | 자동 문구 "스킬 발사 간격 +0.4초"가 나온다(틀리진 않음). 원하면 `발사 간격 1.0초 (기존 0.6초)` |
 | **27** | 공속 ① 최대치 유지 비용(초당 물 약 26) | 사용자 확정 수치. 플레이 후 카탈로그 `Value` / `OverdriveDuration` 만 조정 |
 | **28** | ~~공속 칩 ③ 보류~~ | **확정**(2026-10-07) — D-72 ~ D-75 |
@@ -1115,7 +1119,7 @@ C++ 빌드 통과, 에셋 입력은 2026-09-28 에셋을 직접 읽어 확인했
 - [ ] **잭팟 ①** 확률 75/0/25, 실버 0회
 - [ ] **잭팟 ②** 확률 55/45/0, 골드 0회 / 같은 색 0.15초 뒤 1발 더 / 버튼을 떼도 나감 / 죽으면 안 나감 / 소리 2 · 몽타주 1
 - [ ] **잭팟 ③** 45/50/5 → 브론즈 뒤 43/50/7 → 실버 뒤 43/48/9 … 골드면 45/50/5 / 골드 피해 120 / 부활해도 적립 유지
-- [ ] **스킬당 1칩** 같은 그룹 칩 빈 칸 장착 거부 / 그 칩 칸에 드롭하면 교체 / 동전 1 + 잭팟 1 은 함께 / 미리보기는 "교체" 기준 수치 / 옛 세이브(같은 그룹 2개)는 앞 칸만 남고 경고 로그
+- [ ] **스킬당 1칩** 같은 그룹 칩은 흐린 카드로 **집히지 않는다**(끌어도 드래그 비주얼이 안 뜬다 — D-139) / 기존 칩을 슬롯에서 빼면 곧바로 집혀 장착된다 / 다른 그룹 칩을 점유 칸에 놓는 일반 교체 · 칸 이동은 그대로 / 동전 1 + 잭팟 1 은 함께 / 옛 세이브(같은 그룹 2개)는 앞 칸만 남고 경고 로그
 - [ ] **멀티** 클라 동전 ③ → 호스트 화면에서도 크다 / 클라 동전 ② → 클라 체력바 +2 / 클라 잭팟 ② → 호스트 화면에서도 두 발 / 조작된 보고 → 서버 정화 로그
 - [ ] **검사** `DA_ProgressionConfig` 를 편집해 검사 → 칩·확률표 오류 0건
 

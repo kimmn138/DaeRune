@@ -2,6 +2,7 @@
 
 
 #include "Game/DRChipCatalog.h"
+#include "UI/DRUpgradeUILibrary.h"	// 칩 카드 라벨 규칙(IsValidCard*Label) — 검사와 생성이 같은 판정을 쓴다
 #include "DaeRune/DRLogChannels.h"
 
 #define LOCTEXT_NAMESPACE "DRUpgrade"
@@ -179,7 +180,7 @@ void UDRChipCatalog::ResolveLoadout(const TArray<FName>& EquippedChips, EPlayerC
 	}
 }
 
-FName UDRChipCatalog::FindSkillConflict(const TArray<FName>& EquippedChips, FName ChipId, FName IgnoreChipId) const
+FName UDRChipCatalog::FindSkillConflict(const TArray<FName>& EquippedChips, FName ChipId) const
 {
 	const FDRUpgradeChipDefinition* Chip = FindChip(ChipId);
 	if (!Chip) return NAME_None;
@@ -190,8 +191,8 @@ FName UDRChipCatalog::FindSkillConflict(const TArray<FName>& EquippedChips, FNam
 
 	for (const FName& OtherId : EquippedChips)
 	{
-		// 자기 자신(다중 칸 칩의 다른 칸 포함)과 곧 빠질 칩은 건너뛴다
-		if (OtherId.IsNone() || OtherId == ChipId || OtherId == IgnoreChipId) continue;
+		// 자기 자신(다중 칸 칩의 다른 칸 포함)은 건너뛴다
+		if (OtherId.IsNone() || OtherId == ChipId) continue;
 
 		if (const FDRUpgradeChipDefinition* Other = FindChip(OtherId))
 		{
@@ -349,6 +350,30 @@ bool UDRChipCatalog::ValidateCatalog(int32 MaxSlots, TArray<FString>& OutErrors)
 		if (Chip.EffectSummary.IsEmpty())
 		{
 			OutErrors.Add(FString::Printf(TEXT("%s: EffectSummary 가 비어 있습니다(기본 표시 문구)."), *IdString));
+		}
+
+		// 칩 카드 라벨을 직접 정했으면 카드에 들어가는지 본다.
+		// 자동 라벨은 MakeShortLabel 이 같은 판정으로 걸러서 만들므로 따로 보지 않는다.
+		if (!Chip.CardLabelTop.IsEmpty() && !UDRUpgradeUILibrary::IsValidCardTopLabel(Chip.CardLabelTop.ToString()))
+		{
+			OutErrors.Add(FString::Printf(
+				TEXT("%s: CardLabelTop '%s' 이 공백 빼고 5자를 넘어 칩 카드에 한 줄로 들어가지 않습니다."),
+				*IdString, *Chip.CardLabelTop.ToString()));
+		}
+
+		if (!Chip.CardLabelBottom.IsEmpty())
+		{
+			if (Chip.CardLabelTop.IsEmpty())
+			{
+				OutErrors.Add(FString::Printf(
+					TEXT("%s: CardLabelTop 이 비어 있어 CardLabelBottom 이 무시됩니다(자동 라벨이 쓰입니다)."), *IdString));
+			}
+			else if (!UDRUpgradeUILibrary::IsValidCardValueLabel(Chip.CardLabelBottom.ToString()))
+			{
+				OutErrors.Add(FString::Printf(
+					TEXT("%s: CardLabelBottom '%s' 에는 숫자 표기만 쓸 수 있습니다(+ - × x 숫자 . , %% s m) — 수치 폰트에 한글이 없어 깨집니다."),
+					*IdString, *Chip.CardLabelBottom.ToString()));
+			}
 		}
 
 		// 돌파 칩은 단점을 동반하는 것이 설계 규칙이다.

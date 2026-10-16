@@ -251,7 +251,8 @@ struct FDRChipViewModel
 	EDRUpgradeResult EquipBlockReason = EDRUpgradeResult::Success;
 
 	// ★Plan5(스킬당1칩)★ EquipBlockReason == SkillConflict 일 때 부딪히는(이미 장착된) 같은 스킬 칩.
-	// UI 문구("'○○' 과 같은 스킬 — 그 칸에 끌어다 놓으면 교체")와 교체 대상 칸 강조에 쓴다. 없으면 None/빈 텍스트.
+	// UI 문구("'○○' 과 같은 스킬 — 먼저 해제하세요")에 쓴다(D-139 — 이 칩은 목록에서 드래그되지 않는다).
+	// 없으면 None/빈 텍스트.
 	UPROPERTY(BlueprintReadOnly, Category = "Chip")
 	FName ConflictingChipId;
 

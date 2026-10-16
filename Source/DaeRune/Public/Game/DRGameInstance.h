@@ -213,11 +213,12 @@ public:
 
 	// 이 칩을 "이 칸에" 놓을 수 있는가. 잠긴 칸 / 점유 칸(=교체 가능)까지 구분해 돌려준다.
 	// 점유 칸이어도 교체가 성립하면 Success 다 — 드롭 하이라이트가 그대로 쓰는 판정이다.
+	// 단 같은 스킬 칩과 부딪히면(SkillConflict) 어느 칸이든 거부한다 — 먼저 해제해야 한다(Plan5 D-139).
 	UFUNCTION(BlueprintCallable, Category = "Progression|Chip")
 	EDRUpgradeResult CanEquipChipAtSlot(EPlayerCharacterClass CharacterClass, FName ChipId, int32 SlotIndex,
 		int32& OutRequiredSlots, int32& OutFreeSlots) const;
 
-	// 빈 칸이면 장착, 점유 칸이면 기존 칩을 해제하고 교체한다.
+	// 빈 칸이면 장착, 점유 칸이면 기존 칩을 해제하고 교체한다(같은 스킬 칩끼리는 교체하지 않는다 — D-139).
 	// 실패 시 아무 것도 바꾸지 않는다(사본 작업 후 성공했을 때만 커밋).
 	UFUNCTION(BlueprintCallable, Category = "Progression|Chip")
 	EDRUpgradeResult SwapOrEquipChip(EPlayerCharacterClass CharacterClass, FName ChipId, int32 SlotIndex);
