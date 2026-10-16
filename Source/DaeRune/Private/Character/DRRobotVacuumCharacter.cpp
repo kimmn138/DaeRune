@@ -15,6 +15,10 @@
 #include "Net/UnrealNetwork.h"
 #include "Player/DRPlayerController.h"
 #include "Sound/SoundBase.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
+#include "Game/DRProgressionConfig.h"
+#include "DaeRune/DRLogChannels.h"
+#include "EngineUtils.h"
 
 ADRRobotVacuumCharacter::ADRRobotVacuumCharacter()
 {
@@ -71,6 +75,9 @@ void ADRRobotVacuumCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		DismountRider(false);
 	}
+
+	// ★Plan5(돌진칩)★ 돌진 중 파괴 · 레벨 전환 — 아군 캡슐에 내 이동 무시 항목이 남지 않게 (T-125)
+	ApplyAllyPassThrough(false);
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -144,6 +151,7 @@ void ADRRobotVacuumCharacter::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 
 	DOREPLIFETIME(ADRRobotVacuumCharacter, RiderOnTop);
 	DOREPLIFETIME(ADRRobotVacuumCharacter, bSustainedDash);
+	DOREPLIFETIME(ADRRobotVacuumCharacter, bDashPassThroughAllies);   // ★Plan5(돌진칩)★ 모든 머신이 이동 무시를 맞춘다 (D-115)
 
 	// 애님 전용 플래그 (ABP가 매 프레임 폴링 — RepNotify 불필요)
 	DOREPLIFETIME(ADRRobotVacuumCharacter, bIsDashCharging);
@@ -155,10 +163,10 @@ void ADRRobotVacuumCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 
-	// 공중 Q 사용 플래그 리셋 (판정은 서버 값만 사용)
+	// 공중 Q 사용 횟수 리셋 (판정은 서버 값만 사용)
 	if (HasAuthority())
 	{
-		bAirJumpUsed = false;
+		AirJumpsUsed = 0;   // ★Plan5(물점프칩)★ (예전 bAirJumpUsed = false — D-107)
 		SetJetJumping(false);
 	}
 }
@@ -201,6 +209,9 @@ bool ADRRobotVacuumCharacter::CanBeMountedBy(ADRCharacter* Candidate) const
 	if (Candidate->IsCarryingPart()) return false;
 	if (Candidate->bIsStunned) return false;
 
+	// ★Plan5(탑승칩)★ ③ 비상 탈출 뒤 이 청소기 탑승 금지 (D-90) — 클라 프롬프트와 같은 함수
+	if (UDRAbilitySystemLibrary::IsRideBannedFrom(Candidate, this)) return false;
+
 	// 순환 방지 1: 내가 타고 있는 체인(아래 방향)에 후보가 있으면 거부 (상호 탑승 차단)
 	for (const ADRCharacter* Below = MountedOn; Below; Below = Below->MountedOn)
 	{
@@ -242,6 +253,9 @@ void ADRRobotVacuumCharacter::MountRider(ADRCharacter* Rider)
 		RiderASC->AddReplicatedLooseGameplayTag(RidingTag);
 	}
 
+	// ★Plan5(탑승칩)★ ① 탑 인원이 바뀌었다 — 감속 다시 맞추기 (D-81)
+	RefreshRideLoadsAfterLinkChange(Rider);
+
 	// 리슨 서버 parity (클라는 RepNotify 경로)
 	OnRep_RiderOnTop();
 }
@@ -256,6 +270,7 @@ void ADRRobotVacuumCharacter::DismountRider(bool bLaunchOff)
 	// 라이더가 이미 파괴 중이면 링크만 해제 (EndPlay 경로 대비)
 	if (!IsValid(Rider))
 	{
+		RefreshRideLoadsAfterLinkChange(nullptr);   // ★Plan5(탑승칩)★ (D-81)
 		OnRep_RiderOnTop();
 		return;
 	}
@@ -286,6 +301,9 @@ void ADRRobotVacuumCharacter::DismountRider(bool bLaunchOff)
 
 	Rider->MountedOn = nullptr;
 
+	// ★Plan5(탑승칩)★ ① 탑 인원이 바뀌었다 — 내린 청소기는 맨 아래가 됐다 (D-81)
+	RefreshRideLoadsAfterLinkChange(Rider);
+
 	OnRep_RiderOnTop();
 }
 
@@ -300,6 +318,112 @@ void ADRRobotVacuumCharacter::SetInteractionUIVisible(bool bShow)
 	{
 		MountPromptWidget->SetVisibility(bShow);
 	}
+}
+
+// ========== 탑승 칩 (Plan5(탑승칩)) ==========
+
+int32 ADRRobotVacuumCharacter::GetRiderCountAbove() const
+{
+	// 상한 8 은 순환 방어용 (CanBeMountedBy 가 이미 막는다)
+	int32 Count = 0;
+	const ADRCharacter* Above = RiderOnTop;
+	while (IsValid(Above) && Count < 8)
+	{
+		++Count;
+		const ADRRobotVacuumCharacter* AboveVacuum = Cast<ADRRobotVacuumCharacter>(Above);
+		Above = AboveVacuum ? AboveVacuum->RiderOnTop.Get() : nullptr;
+	}
+	return Count;
+}
+
+const ADRRobotVacuumCharacter* ADRRobotVacuumCharacter::GetStackBottom() const
+{
+	const ADRRobotVacuumCharacter* Bottom = this;
+	for (int32 Steps = 0; IsValid(Bottom->MountedOn) && Steps < 8; ++Steps)
+	{
+		Bottom = Bottom->MountedOn;
+	}
+	return Bottom;
+}
+
+void ADRRobotVacuumCharacter::RefreshRideLoad()
+{
+	if (!HasAuthority()) return;
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+	if (!ASC) return;
+
+	const FDRGameplayTags& DRTags = FDRGameplayTags::Get();
+
+	// ★핸들이 아니라 태그로 지운다★ — ASC 는 PlayerState 소유라 리스폰 · 클래스 변경 뒤에도 GE 가 남는다 (T-84)
+	ASC->RemoveActiveEffectsWithGrantedTags(FGameplayTagContainer(DRTags.Debuff_RobotVacuum_RideLoad));
+
+	if (bDead || MountedOn) return;   // ① 은 맨 아래(직접 달리는) 청소기만 (D-79)
+	if (!UDRAbilitySystemLibrary::HasUpgradeFeature(ASC, DRTags.Upgrade_Feature_Skill_Ride_Power)) return;
+
+	const int32 Riders = GetRiderCountAbove();
+	if (Riders <= 0) return;
+
+	const FDRRideChipTuning& Tuning = UDRAbilitySystemLibrary::GetChipTuning(this).Ride;
+	UClass* EffectClass = Tuning.PowerLoadEffect.LoadSynchronous();
+	if (!EffectClass)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[RideLoad] ChipTuning.Ride.PowerLoadEffect 미지정 — 칩①이 감속 없이 동작"));
+		return;
+	}
+
+	const float SpeedMult = FMath::Clamp(1.f - Tuning.PowerSpeedPenaltyPerRider * Riders, 0.05f, 1.f);
+	FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+	Context.AddSourceObject(this);
+	const FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(EffectClass, 1.f, Context);
+	if (!Spec.IsValid()) return;
+	Spec.Data->SetSetByCallerMagnitude(DRTags.Data_MoveSpeed_Mult, SpeedMult);
+	ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+
+	UE_LOG(LogDR, Log, TEXT("[RideLoad] %s 위 %d명 → 이속 ×%.2f"), *GetName(), Riders, SpeedMult);
+}
+
+void ADRRobotVacuumCharacter::RefreshRideLoadsAfterLinkChange(ADRCharacter* Rider)
+{
+	// 탑승한 청소기는 맨 아래가 아니게 됐고, 내린 청소기는 맨 아래가 됐다
+	if (ADRRobotVacuumCharacter* RiderVacuum = Cast<ADRRobotVacuumCharacter>(Rider))
+	{
+		RiderVacuum->RefreshRideLoad();
+	}
+	// 인원이 바뀐 것은 나부터 맨 아래까지 전부다 (T-85)
+	int32 Steps = 0;
+	for (ADRRobotVacuumCharacter* Vacuum = this; IsValid(Vacuum) && Steps++ < 8; Vacuum = Vacuum->MountedOn)
+	{
+		Vacuum->RefreshRideLoad();
+	}
+}
+
+void ADRRobotVacuumCharacter::EmergencyEjectRider()
+{
+	if (!HasAuthority() || bDead || !IsValid(RiderOnTop)) return;
+
+	ADRCharacter* Rider = RiderOnTop;
+	UAbilitySystemComponent* SelfASC = GetAbilitySystemComponent();
+	const FDRRideChipTuning& Tuning = UDRAbilitySystemLibrary::GetChipTuning(this).Ride;
+
+	// ① 먼저 내린다 — 이후 회복 · 금지는 탑 상태와 무관해진다 (D-89). 감속 갱신도 DismountRider 가 한다
+	DismountRider(/*bLaunchOff*/ true);
+
+	// ② 둘 다 회복. 대상은 방금까지 내 위에 있던 아군과 나 자신이라 팀 판정이 필요 없다 (T-33)
+	UDRAbilitySystemLibrary::ApplyHealToActor(Rider, SelfASC, Tuning.EjectHealEffect, Tuning.EjectHealAmount, this);
+	UDRAbilitySystemLibrary::ApplyHealToActor(this, SelfASC, Tuning.EjectHealEffect, Tuning.EjectHealAmount, this);
+
+	// ③ 이 청소기 탑승 금지 — 소스 = 내 ASC 로 "어느 청소기"인지 구분한다 (D-90)
+	const FActiveGameplayEffectHandle Ban =
+		UDRAbilitySystemLibrary::ApplyTimedTagEffect(Rider, SelfASC, Tuning.EjectBanEffect, Tuning.EjectBanDuration);
+
+	UE_LOG(LogDR, Log, TEXT("[RideEject] %s → %s 비상 탈출 · 회복 %.0f · 금지 %.0f초%s"),
+		*GetName(), *GetNameSafe(Rider), Tuning.EjectHealAmount, Tuning.EjectBanDuration,
+		Ban.IsValid() ? TEXT("") : TEXT(" ★EjectBanEffect 미지정 — 금지 없음★"));
+}
+
+void ADRRobotVacuumCharacter::OnUpgradeEffectsRefreshed()
+{
+	RefreshRideLoad();   // 서버에서만 실제로 동작. 빙의 때 리스폰 잔류 감속도 지운다
 }
 
 // ========== 돌진 ==========
@@ -341,6 +465,57 @@ void ADRRobotVacuumCharacter::OnRep_SustainedDash()
 	// TODO(Plan3 Phase F): 지속 돌진 루프 사운드/VFX 시작·정지
 }
 
+// ========== 돌진칩② 아군 통과 (Plan5(돌진칩)) ==========
+
+void ADRRobotVacuumCharacter::SetDashPassThroughAllies(bool bEnabled)
+{
+	if (!HasAuthority() || bDashPassThroughAllies == bEnabled) return;
+	bDashPassThroughAllies = bEnabled;
+	OnRep_DashPassThroughAllies();   // 리슨 서버 parity (OnRep_SustainedDash 와 같은 관례)
+}
+
+void ADRRobotVacuumCharacter::OnRep_DashPassThroughAllies()
+{
+	ApplyAllyPassThrough(bDashPassThroughAllies);
+}
+
+void ADRRobotVacuumCharacter::ApplyAllyPassThrough(bool bEnable)
+{
+	UCapsuleComponent* MyCapsule = GetCapsuleComponent();
+	if (!MyCapsule) return;
+
+	// 먼저 이 머신에서 넣었던 것을 전부 되돌린다 (켜기 · 끄기 공통 — 중복 등록 방지)
+	for (const TWeakObjectPtr<ADRCharacter>& Weak : PassThroughAllies)
+	{
+		if (ADRCharacter* Ally = Weak.Get())
+		{
+			MyCapsule->IgnoreActorWhenMoving(Ally, false);
+			if (UCapsuleComponent* AllyCapsule = Ally->GetCapsuleComponent())
+			{
+				AllyCapsule->IgnoreActorWhenMoving(this, false);
+			}
+		}
+	}
+	PassThroughAllies.Reset();
+
+	if (!bEnable || !GetWorld()) return;
+
+	// ★양쪽 다★ — 내가 움직일 때도, 아군이 움직일 때도 서로 막지 않는다 (T-124).
+	// 이동 무시는 복제되지 않아 이 함수가 ★모든 머신★ 에서 돈다 (T-123)
+	for (TActorIterator<ADRCharacter> It(GetWorld()); It; ++It)
+	{
+		ADRCharacter* Ally = *It;
+		if (Ally == this || UDRAbilitySystemLibrary::IsNotFriend(this, Ally)) continue;   // 플레이어끼리만 (D-116)
+
+		MyCapsule->IgnoreActorWhenMoving(Ally, true);
+		if (UCapsuleComponent* AllyCapsule = Ally->GetCapsuleComponent())
+		{
+			AllyCapsule->IgnoreActorWhenMoving(this, true);
+		}
+		PassThroughAllies.Add(Ally);
+	}
+}
+
 void ADRRobotVacuumCharacter::MulticastPlayDashImpactSound_Implementation(FVector_NetQuantize Location)
 {
 	if (GetNetMode() == NM_DedicatedServer) return;
@@ -358,6 +533,10 @@ void ADRRobotVacuumCharacter::OnCapsuleHit(UPrimitiveComponent* HitComponent, AA
 
 	// 탑 상태에서 서로 충돌 판정 금지
 	if (OtherActor == RiderOnTop || OtherActor == MountedOn) return;
+
+	// ★Plan5(돌진칩)★ ② 아군 통과 중이면 아군 충돌은 무시 — 무시 목록에 없던 아군(돌진 중 부활 · 입장)의 안전망.
+	//   피해 · 돌진 종료가 절대 없다 (물리적으로는 막힐 수 있다) (D-115)
+	if (bDashPassThroughAllies && !UDRAbilitySystemLibrary::IsNotFriend(this, OtherActor)) return;
 
 	// Pawn(적/타 플레이어) 또는 수직면(벽/지형지물 — 바닥 착지는 노말 Z가 커서 제외)
 	const bool bHitPawn = Cast<APawn>(OtherActor) != nullptr;

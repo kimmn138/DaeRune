@@ -85,19 +85,6 @@ void ADRS2Mole::BeginPlay()
 		HitBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 		HitBox->SetCollisionResponseToChannel(ECC_Projectile, ECR_Overlap);
 		HitBox->SetCollisionResponseToChannel(ECC_Target, ECR_Overlap);
-
-		// [임시 진단]
-		UE_LOG(LogDR, Warning,
-			TEXT("[S2Mole] CombatInterface=%d / 응답: Visibility=%d Target=%d Projectile=%d (0=Ignore 1=Overlap 2=Block) / CollisionEnabled=%d / 액터위치=%s / 히트박스위치=%s 반지름=%.0f 반높이=%.0f"),
-			Implements<UCombatInterface>() ? 1 : 0,
-			static_cast<int32>(HitBox->GetCollisionResponseToChannel(ECC_Visibility)),
-			static_cast<int32>(HitBox->GetCollisionResponseToChannel(ECC_Target)),
-			static_cast<int32>(HitBox->GetCollisionResponseToChannel(ECC_Projectile)),
-			static_cast<int32>(HitBox->GetCollisionEnabled()),
-			*GetActorLocation().ToCompactString(),
-			*HitBox->GetComponentLocation().ToCompactString(),
-			HitBox->GetScaledCapsuleRadius(),
-			HitBox->GetScaledCapsuleHalfHeight());
 	}
 
 	OnEmergeVisual();
@@ -133,11 +120,6 @@ bool ADRS2Mole::AcceptsHitFrom(const AActor* Attacker) const
 
 	// 2m 이내에서의 공격만 유효하다. 그 밖은 투과된다.
 	const float DistSq = FVector::DistSquared(GetActorLocation(), Attacker->GetActorLocation());
-
-	// [임시 진단]
-	UE_LOG(LogDR, Warning, TEXT("[MoleDiag] C. AcceptsHitFrom: 거리 %.0f / 허용 %.0f -> %s"),
-		FMath::Sqrt(DistSq), ProximityRadius,
-		DistSq <= FMath::Square(ProximityRadius) ? TEXT("통과") : TEXT("투과(거리 초과)"));
 
 	return DistSq <= FMath::Square(ProximityRadius);
 }

@@ -142,6 +142,19 @@ void ADRPlayerState::RebuildUpgradeRuntime()
     {
         DRCharacter->RefreshUpgradeEffects();
     }
+
+    // ★Plan3(공용칩) §17.6.3★ 회복 차단 칩이 새로 켜졌으면 ★이미 돌고 있는★ 재생 GE 를 즉시 뗀다.
+    // 로비에서 칩을 끼고 스테이지에 들어오면 이전 GE 가 살아 있을 수 있는데,
+    // StartHealthRegen 의 가드만으로는 그걸 막지 못한다.
+    if (HasAuthority()
+        && CachedUpgradeRuntime.HasFeature(FDRGameplayTags::Get().Upgrade_Feature_Combat_NoHealing))
+    {
+        StopHealthRegen();
+    }
+
+    // ★Plan3(공용칩)★ 수치가 아닌 기능 스위치(HUD 표시 등)를 UI 가 다시 읽게 한다.
+    // RefreshUpgradeEffects() 는 어트리뷰트만 건드리므로 이 통지가 따로 필요하다.
+    OnUpgradeRuntimeChanged.Broadcast();
 }
 
 void ADRPlayerState::ReportUpgradeLoadoutIfLocal()
@@ -215,9 +228,20 @@ void ADRPlayerState::CheckHealthRegenStatus()
     }
 }
 
+float ADRPlayerState::GetEffectiveCombatExitDelay() const
+{
+    // 칩이 없으면 Apply() 가 항등이라 CombatExitDelay 가 그대로 나온다.
+    const float Upgraded = CachedUpgradeRuntime.Apply(EDRUpgradeStat::HealthRegenDelay, CombatExitDelay);
+    return FMath::Max(MinCombatExitDelay, Upgraded);
+}
+
 void ADRPlayerState::EnterCombat()
 {
     if (!HasAuthority()) return;
+
+    // ★두 SetTimer 가 같은 값을 쓰게 한 번만 계산한다.★
+    // 한쪽만 고치면 "첫 피격은 4.5초, 연속 피격은 5.0초" 처럼 조용히 갈린다.
+    const float ExitDelay = GetEffectiveCombatExitDelay();
 
     if (bIsInCombat)
     {
@@ -226,7 +250,7 @@ void ADRPlayerState::EnterCombat()
             CombatTimerHandle,
             this,
             &ADRPlayerState::CheckCombatExit,
-            CombatExitDelay,
+            ExitDelay,
             false
         );
         return;
@@ -248,7 +272,7 @@ void ADRPlayerState::EnterCombat()
         CombatTimerHandle,
         this,
         &ADRPlayerState::CheckCombatExit,
-        CombatExitDelay,
+        ExitDelay,
         false
     );
 
@@ -384,6 +408,10 @@ void ADRPlayerState::OnRep_IsCorrupted()
 void ADRPlayerState::StartHealthRegen()
 {
     if (!HasAuthority() || bIsCorrupted) return;
+
+    // ★Plan3(공용칩) §17.6.3★ 회복 차단 칩이면 재생 GE 자체를 얹지 않는다.
+    // (이미 붙어 있던 GE 는 RebuildUpgradeRuntime 이 떼어내고, 틱은 MMC 가 0 으로 막는다)
+    if (CachedUpgradeRuntime.HasFeature(FDRGameplayTags::Get().Upgrade_Feature_Combat_NoHealing)) return;
 
     // �̹� ���� ���̸� ����
     if (HealthRegenEffectHandle.IsValid()) return;

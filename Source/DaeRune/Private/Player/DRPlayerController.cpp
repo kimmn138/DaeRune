@@ -23,6 +23,7 @@
 #include "Character/DRCharacter.h"
 #include "Character/DREnemy.h"
 #include "Character/DRRobotVacuumCharacter.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Camera/CameraComponent.h"
 #include "Game/DRStageGameMode.h"
 #include "Phase/DRPhase3.h"
@@ -289,7 +290,9 @@ ADRRobotVacuumCharacter* ADRPlayerController::FindMountByLineTrace()
 		if (HitVacuum &&
 			OverlappedMounts.Contains(HitVacuum) &&
 			!HitVacuum->bDead &&
-			HitVacuum->RiderOnTop == nullptr) // 이미 라이더가 있으면 프롬프트도 안 띄움 (서버가 최종 검증)
+			HitVacuum->RiderOnTop == nullptr && // 이미 라이더가 있으면 프롬프트도 안 띄움 (서버가 최종 검증)
+			// ★Plan5(탑승칩)★ ③ 이 청소기에서 비상 탈출한 뒤 20초는 프롬프트도 안 띄운다 (서버도 같은 함수로 거부 — D-90)
+			!UDRAbilitySystemLibrary::IsRideBannedFrom(DRCharacter, HitVacuum))
 		{
 			return HitVacuum;
 		}
@@ -1701,6 +1704,24 @@ void ADRPlayerController::DRAddCurrency(int32 Amount)
 
 	GI->AddCurrency(Amount);
 	UE_LOG(LogDR, Warning, TEXT("[Cheat] 재화 %d 지급 → 현재 %d"), Amount, GI->GetCurrency());
+}
+
+void ADRPlayerController::DRResetDefaultChips()
+{
+	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
+	if (!GI)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
+		return;
+	}
+
+	GI->DebugResetDefaultLoadout();
+
+	// 세이브만 바꿔서는 이미 스폰된 캐릭터에 반영되지 않는다 — 서버에 다시 보고해야
+	// PlayerState 의 EquippedChips 가 갱신되고 HUD/스탯이 따라온다.
+	ReportUpgradeLoadout();
+
+	UE_LOG(LogDR, Warning, TEXT("[Cheat] 기본 장착 칩을 다시 적용하고 서버에 재보고했습니다."));
 }
 
 void ADRPlayerController::CloseUpgradeScreen()

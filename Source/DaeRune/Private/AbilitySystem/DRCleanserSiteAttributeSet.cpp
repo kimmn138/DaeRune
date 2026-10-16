@@ -7,6 +7,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "DRGameplayTags.h"
 #include "Actor/DRCleanserSite.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
 
 void UDRCleanserSiteAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -63,6 +64,14 @@ void UDRCleanserSiteAttributeSet::HandleIncomingDamage(const FGameplayEffectModC
 
 	if (LocalIncomingDamage > 0.0f)
 	{
+		// Plan8(Taunt): a taunted enemy deals -20% damage to the site too (Plan8 D-14).
+		// The site AS does not inherit UDRAttributeSet, so the shared damage gate is not used here.
+		if (const UAbilitySystemComponent* SourceASC =
+				Data.EffectSpec.GetContext().GetOriginalInstigatorAbilitySystemComponent())
+		{
+			LocalIncomingDamage *= UDRAbilitySystemLibrary::GetTauntDamageMultiplier(SourceASC->GetAvatarActor());
+		}
+
 		if (ADRCleanserSite* CleanserSite = Cast<ADRCleanserSite>(GetOwningActor()))
 		{
 			if(UAbilitySystemComponent* ASC = CleanserSite->GetAbilitySystemComponent())

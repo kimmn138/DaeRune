@@ -192,6 +192,11 @@ public:
 	// 서버 전용: 피격 데미지를 마운트 링크(위/아래 1홉)로 전파 (Damage.MountShared 태그로 재전파 방지)
 	void PropagateSharedDamage(float Damage, const FGameplayEffectContextHandle& SourceContext);
 
+	// ★Plan5(탑승칩)★ 서버: Target 에게 탑승 공유 피해 1건(MountSharedDamageEffectClass · 물리 · Damage.MountShared · 소스 = 나).
+	// PropagateSharedDamage 의 GE 적용부를 뽑아낸 것 — 칩② 이전분도 이 함수로 건다 (Plan5 D-83 · D-91).
+	// 못 걸면(대상 사망 · ASC/GE 없음) false. Damage ≤ 0 이면 아무것도 안 하고 true
+	bool ApplyMountSharedDamageTo(ADRCharacter* Target, float Damage);
+
 	// 탑승 공유 데미지에 사용할 GE (기존 공용 GE_Damage 지정 — BP에서 설정)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mount")
 	TSubclassOf<UGameplayEffect> MountSharedDamageEffectClass;
@@ -242,6 +247,13 @@ public:
 	// Third-person carried part visual. Hidden from the owning player.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Part System")
 	TObjectPtr<UStaticMeshComponent> ThirdPersonPartMesh;
+
+	/**
+	 * ★Plan8(FP)★ 소유 클라가 FirstPersonMesh 에 트는 피격 몽타주. 비우면 FP 피격 없음(기본값).
+	 * Effects.HitReact 태그가 붙을 때 재생 — GA_HitReact 가 실제로 켜질 때만 붙으므로 슈퍼아머·스킬 중 차단을 그대로 따른다 (Plan8 D-40)
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mesh|FirstPerson")
+	TObjectPtr<UAnimMontage> FirstPersonHitReactMontage;
 
 	// �޽� ���ü� ������Ʈ
 	void UpdateMeshVisibility();
@@ -301,6 +313,9 @@ public:
 	void MulticastPlayHitReactFacial();
 
 protected:
+	// ★Plan8(FP)★ Effects.HitReact 태그 → FP 피격 몽타주. 로컬 제어 검사는 호출 시점에 (Plan8 T-38)
+	void FirstPersonHitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -324,8 +339,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade")
 	bool bPreserveVitalRatioOnUpgradeApply = true;
 
+	// ★Plan5(탑승칩)★ RefreshUpgradeEffects 가 모든 머신에서 부른다. 청소기가 탑승칩① 감속 GE 를 다시 맞춘다 (Plan5 D-81)
+	virtual void OnUpgradeEffectsRefreshed() {}
+
 	// 현재 적용 중인 업그레이드 GE 핸들 (재적용 시 먼저 제거 — ASC 가 PlayerState 에 있어 리스폰 후에도 남는다)
 	FActiveGameplayEffectHandle UpgradeStatEffectHandle;
+
+	// 시너지 오라(칩 CM.Asc.Synergy) 구동 컴포넌트. 칩이 없으면 타이머가 돌지 않는다.
+	// (Plan3(공용칩) §17.7)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Upgrade")
+	TObjectPtr<class UDRSynergyAuraComponent> SynergyAuraComponent;
 
 	// ========== ��ǰ ���� ==========
 

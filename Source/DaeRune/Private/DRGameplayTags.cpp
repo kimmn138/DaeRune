@@ -196,6 +196,11 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("VendingMachine Attack Speed Buff")
 	);
 
+	GameplayTags.Buff_AttackSpeed_Shared = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.AttackSpeed.Shared"),
+		FString("자판기 공속 버프 칩 ②가 본인·아군에게 거는 공유 공속 버프 (스택당 ChipTuning.AttackSpeedBuff.SharedSpeedPerStack)")
+	);
+
 	GameplayTags.Buff_RobotVacuum_DashSpeed = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Buff.RobotVacuum.DashSpeed"),
 		FString("RobotVacuum Dash Move Speed Buff (stackable)")
@@ -343,6 +348,262 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
+	 * 업그레이드 칩 기능 스위치 (Plan3(공용칩) §4.6)
+	 * 수치가 아닌 On/Off 효과를 칩으로 표현하기 위한 태그. ASC 에는 부여되지 않는다.
+	 */
+
+	GameplayTags.Upgrade_Feature_HUD_Vitals = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.HUD.Vitals"),
+		FString("장착 시 체력/물 HUD 를 표시한다")
+	);
+
+	GameplayTags.Upgrade_Feature_HUD_SkillIcons = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.HUD.SkillIcons"),
+		FString("장착 시 스킬 아이콘 HUD 를 표시한다")
+	);
+
+	GameplayTags.Upgrade_Feature_Combat_Berserk = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Combat.Berserk"),
+		FString("주는 피해 증폭 + 피격 시 체력 컨테이너 1칸 즉시 소모")
+	);
+
+	GameplayTags.Upgrade_Feature_Combat_NoHealing = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Combat.NoHealing"),
+		FString("모든 체력 회복 차단")
+	);
+
+	GameplayTags.Upgrade_Feature_Combat_Synergy = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Combat.Synergy"),
+		FString("근접 팀원 시너지 오라 활성화")
+	);
+
+	GameplayTags.Upgrade_Feature_Combat_BloodCost = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Combat.BloodCost"),
+		FString("스킬 코스트를 물 대신 체력으로 지불")
+	);
+
+	GameplayTags.Buff_Upgrade_Synergy = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.Upgrade.Synergy"),
+		FString("시너지 오라 적용 중 (태그 카운트 = 스택 수)")
+	);
+
+	// ========== 스킬 전용 칩 기능 스위치 (Plan5(씨앗칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_SeedBomb_Refund = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.SeedBomb.Refund"),
+		FString("씨앗 폭탄 직격 시 사용한 물 환급")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_SeedBomb_Slow = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.SeedBomb.Slow"),
+		FString("씨앗 폭탄에 피격된 적 이동 속도 감소")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_SeedBomb_Haste = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.SeedBomb.Haste"),
+		FString("씨앗 폭탄에 닿은 아군 이동 속도 증가")
+	);
+
+	// ========== 물대포 칩 기능 스위치 (Plan5(물대포칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_WaterPump_Ramp = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.WaterPump.Ramp"),
+		FString("물대포 지속 명중 시 피해 누적")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_WaterPump_Slow = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.WaterPump.Slow"),
+		FString("물대포에 피격된 적 이동 속도 감소")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_WaterPump_Vulnerable = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.WaterPump.Vulnerable"),
+		FString("물대포에 피격된 적이 받는 피해 증가")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_WaterPump_Pierce = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.WaterPump.Pierce"),
+		FString("물대포 물줄기가 적을 관통")
+	);
+
+	// ========== 물대포 칩이 쓰는 진짜 GAS 태그 (Plan5(물대포칩)) ==========
+
+	GameplayTags.Buff_WaterPump_Pressure = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.WaterPump.Pressure"),
+		FString("물대포 가압 스택 (태그 카운트 = 스택 수)")
+	);
+
+	GameplayTags.Debuff_Vulnerable = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Debuff.Vulnerable"),
+		FString("이 대상이 받는 모든 피해가 증가한다")
+	);
+
+	// ========== 기본 공격(발톱) 칩 기능 스위치 (Plan5(발톱칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_Claw_Lifesteal = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Claw.Lifesteal"),
+		FString("기본 공격이 적에게 준 피해만큼 시전자 체력 회복")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Claw_AllyHeal = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Claw.AllyHeal"),
+		FString("기본 공격이 아군에게 적중하면 시전자 체력으로 아군 회복")
+	);
+
+	GameplayTags.Data_HealthCost = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.HealthCost"),
+		FString("SetByCaller tag for a self-inflicted health cost (not damage)")
+	);
+
+	// ========== 자판기 기본 공격(동전) 칩 기능 스위치 (Plan5(동전칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_Coin_HitHeal = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Coin.HitHeal"),
+		FString("자판기 기본 공격이 적에게 적중할 때마다 시전자 체력 고정량 회복")
+	);
+
+	// ========== 자판기 잭팟 칩 기능 스위치 (Plan5(잭팟칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_Jackpot_GoldRush = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Jackpot.GoldRush"),
+		FString("잭팟 확률표를 ChipTuning.Jackpot.GoldRushOdds 로 교체")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Jackpot_Double = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Jackpot.Double"),
+		FString("잭팟 캡슐이 같은 색으로 한 발 더 발사, 골드 확률은 브론즈·실버로 재분배")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Jackpot_Pity = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Jackpot.Pity"),
+		FString("브론즈·실버가 나올 때마다 다음 잭팟의 골드 확률 누적 증가, 골드가 나오면 초기화")
+	);
+
+	// ========== 자판기 공속 버프 칩 기능 스위치 (Plan5(공속칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_AttackSpeedBuff_Overdrive = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.AttackSpeedBuff.Overdrive"),
+		FString("공속 버프 스택당 증가량을 OverdriveSpeedPerStack 으로, 지속을 OverdriveDuration 으로")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_AttackSpeedBuff_Share = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.AttackSpeedBuff.Share"),
+		FString("공속 버프를 본인 + SharedRadius 안 아군에게 SharedEffect 로 건다")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_AttackSpeedBuff_Decay = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.AttackSpeedBuff.Decay"),
+		FString("공속 버프를 DecayEffect 로 걸어 만료 후 DecayInterval 마다 1스택씩 감소, 스택당 DecaySpeedPerStack")
+	);
+
+	// ========== 로봇 청소기 탑승 칩 (Plan5(탑승칩)) ==========
+
+	GameplayTags.Abilities_RobotVacuum_Ride = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.RobotVacuum.Ride"),
+		FString("청소기 탑승(패시브) 칩 그룹 키 — 칩 TargetAbilityTag · SkillDisplayNames 전용, GA 에 넣지 않는다")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Ride_Power = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Ride.Power"),
+		FString("맨 아래 청소기 위 인원당 탑승자 전원 주는 피해 증가, 그 청소기 이속 감소")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Ride_Guard = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Ride.Guard"),
+		FString("이 청소기 위 탑승자의 최종 피해를 GuardTransferRatio 만큼 줄여 이 청소기가 대신 받는다")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Ride_Eject = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Ride.Eject"),
+		FString("바로 위 탑승자 체력이 EjectHealthRatio 이하가 되면 비상 탈출 + 회복 + 이 청소기 탑승 금지")
+	);
+
+	GameplayTags.Debuff_RobotVacuum_RideLoad = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Debuff.RobotVacuum.RideLoad"),
+		FString("탑승칩① 감속 GE(GE_RideLoad)가 부여 — 코드가 이 태그로 지운다")
+	);
+
+	GameplayTags.Debuff_Ride_Banned = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Debuff.Ride.Banned"),
+		FString("탑승칩③ 비상 탈출 뒤 그 청소기 탑승 금지(GE_RideBan, 시전자 ASC 로 청소기 구분)")
+	);
+
+	// ========== 로봇 청소기 기본 공격 칩 (Plan5(공기탄칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_AirShot_FriendlyFire = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.AirShot.FriendlyFire"),
+		FString("공기탄이 아군에게도 적과 같은 피해를 준다(탑승 연결은 통과)")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_AirShot_Drag = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.AirShot.Drag"),
+		FString("공기탄에 맞은 적에게 흡착 스택(감속 · 받는 피해 증가, 보스 제외)")
+	);
+
+	GameplayTags.Debuff_AirShot_Drag = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Debuff.AirShot.Drag"),
+		FString("공기탄칩② 흡착 표식(GE_AirShot_Drag, Aggregate by Target 스택) — 스택당 받는 피해 증가")
+	);
+
+	// ========== 로봇 청소기 물 점프 칩 (Plan5(물점프칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_JetJump_Guard = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.JetJump.Guard"),
+		FString("물 점프를 쓰는 순간부터 GuardDuration 동안 무적")
+	);
+
+	GameplayTags.State_Invulnerable = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("State.Invulnerable"),
+		FString("무적 — 기본 피해 관문이 모든 피해를 통째로 무효로 한다(모자보다 먼저)")
+	);
+
+	// ========== 로봇 청소기 돌진 칩 (Plan5(돌진칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_Dash_PassAllies = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Dash.PassAllies"),
+		FString("돌진하는 동안 다른 플레이어와 충돌하지 않고 통과")
+	);
+
+	// ========== 벨보이 칩 (Plan5(가방칩 · 도발칩 · 모자칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_Bag_HatDrop = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Bag.HatDrop"),
+		FString("기본 공격이 적 1마리를 맞힐 때마다 확률로 벨보이 발밑에 모자가 떨어진다")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Taunt_Expose = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Taunt.Expose"),
+		FString("도발된 적이 받는 모든 피해 증가, 대신 도발된 적의 주는 피해 감소가 사라진다")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Hat_AllyHit = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Hat.AllyHit"),
+		FString("모자가 아군에게 맞으면 피해를 준 뒤 모자를 씌운다")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Hat_ShareDouble = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Hat.ShareDouble"),
+		FString("모자 2회 효과를 던진 본인뿐 아니라 모든 플레이어가 받는다")
+	);
+
+	// ========== 범용 SetByCaller (Plan5(씨앗칩)) ==========
+
+	GameplayTags.Data_MoveSpeed_Mult = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.MoveSpeed.Mult"),
+		FString("SetByCaller tag for a temporary MoveSpeed multiplier")
+	);
+
+	GameplayTags.Data_Duration = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Duration"),
+		FString("SetByCaller tag for a generic gameplay effect duration (seconds)")
+	);
+
+	GameplayTags.Data_SelfDamage = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.SelfDamage"),
+		FString("SetByCaller tag for self damage amount (Plan5 돌진칩 — GE_VacuumDashSelfDamage)")
+	);
+
+	/*
 	 * 게임플레이 이벤트 (GA 통지용)
 	 */
 
@@ -417,6 +678,12 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Abilities_VendingMachine_AttackSpeedBuff = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Abilities.VendingMachine.AttackSpeedBuff"),
 		FString("VendingMachine Attack Speed Buff Ability Tag")
+	);
+
+	// ★Plan5(잭팟칩)★ 칩 그룹 키 전용 — GA 에 붙이지 않는다
+	GameplayTags.Abilities_VendingMachine_Jackpot = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.VendingMachine.Jackpot"),
+		FString("Upgrade chip group key for VendingMachine jackpot chips (not granted to any ability)")
 	);
 
 	GameplayTags.Abilities_RobotVacuum_AirShot = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -640,5 +907,96 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.State_MoleBoss_Burrowed = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("State.MoleBoss.Burrowed"),
 		FString("MoleBoss is underground and invulnerable")
+	);
+
+	/*
+	 * 벨보이 (Plan8)
+	 */
+
+	GameplayTags.Abilities_BellBoy_BasicAttack = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.BellBoy.BasicAttack"),
+		FString("BellBoy suitcase swing (LMB)")
+	);
+
+	GameplayTags.Abilities_BellBoy_Taunt = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.BellBoy.Taunt"),
+		FString("BellBoy taunt - draws nearby enemies (E)")
+	);
+
+	GameplayTags.Abilities_BellBoy_HatThrow = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Abilities.BellBoy.HatThrow"),
+		FString("BellBoy hat throw (RMB)")
+	);
+
+	GameplayTags.Event_Montage_BellBoy_BasicAttack = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Event.Montage.BellBoy.BasicAttack"),
+		FString("BellBoy swing notify - suitcase hit moment")
+	);
+
+	GameplayTags.Event_Montage_BellBoy_Taunt = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Event.Montage.BellBoy.Taunt"),
+		FString("BellBoy taunt notify - detection starts")
+	);
+
+	GameplayTags.Event_Montage_BellBoy_HatThrow = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Event.Montage.BellBoy.HatThrow"),
+		FString("BellBoy throw notify - hat leaves the hand")
+	);
+
+	// ★Plan8(FP)★ FP 몽타주에서 "TP 이벤트와 같은 순간"을 표시 — 재생 속도 계산용 (D-35 / T-30)
+	GameplayTags.Event_Montage_BellBoy_FPSync = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Event.Montage.BellBoy.FPSync"),
+		FString("BellBoy FP montage sync point - frame that must line up with the TP event")
+	);
+
+	GameplayTags.Debuff_Taunted = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Debuff.Taunted"),
+		FString("Enemy is taunted by a BellBoy")
+	);
+
+	GameplayTags.Data_Taunt_DamageMult = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Taunt.DamageMult"),
+		FString("SetByCaller - damage multiplier dealt by a taunted enemy")
+	);
+
+	// ★Plan5(도발칩)★ 도발칩① — 도발된 적이 받는 피해 배율 (D-129)
+	GameplayTags.Data_Taunt_DamageTakenMult = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Taunt.DamageTakenMult"),
+		FString("SetByCaller - damage multiplier taken by a taunted enemy")
+	);
+
+	GameplayTags.Buff_BellBoy_Hat = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.BellBoy.Hat"),
+		FString("Wearing a BellBoy hat (parent - query only)")
+	);
+
+	GameplayTags.Buff_BellBoy_Hat_Single = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.BellBoy.Hat.Single"),
+		FString("BellBoy hat - blocks 1 hit")
+	);
+
+	GameplayTags.Buff_BellBoy_Hat_Double = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Buff.BellBoy.Hat.Double"),
+		FString("BellBoy hat - blocks 2 hits (picked up by its thrower)")
+	);
+
+	GameplayTags.GameplayCue_BellBoy_HatBlock = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.BellBoy.HatBlock"),
+		FString("BellBoy hat blocked a hit")
+	);
+
+	GameplayTags.GameplayCue_BellBoy_Hat_Single = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.BellBoy.Hat.Single"),
+		FString("BellBoy hat on head (1 hit)")
+	);
+
+	GameplayTags.GameplayCue_BellBoy_Hat_Double = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.BellBoy.Hat.Double"),
+		FString("BellBoy hat on head (2 hits)")
+	);
+
+	GameplayTags.GameplayCue_BellBoy_Taunted = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("GameplayCue.BellBoy.Taunted"),
+		FString("Taunted enemy marker")
 	);
 }

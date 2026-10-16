@@ -36,6 +36,16 @@ struct FDRClassUpgradeState
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Upgrade")
 	int32 SpentCurrency = 0;
 
+	/**
+	 * ★Plan3(공용칩)★ 기본 장착(UDRGameInstance::ApplyDefaultLoadout)을 이미 적용했는가.
+	 *
+	 * 이 마커가 없으면 플레이어가 기본 칩을 뺀 다음 게임을 껐다 켤 때마다 다시 꽂힌다.
+	 * "로봇당 딱 한 번만 꽂아준다"를 자료구조로 보장하는 유일한 수단이다.
+	 * (순수 필드 추가라 SaveVersion 은 올리지 않는다 — Plan3(공용칩) §4.7)
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Upgrade")
+	bool bDefaultsApplied = false;
+
 	// 해금된 칸 중 비어 있는 칸 수
 	int32 CountFreeSlots() const
 	{
@@ -185,6 +195,11 @@ struct FDRChipViewModel
 	UPROPERTY(BlueprintReadOnly, Category = "Chip")
 	EDRChipCategory Category = EDRChipCategory::Stat;
 
+	// ★Plan3(공용칩)★ 모든 로봇 공용 칩인가 (카드의 "공용" 뱃지).
+	// Category(스탯/돌파)와 직교하는 축이라 enum 에 섞지 않고 별도 플래그로 둔다.
+	UPROPERTY(BlueprintReadOnly, Category = "Chip")
+	bool bCommonChip = false;
+
 	UPROPERTY(BlueprintReadOnly, Category = "Chip")
 	FText DisplayName;
 
@@ -234,6 +249,15 @@ struct FDRChipViewModel
 	// 장착 불가 사유 (bCanEquipNow == false 일 때 UI 툴팁/경고에 사용)
 	UPROPERTY(BlueprintReadOnly, Category = "Chip")
 	EDRUpgradeResult EquipBlockReason = EDRUpgradeResult::Success;
+
+	// ★Plan5(스킬당1칩)★ EquipBlockReason == SkillConflict 일 때 부딪히는(이미 장착된) 같은 스킬 칩.
+	// UI 문구("'○○' 과 같은 스킬 — 먼저 해제하세요")에 쓴다(D-139 — 이 칩은 목록에서 드래그되지 않는다).
+	// 없으면 None/빈 텍스트.
+	UPROPERTY(BlueprintReadOnly, Category = "Chip")
+	FName ConflictingChipId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Chip")
+	FText ConflictingChipName;
 
 	// 단점 모디파이어 보유 여부 (경고 아이콘)
 	UPROPERTY(BlueprintReadOnly, Category = "Chip")

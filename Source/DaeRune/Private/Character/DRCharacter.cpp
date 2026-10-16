@@ -28,6 +28,7 @@
 #include "Game/DRLobbyGameState.h"
 #include "Game/DRTutorialGameMode.h"
 #include "Character/DRFacialExpressionComponent.h"
+#include "AbilitySystem/DRSynergyAuraComponent.h"
 #include "Character/DRRobotVacuumCharacter.h"
 #include "Actor/Stage2/DRS2TrainCar.h"
 #include "DRAbilityTypes.h"
@@ -45,6 +46,7 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "DaeRune/DRLogChannels.h"
+#include "Misc/ScopeExit.h"
 
 ADRCharacter::ADRCharacter()
 {
@@ -123,6 +125,10 @@ ADRCharacter::ADRCharacter()
 
 	// 표정 컴포넌트 생성
 	FacialExpressionComponent = CreateDefaultSubobject<UDRFacialExpressionComponent>(TEXT("FacialExpression"));
+
+	// 시너지 오라 컴포넌트 (Plan3(공용칩) §17.7).
+	// 항상 붙여 두되 칩이 없으면 타이머가 아예 돌지 않으므로 비용이 0 이다.
+	SynergyAuraComponent = CreateDefaultSubobject<UDRSynergyAuraComponent>(TEXT("SynergyAura"));
 
 	// 부품 시스템 초기화
 	bIsCarryingPart = false;
@@ -239,37 +245,42 @@ void ADRCharacter::PropagateSharedDamage(float Damage, const FGameplayEffectCont
 			LinkedCharacters.Add(SelfVacuum->RiderOnTop);
 		}
 	}
-	if (LinkedCharacters.IsEmpty()) return;
+	// ★Plan5(탑승칩)★ GE 적용부는 ApplyMountSharedDamageTo 로 뽑았다 — ② 이전분도 같은 함수를 지난다 (D-91). 동작은 그대로
+	for (ADRCharacter* Linked : LinkedCharacters)
+	{
+		ApplyMountSharedDamageTo(Linked, Damage);
+	}
+}
+
+bool ADRCharacter::ApplyMountSharedDamageTo(ADRCharacter* Target, float Damage)
+{
+	if (!HasAuthority() || !IsValid(Target) || Target->bDead) return false;
+	if (Damage <= 0.f) return true;
 
 	if (!MountSharedDamageEffectClass)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("PropagateSharedDamage: MountSharedDamageEffectClass 미설정 (%s BP에서 GE_Damage 지정 필요)"), *GetName());
-		return;
+		return false;
 	}
 
 	UAbilitySystemComponent* SelfASC = GetAbilitySystemComponent();
-	if (!SelfASC) return;
+	UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent();
+	if (!SelfASC || !TargetASC) return false;
 
+	// Source = 넘겨주는 사람 ASC (플레이어→플레이어라 물 보상/킬크레딧 왜곡 없음).
+	// 주는 피해 배율은 ExecCalc 가 MountShared 를 보고 건너뛴다 (Plan5 D-82)
 	const FDRGameplayTags& DRTags = FDRGameplayTags::Get();
-	for (ADRCharacter* Linked : LinkedCharacters)
-	{
-		if (Linked->bDead) continue;
+	FDamageEffectParams Params;
+	Params.WorldContextObject = this;
+	Params.DamageGameplayEffectClass = MountSharedDamageEffectClass;
+	Params.SourceAbilitySystemComponent = SelfASC;
+	Params.TargetAbilitySystemComponent = TargetASC;
+	Params.BaseDamage = Damage;
+	Params.DamageType = DRTags.Damage_Physical;
+	Params.SourceAbilityTags.AddTag(DRTags.Damage_MountShared);   // ★필수★ — 빠지면 탑 안에서 무한 반복 (Plan5 T-74)
 
-		UAbilitySystemComponent* LinkedASC = Linked->GetAbilitySystemComponent();
-		if (!LinkedASC) continue;
-
-		// Source = 원 피격자 ASC (플레이어→플레이어라 물 보상/킬크레딧 왜곡 없음)
-		FDamageEffectParams Params;
-		Params.WorldContextObject = this;
-		Params.DamageGameplayEffectClass = MountSharedDamageEffectClass;
-		Params.SourceAbilitySystemComponent = SelfASC;
-		Params.TargetAbilitySystemComponent = LinkedASC;
-		Params.BaseDamage = Damage;
-		Params.DamageType = DRTags.Damage_Physical;
-		Params.SourceAbilityTags.AddTag(DRTags.Damage_MountShared);
-
-		UDRAbilitySystemLibrary::ApplyDamageEffect(Params);
-	}
+	UDRAbilitySystemLibrary::ApplyDamageEffect(Params);
+	return true;
 }
 
 void ADRCharacter::PossessedBy(AController* NewController)
@@ -955,16 +966,52 @@ void ADRCharacter::RefreshUpgradeEffects()
 	// 플레이어 체력은 컨테이너 시스템이라 MaxHealth 를 직접 올리면 컨테이너 인덱스 계산과
 	// 오염 해제 로직(NumContainers * ContainerHealth)이 깨진다. 칸 용량 자체를 올린다. (Plan2.md 2.2)
 	const float BaseContainerHealth = ContainerHealth;
+
+	// ★Plan3(공용칩)★ EDRUpgradeStat::MaxHealth 는 "총 HP" 단위 스탯이다.
+	// 불변식(MaxHealth = NumContainers × ContainerHealth)을 지키려면 총량을 칸 수로 나눠
+	// "칸 용량 증가분"으로 환산해 넣어야 한다. 이렇게 해야 칸 수가 4에서 바뀌어도
+	// 카탈로그에 적은 "+100" 이 계속 정확히 +100 이다. (Plan3(공용칩) §7.1 D-3)
+	const float MaxHealthBonusTotal = Runtime.GetGlobalStat(EDRUpgradeStat::MaxHealth).Flat;
+	const float PerContainerBonus = (NumContainers > 0)
+		? MaxHealthBonusTotal / static_cast<float>(NumContainers) : 0.f;
+
 	const float UpgradedContainerHealth = FMath::Max(
-		1.f, Runtime.Apply(EDRUpgradeStat::ContainerHealth, BaseContainerHealth));
+		1.f, Runtime.Apply(EDRUpgradeStat::ContainerHealth, BaseContainerHealth + PerContainerBonus));
 
 	if (UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSets))
 	{
 		PlayerAS->SetContainerInfo(NumContainers, UpgradedContainerHealth);
 	}
 
+	// ===== 1-2) 시너지 오라 (Plan3(공용칩) §17.7) =====
+	// ★반드시 아래 조기 return 들보다 앞에 둔다.★
+	// 시너지 칩은 모디파이어가 없어 Runtime.IsEmpty() 가 true 이고,
+	// UpgradeStatEffectClass 미지정 분기도 return 한다 — 뒤에 두면 오라가 영영 안 켜진다.
+	// (컴포넌트가 내부에서 서버 권한을 검사하므로 여기서 걸러내지 않는다)
+	if (SynergyAuraComponent)
+	{
+		SynergyAuraComponent->RefreshFromUpgrade();
+	}
+
+	// ===== 1-3) ★Plan5(탑승칩)★ 파생 클래스 훅 =====
+	// 탑승칩 ①·③은 모디파이어가 없어 Runtime.IsEmpty() 가 true 일 수 있다 — 시너지와 같은 이유로 조기 return 앞에 둔다 (D-81)
+	OnUpgradeEffectsRefreshed();
+
 	// ===== 2) 스탯 GE (서버 전용) =====
 	if (!HasAuthority()) return;
+
+	// ★Plan5(탑승칩)★ 오염 중이면 아래 ★모든 return 경로의 끝★ 에서 최대 체력을 100 으로 다시 맞춘다 (D-87).
+	// 칩 GE 를 떼고 붙이는 사이 비율 유지 로직이 체력을 바꾸므로 오염 체력은 시작 값으로 되돌린다 (T-88)
+	UDRPlayerAttributeSet* CorruptAS = Cast<UDRPlayerAttributeSet>(AttributeSets);
+	const bool bCorruptedAtStart = CorruptAS && CorruptAS->IsCorrupted();
+	const float CorruptHealthAtStart = bCorruptedAtStart ? CorruptAS->GetHealth() : 0.f;
+	ON_SCOPE_EXIT
+	{
+		if (bCorruptedAtStart)
+		{
+			CorruptAS->ReapplyCorruptMaxHealth(CorruptHealthAtStart);
+		}
+	};
 
 	// 재적용 전에 이전 핸들 제거 (클래스 변경 / 로드아웃 갱신 대응)
 	if (UpgradeStatEffectHandle.IsValid())
@@ -998,13 +1045,15 @@ void ADRCharacter::RefreshUpgradeEffects()
 	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxHealth_Flat, MaxHealthFlat);
 	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxHealth_Mult, 1.f);
 
+	// ★Plan5(씨앗칩)★ FDRResolvedStat::Mult 는 ★이미 배율★ 이다(기본 1.0).
+	// 예전 Percent(기본 0.0) 시절의 `1.f + ...` 관용구를 그대로 두면 칩이 없어도 2배가 된다.
 	const FDRResolvedStat WaterStat = Runtime.GetGlobalStat(EDRUpgradeStat::MaxWater);
 	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxWater_Flat, WaterStat.Flat);
-	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxWater_Mult, 1.f + WaterStat.Percent);
+	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxWater_Mult, WaterStat.Mult);
 
 	const FDRResolvedStat SpeedStat = Runtime.GetGlobalStat(EDRUpgradeStat::MoveSpeed);
 	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MoveSpeed_Flat, SpeedStat.Flat);
-	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MoveSpeed_Mult, 1.f + SpeedStat.Percent);
+	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MoveSpeed_Mult, SpeedStat.Mult);
 
 	// 최대치 변화에 맞춰 현재값 비율을 유지한다.
 	// 스폰 시점엔 만피이므로 그대로 만피가 되고, 컨테이너 시스템에서는 "남은 컨테이너 수 유지"와 같다.
@@ -1102,6 +1151,16 @@ void ADRCharacter::InitAbilityActorInfo()
 		EGameplayTagEventType::NewOrRemoved
 	).AddUObject(this, &ADRCharacter::StunTagChanged);
 
+	// Plan8(FP) TP 가 실제로 경직할 때만 FP 도 — GA_HitReact 가 차단되면 태그가 안 붙는다 (D-40).
+	// 바인딩은 로컬 제어와 무관하게 — 클라 OnRep_PlayerState 시점엔 컨트롤러가 아직 없을 수 있다 (T-38)
+	if (FirstPersonHitReactMontage)
+	{
+		AbilitySystemComponent->RegisterGameplayTagEvent(
+			FDRGameplayTags::Get().Effects_HitReact,
+			EGameplayTagEventType::NewOrRemoved
+		).AddUObject(this, &ADRCharacter::FirstPersonHitReactTagChanged);
+	}
+
 	// 표정 시스템은 명시적 멀티캐스트(MulticastPlayHitReactFacial /
 	// MulticastPlayVendingSkillUse)에서 트리거하므로 태그 바인딩 불필요.
 
@@ -1134,6 +1193,15 @@ void ADRCharacter::MulticastPlayHitReactFacial_Implementation()
 	if (FacialExpressionComponent)
 	{
 		FacialExpressionComponent->OnHitReact();
+	}
+}
+
+void ADRCharacter::FirstPersonHitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
+{
+	// 로컬 제어 · FP 메시 가시성은 헬퍼가 본다 — 서버의 리모트 폰에서는 아무 일도 없다 (Plan8 D-33)
+	if (NewCount > 0)
+	{
+		UDRAbilitySystemLibrary::PlayFirstPersonMontage(this, FirstPersonHitReactMontage);
 	}
 }
 

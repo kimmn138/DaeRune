@@ -87,6 +87,10 @@ protected:
 private:
 	double ChargeStartTime = 0.0;
 	bool bCharging = false;
+
+	// ★Plan5(공속칩)★ 이번 충전에 쓰는 단계당 시간 = ChargeInterval ÷ 공속 배율.
+	// StartCharging 에서 ★한 번만★ 잡는다 — 충전 도중 버프가 끝나도 단계가 뒤로 튀지 않게 (Plan5 D-69 · T-64)
+	float EffectiveChargeInterval = 0.5f;
 	int32 LastNotifiedStage = -1;
 
 	// ChargeInterval마다 OnChargeStageChanged 발화 (로컬 연출용)

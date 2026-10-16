@@ -39,7 +39,11 @@ void UDRVacuumDash::StartChargingGauge()
 	// ABP Dash_Charge 상태 전이용 복제 플래그 (§13.6)
 	Vacuum->SetDashCharging(true);
 
-	GetWorld()->GetTimerManager().SetTimer(ChargeTimerHandle, this, &UDRVacuumDash::TickCharge, ChargeInterval, true);
+	// ★Plan5(돌진칩)★ ③ 칸당 충전 시간 × 선딜 배율(SkillWindup — 0.7 이면 0.5 → 0.35초) (D-117).
+	//   감쇠(DecayInterval)에는 곱하지 않는다 — 돌진 시간이 짧아진다 (T-129)
+	const float WindupScale = FMath::Max(0.01f, GetUpgradedFloat(EDRUpgradeStat::SkillWindup, 1.f));
+	const float EffectiveChargeInterval = FMath::Max(0.05f, ChargeInterval * WindupScale);
+	GetWorld()->GetTimerManager().SetTimer(ChargeTimerHandle, this, &UDRVacuumDash::TickCharge, EffectiveChargeInterval, true);
 }
 
 void UDRVacuumDash::TickCharge()
@@ -112,6 +116,13 @@ void UDRVacuumDash::ReleaseGauge()
 	ApplyBuffStacks(Gauge);
 	Vacuum->SetDashCollisionEnabled(true);
 
+	// ★Plan5(돌진칩)★ ② 아군 통과 — 돌진하는 동안만. 실제 이동 무시는 캐릭터가 모든 머신에서 맞춘다 (D-115)
+	if (UDRAbilitySystemLibrary::HasUpgradeFeature(
+			GetAbilitySystemComponentFromActorInfo(), FDRGameplayTags::Get().Upgrade_Feature_Skill_Dash_PassAllies))
+	{
+		Vacuum->SetDashPassThroughAllies(true);
+	}
+
 	if (Gauge >= MaxGauge)
 	{
 		// 지속 돌진: 자동 전진(캐릭터 Tick) + 감쇠 없음. 종료는 충돌/브레이크/강제취소.
@@ -158,11 +169,15 @@ void UDRVacuumDash::ApplyBuffStacks(int32 Stacks)
 	FGameplayEffectContextHandle ContextHandle = ASC->MakeEffectContext();
 	ContextHandle.AddSourceObject(GetAvatarActorFromActorInfo());
 
+	// ★Plan5(돌진칩)★ ③ 칸당 이속 = SpeedBonusPerGauge × SkillSpeedBonus (0.2 → 0.14). GE 는 SetByCaller · MultiplyAdditive · by Target 5 (D-118).
+	//   ★모든 스펙에 넣는다★ — 빠지면 크기 0 → (0 − 1) × 스택 = 이속 0 이하 (T-121)
+	const float BonusPerGauge = FMath::Max(0.f, GetUpgradedFloat(EDRUpgradeStat::SkillSpeedBonus, SpeedBonusPerGauge));
 	for (int32 i = 0; i < Stacks; ++i)
 	{
 		const FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(SpeedBuffEffect, GetAbilityLevel(), ContextHandle);
 		if (SpecHandle.IsValid())
 		{
+			SpecHandle.Data->SetSetByCallerMagnitude(FDRGameplayTags::Get().Data_MoveSpeed_Mult, 1.f + BonusPerGauge);
 			SpeedBuffHandle = ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 		}
 	}
@@ -191,21 +206,31 @@ void UDRVacuumDash::HandleDashImpact(AActor* HitActor, const FHitResult& Hit)
 	ADRRobotVacuumCharacter* Vacuum = GetVacuum();
 	const bool bWasSustained = Vacuum && Vacuum->bSustainedDash;
 
-	// 대상 데미지: 적 = G×10, 타 플레이어 = G×5. 지형(ASC 없음)은 대상 데미지 없음.
+	// ★Plan5(돌진칩)★ "지형" = Pawn 이 아닌 충돌 — OnCapsuleHit 의 분류와 같다 (사이트도 여기 든다 — D-112 · T-128)
+	const bool bHitPawn = Cast<APawn>(HitActor) != nullptr;
+
+	// 대상 데미지: 적 = G×10(칩 반영), 타 플레이어 = G×5. 지형(ASC 없음)은 대상 데미지 없음.
 	if (IsValid(HitActor) && UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor))
 	{
 		const bool bEnemy = UDRAbilitySystemLibrary::IsNotFriend(Avatar, HitActor);
+		// ★Plan5(돌진칩)★ ①② 적 충돌 피해만 SkillDamage 를 탄다 — 아군 충돌(칸당 5)은 그대로 (D-113 · T-127)
+		const float DamagePerGauge = bEnemy
+			? GetUpgradedFloat(EDRUpgradeStat::SkillDamage, EnemyDamagePerGauge)
+			: PlayerDamagePerGauge;
 		FDamageEffectParams Params = MakeDamageEffectParamsFromClassDefaults(HitActor);
-		Params.BaseDamage = G * (bEnemy ? EnemyDamagePerGauge : PlayerDamagePerGauge);
+		Params.BaseDamage = G * DamagePerGauge;
 		// ApplyDamageEffect 직접 호출 — 아군 필터에 걸리지 않음 (Plan3 §8.2)
 		UDRAbilitySystemLibrary::ApplyDamageEffect(Params);
 	}
 
-	// 지속 돌진 충돌은 자해 50
-	if (bWasSustained && SelfDamageEffect)
+	// ★Plan5(돌진칩)★ 자해 = 지속 돌진 + 지형 충돌만 (사용자 확정 — 적 · 아군 충돌은 자해 없음). 기본 50, 칩① ×2 (D-112 · D-114).
+	//   자해량은 SetByCaller(Data.SelfDamage) — GE 에 값을 박지 않는다 (T-120)
+	if (bWasSustained && !bHitPawn && SelfDamageEffect)
 	{
-		UDRAbilitySystemLibrary::CreateAndApplyEffectSpec(
-			GetAbilitySystemComponentFromActorInfo(), SelfDamageEffect, Avatar);
+		UAbilitySystemComponent* SelfASC = GetAbilitySystemComponentFromActorInfo();
+		FGameplayEffectSpecHandle SpecHandle = UDRAbilitySystemLibrary::CreateEffectSpec(SelfASC, SelfDamageEffect, Avatar);
+		UDRAbilitySystemLibrary::ApplyEffectSpecWithSetByCaller(SelfASC, SpecHandle, FDRGameplayTags::Get().Data_SelfDamage,
+			FMath::Max(0.f, GetUpgradedFloat(EDRUpgradeStat::SkillSelfDamage, SustainedImpactSelfDamage)));
 	}
 
 	FinishDash(true, HitActor);
@@ -236,6 +261,7 @@ void UDRVacuumDash::FinishDash(bool bFromImpact, AActor* HitActor)
 	{
 		Vacuum->SetSustainedDash(false);
 		Vacuum->SetDashCollisionEnabled(false);
+		Vacuum->SetDashPassThroughAllies(false);   // ★Plan5(돌진칩)★ ② (D-115)
 
 		if (bFromImpact)
 		{
@@ -301,6 +327,7 @@ void UDRVacuumDash::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 			Vacuum->SetDashCharging(false);
 			Vacuum->SetSustainedDash(false);
 			Vacuum->SetDashCollisionEnabled(false);
+			Vacuum->SetDashPassThroughAllies(false);   // ★Plan5(돌진칩)★ ② 사망 · 스턴 · 강제 취소 경로에서도 (T-125)
 
 			// 강제 취소 경로에서도 게이지 UI 리셋
 			if (Gauge != 0)

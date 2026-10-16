@@ -5,11 +5,15 @@
 #include "DRGameplayTags.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
+#include "AbilitySystem/Abilities/DRVendingMachineAttackSpeedBuff.h"
+#include "GameplayEffect.h"
 #include "AbilitySystem/DRAttributeSet.h"
 #include "AbilitySystem/DRCleanserSiteAttributeSet.h"
 #include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "AbilitySystem/Data/StatusEffectInfo.h"
 #include "Actor/DRCleanserSite.h"
+#include "Game/DRChipCatalog.h"
+#include "Game/DRGameInstance.h"
 #include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
 #include "Phase/DRPhase3.h"
@@ -43,6 +47,44 @@ void UOverlayWidgetController::BroadcastInitialValues()
 
 	// 조준선 초기 상태 (현재 Carrying 태그 기준으로 강제 브로드캐스트)
 	UpdateCrosshairState(true);
+
+	// 업그레이드 칩에 따른 HUD 모듈 표시 여부 (Plan3(공용칩) §7.2)
+	RefreshHudFeatureVisibility();
+}
+
+void UOverlayWidgetController::RefreshHudFeatureVisibility()
+{
+	const ADRPlayerState* DRPS = GetDRPS();
+
+	// ★PlayerState 가 아직 없으면 "보이는" 쪽으로 간다.★
+	// 실패했을 때 UI 가 사라지는 것보다 남아 있는 편이 훨씬 안전하다
+	// (사라지면 원인을 화면에서 볼 수 없어 디버깅이 어렵다).
+	if (!DRPS)
+	{
+		OnHudFeatureVisibilityChanged.Broadcast(true, true);
+		return;
+	}
+
+	const UDRGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance<UDRGameInstance>() : nullptr;
+	const UDRChipCatalog* Catalog = GI ? GI->GetChipCatalog() : nullptr;
+
+	/**
+	 * ★"그 기능을 가두는 칩이 카탈로그에 있을 때만 잠근다."★
+	 *
+	 * 코드가 에셋보다 먼저 들어가는 것이 정상 순서다(C++ → DA_ChipCatalog 작성).
+	 * 이 가드가 없으면 그 사이 기간 동안 모든 플레이어의 HUD 가 통째로 사라진다.
+	 * 카탈로그에서 칩을 지웠을 때도 같은 방식으로 자동 복구된다. (Plan3(공용칩) §7.2)
+	 */
+	auto ShouldShow = [Catalog, DRPS](const FGameplayTag& FeatureTag) -> bool
+	{
+		if (!Catalog || !Catalog->IsFeatureGated(FeatureTag)) return true;
+		return DRPS->HasUpgradeFeature(FeatureTag);
+	};
+
+	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+	OnHudFeatureVisibilityChanged.Broadcast(
+		ShouldShow(GameplayTags.Upgrade_Feature_HUD_Vitals),
+		ShouldShow(GameplayTags.Upgrade_Feature_HUD_SkillIcons));
 }
 
 void UOverlayWidgetController::BindCallbacksToDependencies()
@@ -140,15 +182,9 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 
 				const FGameplayTag BuffTag = FGameplayTag::RequestGameplayTag(FName("Buff"));
 				const FGameplayTag DebuffTag = FGameplayTag::RequestGameplayTag(FName("Debuff"));
-				const FGameplayTag AttackSpeedBuffTag = FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed;
+				// 자판기 공격속도 버프 스택은 여기서 방송하지 않는다 — HandleAttackSpeedBuffTagChanged 가 맡는다 (Plan5(공속칩) D-75)
 				for (const FGameplayTag& Tag : AssetTags)
 				{
-					// 자판기 공격속도 버프 감지 (현재 스택 수 전달)
-					if (Tag.MatchesTagExact(AttackSpeedBuffTag))
-					{
-						StrongThis->OnVendingMachineAttackSpeedBuff.Broadcast(StackCount);
-					}
-
 					if (Tag.MatchesTag(BuffTag))
 					{
 						FEffectInfo EffectInfo = StrongThis->StatusEffectData->FindEffectInfoForTag(Tag);
@@ -186,14 +222,9 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 
 				FGameplayTag BuffTag = FGameplayTag::RequestGameplayTag(FName("Buff"));
 				FGameplayTag DebuffTag = FGameplayTag::RequestGameplayTag(FName("Debuff"));
-				const FGameplayTag AttackSpeedBuffTag = FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed;
+				// 자판기 공격속도 버프 만료(0) 방송도 HandleAttackSpeedBuffTagChanged 가 맡는다 (Plan5(공속칩) D-75)
 				for (const FGameplayTag& Tag : AssetTags)
 				{
-					// 자판기 공격속도 버프 만료 시 스킬 아이콘 스택 0으로 리셋
-					if (Tag.MatchesTagExact(AttackSpeedBuffTag))
-					{
-						StrongThis->OnVendingMachineAttackSpeedBuff.Broadcast(0);
-					}
 					if (Tag.MatchesTag(BuffTag))
 					{
 						StrongThis->EffectTagRemovedDelegate.Broadcast(Tag, false);
@@ -223,6 +254,13 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 		// State.Carrying 태그 변화 → 조준선 상태 재계산 (서버는 SetCarryingState, 클라는 OnRep 의 Loose 태그 토글로 발화)
 		AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().State_Carrying, EGameplayTagEventType::NewOrRemoved)
 			.AddUObject(this, &UOverlayWidgetController::HandleCarryingTagChanged);
+
+		// ★Plan5(공속칩)★ 자판기 공속 버프(자기 버프 + 칩 ② 공유 버프) 스택 → 스킬 아이콘 숫자.
+		// AnyCountChange 는 GE 가 붙고 떨어질 때뿐 아니라 ★스택 수만 바뀔 때도★ 서버·클라 모두에서 온다 (D-75)
+		AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed, EGameplayTagEventType::AnyCountChange)
+			.AddUObject(this, &UOverlayWidgetController::HandleAttackSpeedBuffTagChanged);
+		AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Buff_AttackSpeed_Shared, EGameplayTagEventType::AnyCountChange)
+			.AddUObject(this, &UOverlayWidgetController::HandleAttackSpeedBuffTagChanged);
 
 		// GA 활성화/종료 시 InputTag 기반 Pressed/Released 재방송
 		// (PlayerController 직접 broadcast 는 차단 중 게이트로 막히는데, 큐잉되어 나중에 발동된 GA 의 시각 피드백을 여기서 보강)
@@ -293,6 +331,13 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 			false  // 한 번만 실행
 		);
 	}
+
+	// 장착 칩 변경 추종 (HUD 표시 칩) — Plan3(공용칩) §7.2
+	if (ADRPlayerState* DRPS = GetDRPS())
+	{
+		DRPS->OnUpgradeRuntimeChanged.AddDynamic(
+			this, &UOverlayWidgetController::RefreshHudFeatureVisibility);
+	}
 }
 
 void UOverlayWidgetController::BindCallbacksCleanserSiteToDependencies()
@@ -336,6 +381,15 @@ void UOverlayWidgetController::UnbindAllDelegates()
 		}
 	}
 	CleanserSiteDelegateHandles.Empty();
+
+	// 장착 칩 변경 델리게이트 언바인딩 (Plan3(공용칩) §7.2).
+	// ★아래 GameState 조기 반환보다 먼저★ 해야 한다 — GameState 가 없을 때도 반드시 풀려야
+	// 관전 전환/오버레이 재생성 시 댕글링 바인딩이 남지 않는다.
+	if (ADRPlayerState* DRPS = GetDRPS())
+	{
+		DRPS->OnUpgradeRuntimeChanged.RemoveDynamic(
+			this, &UOverlayWidgetController::RefreshHudFeatureVisibility);
+	}
 
 	ADRStageGameState* DRGameState = World->GetGameState<ADRStageGameState>();
 	if (!DRGameState) return;
@@ -685,6 +739,78 @@ void UOverlayWidgetController::HandleCarryingTagChanged(const FGameplayTag Callb
 		bCrosshairSiteDetected = false;
 	}
 	UpdateCrosshairState();
+}
+
+void UOverlayWidgetController::HandleAttackSpeedBuffTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
+{
+	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+
+	// NewCount 는 스택 수가 아니라 "그 태그를 주는 GE 개수"다. 0 이면 방금 완전히 떨어진 것이라
+	// 제거 대기 중인 GE 를 다시 세지 않도록 그 태그 몫은 0 으로 본다.
+	auto StacksOf = [this, &CallbackTag, NewCount](const FGameplayTag& Tag) -> int32
+	{
+		if (Tag == CallbackTag && NewCount <= 0) return 0;
+		return UDRAbilitySystemLibrary::GetEffectStackCountWithTag(AbilitySystemComponent, Tag);
+	};
+
+	const int32 SelfStacks = StacksOf(Tags.Buff_VendingMachine_AttackSpeed);
+	const int32 SharedStacks = StacksOf(Tags.Buff_AttackSpeed_Shared);
+
+	// ★방송보다 먼저★ 감소 구간 여부를 갱신한다 — 위젯이 이 방송을 받자마자 GetAttackSpeedBuffFillRatio 를 부른다.
+	// 자기 버프 스택이 줄어드는 길은 칩 ③의 1초 감소뿐이다(나머지는 한꺼번에 0 이 된다) (T-73)
+	if (SelfStacks <= 0 || SelfStacks > LastSelfAttackSpeedStacks)
+	{
+		bAttackSpeedBuffDecaying = false;
+	}
+	else if (SelfStacks < LastSelfAttackSpeedStacks)
+	{
+		bAttackSpeedBuffDecaying = true;
+	}
+	LastSelfAttackSpeedStacks = SelfStacks;
+
+	// 칩 ②를 낀 자판기는 자기 버프 대신 공유 버프를 받으므로 둘을 합쳐 보여 준다 (D-70)
+	OnVendingMachineAttackSpeedBuff.Broadcast(SelfStacks + SharedStacks);
+}
+
+float UOverlayWidgetController::GetAttackSpeedBuffFillRatio() const
+{
+	const UAbilitySystemComponent* ASC = AbilitySystemComponent;
+	const UWorld* World = GetWorld();
+	if (!ASC || !World) return 0.f;
+
+	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+	const float Now = World->GetTimeSeconds();
+
+	// 태그를 주는 첫 활성 GE 의 채움 비율. Aggregate by Target 이라 인스턴스는 하나다.
+	auto RatioOf = [this, ASC, Now](const FGameplayTag& Tag) -> float
+	{
+		FGameplayTagContainer Filter;
+		Filter.AddTag(Tag);
+
+		for (const FActiveGameplayEffectHandle& Handle : ASC->GetActiveEffectsWithAllTags(Filter))
+		{
+			const FActiveGameplayEffect* ActiveGE = ASC->GetActiveGameplayEffect(Handle);
+			if (!ActiveGE || !ActiveGE->Spec.Def) continue;
+
+			// 남은 시간 — 시작 시각은 서버가 복제하므로 클라에서도 정확하다
+			const float Remaining = ActiveGE->GetTimeRemaining(Now);
+			float Total = ActiveGE->GetDuration();   // 기본 20 / 칩 ① 5 / 칩 ② 20 (코드가 스펙에 고정해 넣은 값)
+
+			// 칩 ③ GE — 만료 때 1스택씩 빼는 정책. Spec 지속은 감소 간격(1초)이고 첫 만료만 BuffDuration 뒤로 밀려 있다 (D-73)
+			if (ActiveGE->Spec.Def->GetStackExpirationPolicy() == EGameplayEffectStackingExpirationPolicy::RemoveSingleStackAndRefreshDuration)
+			{
+				// A 방식: 1초씩 줄어드는 구간에는 그래프를 비우고 숫자만 줄인다
+				if (bAttackSpeedBuffDecaying) return 0.f;
+				Total = UDRVendingMachineAttackSpeedBuff::FindBuffDuration(ASC);
+			}
+
+			return Total > 0.f ? FMath::Clamp(Remaining / Total, 0.f, 1.f) : 0.f;
+		}
+		return 0.f;
+	};
+
+	// 자기 버프와 공유 버프(다른 자판기의 칩 ②)가 같이 있으면 더 많이 남은 쪽
+	return FMath::Max(RatioOf(Tags.Buff_VendingMachine_AttackSpeed), RatioOf(Tags.Buff_AttackSpeed_Shared));
 }
 
 void UOverlayWidgetController::UpdateCrosshairState(bool bForceBroadcast)

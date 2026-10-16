@@ -18,7 +18,8 @@ class UAnimMontage;
  *
  * 게이지: 0.5초당 1칸 (물 20 소모, 부족 시 충전 일시 정지). 해소 시:
  * - 1~4칸: 스택당 이속 +20% 버프, 1초당 1칸 감쇠, 0이 되면 종료
- * - 5칸(최대): 지속 돌진 — 자동 전진 + 감쇠 없음, 충돌(50 자해) 또는 S 브레이크(무피해)로 종료
+ * - 5칸(최대): 지속 돌진 — 자동 전진 + 감쇠 없음, 충돌 또는 S 브레이크(무피해)로 종료.
+ *   ★Plan5(돌진칩)★ 자해(50)는 지형(Pawn 이 아닌 것) 충돌에만 — 적 · 아군 충돌은 자해 없음 (Plan5 D-112)
  */
 UCLASS()
 class DAERUNE_API UDRVacuumDash : public UDRDamageGameplayAbility
@@ -64,13 +65,22 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Dash")
 	float WaterPerGauge = 20.f;
 
-	// 이속 버프 GE (GE_VacuumDashSpeedBuff — Infinite, MoveSpeed ×(1+0.2×스택), StackLimit 5)
+	// 이속 버프 GE (GE_VacuumDashSpeedBuff — Infinite, MoveSpeed ★Multiply (Additive)★ · by Target 5).
+	// ★Plan5(돌진칩)★ 크기 = SetByCaller(Data.MoveSpeed.Mult) = 1 + 칸당 증가 — 코드가 매 스펙에 넣는다 (D-118 · T-121)
 	UPROPERTY(EditDefaultsOnly, Category = "Dash")
 	TSubclassOf<UGameplayEffect> SpeedBuffEffect;
 
-	// 지속 돌진 충돌 자해 GE (GE_VacuumDashSelfDamage — 50)
+	// 지속 돌진 지형 충돌 자해 GE (GE_VacuumDashSelfDamage — IncomingDamage · ★SetByCaller(Data.SelfDamage)★)
 	UPROPERTY(EditDefaultsOnly, Category = "Dash")
 	TSubclassOf<UGameplayEffect> SelfDamageEffect;
+
+	// ★Plan5(돌진칩)★ 칸당 이속 증가분 (0.2 = +20%). 예전엔 GE 에 1.2 로 박혀 있었다 — 칩③ SkillSpeedBonus 가 곱해진다 (D-118)
+	UPROPERTY(EditDefaultsOnly, Category = "Dash", meta = (ClampMin = "0.0"))
+	float SpeedBonusPerGauge = 0.2f;
+
+	// ★Plan5(돌진칩)★ 지속 돌진 지형 충돌 자해량. 예전엔 GE 에 50 으로 박혀 있었다 — 칩① SkillSelfDamage 가 곱해진다 (D-112 · D-114)
+	UPROPERTY(EditDefaultsOnly, Category = "Dash", meta = (ClampMin = "0.0"))
+	float SustainedImpactSelfDamage = 50.f;
 
 	// 게이지 1칸당 물 차감 GE — ExecCalc_WaterCost 실행 GE 지정 (GE_Cost_* 관례).
 	// 물 부족 시 부족분 ×0.5를 체력으로 대납, SetByCaller 태그는 Cost.Water

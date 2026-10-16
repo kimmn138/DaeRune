@@ -52,15 +52,31 @@ public:
 	static FText FormatCurrency(int32 Amount);
 
 	/**
-	 * 칩 정의 → 슬롯 카드용 짧은 2행 라벨 ("ATK" / "+5").
+	 * 칩 정의 → 칩/슬롯 카드용 짧은 2행 라벨 ("ATK" / "+5").
 	 *
 	 * 규칙:
-	 *  1) EffectSummary 가 "ATK +5" 처럼 [이름 + 수치] 2토막이면 그대로 쪼개 쓴다(디자이너가 직접 정한 표기 우선).
-	 *  2) 아니면 첫 번째 비-단점 모디파이어를 대표로 삼아 [스탯명] / [±수치] 로 만든다.
-	 *  3) 모디파이어가 하나도 없으면 DisplayName 을 위쪽에 넣고 아래는 비운다.
+	 *  0) CardLabelTop 이 있으면 CardLabelTop / CardLabelBottom 을 그대로 쓴다(디자이너가 직접 정한 표기).
+	 *  1) EffectSummary 가 "ATK +5" 처럼 [이름 + 수치] 2토막이고 ★카드에 들어가면★ 쪼개 쓴다 —
+	 *     이름은 IsValidCardTopLabel, 수치는 IsValidCardValueLabel 을 통과해야 한다.
+	 *     문장형 요약("근처 팀원과 함께 공격 +10%, 방어 +10%")이나 한글 단위("2배")는 여기서 걸러진다.
+	 *  2) 아니면 첫 번째 ★장점★ 모디파이어를 대표로 삼아 [스탯명] / [±수치] 로 만든다.
+	 *  3) 장점 모디파이어가 없으면 DisplayName 을 위쪽에 넣고 아래는 비운다.
+	 *     효과가 코드 구동이라 모디파이어가 단점뿐인 칩에서 단점 수치가 대표로 뜨지 않게 한다.
 	 */
 	UFUNCTION(BlueprintPure, Category = "Upgrade|UI")
 	static void MakeShortLabel(const FDRUpgradeChipDefinition& Chip, FText& OutTop, FText& OutBottom);
+
+	/**
+	 * 카드 윗줄에 한 줄로 들어가는가 — 공백 빼고 5자 이내.
+	 * 칩 카드 텍스트 폭이 100px 이고 이름 폰트(Pretendard 15)의 한글 1자가 약 20px 이다.
+	 */
+	static bool IsValidCardTopLabel(const FString& Text);
+
+	/**
+	 * 카드 아랫줄(수치) 표기인가 — [+ - × x] 숫자 [숫자 . ,]* [% s m x].
+	 * 수치 폰트 BrunoAceSC 에는 한글이 없다(숫자 · 기호 · 영문만). 한글이 섞이면 깨진 상자로 그려진다.
+	 */
+	static bool IsValidCardValueLabel(const FString& Text);
 
 	/** 모디파이어 1건의 상세 문구 (FDRUpgradeModifier::GetDetailText() 위임) */
 	UFUNCTION(BlueprintPure, Category = "Upgrade|UI")
