@@ -564,6 +564,28 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 		FString("돌진하는 동안 다른 플레이어와 충돌하지 않고 통과")
 	);
 
+	// ========== 벨보이 칩 (Plan5(가방칩 · 도발칩 · 모자칩)) ==========
+
+	GameplayTags.Upgrade_Feature_Skill_Bag_HatDrop = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Bag.HatDrop"),
+		FString("기본 공격이 적 1마리를 맞힐 때마다 확률로 벨보이 발밑에 모자가 떨어진다")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Taunt_Expose = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Taunt.Expose"),
+		FString("도발된 적이 받는 모든 피해 증가, 대신 도발된 적의 주는 피해 감소가 사라진다")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Hat_AllyHit = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Hat.AllyHit"),
+		FString("모자가 아군에게 맞으면 피해를 준 뒤 모자를 씌운다")
+	);
+
+	GameplayTags.Upgrade_Feature_Skill_Hat_ShareDouble = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Upgrade.Feature.Skill.Hat.ShareDouble"),
+		FString("모자 2회 효과를 던진 본인뿐 아니라 모든 플레이어가 받는다")
+	);
+
 	// ========== 범용 SetByCaller (Plan5(씨앗칩)) ==========
 
 	GameplayTags.Data_MoveSpeed_Mult = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -935,6 +957,12 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.Data_Taunt_DamageMult = UGameplayTagsManager::Get().AddNativeGameplayTag(
 		FName("Data.Taunt.DamageMult"),
 		FString("SetByCaller - damage multiplier dealt by a taunted enemy")
+	);
+
+	// ★Plan5(도발칩)★ 도발칩① — 도발된 적이 받는 피해 배율 (D-129)
+	GameplayTags.Data_Taunt_DamageTakenMult = UGameplayTagsManager::Get().AddNativeGameplayTag(
+		FName("Data.Taunt.DamageTakenMult"),
+		FString("SetByCaller - damage multiplier taken by a taunted enemy")
 	);
 
 	GameplayTags.Buff_BellBoy_Hat = UGameplayTagsManager::Get().AddNativeGameplayTag(

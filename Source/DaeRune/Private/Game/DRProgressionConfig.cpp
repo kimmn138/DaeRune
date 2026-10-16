@@ -461,6 +461,37 @@ bool UDRProgressionConfig::ValidateCurrencyBudget(TArray<FString>& OutErrors) co
 		}
 	}
 
+	// ===== ★Plan5(가방칩 · 도발칩 · 모자칩)★ 벨보이 칩 튜닝 검사 =====
+	// 비우거나 0 으로 두면 칩이 에러 없이 일부만 동작한다(가방②는 물만 쓰고, 모자①은 단점이 사라진다).
+	// 청소기 칩과 같은 이유로 그 칩이 카탈로그에 있을 때만 검사한다.
+	{
+		const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+
+		if (ChipCatalog && ChipCatalog->IsFeatureGated(Tags.Upgrade_Feature_Skill_Bag_HatDrop))
+		{
+			if (ChipTuning.Bag.HatPickupClass.IsNull())
+			{
+				OutErrors.Add(TEXT("ChipTuning.Bag.HatPickupClass 가 비어 있어 가방칩②가 모자 없이 물만 씁니다."));
+			}
+			if (ChipTuning.Bag.HatDropChance <= 0.f)
+			{
+				OutErrors.Add(TEXT("ChipTuning.Bag.HatDropChance 가 0 이하라 가방칩②의 모자가 떨어지지 않습니다."));
+			}
+		}
+
+		if (ChipCatalog && ChipCatalog->IsFeatureGated(Tags.Upgrade_Feature_Skill_Taunt_Expose)
+			&& ChipTuning.Taunt.ExposeDamageTakenBonus <= 0.f)
+		{
+			OutErrors.Add(TEXT("ChipTuning.Taunt.ExposeDamageTakenBonus 가 0 이하라 도발칩①이 단점(공격력 감소 해제)만 남습니다."));
+		}
+
+		if (ChipCatalog && ChipCatalog->IsFeatureGated(Tags.Upgrade_Feature_Skill_Hat_AllyHit)
+			&& ChipTuning.Hat.AllyHitDamage <= 0.f)
+		{
+			OutErrors.Add(TEXT("ChipTuning.Hat.AllyHitDamage 가 0 이하라 모자칩①의 단점(아군 피해)이 사라집니다."));
+		}
+	}
+
 	if (OutErrors.Num() > 0)
 	{
 		UE_LOG(LogDR, Warning, TEXT("[ProgressionConfig] %s: 검증 오류 %d건 (첫 항목: %s)"),

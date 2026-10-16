@@ -100,6 +100,20 @@ void UDRGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, cons
             }
         }
     }
+    else
+    {
+        // ★Plan5(가방칩)★ 물을 써야 하는데 Cost GE 가 없다 — CheckCost 는 통과하고 물은 안 빠진다 (D-138 · T-133).
+        // 예전 GA_VacuumJetJump(Plan5 D-103)와 같은 배선 실수다. 기본 공격처럼 자주 불리므로 클래스당 1회만 알린다.
+        static TSet<FName> WarnedClasses;
+        const FName ClassName = GetClass()->GetFName();
+        if (!WarnedClasses.Contains(ClassName))
+        {
+            WarnedClasses.Add(ClassName);
+            UE_LOG(LogDR, Warning,
+                TEXT("[Upgrade] %s: 물 소모 %.1f 인데 Cost Gameplay Effect Class 가 비어 있어 물이 빠지지 않습니다."),
+                *GetName(), EffectiveWaterCost);
+        }
+    }
 }
 
 void UDRGameplayAbility::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
@@ -175,8 +189,8 @@ float UDRGameplayAbility::GetAttackSpeedMultiplier() const
 
 float UDRGameplayAbility::GetEffectiveWaterCostFor(const FGameplayAbilityActorInfo* ActorInfo) const
 {
-    if (WaterCost <= 0.f) return 0.f;
-
+    // ★Plan5(가방칩)★ 기본 물이 0 이어도 칩의 Flat 을 더한다 — 예전의 `WaterCost <= 0 → 0` 조기 return 은
+    // "물 0 → 2"(Flat +2)를 통째로 무시했다 (D-125 · T-132). 칩이 없으면 (0 + 0) × 1 = 0 그대로다.
     const float Upgraded = GetUpgradeRuntimeFor(ActorInfo)
         .ApplySkill(GetUpgradeKeyTag(), EDRUpgradeStat::SkillWaterCost, WaterCost);
 

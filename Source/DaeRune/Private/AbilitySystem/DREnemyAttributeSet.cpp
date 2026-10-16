@@ -72,6 +72,10 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 		// ★이번 적중이 쌓을 스택은 아직 없다★ — 직전 스택으로 계산하고, 스택은 아래에서 쌓는다 (D-97)
 		LocalIncomingDamage *= UDRAbilitySystemLibrary::GetAirShotDragDamageTakenMultiplier(Props.TargetASC);
 
+		// ★Plan5(도발칩)★ ① 약점 노출 — 도발된 적이 받는 모든 피해 ×1.15(그 도발을 건 벨보이가 칩①일 때만).
+		// 취약 · 흡착과 같은 자리 · 같은 이유 — DoT 까지 "모든 피해"다 (D-10 · D-129). 아래 흡혈 · 숫자 표시가 이 값을 본다
+		LocalIncomingDamage *= UDRAbilitySystemLibrary::GetTauntDamageTakenMultiplier(Props.TargetASC);
+
 		// ★Plan5(발톱칩)★ 흡혈 — "적에게 준 피해만큼" 시전자 체력 회복.
 		//
 		// ★여기서 지급하는 이유★: 엘리트 ×0.7 / 취약 ×1.5 / Phase1 ×0.7 이 전부 끝난

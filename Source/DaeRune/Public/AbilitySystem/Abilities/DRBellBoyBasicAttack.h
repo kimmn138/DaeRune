@@ -17,6 +17,10 @@ class UGameplayEffect;
  *  · 타격 시각은 몽타주 노티파이에서 읽는다 (Plan8 D-5) — 노티파이를 옮기면 자동으로 따라온다
  *  · 타격부터 HitWindowDuration 동안 서버가 가방 주변을 여러 번 훑는다 (Plan8 D-8)
  *  · 스윙 시작 때 SkillSwitchLockEffect 를 (선딜 + 0.4초) 걸어 다른 스킬을 막는다 (Plan8 D-7)
+ *  · ★Plan5(가방칩)★ 스윙은 "타격 + 실제 후딜" 에 끝난다 — 클라 · 서버가 같은 타이머 (Plan5 D-122)
+ *  · ★Plan5(가방칩)★ 칩: 첫 타 선딜 = SkillWindup, 연속 선딜 · 후딜 = SkillComboWindup · SkillComboRecovery (Plan5 D-121),
+ *    ② 적 1마리 적중마다 확률로 벨보이 발밑에 모자 (Plan5 D-126). 물 2 는 카탈로그 Flat + Cost GE (Plan5 D-125)
+ *  · ★Plan5(공속칩)★ 공속 배율 M 으로 선딜 · 후딜 · 판정 창 · 잠금을 나눈다 — 활성화 때 한 번 (Plan5 D-123)
  *
  * 부모(UDRMeleeAttack)에서 쓰는 것: AttackRadius · GetUpgradedAttackRadius() (범위 칩).
  * 부모의 GetWindupPlayRate / RestoreMontagePlayRate 는 쓰지 않는다 — 재생 속도는 이 클래스가 관리한다.
@@ -78,7 +82,7 @@ protected:
 
 	// ========== 판정 ==========
 
-	/** 판정 창 길이(실제 초). 0 이면 타격 순간 1회만 — 정원로봇 발톱과 같다 (Plan8 D-8) */
+	/** 판정 창 길이(실제 초). 0 이면 타격 순간 1회만 — 정원로봇 발톱과 같다 (Plan8 D-8). ★Plan5(가방칩)★ 실제 후딜보다 길면 후딜로 줄인다 (Plan5 D-122) */
 	UPROPERTY(EditDefaultsOnly, Category = "BellBoy|Hit", meta = (ClampMin = "0.0"))
 	float HitWindowDuration = 0.1f;
 
@@ -117,6 +121,10 @@ private:
 	UFUNCTION()
 	void OnHitWindowFinished(int32 ActionNumber);
 
+	// ★Plan5(가방칩)★ 타격 + 실제 후딜 — 클라 · 서버가 같은 타이머로 스윙을 끝낸다 (Plan5 D-122)
+	UFUNCTION()
+	void OnRecoveryFinished();
+
 	UFUNCTION()
 	void OnMontageFinished();
 
@@ -127,8 +135,11 @@ private:
 	// FP 몽타주는 FPRate 로 따로 — 로컬 제어일 때만 (Plan8 D-36)
 	void SetSwingPlayRate(float NewRate, float FPRate);
 
-	// 몽타주와 판정 창이 ★둘 다★ 끝나야 어빌리티를 끝낸다
+	// 후딜 타이머와 판정 창이 ★둘 다★ 끝나야 어빌리티를 끝낸다
 	void TryFinishSwing();
+
+	// ★Plan5(가방칩)★ ② 서버: 적 1마리 타격마다 굴려 벨보이 발밑에 모자 (Plan5 D-126). 칩이 없으면 아무것도 안 한다
+	void TryDropHatOnEnemyHit(AActor* Target);
 
 	// ── 스윙 사이에 유지 (InstancedPerActor — 서버·소유 클라가 각자 들고 있다) ──
 	double LastSwingEndTime = -1000.0;
@@ -137,9 +148,12 @@ private:
 	// ── 이번 스윙 ──
 	float PendingRecoveryRate = 1.f;
 	float PendingFirstPersonRecoveryRate = 1.f;
+	float PendingRecoveryTime = 0.4f;          // ★Plan5(가방칩)★ 실제 후딜(초) — 칩 · 공속 반영. 끝 = 타격 + 이 값 (Plan5 D-122)
+	float ActiveHitWindowDuration = 0.1f;      // ★Plan5(가방칩)★ 이번 판정 창 = min(HitWindowDuration, 실제 후딜) (Plan5 D-122)
 	TObjectPtr<UAnimMontage> ActiveFirstPersonMontage;   // 로컬 제어일 때만 채워진다 (Plan8 D-33)
 	bool bHitEventReceived = false;
-	bool bMontageDone = false;
+	bool bRecoveryDone = false;                // ★Plan5(가방칩)★ 예전 bMontageDone — 몽타주 끝은 타격이 없을 때만 본다 (Plan5 T-151)
 	bool bHitWindowDone = false;
+	bool bHatDropThisSwing = false;            // ★Plan5(가방칩)★ ② 이번 스윙에 칩이 켜져 있나 (서버, 활성화 때 1회 해석)
 	TSet<TWeakObjectPtr<AActor>> HitActorsThisSwing;
 };

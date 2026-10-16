@@ -148,6 +148,15 @@ FText UDRUpgradeUILibrary::GetStatShortName(EDRUpgradeStat Stat)
 	case EDRUpgradeStat::SkillSpeedBonus:
 		return LOCTEXT("StatShort_SkillSpeedBonus", "이속 버프");		// 정식: 스킬 이속 버프 (Plan5(돌진칩))
 
+	case EDRUpgradeStat::SkillComboWindup:
+		return LOCTEXT("StatShort_SkillComboWindup", "연속 선딜");		// 정식: 스킬 연속 선딜레이 (Plan5(가방칩))
+
+	case EDRUpgradeStat::SkillComboRecovery:
+		return LOCTEXT("StatShort_SkillComboRecovery", "연속 후딜");		// 정식: 스킬 연속 후딜레이 (Plan5(가방칩))
+
+	case EDRUpgradeStat::SkillDuration:
+		return LOCTEXT("StatShort_SkillDuration", "지속 시간");		// 정식: 스킬 지속 시간 (Plan5(도발칩 · 모자칩))
+
 	// SkillAreaRadius("스킬 범위")는 이미 5자 이내라 폴백으로 충분하다
 
 	default:

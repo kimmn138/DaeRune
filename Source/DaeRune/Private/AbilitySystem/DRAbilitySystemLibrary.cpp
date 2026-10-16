@@ -1150,30 +1150,45 @@ bool UDRAbilitySystemLibrary::CanBeTaunted(AActor* Enemy)
 		|| BB->GetKeyID(DRBlackboardKeys::TargetToFollow) != FBlackboard::InvalidKey;
 }
 
+namespace
+{
+	// 이 ASC 에 걸린 도발 GE. 도발 중이 아니면 nullptr. 새 도발이 이전 것을 지우므로 항상 1개다 (Plan8 D-15)
+	// GetTauntInfo 와 ★Plan5(도발칩)★ GetTauntDamageTakenMultiplier 가 같이 쓴다.
+	const FActiveGameplayEffect* FindActiveTauntEffect(const UAbilitySystemComponent* ASC,
+		FActiveGameplayEffectHandle* OutHandle = nullptr)
+	{
+		const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+		if (!ASC || !ASC->HasMatchingGameplayTag(Tags.Debuff_Taunted)) return nullptr;   // 빠른 탈출
+
+		// ★OwningTags 쿼리★ — Debuff.Taunted 는 GE 의 "부여 태그"(Target Tags)다. GetActiveEffectsWithAllTags 는
+		// "에셋 태그"만 비교해서 태그가 붙어 있어도 GE 를 못 찾는다 (Plan8 T-29). 모자 조회도 같은 이유
+		const TArray<FActiveGameplayEffectHandle> Handles =
+			ASC->GetActiveEffects(
+				FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tags.Debuff_Taunted)));
+		if (Handles.Num() == 0) return nullptr;
+
+		if (OutHandle) *OutHandle = Handles[0];
+		return ASC->GetActiveGameplayEffect(Handles[0]);
+	}
+}
+
 bool UDRAbilitySystemLibrary::GetTauntInfo(AActor* Enemy, AActor*& OutTaunter, float& OutDamageMultiplier,
 	FActiveGameplayEffectHandle* OutHandle)
 {
 	OutTaunter = nullptr;
 	OutDamageMultiplier = 1.f;
 
-	const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Enemy);
-	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
-	if (!ASC || !ASC->HasMatchingGameplayTag(Tags.Debuff_Taunted)) return false;   // 빠른 탈출
-
-	// ★OwningTags 쿼리★ — Debuff.Taunted 는 GE 의 "부여 태그"(Target Tags)다. GetActiveEffectsWithAllTags 는
-	// "에셋 태그"만 비교해서 태그가 붙어 있어도 GE 를 못 찾는다 (Plan8 T-29). 모자 조회도 같은 이유
-	const TArray<FActiveGameplayEffectHandle> Handles =
-		ASC->GetActiveEffects(
-			FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tags.Debuff_Taunted)));
-	const FActiveGameplayEffect* Active = Handles.Num() > 0 ? ASC->GetActiveGameplayEffect(Handles[0]) : nullptr;
-	if (!Active) return false;   // 새 도발이 이전 것을 지우므로 항상 1개다 (D-15)
+	FActiveGameplayEffectHandle Handle;
+	const FActiveGameplayEffect* Active =
+		FindActiveTauntEffect(UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Enemy), &Handle);
+	if (!Active) return false;
 
 	if (const UAbilitySystemComponent* SourceASC = Active->Spec.GetContext().GetOriginalInstigatorAbilitySystemComponent())
 	{
 		OutTaunter = SourceASC->GetAvatarActor();                  // ★Instigator(PlayerState)가 아니다 (T-6)★
 	}
-	OutDamageMultiplier = Active->Spec.GetSetByCallerMagnitude(Tags.Data_Taunt_DamageMult, false, 1.f);
-	if (OutHandle) *OutHandle = Handles[0];
+	OutDamageMultiplier = Active->Spec.GetSetByCallerMagnitude(FDRGameplayTags::Get().Data_Taunt_DamageMult, false, 1.f);
+	if (OutHandle) *OutHandle = Handle;
 	return true;
 }
 
@@ -1192,6 +1207,17 @@ float UDRAbilitySystemLibrary::GetTauntDamageMultiplier(AActor* SourceAvatar)
 	float Multiplier = 1.f;
 	if (!IsValid(SourceAvatar) || !GetTauntInfo(SourceAvatar, Taunter, Multiplier)) return 1.f;
 	return FMath::Max(0.f, Multiplier);   // 음수로 피해가 회복으로 뒤집히지 않게
+}
+
+float UDRAbilitySystemLibrary::GetTauntDamageTakenMultiplier(const UAbilitySystemComponent* TargetASC)
+{
+	// ★Plan5(도발칩)★ ① 적 피해 관문이 모든 피해마다 부른다 — 도발 중이 아니면 태그 조회 한 번으로 끝난다
+	const FActiveGameplayEffect* Active = FindActiveTauntEffect(TargetASC);
+	if (!Active) return 1.f;
+
+	// 칩 없는 벨보이의 도발은 1.0 을 넣는다(값이 없어도 기본 1.0). 음수로 피해가 회복으로 뒤집히지 않게 (D-129)
+	return FMath::Max(0.f,
+		Active->Spec.GetSetByCallerMagnitude(FDRGameplayTags::Get().Data_Taunt_DamageTakenMult, false, 1.f));
 }
 
 bool UDRAbilitySystemLibrary::ApplyTauntAggro(AAIController* OwnerController)

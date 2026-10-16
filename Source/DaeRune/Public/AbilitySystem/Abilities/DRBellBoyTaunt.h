@@ -16,6 +16,10 @@ class UGameplayEffect;
  *  · 1초 노티파이 → 0.5초 동안 0.1초마다 30m 구를 훑어 새 적을 도발 (Plan8 D-19)
  *  · 도발 = 적에게 GE_BellBoy_Taunted — 걸린 순간부터 5초, 이속 ×1.1, 주는 피해 ×0.8 (Plan8 D-11 / D-12 / D-13)
  *  · ★어빌리티가 끝나도 도발은 남는다★ — 적마다 자기 5초가 끝날 때 풀린다 (사용자 확정)
+ *
+ * ★Plan5(도발칩)★ ① 약점 노출 — 도발된 적이 받는 피해 ×1.15 · 주는 피해 감소 없음 (GE 스펙 SetByCaller — Plan5 D-129)
+ *                 ② 반경 × SkillAreaRadius — 스캔과 외침 큐가 같은 값 (Plan5 D-130)
+ *                 ③ 적의 도발 시간 × SkillDuration — 모션 5초는 그대로 (Plan5 D-131)
  */
 UCLASS()
 class DAERUNE_API UDRBellBoyTaunt : public UDRGameplayAbility
@@ -103,6 +107,9 @@ private:
 
 	// 이번 시전에 이미 도발한 적 — 한 시전에 적당 1회 (Plan8 D-15)
 	TSet<TWeakObjectPtr<AActor>> TauntedThisCast;
+
+	// ★Plan5(도발칩)★ ② 이번 시전의 반경(uu) — OnTauntStart 에서 1회 구해 스캔 · 큐가 같이 쓴다 (Plan5 D-130 · T-149)
+	float EffectiveTauntRadius = 0.f;
 
 	TObjectPtr<UAnimMontage> ActiveFirstPersonMontage;   // 로컬 제어일 때만 채워진다 (Plan8 D-33)
 };

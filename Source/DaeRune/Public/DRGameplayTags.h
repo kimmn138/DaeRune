@@ -180,6 +180,12 @@ public:
 	// 로봇 청소기 돌진 칩 (Plan5(돌진칩))
 	FGameplayTag Upgrade_Feature_Skill_Dash_PassAllies;	// ② 돌진 중 아군 통과
 
+	// 벨보이 칩 (Plan5(가방칩 · 도발칩 · 모자칩)). 피처 스위치는 ASC 에 부여되지 않는다.
+	FGameplayTag Upgrade_Feature_Skill_Bag_HatDrop;			// 가방② 적 1마리 적중마다 확률로 벨보이 발밑에 모자
+	FGameplayTag Upgrade_Feature_Skill_Taunt_Expose;		// 도발① 도발된 적이 받는 피해 증가 · 주는 피해 감소 없음
+	FGameplayTag Upgrade_Feature_Skill_Hat_AllyHit;			// 모자① 아군에게 맞으면 피해를 준 뒤 모자 장착
+	FGameplayTag Upgrade_Feature_Skill_Hat_ShareDouble;		// 모자② 모자 2회를 모든 플레이어에게
+
 	// 범용 SetByCaller (Plan5(발톱칩)).
 	// 체력을 ★비용으로★ 깎는 GE 가 액수를 밖에서 받게 한다.
 	// ★값은 항상 양수(= 비용 액수)로 넣는다. 부호를 빼는 것은 GE 모디파이어의 몫이다.★
@@ -290,6 +296,8 @@ public:
 	FGameplayTag Debuff_Taunted;
 	// SetByCaller — 도발된 적이 "주는" 피해 배율(0.8). 도발 GE 스펙이 들고 다닌다 (Plan8 D-13)
 	FGameplayTag Data_Taunt_DamageMult;
+	// ★Plan5(도발칩)★ SetByCaller — 도발된 적이 "받는" 피해 배율(칩① 1.15, 없으면 1.0). 같은 스펙이 들고 다닌다 (Plan5 D-129)
+	FGameplayTag Data_Taunt_DamageTakenMult;
 
 	// ★GAS 태그★ — 모자 보호막 (Plan8 D-20). 부모 태그는 "모자를 쓰고 있나" 조회 전용
 	FGameplayTag Buff_BellBoy_Hat;

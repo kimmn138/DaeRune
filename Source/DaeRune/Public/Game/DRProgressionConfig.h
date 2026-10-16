@@ -10,6 +10,7 @@
 class UDRChipCatalog;
 class UDRCosmeticCatalog;
 class UGameplayEffect;
+class ADRBellBoyHatPickup;
 
 /**
  * ★Plan5(씨앗칩)★ "일정 시간 이동 속도를 배로 바꾸는 효과" 한 벌.
@@ -530,6 +531,65 @@ struct FDRJetJumpChipTuning
 };
 
 /**
+ * ★Plan5(가방칩)★ 벨보이 기본 공격(가방) 칩의 동적 상수.
+ * 피해 · 선딜 · 후딜 · 물 2 는 여기가 아니라 DA_ChipCatalog 모디파이어다.
+ */
+USTRUCT(BlueprintType)
+struct FDRBagChipTuning
+{
+	GENERATED_BODY()
+
+	// ========== ② BB.Asc.BagHat (분실물 가방) ==========
+
+	// 적(ADREnemy) 1마리 타격마다 모자가 떨어질 확률 (0.1 = 10%). 서버가 굴린다 (Plan5 D-126)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Bag|HatDrop", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float HatDropChance = 0.1f;
+
+	/**
+	 * 떨어뜨릴 바닥 모자 — BP_BellBoyHatPickup (모자 던지기가 떨구는 것과 같은 BP).
+	 * ★비우면 가방칩②가 모자 없이 물만 쓴다★ — 검사가 잡는다
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Bag|HatDrop")
+	TSoftClassPtr<ADRBellBoyHatPickup> HatPickupClass;
+
+	// 벨보이 발밑에서 흩뿌리는 반경(uu) — 한 스윙에 여러 개가 떨어져도 겹쳐 보이지 않게. 0 = 정확히 발밑
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Bag|HatDrop", meta = (ClampMin = "0.0"))
+	float HatDropScatterRadius = 40.f;
+};
+
+/**
+ * ★Plan5(도발칩)★ 벨보이 시선 집중 칩의 동적 상수.
+ * 반경 · 물 · 도발 시간은 여기가 아니라 DA_ChipCatalog 모디파이어다.
+ */
+USTRUCT(BlueprintType)
+struct FDRTauntChipTuning
+{
+	GENERATED_BODY()
+
+	// ========== ① BB.Asc.TauntExpose (약점 노출) ==========
+
+	// 도발된 적이 받는 모든 피해 증가 (0.15 = +15%). 누가 · 무엇으로 때리든 — 적 피해 관문이 곱한다 (Plan5 D-129)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Taunt|Expose", meta = (ClampMin = "0.0"))
+	float ExposeDamageTakenBonus = 0.15f;
+};
+
+/**
+ * ★Plan5(모자칩)★ 벨보이 모자 던지기 칩의 동적 상수.
+ * 피해 · 물 · 바닥 모자 수명은 여기가 아니라 DA_ChipCatalog 모디파이어다.
+ */
+USTRUCT(BlueprintType)
+struct FDRHatChipTuning
+{
+	GENERATED_BODY()
+
+	// ========== ① BB.Asc.HatHeavy (강철 챙) ==========
+
+	// 모자가 아군에게 맞을 때 주는 피해(기본값). SkillDamage(+50%)는 안 탄다 — 주는 쪽 배율(광폭화 등)은 탄다 (Plan5 D-133)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hat|AllyHit", meta = (ClampMin = "0.0"))
+	float AllyHitDamage = 22.f;
+};
+
+/**
  * 돌파 칩(⑥⑦⑧)의 동적 효과 튜닝 상수. (Plan3(공용칩) §17.4.3)
  *
  * 이 수치들은 카탈로그의 FDRUpgradeModifier 로 표현할 수 없다 —
@@ -640,6 +700,17 @@ struct FDRChipTuning
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "JetJump")
 	FDRJetJumpChipTuning JetJump;
+
+	// ========== 벨보이 기본 공격 · 시선 집중 · 모자 던지기 칩 (Plan5(가방칩 · 도발칩 · 모자칩)) ==========
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Bag")
+	FDRBagChipTuning Bag;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Taunt")
+	FDRTauntChipTuning Taunt;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hat")
+	FDRHatChipTuning Hat;
 };
 
 /**

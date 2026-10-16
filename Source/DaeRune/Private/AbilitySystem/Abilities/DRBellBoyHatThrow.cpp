@@ -30,22 +30,27 @@ void UDRBellBoyHatThrow::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	ReleaseTask->EventReceived.AddDynamic(this, &UDRBellBoyHatThrow::OnRelease);
 	ReleaseTask->ReadyForActivation();
 
+	// ★Plan5(공속칩)★ 공속 배율 M — TP · FP 던지기가 같이 빨라진다(릴리스 = 모자 스폰도 1/M 시각).
+	// 버프가 없으면 1.0 이라 예전과 같다 (Plan5 D-124)
+	const float SpeedMult = FMath::Max(0.01f, GetAttackSpeedMultiplier());
+
 	UAbilityTask_PlayMontageAndWait* MontageTask =
-		UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, ThrowMontage, 1.f);
+		UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, ThrowMontage, SpeedMult);
 	MontageTask->OnCompleted.AddDynamic(this, &UDRBellBoyHatThrow::OnMontageFinished);
 	MontageTask->OnBlendOut.AddDynamic(this, &UDRBellBoyHatThrow::OnMontageFinished);
 	MontageTask->OnInterrupted.AddDynamic(this, &UDRBellBoyHatThrow::OnMontageAborted);
 	MontageTask->OnCancelled.AddDynamic(this, &UDRBellBoyHatThrow::OnMontageAborted);
 	MontageTask->ReadyForActivation();
 
-	// Plan8(FP) FP 릴리스 프레임이 TP 릴리스(=모자 스폰)와 같은 순간에 오도록 (D-35). TP 는 속도 1
+	// Plan8(FP) FP 릴리스 프레임이 TP 릴리스(=모자 스폰)와 같은 순간에 오도록 (D-35). 아래 FPRate 는 TP 속도 1 기준
 	float FPRate = 1.f;
 	const float TPEventTime = UDRAbilitySystemLibrary::FindMontageEventTime(ThrowMontage, ReleaseEventTag);
 	if (FirstPersonThrowMontage && TPEventTime > 0.f)
 	{
 		FPRate = UDRAbilitySystemLibrary::GetFirstPersonSyncTime(FirstPersonThrowMontage, FirstPersonSyncTag, ThrowMontage, TPEventTime) / TPEventTime;
 	}
-	ActiveFirstPersonMontage = UDRAbilitySystemLibrary::PlayFirstPersonMontage(GetAvatarActorFromActorInfo(), FirstPersonThrowMontage, FPRate);
+	// ★Plan5(공속칩)★ TP 가 M 배속이므로 FP 도 같은 M 을 곱해야 릴리스 프레임이 계속 맞는다 (Plan5 D-124 · T-137)
+	ActiveFirstPersonMontage = UDRAbilitySystemLibrary::PlayFirstPersonMontage(GetAvatarActorFromActorInfo(), FirstPersonThrowMontage, FPRate * SpeedMult);
 }
 
 void UDRBellBoyHatThrow::OnRelease(FGameplayEventData Payload)

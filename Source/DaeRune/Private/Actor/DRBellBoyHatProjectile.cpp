@@ -9,6 +9,8 @@
 #include "Character/DRCharacterBase.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "DRGameplayTags.h"
+#include "Game/DRProgressionConfig.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "GameFramework/RotatingMovementComponent.h"
 #include "Interaction/CombatInterface.h"
@@ -34,6 +36,18 @@ void ADRBellBoyHatProjectile::BeginPlay()
 {
 	Super::BeginPlay();
 	SpinComponent->SetUpdatedComponent(HatMesh);   // 연출이라 모든 머신에서. 루트를 돌리면 비행 방향이 틀어진다
+
+	// ★Plan5(모자칩)★ 던진 벨보이의 칩을 1회 해석 — 판정이 서버 전용이라 서버만 (Plan5 D-5).
+	// 클라의 DamageEffectParams 는 복제되지 않아 비어 있다
+	if (HasAuthority())
+	{
+		// (지역 이름을 Tags 로 하면 AActor::Tags 를 가린다 — C4458)
+		const UAbilitySystemComponent* SourceASC = DamageEffectParams.SourceAbilitySystemComponent;
+		const FDRGameplayTags& DRTags = FDRGameplayTags::Get();
+		bChipAllyHit = UDRAbilitySystemLibrary::HasUpgradeFeature(SourceASC, DRTags.Upgrade_Feature_Skill_Hat_AllyHit);
+		ChipAllyHitDamage = UDRAbilitySystemLibrary::GetChipTuning(this).Hat.AllyHitDamage;
+		ChipAllyCharges = UDRAbilitySystemLibrary::HasUpgradeFeature(SourceASC, DRTags.Upgrade_Feature_Skill_Hat_ShareDouble) ? 2 : 1;
+	}
 }
 
 AActor* ADRBellBoyHatProjectile::GetThrower() const
@@ -61,7 +75,16 @@ void ADRBellBoyHatProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedCom
 		if (!UDRAbilitySystemLibrary::IsNotFriend(Thrower, Character))   // 아군 = 둘 다 "Player" 태그
 		{
 			bResolved = true;
-			if (UDRAbilitySystemLibrary::TryEquipBellBoyHat(Character, DamageEffectParams.SourceAbilitySystemComponent, 1))
+
+			// ★Plan5(모자칩)★ ① 피해 먼저, 모자는 그다음 (사용자 확정 — D-133).
+			// 장착 뒤에 때리면 방금 씌운 모자가 이 피해를 막는다(T-141). 이미 쓴 모자가 있으면 그 모자가 막는다(§9-86)
+			if (bChipAllyHit)
+			{
+				ApplyAllyHitDamage(Character);
+			}
+
+			// ★Plan5(모자칩)★ ② 칩이면 아군 직격 모자도 2회 (D-134). 실패(이미 모자 · 방금 피해로 사망)는 아래 바닥으로
+			if (UDRAbilitySystemLibrary::TryEquipBellBoyHat(Character, DamageEffectParams.SourceAbilitySystemComponent, ChipAllyCharges))
 			{
 				Destroy();                              // 머리에 씌웠다
 			}
@@ -105,32 +128,27 @@ void ADRBellBoyHatProjectile::HandleEnemyHit(AActor* Target)
 	Destroy();
 }
 
+void ADRBellBoyHatProjectile::ApplyAllyHitDamage(AActor* Ally)
+{
+	// 소스 ASC 가 없으면(던진 벨보이가 나감) 건너뛴다 — ApplyDamageEffect 가 역참조한다
+	UAbilitySystemComponent* AllyASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Ally);
+	if (!AllyASC || !DamageEffectParams.SourceAbilitySystemComponent || ChipAllyHitDamage <= 0.f) return;
+
+	// 피해 GE · 소스 ASC · SourceAbilityTags(모자 던지기)는 그대로 — 기존 피해 경로라
+	// ExecCalc 가 주는 쪽 배율(광폭화 · 시너지 · DamageDealt · 탑승①)을 곱한다 (사용자 확정 — D-133)
+	FDamageEffectParams Params = DamageEffectParams;
+	Params.BaseDamage = ChipAllyHitDamage;   // ★GetUpgradedDamage(적 피해 45)가 아니다 — SkillDamage 는 적 피해 축이다 (T-140)★
+	Params.TargetAbilitySystemComponent = AllyASC;
+	Params.KnockbackForce = FVector::ZeroVector;
+	Params.DeathImpulse = GetActorForwardVector() * Params.DeathImpulseMagnitude;
+	UDRAbilitySystemLibrary::ApplyDamageEffect(Params);
+}
+
 void ADRBellBoyHatProjectile::DropAsPickup(const FVector& FromLocation)
 {
-	if (PickupClass)
-	{
-		// 바닥 찾기 — ★오브젝트 타입(WorldStatic/Dynamic)으로★ 쏜다.
-		// Visibility 채널로 쏘면 적 히트박스(Visibility Block)에 맞아 픽업이 공중에 뜬다 (T-17)
-		FVector SpawnLocation = FromLocation;
-		FCollisionObjectQueryParams ObjectParams;
-		ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
-		ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
-		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(BellBoyHatDrop), false, this);
-
-		FHitResult GroundHit;
-		if (GetWorld()->LineTraceSingleByObjectType(GroundHit, FromLocation + FVector(0.f, 0.f, 50.f),
-				FromLocation - FVector(0.f, 0.f, 5000.f), ObjectParams, QueryParams))
-		{
-			SpawnLocation = GroundHit.ImpactPoint + FVector(0.f, 0.f, PickupGroundOffset);
-		}
-
-		const FTransform SpawnTransform(FRotator(0.f, GetActorRotation().Yaw, 0.f), SpawnLocation);
-		if (ADRBellBoyHatPickup* Pickup = GetWorld()->SpawnActorDeferred<ADRBellBoyHatPickup>(
-				PickupClass, SpawnTransform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
-		{
-			Pickup->InitThrower(GetThrower(), DamageEffectParams.SourceAbilitySystemComponent);   // 던진 본인이면 2회 (D-23)
-			Pickup->FinishSpawning(SpawnTransform);
-		}
-	}
+	// ★Plan5(가방칩 · 모자칩)★ 바닥 트레이스 · Deferred 스폰은 픽업의 공용 함수 하나로 (Plan5 D-127) — 동작은 예전과 같다.
+	// 던진 본인이면 2회 (D-23), 칩 규칙(수명 · 2회)은 픽업이 던진 벨보이의 칩으로 해석한다 (Plan5 D-128)
+	ADRBellBoyHatPickup::SpawnOnGround(GetWorld(), PickupClass, FromLocation, GetActorRotation().Yaw,
+		GetThrower(), DamageEffectParams.SourceAbilitySystemComponent, this, PickupGroundOffset);
 	Destroy();
 }

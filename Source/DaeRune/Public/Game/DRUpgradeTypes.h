@@ -170,6 +170,28 @@ enum class EDRUpgradeStat : uint8
 	 */
 	SkillSpeedBonus			UMETA(DisplayName = "스킬 이속 버프"),
 
+	// ===== Plan5(가방칩 · 도발칩 · 모자칩) 추가 =====
+	// ★신규 값은 반드시 Count 바로 앞에 붙인다.★ 기존 값 사이에 끼우면
+	// DA_ChipCatalog 에 직렬화된 기존 칩의 효과가 다른 스탯으로 밀린다. (Plan5 T-30)
+
+	/**
+	 * 스킬 단위. ★연속 공격★ 의 선딜레이 배율 — 기준 1.0 에 Apply 해서 쓴다(SkillWindup 과 같은 배율 축).
+	 * 연속 공격이 있는 스킬(지금은 벨보이 기본 공격만)에서 SkillWindup 은 ★첫 타★ 에만, 이 축은 ★연속★ 에만 곱한다.
+	 * 첫 타와 연속을 같은 비율로 바꾸려면 두 축에 같은 값을 넣는다 (Plan5 D-121 · T-136)
+	 */
+	SkillComboWindup		UMETA(DisplayName = "스킬 연속 선딜레이"),
+
+	/** 스킬 단위. ★연속 공격★ 의 후딜레이 배율 — 기준 1.0. 첫 타 후딜에는 곱하지 않는다 (Plan5 D-121) */
+	SkillComboRecovery		UMETA(DisplayName = "스킬 연속 후딜레이"),
+
+	/**
+	 * 스킬 단위. 그 스킬이 남기는 효과의 ★지속 시간(초)★ — 기준 초에 바로 Apply 한다(SkillFireInterval 과 같은 "초" 축).
+	 *     적 도발 시간 = ApplySkill(SkillDuration, TauntDuration)   // Flat −2 → 5 → 3초
+	 * 길수록 좋다 — DRIsTimeStat 에는 넣고 DRIsLowerBetter 에는 ★넣지 않는다★ (Plan5 D-132 · T-146)
+	 * ⚠️ 지금은 벨보이 도발 시간 · 바닥 모자 수명만 읽는다
+	 */
+	SkillDuration			UMETA(DisplayName = "스킬 지속 시간"),
+
 	Count UMETA(Hidden) // 배열 크기 계산용 - 항상 마지막
 };
 
@@ -278,7 +300,10 @@ FORCEINLINE bool DRIsSkillStat(EDRUpgradeStat Stat)
 		|| Stat == EDRUpgradeStat::SkillLaunchHeight	// 〃
 		|| Stat == EDRUpgradeStat::SkillAirUseCount		// 〃
 		|| Stat == EDRUpgradeStat::SkillSelfDamage		// Plan5(돌진칩)
-		|| Stat == EDRUpgradeStat::SkillSpeedBonus;		// 〃
+		|| Stat == EDRUpgradeStat::SkillSpeedBonus		// 〃
+		|| Stat == EDRUpgradeStat::SkillComboWindup		// Plan5(가방칩)
+		|| Stat == EDRUpgradeStat::SkillComboRecovery	// 〃
+		|| Stat == EDRUpgradeStat::SkillDuration;		// Plan5(도발칩 · 모자칩) — 빠뜨리면 도발 −2초가 바닥 모자에도 걸린다 (T-145)
 }
 
 /**
@@ -294,7 +319,9 @@ FORCEINLINE bool DRIsLowerBetter(EDRUpgradeStat Stat)
 		|| Stat == EDRUpgradeStat::HealthRegenDelay
 		|| Stat == EDRUpgradeStat::SkillWindup		// Plan5(발톱칩) 선딜은 짧을수록 좋다
 		|| Stat == EDRUpgradeStat::SkillFireInterval	// Plan5(동전칩) 발사 간격도 짧을수록 좋다
-		|| Stat == EDRUpgradeStat::SkillSelfDamage;	// Plan5(돌진칩) 자해는 적을수록 좋다
+		|| Stat == EDRUpgradeStat::SkillSelfDamage	// Plan5(돌진칩) 자해는 적을수록 좋다
+		|| Stat == EDRUpgradeStat::SkillComboWindup	// Plan5(가방칩) 연속 선딜 · 후딜도 짧을수록 좋다 (지속 시간은 길수록 좋아 제외 — T-146)
+		|| Stat == EDRUpgradeStat::SkillComboRecovery;
 }
 
 /**
@@ -307,7 +334,8 @@ FORCEINLINE bool DRIsTimeStat(EDRUpgradeStat Stat)
 {
 	return Stat == EDRUpgradeStat::SkillCooldown
 		|| Stat == EDRUpgradeStat::HealthRegenDelay
-		|| Stat == EDRUpgradeStat::SkillFireInterval;	// Plan5(동전칩) 단위가 초다 (배율인 SkillWindup 은 제외 — T-25)
+		|| Stat == EDRUpgradeStat::SkillFireInterval	// Plan5(동전칩) 단위가 초다 (배율인 SkillWindup 은 제외 — T-25)
+		|| Stat == EDRUpgradeStat::SkillDuration;		// Plan5(도발칩) 단위가 초다 — Flat −2 가 "−2초"로 표기 (배율인 연속 선딜 · 후딜은 제외)
 }
 
 /**

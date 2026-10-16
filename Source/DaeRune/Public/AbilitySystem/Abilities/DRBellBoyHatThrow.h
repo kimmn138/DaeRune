@@ -12,6 +12,8 @@ class UAnimMontage;
  * ★Plan8(모자)★ 벨보이 스킬2 — 모자 던지기 (RMB).
  * 릴리스 노티파이에서 BP_BellBoyHatProjectile 을 조준점으로 스폰한다. 이후 판정은 전부 투사체·픽업이 한다.
  * 피해(30)·소스 ASC 는 부모 SpawnProjectile 이 MakeDamageEffectParamsFromClassDefaults() 로 넣어 준다.
+ * ★Plan5(공속칩)★ 공속 배율 M 만큼 TP · FP 던지기가 빨라진다 — 릴리스(모자 스폰)도 1/M 시각 (Plan5 D-124).
+ * ★Plan5(모자칩)★ 칩 효과(아군 피해 · 2회 · 바닥 수명)는 투사체 · 픽업이 던진 벨보이의 칩으로 해석한다 (Plan5 D-128 · D-133 · D-134)
  */
 UCLASS()
 class DAERUNE_API UDRBellBoyHatThrow : public UDRProjectileSpell

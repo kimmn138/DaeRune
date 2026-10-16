@@ -10,6 +10,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "DRGameplayTags.h"
+#include "Game/DRProgressionConfig.h"
 #include "DaeRune/DRLogChannels.h"
 
 UDRBellBoyTaunt::UDRBellBoyTaunt()
@@ -64,13 +65,16 @@ void UDRBellBoyTaunt::OnTauntStart(FGameplayEventData Payload)
 
 	if (!HasAuthority(&CurrentActivationInfo)) return;   // 판정·GE 는 서버만
 
+	// ★Plan5(도발칩)★ ② 반경 칩(SkillAreaRadius) — 스캔과 외침 큐가 같은 값을 쓴다. 칩이 없으면 TauntRadius 그대로 (Plan5 D-130)
+	EffectiveTauntRadius = FMath::Max(0.f, GetUpgradedFloat(EDRUpgradeStat::SkillAreaRadius, TauntRadius));
+
 	if (TauntStartCueTag.IsValid())
 	{
 		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 		{
 			FGameplayCueParameters Params;
 			Params.Location = GetAvatarActorFromActorInfo()->GetActorLocation();
-			Params.RawMagnitude = TauntRadius;
+			Params.RawMagnitude = EffectiveTauntRadius;
 			ASC->ExecuteGameplayCue(TauntStartCueTag, Params);
 		}
 	}
@@ -88,10 +92,10 @@ void UDRBellBoyTaunt::OnScan(int32 ActionNumber)
 	if (!Avatar) return;
 
 	TArray<AActor*> Enemies;
-	UDRAbilitySystemLibrary::GetAliveEnemiesWithinRadius(Avatar, Avatar->GetActorLocation(), TauntRadius, Enemies);
+	UDRAbilitySystemLibrary::GetAliveEnemiesWithinRadius(Avatar, Avatar->GetActorLocation(), EffectiveTauntRadius, Enemies);
 
 	// [임시 진단]
-	UE_LOG(LogDR, Warning, TEXT("[TauntDiag] 3. 스캔 #%d — 반경 %.0f 안의 살아 있는 적 %d"), ActionNumber, TauntRadius, Enemies.Num());
+	UE_LOG(LogDR, Warning, TEXT("[TauntDiag] 3. 스캔 #%d — 반경 %.0f 안의 살아 있는 적 %d"), ActionNumber, EffectiveTauntRadius, Enemies.Num());
 
 	for (AActor* Enemy : Enemies)
 	{
@@ -127,9 +131,21 @@ void UDRBellBoyTaunt::ApplyTauntTo(AActor* Enemy)
 	FGameplayEffectSpecHandle Spec = MakeOutgoingGameplayEffectSpec(TauntedEffect, GetAbilityLevel());
 	if (!Spec.IsValid()) return;
 
-	Spec.Data->SetSetByCallerMagnitude(Tags.Data_Duration, TauntDuration);                       // 걸린 순간부터 5초
-	Spec.Data->SetSetByCallerMagnitude(Tags.Data_MoveSpeed_Mult, TauntedMoveSpeedMultiplier);   // ×1.1
-	Spec.Data->SetSetByCallerMagnitude(Tags.Data_Taunt_DamageMult, TauntedDamageMultiplier);    // ×0.8
+	// ★Plan5(도발칩)★ ③ 적의 도발 시간만 바꾼다 — 벨보이 모션 5초는 그대로 (사용자 확정 — Plan5 D-131 · T-150)
+	const float Duration = FMath::Max(0.1f, GetUpgradedFloat(EDRUpgradeStat::SkillDuration, TauntDuration));
+
+	// ★Plan5(도발칩)★ ① 약점 노출 — 주는 피해 감소를 없애고 받는 피해를 늘린다. 배율은 이 스펙이 들고 다녀
+	// 다른 벨보이가 덮어쓰면 그 벨보이의 칩 기준으로 바뀐다 (Plan8 D-15 · Plan5 D-129 · T-139)
+	const bool bExpose = UDRAbilitySystemLibrary::HasUpgradeFeature(
+		GetAbilitySystemComponentFromActorInfo(), Tags.Upgrade_Feature_Skill_Taunt_Expose);
+	const float DamageTakenMult = bExpose
+		? 1.f + FMath::Max(0.f, UDRAbilitySystemLibrary::GetChipTuning(Enemy).Taunt.ExposeDamageTakenBonus)
+		: 1.f;
+
+	Spec.Data->SetSetByCallerMagnitude(Tags.Data_Duration, Duration);                                          // 걸린 순간부터 5초(칩③ 3초)
+	Spec.Data->SetSetByCallerMagnitude(Tags.Data_MoveSpeed_Mult, TauntedMoveSpeedMultiplier);                  // ×1.1
+	Spec.Data->SetSetByCallerMagnitude(Tags.Data_Taunt_DamageMult, bExpose ? 1.f : TauntedDamageMultiplier);   // ×0.8(칩① 1.0)
+	Spec.Data->SetSetByCallerMagnitude(Tags.Data_Taunt_DamageTakenMult, DamageTakenMult);                      // ×1.0(칩① 1.15)
 	const FActiveGameplayEffectHandle Applied = TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
 
 	// 지금 바로 타깃을 벨보이로 바꾸고, 도발이 끝날 때까지 0.2초마다 다시 쓴다 (D-16)

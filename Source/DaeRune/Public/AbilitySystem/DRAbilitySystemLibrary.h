@@ -379,7 +379,7 @@ public:
 	/**
 	 * 대상에게 모자를 씌운다. ★서버 전용★
 	 * 조건: 살아 있는 캐릭터(ADRCharacterBase) + ASC + ★아직 모자가 없다★ (최대 1개 — Plan8 D-22)
-	 * @param Charges 1 = 일반 / 2 이상 = Double (던진 벨보이 본인이 주웠을 때 — Plan8 D-23)
+	 * @param Charges 1 = 일반 / 2 이상 = Double (던진 벨보이 본인이 주웠을 때 — Plan8 D-23. 모자칩②면 모든 플레이어 — Plan5 D-134)
 	 * @return 씌웠으면 true. false 면 호출부가 모자를 남긴다(투사체는 바닥에 떨어지고, 픽업은 그대로).
 	 */
 	static bool TryEquipBellBoyHat(AActor* Target, UAbilitySystemComponent* SourceASC, int32 Charges);
@@ -421,6 +421,13 @@ public:
 
 	/** 피해를 주는 쪽(Source)이 도발된 적이면 그 배율(0.8), 아니면 1.0 — 피해 관문 전용 (Plan8 D-14) */
 	static float GetTauntDamageMultiplier(AActor* SourceAvatar);
+
+	/**
+	 * ★Plan5(도발칩)★ ① 이 적이 받는 피해의 도발 배율 — 그 도발을 건 벨보이가 칩①이면 1 + ExposeDamageTakenBonus(1.15).
+	 * 도발 중이 아니거나 칩이 없으면 정확히 1.0. 적 피해 관문 전용(모든 피해 — Plan5 D-10).
+	 * 배율은 도발 GE 스펙의 SetByCaller(Data.Taunt.DamageTakenMult) — 마지막에 건 벨보이의 칩이 이긴다 (Plan5 D-129)
+	 */
+	static float GetTauntDamageTakenMultiplier(const UAbilitySystemComponent* TargetASC);
 
 	/**
 	 * ★도발 어그로 1회 적용★ (Plan8 D-16) — 서버 전용

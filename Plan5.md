@@ -1,4 +1,4 @@
-# Plan5 — 로봇 전용 칩 30종 (정원로봇 9 · 자판기 9 · 청소기 12) + 스킬당 1칩 규칙
+# Plan5 — 로봇 전용 칩 30종 (정원로봇 9 · 자판기 9 · 청소기 12) + 벨보이 칩 9종(C++ 완료 — §12) + 스킬당 1칩 규칙
 
 > **상태**
 > - 정원로봇 9종(씨앗 폭탄 · 물대포 · 발톱): **구현 완료**. 씨앗 폭탄·물대포는 게임 검증 완료, **발톱은 게임 검증이 남았다 → §10**
@@ -6,8 +6,9 @@
 > - 자판기 공속 버프 3종(§1.6): **구현 완료**(C++ 빌드 통과 · 에셋 입력 확인 2026-10-07), **게임 검증 남음 → §10.3**
 > - 장착 규칙 "같은 스킬 칩은 1개만"(§1.7): **구현 완료**, 게임 검증 남음 → §10
 > - 로봇 청소기 칩 12종(탑승 · 공기탄 · 물 점프 · 돌진 — §1.9~§1.13): **구현 완료**(C++ 빌드 통과 · 에셋 입력 확인 2026-10-08, 커밋 `89120e20`), **게임 검증 남음 → §10.4**. 칩 없이도 바뀐 것 5건(§1.13)
+> - 벨보이 칩 9종(기본 공격 · 시선 집중 · 모자 던지기 — §12) + 벨보이 공속 연동: **C++ 구현 완료**(빌드 통과 2026-10-16), **에디터 작업(§13) · 게임 검증(§12.7) 남음**. 칩 없이도 바뀌는 것 = 벨보이 연속 공격 0.3초(D-122)
 >
-> 최종 갱신: 2026-10-08 / 브랜치 `feat/upgradeskill`
+> 최종 갱신: 2026-10-16 / 브랜치 `feat/upgradeskill`
 > 선행 문서: **Plan2.md**(재화·슬롯·칩 시스템) → **Plan3.md**(공용 칩 8종)
 >
 > 📌 **이 문서는 "계획서"가 아니라 ★완료된 기능의 참조 문서★ 다.**
@@ -17,7 +18,8 @@
 >
 > ⚠️ **코드 주석 표기 규칙** — 씨앗 폭탄 **`Plan5(씨앗칩)`** / 물대포 **`Plan5(물대포칩)`** / 기본 공격 **`Plan5(발톱칩)`**
 > / 자판기 기본 공격 **`Plan5(동전칩)`** / 잭팟 **`Plan5(잭팟칩)`** / 공속 버프 **`Plan5(공속칩)`**
-> / 장착 규칙 **`Plan5(스킬당1칩)`** / 청소기 탑승 **`Plan5(탑승칩)`** / 청소기 기본 공격 **`Plan5(공기탄칩)`** / 청소기 물 점프 **`Plan5(물점프칩)`** / 청소기 돌진 **`Plan5(돌진칩)`**.
+> / 장착 규칙 **`Plan5(스킬당1칩)`** / 청소기 탑승 **`Plan5(탑승칩)`** / 청소기 기본 공격 **`Plan5(공기탄칩)`** / 청소기 물 점프 **`Plan5(물점프칩)`** / 청소기 돌진 **`Plan5(돌진칩)`**
+> / 벨보이 기본 공격 **`Plan5(가방칩)`** / 시선 집중 **`Plan5(도발칩)`** / 모자 던지기 **`Plan5(모자칩)`** (벨보이 공속 연동은 **`Plan5(공속칩)`**).
 > 코드 주석에 있던 이 문서의 절 번호(`§4.2` 등)는 **전부 제거했다.**
 > 절 번호는 다시 붙이지 않는다 — 문서가 바뀔 때마다 조용히 틀린 참조가 되기 때문이다.
 > 대신 **결정 번호(D-n)** 와 **함정 번호(T-n)** 로 가리킨다. 이 둘은 문서 구조가 바뀌어도 유지되며,
@@ -1161,3 +1163,863 @@ C++ 빌드 통과, 에셋 입력은 2026-10-08 에셋을 직접 읽어 확인했
 - **필수 에디터 작업은 없다**(2026-10-08 에셋 확인 — 청소기 칩 12종 포함 전부).
   선택 사항만 남았다 — §9-35(공유 버프 상태 아이콘), §9-25(칩 카드 사유 문구), §9-26(`Detail Override`), 청소기 연출 · 표시(§9-38 · 44 · 54 · 59).
 - 그다음은 §10 플레이 검증과, 결과에 따른 밸런스 조정(§9-14 · 21 · 27 · 49 · 50 · 73)이다.
+- 벨보이 칩 9종: C++ 완료(2026-10-16) → **에디터(§13)** → 검증(§12.7) → §1~§11 흡수.
+
+---
+
+## 12. 벨보이 칩 9종 + 벨보이 공속 연동 (C++ 구현 완료 — 에디터 · 검증 남음)
+
+> **C++ 는 2026-10-16 구현 · Development Editor 빌드 통과**(고친 파일 20개, 새 파일 없음 — §12.10). **에셋은 아직 손대지 않았다** → §13.
+> 에디터 작업 전에도 게임은 동작한다(칩만 없을 뿐). 단 D-122 때문에 칩 없이도 벨보이 연속 공격이 0.3초 주기가 된다(§9-79).
+
+> 2026-10-16 요청. 코드 주석 접두 **`Plan5(가방칩)`**(기본 공격) · **`Plan5(도발칩)`**(시선 집중) · **`Plan5(모자칩)`**(모자 던지기) · 벨보이 공속 연동은 기존 **`Plan5(공속칩)`**.
+> 결정 **D-120 ~ D-138** · 함정 **T-132 ~ T-153** · 이슈 **§9-75 ~ §9-92** (앞 번호에 이어서 매긴 영구 ID).
+> 에디터 작업은 **§13**(처음 보는 사람용). 구현 · 에셋 확인 뒤 §1~§11 에 흡수한다.
+> 벨보이 자체 설계는 `Plan8 D-n / T-n`(코드 주석이 가리킨다 — TP 원문 `git show 3fe5b9f9^:Plan8.md`, FP 는 작업 트리 `Plan8.md`).
+> 이 절은 Plan8 **D-4**(선·후딜 = 재생 속도 따로) · **D-5**(타격 시각 = 노티파이) · **D-8**(판정 창) · **D-11 ~ D-15**(도발 GE · 배율 · 덮어쓰기) · **D-20 ~ D-25**(모자 GE · 1회 무효 · 최대 1개 · 본인 2회 · 픽업) · **D-36**(FP 속도 따로)을 전제로 한다.
+>
+> **사용자 확정(2026-10-16 질의응답)**
+> - 가방칩② 모자는 **벨보이 발밑**에 떨어진다. 줍기 규칙은 기존 그대로(누구나 · 던진 본인 = 벨보이 2회) — 모자가 없으면 바로 주워 2회짜리로 쓴다.
+> - 10% 굴림은 **적 1마리 타격마다**(한 스윙에 3마리면 3번).
+> - 도발칩③ "도발 시간 5 → 3초"는 **적이 도발되는 시간만**. 벨보이 도발 모션(5초, 그동안 다른 스킬 불가 · 피격 경직 없음)은 그대로.
+> - 모자칩① 아군 피해 22 에 **주는 쪽 공격 배율(광폭화 · 시너지 · `DamageDealt` · 탑승①)을 적용**한다 — 공기탄① 아군 피해와 같은 규칙(§9-52). 적 피해 +50% 는 22 에 안 곱한다.
+> - 기본 공격의 끝을 **설계값대로** 맞춘다 — 클라 · 서버 모두 "타격 + 후딜" 시각에 끝난다(D-122). ★칩 없이도 연속 주기가 0.3초 · 첫 타 0.8초로 바뀐다(§9-79)★
+
+### 12.0 지금의 벨보이 (코드 · 에셋 실측 2026-10-16)
+
+| 항목 | 값 | 어디 |
+|---|---|---|
+| 기본 공격 | `GA_BellBoy_BasicAttack`(LMB) — 피해 **30**(`Damage.Physical`), 넉백 100% · 400, 판정 반경 91, 물 **0**, **Cost GE 없음**, 쿨다운 없음 | GA CDO |
+| 기본 공격 타이밍 | 첫 타 선 **0.4** / 후 **0.4**, 연속 선 **0.2** / 후 **0.1**, 연속 유예 0.25, 스킬 전환 0.4, 판정 창 0.1초 · 4회 — **전부 C++ 기본값**(BP 가 안 덮는다) | `DRBellBoyBasicAttack.h` |
+| 기본 공격 몽타주 | TP 0.8초, 타격 노티파이 L **0.399** / R **0.267**, **Blend Out 0.05**(양쪽) / FP 0.767초 | `AM_BB_BasicAttack_L/R` |
+| 기본 공격이 이미 읽는 칩 | `SkillDamage`(`GetUpgradedDamage`) · `SkillAreaRadius`(`GetUpgradedAttackRadius`) · `SkillWindup`(첫 타 · 연속 **둘 다** 곱함) | `DRBellBoyBasicAttack.cpp` |
+| 기본 공격이 끝나는 시점 | 몽타주 **블렌드 아웃 시작**(`OnBlendOut`, 끝 0.05초 전)에 종료. 클라는 타격 즉시 판정 창 완료 처리 → 연속 주기 클라 **≈0.25초**, 서버는 판정 창 마지막 샘플(0.075초)까지 → **≈0.275초**. ★서버가 늦게 끝나 클라의 다음 예측 스윙이 거절될 수 있다★ | `OnMontageFinished` ← OnBlendOut |
+| 물 소모 계산 | `GetEffectiveWaterCostFor` 가 `WaterCost <= 0` 이면 **즉시 0** — 기본 물 0 인 GA 에는 `Flat` 칩이 통째로 무시된다 | `DRGameplayAbility.cpp` |
+| 시선 집중 | `GA_BellBoy_Taunt`(E) — 물 **60**(`GE_Cost_BellBoy_Taunt`), 반경 **3000**, 1.0초 노티파이부터 0.5초 동안 6회 스캔, 적 도발 **5초**(걸린 순간부터), 이속 ×1.1, 적이 주는 피해 **×0.8**(SetByCaller `Data.Taunt.DamageMult`), 모션 5초(기본 공격 · 모자 · 피격 경직 차단) | GA CDO + C++ 기본값 |
+| 도발 배율을 읽는 곳 | 기본 관문 `UDRAttributeSet`(무적 → 모자 → **도발**) + 사이트 관문 `UDRCleanserSiteAttributeSet` — 둘 다 `GetTauntDamageMultiplier(Source)` | Plan8 D-14 |
+| 도발 반경 · 시간 칩 | **안 읽는다** — `TauntRadius` · `TauntDuration` 상수 그대로 | `DRBellBoyTaunt.cpp` |
+| 모자 던지기 | `GA_BellBoy_HatThrow`(RMB) — 피해 **30**, 물 **20**(`GE_Cost_BellBoy_HatThrow`), TP 0.8초(릴리스 0.318 · Blend Out 0.15), 몽타주 속도 **1 고정**. 어빌리티는 블렌드 아웃 시작(≈0.65초)에 끝난다 — 판정 창이 없어 클라 · 서버가 같다 | GA CDO |
+| 모자 투사체 | 적 → 피해 후 소멸 / 아군 → `TryEquipBellBoyHat(…, 1)`, 이미 모자면 그 자리 바닥 / 벽 · 바닥 → 바닥. 피해 = `MakeDamageEffectParamsFromClassDefaults`(SkillDamage 반영) | `DRBellBoyHatProjectile.cpp` |
+| 바닥 모자 | `LifeTime` **10**, `ThrowerCharges` **2**(던진 본인만), 0.25초 재확인, 적 · 아군 누구든 | `DRBellBoyHatPickup`(C++ — BP 가 안 덮는다) |
+| 모자 GE | Single(1회) / Double(2회) — `DA_GameBalanceConfig.BellBoy` | Plan8 D-20 · D-27 |
+| BP | GA 3 · 투사체 · 픽업 BP 는 **데이터만**(그래프 로직 없음) → 칩은 **C++ 만** 고친다 | 에셋 실측 |
+| 공속 | 자판기 칩②의 공유 버프 `Buff.AttackSpeed.Shared` 는 **이미** 20m 안 모든 플레이어(벨보이 포함)에게 걸린다 — 벨보이 GA 가 **읽지 않을 뿐** | `DRVendingMachineAttackSpeedBuff.cpp` |
+| 카탈로그 | 칩 38개 중 벨보이 0. `SkillDisplayNames` 에 벨보이 태그 없음. 아이콘 폴더 없음 | `DA_ChipCatalog` |
+| 인코딩 | 고칠 파일 22개 전부 UTF-8(혼합 인코딩 아님 — 2026-10-16 확인) | — |
+
+**엔진 사실** (UE 5.5 소스 `D:\UE_5.5` 실측)
+
+| 항목 | 사실 | 위치 |
+|---|---|---|
+| 활성 중 재발동 | InstancedPerActor 어빌리티가 활성 중이면 `bRetriggerInstancedAbility` 가 꺼져 있는 한 **재발동 거부** → 서버 인스턴스가 클라보다 늦게 끝나면 클라의 다음 예측 발동이 거절 · 취소된다 | `AbilitySystemComponent_Abilities.cpp` 1801~1821 |
+| 몽타주 자동 블렌드 아웃 | 남은 **실제 재생 시간**(재생 속도 반영) ≤ Blend Out 이면 `Stop` → `OnBlendOut`. 후딜 0.05초 몽타주는 타격 직후 블렌드 아웃이 시작된다 | `AnimMontage.cpp` 2494~2512 |
+| `AbilityTask_Repeat` | 즉시 1회 + 루프 타이머, **마지막 실행 직후** `OnFinished`(4회 · 0.1초면 0.075초) | `AbilityTask_Repeat.cpp` |
+| 루프 타이머 | 한 프레임에 밀린 횟수만큼 연달아 실행(CallCount) — 0.0125초 간격도 샘플이 빠지지 않는다 | `TimerManager.cpp` 1035~1048 |
+| `ExecCalc_WaterCost` | SetByCaller `Cost.Water` 가 없거나 0 이면 아무것도 안 한다(경고 없음) → Cost GE 를 붙여도 칩 없는 스윙은 물 0 | `ExecCalc_WaterCost.cpp` |
+
+### 12.1 칩 9종 스펙
+
+공통: `OwnerClass = BellBoy`, `bCommonChip = false`, `Category = Ascension`, `RequiredSlotCount = 1`.
+칩 레벨 `TargetAbilityTag` = **각 GA 태그**(그룹 키 — D-120) → 그룹마다 1개, 세 그룹은 함께 낄 수 있다. 모디파이어마다 같은 태그를 넣는다(§1 규칙).
+이름 · Tier · `ChipId` · 아이콘은 **가칭**(§9-89).
+
+#### 12.1.1 기본 공격(가방) — `TargetAbilityTag = Abilities.BellBoy.BasicAttack`
+
+| # | `ChipId` | 이름(가칭) | Modifiers | GrantedTags | Tier |
+|---|---|---|---|---|---|
+| ① | `BB.Asc.BagHeavy` | 철제 트렁크 | `SkillDamage` **+0.5**<br>`SkillWindup` **+0.375** ★단점★<br>`SkillComboWindup` **+0.5** ★단점★ | (없음) | 3 |
+| ② | `BB.Asc.BagHat` | 분실물 가방 | `SkillWaterCost` **Flat +2** ★단점★ | `…Bag.HatDrop` | 4 |
+| ③ | `BB.Asc.BagQuick` | 기내용 손가방 | `SkillComboWindup` **−0.5**<br>`SkillComboRecovery` **−0.5**<br>`SkillDamage` **Flat −16** ★단점★ | (없음) | 3 |
+
+- ① 피해 30 → **45**. 대신 첫 타 선딜 0.4 → **0.55초**(×1.375), 연속 선딜 0.2 → **0.3초**(×1.5). 후딜은 그대로.
+  ★첫 타와 연속의 배율이 달라 축이 둘이다★ — `SkillWindup` 은 첫 타에만, `SkillComboWindup` 은 연속에만(D-121).
+- ② 기본 공격이 **적(`ADREnemy`) 1마리를 맞힐 때마다 10%** → **벨보이 발밑**에 바닥 모자(사용자 확정 2건). 클렌저 사이트 · 홀로그램 두더지는 굴리지 않는다.
+  떨어진 모자는 기존 바닥 모자 그대로 — 벨보이에게 모자가 없으면 0.25초 안에 주워 **2회**(던진 본인 — Plan8 D-23), 있으면 바닥에 남는다(누구든 줍는다).
+  대신 스윙마다 물 **2**(예전 0). 물이 모자라면 기존 대납 규칙(부족분 × 0.5 내림 → 체력 1).
+- ③ 연속 선딜 0.2 → **0.1초**, 연속 후딜 0.1 → **0.05초**(첫 타는 그대로). 대신 피해 30 → **14**.
+  ★연속 주기 0.3 → 0.15초는 D-122(종료 = 타격 + 후딜) 덕분에 정확히 나온다★ — 지금 구조(블렌드 아웃 종료)면 후딜 0.05 를 블렌드 아웃 0.05 가 다 먹어 0.1초가 된다(T-134).
+
+#### 12.1.2 시선 집중(도발) — `TargetAbilityTag = Abilities.BellBoy.Taunt`
+
+| # | `ChipId` | 이름(가칭) | Modifiers | GrantedTags | Tier |
+|---|---|---|---|---|---|
+| ① | `BB.Asc.TauntExpose` | 약점 노출 | (없음) | `…Taunt.Expose` | 3 |
+| ② | `BB.Asc.TauntWide` | 확성기 | `SkillAreaRadius` **+0.4**<br>`SkillWaterCost` **+0.4** ★단점★ | (없음) | 4 |
+| ③ | `BB.Asc.TauntQuick` | 짧은 호객 | `SkillWaterCost` **−0.4**<br>`SkillDuration` **Flat −2** ★단점★ | (없음) | 3 |
+
+- ① 도발된 적이 **받는 모든 피해 ×1.15**(누가 · 무엇으로든, DoT 포함 — D-10). 대신 도발된 적의 **주는 피해 −20% 가 사라진다**(×0.8 → ×1.0, 사이트에 주는 피해도).
+  단점이 규칙이라 모디파이어가 없다 → **`Description` 필수**(검사).
+- ② 반경 30 → **42m**(3000 → 4200uu) — 스캔 반경과 외침 큐 반경(RawMagnitude)이 같이. 대신 물 60 → **84**.
+- ③ 물 60 → **36**. 대신 **적이 도발되는 시간** 5 → **3초**(걸린 순간부터). 벨보이 모션은 5초 그대로(사용자 확정) — 적은 4~4.5초에 풀린다.
+
+#### 12.1.3 모자 던지기 — `TargetAbilityTag = Abilities.BellBoy.HatThrow`
+
+| # | `ChipId` | 이름(가칭) | Modifiers | GrantedTags | Tier |
+|---|---|---|---|---|---|
+| ① | `BB.Asc.HatHeavy` | 강철 챙 | `SkillDamage` **+0.5**<br>`SkillWaterCost` **+0.5** ★단점★ | `…Hat.AllyHit` | 3 |
+| ② | `BB.Asc.HatShare` | VIP 서비스 | `SkillWaterCost` **+0.4** ★단점★<br>`SkillDamage` **−0.2** ★단점★ | `…Hat.ShareDouble` | 4 |
+| ③ | `BB.Asc.HatLinger` | 보관 서비스 | `SkillDuration` **Flat +8**<br>`SkillDamage` **Flat −5** ★단점★ | (없음) | 3 |
+
+- ① 적 피해 30 → **45**. 대신 **아군에게 맞으면 22 피해 → 그다음 모자 장착**(사용자 확정 순서). 22 에는 주는 쪽 배율(광폭화 등)이 붙고 `SkillDamage`(+50%)는 안 붙는다(D-133). 물 20 → **30**.
+- ② "던진 벨보이 본인만 2회"(Plan8 D-23)가 **모든 플레이어**로 — 투사체로 직접 씌우든 바닥에서 줍든. **적은 그대로 1회**. 대신 물 20 → **28**, 피해 30 → **24**.
+- ③ 바닥 모자 수명 10 → **18초**. 대신 피해 30 → **25**.
+- ★바닥 모자의 규칙(②의 2회 · ③의 18초)은 그 모자를 떨군 스킬이 아니라 "던진 벨보이의 모자칩"을 따른다★ — 가방칩②로 발밑에 떨어진 모자도 같다(D-128).
+
+#### 12.1.4 벨보이 공속 연동 (칩 아님 — 자판기 공속칩 ② 공유 버프를 벨보이가 읽게)
+
+공속 배율 `M` = `UDRGameplayAbility::GetAttackSpeedMultiplier()`(Plan5 D-62) — 벨보이는 자기 버프가 없어 **1 + 0.1 × 공유 스택(최대 5) = 최대 ×1.5**.
+
+| 대상 | 바뀌는 것 | 공유 5중첩(M = 1.5) |
+|---|---|---|
+| 벨보이 기본 공격 | 선딜 · 후딜 ÷ M(첫 타 · 연속, **FP 도 같은 시간**), 판정 창 ≤ 후딜, 스킬 전환 잠금 = 선딜 + 0.4 ÷ M — **활성화 때 한 번** | 연속 0.3 → **0.2초**, 첫 타 0.8 → **0.53초** |
+| 벨보이 모자 던지기 | TP 몽타주 PlayRate × M, FP PlayRate × M — 릴리스(모자 스폰)도 1/M 시각 | 몽타주 0.8 → **0.53초**, 릴리스 0.318 → 0.212초, 연타 주기(블렌드 아웃 0.15초 전 종료) ≈0.65 → **≈0.38초** |
+| 벨보이 시선 집중 | **안 바뀐다**(요구 범위 밖 — §9-91) | — |
+
+#### 12.1.5 칩별 수치 (같은 그룹 칩은 동시 장착 불가 — 단일 칩 기준)
+
+**기본 공격** — D-122 적용 후(종료 = 타격 + 후딜). 단일 대상 · LMB 홀드
+
+| 조합 | 피해 | 첫 타 선 / 후 | 연속 선 / 후 | 첫 타 주기 | 연속 주기 | 연속 DPS | 물 / 스윙 | 판정 창(연속) |
+|---|---|---|---|---|---|---|---|---|
+| (없음) | 30 | 0.4 / 0.4 | 0.2 / 0.1 | 0.8 | 0.3 | **100** | 0 | 0.1 |
+| ① | **45** | **0.55** / 0.4 | **0.3** / 0.1 | 0.95 | 0.4 | **112.5** | 0 | 0.1 |
+| ② | 30 | 0.4 / 0.4 | 0.2 / 0.1 | 0.8 | 0.3 | 100 | **2**(초당 6.7) | 0.1 |
+| ③ | **14** | 0.4 / 0.4 | **0.1 / 0.05** | 0.8 | **0.15** | **93.3** | 0 | **0.05** |
+| (없음) + 공속 ×1.5 | 30 | 0.27 / 0.27 | 0.13 / 0.07 | 0.53 | 0.2 | 150 | 0 | 0.067 |
+| ③ + 공속 ×1.5 | 14 | 0.27 / 0.27 | 0.067 / 0.033 | 0.53 | 0.1 | 140 | 0 | 0.033 |
+
+- 스킬 전환 잠금(선딜 + 0.4 ÷ M): 없음 0.8 / 0.6(연속), ① 0.95 / 0.7, ③ 0.8 / 0.5, 공속 ×1.5 0.53 / 0.4.
+- ② 모자 기대값: 단일 대상 연속이면 초당 3.3타 × 10% ≈ **3초에 1개**, 적 3마리를 함께 치면 ≈ 1초에 1개.
+- ③ 몽타주 재생 속도(연속): 선딜 L ×4.0 · R ×2.7, 후딜 L ×8.0 · R ×10.7 — 공속 ×1.5 면 최대 ×16(§9-81).
+
+**시선 집중**
+
+| 조합 | 물 | 반경 | 적 도발 시간 | 적이 주는 피해 | 적이 받는 피해 | 도발 풀림(시전 기준) |
+|---|---|---|---|---|---|---|
+| (없음) | 60 | 30m | 5초 | ×0.8 | ×1.0 | 6.0~6.5초 |
+| ① | 60 | 30m | 5초 | **×1.0** | **×1.15** | 6.0~6.5초 |
+| ② | **84** | **42m** | 5초 | ×0.8 | ×1.0 | 6.0~6.5초 |
+| ③ | **36** | 30m | **3초** | ×0.8 | ×1.0 | **4.0~4.5초**(모션은 5.0초까지) |
+
+**모자 던지기** — RMB 홀드면 ≈0.65초마다(몽타주 0.8초 − 블렌드 아웃 0.15초), 공속 ×1.5 면 ≈0.38초 → 물 초당 ≈31(칩 없음) · 46(①) · 43(②)
+
+| 조합 | 적 피해 | 물 | 아군 적중 | 아군 모자 | 바닥 모자 |
+|---|---|---|---|---|---|
+| (없음) | 30 | 20 | 모자 장착 | 1회 | 10초 · 던진 본인 2회 |
+| ① | **45** | **30** | **22 피해 → 모자 장착** | 1회 | 10초 · 본인 2회 |
+| ② | **24** | **28** | 모자 장착 | **2회** | 10초 · **플레이어 전원 2회** |
+| ③ | **25** | 20 | 모자 장착 | 1회 | **18초** · 본인 2회 |
+
+### 12.2 상호작용
+
+| 조합 | 결과 |
+|---|---|
+| 가방② + 모자② / 모자③ | 발밑 모자도 던진 벨보이의 모자칩을 따른다 — 아군이 주워도 2회 / 18초 유지(D-128) |
+| 가방② + 피의 계약(⑧) | 물 대신 체력 2/스윙(비율 1.0) → 연속이면 초당 6.7 ★매우 아프다(§9-75)★ |
+| 가방② + 물 부족 | 기존 대납 — 체력 1/스윙(부족분 2 × 0.5). 체력 1 이하면 시전 불가(`CheckCost`) |
+| 가방② + 벨보이가 모자 착용 중 | 발밑 모자가 바닥에 남는다 — 붙어 싸우는 적이 주울 수 있다(기존 규칙, §9-76). 모자가 깨지면 0.25초 재확인으로 바로 다시 쓴다 |
+| 가방② + 탑승(청소기 위) | 발밑 = 청소기 아래 바닥 → 청소기가 줍는다(§9-77) |
+| 가방③ + 넉백 | 기본 공격 넉백 100% · 400 이 초당 6.7회 → 적이 판정 반경(91) 밖으로 밀리거나 벽 앞에서 벽꿍 스턴이 이어진다(Plan8 T-13, §9-80) |
+| 가방 ①③ + 공속 공유 버프 | 칩 시간을 먼저 바꾸고 M 으로 나눈다 — ① 첫 타 선딜 0.55 ÷ 1.5 = 0.37, ③ 연속 0.1초 |
+| 도발① + 물대포② 취약 / 공기탄② 흡착 | 적 관문에서 곱 — ×1.5 × (1 + 0.05n) × **1.15** |
+| 도발① + 발톱② 흡혈 / 동전② | 흡혈은 최종 피해 기준이라 ×1.15 만큼 는다 / 동전② 고정 2 그대로 |
+| 도발① + 다른 벨보이가 다시 도발 | 마지막에 건 벨보이가 이긴다(Plan8 D-15) — 그 벨보이의 칩 기준으로 배율이 바뀐다(①이 아니면 ×0.8 · ×1.0 으로 돌아온다) |
+| 도발① + 클렌저 사이트 | 도발된 적이 사이트에 주는 피해도 −20% 가 없다(사이트 관문도 같은 SetByCaller — Plan8 D-14) |
+| 도발① + 보스 · 튜토리얼 더미 | 두더지 보스도 도발되므로 ×1.15(Plan8 E-1, §9-82) / 더미에도 걸린다 |
+| 도발② | 외침 큐(`TauntStartCueTag`)의 RawMagnitude 도 4200 — 이펙트가 반경을 쓰면 같이 커진다 |
+| 도발③ + 모션 | 적은 4~4.5초에 풀리고 벨보이는 5초까지 묶인다(사용자 확정, §9-84) |
+| 모자① + 이미 모자를 쓴 아군 | 22 를 그 모자가 막는다(Single 소모 / Double → Single). Single 이 사라졌으면 새 모자가 씌워지고, Double 이 Single 로 줄었으면 장착 실패 → 그 자리 바닥(§9-86) |
+| 모자① + 물 점프② 무적 아군 | 피해 0 → 모자 장착 |
+| 모자① + 광폭화 · 시너지 벨보이 | 22 × 배율(광폭화면 44~66 — 사용자 확정, §9-85) |
+| 모자① + 탑승 중인 아군 | 22 가 탑승 공유 규칙대로 위 · 아래 1칸에 받는 피해로 간다(D-82) |
+| 모자① + 아군이 22 로 사망 | 시체는 모자를 못 쓴다 → 그 자리 바닥 |
+| 모자② + 적 | 적은 여전히 1회 |
+| 모자② + 벨보이 2명 | 판정은 그 모자를 **던진** 벨보이의 칩 — A(②)의 모자는 누구든(플레이어) 2회, B(칩 없음)의 모자는 A 가 주워도 1회(§9-87) |
+| 공용 ⑥ 광폭화 · ⑦ 시너지 | 가방 · 모자 피해에 ExecCalc 소스측에서 추가로 곱해진다(기존 규칙) |
+| 세 그룹 | 그룹이 달라 가방 · 도발 · 모자 칩을 1개씩 함께 낄 수 있다 |
+
+### 12.3 설계 결정
+
+| # | 결정 | 근거 |
+|---|---|---|
+| **D-120** | 그룹 키 = 각 GA 태그 `Abilities.BellBoy.{BasicAttack, Taunt, HatThrow}`. 카탈로그 `SkillDisplayNames` 에 3줄(기본 공격 · 시선 집중 · 모자 던지기) | GA `AbilityTags` 와 일치 — 동전 · 공기탄과 같은 방식(D-93). 새 그룹 키 태그가 필요 없다 |
+| **D-121** | 기본 공격 타이밍 축: `SkillWindup` = **첫 타 선딜**, 새 축 `SkillComboWindup` = **연속 선딜**, `SkillComboRecovery` = **연속 후딜** — 셋 다 기준 1.0 배율(D-21 계열). 첫 타 후딜은 축 없음 | ①의 첫 타(×1.375) · 연속(×1.5) 배율이 달라 축 하나로는 정확히 못 맞춘다. 배율이라 GA 의 초 값이 바뀌어도 칩이 비율로 따라간다(D-99 · D-117 과 같다). 벨보이에 "선딜 −X%" 칩을 만들 땐 `SkillWindup` + `SkillComboWindup` 둘 다 넣는다(T-136) |
+| **D-122** | ★선행★ 기본 공격 종료 = **타격 + 실제 후딜** — 클라 · 서버가 같은 `WaitDelay` 로 끝낸다. 판정 창 = `min(HitWindowDuration, 실제 후딜)`. 몽타주 `OnBlendOut`/`OnCompleted` 는 **타격 이벤트가 없었을 때만** 종료 폴백(Plan8 T-22) | 사용자 확정. 지금은 블렌드 아웃 시작(끝 0.05초 전)에 끝나고 서버만 판정 창을 기다려 클라 ≈0.25 / 서버 ≈0.275초로 어긋난다 → 서버가 다음 예측 스윙을 거절(엔진 확인). 칩③ 후딜 0.05 는 블렌드 아웃에 다 먹힌다(T-134). 칩 없이도 연속 0.3 · 첫 타 0.8초(원래 설계 — Plan8 §0.1)로 바뀐다(§9-79) |
+| **D-123** | 공속 M(기본 공격) = **실제 시간 변수**(`WindupTime` · `RecoveryTime`)를 ÷ M — TP · FP 재생 속도 · 판정 창 · 종료 타이머가 한 번에 따라온다. 스킬 전환 잠금 = 선딜(÷M) + `SkillSwitchRecoveryTime` ÷ M. **활성화 때 한 번** | Plan5 레시피 8(선 · 후딜 모두, T-63). 시간 변수 하나에서 나눠야 FP 동기(Plan8 D-36)가 깨지지 않는다(T-137). 스윙 중 버프가 끝나도 그 스윙은 그대로(D-69 와 같은 이유, T-152) |
+| **D-124** | 공속 M(모자 던지기) = TP `PlayMontageAndWait` Rate = M, FP Rate = FP 동기 속도 × M | 씨앗 대포(D-68)와 같다 — 몽타주 하나에 선 · 후딜이 다 있다. 둘 다 M 을 곱해 FP 릴리스 프레임이 TP 릴리스와 계속 맞는다(Plan8 D-35) |
+| **D-125** | 가방② 물 2 = 카탈로그 `SkillWaterCost Flat +2` + `GetEffectiveWaterCostFor` 의 `WaterCost <= 0` 조기 return 제거 + `GE_Cost_BellBoy_BasicAttack`(모자 Cost GE 복제)를 GA 에 연결 | Percent 는 0 에 곱해 0. 물 부족 · 피의 계약 · 미리보기가 기존 배관으로 그대로 흐른다. 조기 return 제거는 칩 없으면 (0 + 0) × 1 = 0 이라 무해(카탈로그에 태그 없는 `SkillWaterCost` 모디파이어가 없다 — 실측) |
+| **D-126** | 가방② 모자 = 서버 `OnHitSample` 에서 **`ADREnemy` 적중 1마리마다** `FRand() < HatDropChance` → **벨보이 발밑**(± `HatDropScatterRadius` 40uu)에 바닥 모자. 던진 사람 = 벨보이 | 사용자 확정 2건. 적 판정은 D-3 과 같은 `Cast<ADREnemy>` — 기본 공격은 사이트에도 맞기 때문(§9-13, T-144). 흩뿌림은 한 스윙에 여러 개가 떨어져도 겹쳐 안 보이게. 판정은 서버 전용(T-143) |
+| **D-127** | 바닥 모자 스폰 = **`ADRBellBoyHatPickup::SpawnOnGround()`** 하나 — 투사체 `DropAsPickup` 도 이것을 부른다(동작 동일) | 바닥 트레이스 규칙(오브젝트 타입 — Plan8 T-17)과 Deferred 스폰 순서(T-142)를 한 곳에 |
+| **D-128** | 바닥 모자 규칙(③ 수명 · ② 2회) = **던진 벨보이의 모자칩** — `InitThrower` 가 FinishSpawning **전에** `GetUpgradeRuntimeForASC(ThrowerASC)` 로 1회 해석해 캐시(`ApplySkill(HatThrow 키, SkillDuration, LifeTime)` · `HasFeature(ShareDouble)`) | "바닥 모자"는 모자 던지기 스킬의 물건이다. 가방②가 떨군 모자도 같은 물건이라 같은 규칙. 스폰 전 1회 해석(D-5) |
+| **D-129** | 도발① = 도발 GE 스펙의 SetByCaller 둘 — 주는 피해 `Data.Taunt.DamageMult`(①이면 **1.0**) + 받는 피해 새 태그 **`Data.Taunt.DamageTakenMult`**(①이면 **1 + 0.15**). 받는 피해는 **적 관문 흡착 다음**에서 `GetTauntDamageTakenMultiplier` 로 곱한다 | 배율을 스펙이 들고 다니는 기존 구조(Plan8 D-13). 마지막 벨보이가 이기므로(D-15) 배율도 그 벨보이의 칩. "받는 모든 피해"는 ExecCalc 가 아니라 적 관문(D-10, T-138). 태그 보유만 보면 칩 없는 도발에도 걸린다(T-139) |
+| **D-130** | 도발② 반경 = `SkillAreaRadius +0.4` → `OnTauntStart` 에서 `EffectiveTauntRadius` 를 1회 구해 스캔 · 큐 RawMagnitude 둘 다 | 범위 축 재사용(D-28 계열). 스캔에만 넣으면 외침 연출이 30m 로 남는다(T-149) |
+| **D-131** | 도발③ = 새 축 `SkillDuration`(Flat −2) → `ApplyTauntTo` 의 `Data.Duration` 만. 몽타주 · 어빌리티 길이는 그대로 | 사용자 확정(T-150) |
+| **D-132** | 새 축 `SkillDuration`(스킬 지속 시간) = **초 축** — `ApplySkill(SkillDuration, 기준 초)`. `DRIsTimeStat` ✓ · `DRIsLowerBetter` ✗. 지금은 도발 시간 · 바닥 모자 수명만 읽는다 | 기준 초를 코드가 안다(`SkillFireInterval` 과 같은 이유 — D-37). Flat 이 "초"로 표기된다(T-146) |
+| **D-133** | 모자① 아군 피해 = 투사체의 `DamageEffectParams` 복사본에 `BaseDamage = ChipTuning.Hat.AllyHitDamage`(22) → 기존 `ApplyDamageEffect`(GE_Damage → ExecCalc). 순서 **피해 → 모자 장착** | 사용자 확정 2건(배율 적용 · 순서). `SkillDamage`(+50%)는 적 피해 축이라 안 탄다(T-140). 장착 뒤에 때리면 방금 씌운 모자가 막는다(T-141) |
+| **D-134** | 모자② = 모자 2회(Double)를 **던진 본인 + 모든 플레이어(`Player` 태그)** 에게 — 투사체 직격(`TryEquipBellBoyHat(…, 2)`) · 바닥 줍기 둘 다. 적은 1회 | 원문 "다른 플레이어들에게도"(T-148). 2회 = Double GE(Plan8 D-20)라 새 GE 가 없다 |
+| **D-135** | 모자③ 수명 = `SkillDuration Flat +8`(HatThrow 키) → 10 → 18초 | D-132 축 재사용. 키를 HatThrow 로 고정해 가방②가 떨군 모자에도 걸린다(D-128) |
+| **D-136** | 표기 · 정밀도: 순환소수가 되는 변화는 **Flat**(가방③ −16 · 모자③ −5 · 도발③ −2초 · 모자③ +8초), 기준 0 에서 시작하는 가방② 물도 Flat +2. 나머지는 Percent(+0.5 · +0.375 · ±0.4 · −0.2 · −0.5) | T-110 원리 — Percent −0.5333 은 13.99. +0.375 · ±0.4 는 float 로 정확하거나 목표 이하로 반올림된다 |
+| **D-137** | 동적 상수 = `ChipTuning.Bag`(`HatDropChance` 0.1 · `HatPickupClass` · `HatDropScatterRadius` 40) / `ChipTuning.Taunt`(`ExposeDamageTakenBonus` 0.15) / `ChipTuning.Hat`(`AllyHitDamage` 22). 검사는 그 칩이 카탈로그에 있을 때만 | D-2. 확률 · 배율 · 피해량 · 액터 클래스는 스탯 축으로 표현 못 한다 |
+| **D-138** | 물 소모가 0 보다 큰데 Cost GE 가 없으면 `UDRGameplayAbility::ApplyCost` 가 **클래스당 1회** 경고 | `CheckCost` 는 통과하고 물은 안 빠지는 사고가 두 번째다(D-103, T-133). 지금 그런 GA 는 없다 — 플레이어 GA 15개 실측, 물 > 0 인 GA(시선 집중 · 모자 · 물대포 · 씨앗 · 공속 · 물 점프 · 테스트)는 전부 Cost GE 가 있다 |
+
+> 기각: 첫 타 · 연속을 축 하나(`SkillWindup` = 둘 다)로 — ①의 연속에 ×1.0909 같은 값이 필요하다 / 기본 공격 타이밍을 `ChipTuning` 절대값으로 — 카드 · 미리보기에 단점이 안 보인다 / 도발① 받는 피해를 "태그만 보고" Config 로 — 칩 없는 벨보이의 도발에도 걸린다 /
+> 가방② 모자를 맞은 적 발밑에 — 적이 바로 주워 보호막을 얻는다(사용자 기각) / 모자① 22 를 고정 피해 GE 로 — 사용자 기각(배율 적용) / 판정 창을 블렌드 아웃 안으로 압축 — 칩③이 0.1초 주기가 된다(사용자 기각).
+
+### 12.4 C++ 변경 (적용 순서)
+
+**① `DRGameplayTags.h / .cpp`** — 태그 5개(네이티브). 헤더의 벨보이 묶음(`Data_Taunt_DamageMult` 아래), `.cpp` 도 벨보이 태그 다음
+
+| 멤버 | 태그 | 종류 |
+|---|---|---|
+| `Upgrade_Feature_Skill_Bag_HatDrop` | `Upgrade.Feature.Skill.Bag.HatDrop` | 가방② 스위치(ASC 에 안 붙는다) |
+| `Upgrade_Feature_Skill_Taunt_Expose` | `Upgrade.Feature.Skill.Taunt.Expose` | 도발① 스위치 |
+| `Upgrade_Feature_Skill_Hat_AllyHit` | `Upgrade.Feature.Skill.Hat.AllyHit` | 모자① 스위치 |
+| `Upgrade_Feature_Skill_Hat_ShareDouble` | `Upgrade.Feature.Skill.Hat.ShareDouble` | 모자② 스위치 |
+| `Data_Taunt_DamageTakenMult` | `Data.Taunt.DamageTakenMult` | SetByCaller — 도발된 적이 **받는** 피해 배율(①이면 1.15). 도발 GE 스펙이 들고 다닌다 |
+
+**② `Public/Game/DRUpgradeTypes.h`** — 축 3개(★`Count` 바로 앞★ — T-30) + 판정 함수 3곳
+
+```cpp
+	// ===== Plan5(가방칩 · 도발칩 · 모자칩) 추가 =====
+	// ★신규 값은 반드시 Count 바로 앞에 붙인다.★ (Plan5 T-30)
+
+	/**
+	 * 스킬 단위. ★연속 공격★ 의 선딜레이 배율 — 기준 1.0 에 Apply 해서 쓴다(SkillWindup 과 같은 배율 축).
+	 * 연속 공격이 있는 스킬(지금은 벨보이 기본 공격만)에서 SkillWindup 은 ★첫 타★ 에만, 이 축은 ★연속★ 에만 곱한다 (Plan5 D-121)
+	 */
+	SkillComboWindup		UMETA(DisplayName = "스킬 연속 선딜레이"),
+
+	/** 스킬 단위. ★연속 공격★ 의 후딜레이 배율 — 기준 1.0. 첫 타 후딜에는 곱하지 않는다 (Plan5 D-121) */
+	SkillComboRecovery		UMETA(DisplayName = "스킬 연속 후딜레이"),
+
+	/**
+	 * 스킬 단위. 그 스킬이 남기는 효과의 ★지속 시간(초)★ — 기준 초에 바로 Apply 한다(SkillFireInterval 과 같은 "초" 축).
+	 *     적 도발 시간 = ApplySkill(SkillDuration, TauntDuration)   // Flat −2 → 5 → 3초
+	 * ⚠️ 지금은 도발 시간 · 바닥 모자 수명만 읽는다 (Plan5 D-132)
+	 */
+	SkillDuration			UMETA(DisplayName = "스킬 지속 시간"),
+```
+
+- `DRIsSkillStat` 에 3개 모두(★빠뜨리면 전역 블록에 쌓여 도발③의 −2초가 바닥 모자 수명에도 걸린다 — T-145★).
+- `DRIsLowerBetter` 에 `SkillComboWindup` · `SkillComboRecovery`(짧을수록 좋다). `SkillDuration` 은 **넣지 않는다**(길수록 좋다 — T-146).
+- `DRIsTimeStat` 에 `SkillDuration`(Flat 이 "−2초"로 표기 — T-146). 배율 축 둘은 넣지 않는다(T-25).
+
+**③ `Private/UI/DRUpgradeUILibrary.cpp`** — 짧은 이름(5자): `SkillComboWindup` = "연속 선딜" · `SkillComboRecovery` = "연속 후딜" · `SkillDuration` = "지속 시간" (`LOCTEXT("StatShort_…")`, 주석 `Plan5(가방칩)` / `Plan5(도발칩)`).
+
+**④ `Public/Game/DRProgressionConfig.h / .cpp`** — `FDRJetJumpChipTuning` 다음에 구조체 3개, 맨 위 `class ADRBellBoyHatPickup;` 전방 선언
+
+```cpp
+/**
+ * ★Plan5(가방칩)★ 벨보이 기본 공격(가방) 칩의 동적 상수.
+ * 피해 · 선딜 · 후딜 · 물 2 는 여기가 아니라 DA_ChipCatalog 모디파이어다.
+ */
+USTRUCT(BlueprintType)
+struct FDRBagChipTuning
+{
+	GENERATED_BODY()
+
+	// ========== ② BB.Asc.BagHat (분실물 가방) ==========
+
+	// 적(ADREnemy) 1마리 타격마다 모자가 떨어질 확률 (0.1 = 10%). 서버가 굴린다 (Plan5 D-126)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Bag|HatDrop", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float HatDropChance = 0.1f;
+
+	/**
+	 * 떨어뜨릴 바닥 모자 — BP_BellBoyHatPickup (모자 던지기가 떨구는 것과 같은 BP).
+	 * ★비우면 가방칩②가 모자 없이 물만 쓴다★ — 검사가 잡는다
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Bag|HatDrop")
+	TSoftClassPtr<ADRBellBoyHatPickup> HatPickupClass;
+
+	// 벨보이 발밑에서 흩뿌리는 반경(uu) — 한 스윙에 여러 개가 떨어져도 겹쳐 보이지 않게. 0 = 정확히 발밑
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Bag|HatDrop", meta = (ClampMin = "0.0"))
+	float HatDropScatterRadius = 40.f;
+};
+
+/** ★Plan5(도발칩)★ 벨보이 시선 집중 칩의 동적 상수. 반경 · 물 · 도발 시간은 카탈로그 모디파이어다. */
+USTRUCT(BlueprintType)
+struct FDRTauntChipTuning
+{
+	GENERATED_BODY()
+
+	// ========== ① BB.Asc.TauntExpose (약점 노출) ==========
+
+	// 도발된 적이 받는 모든 피해 증가 (0.15 = +15%). 누가 · 무엇으로 때리든 — 적 피해 관문이 곱한다 (Plan5 D-129)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Taunt|Expose", meta = (ClampMin = "0.0"))
+	float ExposeDamageTakenBonus = 0.15f;
+};
+
+/** ★Plan5(모자칩)★ 벨보이 모자 던지기 칩의 동적 상수. 피해 · 물 · 바닥 수명은 카탈로그 모디파이어다. */
+USTRUCT(BlueprintType)
+struct FDRHatChipTuning
+{
+	GENERATED_BODY()
+
+	// ========== ① BB.Asc.HatHeavy (강철 챙) ==========
+
+	// 모자가 아군에게 맞을 때 주는 피해(기본값). SkillDamage(+50%)는 안 탄다 — 주는 쪽 배율(광폭화 등)은 탄다 (Plan5 D-133)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hat|AllyHit", meta = (ClampMin = "0.0"))
+	float AllyHitDamage = 22.f;
+};
+```
+
+`FDRChipTuning` 끝(JetJump 다음)에 `FDRBagChipTuning Bag;` · `FDRTauntChipTuning Taunt;` · `FDRHatChipTuning Hat;`(주석 `벨보이 칩 (Plan5(가방칩 · 도발칩 · 모자칩))`).
+
+`.cpp` 검사 — 청소기 칩 검사 블록 다음, **그 칩이 카탈로그에 있을 때만**(`IsFeatureGated`):
+
+| 조건 | 오류 문구 |
+|---|---|
+| `Bag.HatDrop` 이 있고 `Bag.HatPickupClass` 가 비었다 | `ChipTuning.Bag.HatPickupClass 가 비어 있어 가방칩②가 모자 없이 물만 씁니다.` |
+| `Bag.HatDrop` 이 있고 `HatDropChance <= 0` | `ChipTuning.Bag.HatDropChance 가 0 이하라 모자가 떨어지지 않습니다.` |
+| `Taunt.Expose` 가 있고 `ExposeDamageTakenBonus <= 0` | `ChipTuning.Taunt.ExposeDamageTakenBonus 가 0 이하라 도발칩①이 단점(공격력 감소 해제)만 남습니다.` |
+| `Hat.AllyHit` 이 있고 `AllyHitDamage <= 0` | `ChipTuning.Hat.AllyHitDamage 가 0 이하라 모자칩①의 단점(아군 피해)이 사라집니다.` |
+
+**⑤ `Private/AbilitySystem/Abilities/DRGameplayAbility.cpp`** — 물 계산 · Cost GE 경고
+
+```cpp
+float UDRGameplayAbility::GetEffectiveWaterCostFor(const FGameplayAbilityActorInfo* ActorInfo) const
+{
+    // ★Plan5(가방칩)★ 기본 물이 0 이어도 칩의 Flat 을 더한다 — 예전의 `WaterCost <= 0 → 0` 조기 return 은
+    // "물 0 → 2"(Flat +2)를 통째로 무시했다 (D-125 · T-132). 칩이 없으면 (0 + 0) × 1 = 0 그대로다.
+    const float Upgraded = GetUpgradeRuntimeFor(ActorInfo)
+        .ApplySkill(GetUpgradeKeyTag(), EDRUpgradeStat::SkillWaterCost, WaterCost);
+    return FMath::Max(0.f, Upgraded);
+}
+```
+
+`ApplyCost` 의 `if (GetCostGameplayEffect()) { … }` 에 `else` 를 붙인다 — `static TSet<FName>` 으로 클래스당 1회
+`UE_LOG(LogDR, Warning, TEXT("[Upgrade] %s: 물 소모 %.1f 인데 Cost Gameplay Effect Class 가 비어 있어 물이 빠지지 않습니다."), …)` (D-138 · T-133).
+
+**⑥ `AbilitySystem/DRAbilitySystemLibrary.h / .cpp`** — 도발 받는 피해
+
+```cpp
+	/**
+	 * ★Plan5(도발칩)★ ① 이 적이 받는 피해의 도발 배율 — 그 도발을 건 벨보이가 칩①이면 1 + ExposeDamageTakenBonus(1.15).
+	 * 도발 중이 아니거나 칩이 없으면 정확히 1.0. 적 피해 관문 전용(모든 피해 — D-10). 배율은 도발 GE 스펙의 SetByCaller (D-129)
+	 */
+	static float GetTauntDamageTakenMultiplier(const UAbilitySystemComponent* TargetASC);
+```
+
+(구현: 바로 위 흡착 함수 `GetAirShotDragDamageTakenMultiplier(TargetASC)` 와 같은 꼴로 ★ASC 를 받는다★ — 관문이 `Props.TargetASC` 를 그대로 넘겨 액터 → ASC 재조회가 없다. §12.10)
+
+- `.cpp`: `HasMatchingGameplayTag(Debuff_Taunted)` 빠른 탈출 → 활성 도발 GE → `Spec.GetSetByCallerMagnitude(Data_Taunt_DamageTakenMult, false, 1.f)` → `Max(0, …)`.
+  GE 찾기(★`MakeQuery_MatchAnyOwningTags`★ — Plan8 T-29 · T-131)는 `GetTauntInfo` 와 같은 코드라 파일 안 익명 함수 `FindActiveTauntEffect(const UAbilitySystemComponent*)` 로 뽑아 둘이 같이 쓴다.
+- `TryEquipBellBoyHat` 주석의 `@param Charges` 에 "(던진 본인 — 모자칩②면 모든 플레이어, Plan5 D-134)" 추가(동작 불변).
+
+**⑦ `Private/AbilitySystem/DREnemyAttributeSet.cpp`** — 흡착 배율 줄(`GetAirShotDragDamageTakenMultiplier`) **바로 다음**, 흡혈 블록 위
+
+```cpp
+		// ★Plan5(도발칩)★ ① 약점 노출 — 도발된 적이 받는 모든 피해 ×1.15(그 도발을 건 벨보이가 칩①일 때만).
+		// 취약 · 흡착과 같은 자리 · 같은 이유 — DoT 까지 "모든 피해" (D-10 · D-129). 흡혈 · 숫자 표시가 이 값을 본다
+		LocalIncomingDamage *= UDRAbilitySystemLibrary::GetTauntDamageTakenMultiplier(Props.TargetASC);
+```
+
+**⑧ `Actor/DRBellBoyHatPickup.h / .cpp`** — 공용 스폰 · 칩 규칙
+
+```cpp
+public:
+	/**
+	 * ★Plan5(가방칩 · 모자칩)★ 바닥 모자를 세우는 유일한 길 (D-127) — 서버 전용.
+	 * FromLocation 아래 바닥을 ★오브젝트 타입(WorldStatic/Dynamic)★ 으로 찾아(Plan8 T-17) GroundOffset 만큼 띄운다.
+	 * Deferred 스폰 사이에 InitThrower 를 불러 칩 규칙(수명 · 2회)을 BeginPlay 전에 정한다 (T-142).
+	 */
+	static ADRBellBoyHatPickup* SpawnOnGround(UWorld* World, TSubclassOf<ADRBellBoyHatPickup> PickupClass,
+		const FVector& FromLocation, float Yaw, AActor* InThrower, UAbilitySystemComponent* InThrowerASC,
+		const AActor* IgnoreActor = nullptr, float GroundOffset = 5.f);
+
+private:
+	float EffectiveLifeTime = -1.f;      // ★Plan5(모자칩)★ ③ — InitThrower 가 정한다. 음수면 LifeTime (D-128)
+	bool bShareDoubleCharges = false;    // ★Plan5(모자칩)★ ② — 플레이어 전원 ThrowerCharges (D-134)
+```
+
+- `SpawnOnGround` 본문 = 지금 `ADRBellBoyHatProjectile::DropAsPickup` 의 트레이스 · `SpawnActorDeferred(AlwaysSpawn)` · `InitThrower` · `FinishSpawning`(옮기기만 한다).
+- `InitThrower`: 기존 두 줄 + `const FDRUpgradeRuntime& Runtime = GetUpgradeRuntimeForASC(InThrowerASC);`
+  `EffectiveLifeTime = Max(0.1, Runtime.ApplySkill(Abilities_BellBoy_HatThrow, SkillDuration, LifeTime))` · `bShareDoubleCharges = Runtime.HasFeature(Upgrade_Feature_Skill_Hat_ShareDouble)`.
+  던진 사람 ASC 가 없으면(나감) 빈 캐시 → 10초 · 1회(기존과 같다).
+- `BeginPlay`: `SetLifeSpan(EffectiveLifeTime > 0.f ? EffectiveLifeTime : LifeTime)`.
+- `TryGiveTo`:
+
+```cpp
+	// 적이든 아군이든 (사용자 확정). 던진 벨보이 본인이면 2회 (Plan8 D-23)
+	// ★Plan5(모자칩)★ ② 플레이어 전원 2회 — 적은 그대로 1회 (D-134)
+	const bool bIsThrower = Thrower.IsValid() && Character == Thrower.Get();
+	const bool bSharedPlayer = bShareDoubleCharges && Character->ActorHasTag(FName("Player"));
+	const int32 Charges = (bIsThrower || bSharedPlayer) ? ThrowerCharges : 1;
+```
+
+- 클래스 주석: "던진 벨보이 본인이면 2회(Plan8 D-23) — 모자칩②면 모든 플레이어, 수명은 모자칩③(Plan5 D-128)".
+
+**⑨ `Actor/DRBellBoyHatProjectile.h / .cpp`** — 칩 캐시 · 아군 피해 · 2회
+
+```cpp
+private:
+	void ApplyAllyHitDamage(AActor* Ally);   // ★Plan5(모자칩)★ ①
+
+	// ★Plan5(모자칩)★ 칩 해석 캐시 — 서버 BeginPlay 에서 1회 (Plan5 D-5). DamageEffectParams 는 FinishSpawning 전에 들어와 있다
+	bool bChipAllyHit = false;
+	float ChipAllyHitDamage = 0.f;
+	int32 ChipAllyCharges = 1;
+```
+
+- `BeginPlay`(서버): 소스 ASC = `DamageEffectParams.SourceAbilitySystemComponent` → `bChipAllyHit = HasUpgradeFeature(…Hat.AllyHit)` · `ChipAllyHitDamage = GetChipTuning(this).Hat.AllyHitDamage` · `ChipAllyCharges = HasUpgradeFeature(…Hat.ShareDouble) ? 2 : 1`.
+- 아군 분기:
+
+```cpp
+		if (!UDRAbilitySystemLibrary::IsNotFriend(Thrower, Character))   // 아군 = 둘 다 "Player" 태그
+		{
+			bResolved = true;
+			// ★Plan5(모자칩)★ ① 피해 먼저, 모자는 그다음 (사용자 확정 — D-133). 이미 쓴 모자가 있으면 그 모자가 이 피해를 막는다
+			if (bChipAllyHit)
+			{
+				ApplyAllyHitDamage(Character);
+			}
+			// ★Plan5(모자칩)★ ② 플레이어면 2회 (D-134). 실패(이미 모자 · 22 로 사망) → 그 자리 바닥 (Plan8 D-22)
+			if (UDRAbilitySystemLibrary::TryEquipBellBoyHat(Character, DamageEffectParams.SourceAbilitySystemComponent, ChipAllyCharges))
+			{
+				Destroy();
+			}
+			else
+			{
+				DropAsPickup(GetActorLocation());
+			}
+			return;
+		}
+```
+
+- `ApplyAllyHitDamage`: 아군 ASC · 소스 ASC(던진 벨보이가 나가면 없다 — `ApplyDamageEffect` 가 역참조한다) · 피해 > 0 이 아니면 건너뛴다.
+  `FDamageEffectParams Params = DamageEffectParams;`(피해 GE · 소스 ASC · `SourceAbilityTags` 그대로) → `Params.BaseDamage = ChipAllyHitDamage`(★적 피해 45 가 아니다 — T-140★) · `TargetAbilitySystemComponent = 아군 ASC` · `KnockbackForce = 0` · `DeathImpulse = 전방 × DeathImpulseMagnitude` → `ApplyDamageEffect(Params)`(ExecCalc 가 주는 쪽 배율을 곱한다 — 사용자 확정).
+- `DropAsPickup` 은 `ADRBellBoyHatPickup::SpawnOnGround(GetWorld(), PickupClass, FromLocation, GetActorRotation().Yaw, GetThrower(), SourceASC, this, PickupGroundOffset)` + `Destroy()`.
+
+**⑩ `Abilities/DRBellBoyBasicAttack.h / .cpp`** — 축 · 공속 · 종료 타이머 · 판정 창 · 모자 낙하
+
+헤더(private) 추가 · 변경:
+
+```cpp
+	UFUNCTION()
+	void OnRecoveryFinished();
+
+	// ★Plan5(가방칩)★ ② 서버: 적 1마리 타격마다 굴려 벨보이 발밑에 모자 (D-126). 칩이 없으면 아무것도 안 한다
+	void TryDropHatOnEnemyHit(AActor* Target);
+
+	// ── 이번 스윙 ──
+	float PendingRecoveryTime = 0.4f;       // ★Plan5(가방칩)★ 실제 후딜(초) — 칩 · 공속 반영. 끝 = 타격 + 이 값 (D-122)
+	float ActiveHitWindowDuration = 0.1f;   // 판정 창 = min(HitWindowDuration, 실제 후딜) (D-122)
+	bool bHatDropThisSwing = false;         // 가방칩② — 서버, 활성화 때 1회 해석 (D-126)
+	bool bRecoveryDone = false;             // ★bMontageDone 을 대신한다★ — 몽타주 끝은 타격이 없을 때만 본다 (T-151)
+```
+
+`ActivateAbility` ② · ③ · ④:
+
+```cpp
+	// ★Plan5(가방칩)★ 칩 — 첫 타는 SkillWindup, 연속은 SkillComboWindup · SkillComboRecovery (D-121). 칩이 없으면 전부 1.0
+	const float WindupScale = FMath::Max(0.01f,
+		GetUpgradedFloat(bCombo ? EDRUpgradeStat::SkillComboWindup : EDRUpgradeStat::SkillWindup, 1.f));
+	const float RecoveryScale = bCombo ? FMath::Max(0.01f, GetUpgradedFloat(EDRUpgradeStat::SkillComboRecovery, 1.f)) : 1.f;
+
+	// ★Plan5(공속칩)★ 공속 배율 M — 실제 시간에서 한 번에 나눠 TP · FP · 판정 창 · 종료가 같이 빨라진다.
+	// 활성화 때 한 번만 읽는다 — 스윙 중 버프가 끝나도 이 스윙은 그대로 (D-123 · T-152). 버프가 없으면 1.0
+	const float SpeedMult = FMath::Max(0.01f, GetAttackSpeedMultiplier());
+	const float WindupTime = (bCombo ? ComboWindupTime : FirstWindupTime) * WindupScale / SpeedMult;
+	const float RecoveryTime = (bCombo ? ComboRecoveryTime : FirstRecoveryTime) * RecoveryScale / SpeedMult;
+
+	// ★Plan5(가방칩)★ 끝 = 타격 + 실제 후딜, 판정 창은 그 안에서 끝난다 — 서버만 늦게 끝나면 다음 예측 스윙이 거절된다 (D-122 · T-134 · T-135)
+	PendingRecoveryTime = FMath::Max(0.01f, RecoveryTime);
+	ActiveHitWindowDuration = FMath::Min(HitWindowDuration, PendingRecoveryTime);
+	// (WindupRate · PendingRecoveryRate · FP 속도 계산은 그대로 — WindupTime/RecoveryTime 을 쓰므로 자동으로 따라온다)
+
+	// ③ 잠금: SetSetByCallerMagnitude(Data_Duration, WindupTime + SkillSwitchRecoveryTime / SpeedMult)   ★Plan5(공속칩)★ (D-123)
+
+	// ④ 이번 스윙 상태: bHitEventReceived · bRecoveryDone · bHitWindowDone = false, HitActorsThisSwing.Reset()
+	bHatDropThisSwing = HasAuthority(&ActivationInfo) && UDRAbilitySystemLibrary::HasUpgradeFeature(
+		GetAbilitySystemComponentFromActorInfo(), FDRGameplayTags::Get().Upgrade_Feature_Skill_Bag_HatDrop);
+```
+
+`OnHitEvent` — 후딜 속도 전환 다음에 종료 타이머(클라 · 서버 모두), 판정 창은 `ActiveHitWindowDuration`:
+
+```cpp
+	// ★Plan5(가방칩)★ 끝 = 타격 + 실제 후딜 — 클라 · 서버가 같은 타이머로 끝난다(블렌드 아웃 시작이 아니다) (D-122)
+	UAbilityTask_WaitDelay* RecoveryTask = UAbilityTask_WaitDelay::WaitDelay(this, PendingRecoveryTime);
+	RecoveryTask->OnFinish.AddDynamic(this, &UDRBellBoyBasicAttack::OnRecoveryFinished);
+	RecoveryTask->ReadyForActivation();
+	// … 이하 기존: 클라는 bHitWindowDone = true / 서버는 ActiveHitWindowDuration 으로 RepeatAction
+	//     (if (ActiveHitWindowDuration <= 0.f || HitWindowSamples <= 1) 1회 판정, 아니면 RepeatAction(this, ActiveHitWindowDuration / HitWindowSamples, HitWindowSamples))
+```
+
+```cpp
+void UDRBellBoyBasicAttack::OnRecoveryFinished()
+{
+	bRecoveryDone = true;
+	TryFinishSwing();
+}
+
+void UDRBellBoyBasicAttack::OnMontageFinished()
+{
+	// ★Plan5(가방칩)★ 타격을 받은 스윙의 끝은 후딜 타이머가 정한다 (D-122) — 블렌드 아웃 시작에 끝내면 서버와 어긋난다 (T-134)
+	if (bHitEventReceived) return;
+
+	// 노티파이가 없어 타격 이벤트를 못 받았다 — 몽타주 끝으로 끝낸다. 안 그러면 영원히 안 끝난다 (Plan8 T-22 · Plan5 T-151)
+	bHitWindowDone = true;
+	bRecoveryDone = true;
+	TryFinishSwing();
+}
+// TryFinishSwing: if (bRecoveryDone && bHitWindowDone) EndAbility(…, bWasCancelled = false)
+```
+
+`OnHitSample` — 대상마다 `ApplyDamageEffect` 바로 다음에 `TryDropHatOnEnemyHit(Target);`
+
+```cpp
+void UDRBellBoyBasicAttack::TryDropHatOnEnemyHit(AActor* Target)
+{
+	// 적만 — 클렌저 사이트 · 홀로그램 두더지는 굴리지 않는다 (D-126 · T-144). 한 스윙에 대상당 1회는 HitActorsThisSwing 이 보장한다
+	if (!bHatDropThisSwing || !Cast<ADREnemy>(Target)) return;
+
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+	const FDRBagChipTuning& Tuning = UDRAbilitySystemLibrary::GetChipTuning(Avatar).Bag;
+	if (FMath::FRand() >= Tuning.HatDropChance) return;   // 적 1마리마다 10% (사용자 확정)
+
+	UClass* PickupClass = Tuning.HatPickupClass.LoadSynchronous();
+	if (!PickupClass)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[BellBoy] ChipTuning.Bag.HatPickupClass 미지정 — 가방칩② 모자가 떨어지지 않는다"));
+		return;
+	}
+
+	// 벨보이 발밑(사용자 확정) — 여러 개가 겹쳐 안 보이게 살짝 흩뿌린다
+	const FVector From = Avatar->GetActorLocation() + FVector(FMath::RandPointInCircle(Tuning.HatDropScatterRadius), 0.f);
+	// 던진 사람 = 벨보이 → 본인이 주우면 2회(Plan8 D-23), 수명 · 2회 규칙은 모자칩을 따른다 (D-128)
+	ADRBellBoyHatPickup::SpawnOnGround(GetWorld(), PickupClass, From, FMath::FRandRange(0.f, 360.f),
+		Avatar, GetAbilitySystemComponentFromActorInfo(), Avatar);
+}
+```
+
+- include: `Abilities/Tasks/AbilityTask_WaitDelay.h` · `Actor/DRBellBoyHatPickup.h` · `Character/DREnemy.h` · `Game/DRProgressionConfig.h`.
+- 클래스 주석: "칩(SkillWindup) — 첫 타만. 연속은 SkillComboWindup · SkillComboRecovery(Plan5 D-121) / 공속 M(Plan5 D-123) / 끝 = 타격 + 후딜(Plan5 D-122)". `bMontageDone` 은 지운다.
+
+**⑪ `Abilities/DRBellBoyTaunt.h / .cpp`** — 반경 · 시간 · ①
+
+- 헤더 private: `float EffectiveTauntRadius = 0.f;   // ★Plan5(도발칩)★ ② 이번 시전 반경 — OnTauntStart 에서 1회 (D-130)`.
+- `OnTauntStart`(서버, 큐 전에): `EffectiveTauntRadius = FMath::Max(0.f, GetUpgradedFloat(EDRUpgradeStat::SkillAreaRadius, TauntRadius));` → `Params.RawMagnitude = EffectiveTauntRadius`.
+- `OnScan`: `GetAliveEnemiesWithinRadius(…, EffectiveTauntRadius, …)`(진단 로그의 반경도 이 값).
+- `ApplyTauntTo`:
+
+```cpp
+	// ★Plan5(도발칩)★ ③ 적의 도발 시간만 바꾼다 — 모션 5초는 그대로 (사용자 확정 — D-131 · T-150)
+	const float Duration = FMath::Max(0.1f, GetUpgradedFloat(EDRUpgradeStat::SkillDuration, TauntDuration));
+	// ★Plan5(도발칩)★ ① 약점 노출 — 주는 피해 감소를 없애고 받는 피해를 늘린다. 배율은 스펙이 들고 다닌다 (D-129)
+	const bool bExpose = UDRAbilitySystemLibrary::HasUpgradeFeature(
+		GetAbilitySystemComponentFromActorInfo(), Tags.Upgrade_Feature_Skill_Taunt_Expose);
+	const float DamageTakenMult = bExpose
+		? 1.f + FMath::Max(0.f, UDRAbilitySystemLibrary::GetChipTuning(Enemy).Taunt.ExposeDamageTakenBonus) : 1.f;
+
+	Spec.Data->SetSetByCallerMagnitude(Tags.Data_Duration, Duration);                                         // 걸린 순간부터 5초(③ 3초)
+	Spec.Data->SetSetByCallerMagnitude(Tags.Data_MoveSpeed_Mult, TauntedMoveSpeedMultiplier);                 // ×1.1
+	Spec.Data->SetSetByCallerMagnitude(Tags.Data_Taunt_DamageMult, bExpose ? 1.f : TauntedDamageMultiplier);  // ×0.8(① 1.0)
+	Spec.Data->SetSetByCallerMagnitude(Tags.Data_Taunt_DamageTakenMult, DamageTakenMult);                     // ×1.0(① 1.15)
+```
+
+- 헤더 클래스 주석에 칩 3줄 추가. `[TauntDiag]` 임시 로그는 이 작업에서 건드리지 않는다(Plan8 E-17 정리 때).
+
+**⑫ `Abilities/DRBellBoyHatThrow.cpp`** — 공속
+
+```cpp
+	// ★Plan5(공속칩)★ 공속 배율 M — TP · FP 던지기가 같이 빨라진다(릴리스 = 모자 스폰도 1/M 시각). 버프가 없으면 1.0 (D-124)
+	const float SpeedMult = FMath::Max(0.01f, GetAttackSpeedMultiplier());
+	// CreatePlayMontageAndWaitProxy(this, NAME_None, ThrowMontage, SpeedMult)
+	// PlayFirstPersonMontage(…, FirstPersonThrowMontage, FPRate * SpeedMult)
+```
+
+**⑬ 빌드** — `UENUM` · `USTRUCT` 가 바뀐다 → **에디터를 닫고** Development Editor 빌드(T-45). 예상 변경량 ≈ +260줄 / 파일 22개(새 파일 없음).
+
+### 12.5 에디터 작업 (C++ 빌드 뒤 — 단계별 안내는 §13)
+
+| # | 에셋 | 할 일 |
+|---|---|---|
+| 1 | `GE_Cost_BellBoy_BasicAttack`(새, `…/BellBoy/Abilities/Skill1/`) | `GE_Cost_BellBoy_HatThrow` 복제(Execution `ExecCalc_WaterCost` 그대로) |
+| 2 | `GA_BellBoy_BasicAttack` | `Cost Gameplay Effect Class` = 위 GE(★없으면 물이 안 빠진다 — T-133★) |
+| 3 | `DA_ProgressionConfig` → `Chip Tuning` → `Bag` | `Hat Pickup Class` = `BP_BellBoyHatPickup`(나머지 · `Taunt` · `Hat` 은 C++ 기본값) |
+| 4 | `DA_ChipCatalog` | 칩 9개 + `SkillDisplayNames` 3줄 |
+| 5 | `DA_ChipCatalog` → `VM.Asc.SpeedShare` | `Description` 의 로봇 목록에 "벨보이는 기본 공격 · 모자 던지기" 추가(§9-90) |
+| 6 | (선택) 아이콘 9개 | `Content/DaeRuneAssets/UI/Upgrade/Icon/BellBoy/`(사용자 제작 — §9-89) |
+| 7 | (선택) `DA_StatusEffectInfo` | `Buff.AttackSpeed.Shared` 한 줄(§9-35) — 벨보이 화면에도 공속 아이콘 |
+
+★GA 그래프 · GE 구조 · 몽타주는 고치지 않는다★(칩 로직은 전부 C++). 새 GE 는 Cost GE 하나뿐.
+
+### 12.6 함정
+
+| # | 함정 | 왜 위험한가 / 어떻게 피하나 |
+|---|---|---|
+| **T-132** | `GetEffectiveWaterCostFor` 의 `WaterCost <= 0` 조기 return 을 남긴다 | 가방② `Flat +2` 가 **통째로 무시**(물 0) — 카드엔 "물 +2" 가 보이는데 검사도 못 잡는다 |
+| **T-133** | `GA_BellBoy_BasicAttack` 에 Cost GE 를 안 붙인다 | `CheckCost` 는 물 2 를 요구하는데 **물은 안 빠진다**(T-108 과 같은 꼴) → D-138 경고 로그 |
+| **T-134** | 기본 공격을 몽타주 `OnBlendOut`(끝 0.05초 전)에 끝내고 서버만 판정 창을 기다린다(지금 구조) | 서버가 늦게 끝나 클라의 다음 예측 스윙이 **거절**(InstancedPerActor — 엔진 확인). 블렌드 아웃이 후딜을 깎아 가방③ 후딜 0.05 가 0 이 된다 → D-122 |
+| **T-135** | 판정 창(0.1초)을 실제 후딜보다 길게 둔다 | 가방③(0.05) · 공속(0.067)에서 서버만 늦게 끝난다 → `min(HitWindowDuration, 실제 후딜)` |
+| **T-136** | `SkillWindup` 을 연속 선딜에도 곱한다(지금 코드) | 가방①의 연속 선딜이 0.2 × 1.375 × 1.5 = **0.41초**. 반대로 벨보이에 "선딜 −X%" 칩을 만들 땐 `SkillWindup` + `SkillComboWindup` **둘 다** |
+| **T-137** | 공속 M 을 재생 속도에만 / TP 에만 곱한다 | FP 손과 TP 몸이 어긋나고(Plan8 D-36) 판정 창 · 종료 타이머 · 잠금이 원속으로 남는다 → 시간 변수에서 한 번에 나눈다 |
+| **T-138** | 도발 받는 피해 배율을 `ExecCalc_Damage` 에 넣는다 | DoT 가 빠진다(D-10) → 적 관문 흡착 다음 |
+| **T-139** | 도발① 받는 피해를 "`Debuff.Taunted` 가 있으면 ×1.15"로 계산 | 칩 없는 벨보이의 도발에도 걸리고, 다른 벨보이가 덮어써도 남는다 → 스펙 SetByCaller(D-129) |
+| **T-140** | 모자① 아군 피해에 `DamageEffectParams.BaseDamage`(= `GetUpgradedDamage`, 45)를 그대로 쓴다 | 아군이 45(×배율)를 맞는다 → `ChipTuning.Hat.AllyHitDamage`(22)로 덮는다 |
+| **T-141** | 모자① 피해를 모자 장착 **뒤에** 건다 | 방금 씌운 모자가 그 피해를 막아 모자만 사라진다(Plan8 D-21) → 피해 먼저(사용자 확정) |
+| **T-142** | `InitThrower` 를 `FinishSpawning` 뒤에 부르거나 수명을 BeginPlay 뒤에 정한다 | `SetLifeSpan` 이 10초로 굳어 모자③이 무시된다 → `SpawnOnGround` 가 Deferred 스폰 사이에 부른다 |
+| **T-143** | 가방② 굴림을 클라에서도 한다 | 결과가 갈려 유령 모자 · 중복 스폰 → `OnHitSample`(서버 전용) 안에서만 |
+| **T-144** | 가방② 대상 판정을 `IsValidDamageTarget` 만으로 | 기본 공격은 클렌저 사이트에도 맞아(§9-13) 사이트를 때려 모자를 뽑는다 → `Cast<ADREnemy>` |
+| **T-145** | 새 축 3개를 `Count` 앞이 아닌 곳에 넣거나 `DRIsSkillStat` 에서 빠뜨린다 | 기존 칩 효과가 밀리거나(T-30) 전역 블록에 쌓여 **도발③의 −2초가 바닥 모자 수명에도** 걸린다(T-12). `ValidateCatalog` 가 잡는다 |
+| **T-146** | `SkillDuration` 을 `DRIsLowerBetter` 에 넣거나 `DRIsTimeStat` 에서 뺀다 | 도발③ −2초가 초록(장점) · 모자③ +8초가 빨강으로 / "−2" 로만 보여 단위를 모른다 |
+| **T-147** | 가방③ 피해를 Percent −0.5333 으로 | 13.99 — T-110 원리 → Flat −16 (모자③ −5 도 같다) |
+| **T-148** | 모자② 의 2회를 적에게도 준다 | 원문은 "다른 플레이어" → `Player` 태그만(D-134) |
+| **T-149** | 도발② 반경을 `OnScan` 에만 넣는다 | 외침 큐가 30m 로 그려진다 → `OnTauntStart` 에서 한 번 구해 둘 다 |
+| **T-150** | 도발③ 을 모션(몽타주 · 어빌리티 길이)에도 건다 | 사용자 확정 위반 → `Data.Duration`(적 GE)에만 |
+| **T-151** | 종료를 후딜 타이머로 바꾸며 `OnMontageFinished` 를 통째로 무시 | 노티파이가 없을 때(Plan8 T-22) 영원히 안 끝난다 → 타격 이벤트가 없었으면 몽타주 끝으로 끝낸다 |
+| **T-152** | 공속 M 을 스윙 중(타격 · 후딜 전환 때) 다시 읽는다 | 버프가 중간에 끝나면 후딜 속도가 튀고 FP 와 어긋난다 → 활성화 때 한 번(D-69 와 같은 이유) |
+| **T-153** | ★실제 빌드 오류였음★ **액터** 멤버 함수 안에서 `const FDRGameplayTags& Tags = FDRGameplayTags::Get();` | `AActor::Tags` 를 가려 C4458 — UE 는 이 경고를 오류로 처리해 빌드가 멈춘다. GA · 라이브러리 · 어트리뷰트셋에는 `Tags` 멤버가 없어 같은 관용구가 통한다 → 액터에서는 `DRTags` 처럼 다른 이름 |
+
+### 12.7 검증 (게임 내)
+
+준비: PIE Listen Server · 플레이어 2~3(벨보이 + 자판기 + 아무나), 콘솔 `DRUnlockUpgrade` → `DRUnlockSlot 6`.
+수치는 데미지 숫자 · `showdebug abilitysystem`(Water · 활성 GE), 로그 `[TauntDiag]`(반경) · `[BellBoy]` · `[Upgrade]` · `[AttackSpeedBuff]`.
+예측 거절은 콘솔 `log LogAbilitySystem Verbose` 후 `Can't activate instanced per actor ability` 줄로 본다.
+
+- [ ] **회귀(칩 없음)** 기본 공격 피해 30 · 물 0 / 첫 타 0.8초 · 연속 0.3초(10초 홀드 ≈ 31타) — **클라 벨보이도 같고 예측 거절 로그 없음**(D-122) / 시선 집중 물 60 · 30m · 5초 · 적 피해 ×0.8 / 모자 30 · 물 20 · 바닥 10초 · 본인 2회 · 아군 1회 / 다른 로봇 물 소모 그대로(정원 · 자판기 · 청소기 기본 공격 물 0) / `[Upgrade] … Cost Gameplay Effect Class 가 비어` 경고 없음
+- [ ] **가방①** 피해 45 / 첫 타 0.95초 · 연속 0.4초(10초 ≈ 23타) / FP 손과 TP 몸 동기 / 연속 중 E · RMB 잠금 0.7초
+- [ ] **가방②** 스윙마다 물 −2(물 0 이면 체력 −1, 체력 1 이면 공격 불가) / 적 적중마다 가끔 발밑에 모자 — 모자가 없으면 바로 2회짜리 착용, 있으면 바닥에 남음 / 적 3마리를 함께 치면 더 자주 / 클렌저 사이트 · 홀로그램 두더지를 때려선 안 떨어짐 / 피의 계약이면 체력 −2
+- [ ] **가방③** 피해 14 / 연속 0.15초(10초 ≈ 62타) · 첫 타 0.8초 그대로 / 연속에서도 판정 창 안의 적이 맞는다 / 넉백 · 벽꿍 스턴 체감(§9-80)
+- [ ] **도발①** 도발된 적이 받는 피해 ×1.15(물대포② 취약과 곱 ×1.725) · DoT 도 / 그 적이 벨보이 · 아군 · 사이트에 주는 피해 감소 없음 / 칩 없는 벨보이가 다시 도발하면 ×1.0 · ×0.8 로 돌아옴
+- [ ] **도발②** `[TauntDiag] … 반경 4200` / 30~42m 사이 적이 도발됨 / 물 84
+- [ ] **도발③** 물 36 / 적이 3초 뒤 풀림(4~4.5초) / 벨보이 모션은 5초 · 그동안 공격 불가
+- [ ] **모자①** 적 45 / 아군에 맞으면 22(벨보이 광폭화면 44~66) 피해 숫자 → 모자 장착 / 이미 모자 쓴 아군 → 기존 모자가 막고 새 모자 / 물 30
+- [ ] **모자②** 아군 직격 · 바닥 줍기 모두 Double(머리 모자 큐 · HUD 2회) / 적이 주우면 1회 / 물 28 · 피해 24
+- [ ] **모자③** 바닥 모자 18초 유지 / 가방②와 함께면 발밑 모자도 18초 / 피해 25
+- [ ] **공속 연동** 자판기(공속칩②) 근처 벨보이: 공유 5중첩이면 연속 0.2초 · 첫 타 0.53초 · 모자 던지기 몽타주 0.53초(연타 ≈0.38초) · FP 동기 유지 / 20m 밖 · 버프 만료 뒤 원래대로 / 스윙 중 만료돼도 튐 없음
+- [ ] **스킬당 1칩** 그룹마다 1개, 세 그룹 동시 가능 / 미리보기 라벨 "기본 공격 · 시선 집중 · 모자 던지기" / 카드 단점 색(연속 선딜 +50% 빨강 · 지속 시간 −2초 빨강 · +8초 초록)
+- [ ] **멀티** 클라 벨보이: 가방③ 연속이 끊기지 않음(예측 거절 없음) · 가방② 모자가 모든 화면에 보임 · 모자② Double 이 호스트 화면에서도 · 공속 연동이 클라 자기 화면(FP)에서도
+- [ ] **검사** `DA_ProgressionConfig` 편집 → 오류 0건(벨보이 칩 튜닝 검사 포함)
+
+전부 통과하면 §1~§11 에 흡수(§1.14~ 스펙 · §1.6 공속 표에 벨보이 2줄 · §5 튜닝 · §10 검증 정리)하고 이 절을 지운다.
+
+### 12.8 열린 결정 · 알려진 제약 (§9 번호에 이어서)
+
+| # | 내용 | 현재 판단 |
+|---|---|---|
+| **75** | 가방② + 피의 계약(⑧) = 스윙마다 체력 2 → 연속이면 초당 6.7 | 사용자 수치 그대로. 플레이 후 카탈로그 `Value` 만 |
+| **76** | 가방② 모자는 벨보이 발밑 — 이미 모자를 쓰고 있으면 바닥에 남아 붙어 싸우는 적이 주울 수 있다 | 기존 줍기 규칙(사용자 확정). 막으려면 픽업에 "플레이어 전용" 스위치 |
+| **77** | 벨보이가 청소기에 타 있으면 발밑 = 청소기 아래 바닥 → 청소기가 줍는다 | 허용 |
+| **78** | 가방② 모자 낙하 연출(소리 · 이펙트) 없음 — 픽업 스폰만 | 선택: 픽업 BP 에 스폰 사운드 |
+| **79** | ★선행 변경(D-122)★ 칩 없는 벨보이 연속 공격 클라 ≈0.25 → **0.3초**(서버 ≈0.275 → 0.3), 첫 타 0.75 → **0.8초** — 원래 설계값, 클라 · 서버 통일 | 사용자 확정. 플레이 후 GA `Combo/FirstRecoveryTime` 만 |
+| **80** | 가방③ 연속 0.15초 = 넉백(100% · 400) 초당 6.7회 → 적이 판정 반경 밖으로 밀려 실제 DPS 가 93 보다 낮을 수 있고, 벽 앞에선 벽꿍 스턴이 이어진다(Plan8 T-13) | 플레이 확인. 과하면 GA `KnockbackForceMagnitude` 또는 ③ 전용 넉백 축 |
+| **81** | 공속 ×1.5 + 가방③ = 연속 0.1초, 몽타주 최대 ×16 배속 | 연출 확인 |
+| **82** | 도발① ×1.15 는 보스(두더지 보스도 도발된다 — Plan8 E-1) · 튜토리얼 더미에도 | 그대로. 보스 제외는 `GetTauntDamageTakenMultiplier` 에 `IsBoss()` 한 줄 |
+| **83** | 도발① 상태 표시 없음 — 기존 도발 큐(`GC_BellBoy_Taunted`)만 | 선택 |
+| **84** | 도발③ — 적은 4~4.5초에 풀리고 벨보이는 5초 모션 동안 다른 스킬을 못 쓴다 | 사용자 확정 |
+| **85** | 모자① 아군 피해로 아군이 오염 · 사망할 수 있다. 광폭화 벨보이면 44~66 | 사용자 확정(배율 적용). 로비 · 튜토리얼은 체력 1 클램프 |
+| **86** | 모자① 이 이미 모자 쓴 아군을 맞히면 그 모자가 22 를 막는다(Double 이었으면 Single 로 줄고 새 모자는 바닥) | "피해 → 장착" 순서의 자연스러운 결과(Plan8 D-21) |
+| **87** | 모자② · ③ 판정은 "그 모자를 던진 벨보이"의 칩 — 벨보이 2명이면 섞여 보일 수 있다 | 그대로(D-128) |
+| **88** | `SkillDuration` 은 지금 도발 시간 · 바닥 모자 수명만 읽는다 | 다른 스킬 지속(씨앗 감속 등)에 쓰려면 그 스킬도 읽게 |
+| **89** | 칩 9종 이름 · Tier · 아이콘 · `ChipId` 가칭, 아이콘 폴더 `Upgrade/Icon/BellBoy/` 없음 | 사용자 확정 후 카탈로그만 |
+| **90** | 자판기 `VM.Asc.SpeedShare` 설명에 벨보이 문구가 없다 | 에디터(§13.4) |
+| **91** | 공속 연동은 시선 집중에 안 걸린다 | 요구 범위 밖 |
+| **92** | 탑승 중 벨보이가 던진 모자는 내가 탄 청소기에 맞을 수 있다(투사체에 탑승 연결 통과가 없다 — 공기탄은 있다) → 모자①이면 그 청소기가 22 피해 | 기존 동작(아군에게 모자를 주는 정상 동작이기도 하다). 막으려면 공기탄처럼 `RiderOnTop == 던진 사람` 통과 한 줄 |
+
+### 12.9 작업 순서
+
+1. ① 태그 → ② 축 · 판정 함수 → ③ 짧은 이름 → ④ ChipTuning · 검사
+2. ⑤ 물 계산 · Cost GE 경고 → ⑥ 라이브러리 → ⑦ 적 관문
+3. ⑧ 픽업(공용 스폰 · 칩 규칙) → ⑨ 투사체(아군 피해 · 2회 · 공용 스폰 사용)
+4. ⑩ 기본 공격(D-121 ~ D-123 · D-126) → ⑪ 도발 → ⑫ 모자 던지기 공속
+5. ⑬ 에디터를 닫고 빌드 → 칩 없이 PIE 회귀(§12.7 첫 줄 — 특히 D-122 연속 0.3초 · 예측 거절 없음)
+6. §13 에디터 작업 → 검사 → §12.7 전체 → 흡수 압축
+
+### 12.10 구현 결과 — 계획과 달라진 점
+
+**2026-10-16 C++ 구현 · 빌드 통과** — `DaeRuneEditor Win64 Development`. 고친 파일 20개(+512 / −78), 새 파일 없음.
+바뀐 파일에서 나온 새 경고 없음(`DRGameplayAbility.cpp` 의 `AbilityTags` C4996 은 원래 있던 `OnGiveAbility` 코드다).
+
+| 파일 | 한 일 |
+|---|---|
+| `DRGameplayTags.h / .cpp` | 칩 스위치 4개(`Upgrade.Feature.Skill.Bag.HatDrop` · `Taunt.Expose` · `Hat.AllyHit` · `Hat.ShareDouble`) — 다른 칩 스위치 옆 / SetByCaller `Data.Taunt.DamageTakenMult` — `Data.Taunt.DamageMult` 옆 |
+| `DRUpgradeTypes.h` | `SkillComboWindup` · `SkillComboRecovery` · `SkillDuration`(`Count` 바로 앞) + `DRIsSkillStat` 3 · `DRIsLowerBetter` 2 · `DRIsTimeStat` 1 |
+| `DRUpgradeUILibrary.cpp` | 짧은 이름 "연속 선딜" · "연속 후딜" · "지속 시간" |
+| `DRProgressionConfig.h / .cpp` | `FDRBagChipTuning` · `FDRTauntChipTuning` · `FDRHatChipTuning` → `ChipTuning.Bag / Taunt / Hat` + 검사 4줄(칩이 카탈로그에 있을 때만) |
+| `DRGameplayAbility.cpp` | 물 계산 조기 return 제거(D-125) · Cost GE 누락 경고(D-138) |
+| `DRAbilitySystemLibrary.h / .cpp` | `GetTauntDamageTakenMultiplier` + 도발 GE 찾기를 익명 함수 `FindActiveTauntEffect` 로 뽑아 `GetTauntInfo` 와 공유(동작 동일) |
+| `DREnemyAttributeSet.cpp` | 흡착 배율 다음에 도발 받는 피해 |
+| `DRBellBoyHatPickup.h / .cpp` | `SpawnOnGround`(투사체 `DropAsPickup` 에서 옮김) · `InitThrower` 칩 해석 · 수명 · 2회 |
+| `DRBellBoyHatProjectile.h / .cpp` | BeginPlay 칩 캐시 · `ApplyAllyHitDamage` · 아군 직격 2회 · `DropAsPickup` → `SpawnOnGround` |
+| `DRBellBoyBasicAttack.h / .cpp` | 축 분리 · 공속 M · 후딜 타이머 종료(`bMontageDone` → `bRecoveryDone`) · 판정 창 제한 · 잠금 ÷M · `TryDropHatOnEnemyHit` |
+| `DRBellBoyTaunt.h / .cpp` | `EffectiveTauntRadius` · 도발 시간 · 약점 노출 SetByCaller 2개 |
+| `DRBellBoyHatThrow.h / .cpp` | TP Rate = M · FP Rate × M |
+
+계획과 달라진 점
+
+1. `GetTauntDamageTakenMultiplier` 는 액터가 아니라 **`const UAbilitySystemComponent*`** 를 받는다 — 바로 위 흡착 함수 `GetAirShotDragDamageTakenMultiplier(TargetASC)` 와 같은 꼴이고, 관문이 `Props.TargetASC` 를 그대로 넘긴다(§12.4 ⑥ ⑦ 고침).
+2. 첫 빌드가 **C4458**(지역 `Tags` 가 `AActor::Tags` 를 가림)로 멈췄다 — 모자 투사체 · 픽업의 지역 이름을 `DRTags` 로 바꿔 통과. 새 함정 **T-153**.
+
+남은 것: §13 에디터 작업 → §12.7 게임 검증. 칩 없이 PIE 회귀(특히 D-122 — 벨보이 연속 0.3초 · 예측 거절 없음)부터 보는 것을 권한다.
+
+---
+
+## 13. 에디터에서 할 일 — 벨보이 칩 9종 (처음 보는 사람용)
+
+> §12.4 의 C++ 가 빌드된 뒤에 한다. 아래 **13.1 ~ 13.7** 을 순서대로 하면 칩 9개가 게임에서 동작한다. 걸리는 시간은 30~40분.
+> **블루프린트 · GE 는 고친 뒤 `Compile` → `Save`(Ctrl+S)**, 데이터 에셋은 `Save` 만.
+> 이 작업 전에도 게임은 동작한다(칩만 없을 뿐) — 중간에 멈춰도 망가지지 않는다.
+
+### 13.0 시작 전에 알아 둘 것
+
+| 용어 | 뜻 |
+|---|---|
+| 콘텐츠 브라우저 | 에디터 아래쪽 파일 창. 왼쪽 폴더 트리에서 `Content` 아래 경로를 따라 들어간다 |
+| 디테일 패널 | 에셋을 열었을 때의 속성 목록. 위쪽 **검색창**에 속성 이름을 치면 바로 찾는다 |
+| GE / GA | Gameplay Effect(규칙표 — `GE_`) / Gameplay Ability(스킬 — `GA_`) |
+| 태그 고르기 | 태그 칸을 누르면 트리가 뜬다. 검색창에 `Bag` · `Taunt` · `Hat` 처럼 일부를 치면 빨리 찾는다 |
+
+- 새 태그(`Upgrade.Feature.Skill.Bag.HatDrop` 등)와 새 스탯(스킬 연속 선딜레이 · 스킬 연속 후딜레이 · 스킬 지속 시간)은 C++ 에 들어 있어 **목록에 자동으로 보인다**.
+- 실수하면: 저장 전이면 창을 닫고 "저장 안 함", 저장 뒤면 Git 으로 그 `.uasset` 만 되돌린다.
+
+### 13.1 기본 공격에 물 소모 GE 붙이기 (가방칩② 용) ★빠뜨리면 물이 안 빠진다★
+
+**어디서**: `Content/Blueprints/AbilitySystem/Player/BellBoy/Abilities/`
+
+1. `Skill3/GE_Cost_BellBoy_HatThrow` 를 **우클릭 → Duplicate** → 이름 `GE_Cost_BellBoy_BasicAttack`.
+2. 새 GE 를 `Skill1/` 폴더로 끌어 놓고 **Move Here**.
+3. 열어서 **아무것도 바꾸지 않는다**(Executions 에 `ExecCalc_WaterCost` 하나 — 그대로). `Save`.
+4. `Skill1/GA_BellBoy_BasicAttack` 을 연다 → 디테일 검색창에 `Cost` →
+
+| 칸 | 지금 값 | 바꿀 값 |
+|---|---|---|
+| `Cost Gameplay Effect Class` | None | **`GE_Cost_BellBoy_BasicAttack`** |
+
+5. `Compile` → `Save`.
+
+> 💡 칩이 없으면 물 소모가 0 이라 이 GE 는 아무것도 하지 않는다(정상).
+> ⚠️ `Water Cost` 칸은 **0 그대로** 둔다 — 물 2 는 칩이 더한다.
+
+### 13.2 칩 튜닝에 바닥 모자 연결하기
+
+**어디서**: `Content/Blueprints/Progression/DA_ProgressionConfig` → 디테일 검색창에 `Chip Tuning`.
+
+| 칸 | 값 |
+|---|---|
+| `Chip Tuning` → `Bag` → `Hat Pickup Class` | **`BP_BellBoyHatPickup`** (`…/BellBoy/Abilities/Skill3/` 에 있다) |
+| `Bag` → `Hat Drop Chance` · `Hat Drop Scatter Radius` | 0.1 · 40 (기본값 그대로) |
+| `Taunt` → `Expose Damage Taken Bonus` | 0.15 (기본값 그대로) |
+| `Hat` → `Ally Hit Damage` | 22 (기본값 그대로) |
+
+`Save`.
+
+### 13.3 칩 카탈로그에 9개 추가하기
+
+**어디서**: `Content/Blueprints/Progression/DA_ChipCatalog`.
+
+1. `Chips` 배열 **+** 를 9번 → 맨 아래 빈 칸 9개.
+2. 아래 표대로 채운다. **표에 없는 칸은 기본값 그대로.** 공통: `Owner Class` = **Bell Boy**, `Common Chip` = ☐, `Category` = **Ascension**, `Required Slot Count` = 1.
+
+**기본 공격 3종** — `Target Ability Tag` = `Abilities.BellBoy.BasicAttack`(칩 칸과 모디파이어 칸 모두)
+
+| 칸 | ① | ② | ③ |
+|---|---|---|---|
+| `Chip Id` | `BB.Asc.BagHeavy` | `BB.Asc.BagHat` | `BB.Asc.BagQuick` |
+| `Display Name` | 철제 트렁크 | 분실물 가방 | 기내용 손가방 |
+| `Effect Summary` | 기본 공격 피해 ×1.5 | 적중마다 10% 모자 | 연속 공격 2배 빠르게 |
+| `Description` | 가방에 쇳덩이를 채워 기본 공격 피해가 1.5배(30 → 45)가 됩니다. 대신 첫 타의 선딜레이가 0.4초에서 0.55초로, 연속 공격의 선딜레이가 0.2초에서 0.3초로 늘어납니다. | 기본 공격이 적을 맞힐 때마다(적 1마리당) 10% 확률로 벨보이 발밑에 모자가 떨어집니다. 모자를 쓰고 있지 않으면 바로 주워 피해를 2번 막습니다. 대신 기본 공격이 물을 2 소모합니다(물이 없으면 체력 1). | 연속 공격의 선딜레이가 0.2초에서 0.1초로, 후딜레이가 0.1초에서 0.05초로 줄어듭니다(첫 타는 그대로). 대신 기본 공격 피해가 30에서 14로 줄어듭니다. |
+| `Required Slot Tier` | 3 | 4 | 3 |
+| `Granted Tags` | (비움) | `Upgrade.Feature.Skill.Bag.HatDrop` | (비움) |
+
+| 칩 | `Stat` | `Op` | `Value` | `Is Drawback` | `Detail Override` |
+|---|---|---|---|---|---|
+| ① | 스킬 피해량 | 곱연산 | **0.5** | ☐ | 피해 30 → 45 |
+| ① | 스킬 선딜레이 | 곱연산 | **0.375** | ☑ | 첫 타 선딜 0.4 → 0.55초 |
+| ① | 스킬 연속 선딜레이 | 곱연산 | **0.5** | ☑ | 연속 선딜 0.2 → 0.3초 |
+| ② | 스킬 물 소모량 | **합연산(절대값)** | **2** | ☑ | 물 소모 0 → 2 |
+| ③ | 스킬 연속 선딜레이 | 곱연산 | **−0.5** | ☐ | 연속 선딜 0.2 → 0.1초 |
+| ③ | 스킬 연속 후딜레이 | 곱연산 | **−0.5** | ☐ | 연속 후딜 0.1 → 0.05초 |
+| ③ | 스킬 피해량 | **합연산(절대값)** | **−16** | ☑ | 피해 30 → 14 |
+
+**시선 집중 3종** — `Target Ability Tag` = `Abilities.BellBoy.Taunt`
+
+| 칸 | ① | ② | ③ |
+|---|---|---|---|
+| `Chip Id` | `BB.Asc.TauntExpose` | `BB.Asc.TauntWide` | `BB.Asc.TauntQuick` |
+| `Display Name` | 약점 노출 | 확성기 | 짧은 호객 |
+| `Effect Summary` | 도발된 적 받는 피해 +15% | 도발 범위 42m | 물 36 · 도발 3초 |
+| `Description` | 도발된 적이 받는 모든 피해가 15% 늘어납니다. 대신 도발된 적의 공격력 감소(−20%)가 사라집니다. | 시선 집중의 범위가 30m에서 42m로 넓어집니다. 대신 물 소모가 60에서 84로 늘어납니다. | 시선 집중의 물 소모가 60에서 36으로 줄어듭니다. 대신 적이 도발되는 시간이 5초에서 3초로 줄어듭니다(도발 모션은 5초 그대로). |
+| `Required Slot Tier` | 3 | 4 | 3 |
+| `Granted Tags` | `Upgrade.Feature.Skill.Taunt.Expose` | (비움) | (비움) |
+
+| 칩 | `Stat` | `Op` | `Value` | `Is Drawback` | `Detail Override` |
+|---|---|---|---|---|---|
+| ① | (모디파이어 없음 — `Description` 이 단점을 알린다) | | | | |
+| ② | 스킬 범위 | 곱연산 | **0.4** | ☐ | 도발 범위 30 → 42m |
+| ② | 스킬 물 소모량 | 곱연산 | **0.4** | ☑ | 물 소모 60 → 84 |
+| ③ | 스킬 물 소모량 | 곱연산 | **−0.4** | ☐ | 물 소모 60 → 36 |
+| ③ | 스킬 지속 시간 | **합연산(절대값)** | **−2** | ☑ | 도발 시간 5 → 3초 |
+
+**모자 던지기 3종** — `Target Ability Tag` = `Abilities.BellBoy.HatThrow`
+
+| 칸 | ① | ② | ③ |
+|---|---|---|---|
+| `Chip Id` | `BB.Asc.HatHeavy` | `BB.Asc.HatShare` | `BB.Asc.HatLinger` |
+| `Display Name` | 강철 챙 | VIP 서비스 | 보관 서비스 |
+| `Effect Summary` | 모자 피해 45 | 모든 플레이어 모자 2회 | 바닥 모자 18초 |
+| `Description` | 모자가 적에게 주는 피해가 30에서 45로 늘어납니다. 대신 아군에게 맞으면 22의 피해를 준 뒤 모자가 씌워지고, 물 소모가 20에서 30으로 늘어납니다. | 벨보이 본인만 받던 '모자 2회' 효과를 다른 플레이어도 받습니다(직접 맞히든 바닥에서 줍든). 적은 그대로 1회입니다. 대신 물 소모가 20에서 28로 늘고, 모자 피해가 30에서 24로 줄어듭니다. | 바닥에 떨어진 모자가 10초가 아니라 18초 동안 남습니다. 대신 모자 피해가 30에서 25로 줄어듭니다. |
+| `Required Slot Tier` | 3 | 4 | 3 |
+| `Granted Tags` | `Upgrade.Feature.Skill.Hat.AllyHit` | `Upgrade.Feature.Skill.Hat.ShareDouble` | (비움) |
+
+| 칩 | `Stat` | `Op` | `Value` | `Is Drawback` | `Detail Override` |
+|---|---|---|---|---|---|
+| ① | 스킬 피해량 | 곱연산 | **0.5** | ☐ | 적 피해 30 → 45 |
+| ① | 스킬 물 소모량 | 곱연산 | **0.5** | ☑ | 물 소모 20 → 30 |
+| ② | 스킬 물 소모량 | 곱연산 | **0.4** | ☑ | 물 소모 20 → 28 |
+| ② | 스킬 피해량 | 곱연산 | **−0.2** | ☑ | 피해 30 → 24 |
+| ③ | 스킬 지속 시간 | **합연산(절대값)** | **8** | ☐ | 바닥 모자 10 → 18초 |
+| ③ | 스킬 피해량 | **합연산(절대값)** | **−5** | ☑ | 피해 30 → 25 |
+
+3. 같은 에셋 아래 **`Skill Display Names`** 에 **+** 3번:
+
+| 키 | 값 |
+|---|---|
+| `Abilities.BellBoy.BasicAttack` | 기본 공격 |
+| `Abilities.BellBoy.Taunt` | 시선 집중 |
+| `Abilities.BellBoy.HatThrow` | 모자 던지기 |
+
+4. `Icon` 은 비워도 된다(§13.5). `Save`.
+
+> ⚠️ 모디파이어마다 `Target Ability Tag` 를 칩과 **같은 태그**로 넣는다 — 비우면 벨보이의 **모든 스킬**에 퍼진다(검사가 잡는다).
+> ⚠️ `Op` 에 "합연산"이라고 적힌 줄(② 물 2 · ③ −16 · −2 · +8 · −5)을 곱연산으로 두면 수치가 완전히 달라진다(물 2 → 0, 피해 −16 → −1600%).
+> ⚠️ 시선 집중 ①은 모디파이어가 없어 `Description` 이 비면 검사 오류.
+
+### 13.4 공유 회로 설명 고치기
+
+`DA_ChipCatalog` 의 `VM.Asc.SpeedShare` → `Description` 괄호 안을
+"(정원로봇은 기본 공격·씨앗 대포, 청소기는 기본 공격, **벨보이는 기본 공격·모자 던지기**의 동작이 빨라집니다)" 로 바꾸고 `Save`.
+
+### 13.5 (선택) 아이콘
+
+`Content/DaeRuneAssets/UI/Upgrade/Icon/BellBoy/` 폴더를 만들고 9개를 넣은 뒤 각 칩 `Icon` 에 지정한다(청소기 때처럼 이름 자유).
+그 전에는 비워 둬도 검사는 통과한다.
+
+### 13.6 검사 돌리기
+
+1. `DA_ProgressionConfig` 를 열어 아무 숫자를 바꿨다 되돌리고 `Save`(또는 우클릭 → **Asset Actions → Validate Assets**).
+2. Output Log 검색창에 `ProgressionConfig` → **`검증 통과`** 가 보이면 끝.
+
+| 오류 문구(일부) | 고칠 곳 |
+|---|---|
+| `ChipTuning.Bag.HatPickupClass 가 비어 있어…` | 13.2 |
+| `…TargetAbilityTag(…)가 칩의 대상 스킬(…)과 다릅니다` / `…비어 있어 스킬당 1칩 제한을 빠져나갑니다` | 13.3 — 모디파이어 · 칩의 태그 |
+| `단점이 코드 구동인 돌파 칩은 Description 에…` | 13.3 — 시선 집중 ① |
+| `Value 가 0인 모디파이어가 있습니다` | 13.3 — 빈 줄을 지운다 |
+
+### 13.7 바로 해 보는 확인 (10분)
+
+1. 업그레이드 화면에서 벨보이에 칩을 끼운다(같은 스킬 칩은 하나만 끼워진다 — 정상). 콘솔 `DRUnlockUpgrade` → `DRUnlockSlot 6` 이 먼저 필요할 수 있다.
+2. Play(PIE) → 연습 상대(적 · 튜토리얼 더미)를 친다.
+
+| 낀 칩 | 보이면 정상 |
+|---|---|
+| (없음) | 예전과 같다 — 단, 연속 공격이 아주 조금(0.05초) 느긋해진다(§9-79) |
+| 가방 ① / ② / ③ | 45 · 첫 타가 굼뜸 / 물이 2씩 줄고 가끔 발밑에 모자 · 바로 머리에 씀 / 14 · 연속이 눈에 띄게 빠름 |
+| 시선 집중 ① / ② / ③ | 도발된 적의 피해 숫자가 15% 큼 / 물 84 · 더 먼 적까지 / 물 36 · 적이 3초 만에 풀림 |
+| 모자 ① / ② / ③ | 45 · 아군을 맞히면 22 피해 숫자 뒤 모자 / 아군 머리 모자가 2회짜리 / 바닥 모자가 18초 남음 |
+| (멀티) 자판기 공유 회로 | 자판기가 E 를 쓰면 근처 벨보이의 휘두르기 · 모자 던지기가 빨라짐 |
+
+- 물이 줄지 않으면 **13.1** 을 빠뜨린 것이다(Output Log `[Upgrade] … Cost Gameplay Effect Class 가 비어` 경고).
+- 모자가 안 떨어지면 **13.2**(`[BellBoy] ChipTuning.Bag.HatPickupClass 미지정` 경고).
+- 자세한 검증은 **§12.7**.

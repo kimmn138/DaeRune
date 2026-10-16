@@ -5,12 +5,16 @@
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_Repeat.h"
+#include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
+#include "Actor/DRBellBoyHatPickup.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Character/DREnemy.h"
 #include "DRGameplayTags.h"
 #include "DrawDebugHelpers.h"
+#include "Game/DRProgressionConfig.h"
 #include "Interaction/CombatInterface.h"
 #include "DaeRune/DRLogChannels.h"
 
@@ -57,10 +61,23 @@ void UDRBellBoyBasicAttack::ActivateAbility(const FGameplayAbilitySpecHandle Han
 		HitTime = FallbackHitTime;
 	}
 
-	// 칩(SkillWindup) — 칩이 없으면 정확히 1.0. 나중에 벨보이 칩이 생겨도 그대로 동작한다.
-	const float WindupScale = FMath::Max(0.01f, GetUpgradedFloat(EDRUpgradeStat::SkillWindup, 1.f));
-	const float WindupTime = (bCombo ? ComboWindupTime : FirstWindupTime) * WindupScale;
-	const float RecoveryTime = bCombo ? ComboRecoveryTime : FirstRecoveryTime;
+	// ★Plan5(가방칩)★ 칩 — 첫 타 선딜은 SkillWindup, 연속 선딜 · 후딜은 SkillComboWindup · SkillComboRecovery (Plan5 D-121).
+	// 첫 타와 연속의 배율이 달라(가방칩① ×1.375 / ×1.5) 축이 둘이다. 칩이 없으면 전부 정확히 1.0
+	const float WindupScale = FMath::Max(0.01f,
+		GetUpgradedFloat(bCombo ? EDRUpgradeStat::SkillComboWindup : EDRUpgradeStat::SkillWindup, 1.f));
+	const float RecoveryScale = bCombo
+		? FMath::Max(0.01f, GetUpgradedFloat(EDRUpgradeStat::SkillComboRecovery, 1.f)) : 1.f;
+
+	// ★Plan5(공속칩)★ 공속 배율 M — 실제 시간에서 한 번에 나눠 TP · FP 재생 속도 · 판정 창 · 종료 · 잠금이 같이 빨라진다.
+	// 활성화 때 한 번만 읽는다 — 스윙 중 버프가 끝나도 이 스윙은 그대로 (Plan5 D-123 · T-152). 버프가 없으면 1.0
+	const float SpeedMult = FMath::Max(0.01f, GetAttackSpeedMultiplier());
+	const float WindupTime = (bCombo ? ComboWindupTime : FirstWindupTime) * WindupScale / SpeedMult;
+	const float RecoveryTime = (bCombo ? ComboRecoveryTime : FirstRecoveryTime) * RecoveryScale / SpeedMult;
+
+	// ★Plan5(가방칩)★ 끝 = 타격 + 실제 후딜, 판정 창은 그 안에서 끝난다 —
+	// 서버만 늦게 끝나면 클라의 다음 예측 스윙이 거절된다 (Plan5 D-122 · T-134 · T-135)
+	PendingRecoveryTime = FMath::Max(0.01f, RecoveryTime);
+	ActiveHitWindowDuration = FMath::Min(HitWindowDuration, PendingRecoveryTime);
 
 	const float WindupRate = HitTime / FMath::Max(0.01f, WindupTime);                                  // 0.4/0.4=1.0 · 0.4/0.2=2.0
 	PendingRecoveryRate = FMath::Max(0.01f, Montage->GetPlayLength() - HitTime) / FMath::Max(0.01f, RecoveryTime); // 1.0 · 4.0
@@ -82,16 +99,22 @@ void UDRBellBoyBasicAttack::ActivateAbility(const FGameplayAbilitySpecHandle Han
 		FGameplayEffectSpecHandle LockSpec = MakeOutgoingGameplayEffectSpec(SkillSwitchLockEffect, GetAbilityLevel());
 		if (LockSpec.IsValid())
 		{
-			LockSpec.Data->SetSetByCallerMagnitude(FDRGameplayTags::Get().Data_Duration, WindupTime + SkillSwitchRecoveryTime);
+			// ★Plan5(공속칩)★ 전환 후딜도 공속을 받는다 — 선딜은 이미 ÷M (Plan5 D-123)
+			LockSpec.Data->SetSetByCallerMagnitude(FDRGameplayTags::Get().Data_Duration,
+				WindupTime + SkillSwitchRecoveryTime / SpeedMult);
 			ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, LockSpec);
 		}
 	}
 
 	// ── ④ 이번 스윙 상태 ──
 	bHitEventReceived = false;
-	bMontageDone = false;
+	bRecoveryDone = false;
 	bHitWindowDone = false;
 	HitActorsThisSwing.Reset();
+
+	// ★Plan5(가방칩)★ ② 모자 낙하는 서버만 굴린다 — 활성화 때 1회 해석 (Plan5 D-126 · T-143)
+	bHatDropThisSwing = HasAuthority(&ActivationInfo) && UDRAbilitySystemLibrary::HasUpgradeFeature(
+		GetAbilitySystemComponentFromActorInfo(), FDRGameplayTags::Get().Upgrade_Feature_Skill_Bag_HatDrop);
 
 	// ── ⑤ 타격 이벤트를 먼저 기다리고, 몽타주를 튼다 ──
 	UAbilityTask_WaitGameplayEvent* HitTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
@@ -118,6 +141,12 @@ void UDRBellBoyBasicAttack::OnHitEvent(FGameplayEventData Payload)
 	// ① 후딜 속도로 — 서버·소유 클라 모두 (D-4 / D-10)
 	SetSwingPlayRate(PendingRecoveryRate, PendingFirstPersonRecoveryRate);
 
+	// ★Plan5(가방칩)★ 끝 = 타격 + 실제 후딜 — 클라 · 서버가 같은 타이머로 끝난다.
+	// 몽타주 블렌드 아웃 시작(끝 0.05초 전)에 끝내면 클라만 일찍 끝나 서버가 다음 스윙을 거절한다 (Plan5 D-122 · T-134)
+	UAbilityTask_WaitDelay* RecoveryTask = UAbilityTask_WaitDelay::WaitDelay(this, PendingRecoveryTime);
+	RecoveryTask->OnFinish.AddDynamic(this, &UDRBellBoyBasicAttack::OnRecoveryFinished);
+	RecoveryTask->ReadyForActivation();
+
 	// ② 판정은 서버만. 클라는 판정 창이 없는 것으로 친다
 	if (!HasAuthority(&CurrentActivationInfo))
 	{
@@ -126,7 +155,7 @@ void UDRBellBoyBasicAttack::OnHitEvent(FGameplayEventData Payload)
 		return;
 	}
 
-	if (HitWindowDuration <= 0.f || HitWindowSamples <= 1)
+	if (ActiveHitWindowDuration <= 0.f || HitWindowSamples <= 1)
 	{
 		OnHitSample(0);   // 정원로봇 발톱과 같은 1회 판정
 		bHitWindowDone = true;
@@ -134,9 +163,11 @@ void UDRBellBoyBasicAttack::OnHitEvent(FGameplayEventData Payload)
 		return;
 	}
 
-	// 0 / 0.025 / 0.05 / 0.075 초 — AbilityTask_Repeat 는 활성화 즉시 1회를 실행한다 (엔진 확인)
+	// 판정 창 0.1초면 0 / 0.025 / 0.05 / 0.075 초 — AbilityTask_Repeat 는 활성화 즉시 1회를 실행한다 (엔진 확인).
+	// ★Plan5(가방칩)★ 창이 실제 후딜 안이라 마지막 샘플도 스윙이 끝나기 전에 나간다(가방칩③ · 공속이면 창이 줄어든다 — D-122).
+	// 간격이 한 프레임보다 짧아도 루프 타이머가 밀린 만큼 연달아 실행해 샘플이 빠지지 않는다 (엔진 확인)
 	UAbilityTask_Repeat* RepeatTask = UAbilityTask_Repeat::RepeatAction(
-		this, HitWindowDuration / HitWindowSamples, HitWindowSamples);
+		this, ActiveHitWindowDuration / HitWindowSamples, HitWindowSamples);
 	RepeatTask->OnPerformAction.AddDynamic(this, &UDRBellBoyBasicAttack::OnHitSample);
 	RepeatTask->OnFinished.AddDynamic(this, &UDRBellBoyBasicAttack::OnHitWindowFinished);
 	RepeatTask->ReadyForActivation();
@@ -167,7 +198,36 @@ void UDRBellBoyBasicAttack::OnHitSample(int32 SampleIndex)
 		HitActorsThisSwing.Add(Target);
 		// 피해 30 + 넉백(KnockbackForceMagnitude, 45° 위) — 기존 파이프라인 그대로 (D-9)
 		UDRAbilitySystemLibrary::ApplyDamageEffect(MakeDamageEffectParamsFromClassDefaults(Target));
+
+		// ★Plan5(가방칩)★ ② 적 1마리 타격마다 모자 굴림 — 한 스윙에 대상당 1회는 HitActorsThisSwing 이 보장한다 (Plan5 D-126)
+		TryDropHatOnEnemyHit(Target);
 	}
+}
+
+void UDRBellBoyBasicAttack::TryDropHatOnEnemyHit(AActor* Target)
+{
+	// 적만 — 기본 공격은 클렌저 사이트에도 맞으므로 클래스로 거른다. 홀로그램 두더지도 굴리지 않는다 (Plan5 D-126 · T-144)
+	if (!bHatDropThisSwing || !Cast<ADREnemy>(Target)) return;
+
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+	if (!Avatar) return;
+
+	const FDRBagChipTuning& Tuning = UDRAbilitySystemLibrary::GetChipTuning(Avatar).Bag;
+	if (FMath::FRand() >= Tuning.HatDropChance) return;   // 적 1마리마다 10% (사용자 확정)
+
+	UClass* PickupClass = Tuning.HatPickupClass.LoadSynchronous();
+	if (!PickupClass)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[BellBoy] ChipTuning.Bag.HatPickupClass 미지정 — 가방칩② 모자가 떨어지지 않는다"));
+		return;
+	}
+
+	// 벨보이 발밑(사용자 확정) — 한 스윙에 여러 개가 떨어져도 겹쳐 안 보이게 살짝 흩뿌린다
+	const FVector From = Avatar->GetActorLocation() + FVector(FMath::RandPointInCircle(Tuning.HatDropScatterRadius), 0.f);
+
+	// 던진 사람 = 벨보이 → 본인이 주우면 2회(Plan8 D-23). 수명 · 2회 규칙은 벨보이의 모자칩을 따른다 (Plan5 D-128)
+	ADRBellBoyHatPickup::SpawnOnGround(GetWorld(), PickupClass, From, FMath::FRandRange(0.f, 360.f),
+		Avatar, GetAbilitySystemComponentFromActorInfo(), Avatar);
 }
 
 void UDRBellBoyBasicAttack::OnHitWindowFinished(int32 ActionNumber)
@@ -176,15 +236,21 @@ void UDRBellBoyBasicAttack::OnHitWindowFinished(int32 ActionNumber)
 	TryFinishSwing();
 }
 
+void UDRBellBoyBasicAttack::OnRecoveryFinished()
+{
+	bRecoveryDone = true;
+	TryFinishSwing();
+}
+
 void UDRBellBoyBasicAttack::OnMontageFinished()
 {
-	bMontageDone = true;
+	// ★Plan5(가방칩)★ 타격을 받은 스윙의 끝은 후딜 타이머가 정한다 (Plan5 D-122) —
+	// 블렌드 아웃 시작(끝 0.05초 전)에 끝내면 클라만 일찍 끝나 서버와 어긋난다 (Plan5 T-134)
+	if (bHitEventReceived) return;
 
-	// 노티파이가 없어서 타격 이벤트를 못 받았으면 판정 창도 끝난 것으로 — 안 그러면 영원히 안 끝난다 (T-22)
-	if (!bHitEventReceived)
-	{
-		bHitWindowDone = true;
-	}
+	// 노티파이가 없어서 타격 이벤트를 못 받았다 — 몽타주 끝으로 끝낸다. 안 그러면 영원히 안 끝난다 (Plan8 T-22 · Plan5 T-151)
+	bHitWindowDone = true;
+	bRecoveryDone = true;
 	TryFinishSwing();
 }
 
@@ -197,8 +263,9 @@ void UDRBellBoyBasicAttack::OnMontageAborted()
 
 void UDRBellBoyBasicAttack::TryFinishSwing()
 {
-	// 연속 공격은 후딜(0.1초)과 판정 창(0.1초)이 거의 같이 끝난다 — 둘 다 기다려야 마지막 샘플이 잘리지 않는다
-	if (bMontageDone && bHitWindowDone)
+	// ★Plan5(가방칩)★ 후딜 타이머(타격 + 실제 후딜)와 판정 창이 둘 다 끝나야 한다 — 판정 창은 후딜 안이라
+	// 보통 후딜 타이머가 마지막이고, 클라 · 서버가 같은 시각에 끝난다 (Plan5 D-122)
+	if (bRecoveryDone && bHitWindowDone)
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 	}
