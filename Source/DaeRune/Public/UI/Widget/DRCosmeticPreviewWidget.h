@@ -10,9 +10,10 @@
 class ADRCosmeticPreviewStage;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
+class UImage;
 
 /**
- * 옷장 화면 안의 3D 캐릭터 프리뷰. (Plan.md 5.8.3 참조)
+ * 옷장 화면 안의 3D 캐릭터 프리뷰. (Plan(옷장) D-11)
  *
  * ★UMG 에 3D 메시를 직접 넣을 수 없으므로★ 맵 밖 스튜디오(ADRCosmeticPreviewStage)가 찍은
  * RenderTarget 을 머티리얼로 감싸 Image 위젯에 물린다.
@@ -20,7 +21,7 @@ class UMaterialInstanceDynamic;
  *
  * WBP 구성:
  *   WBP_CosmeticPreview (Parent: 이 클래스)
- *   └── Img_Preview  [Image]   Brush.Material = GetPreviewMaterial() (OnPreviewReady 에서 대입)
+ *   └── Img_Preview  [Image]   ★이름 고정★ — C++ 이 머티리얼을 직접 물린다 (BP 배선 불필요)
  *
  * ★루트/이미지의 Visibility 를 `Visible` 로 둘 것★ — `SelfHitTestInvisible` 이면
  * 드래그 회전 입력을 받지 못한다.
@@ -70,13 +71,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cosmetic")
 	float YawPerPixel = 0.5f;
 
-	// 머티리얼 준비 완료 (BP: Img_Preview 의 Brush 에 물린다)
+	// 머티리얼 준비 완료. Img_Preview 에는 C++ 이 이미 물렸다 — BP 는 추가 연출만.
 	UFUNCTION(BlueprintImplementableEvent, Category = "Cosmetic")
 	void OnPreviewReady(UMaterialInstanceDynamic* Material);
 
-	// 레벨에 스테이지가 없다 (BP: 프리뷰 영역 숨김 — Plan.md 15.12 폴백)
+	// 프리뷰를 쓸 수 없다 (스테이지/머티리얼/RT 없음). 이 위젯은 C++ 이 이미 접었다 — Plan(옷장) D-12
 	UFUNCTION(BlueprintImplementableEvent, Category = "Cosmetic")
 	void OnPreviewUnavailable();
+
+	// 프리뷰 그림이 그려질 이미지. ★이름 고정★
+	UPROPERTY(BlueprintReadOnly, Category = "Cosmetic|Widgets", meta = (BindWidgetOptional))
+	TObjectPtr<UImage> Img_Preview;
 
 private:
 	UPROPERTY()
@@ -85,4 +90,10 @@ private:
 	TWeakObjectPtr<ADRCosmeticPreviewStage> PreviewStage;
 
 	bool bDragging = false;
+
+	// 한 번 "쓸 수 없음"으로 판정되면 NativeConstruct 가 다시 보이게 하지 않는다
+	// (화면 NativeConstruct 와 이 위젯 NativeConstruct 의 순서가 보장되지 않는다)
+	bool bPreviewUnavailable = false;
+
+	void MarkPreviewUnavailable();
 };

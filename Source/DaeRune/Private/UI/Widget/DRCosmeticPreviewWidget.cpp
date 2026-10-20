@@ -2,6 +2,7 @@
 
 
 #include "UI/Widget/DRCosmeticPreviewWidget.h"
+#include "Components/Image.h"
 #include "Actor/DRCosmeticPreviewStage.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -19,7 +20,7 @@ void UDRCosmeticPreviewWidget::InitializePreview(EPlayerCharacterClass Character
 		// 프리뷰 영역만 접고 칸 목록은 그대로 동작한다.
 		UE_LOG(LogDR, Warning,
 			TEXT("[Cosmetic] 레벨에 ADRCosmeticPreviewStage 가 없어 3D 프리뷰를 표시하지 않습니다."));
-		OnPreviewUnavailable();
+		MarkPreviewUnavailable();
 		return;
 	}
 
@@ -36,7 +37,7 @@ void UDRCosmeticPreviewWidget::InitializePreview(EPlayerCharacterClass Character
 			TEXT("[Cosmetic] 프리뷰 머티리얼(%s) 또는 RenderTarget(%s) 이 없어 화면에 그릴 수 없습니다."),
 			PreviewMaterial ? TEXT("O") : TEXT("X"),
 			RenderTarget ? TEXT("O") : TEXT("X"));
-		OnPreviewUnavailable();
+		MarkPreviewUnavailable();
 		return;
 	}
 
@@ -44,6 +45,12 @@ void UDRCosmeticPreviewWidget::InitializePreview(EPlayerCharacterClass Character
 	if (PreviewMID)
 	{
 		PreviewMID->SetTextureParameterValue(PreviewTextureParameter, RenderTarget);
+
+		if (Img_Preview)
+		{
+			Img_Preview->SetBrushFromMaterial(PreviewMID);
+		}
+
 		OnPreviewReady(PreviewMID);
 	}
 }
@@ -69,8 +76,20 @@ void UDRCosmeticPreviewWidget::NativeConstruct()
 	Super::NativeConstruct();
 
 	// 드래그 회전을 받으려면 히트 테스트가 켜져 있어야 한다.
-	// 디자이너가 SelfHitTestInvisible 로 두는 실수를 여기서 흡수한다.
-	SetVisibility(ESlateVisibility::Visible);
+	// 디자이너가 SelfHitTestInvisible 로 두는 실수를 여기서 흡수한다. (Plan(옷장) T-8)
+	SetVisibility(bPreviewUnavailable ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	if (Img_Preview)
+	{
+		Img_Preview->SetVisibility(ESlateVisibility::Visible);
+	}
+}
+
+void UDRCosmeticPreviewWidget::MarkPreviewUnavailable()
+{
+	// 레벨에 스테이지를 안 놓았다고 옷장 기능 전체가 죽으면 안 된다 — 이 영역만 접는다 (D-12)
+	bPreviewUnavailable = true;
+	SetVisibility(ESlateVisibility::Collapsed);
+	OnPreviewUnavailable();
 }
 
 void UDRCosmeticPreviewWidget::NativeDestruct()

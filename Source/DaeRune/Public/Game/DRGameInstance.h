@@ -277,10 +277,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Progression|Reward")
 	bool IsRewardClaimed(FName RewardId) const;
 
-	// ========== 코스메틱 / 옷장 (계정 단위, 클라 권위) — Plan.md 5.1 / 15.11 ==========
+	// ========== 코스메틱 / 옷장 (계정 단위, 클라 권위) — Plan(옷장) ==========
 	//
 	// 해금 상태는 ★저장하지 않고 매번 파생★한다 (EarnedAchievements ∪ ClaimedRewards).
-	// 파생값을 저장하면 카탈로그의 해금 조건을 조정했을 때 둘이 어긋난다. (Plan.md 4.5)
+	// 파생값을 저장하면 카탈로그의 해금 조건을 조정했을 때 둘이 어긋난다. (Plan(옷장) D-2)
 
 	UFUNCTION(BlueprintPure, Category = "Cosmetic")
 	UDRCosmeticCatalog* GetCosmeticCatalog() const;
@@ -321,6 +321,10 @@ public:
 	// 이 로봇에 (잠긴 것 포함) 고를 옷이 하나라도 정의돼 있는가. 옷장 프롬프트 표시용.
 	UFUNCTION(BlueprintPure, Category = "Cosmetic")
 	bool HasAnySkinAvailable(EPlayerCharacterClass CharacterClass) const;
+
+	// 스킨 표시 이름 — 해금 토스트("새 옷 해금!") 가 OnSkinUnlocked 의 SkinId 로 부른다. 카탈로그에 없으면 빈 텍스트 (Plan(옷장) M5)
+	UFUNCTION(BlueprintPure, Category = "Cosmetic")
+	FText GetSkinDisplayName(FName SkinId) const;
 
 	// ★치트/디버그 전용★ — 업적을 임의로 달성 처리 (DebugSetUpgradeSystemUnlocked 선례)
 	UFUNCTION(BlueprintCallable, Category = "Cosmetic")

@@ -12,6 +12,14 @@ public class DaeRune : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "GameplayTags", "GameplayTasks", "Niagara", "AIModule" });
 
+		// 에디터 전용 도우미(UDRWardrobeEditorTools — WBP 위젯 트리 정리 · 속성 텍스트 임포트)와
+		// 카탈로그 저장 시 검증(GameMapsSettings 로 GameInstance 기본값을 찾는다 — EngineSettings)용.
+		// 게임 빌드(에디터 아님)에는 들어가지 않는다 — 코드도 WITH_EDITOR 로 감싸 둔다.
+		if (Target.bBuildEditor)
+		{
+			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "UMGEditor", "EngineSettings" });
+		}
+
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 		

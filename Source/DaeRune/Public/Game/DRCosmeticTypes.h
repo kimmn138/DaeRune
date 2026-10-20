@@ -13,7 +13,7 @@ class UStaticMesh;
 class UTexture2D;
 
 /**
- * 코스메틱 부위 분류. 옷장 화면의 탭 4개와 1:1 대응한다. (Plan.md 15.11 참조)
+ * 코스메틱 부위 분류. 옷장 화면의 탭 4개와 1:1 대응한다. (Plan(옷장) D-5)
  *
  * 한 로봇은 카테고리마다 하나씩, 최대 4개를 ★동시에★ 장착한다.
  * 세이브의 TMap 키가 아니라 배열 인덱스로 쓰이므로 값 자체가 직렬화된다 —
@@ -64,7 +64,7 @@ struct FDRSkinMaterialOverride
 };
 
 /**
- * 메시 1개를 캐릭터에 붙이는 명세. 3인칭/1인칭 각각 따로 지정한다. (Plan.md 15.11 참조)
+ * 메시 1개를 캐릭터에 붙이는 명세. 3인칭/1인칭 각각 따로 지정한다. (Plan(옷장) D-6)
  *
  * 부착물 컴포넌트는 ★복제하지 않는다★ — 각 머신이 복제된 EquippedSkinIds 를 보고
  * 로컬에서 만든다. 컴포넌트를 복제하면 스폰 순서/소유권 문제만 생기고 얻는 게 없다.
@@ -108,8 +108,29 @@ struct FDRSkinAttachSpec
 };
 
 /**
+ * 공용 옷의 ★로봇별 위치 덮어쓰기★ (Plan(옷장) D-32).
+ *
+ * 위치는 두 단계로 정해진다 — ① 로봇 메시의 부위 소켓(Cosmetic_Head 등)이 체형 차이를 흡수하고
+ * ② 옷마다 그 소켓에서의 상대 위치(ThirdPerson.RelativeTransform)를 갖는다.
+ * 이 구조체는 ②가 ★특정 로봇에서만★ 어긋날 때 그 로봇의 값을 대신 준다.
+ */
+USTRUCT(BlueprintType)
+struct FDRSkinAttachOverride
+{
+	GENERATED_BODY()
+
+	// 이 로봇에서 붙일 소켓/뼈. 비우면 기본(ThirdPerson.SocketName)을 쓴다
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attach")
+	FName SocketName;
+
+	// 이 로봇에서의 소켓 기준 상대 변환 — ★기본값을 대신한다★ (기본값에 더하지 않는다)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attach")
+	FTransform RelativeTransform;
+};
+
+/**
  * 스킨(코스메틱 아이템) 1종의 정의. UDRCosmeticCatalog 가 배열로 보유한다.
- * (Plan.md 4.4 / 15.11 참조)
+ * (Plan(옷장) D-5)
  *
  * 부착물과 본체 리컬러를 ★둘 다 선택★ 으로 담는다.
  * → "부착물만" / "리컬러만" / "둘 다" 스킨이 전부 같은 구조로 표현된다.
@@ -120,13 +141,25 @@ struct FDRSkinDefinition
 	GENERATED_BODY()
 
 	// 세이브에 저장되는 키. ★변경 금지★ (바꾸면 유저의 장착 상태가 사라진다).
-	// 명명 규약: "Skin.<Class>.<Category>.<Name>" 예) Skin.Gardener.Head.Cap
+	// 명명 규약: 공용 옷 "Skin.Shared.<Category>.<Name>" / 로봇 전용 "Skin.<Class>.<Category>.<Name>"
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skin")
 	FName SkinId;
 
-	// 어느 로봇의 아이템인가
+	/**
+	 * ★공용 옷★ — true 면 OwnerClass 를 무시하고 ExcludedClasses 를 뺀 ★모든 로봇★이 입을 수 있다 (Plan(옷장) D-31).
+	 * 해금도 SkinId 하나라서 ★로봇 공용★ 이다 (한 번 풀면 4종 모두). 장착은 로봇마다 따로다 (세이브가 로봇별).
+	 * 공용칩(bCommonChip)과 같은 관용구다.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skin")
+	bool bCommonSkin = false;
+
+	// 로봇 전용 옷일 때 그 로봇. bCommonSkin 이면 무시된다
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skin", meta = (EditCondition = "!bCommonSkin"))
 	EPlayerCharacterClass OwnerClass = EPlayerCharacterClass::Gardener;
+
+	// 공용 옷이지만 체형이 안 맞아 ★이 로봇들에게는 내놓지 않는다★
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skin", meta = (EditCondition = "bCommonSkin"))
+	TArray<EPlayerCharacterClass> ExcludedClasses;
 
 	// 어느 탭에 표시되는가
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skin")
@@ -141,7 +174,7 @@ struct FDRSkinDefinition
 	// ========== 해금 조건 ==========
 
 	// 필요한 업적/보상 Id. ★비어 있으면 기본 제공★ (항상 해금).
-	// SaveGame 의 EarnedAchievements ∪ ClaimedRewards 와 대조한다. (Plan.md 4.5)
+	// SaveGame 의 EarnedAchievements ∪ ClaimedRewards 와 대조한다. (Plan(옷장) D-2)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skin|Unlock")
 	TArray<FName> RequiredAchievements;
 
@@ -155,9 +188,17 @@ struct FDRSkinDefinition
 
 	// ========== 외형: 부착물 (주 경로) ==========
 
-	// 타인이 보는 3인칭 메시에 붙는다
+	/**
+	 * 타인이 보는 3인칭 메시에 붙는다.
+	 * 공용 옷은 SocketName 에 ★부위 소켓★(Cosmetic_Head / Face / Chest / Back / Tail)을 쓰고,
+	 * RelativeTransform 은 그 소켓에서의 이 옷의 위치다 — ★모든 로봇의 기본값★ (Plan(옷장) D-32).
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skin|Attach")
 	FDRSkinAttachSpec ThirdPerson;
+
+	// 특정 로봇에서만 위치를 바꿀 때 (소켓 · 상대 변환). 없는 로봇은 ThirdPerson 그대로 (Plan(옷장) D-32)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skin|Attach")
+	TMap<EPlayerCharacterClass, FDRSkinAttachOverride> ThirdPersonByClass;
 
 	// 본인이 보는 1인칭 메시에 붙는다.
 	// ★비워두는 것이 기본★ — 1인칭에서는 자기 머리 위의 모자도 꼬리도 보이지 않는다.
@@ -192,6 +233,31 @@ struct FDRSkinDefinition
 		return ThirdPerson.HasMesh() || FirstPerson.HasMesh()
 			|| BodyMaterialsTP.Num() > 0 || BodyMaterialsFP.Num() > 0 || WeaponMaterials.Num() > 0;
 	}
+
+	/**
+	 * ★이 로봇이 이 옷을 입을 수 있는가 — 모든 소속 판정의 단일 진입점★ (Plan(옷장) D-31).
+	 * OwnerClass == SomeClass 로 직접 비교하는 코드를 남기지 말 것 — 목록 · 장착 · 정화 · 서버 검증 중
+	 * 한 곳만 빠져도 "입혀지는데 다음 실행에 사라지는" 식으로 늦게 드러난다 (공용칩과 같은 교훈).
+	 */
+	bool IsUsableBy(EPlayerCharacterClass InClass) const
+	{
+		return bCommonSkin ? !ExcludedClasses.Contains(InClass) : OwnerClass == InClass;
+	}
+
+	// 이 로봇에게 쓸 3인칭 부착 명세 — 기본(ThirdPerson) 에 로봇별 덮어쓰기를 얹는다 (Plan(옷장) D-32)
+	FDRSkinAttachSpec GetThirdPersonFor(EPlayerCharacterClass InClass) const
+	{
+		FDRSkinAttachSpec Spec = ThirdPerson;
+		if (const FDRSkinAttachOverride* Override = ThirdPersonByClass.Find(InClass))
+		{
+			if (!Override->SocketName.IsNone())
+			{
+				Spec.SocketName = Override->SocketName;
+			}
+			Spec.RelativeTransform = Override->RelativeTransform;
+		}
+		return Spec;
+	}
 };
 
 /**
@@ -199,7 +265,7 @@ struct FDRSkinDefinition
  *
  * FDRClassUpgradeState::SlotChips 와 ★같은 관용구★ 를 쓴다 —
  * 고정 길이 배열 + 빈 칸은 NAME_None. 자료구조만으로 "카테고리당 최대 1개"가 보장된다.
- * (Plan.md 15.11 참조)
+ * (Plan(옷장) D-5)
  */
 USTRUCT(BlueprintType)
 struct FDRClassCosmeticState
@@ -240,7 +306,7 @@ struct FDRClassCosmeticState
 
 /**
  * 옷장 화면의 칸 1개를 그리는 데 필요한 전부. (FDRChipViewModel 의 코스메틱 버전)
- * UI 가 카탈로그와 세이브를 직접 뒤지지 않게 하기 위한 뷰모델이다. (Plan.md 15.7 참조)
+ * UI 가 카탈로그와 세이브를 직접 뒤지지 않게 하기 위한 뷰모델이다. (Plan(옷장) D-13)
  */
 USTRUCT(BlueprintType)
 struct FDRSkinViewModel

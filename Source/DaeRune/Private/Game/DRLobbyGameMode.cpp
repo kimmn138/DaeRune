@@ -716,7 +716,26 @@ void ADRLobbyGameMode::SpawnDisplayCharacter(AController* Player, EPlayerCharact
 	// 由ы뵆由ъ??댄듃 ?대룞 鍮꾪솢?깊솕
 	Display->SetReplicateMovement(false);
 
+	// 대기실에서도 입은 옷이 보이게 — 보고가 아직이면 빈 목록이고, 도착하면 RefreshDisplayCharacterSkin 이 다시 싣는다 (Plan(옷장) M5)
+	if (const ADRPlayerState* PS = Player->GetPlayerState<ADRPlayerState>())
+	{
+		Display->SetDisplaySkinIds(PS->GetEquippedSkinIds());
+	}
+
 	DisplayCharacterMap.Add(Player, Display);
+}
+
+void ADRLobbyGameMode::RefreshDisplayCharacterSkin(AController* Player)
+{
+	if (!Player) return;
+
+	const TWeakObjectPtr<ADRCharacter>* Found = DisplayCharacterMap.Find(Player);
+	if (!Found || !Found->IsValid()) return;
+
+	if (const ADRPlayerState* PS = Player->GetPlayerState<ADRPlayerState>())
+	{
+		Found->Get()->SetDisplaySkinIds(PS->GetEquippedSkinIds());
+	}
 }
 
 void ADRLobbyGameMode::UpdateDisplayCharacter(AController* Player, EPlayerCharacterClass NewClass)

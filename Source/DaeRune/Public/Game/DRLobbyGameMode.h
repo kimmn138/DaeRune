@@ -34,6 +34,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Lobby")
 	void PowerOn(class ADRPlayerController* Requester);
 
+	/**
+	 * 그 플레이어의 대기실 디스플레이 캐릭터에 PlayerState 의 옷 목록을 다시 실어 준다 (Plan(옷장) M5 · T-24).
+	 * ADRPlayerState::SetEquippedSkinIds 가 부른다 — 접속 0.5초 뒤 스폰 타이머보다 옷 보고가 늦게 와도 결국 입혀진다.
+	 * 디스플레이 캐릭터가 없으면(FreeRoam 등) 아무 일도 없다.
+	 */
+	void RefreshDisplayCharacterSkin(AController* Player);
+
 	// 플레이어 준비 상태 설정 (클라이언트 요청 처리, 서버 전용)
 	UFUNCTION(BlueprintCallable, Category = "Lobby")
 	void SetPlayerReady(class ADRPlayerController* Player, bool bReady);

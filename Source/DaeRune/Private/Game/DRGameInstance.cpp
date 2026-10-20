@@ -1535,10 +1535,10 @@ FDRStageRewardResult UDRGameInstance::ApplyStageReward(const FDRStageRewardRepor
 
 		// ★해금 원장은 재화 지급 여부와 무관하게 항상 기록한다★
 		// 아래 중복 방지 continue 보다 ★반드시 앞★ 이어야 한다 —
-		// 뒤에 두면 이미 재화를 받은 업적이 코스메틱 해금 판정에서 누락된다. (Plan.md 4.5 / 5.1)
+		// 뒤에 두면 이미 재화를 받은 업적이 코스메틱 해금 판정에서 누락된다. (Plan(옷장) D-3 · T-2)
 		Save->EarnedAchievements.AddUnique(AchievementId);
 
-		// 스팀 미러링 큐. 연동(Plan.md M6) 전까지는 쌓아두기만 한다.
+		// 스팀 미러링 큐. 연동(Plan(옷장) M6) 전까지는 쌓아두기만 한다.
 		if (!Def->SteamApiName.IsEmpty())
 		{
 			Save->PendingSteamAchievements.AddUnique(AchievementId);
@@ -1618,7 +1618,7 @@ void UDRGameInstance::ClearPlayerClassSelections()
 	PlayerClassSelections.Empty();
 }
 
-// ========================= 코스메틱 / 옷장 (Plan.md 5.1 / 15.11) =========================
+// ========================= 코스메틱 / 옷장 (Plan(옷장)) =========================
 
 UDRCosmeticCatalog* UDRGameInstance::GetCosmeticCatalog() const
 {
@@ -1730,7 +1730,7 @@ bool UDRGameInstance::EquipSkin(EPlayerCharacterClass CharacterClass, EDRCosmeti
 			return false;
 		}
 
-		if (Def->OwnerClass != CharacterClass || Def->Category != Category) return false;
+		if (!Def->IsUsableBy(CharacterClass) || Def->Category != Category) return false;	// Plan(옷장) D-31
 		if (!IsSkinUnlocked(SkinId)) return false;
 	}
 
@@ -1830,9 +1830,15 @@ bool UDRGameInstance::HasAnySkinAvailable(EPlayerCharacterClass CharacterClass) 
 
 	for (const FDRSkinDefinition& Skin : Catalog->Skins)
 	{
-		if (!Skin.SkinId.IsNone() && Skin.OwnerClass == CharacterClass) return true;
+		if (!Skin.SkinId.IsNone() && Skin.IsUsableBy(CharacterClass)) return true;
 	}
 	return false;
+}
+
+FText UDRGameInstance::GetSkinDisplayName(FName SkinId) const
+{
+	const FDRSkinDefinition* Def = FindSkinDef(SkinId);
+	return Def ? Def->DisplayName : FText::GetEmpty();
 }
 
 bool UDRGameInstance::SanitizeCosmeticState(EPlayerCharacterClass CharacterClass,

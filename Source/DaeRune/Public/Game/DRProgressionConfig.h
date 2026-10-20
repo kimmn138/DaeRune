@@ -775,7 +775,7 @@ struct FDRAchievementDef
 	 * 비워두면 ★스팀 미러링 대상이 아니다★ (로컬 전용 업적).
 	 *
 	 * 파트너 사이트 등록은 출시 후 삭제가 비가역이라 마지막에 몰아서 한다 — 그전까지는
-	 * 이 칸을 비워둔 채 게임 안 업적만 자유롭게 늘려도 된다. (Plan.md 8.1)
+	 * 이 칸을 비워둔 채 게임 안 업적만 자유롭게 늘려도 된다. (Plan(옷장) D-20)
 	 * 영숫자와 '_' 만 사용 (공백/한글 불가).
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Achievement|Steam")
@@ -898,6 +898,16 @@ public:
 	// 총 획득 >= 총 필요 인지 검사. 콘텐츠 작업 후 1회 실행할 것. (Plan2.md 5.4)
 	UFUNCTION(BlueprintCallable, Category = "Progression|Budget")
 	bool ValidateCurrencyBudget(TArray<FString>& OutErrors) const;
+
+	/**
+	 * 업적 · 스팀 키 · 옷 해금 조건의 정합성 (Plan(옷장) D-29). 문제가 없으면 true.
+	 *  - SteamApiName: 영문 · 숫자 · '_' 만, 중복 금지 (두 업적이 같은 키면 하나가 조용히 덮인다 — 실 AppId 빌드에서야 드러난다)
+	 *  - CosmeticCatalog 옷의 RequiredAchievements 가 실재하는가: 업적 Id 이거나 StageClear.<StageRewards 의 StageId>
+	 *    (오타면 그 옷은 영원히 잠긴다)
+	 * 이 에셋을 고칠 때와 카탈로그를 고칠 때 둘 다 자동으로 돈다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Progression|Validation")
+	bool ValidateAchievements(TArray<FString>& OutErrors) const;
 
 #if WITH_EDITOR
 	// 에셋을 편집할 때마다 예산/카탈로그 정합성을 자동 검사해 로그로 알린다.

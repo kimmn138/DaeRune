@@ -3,12 +3,16 @@
 
 #include "UI/Widget/DRWardrobeScreenWidget.h"
 #include "UI/Widget/DRWardrobeTabWidget.h"
+#include "UI/Widget/DRWardrobeSlotWidget.h"
 #include "UI/Widget/DRCosmeticPreviewWidget.h"
 #include "Game/DRGameInstance.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/PanelWidget.h"	// FindOwnerScreen 이 GetParent() 반환형(UPanelWidget)을 업캐스트한다
+#include "Components/UniformGridPanel.h"
+#include "Components/UniformGridSlot.h"
+#include "Components/Button.h"
 #include "DaeRune/DRLogChannels.h"
 
 EPlayerCharacterClass UDRWardrobeScreenWidget::GetViewedClass() const
@@ -81,7 +85,41 @@ void UDRWardrobeScreenWidget::RequestClose()
 void UDRWardrobeScreenWidget::RefreshAll()
 {
 	UpdateTabSelection();
+	RebuildSlotGrid();
 	OnRefreshSkins();
+}
+
+void UDRWardrobeScreenWidget::RebuildSlotGrid()
+{
+	if (!UniformGridPanel_Slots || !SlotWidgetClass) return;
+
+	UniformGridPanel_Slots->ClearChildren();
+
+	TArray<FDRSkinViewModel> ViewModels;
+	GetCurrentSkinViewModels(ViewModels);
+
+	const int32 Columns = FMath::Max(1, SlotColumns);
+	for (int32 Index = 0; Index < ViewModels.Num(); ++Index)
+	{
+		// 화면을 소유자로 만들면 칸의 Outer 가 이 화면의 WidgetTree 가 되어 FindOwnerScreen 이 바로 찾는다
+		UDRWardrobeSlotWidget* SlotWidget = CreateWidget<UDRWardrobeSlotWidget>(this, SlotWidgetClass);
+		if (!SlotWidget) continue;
+
+		// ★데이터는 SetSkinViewModel 로만 넣는다★ — C++ ViewModel 이 비면 클릭이 "기본"을 장착한다 (T-20)
+		SlotWidget->SetSkinViewModel(ViewModels[Index]);
+
+		// 행/열을 직접 지정해 패딩을 바꿔도 열 수가 바뀌지 않게 한다
+		if (UUniformGridSlot* GridSlot = UniformGridPanel_Slots->AddChildToUniformGrid(SlotWidget, Index / Columns, Index % Columns))
+		{
+			GridSlot->SetHorizontalAlignment(HAlign_Left);	// Fill 이면 칸이 늘어난다
+			GridSlot->SetVerticalAlignment(VAlign_Top);
+		}
+	}
+}
+
+void UDRWardrobeScreenWidget::HandleClearAllClicked()
+{
+	ClearAll();
 }
 
 void UDRWardrobeScreenWidget::GetCurrentSkinViewModels(TArray<FDRSkinViewModel>& OutViewModels) const
@@ -163,6 +201,11 @@ void UDRWardrobeScreenWidget::NativeConstruct()
 	SetIsFocusable(true);
 	SetKeyboardFocus();
 
+	if (Btn_ClearAll)
+	{
+		Btn_ClearAll->OnClicked.AddUniqueDynamic(this, &UDRWardrobeScreenWidget::HandleClearAllClicked);
+	}
+
 	CurrentCategory = DRIsValidCosmeticCategory(DefaultCategory)
 		? DefaultCategory
 		: EDRCosmeticCategory::Head;
@@ -181,7 +224,7 @@ void UDRWardrobeScreenWidget::NativeConstruct()
 	RefreshAll();
 	OnCategoryChanged(CurrentCategory);
 
-	// 3D 프리뷰 기동 — 스테이지가 없으면 프리뷰 위젯이 스스로 접힌다 (Plan.md 5.8.2 폴백)
+	// 3D 프리뷰 기동 — 스테이지가 없으면 프리뷰 위젯이 스스로 접힌다 (Plan(옷장) D-12)
 	if (Preview_Character)
 	{
 		const UDRGameInstance* GI = GetProgression();
@@ -203,6 +246,11 @@ void UDRWardrobeScreenWidget::SyncPreview()
 
 void UDRWardrobeScreenWidget::NativeDestruct()
 {
+	if (Btn_ClearAll)
+	{
+		Btn_ClearAll->OnClicked.RemoveDynamic(this, &UDRWardrobeScreenWidget::HandleClearAllClicked);
+	}
+
 	// GameInstance 는 레벨 전환에도 살아남는다. 해제하지 않으면 죽은 위젯이 델리게이트에 남는다.
 	if (UDRGameInstance* GI = GetProgression())
 	{
@@ -217,7 +265,7 @@ FReply UDRWardrobeScreenWidget::NativeOnKeyDown(const FGeometry& InGeometry, con
 {
 	const FKey PressedKey = InKeyEvent.GetKey();
 
-	// 다른 창들과 동일하게 키 입력으로 닫는다 (마우스 전용 닫기 버튼은 두지 않는다 — Plan.md 15.9)
+	// 다른 창들과 동일하게 키 입력으로 닫는다 (마우스 전용 닫기 버튼은 두지 않는다 — Plan(옷장) D-16)
 	if (PressedKey == EKeys::Escape)
 	{
 		RequestClose();
@@ -239,6 +287,7 @@ void UDRWardrobeScreenWidget::HandleCosmeticsChanged(EPlayerCharacterClass Chara
 	// 다른 로봇의 변경은 이 화면과 무관하다
 	if (CharacterClass != GetViewedClass()) return;
 
+	RebuildSlotGrid();
 	OnRefreshSkins();
 
 	// ★장착이 바뀌는 모든 경로(칸 클릭 / Clear All / 치트)가 여기를 지나므로
@@ -249,6 +298,7 @@ void UDRWardrobeScreenWidget::HandleCosmeticsChanged(EPlayerCharacterClass Chara
 void UDRWardrobeScreenWidget::HandleSkinUnlocked(FName SkinId)
 {
 	// 해금은 목록의 잠금 표시를 바꾸므로 다시 그린다
+	RebuildSlotGrid();
 	OnRefreshSkins();
 	OnSkinNewlyUnlocked(SkinId);
 }
