@@ -47,6 +47,7 @@ void ADRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(ADRPlayerState, bIsReady);
     DOREPLIFETIME(ADRPlayerState, bIsHost);
     DOREPLIFETIME(ADRPlayerState, EquippedChips);
+    DOREPLIFETIME(ADRPlayerState, EquippedSkinIds);
     DOREPLIFETIME(ADRPlayerState, StageKillCount);
 }
 
@@ -70,6 +71,9 @@ void ADRPlayerState::CopyProperties(APlayerState* PlayerState)
 		// 로비↔스테이지 이동 시 장착 칩을 보존한다 (스폰 시점에 이미 알고 있어야 하므로)
 		DRPS->EquippedChips = EquippedChips;
 		DRPS->RebuildUpgradeRuntime();
+
+		// ★입은 채로 스테이지★ — 새 폰의 PossessedBy 가 이 목록을 끌어가 입힌다 (Plan(옷장) M3)
+		DRPS->EquippedSkinIds = EquippedSkinIds;
 
 		// StageKillCount 는 스테이지 한정 값이라 복사하지 않는다
 	}
@@ -104,6 +108,9 @@ void ADRPlayerState::BeginPlay()
 
     // 복제로 이미 도착한 장착 목록이 있으면 캐시를 만든다 (OnRep 이 BeginPlay 보다 앞설 수 있음)
     RebuildUpgradeRuntime();
+
+    // 옷도 같은 이유로 한 번 더 (폰이 이미 붙어 있는 경우)
+    RefreshCosmeticVisuals();
 
     // 최초 보고는 PlayerController 쪽(OnRep_PlayerState / OnLevelEntered)이 담당한다.
     // PlayerState 가 먼저 도착하고 컨트롤러 연결이 늦는 순서를 그쪽이 흡수한다. (Plan2.md 7.1)
@@ -171,6 +178,55 @@ void ADRPlayerState::ReportUpgradeLoadoutIfLocal()
         if (DRPC->PlayerState != this) continue;
 
         DRPC->ReportUpgradeLoadout();
+        return;
+    }
+}
+
+// ========================= 코스메틱 (Plan(옷장) M3 · D-26) =========================
+
+void ADRPlayerState::SetEquippedSkinIds(const TArray<FName>& InSkinIds)
+{
+    if (!HasAuthority()) return;
+
+    EquippedSkinIds = InSkinIds;
+
+    // ★리슨 서버 호스트에서는 RepNotify 가 불리지 않는다★ — 서버에서 직접 입힌다 (Plan(옷장) T-23)
+    RefreshCosmeticVisuals();
+
+    // 대기실 디스플레이 캐릭터는 PlayerState 가 없어 위 경로를 못 탄다 — 로비면 다시 실어 준다 (Plan(옷장) M5 · T-24)
+    if (ADRLobbyGameMode* LobbyGM = GetWorld() ? GetWorld()->GetAuthGameMode<ADRLobbyGameMode>() : nullptr)
+    {
+        LobbyGM->RefreshDisplayCharacterSkin(Cast<AController>(GetOwner()));
+    }
+}
+
+void ADRPlayerState::OnRep_EquippedSkinIds()
+{
+    RefreshCosmeticVisuals();
+}
+
+void ADRPlayerState::RefreshCosmeticVisuals()
+{
+    // 프리뷰 · 대기실 캐릭터는 PlayerState 가 없어 이 경로를 타지 않는다 — 인게임 폰 전용
+    if (ADRCharacter* DRCharacter = Cast<ADRCharacter>(GetPawn()))
+    {
+        DRCharacter->ApplyCosmeticSkins(EquippedSkinIds);
+    }
+}
+
+void ADRPlayerState::ReportCosmeticIfLocal()
+{
+    // ReportUpgradeLoadoutIfLocal 과 같은 탐색 — Owner 포인터는 클라에서 늦게 복제될 수 있어 쓰지 않는다
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+    {
+        ADRPlayerController* DRPC = Cast<ADRPlayerController>(It->Get());
+        if (!DRPC || !DRPC->IsLocalController()) continue;
+        if (DRPC->PlayerState != this) continue;
+
+        DRPC->ReportCosmeticLoadout();
         return;
     }
 }
@@ -504,6 +560,10 @@ void ADRPlayerState::SetSelectedPlayerClass(EPlayerCharacterClass NewClass)
 	EquippedChips.Reset();
 	RebuildUpgradeRuntime();
 
+	// 옷도 같다 — 자판기 옷을 청소기가 입는 사고 방지 (Plan(옷장) M3)
+	EquippedSkinIds.Reset();
+	RefreshCosmeticVisuals();
+
 	OnPlayerClassChanged.Broadcast(this, SelectedPlayerClass);
 
 	// 로비 대기실에서만 폰 교체 실행
@@ -516,6 +576,10 @@ void ADRPlayerState::SetSelectedPlayerClass(EPlayerCharacterClass NewClass)
 			LobbyGM->RespawnPlayerWithClass(DRPC, NewClass);
 		}
 	}
+
+	// ★리슨 서버 호스트★ 는 OnRep_SelectedPlayerClass 가 불리지 않아 새 로봇의 옷을 보고할 기회가 없다 —
+	// 여기서 바로 보고한다. 원격 클라이언트의 PlayerState 면 이 머신에 그 컨트롤러가 없어 아무 일도 없다.
+	ReportCosmeticIfLocal();
 }
 
 void ADRPlayerState::OnRep_SelectedPlayerClass()
@@ -525,6 +589,7 @@ void ADRPlayerState::OnRep_SelectedPlayerClass()
 
 	// 소유 클라이언트: 새 클래스의 장착 목록을 서버에 보고
 	ReportUpgradeLoadoutIfLocal();
+	ReportCosmeticIfLocal();
 
 	OnPlayerClassChanged.Broadcast(this, SelectedPlayerClass);
 }

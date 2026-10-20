@@ -135,6 +135,15 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Upgrade")
 	FOnUpgradeRuntimeChangedSignature OnUpgradeRuntimeChanged;
 
+	// ========== 코스메틱 (Plan(옷장) M3 · D-26) ==========
+
+	// 이 플레이어가 입고 있는 옷 (인덱스 = EDRCosmeticCategory). 클라이언트 신고 → 서버 정화 → 복제 — 칩과 같은 경로
+	UFUNCTION(BlueprintPure, Category = "Cosmetic")
+	const TArray<FName>& GetEquippedSkinIds() const { return EquippedSkinIds; }
+
+	// 서버 전용: 정화된 목록(길이 = 카테고리 수)을 싣고 폰에 바로 입힌다
+	void SetEquippedSkinIds(const TArray<FName>& InSkinIds);
+
 	// ========== 스테이지 처치 수 (업적 판정 / 결과창 표시) ==========
 
 	UFUNCTION(BlueprintPure, Category = "Stage")
@@ -183,6 +192,10 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_EquippedChips, BlueprintReadOnly, Category = "Upgrade")
 	TArray<FName> EquippedChips;
 
+	// 입고 있는 옷 (인덱스 = EDRCosmeticCategory). 남에게 필요한 건 "지금 입은 4벌"뿐이라 이것만 복제한다 (Plan(옷장) D-6)
+	UPROPERTY(ReplicatedUsing = OnRep_EquippedSkinIds, BlueprintReadOnly, Category = "Cosmetic")
+	TArray<FName> EquippedSkinIds;
+
 	// 이번 스테이지 처치 수 (스테이지 한정 값 — Seamless Travel 시 복사하지 않는다)
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Stage")
 	int32 StageKillCount = 0;
@@ -193,6 +206,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_EquippedChips();
+
+	UFUNCTION()
+	void OnRep_EquippedSkinIds();
 
 	UFUNCTION()
 	void OnRep_IsCorrupted();
@@ -214,6 +230,13 @@ protected:
 
 	// 소유 클라이언트에서만: 현재 선택 클래스의 장착 목록을 서버에 보고
 	void ReportUpgradeLoadoutIfLocal();
+
+	// 입고 있는 옷을 폰에 반영한다. 폰이 아직 없으면 아무것도 안 한다 —
+	// 폰이 나중에 오면 ADRCharacter::PossessedBy / OnRep_PlayerState 가 여기서 끌어간다 (Plan(옷장) M3)
+	void RefreshCosmeticVisuals();
+
+	// 이 머신의 로컬 컨트롤러가 나를 소유하면: 현재 선택 클래스의 옷 목록을 서버에 보고
+	void ReportCosmeticIfLocal();
 
 private:
 	// 장착 칩을 펼친 수치 캐시 (복제 안 함 — 서버/각 클라가 각자 구축)

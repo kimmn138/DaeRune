@@ -3,6 +3,7 @@
 
 #include "Game/DRProgressionConfig.h"
 #include "Game/DRChipCatalog.h"
+#include "Game/DRCosmeticCatalog.h"
 #include "DaeRune/DRLogChannels.h"
 // Plan5(공속칩) — 공속 버프 칩 GE 검사
 #include "DRGameplayTags.h"
@@ -111,6 +112,70 @@ int32 UDRProgressionConfig::GetTotalSlotUnlockCost() const
 	// 로봇 수는 하드코딩하지 않는다 — 클래스 추가에 자동 대응
 	const int32 ClassCount = static_cast<int32>(EPlayerCharacterClass::Count);
 	return GetSlotUnlockCostForClass() * ClassCount;
+}
+
+bool UDRProgressionConfig::ValidateAchievements(TArray<FString>& OutErrors) const
+{
+	OutErrors.Reset();
+
+	// 스팀 API 이름 — 영문 · 숫자 · '_' 만 (파트너 사이트 규칙), 중복 금지
+	TMap<FString, FName> SteamNameOwners;
+	for (const FDRAchievementDef& Def : Achievements)
+	{
+		if (Def.SteamApiName.IsEmpty()) continue;	// 로컬 전용 업적 (Plan(옷장) D-20)
+
+		for (const TCHAR Ch : Def.SteamApiName)
+		{
+			const bool bAllowed = (Ch >= TEXT('A') && Ch <= TEXT('Z')) || (Ch >= TEXT('a') && Ch <= TEXT('z'))
+				|| (Ch >= TEXT('0') && Ch <= TEXT('9')) || Ch == TEXT('_');
+			if (!bAllowed)
+			{
+				OutErrors.Add(FString::Printf(TEXT("[%s] SteamApiName '%s' 에 쓸 수 없는 문자가 있습니다 — 영문 · 숫자 · '_' 만"),
+					*Def.AchievementId.ToString(), *Def.SteamApiName));
+				break;
+			}
+		}
+
+		if (const FName* Owner = SteamNameOwners.Find(Def.SteamApiName))
+		{
+			OutErrors.Add(FString::Printf(TEXT("SteamApiName '%s' 가 %s 와 %s 에 겹칩니다 — 한쪽이 조용히 덮입니다"),
+				*Def.SteamApiName, *Owner->ToString(), *Def.AchievementId.ToString()));
+		}
+		else
+		{
+			SteamNameOwners.Add(Def.SteamApiName, Def.AchievementId);
+		}
+	}
+
+	// 옷 해금 조건이 실재하는가 — IsSkinUnlocked 는 EarnedAchievements ∪ ClaimedRewards 를 보므로
+	// 유효한 키는 "업적 Id" 와 "StageClear.<StageId>" 두 종류뿐이다
+	if (CosmeticCatalog)
+	{
+		TSet<FName> ValidIds;
+		for (const FDRAchievementDef& Def : Achievements)
+		{
+			if (!Def.AchievementId.IsNone()) ValidIds.Add(Def.AchievementId);
+		}
+		for (const FDRStageRewardDef& Def : StageRewards)
+		{
+			if (!Def.StageId.IsNone()) ValidIds.Add(MakeStageClearRewardId(Def.StageId));
+		}
+
+		for (const FDRSkinDefinition& Skin : CosmeticCatalog->Skins)
+		{
+			for (const FName& Required : Skin.RequiredAchievements)
+			{
+				if (!ValidIds.Contains(Required))
+				{
+					OutErrors.Add(FString::Printf(
+						TEXT("[%s] 해금 조건 '%s' 가 업적에도 스테이지 클리어(StageClear.<StageId>)에도 없습니다 — 영원히 잠깁니다"),
+						*Skin.SkinId.ToString(), *Required.ToString()));
+				}
+			}
+		}
+	}
+
+	return OutErrors.Num() == 0;
 }
 
 bool UDRProgressionConfig::ValidateCurrencyBudget(TArray<FString>& OutErrors) const
@@ -514,6 +579,11 @@ void UDRProgressionConfig::PostEditChangeProperty(FPropertyChangedEvent& Propert
 	// 편집 즉시 검증 — 재화 예산 미달/칩 정합성 오류를 로그로 알린다.
 	TArray<FString> Errors;
 	ValidateCurrencyBudget(Errors);
+
+	// 업적 · 스팀 키 · 옷 해금 조건 (Plan(옷장) D-29)
+	TArray<FString> AchievementErrors;
+	ValidateAchievements(AchievementErrors);
+	Errors.Append(AchievementErrors);
 
 	for (const FString& Error : Errors)
 	{

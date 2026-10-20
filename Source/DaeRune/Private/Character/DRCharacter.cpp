@@ -142,6 +142,7 @@ void ADRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ADRCharacter, bIsCarryingPart);
 	DOREPLIFETIME(ADRCharacter, CarriedPart);
 	DOREPLIFETIME(ADRCharacter, PlayerCharacterClass);
+	DOREPLIFETIME(ADRCharacter, DisplaySkinIds);	// 대기실 디스플레이 전용 (Plan(옷장) M5)
 
 	// 탑승 시스템 (라이더 측)
 	DOREPLIFETIME(ADRCharacter, MountedOn);
@@ -311,6 +312,9 @@ void ADRCharacter::PossessedBy(AController* NewController)
 			DRPC->bAutoManageActiveCameraTarget = false;
 		}
 	}
+
+	// 입고 있는 옷 — PlayerState 가 폰보다 먼저 와 있던 경우의 치유 경로 (서버 · 리슨 호스트, Plan(옷장) M3)
+	ApplyCosmeticsFromPlayerState();
 }
 
 void ADRCharacter::OnRep_PlayerState()
@@ -320,6 +324,30 @@ void ADRCharacter::OnRep_PlayerState()
 	// 클라이언트에서 GAS 초기화
 	InitAbilityActorInfo();
 	InitializeMoveSpeedBinding();
+
+	// 클라이언트 쪽 같은 치유 경로 — 다른 플레이어의 폰도 여기로 온다 (Plan(옷장) M3)
+	ApplyCosmeticsFromPlayerState();
+}
+
+void ADRCharacter::ApplyCosmeticsFromPlayerState()
+{
+	if (const ADRPlayerState* DRPS = GetPlayerState<ADRPlayerState>())
+	{
+		ApplyCosmeticSkins(DRPS->GetEquippedSkinIds());
+	}
+}
+
+void ADRCharacter::SetDisplaySkinIds(const TArray<FName>& InSkinIds)
+{
+	if (!HasAuthority()) return;
+
+	DisplaySkinIds = InSkinIds;
+	ApplyCosmeticSkins(DisplaySkinIds);	// 리슨 호스트 화면 (Plan(옷장) T-23)
+}
+
+void ADRCharacter::OnRep_DisplaySkinIds()
+{
+	ApplyCosmeticSkins(DisplaySkinIds);
 }
 
 void ADRCharacter::OnRep_Stunned()
@@ -1222,6 +1250,10 @@ void ADRCharacter::MulticastHandleDeath_Implementation(const FVector& DeathImpul
 		DeathMontageIndex = FMath::RandRange(0, DeathMontages.Num() - 1);
 	}
 
+	// 옷(부착물)은 녹지 않으므로 숨긴다 — Super 의 시점 전환이 Sync 를 다시 돌려도 꺼진 채로 남는다 (Plan(옷장) T-3)
+	bCosmeticHiddenForDeath = true;
+	SyncCosmeticVisibility();
+
 	// 베이스 본체 실행:
 	//  - bDead = true
 	//  - 충돌/이동/물리/Dissolve/표정/디버프 정리
@@ -1310,7 +1342,9 @@ void ADRCharacter::MulticastHandleRevive_Implementation()
 	// ★코스메틱 재적용 — 반드시 필요하다★
 	// ADRCharacterBase::Dissolve() 가 사망 시 본체/무기의 머티리얼 슬롯 0 을 Dissolve 머티리얼로
 	// 덮어쓰는데, 부활 복원은 BP(K2_OnCharacterRevived)가 "Dissolve 파라미터"만 되돌린다.
-	// 여기서 다시 입히지 않으면 부활할 때마다 옷이 기본 외형으로 돌아간다. (Plan.md 1.7 / 15.11)
+	// 여기서 다시 입히지 않으면 부활할 때마다 옷이 기본 외형으로 돌아간다. (Plan(옷장) T-3)
+	// 사망 때 숨긴 부착물도 이 재생성으로 다시 보인다 — 플래그를 먼저 풀어야 한다.
+	bCosmeticHiddenForDeath = false;
 	RefreshSkinVisuals();
 }
 
@@ -1321,6 +1355,14 @@ void ADRCharacter::OnRep_Dead()
 	if (bDead)
 	{
 		PlayDeathMontage_Internal();
+	}
+
+	// 늦게 들어온 클라이언트는 사망/부활 멀티캐스트를 못 받는다 — 복제된 bDead 로도 옷 숨김을 맞춘다 (Plan(옷장) T-3).
+	// ★양방향★ — 부활 멀티캐스트보다 늦게 도착한 옛 값(true)이 숨겨도 다음 복제(false)가 다시 켠다.
+	if (bCosmeticHiddenForDeath != bDead)
+	{
+		bCosmeticHiddenForDeath = bDead;
+		SyncCosmeticVisibility();
 	}
 }
 
@@ -1357,7 +1399,7 @@ void ADRCharacter::PlayDeathMontage_Internal()
 	}
 }
 
-// ========================= 코스메틱 외형 (Plan.md 5.4 / 15.11) =========================
+// ========================= 코스메틱 외형 (Plan(옷장) D-6 · D-7) =========================
 
 namespace
 {
@@ -1481,6 +1523,9 @@ void ADRCharacter::BuildCosmeticVisuals()
 	CosmeticAttachTP.SetNum(CategoryCount);
 	CosmeticAttachFP.SetNum(CategoryCount);
 
+	// 공용 옷의 로봇별 위치를 고를 기준 (Plan(옷장) D-32)
+	const EPlayerCharacterClass CosmeticClass = ResolveCosmeticClass();
+
 	// 2) Head → Face → Body → Tail 순으로 겹쳐 적용한다.
 	//    같은 머티리얼 슬롯을 두 카테고리가 건드리면 ★나중이 이긴다★ —
 	//    순서를 카테고리 순으로 고정해 결과를 결정적으로 만든다.
@@ -1491,13 +1536,35 @@ void ADRCharacter::BuildCosmeticVisuals()
 		const FDRSkinDefinition* Def = Catalog->FindSkin(SkinId);
 		if (!Def) continue;
 
+		// 로봇이 바뀌는 순간 등 목록과 몸이 어긋나면 입히지 않는다 (서버 정화가 1차 방어선)
+		if (!Def->IsUsableBy(CosmeticClass)) continue;
+
 		ApplyCosmeticMaterials(GetMesh(), Def->BodyMaterialsTP);
 		ApplyCosmeticMaterials(FirstPersonMesh, Def->BodyMaterialsFP);
 		ApplyCosmeticMaterials(Weapon, Def->WeaponMaterials);
 
-		CosmeticAttachTP[Index] = SpawnCosmeticAttachment(Def->ThirdPerson, GetMesh(), false);
+		CosmeticAttachTP[Index] = SpawnCosmeticAttachment(Def->GetThirdPersonFor(CosmeticClass), GetMesh(), false);
 		CosmeticAttachFP[Index] = SpawnCosmeticAttachment(Def->FirstPerson, FirstPersonMesh, true);
 	}
+}
+
+EPlayerCharacterClass ADRCharacter::ResolveCosmeticClass() const
+{
+	// 빙의된 캐릭터는 PlayerState 가 PlayerCharacterClass 를 덮어써 정확하지만, 프리뷰 · 대기실 캐릭터는
+	// BP 기본값 그대로다(자판기 BP 는 범위 밖 값이 들어 있다). 그래서 ★BP 클래스로★ 판정한다 —
+	// ClassInfo 의 "로봇 → BP" 표를 거꾸로 찾는다. 정확히 같은 클래스를 먼저, 없으면 자식 클래스를.
+	if (const UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this))
+	{
+		for (const TPair<EPlayerCharacterClass, TSubclassOf<ADRCharacter>>& Pair : ClassInfo->CharacterBPClasses)
+		{
+			if (Pair.Value && GetClass() == Pair.Value.Get()) return Pair.Key;
+		}
+		for (const TPair<EPlayerCharacterClass, TSubclassOf<ADRCharacter>>& Pair : ClassInfo->CharacterBPClasses)
+		{
+			if (Pair.Value && GetClass()->IsChildOf(Pair.Value.Get())) return Pair.Key;
+		}
+	}
+	return PlayerCharacterClass;
 }
 
 UMeshComponent* ADRCharacter::SpawnCosmeticAttachment(const FDRSkinAttachSpec& Spec,
@@ -1558,10 +1625,11 @@ UMeshComponent* ADRCharacter::SpawnCosmeticAttachment(const FDRSkinAttachSpec& S
 		Created->BoundsScale = 4.f;	// FirstPersonMesh 와 동일 — depth 압축 WPO 로 인한 컬링 pop 방지
 	}
 
-	// 가시성 플래그는 부모 메시를 그대로 따라간다 (대기실/1인칭 전환 상태까지 자동 반영)
+	// 가시성 플래그는 부모 메시를 그대로 따라간다 (대기실/1인칭 전환 상태까지 자동 반영).
+	// 단 사망 중에는 숨긴 채로 만든다 (Plan(옷장) T-3)
 	Created->SetOnlyOwnerSee(Parent->bOnlyOwnerSee);
 	Created->SetOwnerNoSee(Parent->bOwnerNoSee);
-	Created->SetVisibility(Parent->IsVisible());
+	Created->SetVisibility(Parent->IsVisible() && !bCosmeticHiddenForDeath);
 
 	return Created;
 }
@@ -1622,7 +1690,9 @@ void ADRCharacter::ClearCosmeticAttachments()
 
 void ADRCharacter::SyncCosmeticVisibility()
 {
-	auto Sync = [](TArray<TObjectPtr<UMeshComponent>>& Components, const USkeletalMeshComponent* Parent)
+	const bool bHiddenForDeath = bCosmeticHiddenForDeath;
+
+	auto Sync = [bHiddenForDeath](TArray<TObjectPtr<UMeshComponent>>& Components, const USkeletalMeshComponent* Parent)
 	{
 		if (!Parent) return;
 
@@ -1632,7 +1702,7 @@ void ADRCharacter::SyncCosmeticVisibility()
 
 			Component->SetOnlyOwnerSee(Parent->bOnlyOwnerSee);
 			Component->SetOwnerNoSee(Parent->bOwnerNoSee);
-			Component->SetVisibility(Parent->IsVisible());
+			Component->SetVisibility(Parent->IsVisible() && !bHiddenForDeath);	// Plan(옷장) T-3
 		}
 	};
 

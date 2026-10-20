@@ -83,7 +83,7 @@ public:
 	// (InitializePlayerDefaultAttributes 가 활성 GE 를 제거하고 BaseValue 를 0으로 리셋한다).
 	void RefreshUpgradeEffects();
 
-	// ========== 코스메틱 외형 (Plan.md 5.4 / 15.11) ==========
+	// ========== 코스메틱 외형 (Plan(옷장) D-6 · D-7) ==========
 
 	/**
 	 * 카테고리별 스킨 4종을 이 캐릭터에 반영한다. ★멱등★ — 몇 번 호출해도 안전하다.
@@ -103,6 +103,13 @@ public:
 
 	// 지금 적용돼 있는 목록 (디버그/재적용용)
 	const TArray<FName>& GetAppliedSkins() const { return AppliedSkinIds; }
+
+	/**
+	 * ★대기실 디스플레이 캐릭터 전용★ — 서버가 그 플레이어의 PlayerState 옷 목록을 실어 보낸다 (Plan(옷장) M5 · T-24).
+	 * 디스플레이 캐릭터는 아무도 빙의하지 않아 PlayerState 가 없으므로 M3 경로(PossessedBy · OnRep_PlayerState)를 못 탄다.
+	 * 서버 전용. 리슨 호스트에서는 RepNotify 가 안 불리므로 서버에서 바로 입힌다 (T-23).
+	 */
+	void SetDisplaySkinIds(const TArray<FName>& InSkinIds);
 
 	/**
 	 * 부착물의 가시성 플래그를 부모 메시와 맞춘다.
@@ -382,8 +389,21 @@ protected:
 private:
 	// ========== 코스메틱 외형 (내부) ==========
 
+	// PlayerState 에 복제된 옷 목록을 입는다 — PossessedBy / OnRep_PlayerState 공용 (Plan(옷장) M3)
+	void ApplyCosmeticsFromPlayerState();
+
+	// 대기실 디스플레이 캐릭터의 옷 (복제 — 다른 플레이어 화면에서도 같은 옷이 보인다). 인게임 폰은 비어 있다 (Plan(옷장) M5)
+	UPROPERTY(ReplicatedUsing = OnRep_DisplaySkinIds)
+	TArray<FName> DisplaySkinIds;
+
+	UFUNCTION()
+	void OnRep_DisplaySkinIds();
+
 	// 로드가 끝난 뒤 실제로 컴포넌트를 만들고 머티리얼을 얹는다
 	void BuildCosmeticVisuals();
+
+	// 옷 위치를 고를 때 쓰는 "이 몸은 어느 로봇인가" — BP 클래스 기준 (Plan(옷장) D-32)
+	EPlayerCharacterClass ResolveCosmeticClass() const;
 
 	// 기존 부착물 컴포넌트를 전부 파괴한다
 	void ClearCosmeticAttachments();
@@ -416,6 +436,16 @@ private:
 	// 세대가 어긋난 콜백은 버린다.
 	TSharedPtr<struct FStreamableHandle> CosmeticLoadHandle;
 	uint32 CosmeticApplyGeneration = 0;
+
+	/**
+	 * 사망 ~ 부활 사이에 부착물을 숨긴다 (Plan(옷장) T-3).
+	 * Dissolve 는 본체 · 무기만 녹이므로 그냥 두면 모자 · 꼬리만 허공에 남는다.
+	 * ★가시성을 직접 끄면 안 된다★ — SyncCosmeticVisibility / SpawnCosmeticAttachment 가 부모 메시의
+	 * 가시성(사망 중에도 보임)을 그대로 복사하므로 시점 전환 한 번에 다시 켜진다. 그래서 플래그로 막는다.
+	 * 로컬 상태다 — 사망/부활 멀티캐스트가 모든 머신에서 순서대로 돌아 그 둘로 켜고 끈다
+	 * (bDead 는 복제 도착 순서가 멀티캐스트와 어긋날 수 있어 쓰지 않는다).
+	 */
+	bool bCosmeticHiddenForDeath = false;
 
 	// 부품 드롭 실제 구현 (쿨다운 검사 없음, 권한/보유 검사는 호출부에서 수행)
 	void DoDropCarriedPart();

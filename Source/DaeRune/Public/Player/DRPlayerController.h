@@ -318,6 +318,15 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerReportUpgradeLoadout(EPlayerCharacterClass ForClass, const TArray<FName>& Chips);
 
+	// ========== 코스메틱 (Plan(옷장) M3 · D-26 — 칩과 같은 경로) ==========
+
+	// 로컬 세이브의 옷 목록(지금 고른 로봇)을 서버에 보고 (로컬 컨트롤러 전용)
+	void ReportCosmeticLoadout();
+
+	// 클라이언트 신고 → 서버가 클래스 일치 확인 + 카탈로그 정화 후 PlayerState 에 싣는다
+	UFUNCTION(Server, Reliable)
+	void ServerReportCosmeticLoadout(EPlayerCharacterClass ForClass, const TArray<FName>& SkinIds);
+
 	// 서버 → 클라: 스테이지 성과 통지. 클라가 로컬 세이브에 재화를 반영한다.
 	UFUNCTION(Client, Reliable)
 	void Client_GrantStageReward(const FDRStageRewardReport& Report);
@@ -356,7 +365,7 @@ public:
 	UPROPERTY(BlueprintReadWrite, Transient, Category = "UI")
 	TObjectPtr<UDRUpgradeScreenWidget> UpgradeScreenWidget;
 
-	// ========== 로비 옷장 화면 (Plan.md 5.3 / 15) ==========
+	// ========== 로비 옷장 화면 (Plan(옷장)) ==========
 	//
 	// 업그레이드 화면과 ★완전히 같은 구조★ 다. 옷장도 로컬 세이브만 다루므로 RPC 가 없다.
 
@@ -370,9 +379,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Cosmetic")
 	bool IsWardrobeScreenOpen() const { return bIsWardrobeScreenOpen; }
 
-	// ★블루프린트가 위젯을 생성/제거한다★ (OnUpgradeScreenOpened/Closed 와 같은 구조)
-	//  - Opened : CreateWidget → AddToViewport → SetKeyboardFocus
-	//  - Closed : RemoveFromParent
+	// 화면이 열린/닫힌 직후 (BP: 사운드 등 연출용).
+	// ★위젯 생성/제거는 C++ 이 한다★ — 여기서 CreateWidget 을 또 하면 화면이 두 장 뜬다.
 	UFUNCTION(BlueprintImplementableEvent, Category = "Cosmetic")
 	void OnWardrobeScreenOpened();
 
@@ -383,7 +391,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TSubclassOf<class UDRWardrobeScreenWidget> WardrobeScreenWidgetClass;
 
-	// BP 가 만든 화면 위젯 보관 (소유권은 BP)
+	// C++ 이 만든 화면 위젯 (OpenWardrobeScreen 에서 생성, CloseWardrobeScreen 에서 제거)
 	UPROPERTY(BlueprintReadWrite, Transient, Category = "UI")
 	TObjectPtr<UDRWardrobeScreenWidget> WardrobeScreenWidget;
 
@@ -449,6 +457,16 @@ public:
 	// 치트: 현재 로봇의 장착 코스메틱을 로그로 덤프
 	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Cosmetic")
 	void DRDumpCosmetic();
+
+	/**
+	 * 치트: 내 캐릭터를 바로 죽이고 / 되살린다 — 사망 중 옷(부착물) 숨김 확인용 (Plan(옷장) T-3).
+	 * 정식 사망은 오염(Corrupt) 상태에서만 일어나서 확인하기 번거롭다. 개발 빌드에서만 동작한다.
+	 */
+	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Cosmetic")
+	void DRDie();
+
+	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Cosmetic")
+	void DRRevive();
 
 private:
 	// 치트가 조작할 대상 로봇 (업그레이드 화면의 GetViewedClass 와 같은 기준)
@@ -854,4 +872,11 @@ private:
 	// �������� ������ ��ŵ ����
     UFUNCTION(Server, Reliable)
     void ServerCheatSkipToNextPhase();
+
+	// DRDie / DRRevive 의 서버 쪽 (사망 · 부활은 서버가 멀티캐스트한다)
+	UFUNCTION(Server, Reliable)
+	void ServerCheatDie();
+
+	UFUNCTION(Server, Reliable)
+	void ServerCheatRevive();
 };
