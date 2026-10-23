@@ -3,6 +3,8 @@
 
 #include "Player/DRPlayerController.h"
 #include "UI/Widget/DRWardrobeScreenWidget.h"
+#include "UI/Widget/DRStageSelectScreenWidget.h"
+#include "Game/DRProgressionConfig.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "DRGameplayTags.h"
 #include "EnhancedInputSubsystems.h"
@@ -1040,6 +1042,18 @@ void ADRPlayerController::OnLevelEntered()
 		bIsWardrobeScreenOpen = false;
 	}
 
+	// 스테이지 선택 화면 — ★출발할 때 열린 채로 이동하므로 도착한 레벨에서 반드시 여기서 정리된다★
+	if (bIsStageSelectScreenOpen)
+	{
+		OnStageSelectScreenClosed();
+		if (StageSelectScreenWidget)
+		{
+			StageSelectScreenWidget->RemoveFromParent();
+			StageSelectScreenWidget = nullptr;
+		}
+		bIsStageSelectScreenOpen = false;
+	}
+
 	// 愿???곹깭 珥덇린??(?몃━寃뚯씠???뺣━ ?ы븿)
 	if (CurrentSpectatedCharacter.IsValid())
 	{
@@ -1108,6 +1122,12 @@ void ADRPlayerController::OnLevelEntered()
 
 void ADRPlayerController::HandleToggleSettings()
 {
+	// 스테이지 선택 화면은 위젯이 ESC 를 받는다(선택 취소 → 닫기). 포커스를 잃었을 때만 여기로 온다.
+	if (bIsStageSelectScreenOpen)
+	{
+		CloseStageSelectScreen();
+		return;
+	}
 	// 옷장/업그레이드 화면이 열려 있으면 ESC 로 그 화면을 먼저 닫는다.
 	// (옷장은 위젯의 NativeOnKeyDown 도 ESC 를 받지만, 포커스를 잃은 상태를 대비해 여기도 둔다)
 	if (bIsWardrobeScreenOpen)
@@ -1863,6 +1883,166 @@ void ADRPlayerController::CloseWardrobeScreen()
 	// 고른 옷을 서버에 보고 → PlayerState 복제 → 내 캐릭터와 남의 화면에 입혀진다 (Plan(옷장) M3).
 	// 화면이 열려 있는 동안의 변경은 프리뷰에만 보이고, 닫는 순간 한 번에 반영된다.
 	ReportCosmeticLoadout();
+}
+
+// ========================= 스테이지 선택 화면 =========================
+
+bool ADRPlayerController::CanUseStageSelectScreen() const
+{
+	if (!StageSelectScreenWidgetClass) return false;
+
+	const UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
+	return GI && GI->ProgressionConfig && GI->ProgressionConfig->StageSelectList.Num() > 0;
+}
+
+void ADRPlayerController::OpenStageSelectScreen()
+{
+	if (!IsLocalController()) return;
+	if (bIsStageSelectScreenOpen) return;
+
+	// 리슨 서버의 호스트만 — 클라이언트는 스테이지를 고를 수 없다
+	if (!HasAuthority())
+	{
+		UE_LOG(LogDR, Warning, TEXT("[StageSelect] 호스트가 아닌 플레이어가 스테이지 선택을 열려고 했습니다 — 무시합니다."));
+		return;
+	}
+
+	if (!IsInLobby())
+	{
+		UE_LOG(LogDR, Warning, TEXT("[StageSelect] 로비가 아닌 곳에서 스테이지 선택 열기를 시도했습니다 — 무시합니다."));
+		return;
+	}
+
+	if (!StageSelectScreenWidgetClass)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[StageSelect] StageSelectScreenWidgetClass 가 지정되지 않았습니다 (BP_DRPlayerController)."));
+		return;
+	}
+
+	// 다른 전체화면 UI 와 입력 모드가 겹치지 않게 먼저 닫는다
+	if (bIsSettingsMenuOpen)
+	{
+		CloseSettingsMenu();
+	}
+	if (bIsUpgradeScreenOpen)
+	{
+		CloseUpgradeScreen();
+	}
+	if (bIsWardrobeScreenOpen)
+	{
+		CloseWardrobeScreen();
+	}
+
+	bIsStageSelectScreenOpen = true;
+
+	SetInputMode(FInputModeUIOnly());
+	SetShowMouseCursor(true);
+
+	// ★위젯은 C++ 이 만든다★ — 키보드 포커스는 화면의 NativeConstruct 가 직접 잡는다
+	StageSelectScreenWidget = CreateWidget<UDRStageSelectScreenWidget>(this, StageSelectScreenWidgetClass);
+	if (StageSelectScreenWidget)
+	{
+		// 전체화면 모달이라 HUD(0) · 퍼즐(10) 위, 결과창/캐릭터 정보(100) · 로딩(10000) 아래.
+		// 0 이면 화면을 연 ★뒤에★ 만들어지는 HUD 위젯(대기실 → 자유이동 전환 직후의 크로스헤어 등)이 위에 덮인다.
+		StageSelectScreenWidget->AddToViewport(50);
+	}
+
+	OnStageSelectScreenOpened();
+}
+
+void ADRPlayerController::CloseStageSelectScreen()
+{
+	if (!IsLocalController()) return;
+	if (!bIsStageSelectScreenOpen) return;
+
+	OnStageSelectScreenClosed();
+
+	if (StageSelectScreenWidget)
+	{
+		StageSelectScreenWidget->RemoveFromParent();
+		StageSelectScreenWidget = nullptr;
+	}
+
+	bIsStageSelectScreenOpen = false;
+	RestoreDefaultInputMode();
+}
+
+bool ADRPlayerController::RequestStageTravel(FName StageId)
+{
+	if (!IsLocalController() || !HasAuthority())
+	{
+		UE_LOG(LogDR, Warning, TEXT("[StageSelect] 스테이지 이동은 호스트만 요청할 수 있습니다."));
+		return false;
+	}
+
+	const UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
+	const FDRStageSelectDef* Def = (GI && GI->ProgressionConfig) ? GI->ProgressionConfig->FindStageSelectDef(StageId) : nullptr;
+	if (!Def || Def->Map.IsNull())
+	{
+		UE_LOG(LogDR, Warning, TEXT("[StageSelect] '%s' 의 정의 또는 Map 이 없습니다 (DA_ProgressionConfig > StageSelectList)."),
+			*StageId.ToString());
+		return false;
+	}
+
+	// 화면을 거치지 않는 호출(BP · 치트)도 같은 규칙을 따른다
+	if (GI->GetStageSelectState(StageId) == EDRStageSelectState::Locked)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[StageSelect] '%s' 는 잠긴 스테이지입니다 — 이동하지 않습니다."), *StageId.ToString());
+		return false;
+	}
+
+	ADRLobbyGameMode* LobbyGameMode = GetWorld() ? GetWorld()->GetAuthGameMode<ADRLobbyGameMode>() : nullptr;
+	if (!LobbyGameMode)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[StageSelect] 로비 게임모드가 아닙니다 — 이동하지 않습니다."));
+		return false;
+	}
+
+	// "/Game/Maps/Stage1" 형태. ExecuteTravel 이 "?listen" 을 붙여 ServerTravel 한다.
+	LobbyGameMode->TravelToStage(Def->Map.GetLongPackageName(), this);
+	return true;
+}
+
+void ADRPlayerController::DROpenStageSelect()
+{
+	OpenStageSelectScreen();
+}
+
+void ADRPlayerController::DRStageState(const FString& StageId, const FString& State)
+{
+	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
+	if (!GI) return;
+
+	const FName Id = StageId.Equals(TEXT("all"), ESearchCase::IgnoreCase) ? NAME_None : FName(*StageId);
+
+	if (State.Equals(TEXT("reset"), ESearchCase::IgnoreCase) || State.IsEmpty())
+	{
+		GI->DebugClearStageStateOverride(Id);
+	}
+	else if (Id.IsNone())
+	{
+		UE_LOG(LogDR, Warning, TEXT("[StageSelect] 'all' 은 reset 과만 쓸 수 있습니다."));
+		return;
+	}
+	else if (State.Equals(TEXT("locked"), ESearchCase::IgnoreCase))
+	{
+		GI->DebugSetStageStateOverride(Id, EDRStageSelectState::Locked);
+	}
+	else if (State.Equals(TEXT("normal"), ESearchCase::IgnoreCase) || State.Equals(TEXT("available"), ESearchCase::IgnoreCase))
+	{
+		GI->DebugSetStageStateOverride(Id, EDRStageSelectState::Available);
+	}
+	else if (State.Equals(TEXT("cleared"), ESearchCase::IgnoreCase) || State.Equals(TEXT("clear"), ESearchCase::IgnoreCase))
+	{
+		GI->DebugSetStageStateOverride(Id, EDRStageSelectState::Cleared);
+	}
+	else
+	{
+		UE_LOG(LogDR, Warning, TEXT("[StageSelect] 사용법: DRStageState <StageId|all> <locked|normal|cleared|reset>"));
+		return;
+	}
+
+	UE_LOG(LogDR, Log, TEXT("[StageSelect] %s → %s (디버그 덮어쓰기, 저장 안 함)"), *StageId, *State);
 }
 
 void ADRPlayerController::DRUnlockSkins()

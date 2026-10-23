@@ -64,6 +64,19 @@ const FDRAchievementDef* UDRProgressionConfig::FindAchievement(FName Achievement
 		[AchievementId](const FDRAchievementDef& Def) { return Def.AchievementId == AchievementId; });
 }
 
+const FDRStageSelectDef* UDRProgressionConfig::FindStageSelectDef(FName StageId, int32* OutIndex) const
+{
+	if (OutIndex) *OutIndex = INDEX_NONE;
+	if (StageId.IsNone()) return nullptr;
+
+	const int32 Index = StageSelectList.IndexOfByPredicate(
+		[StageId](const FDRStageSelectDef& Def) { return Def.StageId == StageId; });
+	if (Index == INDEX_NONE) return nullptr;
+
+	if (OutIndex) *OutIndex = Index;
+	return &StageSelectList[Index];
+}
+
 FName UDRProgressionConfig::MakeStageClearRewardId(FName StageId)
 {
 	if (StageId.IsNone()) return NAME_None;
@@ -571,6 +584,60 @@ bool UDRProgressionConfig::ValidateCurrencyBudget(TArray<FString>& OutErrors) co
 	return OutErrors.Num() == 0;
 }
 
+bool UDRProgressionConfig::ValidateStageSelect(TArray<FString>& OutErrors) const
+{
+	const int32 ErrorCountBefore = OutErrors.Num();
+
+	TSet<FName> SeenIds;
+	for (const FDRStageSelectDef& Def : StageSelectList)
+	{
+		if (Def.StageId.IsNone())
+		{
+			OutErrors.Add(TEXT("[스테이지 선택] StageId 가 비어 있는 항목이 있습니다."));
+			continue;
+		}
+
+		if (SeenIds.Contains(Def.StageId))
+		{
+			OutErrors.Add(FString::Printf(TEXT("[스테이지 선택] 중복 StageId: %s"), *Def.StageId.ToString()));
+		}
+		SeenIds.Add(Def.StageId);
+
+		if (Def.Map.IsNull())
+		{
+			OutErrors.Add(FString::Printf(TEXT("[스테이지 선택] '%s' 의 Map 이 지정되지 않았습니다 — 시작할 수 없습니다."),
+				*Def.StageId.ToString()));
+		}
+
+		// 클리어 판정은 ApplyStageReward 가 원장에 남기는 "StageClear.<StageId>" 뿐이다.
+		// StageRewards 에 정의가 없으면 그 기록이 안 남아 이 스테이지를 선행으로 둔 스테이지가 영원히 잠긴다.
+		if (!FindStageReward(Def.StageId))
+		{
+			OutErrors.Add(FString::Printf(
+				TEXT("[스테이지 선택] '%s' 가 StageRewards 에 없습니다 — 클리어해도 기록되지 않습니다."),
+				*Def.StageId.ToString()));
+		}
+	}
+
+	for (const FDRStageSelectDef& Def : StageSelectList)
+	{
+		if (Def.RequiredStageId.IsNone()) continue;
+
+		if (Def.RequiredStageId == Def.StageId)
+		{
+			OutErrors.Add(FString::Printf(TEXT("[스테이지 선택] '%s' 가 자기 자신을 선행 스테이지로 요구합니다 — 영원히 잠깁니다."),
+				*Def.StageId.ToString()));
+		}
+		else if (!SeenIds.Contains(Def.RequiredStageId))
+		{
+			OutErrors.Add(FString::Printf(TEXT("[스테이지 선택] '%s' 의 선행 스테이지 '%s' 가 목록에 없습니다."),
+				*Def.StageId.ToString(), *Def.RequiredStageId.ToString()));
+		}
+	}
+
+	return OutErrors.Num() == ErrorCountBefore;
+}
+
 #if WITH_EDITOR
 void UDRProgressionConfig::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
@@ -584,6 +651,9 @@ void UDRProgressionConfig::PostEditChangeProperty(FPropertyChangedEvent& Propert
 	TArray<FString> AchievementErrors;
 	ValidateAchievements(AchievementErrors);
 	Errors.Append(AchievementErrors);
+
+	// 스테이지 선택 목록
+	ValidateStageSelect(Errors);
 
 	for (const FString& Error : Errors)
 	{

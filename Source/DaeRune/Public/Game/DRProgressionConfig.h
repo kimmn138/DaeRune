@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "Game/DRUpgradeTypes.h"
+#include "Game/DRStageSelectTypes.h"
 #include "DRProgressionConfig.generated.h"
 
 class UDRChipCatalog;
@@ -861,6 +862,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Reward", meta = (TitleProperty = "AchievementId"))
 	TArray<FDRAchievementDef> Achievements;
 
+	// ========== 스테이지 선택 화면 ==========
+
+	// 로비 스테이지 선택 화면에 나오는 스테이지 목록. ★배열 순서 = 카드 순서 = 스테이지 번호★
+	// 비어 있으면 포털은 화면 없이 예전처럼 ADRStageSelectActor::DestinationMapName 으로 바로 이동한다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage Select", meta = (TitleProperty = "StageId"))
+	TArray<FDRStageSelectDef> StageSelectList;
+
 	// ========== 조회 헬퍼 ==========
 
 	// 로봇 1대의 통합 슬롯 총 칸 수
@@ -876,6 +884,9 @@ public:
 
 	// 업적 정의. 없으면 nullptr.
 	const FDRAchievementDef* FindAchievement(FName AchievementId) const;
+
+	// 스테이지 선택 정의. 없으면 nullptr. OutIndex 는 StageSelectList 안의 위치.
+	const FDRStageSelectDef* FindStageSelectDef(FName StageId, int32* OutIndex = nullptr) const;
 
 	// 스테이지 최초 클리어 원장 키 ("StageClear.<StageId>")
 	UFUNCTION(BlueprintPure, Category = "Progression")
@@ -908,6 +919,15 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Progression|Validation")
 	bool ValidateAchievements(TArray<FString>& OutErrors) const;
+
+	/**
+	 * 스테이지 선택 목록의 정합성. 문제가 없으면 true.
+	 *  - StageId 비어 있음 / 중복 / Map 미지정
+	 *  - StageRewards 에 없는 StageId (클리어가 원장에 안 남아 ★다음 스테이지가 영원히 잠긴다★)
+	 *  - RequiredStageId 가 목록에 없거나 자기 자신
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Progression|Validation")
+	bool ValidateStageSelect(TArray<FString>& OutErrors) const;
 
 #if WITH_EDITOR
 	// 에셋을 편집할 때마다 예산/카탈로그 정합성을 자동 검사해 로그로 알린다.

@@ -98,6 +98,43 @@ FText UDRUpgradeUILibrary::GetUpgradeResultText(EDRUpgradeResult Result, int32 A
 
 FText UDRUpgradeUILibrary::GetStatDisplayName(EDRUpgradeStat Stat)
 {
+	// ★UMETA(DisplayName) 을 쓰지 않는다★ — 에디터 전용 메타데이터라 현지화 수집에 안 잡히고,
+	// 패키징 빌드에서는 아예 없어서 열거자 이름("MaxHealth")이 그대로 보인다.
+	// 한글 원문은 DRUpgradeTypes.h 의 DisplayName 과 같게 유지한다. 새 스탯을 추가하면 여기도 추가할 것.
+	switch (Stat)
+	{
+	case EDRUpgradeStat::ContainerHealth:       return LOCTEXT("Stat_ContainerHealth", "컨테이너 체력");
+	case EDRUpgradeStat::MaxWater:              return LOCTEXT("Stat_MaxWater", "최대 물");
+	case EDRUpgradeStat::MoveSpeed:             return LOCTEXT("Stat_MoveSpeed", "이동 속도");
+	case EDRUpgradeStat::DamageTaken:           return LOCTEXT("Stat_DamageTaken", "받는 피해");
+	case EDRUpgradeStat::WaterGain:             return LOCTEXT("Stat_WaterGain", "물 획득량");
+	case EDRUpgradeStat::SkillDamage:           return LOCTEXT("Stat_SkillDamage", "스킬 피해량");
+	case EDRUpgradeStat::SkillWaterCost:        return LOCTEXT("Stat_SkillWaterCost", "스킬 물 소모량");
+	case EDRUpgradeStat::SkillCooldown:         return LOCTEXT("Stat_SkillCooldown", "스킬 딜레이");
+	case EDRUpgradeStat::SkillProjectileCount:  return LOCTEXT("Stat_SkillProjectileCount", "스킬 투사체 수");
+	case EDRUpgradeStat::MaxHealth:             return LOCTEXT("Stat_MaxHealth", "최대 체력");
+	case EDRUpgradeStat::HealthRegenDelay:      return LOCTEXT("Stat_HealthRegenDelay", "회복 시작 시간");
+	case EDRUpgradeStat::DamageDealt:           return LOCTEXT("Stat_DamageDealt", "주는 피해");
+	case EDRUpgradeStat::SkillHealing:          return LOCTEXT("Stat_SkillHealing", "스킬 회복량");
+	case EDRUpgradeStat::SkillAreaRadius:       return LOCTEXT("Stat_SkillAreaRadius", "스킬 범위");
+	case EDRUpgradeStat::SkillWaterGrant:       return LOCTEXT("Stat_SkillWaterGrant", "스킬 물 지급량");
+	case EDRUpgradeStat::SkillWindup:           return LOCTEXT("Stat_SkillWindup", "스킬 선딜레이");
+	case EDRUpgradeStat::SkillFireInterval:     return LOCTEXT("Stat_SkillFireInterval", "스킬 발사 간격");
+	case EDRUpgradeStat::SkillProjectileScale:  return LOCTEXT("Stat_SkillProjectileScale", "스킬 투사체 크기");
+	case EDRUpgradeStat::SkillChargeGrowth:     return LOCTEXT("Stat_SkillChargeGrowth", "스킬 차지 증가량");
+	case EDRUpgradeStat::SkillOuterDamage:      return LOCTEXT("Stat_SkillOuterDamage", "스킬 외곽 피해");
+	case EDRUpgradeStat::SkillLaunchHeight:     return LOCTEXT("Stat_SkillLaunchHeight", "스킬 상승 높이");
+	case EDRUpgradeStat::SkillAirUseCount:      return LOCTEXT("Stat_SkillAirUseCount", "스킬 공중 사용 횟수");
+	case EDRUpgradeStat::SkillSelfDamage:       return LOCTEXT("Stat_SkillSelfDamage", "스킬 자해 피해");
+	case EDRUpgradeStat::SkillSpeedBonus:       return LOCTEXT("Stat_SkillSpeedBonus", "스킬 이속 버프");
+	case EDRUpgradeStat::SkillComboWindup:      return LOCTEXT("Stat_SkillComboWindup", "스킬 연속 선딜레이");
+	case EDRUpgradeStat::SkillComboRecovery:    return LOCTEXT("Stat_SkillComboRecovery", "스킬 연속 후딜레이");
+	case EDRUpgradeStat::SkillDuration:         return LOCTEXT("Stat_SkillDuration", "스킬 지속 시간");
+
+	default:
+		break;
+	}
+
 	return UEnum::GetDisplayValueAsText(Stat);
 }
 
@@ -166,13 +203,32 @@ FText UDRUpgradeUILibrary::GetStatShortName(EDRUpgradeStat Stat)
 	case EDRUpgradeStat::SkillDuration:
 		return LOCTEXT("StatShort_SkillDuration", "지속 시간");		// 정식: 스킬 지속 시간 (Plan5(도발칩 · 모자칩))
 
-	// SkillAreaRadius("스킬 범위")는 이미 5자 이내라 폴백으로 충분하다
+	// 아래는 정식 명칭이 이미 짧지만, 영어로는 정식 명칭이 카드(100px)를 넘으므로 짧은 이름을 따로 둔다
+	case EDRUpgradeStat::MaxHealth:
+		return LOCTEXT("StatShort_MaxHealth", "최대 체력");
+
+	case EDRUpgradeStat::MaxWater:
+		return LOCTEXT("StatShort_MaxWater", "최대 물");
+
+	case EDRUpgradeStat::MoveSpeed:
+		return LOCTEXT("StatShort_MoveSpeed", "이동 속도");
+
+	case EDRUpgradeStat::DamageTaken:
+		return LOCTEXT("StatShort_DamageTaken", "받는 피해");
+
+	case EDRUpgradeStat::DamageDealt:
+		return LOCTEXT("StatShort_DamageDealt", "주는 피해");
+
+	case EDRUpgradeStat::WaterGain:
+		return LOCTEXT("StatShort_WaterGain", "물 획득량");
+
+	case EDRUpgradeStat::SkillAreaRadius:
+		return LOCTEXT("StatShort_SkillAreaRadius", "스킬 범위");
 
 	default:
 		break;
 	}
 
-	// 최대 체력 / 최대 물 / 이동 속도 / 받는 피해 / 물 획득량 은 이미 5자 이내다
 	return GetStatDisplayName(Stat);
 }
 

@@ -127,7 +127,16 @@ bool ADRS2RoomTrigger::IsActorInside(const AActor* TargetActor) const
 {
 	if (!IsValid(TargetActor) || !TriggerBox) return false;
 
-	return TriggerBox->IsOverlappingActor(TargetActor);
+	// ★오버랩이 아니라 위치로 판정한다.
+	//   트리거 박스는 Pawn 채널만 오버랩하므로, 바닥에 놓인 부품(Pawn 이 아님)은
+	//   박스 안에 있어도 IsOverlappingActor 가 항상 false 였다.
+	//   그 결과 방3 부품 동반 검증이 매번 실패해 D2 가 닫히지 않았다.
+	const FVector LocalLocation = TriggerBox->GetComponentTransform().InverseTransformPosition(TargetActor->GetActorLocation());
+	const FVector Extent = TriggerBox->GetUnscaledBoxExtent();
+
+	return FMath::Abs(LocalLocation.X) <= Extent.X
+		&& FMath::Abs(LocalLocation.Y) <= Extent.Y
+		&& FMath::Abs(LocalLocation.Z) <= Extent.Z;
 }
 
 void ADRS2RoomTrigger::HandleBeginOverlap(UPrimitiveComponent* /*OverlappedComponent*/, AActor* OtherActor,

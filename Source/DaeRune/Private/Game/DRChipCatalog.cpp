@@ -16,7 +16,8 @@ FText FDRUpgradeModifier::GetDetailText() const
 		return DetailOverride;
 	}
 
-	const FText StatName = UEnum::GetDisplayValueAsText(Stat);
+	// 열거형 DisplayName(에디터 전용 · 현지화 불가) 대신 LOCTEXT 이름
+	const FText StatName = UDRUpgradeUILibrary::GetStatDisplayName(Stat);
 	const FText Sign = Value < 0.f ? LOCTEXT("ModifierSignMinus", "-") : LOCTEXT("ModifierSignPlus", "+");
 
 	FNumberFormattingOptions Options;

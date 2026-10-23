@@ -149,7 +149,14 @@ void ADRStageSelectActor::OnBoxEndOverlap(UPrimitiveComponent* OverlappedCompone
 
 void ADRStageSelectActor::OnHostInteract()
 {
-    // ������ �̵� ��û
+    // 스테이지 선택 화면이 준비돼 있으면 화면을 연다 (출발은 화면에서 → ADRPlayerController::RequestStageTravel).
+    // 위젯 클래스나 StageSelectList 가 비어 있으면 예전처럼 DestinationMapName 으로 바로 이동한다.
+    if (OverlappingHostController && OverlappingHostController->CanUseStageSelectScreen())
+    {
+        OverlappingHostController->OpenStageSelectScreen();
+        return;
+    }
+
     ServerRequestTravel();
 }
 

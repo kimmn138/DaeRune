@@ -8,6 +8,7 @@
 #include "Game/DRProgressionTypes.h"
 #include "Game/DRUpgradeTypes.h"
 #include "Game/DRCosmeticTypes.h"
+#include "Game/DRStageSelectTypes.h"
 #include "DRGameInstance.generated.h"
 
 class UDRSaveGame;
@@ -27,6 +28,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnUpgradeSystemUnlockedSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCosmeticsChangedSignature, EPlayerCharacterClass, CharacterClass);
 // 새 스킨 해금 알림 (해금 토스트용)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSkinUnlockedSignature, FName, SkinId);
+// 스테이지 선택 상태(잠김/진행 가능/클리어)가 바뀔 수 있음 알림 (스테이지 선택 화면 갱신용)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnStageSelectStatesChangedSignature);
 
 /**
  *
@@ -277,6 +280,38 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Progression|Reward")
 	bool IsRewardClaimed(FName RewardId) const;
 
+	// ========== 스테이지 선택 (호스트 로컬 세이브 기준) ==========
+	//
+	// 클리어 여부는 저장하지 않고 원장의 "StageClear.<StageId>" 로 파생한다.
+	// 목록 정의는 ProgressionConfig->StageSelectList.
+
+	// 이 스테이지를 클리어한 적이 있는가 (★실제 세이브만★ 본다 — 디버그 덮어쓰기 무시)
+	UFUNCTION(BlueprintPure, Category = "StageSelect")
+	bool IsStageCleared(FName StageId) const;
+
+	// 카드에 보일 상태. 디버그 덮어쓰기 > 클리어 기록 > 선행 스테이지 클리어 여부 순으로 판정한다.
+	UFUNCTION(BlueprintPure, Category = "StageSelect")
+	EDRStageSelectState GetStageSelectState(FName StageId) const;
+
+	// 화면에 그릴 카드 목록 (StageSelectList 순서 그대로)
+	UFUNCTION(BlueprintCallable, Category = "StageSelect")
+	void GetStageSelectViewModels(TArray<FDRStageSelectViewModel>& OutViewModels) const;
+
+	// 디버그 덮어쓰기 / 세이브 변경으로 상태가 달라졌을 때
+	UPROPERTY(BlueprintAssignable, Category = "StageSelect")
+	FOnStageSelectStatesChangedSignature OnStageSelectStatesChanged;
+
+	/**
+	 * 디버그: 카드 상태를 강제로 덮어쓴다 (시안의 "미리보기 상태" 패널과 같은 역할).
+	 * ★세이브에 쓰지 않는다★ — 게임을 껐다 켜면 사라진다. 실제 클리어 기록을 남기지 않으므로 보상에도 영향이 없다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "StageSelect|Debug")
+	void DebugSetStageStateOverride(FName StageId, EDRStageSelectState State);
+
+	// 디버그: StageId 의 덮어쓰기 해제. NAME_None 이면 전부 해제.
+	UFUNCTION(BlueprintCallable, Category = "StageSelect|Debug")
+	void DebugClearStageStateOverride(FName StageId);
+
 	// ========== 코스메틱 / 옷장 (계정 단위, 클라 권위) — Plan(옷장) ==========
 	//
 	// 해금 상태는 ★저장하지 않고 매번 파생★한다 (EarnedAchievements ∪ ClaimedRewards).
@@ -441,4 +476,10 @@ private:
 
 	// 맵 전환 시 캐릭터 선택 보존용 (GameInstance는 맵 전환에서 절대 파괴되지 않음)
 	TMap<FString, EPlayerCharacterClass> PlayerClassSelections;
+
+	// 스테이지 선택 디버그 덮어쓰기 (저장 안 함 — DebugSetStageStateOverride)
+	TMap<FName, EDRStageSelectState> DebugStageStateOverrides;
+
+	// 선행 조건 판정용 — 덮어쓰기가 있으면 그것이 Cleared 인지, 없으면 실제 기록
+	bool IsStageClearedForSelect(FName StageId) const;
 };

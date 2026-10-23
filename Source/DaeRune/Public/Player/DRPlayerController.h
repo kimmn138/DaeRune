@@ -25,6 +25,7 @@ class ADRCleanserSite;
 class ADRRobotVacuumCharacter;
 class ADRWaitingRoomCameraActor;
 class UDRWaitingRoomWidget;
+class UDRStageSelectScreenWidget;
 class ADRS2InteractProp;
 class ADRS2SlidePuzzle;
 class APlayerState;
@@ -395,6 +396,48 @@ public:
 	UPROPERTY(BlueprintReadWrite, Transient, Category = "UI")
 	TObjectPtr<UDRWardrobeScreenWidget> WardrobeScreenWidget;
 
+	// ========== 로비 스테이지 선택 화면 (시안: 스테이지 선택.html) ==========
+	//
+	// ★호스트 전용★ — 스테이지를 고르는 사람은 호스트뿐이고, 잠김/클리어 판정도 호스트의 로컬 세이브 기준이다.
+	// 옷장과 같은 구조로 위젯 생성/제거는 C++ 이 한다.
+
+	// 스테이지 선택 포털(ADRStageSelectActor) 상호작용으로 호출. 호스트가 아니거나 로비가 아니면 무시한다.
+	UFUNCTION(BlueprintCallable, Category = "StageSelect")
+	void OpenStageSelectScreen();
+
+	UFUNCTION(BlueprintCallable, Category = "StageSelect")
+	void CloseStageSelectScreen();
+
+	UFUNCTION(BlueprintPure, Category = "StageSelect")
+	bool IsStageSelectScreenOpen() const { return bIsStageSelectScreenOpen; }
+
+	// 화면을 열 수 있는 상태인가 (위젯 클래스 지정 + 목록이 비어 있지 않음). 아니면 포털이 예전처럼 바로 이동한다.
+	UFUNCTION(BlueprintPure, Category = "StageSelect")
+	bool CanUseStageSelectScreen() const;
+
+	/**
+	 * 고른 스테이지로 전원 이동 (★호스트 전용★ — 리슨 서버의 호스트는 권한이 있으므로 RPC 없이 바로 처리한다).
+	 * 맵은 클라가 보낸 문자열이 아니라 ProgressionConfig 의 StageSelectList 에서 찾는다. 잠긴 스테이지는 거절한다.
+	 * @return 이동을 시작했으면 true
+	 */
+	UFUNCTION(BlueprintCallable, Category = "StageSelect")
+	bool RequestStageTravel(FName StageId);
+
+	// 화면이 열린/닫힌 직후 (BP: 사운드 등 연출용). ★여기서 CreateWidget 하지 말 것★ — 두 장이 뜬다.
+	UFUNCTION(BlueprintImplementableEvent, Category = "StageSelect")
+	void OnStageSelectScreenOpened();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "StageSelect")
+	void OnStageSelectScreenClosed();
+
+	// 스테이지 선택 화면 위젯 클래스 (BP_DRPlayerController 에서 WBP_StageSelect 지정).
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<class UDRStageSelectScreenWidget> StageSelectScreenWidgetClass;
+
+	// C++ 이 만든 화면 위젯 (OpenStageSelectScreen 에서 생성, CloseStageSelectScreen 에서 제거)
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "UI")
+	TObjectPtr<UDRStageSelectScreenWidget> StageSelectScreenWidget;
+
 	// ========== 치트/디버그 모드 ==========
 
     // �׽�Ʈ�� ������ ��ŵ (��������Ʈ���� ȣ��)
@@ -458,6 +501,19 @@ public:
 	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Cosmetic")
 	void DRDumpCosmetic();
 
+	// 치트: 스테이지 선택 화면을 강제로 연다 (포털 없이 UI 확인)
+	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|StageSelect")
+	void DROpenStageSelect();
+
+	/**
+	 * 치트: 카드 상태를 덮어쓴다 — 시안의 "미리보기 상태" 패널. ★세이브에 쓰지 않는다★
+	 *   DRStageState Stage2 locked | normal | cleared | reset
+	 *   DRStageState all reset   (전부 해제)
+	 * 화면이 열려 있으면 바로 다시 그려진다.
+	 */
+	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|StageSelect")
+	void DRStageState(const FString& StageId, const FString& State);
+
 	/**
 	 * 치트: 내 캐릭터를 바로 죽이고 / 되살린다 — 사망 중 옷(부착물) 숨김 확인용 (Plan(옷장) T-3).
 	 * 정식 사망은 오염(Corrupt) 상태에서만 일어나서 확인하기 번거롭다. 개발 빌드에서만 동작한다.
@@ -520,6 +576,9 @@ protected:
 
 	// 옷장 화면 표시 여부
 	bool bIsWardrobeScreenOpen = false;
+
+	// 스테이지 선택 화면 표시 여부
+	bool bIsStageSelectScreenOpen = false;
 
 	// ========== 대기실 UI ==========
 

@@ -141,6 +141,13 @@ void UDRS2TrainPhase::HandleTrainStopped(int32 ObstacleIndex)
 	ADRS2TrainObstacle* Obstacle = Director->Obstacles[ObstacleIndex];
 	if (!Obstacle) return;
 
+	// ★보스 등장 시 전원 자동 하차. 각 칸의 ExitPoint 로 내려놓는다.
+	//   열차는 StoppedAtObstacle 상태라 보스가 도망칠 때까지 다시 탈 수 없다.
+	if (Director->Train)
+	{
+		Director->Train->DeboardAll();
+	}
+
 	// ★보스 등장과 동시에 장애물이 부서진다 (§14.6.3)
 	Obstacle->BreakByBoss();
 

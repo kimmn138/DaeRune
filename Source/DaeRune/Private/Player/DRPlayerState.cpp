@@ -577,8 +577,11 @@ void ADRPlayerState::SetSelectedPlayerClass(EPlayerCharacterClass NewClass)
 		}
 	}
 
-	// ★리슨 서버 호스트★ 는 OnRep_SelectedPlayerClass 가 불리지 않아 새 로봇의 옷을 보고할 기회가 없다 —
+	// ★리슨 서버 호스트★ 는 OnRep_SelectedPlayerClass 가 불리지 않아 새 로봇의 칩·옷을 보고할 기회가 없다 —
 	// 여기서 바로 보고한다. 원격 클라이언트의 PlayerState 면 이 머신에 그 컨트롤러가 없어 아무 일도 없다.
+	// (칩: 레벨 진입 보고(OnLevelEntered)가 기본 클래스로 먼저 나간 뒤 GameMode 가 저장된 클래스로
+	//  바꾸면서 위에서 EquippedChips 를 비운다. 재보고가 없으면 칩 기기를 열고 닫기 전까지 칩이 0개다.)
+	ReportUpgradeLoadoutIfLocal();
 	ReportCosmeticIfLocal();
 }
 

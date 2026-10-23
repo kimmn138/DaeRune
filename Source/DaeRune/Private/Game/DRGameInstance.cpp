@@ -1467,6 +1467,118 @@ bool UDRGameInstance::IsRewardClaimed(FName RewardId) const
 	return CurrentSaveGame->ClaimedRewards.Contains(RewardId);
 }
 
+// ========================= 스테이지 선택 =========================
+
+bool UDRGameInstance::IsStageCleared(FName StageId) const
+{
+	return IsRewardClaimed(UDRProgressionConfig::MakeStageClearRewardId(StageId));
+}
+
+bool UDRGameInstance::IsStageClearedForSelect(FName StageId) const
+{
+	if (const EDRStageSelectState* Override = DebugStageStateOverrides.Find(StageId))
+	{
+		return *Override == EDRStageSelectState::Cleared;
+	}
+	return IsStageCleared(StageId);
+}
+
+EDRStageSelectState UDRGameInstance::GetStageSelectState(FName StageId) const
+{
+	if (const EDRStageSelectState* Override = DebugStageStateOverrides.Find(StageId))
+	{
+		return *Override;
+	}
+
+	if (IsStageCleared(StageId))
+	{
+		return EDRStageSelectState::Cleared;
+	}
+
+	const FDRStageSelectDef* Def = ProgressionConfig ? ProgressionConfig->FindStageSelectDef(StageId) : nullptr;
+	if (!Def)
+	{
+		// 목록에 없는 스테이지는 고를 수 없다
+		return EDRStageSelectState::Locked;
+	}
+
+	// 선행 조건은 한 단계만 본다 — 선행 스테이지가 "클리어" 면 그 앞 단계도 이미 통과한 것이다
+	if (Def->RequiredStageId.IsNone() || IsStageClearedForSelect(Def->RequiredStageId))
+	{
+		return EDRStageSelectState::Available;
+	}
+
+	return EDRStageSelectState::Locked;
+}
+
+void UDRGameInstance::GetStageSelectViewModels(TArray<FDRStageSelectViewModel>& OutViewModels) const
+{
+	OutViewModels.Reset();
+	if (!ProgressionConfig) return;
+
+	const TArray<FDRStageSelectDef>& List = ProgressionConfig->StageSelectList;
+	OutViewModels.Reserve(List.Num());
+
+	for (int32 Index = 0; Index < List.Num(); ++Index)
+	{
+		const FDRStageSelectDef& Def = List[Index];
+
+		FDRStageSelectViewModel& ViewModel = OutViewModels.AddDefaulted_GetRef();
+		ViewModel.Index = Index;
+		ViewModel.StageNumber = Index + 1;
+		ViewModel.StageId = Def.StageId;
+		ViewModel.MissionText = Def.MissionText;
+		ViewModel.State = GetStageSelectState(Def.StageId);
+		ViewModel.Thumbnail = Def.Thumbnail.IsNull() ? nullptr : Def.Thumbnail.LoadSynchronous();
+
+		// 이름 폴백: 선택 정의 → 보상 정의 → Id
+		ViewModel.DisplayName = Def.DisplayName;
+		if (ViewModel.DisplayName.IsEmpty())
+		{
+			const FDRStageRewardDef* RewardDef = ProgressionConfig->FindStageReward(Def.StageId);
+			ViewModel.DisplayName = (RewardDef && !RewardDef->DisplayName.IsEmpty())
+				? RewardDef->DisplayName
+				: FText::FromName(Def.StageId);
+		}
+
+		if (ViewModel.State == EDRStageSelectState::Locked)
+		{
+			int32 RequiredIndex = INDEX_NONE;
+			if (ProgressionConfig->FindStageSelectDef(Def.RequiredStageId, &RequiredIndex))
+			{
+				ViewModel.LockHint = FText::Format(
+					NSLOCTEXT("DRStageSelect", "LockHintFmt", "스테이지 {0} 클리어 후 열립니다."),
+					FText::AsNumber(RequiredIndex + 1));
+			}
+			else
+			{
+				ViewModel.LockHint = NSLOCTEXT("DRStageSelect", "LockHintUnknown", "아직 열리지 않은 스테이지입니다.");
+			}
+		}
+	}
+}
+
+void UDRGameInstance::DebugSetStageStateOverride(FName StageId, EDRStageSelectState State)
+{
+	if (StageId.IsNone()) return;
+
+	DebugStageStateOverrides.Add(StageId, State);
+	OnStageSelectStatesChanged.Broadcast();
+}
+
+void UDRGameInstance::DebugClearStageStateOverride(FName StageId)
+{
+	if (StageId.IsNone())
+	{
+		DebugStageStateOverrides.Reset();
+	}
+	else
+	{
+		DebugStageStateOverrides.Remove(StageId);
+	}
+	OnStageSelectStatesChanged.Broadcast();
+}
+
 FDRStageRewardResult UDRGameInstance::ApplyStageReward(const FDRStageRewardReport& Report)
 {
 	FDRStageRewardResult Result;
@@ -1499,14 +1611,18 @@ FDRStageRewardResult UDRGameInstance::ApplyStageReward(const FDRStageRewardRepor
 			Save->ClaimedRewards.Add(RewardId);
 			Result.FirstClearCurrency = FMath::Max(0, StageDef->FirstClearCurrency);
 
-			FDRRewardLineItem Line;
-			Line.RewardId = RewardId;
-			Line.Kind = EDRRewardKind::StageFirstClear;
-			Line.DisplayName = StageDef->DisplayName.IsEmpty()
-				? FText::FromName(Report.StageId)
-				: StageDef->DisplayName;
-			Line.Currency = Result.FirstClearCurrency;
-			Result.Lines.Add(MoveTemp(Line));
+			// 재화 0 짜리 정의는 "클리어 기록만 남기는" 용도다 (스테이지 선택 화면의 CLEAR 표시) — 결과창에 "+0" 줄을 띄우지 않는다
+			if (Result.FirstClearCurrency > 0)
+			{
+				FDRRewardLineItem Line;
+				Line.RewardId = RewardId;
+				Line.Kind = EDRRewardKind::StageFirstClear;
+				Line.DisplayName = StageDef->DisplayName.IsEmpty()
+					? FText::FromName(Report.StageId)
+					: StageDef->DisplayName;
+				Line.Currency = Result.FirstClearCurrency;
+				Result.Lines.Add(MoveTemp(Line));
+			}
 		}
 
 		// 해금은 재화 지급과 별개로 판정한다 (원장은 있는데 해금이 안 된 이상 상태 복구)
