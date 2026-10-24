@@ -1071,6 +1071,12 @@ void ADRPlayerController::OnLevelEntered()
 	// (클라이언트는 OnRep_PlayerState 에서도 보고한다. 대기실 디스플레이 캐릭터도 이 목록을 입는다)
 	ReportCosmeticLoadout();
 
+	// 장착 칩 보고도 같은 이유로 ★로비 분기보다 앞★ 에서 한다.
+	// 대기실이면 아래에서 일찍 return 하는데, 리슨 서버 호스트는 OnRep_PlayerState 가 안 불리고,
+	// 저장된 클래스가 기본값(정원로봇)과 같으면 SetSelectedPlayerClass 도 일찍 return 해 재보고가 없다.
+	// 그러면 정원로봇만 칩 기기를 열고 닫기 전까지 칩이 0개(HUD 모듈 칩 미적용 → HUD 숨김)였다.
+	ReportUpgradeLoadout();
+
 	// ?湲곗떎 媛먯? ??ViewTarget 蹂듭썝 李⑤떒
 	ADRLobbyGameState* LGS = World->GetGameState<ADRLobbyGameState>();
 
@@ -1113,9 +1119,6 @@ void ADRPlayerController::OnLevelEntered()
 
 	// ?덈꺼??留욌뒗 湲곕낯 ?낅젰 紐⑤뱶濡?蹂듭썝
 	RestoreDefaultInputMode();
-
-	// 레벨 진입 시 장착 칩 보고 (호스트/이미 PlayerState 가 준비된 경로)
-	ReportUpgradeLoadout();
 
 	// BGM? ?덈꺼??諛곗튂??DRBGMActor媛 ?대떦
 }
