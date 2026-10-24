@@ -5,6 +5,12 @@
 #include "Actor/DRSeedProjectile.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 
+float UDRSeedCannon::GetAttackSpeedPlayRate() const
+{
+	// ★Plan5(공속칩)★ 버프가 없으면 GetAttackSpeedMultiplier() 가 1.0 이라 BaseMontagePlayRate 그대로 (D-68)
+	return BaseMontagePlayRate * GetAttackSpeedMultiplier();
+}
+
 void UDRSeedCannon::SpawnSeedProjectile(const FVector& ForwardVector, const FVector& SocketLocation)
 {
     const bool bIsServer = GetAvatarActorFromActorInfo()->HasAuthority();
@@ -40,6 +46,11 @@ void UDRSeedCannon::SpawnSeedProjectile(const FVector& ForwardVector, const FVec
 
     // ������ �Ķ���� ����
     Projectile->DamageEffectParams = MakeDamageEffectParamsFromClassDefaults();
+
+    // ★Plan5(씨앗칩)★ 직격 환급 칩(GR.Asc.SeedRefund)이 돌려줄 금액의 근거.
+    // GetEffectiveWaterCostFor 는 CheckCost/ApplyCost 가 쓰는 것과 ★같은 함수★ 라
+    // 실제 지불액과 어긋나지 않는다.
+    Projectile->SpentWaterCost = GetEffectiveWaterCostFor(GetCurrentActorInfo());
 
     // �ӵ� ���� ���� ����
     Projectile->ProjectileMovement->Velocity = LaunchDirection * LaunchSpeed;

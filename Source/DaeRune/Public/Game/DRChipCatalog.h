@@ -38,6 +38,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Chips")
 	FText GetSkillDisplayName(const FGameplayTag& AbilityTag) const;
 
+	/**
+	 * ★이 기능 스위치를 부여하는 칩이 카탈로그에 하나라도 있는가.★ (Plan3(공용칩) §7.2)
+	 *
+	 * "기능을 가두는 칩이 아직 없으면 그 기능은 잠기지 않는다" 규칙을 위한 조회다.
+	 * 이게 없으면 카탈로그에 HUD 칩을 만들기 ★전에★ 코드만 먼저 들어간 순간
+	 * 모든 플레이어의 체력/물/스킬 UI 가 통째로 사라진다 —
+	 * 화면에서 원인을 볼 수 없어 가장 찾기 어려운 형태의 회귀가 된다.
+	 * 칩을 카탈로그에서 지웠을 때도 같은 방식으로 복구된다.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Chips")
+	bool IsFeatureGated(FGameplayTag FeatureTag) const;
+
 	// 장착 칩 목록을 즉시 조회 가능한 수치 캐시로 펼친다.
 	// OwnerClass 가 다른 항목은 무시한다(잘못된 목록 방어).
 	void ResolveLoadout(const TArray<FName>& EquippedChips, EPlayerCharacterClass CharacterClass,
@@ -51,6 +63,14 @@ public:
 	// 반환: 하나라도 수정했으면 true (로깅용)
 	bool SanitizeLoadout(TArray<FName>& InOutChips, EPlayerCharacterClass CharacterClass,
 		int32 MaxSlots) const;
+
+	/**
+	 * ★Plan5(스킬당1칩)★ ChipId 를 EquippedChips 에 더하면 ★같은 스킬로 부딪히는 칩★. 없으면 NAME_None.
+	 *
+	 * 클라 장착 판정 · 서버 정화(SanitizeLoadout) · 세이브 정화 · 뷰모델 · 미리보기가 ★전부 이 함수만★ 쓴다 —
+	 * 한 곳이라도 따로 판정하면 "장착은 되는데 다음 실행/멀티에서 사라지는" 늦은 증상이 난다 (Plan5 D-49).
+	 */
+	FName FindSkillConflict(const TArray<FName>& EquippedChips, FName ChipId) const;
 
 	// 카탈로그 정합성 검사 (중복 Id, 슬롯 수 범위, 효과 누락 등). 콘텐츠 작업 후 1회 실행.
 	UFUNCTION(BlueprintCallable, Category = "Chips")

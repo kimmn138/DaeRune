@@ -27,6 +27,10 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (ExposeOnSpawn = true), Category = "AirShot")
 	bool bEnhanced = false;
 
+	// ★Plan5(공기탄칩)★ ① 아군에게도 피해 — FireShot 이 스폰 직후 넣는다(서버). 클라 적중 연출용으로 복제 (bEnhanced 와 같다)
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "AirShot")
+	bool bHitsAllies = false;
+
 	// 가로형 판정 박스 (Plan5 §7) — 루트 Sphere는 비균등 스케일 불가라 별도 박스로 판정.
 	// 기본 NoCollision — BP_VacuumAirProjectile에서 프로파일/Extent 설정 (Sphere 세팅 미러)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AirShot")

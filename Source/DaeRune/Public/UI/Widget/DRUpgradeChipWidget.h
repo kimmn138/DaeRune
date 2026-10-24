@@ -28,9 +28,15 @@ public:
 	 * 목록에서 끌어낼 수 있는 칩인가.
 	 * - 미해금 칩은 못 든다 (해금 단계 미달)
 	 * - 이미 장착된 칩은 못 든다 → 좌측 슬롯에서 빼거나 옮겨야 한다
+	 * - ★Plan5(스킬당1칩)★ 같은 스킬 칩이 장착돼 있으면 못 든다 → 그 칩을 먼저 해제해야 한다 (D-139)
+	 *   칸이 모자란 칩(NotEnoughSlots)은 든다 — 점유 칸에 놓는 일반 교체는 그대로다.
 	 */
 	UFUNCTION(BlueprintPure, Category = "Upgrade")
-	bool IsDraggable() const { return ViewModel.bUnlocked && !ViewModel.bEquipped; }
+	bool IsDraggable() const
+	{
+		return ViewModel.bUnlocked && !ViewModel.bEquipped
+			&& ViewModel.EquipBlockReason != EDRUpgradeResult::SkillConflict;
+	}
 
 protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Upgrade")

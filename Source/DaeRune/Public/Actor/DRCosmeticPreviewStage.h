@@ -12,7 +12,7 @@ class USceneCaptureComponent2D;
 class UTextureRenderTarget2D;
 
 /**
- * 옷장 UI 안에 3D 캐릭터를 띄우기 위한 "촬영 스튜디오". (Plan.md 5.8 참조)
+ * 옷장 UI 안에 3D 캐릭터를 띄우기 위한 "촬영 스튜디오". (Plan(옷장) D-11)
  *
  * ★UMG 는 SkeletalMeshComponent 를 위젯 트리에 직접 넣을 수 없다★ — 스톡 위젯이 없다.
  * 그래서 맵 밖에 실제 캐릭터를 세우고 SceneCapture 로 찍어 RenderTarget 에 그린 뒤,
@@ -84,6 +84,15 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cosmetic")
 	float BaseYaw = 0.0f;
 
+	/**
+	 * 로봇별 캡처 카메라 위치 (이 액터 기준 상대 좌표). 표에 없는 로봇은 CaptureComponent 의 기본 위치를 쓴다.
+	 * 로봇마다 키 · 들고 있는 물건(정원사 삽 · 벨보이 가방) · 발 높이가 달라서 구도 하나로는
+	 * 잘리거나 떠 보인다 (Plan(옷장) D-28).
+	 * 맞추는 법: X(거리) — 어느 각도로 돌려도 좌우가 안 잘리게. Z(높이) — 발이 캐릭터 back 글로우의 바닥선(화면 y≈880)에 오게.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cosmetic")
+	TMap<EPlayerCharacterClass, FVector> CaptureLocationByClass;
+
 private:
 	void DestroyPreviewCharacter();
 
@@ -95,6 +104,9 @@ private:
 
 	// Count = "아직 아무 것도 안 세움"
 	EPlayerCharacterClass CurrentPreviewClass = EPlayerCharacterClass::Count;
+
+	// CaptureLocationByClass 에 없는 로봇용 — 처음 세울 때 컴포넌트의 상대 위치를 기억해 둔다
+	TOptional<FVector> DefaultCaptureLocation;
 
 	float CurrentYaw = 0.0f;
 };

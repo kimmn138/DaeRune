@@ -96,32 +96,40 @@ void ADRProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AA
 	// ���������� ������ ó��
 	if (HasAuthority())
 	{
-		if (UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(OtherActor))
-		{
-			// ��� �� �˹� ���� ����
-			const FVector DeathImpulse = GetActorForwardVector() * DamageEffectParams.DeathImpulseMagnitude; 
-			DamageEffectParams.DeathImpulse = DeathImpulse;
-			// �˹� Ȯ�� ��� �� ����
-			const bool bKnockback = FMath::RandRange(1, 100) < DamageEffectParams.KnockbackChance;
-			if (bKnockback)
-			{
-				FRotator Rotation = GetActorRotation();
-				// �������� �˹�
-				Rotation.Pitch = 45.f;
+		ApplyImpactDamage(OtherActor);   // ★Plan5(공기탄칩)★ 피해 적용부를 뽑았다 — 동작 불변 (D-94)
 
-				const FVector KnockbackDirection = Rotation.Vector();
-				const FVector KnockbackForce = KnockbackDirection * DamageEffectParams.KnockbackForceMagnitude;
-				DamageEffectParams.KnockbackForce = KnockbackForce;
-			}
-
-			// GAS�� ���� ������ ����
-			DamageEffectParams.TargetAbilitySystemComponent = TargetASC; 
-			UDRAbilitySystemLibrary::ApplyDamageEffect(DamageEffectParams);
-		}
-
-		// �������� �߻�ü �ı�
+		// 서버에서만 발사체 파괴
 		Destroy();
 	}
-	// Ŭ���̾�Ʈ������ Ÿ�� �÷��׸� ����
+	// 클라이언트는 타격 플래그만 세운다
 	else bHit = true;
+}
+
+void ADRProjectile::ApplyImpactDamage(AActor* Target)
+{
+	// ★팀 판정은 하지 않는다 — 호출부 책임★ (적 투사체와 공유 클래스라 칩 지식은 두지 않는다)
+	if (!HasAuthority() || !IsValid(Target)) return;
+
+	if (UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target))
+	{
+		// ��� �� �˹� ���� ����
+		const FVector DeathImpulse = GetActorForwardVector() * DamageEffectParams.DeathImpulseMagnitude; 
+		DamageEffectParams.DeathImpulse = DeathImpulse;
+		// �˹� Ȯ�� ��� �� ����
+		const bool bKnockback = FMath::RandRange(1, 100) < DamageEffectParams.KnockbackChance;
+		if (bKnockback)
+		{
+			FRotator Rotation = GetActorRotation();
+			// �������� �˹�
+			Rotation.Pitch = 45.f;
+
+			const FVector KnockbackDirection = Rotation.Vector();
+			const FVector KnockbackForce = KnockbackDirection * DamageEffectParams.KnockbackForceMagnitude;
+			DamageEffectParams.KnockbackForce = KnockbackForce;
+		}
+
+		// GAS�� ���� ������ ����
+		DamageEffectParams.TargetAbilitySystemComponent = TargetASC; 
+		UDRAbilitySystemLibrary::ApplyDamageEffect(DamageEffectParams);
+	}
 }

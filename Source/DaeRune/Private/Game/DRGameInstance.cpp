@@ -168,6 +168,20 @@ void UDRGameInstance::EnsureProgressInitialized()
 		}
 	}
 
+	// ★Plan3(공용칩)★ 기본 장착 — 반드시 SanitizeClassState 보다 ★먼저★ 돌아야 한다.
+	// 순서가 바뀌면 SlotChips 길이가 0인 상태에서 배치하려다 조용히 실패한다. (§6.1)
+	bool bDefaultsChanged = false;
+	if (ProgressionConfig)
+	{
+		for (auto& Pair : CurrentSaveGame->ClassUpgrades)
+		{
+			if (ApplyDefaultLoadout(Pair.Key, Pair.Value))
+			{
+				bDefaultsChanged = true;
+			}
+		}
+	}
+
 	// 저장된 상태가 현재 설정/카탈로그와 어긋나면(슬롯 수 변경, 칩 삭제 등) 정화한다.
 	// 정화로 사라진 슬롯의 지불액은 지갑으로 되돌려 재화가 증발하지 않게 한다.
 	if (ProgressionConfig)
@@ -191,9 +205,101 @@ void UDRGameInstance::EnsureProgressInitialized()
 		if (bAnyChanged)
 		{
 			CurrentSaveGame->Currency += TotalReclaimed;
+		}
+
+		if (bAnyChanged || bDefaultsChanged)
+		{
 			SaveProgress();
 		}
 	}
+}
+
+bool UDRGameInstance::ApplyDefaultLoadout(EPlayerCharacterClass CharacterClass, FDRClassUpgradeState& State)
+{
+	if (!ProgressionConfig) return false;
+
+	// ★로봇당 세이브당 1회.★ 이 가드가 없으면 플레이어가 기본 칩을 뺀 선택이
+	// 다음 실행에서 매번 되돌려진다. (Plan3(공용칩) §6.2)
+	if (State.bDefaultsApplied) return false;
+
+	bool bMutated = false;
+	const int32 MaxSlotCount = ProgressionConfig->GetMaxSlotCount();
+
+	// 1) 칸 배열 길이 보장 — SanitizeClassState 보다 먼저 돌기 때문에 여기서 직접 맞춘다.
+	if (State.SlotChips.Num() != MaxSlotCount)
+	{
+		State.SlotChips.SetNum(MaxSlotCount);
+		bMutated = true;
+	}
+
+	// 2) 무료 시작 슬롯 해금. ★SpentCurrency 는 건드리지 않는다★ — 재화를 쓰지 않았으므로
+	//    환불 상한이 0으로 유지되고, RefundSlot() 이 이 칸들을 환불 대상에서 제외한다.
+	const int32 FreeSlots = FMath::Clamp(ProgressionConfig->InitialFreeSlots, 0, MaxSlotCount);
+	if (State.UnlockedSlots < FreeSlots)
+	{
+		State.UnlockedSlots = FreeSlots;
+		bMutated = true;
+	}
+
+	// 3) 기본 칩 배치 — 앞에서부터 ★빈 칸에만★ 꽂는다.
+	//    이미 슬롯을 쓰고 있던 기존 세이브의 장착을 덮어쓰지 않기 위함이다.
+	//
+	// ★하나라도 꽂지 못하면 bDefaultsApplied 를 세우지 않고 다음 실행에 다시 시도한다.★
+	// 칩을 만들기 전에 Config 에 Id 만 먼저 적어두는 순서가 정상인데, 그때 한 번 실패했다고
+	// 마커를 세워 버리면 에셋을 다 만든 뒤에도 기본 칩이 영영 안 꽂힌다.
+	bool bAllPlaced = true;
+
+	for (const FName& ChipId : ProgressionConfig->DefaultEquippedChips)
+	{
+		if (ChipId.IsNone()) continue;
+
+		const FDRUpgradeChipDefinition* Chip = FindChip(ChipId);
+		if (!Chip)
+		{
+			// 카탈로그 작성 전 — 다음 실행에 다시 시도한다
+			UE_LOG(LogDR, Warning,
+				TEXT("[Progression] DefaultEquippedChips 의 %s 가 카탈로그에 없습니다 — 다음 실행에 다시 시도합니다."),
+				*ChipId.ToString());
+			bAllPlaced = false;
+			continue;
+		}
+
+		// 공용이 아닌 칩이면 소속 로봇에만 꽂힌다 (Config 검증이 경고를 낸다).
+		// 이 로봇의 것이 아닌 건 다시 시도해도 결과가 같으므로 실패로 치지 않는다.
+		if (!Chip->IsUsableBy(CharacterClass)) continue;
+
+		// 이미 꽂혀 있으면 중복 장착하지 않는다
+		if (State.CountOccupiedSlots(ChipId) > 0) continue;
+
+		const int32 RequiredSlots = FMath::Max(1, Chip->RequiredSlotCount);
+
+		// ★칸 배정은 ComputeAssignment 하나로만 한다★ — 드래그앤드롭으로 꽂은 칩과
+		// 기본으로 꽂힌 칩의 배치 규칙이 갈리지 않게 한다. (Plan2.md 6.4)
+		TArray<int32> Assignment;
+		if (!ComputeAssignment(State, RequiredSlots, /*PreferredSlotIndex*/ INDEX_NONE, Assignment))
+		{
+			// 이미 칸을 꽉 채워 쓰던 기존 세이브 — 칸이 비면 그때 꽂아준다
+			UE_LOG(LogDR, Warning,
+				TEXT("[Progression] 기본 칩 %s 를 꽂을 빈 칸이 없습니다 (클래스 %d)."),
+				*ChipId.ToString(), static_cast<int32>(CharacterClass));
+			bAllPlaced = false;
+			continue;
+		}
+
+		for (const int32 SlotIndex : Assignment)
+		{
+			State.SlotChips[SlotIndex] = ChipId;
+		}
+		bMutated = true;
+	}
+
+	if (bAllPlaced)
+	{
+		State.bDefaultsApplied = true;
+		bMutated = true;
+	}
+
+	return bMutated;
 }
 
 bool UDRGameInstance::SanitizeClassState(EPlayerCharacterClass CharacterClass, FDRClassUpgradeState& State,
@@ -244,7 +350,7 @@ bool UDRGameInstance::SanitizeClassState(EPlayerCharacterClass CharacterClass, F
 
 		const FDRUpgradeChipDefinition* Chip = FindChip(ChipId);
 		const bool bValid = Chip
-			&& Chip->OwnerClass == CharacterClass
+			&& Chip->IsUsableBy(CharacterClass)
 			&& Chip->RequiredSlotTier <= Unlocked
 			&& SlotIndex < Unlocked;
 
@@ -279,6 +385,32 @@ bool UDRGameInstance::SanitizeClassState(EPlayerCharacterClass CharacterClass, F
 			}
 		}
 		bModified = true;
+	}
+
+	// ★Plan5(스킬당1칩)★ 3차 패스: 같은 스킬 칩이 둘 이상이면 ★앞 칸의 칩만★ 남긴다(D-50).
+	// 규칙 도입 전 세이브 대비. 칩은 사는 게 아니라 슬롯을 사는 구조라 재화는 건드리지 않는다.
+	if (const UDRChipCatalog* Catalog = GetChipCatalog())
+	{
+		TArray<FName> Kept;
+		for (FName& Slot : Slots)
+		{
+			if (Slot.IsNone()) continue;
+			if (Kept.Contains(Slot)) continue;   // 다중 칸 칩의 나머지 칸
+
+			if (Catalog->FindSkillConflict(Kept, Slot).IsNone())
+			{
+				Kept.Add(Slot);
+				continue;
+			}
+
+			const FName Dropped = Slot;
+			for (FName& Other : Slots)
+			{
+				if (Other == Dropped) Other = NAME_None;
+			}
+			UE_LOG(LogDR, Warning, TEXT("[Upgrade] 같은 스킬 칩 중복으로 %s 를 해제했습니다."), *Dropped.ToString());
+			bModified = true;
+		}
 	}
 
 	// 지불액 재산정: 정가 합계보다 많이 냈던 만큼은 지갑으로 환급 (재화 증발 방지)
@@ -351,6 +483,37 @@ void UDRGameInstance::DebugSetUpgradeSystemUnlocked(bool bUnlocked)
 	if (bUnlocked)
 	{
 		OnUpgradeSystemUnlocked.Broadcast();
+	}
+}
+
+void UDRGameInstance::DebugResetDefaultLoadout()
+{
+	UDRSaveGame* Save = GetOrLoadSaveGame();
+	if (!Save || !ProgressionConfig) return;
+
+	bool bChanged = false;
+
+	for (auto& Pair : Save->ClassUpgrades)
+	{
+		// 마커를 내려야 ApplyDefaultLoadout 이 다시 동작한다
+		if (Pair.Value.bDefaultsApplied)
+		{
+			Pair.Value.bDefaultsApplied = false;
+			bChanged = true;
+		}
+
+		if (ApplyDefaultLoadout(Pair.Key, Pair.Value))
+		{
+			bChanged = true;
+		}
+
+		OnUpgradesChanged.Broadcast(Pair.Key);
+	}
+
+	if (bChanged)
+	{
+		SaveProgress();
+		UE_LOG(LogDR, Warning, TEXT("[Progression] (치트) 기본 장착을 다시 적용했습니다."));
 	}
 }
 
@@ -475,7 +638,12 @@ EDRUpgradeResult UDRGameInstance::RefundSlot(EPlayerCharacterClass CharacterClas
 
 	FDRClassUpgradeState& State = FindOrAddClassState(CharacterClass);
 	const int32 Unlocked = State.UnlockedSlots;
-	if (Unlocked <= 0) return EDRUpgradeResult::NoSlotToRefund;
+
+	// ★Plan3(공용칩)★ 무료로 받은 시작 슬롯은 환불 대상이 아니다.
+	// 재화를 쓰지 않았으므로 돌려받을 금액이 0인데 칸만 잃는 함정이 된다. (§6.5)
+	const int32 FreeSlots = FMath::Clamp(
+		ProgressionConfig->InitialFreeSlots, 0, ProgressionConfig->GetMaxSlotCount());
+	if (Unlocked <= FreeSlots) return EDRUpgradeResult::NoSlotToRefund;
 
 	// 순차 해금의 역순 — 마지막으로 해금한 칸이 비어 있어야 환불할 수 있다
 	const int32 SlotIndex = Unlocked - 1;
@@ -689,7 +857,7 @@ int32 UDRGameInstance::GetChipSlotCount(const FDRClassUpgradeState& State, FName
 bool UDRGameInstance::IsChipUnlocked(EPlayerCharacterClass CharacterClass, FName ChipId) const
 {
 	const FDRUpgradeChipDefinition* Chip = FindChip(ChipId);
-	if (!Chip || Chip->OwnerClass != CharacterClass) return false;
+	if (!Chip || !Chip->IsUsableBy(CharacterClass)) return false;
 
 	// RequiredSlotTier 를 통합 해금 수와 비교한다 — 칩의 Category 는 보지 않는다.
 	return GetUnlockedSlotCount(CharacterClass) >= FMath::Max(1, Chip->RequiredSlotTier);
@@ -716,7 +884,7 @@ EDRUpgradeResult UDRGameInstance::CanEquipChip(EPlayerCharacterClass CharacterCl
 	const FDRUpgradeChipDefinition* Chip = FindChip(ChipId);
 	if (!Chip) return EDRUpgradeResult::UnknownChip;
 
-	if (Chip->OwnerClass != CharacterClass) return EDRUpgradeResult::WrongClass;
+	if (!Chip->IsUsableBy(CharacterClass)) return EDRUpgradeResult::WrongClass;
 
 	OutRequiredSlots = FMath::Max(1, Chip->RequiredSlotCount);
 	OutFreeSlots = GetFreeSlotCount(CharacterClass);
@@ -725,9 +893,22 @@ EDRUpgradeResult UDRGameInstance::CanEquipChip(EPlayerCharacterClass CharacterCl
 
 	if (IsChipEquipped(CharacterClass, ChipId)) return EDRUpgradeResult::AlreadyEquipped;
 
+	// ★Plan5(스킬당1칩)★ 같은 스킬 칩이 이미 있으면 거부한다(자동 교체 없음 — D-48).
+	// 슬롯 수보다 ★먼저★ 본다 — 칸이 모자란 것보다 "이 조합 자체가 안 된다"가 더 정확한 사유다.
+	// 교체 경로는 없다 — 그 칩을 먼저 해제해야 한다(D-139). CanEquipChipAtSlot 도 이 결과를 그대로 돌려준다.
+	if (!GetSkillConflictChip(CharacterClass, ChipId).IsNone()) return EDRUpgradeResult::SkillConflict;
+
 	if (OutFreeSlots < OutRequiredSlots) return EDRUpgradeResult::NotEnoughSlots;
 
 	return EDRUpgradeResult::Success;
+}
+
+FName UDRGameInstance::GetSkillConflictChip(EPlayerCharacterClass CharacterClass, FName ChipId) const
+{
+	const UDRChipCatalog* Catalog = GetChipCatalog();
+	if (!Catalog) return NAME_None;
+
+	return Catalog->FindSkillConflict(GetEquippedChips(CharacterClass), ChipId);
 }
 
 EDRUpgradeResult UDRGameInstance::EquipChip(EPlayerCharacterClass CharacterClass, FName ChipId,
@@ -813,6 +994,8 @@ EDRUpgradeResult UDRGameInstance::CanEquipChipAtSlot(EPlayerCharacterClass Chara
 {
 	// 칩 자체의 자격(설정/해금/소속/중복)은 기존 판정을 그대로 쓴다.
 	// NotEnoughSlots 만 "이 칸 기준"으로 다시 판단한다 — 점유 칸은 교체가 가능하기 때문.
+	// ★Plan5(스킬당1칩)★ SkillConflict 는 칸과 무관하게 그대로 거부한다 — 그 칩이 있는 칸에 놓아도
+	// 교체되지 않는다. 같은 스킬 칩은 먼저 해제한 뒤 장착한다(D-139 — D-48 의 드롭 교체를 폐지).
 	const EDRUpgradeResult BaseResult = CanEquipChip(CharacterClass, ChipId, OutRequiredSlots, OutFreeSlots);
 	if (BaseResult != EDRUpgradeResult::Success && BaseResult != EDRUpgradeResult::NotEnoughSlots)
 	{
@@ -1022,6 +1205,7 @@ void UDRGameInstance::MakeChipViewModel(EPlayerCharacterClass CharacterClass, co
 
 	OutViewModel.ChipId = Chip.ChipId;
 	OutViewModel.Category = Chip.Category;
+	OutViewModel.bCommonChip = Chip.bCommonChip;
 	OutViewModel.DisplayName = Chip.DisplayName;
 	OutViewModel.EffectSummary = Chip.EffectSummary;
 	OutViewModel.Description = Chip.Description;
@@ -1030,7 +1214,9 @@ void UDRGameInstance::MakeChipViewModel(EPlayerCharacterClass CharacterClass, co
 	OutViewModel.RequiredSlotTier = FMath::Max(1, Chip.RequiredSlotTier);
 	OutViewModel.bEquipped = IsChipEquipped(CharacterClass, Chip.ChipId);
 	OutViewModel.bUnlocked = IsChipUnlocked(CharacterClass, Chip.ChipId);
-	OutViewModel.bHasDrawback = Chip.HasDrawback();
+	// 돌파 칩은 단점이 코드 구동이라 bIsDrawback 모디파이어가 없을 수 있다.
+	// 분류만으로도 경고 아이콘을 띄워 "공짜 강화"로 오인하지 않게 한다. (Plan3(공용칩) §17.4.5)
+	OutViewModel.bHasDrawback = Chip.HasDrawback() || Chip.Category == EDRChipCategory::Ascension;
 
 	// 카드에 크게 찍을 2행 라벨. 슬롯 카드와 같은 규칙을 쓴다(같은 칩이 두 곳에서 다르게 보이지 않게).
 	UDRUpgradeUILibrary::MakeShortLabel(Chip, OutViewModel.ShortLabelTop, OutViewModel.ShortLabelBottom);
@@ -1045,6 +1231,16 @@ void UDRGameInstance::MakeChipViewModel(EPlayerCharacterClass CharacterClass, co
 	const EDRUpgradeResult EquipResult = CanEquipChip(CharacterClass, Chip.ChipId, RequiredSlots, FreeSlots);
 	OutViewModel.bCanEquipNow = (EquipResult == EDRUpgradeResult::Success);
 	OutViewModel.EquipBlockReason = EquipResult;
+
+	// ★Plan5(스킬당1칩)★ 부딪히는 칩을 알려 줘야 "'○○' 을 먼저 해제하세요"를 안내할 수 있다(D-139)
+	if (EquipResult == EDRUpgradeResult::SkillConflict)
+	{
+		OutViewModel.ConflictingChipId = GetSkillConflictChip(CharacterClass, Chip.ChipId);
+		if (const FDRUpgradeChipDefinition* Conflicting = FindChip(OutViewModel.ConflictingChipId))
+		{
+			OutViewModel.ConflictingChipName = Conflicting->DisplayName;
+		}
+	}
 
 	for (const FDRUpgradeModifier& Modifier : Chip.Modifiers)
 	{
@@ -1133,6 +1329,14 @@ void UDRGameInstance::BuildPreviewRuntime(EPlayerCharacterClass CharacterClass, 
 	}
 	if (!AddChipId.IsNone())
 	{
+		// ★Plan5(스킬당1칩)★ 같은 스킬 칩이 있으면 그 칩이 빠진다고 보고 계산한다 —
+		// 도달할 수 있는 결과는 "그 칩을 해제하고 이 칩을 낀" 상태뿐이라(D-139),
+		// 둘을 합친 수치를 보여 주면 거짓 미리보기가 된다(T-50).
+		const FName Conflicting = Catalog->FindSkillConflict(Chips, AddChipId);
+		if (!Conflicting.IsNone())
+		{
+			Chips.Remove(Conflicting);
+		}
 		Chips.AddUnique(AddChipId);
 	}
 
@@ -1143,7 +1347,13 @@ bool UDRGameInstance::MakeStatPreviewLine(EDRUpgradeStat Stat, const FGameplayTa
 	const FDRResolvedStat& Current, const FDRResolvedStat& Preview, FDRStatPreviewLine& OutLine) const
 {
 	const float DeltaFlat = Preview.Flat - Current.Flat;
-	const float DeltaPercent = Preview.Percent - Current.Percent;
+
+	// ★Plan5(씨앗칩)★ Mult 는 곱연산 누산기(기본 1.0)라 차가 아니라 ★비(比)★ 로 델타를 낸다.
+	//   예) 현재 ×1.5 인 상태에서 +50% 칩을 더 끼면 ×2.25 → 델타는 +50% 로 나와야 한다.
+	// Current.Mult 가 0 인 경우(-100% 칩)는 나눗셈이 성립하지 않으므로 차로 폴백한다.
+	const float DeltaPercent = FMath::IsNearlyZero(Current.Mult)
+		? (Preview.Mult - Current.Mult)
+		: (Preview.Mult / Current.Mult) - 1.f;
 
 	// 변화가 없는 항목은 줄을 만들지 않는다 (UI 가 "안 변한 것"으로 도배되지 않게)
 	if (FMath::IsNearlyZero(DeltaFlat) && FMath::IsNearlyZero(DeltaPercent))
@@ -1155,9 +1365,10 @@ bool UDRGameInstance::MakeStatPreviewLine(EDRUpgradeStat Stat, const FGameplayTa
 	OutLine.Stat = Stat;
 	OutLine.SkillTag = SkillTag;
 	OutLine.CurrentFlat = Current.Flat;
-	OutLine.CurrentPercent = Current.Percent;
 	OutLine.PreviewFlat = Preview.Flat;
-	OutLine.PreviewPercent = Preview.Percent;
+	// 필드 의미는 그대로 "누적 비율"이다 (×1.5 → 0.5). 이름을 바꾸지 않아 BP 영향이 없다.
+	OutLine.CurrentPercent = Current.Mult - 1.f;
+	OutLine.PreviewPercent = Preview.Mult - 1.f;
 	OutLine.DeltaText = UDRUpgradeUILibrary::MakeDeltaText(DeltaFlat, DeltaPercent);
 
 	// 라벨: 전역이면 스탯명만, 스킬 대상이면 "스킬명 · 스탯명"
@@ -1324,10 +1535,10 @@ FDRStageRewardResult UDRGameInstance::ApplyStageReward(const FDRStageRewardRepor
 
 		// ★해금 원장은 재화 지급 여부와 무관하게 항상 기록한다★
 		// 아래 중복 방지 continue 보다 ★반드시 앞★ 이어야 한다 —
-		// 뒤에 두면 이미 재화를 받은 업적이 코스메틱 해금 판정에서 누락된다. (Plan.md 4.5 / 5.1)
+		// 뒤에 두면 이미 재화를 받은 업적이 코스메틱 해금 판정에서 누락된다. (Plan(옷장) D-3 · T-2)
 		Save->EarnedAchievements.AddUnique(AchievementId);
 
-		// 스팀 미러링 큐. 연동(Plan.md M6) 전까지는 쌓아두기만 한다.
+		// 스팀 미러링 큐. 연동(Plan(옷장) M6) 전까지는 쌓아두기만 한다.
 		if (!Def->SteamApiName.IsEmpty())
 		{
 			Save->PendingSteamAchievements.AddUnique(AchievementId);
@@ -1407,7 +1618,7 @@ void UDRGameInstance::ClearPlayerClassSelections()
 	PlayerClassSelections.Empty();
 }
 
-// ========================= 코스메틱 / 옷장 (Plan.md 5.1 / 15.11) =========================
+// ========================= 코스메틱 / 옷장 (Plan(옷장)) =========================
 
 UDRCosmeticCatalog* UDRGameInstance::GetCosmeticCatalog() const
 {
@@ -1519,7 +1730,7 @@ bool UDRGameInstance::EquipSkin(EPlayerCharacterClass CharacterClass, EDRCosmeti
 			return false;
 		}
 
-		if (Def->OwnerClass != CharacterClass || Def->Category != Category) return false;
+		if (!Def->IsUsableBy(CharacterClass) || Def->Category != Category) return false;	// Plan(옷장) D-31
 		if (!IsSkinUnlocked(SkinId)) return false;
 	}
 
@@ -1619,9 +1830,15 @@ bool UDRGameInstance::HasAnySkinAvailable(EPlayerCharacterClass CharacterClass) 
 
 	for (const FDRSkinDefinition& Skin : Catalog->Skins)
 	{
-		if (!Skin.SkinId.IsNone() && Skin.OwnerClass == CharacterClass) return true;
+		if (!Skin.SkinId.IsNone() && Skin.IsUsableBy(CharacterClass)) return true;
 	}
 	return false;
+}
+
+FText UDRGameInstance::GetSkinDisplayName(FName SkinId) const
+{
+	const FDRSkinDefinition* Def = FindSkinDef(SkinId);
+	return Def ? Def->DisplayName : FText::GetEmpty();
 }
 
 bool UDRGameInstance::SanitizeCosmeticState(EPlayerCharacterClass CharacterClass,

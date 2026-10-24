@@ -39,7 +39,7 @@ ADRCosmeticPreviewStage::ADRCosmeticPreviewStage()
 	 * SCS_SceneColorHDR 은 알파에 ★역불투명도(Inv Opacity)★ 를 담는다.
 	 * 즉 아무 것도 없는 픽셀은 A=1, 캐릭터가 있는 픽셀은 A=0 이다.
 	 * → UI 머티리얼에서 Opacity = 1 - A 로 쓰면 배경이 뚫려
-	 *   뒤에 깔린 캐릭터 글로우(Img_CharBack)가 비쳐 보인다. (Plan.md 15.3 / 15.4)
+	 *   뒤에 깔린 캐릭터 글로우(Img_CharBack)가 비쳐 보인다. (Plan(옷장) D-11)
 	 *
 	 * 대안은 프로젝트 설정에서 알파 채널 전파를 켜고 SCS_FinalColorLDR 을 쓰는 것인데,
 	 * 렌더링 전역 설정을 바꾸는 비용이 커서 택하지 않았다.
@@ -110,6 +110,14 @@ void ADRCosmeticPreviewStage::SetPreviewClass(EPlayerCharacterClass CharacterCla
 	PreviewCharacter->SetWaitingRoomVisibility(true);
 
 	CurrentPreviewClass = CharacterClass;
+
+	// 로봇별 구도 (Plan(옷장) D-28)
+	if (!DefaultCaptureLocation.IsSet())
+	{
+		DefaultCaptureLocation = CaptureComponent->GetRelativeLocation();
+	}
+	const FVector* ClassCaptureLocation = CaptureLocationByClass.Find(CharacterClass);
+	CaptureComponent->SetRelativeLocation(ClassCaptureLocation ? *ClassCaptureLocation : DefaultCaptureLocation.GetValue());
 
 	RefreshShowOnlyList();
 }

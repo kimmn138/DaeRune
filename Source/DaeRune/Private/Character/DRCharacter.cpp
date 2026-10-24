@@ -28,6 +28,7 @@
 #include "Game/DRLobbyGameState.h"
 #include "Game/DRTutorialGameMode.h"
 #include "Character/DRFacialExpressionComponent.h"
+#include "AbilitySystem/DRSynergyAuraComponent.h"
 #include "Character/DRRobotVacuumCharacter.h"
 #include "Actor/Stage2/DRS2TrainCar.h"
 #include "DRAbilityTypes.h"
@@ -45,6 +46,7 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "DaeRune/DRLogChannels.h"
+#include "Misc/ScopeExit.h"
 
 ADRCharacter::ADRCharacter()
 {
@@ -124,6 +126,10 @@ ADRCharacter::ADRCharacter()
 	// 표정 컴포넌트 생성
 	FacialExpressionComponent = CreateDefaultSubobject<UDRFacialExpressionComponent>(TEXT("FacialExpression"));
 
+	// 시너지 오라 컴포넌트 (Plan3(공용칩) §17.7).
+	// 항상 붙여 두되 칩이 없으면 타이머가 아예 돌지 않으므로 비용이 0 이다.
+	SynergyAuraComponent = CreateDefaultSubobject<UDRSynergyAuraComponent>(TEXT("SynergyAura"));
+
 	// 부품 시스템 초기화
 	bIsCarryingPart = false;
 	CarriedPart = nullptr;
@@ -136,6 +142,7 @@ void ADRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ADRCharacter, bIsCarryingPart);
 	DOREPLIFETIME(ADRCharacter, CarriedPart);
 	DOREPLIFETIME(ADRCharacter, PlayerCharacterClass);
+	DOREPLIFETIME(ADRCharacter, DisplaySkinIds);	// 대기실 디스플레이 전용 (Plan(옷장) M5)
 
 	// 탑승 시스템 (라이더 측)
 	DOREPLIFETIME(ADRCharacter, MountedOn);
@@ -239,37 +246,42 @@ void ADRCharacter::PropagateSharedDamage(float Damage, const FGameplayEffectCont
 			LinkedCharacters.Add(SelfVacuum->RiderOnTop);
 		}
 	}
-	if (LinkedCharacters.IsEmpty()) return;
+	// ★Plan5(탑승칩)★ GE 적용부는 ApplyMountSharedDamageTo 로 뽑았다 — ② 이전분도 같은 함수를 지난다 (D-91). 동작은 그대로
+	for (ADRCharacter* Linked : LinkedCharacters)
+	{
+		ApplyMountSharedDamageTo(Linked, Damage);
+	}
+}
+
+bool ADRCharacter::ApplyMountSharedDamageTo(ADRCharacter* Target, float Damage)
+{
+	if (!HasAuthority() || !IsValid(Target) || Target->bDead) return false;
+	if (Damage <= 0.f) return true;
 
 	if (!MountSharedDamageEffectClass)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("PropagateSharedDamage: MountSharedDamageEffectClass 미설정 (%s BP에서 GE_Damage 지정 필요)"), *GetName());
-		return;
+		return false;
 	}
 
 	UAbilitySystemComponent* SelfASC = GetAbilitySystemComponent();
-	if (!SelfASC) return;
+	UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent();
+	if (!SelfASC || !TargetASC) return false;
 
+	// Source = 넘겨주는 사람 ASC (플레이어→플레이어라 물 보상/킬크레딧 왜곡 없음).
+	// 주는 피해 배율은 ExecCalc 가 MountShared 를 보고 건너뛴다 (Plan5 D-82)
 	const FDRGameplayTags& DRTags = FDRGameplayTags::Get();
-	for (ADRCharacter* Linked : LinkedCharacters)
-	{
-		if (Linked->bDead) continue;
+	FDamageEffectParams Params;
+	Params.WorldContextObject = this;
+	Params.DamageGameplayEffectClass = MountSharedDamageEffectClass;
+	Params.SourceAbilitySystemComponent = SelfASC;
+	Params.TargetAbilitySystemComponent = TargetASC;
+	Params.BaseDamage = Damage;
+	Params.DamageType = DRTags.Damage_Physical;
+	Params.SourceAbilityTags.AddTag(DRTags.Damage_MountShared);   // ★필수★ — 빠지면 탑 안에서 무한 반복 (Plan5 T-74)
 
-		UAbilitySystemComponent* LinkedASC = Linked->GetAbilitySystemComponent();
-		if (!LinkedASC) continue;
-
-		// Source = 원 피격자 ASC (플레이어→플레이어라 물 보상/킬크레딧 왜곡 없음)
-		FDamageEffectParams Params;
-		Params.WorldContextObject = this;
-		Params.DamageGameplayEffectClass = MountSharedDamageEffectClass;
-		Params.SourceAbilitySystemComponent = SelfASC;
-		Params.TargetAbilitySystemComponent = LinkedASC;
-		Params.BaseDamage = Damage;
-		Params.DamageType = DRTags.Damage_Physical;
-		Params.SourceAbilityTags.AddTag(DRTags.Damage_MountShared);
-
-		UDRAbilitySystemLibrary::ApplyDamageEffect(Params);
-	}
+	UDRAbilitySystemLibrary::ApplyDamageEffect(Params);
+	return true;
 }
 
 void ADRCharacter::PossessedBy(AController* NewController)
@@ -300,6 +312,9 @@ void ADRCharacter::PossessedBy(AController* NewController)
 			DRPC->bAutoManageActiveCameraTarget = false;
 		}
 	}
+
+	// 입고 있는 옷 — PlayerState 가 폰보다 먼저 와 있던 경우의 치유 경로 (서버 · 리슨 호스트, Plan(옷장) M3)
+	ApplyCosmeticsFromPlayerState();
 }
 
 void ADRCharacter::OnRep_PlayerState()
@@ -309,6 +324,30 @@ void ADRCharacter::OnRep_PlayerState()
 	// 클라이언트에서 GAS 초기화
 	InitAbilityActorInfo();
 	InitializeMoveSpeedBinding();
+
+	// 클라이언트 쪽 같은 치유 경로 — 다른 플레이어의 폰도 여기로 온다 (Plan(옷장) M3)
+	ApplyCosmeticsFromPlayerState();
+}
+
+void ADRCharacter::ApplyCosmeticsFromPlayerState()
+{
+	if (const ADRPlayerState* DRPS = GetPlayerState<ADRPlayerState>())
+	{
+		ApplyCosmeticSkins(DRPS->GetEquippedSkinIds());
+	}
+}
+
+void ADRCharacter::SetDisplaySkinIds(const TArray<FName>& InSkinIds)
+{
+	if (!HasAuthority()) return;
+
+	DisplaySkinIds = InSkinIds;
+	ApplyCosmeticSkins(DisplaySkinIds);	// 리슨 호스트 화면 (Plan(옷장) T-23)
+}
+
+void ADRCharacter::OnRep_DisplaySkinIds()
+{
+	ApplyCosmeticSkins(DisplaySkinIds);
 }
 
 void ADRCharacter::OnRep_Stunned()
@@ -955,16 +994,52 @@ void ADRCharacter::RefreshUpgradeEffects()
 	// 플레이어 체력은 컨테이너 시스템이라 MaxHealth 를 직접 올리면 컨테이너 인덱스 계산과
 	// 오염 해제 로직(NumContainers * ContainerHealth)이 깨진다. 칸 용량 자체를 올린다. (Plan2.md 2.2)
 	const float BaseContainerHealth = ContainerHealth;
+
+	// ★Plan3(공용칩)★ EDRUpgradeStat::MaxHealth 는 "총 HP" 단위 스탯이다.
+	// 불변식(MaxHealth = NumContainers × ContainerHealth)을 지키려면 총량을 칸 수로 나눠
+	// "칸 용량 증가분"으로 환산해 넣어야 한다. 이렇게 해야 칸 수가 4에서 바뀌어도
+	// 카탈로그에 적은 "+100" 이 계속 정확히 +100 이다. (Plan3(공용칩) §7.1 D-3)
+	const float MaxHealthBonusTotal = Runtime.GetGlobalStat(EDRUpgradeStat::MaxHealth).Flat;
+	const float PerContainerBonus = (NumContainers > 0)
+		? MaxHealthBonusTotal / static_cast<float>(NumContainers) : 0.f;
+
 	const float UpgradedContainerHealth = FMath::Max(
-		1.f, Runtime.Apply(EDRUpgradeStat::ContainerHealth, BaseContainerHealth));
+		1.f, Runtime.Apply(EDRUpgradeStat::ContainerHealth, BaseContainerHealth + PerContainerBonus));
 
 	if (UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSets))
 	{
 		PlayerAS->SetContainerInfo(NumContainers, UpgradedContainerHealth);
 	}
 
+	// ===== 1-2) 시너지 오라 (Plan3(공용칩) §17.7) =====
+	// ★반드시 아래 조기 return 들보다 앞에 둔다.★
+	// 시너지 칩은 모디파이어가 없어 Runtime.IsEmpty() 가 true 이고,
+	// UpgradeStatEffectClass 미지정 분기도 return 한다 — 뒤에 두면 오라가 영영 안 켜진다.
+	// (컴포넌트가 내부에서 서버 권한을 검사하므로 여기서 걸러내지 않는다)
+	if (SynergyAuraComponent)
+	{
+		SynergyAuraComponent->RefreshFromUpgrade();
+	}
+
+	// ===== 1-3) ★Plan5(탑승칩)★ 파생 클래스 훅 =====
+	// 탑승칩 ①·③은 모디파이어가 없어 Runtime.IsEmpty() 가 true 일 수 있다 — 시너지와 같은 이유로 조기 return 앞에 둔다 (D-81)
+	OnUpgradeEffectsRefreshed();
+
 	// ===== 2) 스탯 GE (서버 전용) =====
 	if (!HasAuthority()) return;
+
+	// ★Plan5(탑승칩)★ 오염 중이면 아래 ★모든 return 경로의 끝★ 에서 최대 체력을 100 으로 다시 맞춘다 (D-87).
+	// 칩 GE 를 떼고 붙이는 사이 비율 유지 로직이 체력을 바꾸므로 오염 체력은 시작 값으로 되돌린다 (T-88)
+	UDRPlayerAttributeSet* CorruptAS = Cast<UDRPlayerAttributeSet>(AttributeSets);
+	const bool bCorruptedAtStart = CorruptAS && CorruptAS->IsCorrupted();
+	const float CorruptHealthAtStart = bCorruptedAtStart ? CorruptAS->GetHealth() : 0.f;
+	ON_SCOPE_EXIT
+	{
+		if (bCorruptedAtStart)
+		{
+			CorruptAS->ReapplyCorruptMaxHealth(CorruptHealthAtStart);
+		}
+	};
 
 	// 재적용 전에 이전 핸들 제거 (클래스 변경 / 로드아웃 갱신 대응)
 	if (UpgradeStatEffectHandle.IsValid())
@@ -998,13 +1073,15 @@ void ADRCharacter::RefreshUpgradeEffects()
 	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxHealth_Flat, MaxHealthFlat);
 	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxHealth_Mult, 1.f);
 
+	// ★Plan5(씨앗칩)★ FDRResolvedStat::Mult 는 ★이미 배율★ 이다(기본 1.0).
+	// 예전 Percent(기본 0.0) 시절의 `1.f + ...` 관용구를 그대로 두면 칩이 없어도 2배가 된다.
 	const FDRResolvedStat WaterStat = Runtime.GetGlobalStat(EDRUpgradeStat::MaxWater);
 	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxWater_Flat, WaterStat.Flat);
-	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxWater_Mult, 1.f + WaterStat.Percent);
+	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MaxWater_Mult, WaterStat.Mult);
 
 	const FDRResolvedStat SpeedStat = Runtime.GetGlobalStat(EDRUpgradeStat::MoveSpeed);
 	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MoveSpeed_Flat, SpeedStat.Flat);
-	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MoveSpeed_Mult, 1.f + SpeedStat.Percent);
+	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MoveSpeed_Mult, SpeedStat.Mult);
 
 	// 최대치 변화에 맞춰 현재값 비율을 유지한다.
 	// 스폰 시점엔 만피이므로 그대로 만피가 되고, 컨테이너 시스템에서는 "남은 컨테이너 수 유지"와 같다.
@@ -1102,6 +1179,16 @@ void ADRCharacter::InitAbilityActorInfo()
 		EGameplayTagEventType::NewOrRemoved
 	).AddUObject(this, &ADRCharacter::StunTagChanged);
 
+	// Plan8(FP) TP 가 실제로 경직할 때만 FP 도 — GA_HitReact 가 차단되면 태그가 안 붙는다 (D-40).
+	// 바인딩은 로컬 제어와 무관하게 — 클라 OnRep_PlayerState 시점엔 컨트롤러가 아직 없을 수 있다 (T-38)
+	if (FirstPersonHitReactMontage)
+	{
+		AbilitySystemComponent->RegisterGameplayTagEvent(
+			FDRGameplayTags::Get().Effects_HitReact,
+			EGameplayTagEventType::NewOrRemoved
+		).AddUObject(this, &ADRCharacter::FirstPersonHitReactTagChanged);
+	}
+
 	// 표정 시스템은 명시적 멀티캐스트(MulticastPlayHitReactFacial /
 	// MulticastPlayVendingSkillUse)에서 트리거하므로 태그 바인딩 불필요.
 
@@ -1137,6 +1224,15 @@ void ADRCharacter::MulticastPlayHitReactFacial_Implementation()
 	}
 }
 
+void ADRCharacter::FirstPersonHitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
+{
+	// 로컬 제어 · FP 메시 가시성은 헬퍼가 본다 — 서버의 리모트 폰에서는 아무 일도 없다 (Plan8 D-33)
+	if (NewCount > 0)
+	{
+		UDRAbilitySystemLibrary::PlayFirstPersonMontage(this, FirstPersonHitReactMontage);
+	}
+}
+
 // ========== 사망 애니메이션 (이벤트 기반) ==========
 
 void ADRCharacter::MulticastHandleDeath_Implementation(const FVector& DeathImpulse)
@@ -1153,6 +1249,10 @@ void ADRCharacter::MulticastHandleDeath_Implementation(const FVector& DeathImpul
 	{
 		DeathMontageIndex = FMath::RandRange(0, DeathMontages.Num() - 1);
 	}
+
+	// 옷(부착물)은 녹지 않으므로 숨긴다 — Super 의 시점 전환이 Sync 를 다시 돌려도 꺼진 채로 남는다 (Plan(옷장) T-3)
+	bCosmeticHiddenForDeath = true;
+	SyncCosmeticVisibility();
 
 	// 베이스 본체 실행:
 	//  - bDead = true
@@ -1242,7 +1342,9 @@ void ADRCharacter::MulticastHandleRevive_Implementation()
 	// ★코스메틱 재적용 — 반드시 필요하다★
 	// ADRCharacterBase::Dissolve() 가 사망 시 본체/무기의 머티리얼 슬롯 0 을 Dissolve 머티리얼로
 	// 덮어쓰는데, 부활 복원은 BP(K2_OnCharacterRevived)가 "Dissolve 파라미터"만 되돌린다.
-	// 여기서 다시 입히지 않으면 부활할 때마다 옷이 기본 외형으로 돌아간다. (Plan.md 1.7 / 15.11)
+	// 여기서 다시 입히지 않으면 부활할 때마다 옷이 기본 외형으로 돌아간다. (Plan(옷장) T-3)
+	// 사망 때 숨긴 부착물도 이 재생성으로 다시 보인다 — 플래그를 먼저 풀어야 한다.
+	bCosmeticHiddenForDeath = false;
 	RefreshSkinVisuals();
 }
 
@@ -1253,6 +1355,14 @@ void ADRCharacter::OnRep_Dead()
 	if (bDead)
 	{
 		PlayDeathMontage_Internal();
+	}
+
+	// 늦게 들어온 클라이언트는 사망/부활 멀티캐스트를 못 받는다 — 복제된 bDead 로도 옷 숨김을 맞춘다 (Plan(옷장) T-3).
+	// ★양방향★ — 부활 멀티캐스트보다 늦게 도착한 옛 값(true)이 숨겨도 다음 복제(false)가 다시 켠다.
+	if (bCosmeticHiddenForDeath != bDead)
+	{
+		bCosmeticHiddenForDeath = bDead;
+		SyncCosmeticVisibility();
 	}
 }
 
@@ -1289,7 +1399,7 @@ void ADRCharacter::PlayDeathMontage_Internal()
 	}
 }
 
-// ========================= 코스메틱 외형 (Plan.md 5.4 / 15.11) =========================
+// ========================= 코스메틱 외형 (Plan(옷장) D-6 · D-7) =========================
 
 namespace
 {
@@ -1413,6 +1523,9 @@ void ADRCharacter::BuildCosmeticVisuals()
 	CosmeticAttachTP.SetNum(CategoryCount);
 	CosmeticAttachFP.SetNum(CategoryCount);
 
+	// 공용 옷의 로봇별 위치를 고를 기준 (Plan(옷장) D-32)
+	const EPlayerCharacterClass CosmeticClass = ResolveCosmeticClass();
+
 	// 2) Head → Face → Body → Tail 순으로 겹쳐 적용한다.
 	//    같은 머티리얼 슬롯을 두 카테고리가 건드리면 ★나중이 이긴다★ —
 	//    순서를 카테고리 순으로 고정해 결과를 결정적으로 만든다.
@@ -1423,13 +1536,35 @@ void ADRCharacter::BuildCosmeticVisuals()
 		const FDRSkinDefinition* Def = Catalog->FindSkin(SkinId);
 		if (!Def) continue;
 
+		// 로봇이 바뀌는 순간 등 목록과 몸이 어긋나면 입히지 않는다 (서버 정화가 1차 방어선)
+		if (!Def->IsUsableBy(CosmeticClass)) continue;
+
 		ApplyCosmeticMaterials(GetMesh(), Def->BodyMaterialsTP);
 		ApplyCosmeticMaterials(FirstPersonMesh, Def->BodyMaterialsFP);
 		ApplyCosmeticMaterials(Weapon, Def->WeaponMaterials);
 
-		CosmeticAttachTP[Index] = SpawnCosmeticAttachment(Def->ThirdPerson, GetMesh(), false);
+		CosmeticAttachTP[Index] = SpawnCosmeticAttachment(Def->GetThirdPersonFor(CosmeticClass), GetMesh(), false);
 		CosmeticAttachFP[Index] = SpawnCosmeticAttachment(Def->FirstPerson, FirstPersonMesh, true);
 	}
+}
+
+EPlayerCharacterClass ADRCharacter::ResolveCosmeticClass() const
+{
+	// 빙의된 캐릭터는 PlayerState 가 PlayerCharacterClass 를 덮어써 정확하지만, 프리뷰 · 대기실 캐릭터는
+	// BP 기본값 그대로다(자판기 BP 는 범위 밖 값이 들어 있다). 그래서 ★BP 클래스로★ 판정한다 —
+	// ClassInfo 의 "로봇 → BP" 표를 거꾸로 찾는다. 정확히 같은 클래스를 먼저, 없으면 자식 클래스를.
+	if (const UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this))
+	{
+		for (const TPair<EPlayerCharacterClass, TSubclassOf<ADRCharacter>>& Pair : ClassInfo->CharacterBPClasses)
+		{
+			if (Pair.Value && GetClass() == Pair.Value.Get()) return Pair.Key;
+		}
+		for (const TPair<EPlayerCharacterClass, TSubclassOf<ADRCharacter>>& Pair : ClassInfo->CharacterBPClasses)
+		{
+			if (Pair.Value && GetClass()->IsChildOf(Pair.Value.Get())) return Pair.Key;
+		}
+	}
+	return PlayerCharacterClass;
 }
 
 UMeshComponent* ADRCharacter::SpawnCosmeticAttachment(const FDRSkinAttachSpec& Spec,
@@ -1490,10 +1625,11 @@ UMeshComponent* ADRCharacter::SpawnCosmeticAttachment(const FDRSkinAttachSpec& S
 		Created->BoundsScale = 4.f;	// FirstPersonMesh 와 동일 — depth 압축 WPO 로 인한 컬링 pop 방지
 	}
 
-	// 가시성 플래그는 부모 메시를 그대로 따라간다 (대기실/1인칭 전환 상태까지 자동 반영)
+	// 가시성 플래그는 부모 메시를 그대로 따라간다 (대기실/1인칭 전환 상태까지 자동 반영).
+	// 단 사망 중에는 숨긴 채로 만든다 (Plan(옷장) T-3)
 	Created->SetOnlyOwnerSee(Parent->bOnlyOwnerSee);
 	Created->SetOwnerNoSee(Parent->bOwnerNoSee);
-	Created->SetVisibility(Parent->IsVisible());
+	Created->SetVisibility(Parent->IsVisible() && !bCosmeticHiddenForDeath);
 
 	return Created;
 }
@@ -1554,7 +1690,9 @@ void ADRCharacter::ClearCosmeticAttachments()
 
 void ADRCharacter::SyncCosmeticVisibility()
 {
-	auto Sync = [](TArray<TObjectPtr<UMeshComponent>>& Components, const USkeletalMeshComponent* Parent)
+	const bool bHiddenForDeath = bCosmeticHiddenForDeath;
+
+	auto Sync = [bHiddenForDeath](TArray<TObjectPtr<UMeshComponent>>& Components, const USkeletalMeshComponent* Parent)
 	{
 		if (!Parent) return;
 
@@ -1564,7 +1702,7 @@ void ADRCharacter::SyncCosmeticVisibility()
 
 			Component->SetOnlyOwnerSee(Parent->bOnlyOwnerSee);
 			Component->SetOwnerNoSee(Parent->bOwnerNoSee);
-			Component->SetVisibility(Parent->IsVisible());
+			Component->SetVisibility(Parent->IsVisible() && !bHiddenForDeath);	// Plan(옷장) T-3
 		}
 	};
 

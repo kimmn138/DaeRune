@@ -13,8 +13,12 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/OverlapResult.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemBlueprintLibrary.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
+// Plan5(물대포칩) — 업그레이드 조회 / 칩 튜닝 상수
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
+#include "Game/DRProgressionConfig.h"
 
 FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLocation, bool& bHitObstacle, FHitResult& OutHitResult)
 {
@@ -44,32 +48,21 @@ FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLoca
     //
     //   조준 지점을 먼저 확정하면 소켓->조준점 직선이 목표를 향하므로 그 문제가 사라진다.
     //   벽 차단은 아래 소켓 트레이스가 그대로 담당하므로 관통 문제는 생기지 않는다.
+    //
+    //   ★Plan5(물대포칩)★ 관통 칩이 있으면 이 광선도 캐릭터를 건너뛰어야 한다.
+    //   여기를 빠뜨리면 조준점이 첫 적에서 확정되어 아래 소켓 트레이스도 짧아지고,
+    //   결국 관통이 "첫 적까지"만 된다.
     {
         FHitResult CameraHit;
-        if (GetWorld()->LineTraceSingleByChannel(
-                CameraHit, AimStart, CameraTargetPoint, ECC_Visibility, QueryParams))
+        if (TraceBeamBlocker(AimStart, CameraTargetPoint, Resolved.bPierce, QueryParams, CameraHit))
         {
             CameraTargetPoint = CameraHit.ImpactPoint;
         }
     }
 
-    // LineTrace ����
-    bHitObstacle = GetWorld()->LineTraceSingleByChannel(
-        OutHitResult,
-        WeaponSocketLocation,
-        CameraTargetPoint,
-        ECC_Visibility,
-        QueryParams
-    );
-
-    // [임시 진단]
-    UE_LOG(LogDR, Warning,
-        TEXT("[MoleDiag] V. 빔 트레이스: 히트=%d / 맞은것=%s / 거리=%.0f / 관통시작=%d / 최대사거리=%.0f"),
-        bHitObstacle ? 1 : 0,
-        *GetNameSafe(OutHitResult.GetActor()),
-        OutHitResult.Distance,
-        OutHitResult.bStartPenetrating ? 1 : 0,
-        WeaponRange);
+    // LineTrace ���� (관통이면 캐릭터를 건너뛴다 — 지형지물은 그대로 막는다)
+    bHitObstacle = TraceBeamBlocker(
+        WeaponSocketLocation, CameraTargetPoint, Resolved.bPierce, QueryParams, OutHitResult);
 
     // ★시작점이 이미 막힌 형상 안이면(BlockingVolume 등) 거리 0 으로 히트가 잡힌다.
     //   그대로 두면 빔 길이가 0 이 되어 판정 박스가 소켓 자리에 뭉개지고
@@ -132,10 +125,62 @@ FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLoca
     return BeamEndPoint;
 }
 
+bool UDRWaterPump::TraceBeamBlocker(const FVector& Start, const FVector& End, bool bPierceCharacters,
+    FCollisionQueryParams Params, FHitResult& OutHit) const
+{
+    UWorld* World = GetWorld();
+    if (!World) return false;
+
+    // 관통이 아니면 기존과 ★완전히 동일한★ 단일 트레이스다. 회귀 0.
+    if (!bPierceCharacters)
+    {
+        return World->LineTraceSingleByChannel(OutHit, Start, End, ECC_Visibility, Params);
+    }
+
+    // ★Plan5(물대포칩)★ 관통 — 캐릭터형 액터를 만나면 무시 목록에 넣고 다시 쏜다.
+    //
+    // LineTraceMulti 로는 안 된다: Multi 도 ★첫 Block 에서 멈춘다★.
+    // 적 커스텀 히트박스가 ECC_Visibility 를 Block 으로 잡고 있어서(DREnemy::SetupHitboxComponents)
+    // Multi 를 써도 첫 적까지만 돌려준다.
+    //
+    // 판정 기준이 ICombatInterface 인 이유 (D-13):
+    //   · Cast<ADREnemy>       — 홀로그램 두더지처럼 캐릭터가 아닌 유효 대상을 놓친다
+    //   · IsValidDamageTarget  — 죽은 적을 false 로 돌려줘서 ★시체가 빔을 막는다★
+    for (int32 Step = 0; Step <= MaxPierceTargets; ++Step)
+    {
+        if (!World->LineTraceSingleByChannel(OutHit, Start, End, ECC_Visibility, Params))
+        {
+            return false;                       // 끝까지 아무것도 안 막았다 = 최대 사거리
+        }
+
+        AActor* Blocker = OutHit.GetActor();
+        if (!Blocker || !Blocker->Implements<UCombatInterface>())
+        {
+            return true;                        // ★지형지물★ — 여기서 끊긴다
+        }
+
+        Params.AddIgnoredActor(Blocker);        // 캐릭터는 통과시키고 다시
+    }
+
+    return true;   // 상한 도달: 마지막 히트를 그대로 쓴다 (무한 루프 방지)
+}
+
 AActor* UDRWaterPump::FindClosestTargetInBeam(const FVector& WeaponSocketLocation, const FVector& BeamEndPoint)
 {
+    // ★Plan5(물대포칩)★ 본체는 CollectTargetsInBeam 으로 옮겼다.
+    // 이 함수는 BlueprintCallable 시그니처를 유지하기 위한 얇은 래퍼다.
+    TArray<AActor*> Targets;
+    CollectTargetsInBeam(WeaponSocketLocation, BeamEndPoint, Targets);
+    return Targets.Num() > 0 ? Targets[0] : nullptr;
+}
+
+void UDRWaterPump::CollectTargetsInBeam(const FVector& WeaponSocketLocation, const FVector& BeamEndPoint,
+    TArray<AActor*>& OutTargets) const
+{
+    OutTargets.Reset();
+
     ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
-    if (!OwnerCharacter) return nullptr;
+    if (!OwnerCharacter) return;
 
     // ������ ����� ���� ���
     FVector BeamDirection = (BeamEndPoint - WeaponSocketLocation).GetSafeNormal();
@@ -196,33 +241,12 @@ AActor* UDRWaterPump::FindClosestTargetInBeam(const FVector& WeaponSocketLocatio
     }
 #endif
 
-    if (!bHasOverlaps) return nullptr;
-
-    // ���� ����� �� ã��
-    AActor* ClosestTarget = nullptr;
-    float ClosestDistanceSq = FLT_MAX;
-
-    // [임시 진단]
-    UE_LOG(LogDR, Warning, TEXT("[MoleDiag] W1. 박스 중심=%s 반크기=%s / 오버랩 %d개"),
-        *BoxCenter.ToCompactString(), *BoxHalfExtent.ToCompactString(), OverlapResults.Num());
-
-    for (const FOverlapResult& R : OverlapResults)
-    {
-        UE_LOG(LogDR, Warning, TEXT("[MoleDiag] W1-%s (컴포넌트 %s)"),
-            *GetNameSafe(R.GetActor()), *GetNameSafe(R.GetComponent()));
-    }
+    if (!bHasOverlaps) return;
 
     for (const FOverlapResult& Result : OverlapResults)
     {
         AActor* OverlappedActor = Result.GetActor();
         if (!OverlappedActor) continue;
-
-        // [임시 진단] 두더지만 출력
-        if (OverlappedActor->GetClass()->GetName().Contains(TEXT("Mole")))
-        {
-            UE_LOG(LogDR, Warning, TEXT("[MoleDiag] W2. 두더지 발견: %s / Implements=%d"),
-                *OverlappedActor->GetName(), OverlappedActor->Implements<UCombatInterface>() ? 1 : 0);
-        }
 
         // CombatInterface üũ
         if (!OverlappedActor->Implements<UCombatInterface>()) continue;
@@ -230,20 +254,54 @@ AActor* UDRWaterPump::FindClosestTargetInBeam(const FVector& WeaponSocketLocatio
         // ���� �� ����
         if (ICombatInterface::Execute_IsDead(OverlappedActor)) continue;
 
-        // �Ÿ� ���
-        float DistanceSq = FVector::DistSquared(WeaponSocketLocation, OverlappedActor->GetActorLocation());
-
-        if (DistanceSq < ClosestDistanceSq)
-        {
-            ClosestDistanceSq = DistanceSq;
-            ClosestTarget = OverlappedActor;
-        }
+        // ★같은 액터의 히트박스가 여러 개면 오버랩도 여러 번 잡힌다★ — 중복을 제거한다.
+        // 기존에는 "가장 가까운 하나"만 골라서 드러나지 않던 문제다.
+        OutTargets.AddUnique(OverlappedActor);
     }
 
-    // [임시 진단]
-    UE_LOG(LogDR, Warning, TEXT("[MoleDiag] W3. 최종 대상 = %s"), *GetNameSafe(ClosestTarget));
+    // 가까운 순으로 정렬한다. 관통이 아닐 때 [0] 이 곧 기존의 "가장 가까운 대상"이다.
+    OutTargets.Sort([&WeaponSocketLocation](const AActor& A, const AActor& B)
+    {
+        return FVector::DistSquared(WeaponSocketLocation, A.GetActorLocation())
+             < FVector::DistSquared(WeaponSocketLocation, B.GetActorLocation());
+    });
+}
 
-    return ClosestTarget;
+void UDRWaterPump::NarrowTargetsToChipRules(TArray<AActor*>& Targets) const
+{
+    // 관통이 아니면 가장 가까운 하나만 = ★기존 동작과 완전히 동일★ (회귀 0)
+    if (!Resolved.bPierce)
+    {
+        if (Targets.Num() > 1)
+        {
+            Targets.SetNum(1);
+        }
+        return;
+    }
+
+    AActor* Avatar = GetAvatarActorFromActorInfo();
+
+    // ★Plan5(물대포칩) / D-18★ 관통은 ★적에게만★ 적용된다.
+    //   아군은 관통 여부와 무관하게 ★가장 가까운 한 명★ 만 급수 대상이다.
+    //   Targets 는 거리순이므로 앞에서부터 훑으며 두 번째 이후의 아군만 버리면 된다.
+    //   안전 상한(MaxPierceTargets)도 같은 루프에서 처리한다.
+    TArray<AActor*> Narrowed;
+    Narrowed.Reserve(FMath::Min(Targets.Num(), MaxPierceTargets));
+
+    bool bAllyTaken = false;
+    for (AActor* Target : Targets)
+    {
+        if (!UDRAbilitySystemLibrary::IsValidDamageTarget(Avatar, Target))
+        {
+            if (bAllyTaken) continue;      // 두 번째 이후의 아군은 버린다
+            bAllyTaken = true;
+        }
+
+        Narrowed.Add(Target);
+        if (Narrowed.Num() >= MaxPierceTargets) break;
+    }
+
+    Targets = MoveTemp(Narrowed);
 }
 
 void UDRWaterPump::StartWaterPumpLoop()
@@ -253,6 +311,11 @@ void UDRWaterPump::StartWaterPumpLoop()
 
     ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
     if (!OwnerCharacter) return;
+
+    // ★Plan5(물대포칩) / D-14★ 칩 스위치 해석은 ★서버/클라 분기보다 먼저★ 한다.
+    //   관통은 소유 클라이언트의 1P 빔 길이 계산에도 필요하기 때문이다.
+    //   (FDRUpgradeRuntime 은 각 머신이 복제된 EquippedChips 로 각자 만들므로 클라에서도 유효하다)
+    ResolveUpgradedParams();
 
     // 공통 초기화
     // 첫 틱에서 즉시 데미지가 적용되도록 카운터를 임계값 직전으로 초기화
@@ -395,6 +458,10 @@ void UDRWaterPump::StopWaterPumpLoop()
         CurrentTarget = nullptr;
         PreviousTarget = nullptr;
 
+        // ★Plan5(물대포칩)★ 물대포를 끄면 가압 스택을 초기화한다(요구 ①-3).
+        // EndAbility 도 StopWaterPumpLoop 를 부르므로 강제 취소 경로까지 한 줄로 덮인다.
+        ClearRampStacks();
+
         // 3P 빔 리플리케이트 상태 비활성화
         if (ADRCharacter* DRChar = Cast<ADRCharacter>(OwnerCharacter))
         {
@@ -444,8 +511,13 @@ void UDRWaterPump::PerformWaterPumpTick()
         }
     }
 
-    // BoxOverlap으로 타겟 감지
-    AActor* NewTarget = FindClosestTargetInBeam(WeaponSocketLocation, BeamEndPoint);
+    // BoxOverlap으로 타겟 감지 — ★Plan5(물대포칩)★ 빔 안의 유효 대상을 거리순으로 전부 모은 뒤
+    // 칩 규칙(관통 여부 + 아군 1명 제한 + 안전 상한)으로 좁힌다.
+    TArray<AActor*> HitTargets;
+    CollectTargetsInBeam(WeaponSocketLocation, BeamEndPoint, HitTargets);
+    NarrowTargetsToChipRules(HitTargets);
+
+    AActor* NewTarget = HitTargets.Num() > 0 ? HitTargets[0] : nullptr;
 
     // Ÿ�� ���� üũ
     if (NewTarget)
@@ -462,14 +534,35 @@ void UDRWaterPump::PerformWaterPumpTick()
 
         // ƽ ī���� ����
         DamageTickCounter++;
-        
+
         // ������ ���� ���� üũ (1�ʸ���)
         if (DamageTickCounter >= DamageApplicationInterval)
         {
             DamageTickCounter = 0; // ī���� ����
 
-            // ��������Ʈ���� ȿ�� ����
-            OnDamageTickReached(CurrentTarget.Get());
+            // ★이번 틱에 적을 맞혔는지는 ★피해를 넣기 전에★ 판정한다.★
+            // 피해로 적이 죽으면 IsValidDamageTarget 이 false 가 되어
+            // "마지막 일격을 넣으면 가압 스택이 끊기는" 이상한 동작이 된다.
+            const bool bTickHitEnemy = HasEnemyTarget(HitTargets);
+
+            // ★D-16★ ① 디버프를 먼저 건다 — 같은 틱에 들어오는 아군의 피해가 곧바로
+            //   취약 배율을 받도록. (물대포 자신의 피해는 칩 ②에서 0 이라 순서가 결과를 바꾸진 않지만,
+            //   조합이 늘었을 때 원인 불명의 차이가 생기지 않게 순서를 고정해 둔다)
+            ApplyChipDebuffs(HitTargets);
+
+            // ★D-15★ ② 대상 수만큼 BP 이벤트를 부른다.
+            //   관통 칩이 없으면 목록이 1개라 호출 횟수도 기존과 같다(회귀 0).
+            //   ⚠️ 이벤트 안에서 대상이 죽을 수 있으므로 매 반복 IsValid 를 다시 본다.
+            for (AActor* Target : HitTargets)
+            {
+                if (IsValid(Target))
+                {
+                    OnDamageTickReached(Target);
+                }
+            }
+
+            // ★③ 스택은 마지막★ — 이번 틱의 피해는 아직 강화되지 않은 값이다.
+            AdvanceRampStack(bTickHitEnemy);
         }
     }
     else
@@ -632,6 +725,166 @@ void UDRWaterPump::EndAbility(
     StopWaterPumpLoop();
 
     Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+// ========================= Plan5(물대포칩) — 업그레이드 칩 =========================
+
+void UDRWaterPump::ResolveUpgradedParams()
+{
+    const UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+    const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+
+    Resolved.bRamp = UDRAbilitySystemLibrary::HasUpgradeFeature(
+        ASC, Tags.Upgrade_Feature_Skill_WaterPump_Ramp);
+    Resolved.bSlow = UDRAbilitySystemLibrary::HasUpgradeFeature(
+        ASC, Tags.Upgrade_Feature_Skill_WaterPump_Slow);
+    Resolved.bVulnerable = UDRAbilitySystemLibrary::HasUpgradeFeature(
+        ASC, Tags.Upgrade_Feature_Skill_WaterPump_Vulnerable);
+    Resolved.bPierce = UDRAbilitySystemLibrary::HasUpgradeFeature(
+        ASC, Tags.Upgrade_Feature_Skill_WaterPump_Pierce);
+}
+
+void UDRWaterPump::ApplyChipDebuffs(const TArray<AActor*>& Targets)
+{
+    if (!Resolved.bSlow && !Resolved.bVulnerable) return;
+
+    AActor* Avatar = GetAvatarActorFromActorInfo();
+    UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
+    if (!Avatar || !SourceASC) return;
+
+    const FDRWaterPumpChipTuning& Tuning =
+        UDRAbilitySystemLibrary::GetChipTuning(Avatar).WaterPump;
+
+    for (AActor* Target : Targets)
+    {
+        // ★아군에게는 걸지 않는다★ — 대상 목록에는 아군도 들어 있다(BP 가 분기한다).
+        if (!UDRAbilitySystemLibrary::IsValidDamageTarget(Avatar, Target)) continue;
+
+        // ②-1 감속 — Plan5(씨앗칩) 의 헬퍼를 ★그대로★ 쓴다.
+        if (Resolved.bSlow)
+        {
+            UDRAbilitySystemLibrary::ApplyTimedSpeedEffect(
+                Target, SourceASC, Tuning.EnemySlow,
+                FMath::Max(0.05f, 1.f - Tuning.EnemySlow.Magnitude));
+        }
+
+        // ②-2 취약 — 태그만 거는 시한 GE. 배율은 피해 시점에 Config 에서 읽는다.
+        if (Resolved.bVulnerable)
+        {
+            UDRAbilitySystemLibrary::ApplyTimedTagEffect(
+                Target, SourceASC, Tuning.VulnerableEffect, Tuning.VulnerableDuration);
+        }
+    }
+}
+
+bool UDRWaterPump::HasEnemyTarget(const TArray<AActor*>& Targets) const
+{
+    AActor* Avatar = GetAvatarActorFromActorInfo();
+    if (!Avatar) return false;
+
+    for (AActor* Target : Targets)
+    {
+        if (UDRAbilitySystemLibrary::IsValidDamageTarget(Avatar, Target))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void UDRWaterPump::AdvanceRampStack(bool bTickHitEnemy)
+{
+    // ★요구 ①-1★ "동일 적이 아니어도 된다" = 대상이 누구든 상관없다.
+    // ★단 한 틱에 1스택★ — 관통으로 여러 명을 맞혀도 1이다. 아군만 맞힌 틱은 오르지 않는다.
+    if (!Resolved.bRamp || !bTickHitEnemy) return;
+
+    AActor* Avatar = GetAvatarActorFromActorInfo();
+    UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+    if (!Avatar || !ASC) return;
+
+    const FDRWaterPumpChipTuning& Tuning =
+        UDRAbilitySystemLibrary::GetChipTuning(Avatar).WaterPump;
+
+    UClass* StackClass = Tuning.RampStackEffect.LoadSynchronous();
+    if (!StackClass) return;   // 미지정이면 조용히 — 매 초 경고를 쏟지 않는다
+
+    FGameplayEffectSpecHandle SpecHandle =
+        MakeOutgoingGameplayEffectSpec(StackClass, GetAbilityLevel());
+    if (!SpecHandle.IsValid()) return;
+
+    // 지속시간을 매번 실어 보낸다 → 상한에 도달한 뒤에도 ★갱신★ 이 계속된다.
+    // ★GE 의 Deny Overflow Application 을 체크하면 이 갱신이 막힌다★ (Plan5 함정표 T-4)
+    SpecHandle.Data->SetSetByCallerMagnitude(
+        FDRGameplayTags::Get().Data_Duration, FMath::Max(0.1f, Tuning.RampResetGrace));
+
+    // ★핸들을 보관한다★ — 스택 수는 이 핸들로만 읽을 수 있다 (헤더의 RampStackHandle 주석 참고).
+    RampStackHandle = ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+}
+
+void UDRWaterPump::ClearRampStacks()
+{
+    if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+    {
+        // 핸들이 아니라 태그로 지운다 — 강제 취소 등으로 핸들을 잃어도 확실히 정리된다.
+        FGameplayTagContainer PressureTags;
+        PressureTags.AddTag(FDRGameplayTags::Get().Buff_WaterPump_Pressure);
+        ASC->RemoveActiveEffectsWithGrantedTags(PressureTags);
+    }
+
+    // 핸들도 같이 비운다. (안 비워도 GetCurrentStackCount 가 0 을 돌려주지만,
+    //  "끈 뒤에도 핸들이 살아 있는 것처럼 보이는" 상태를 남기지 않는다)
+    RampStackHandle.Invalidate();
+}
+
+float UDRWaterPump::GetRuntimeDamageMultiplier() const
+{
+    const UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+    if (!ASC) return 1.f;
+
+    // ★스택 수는 액티브 GE 의 StackCount 로 읽는다 — ★태그 카운트가 아니다★.★
+    // GAS 는 Stacking 이 켜진 GE 를 하나의 액티브 GE 로 합치고 StackCount 만 올리므로,
+    // 부여 태그의 카운트는 스택이 몇 개든 항상 1 이다. (헤더 RampStackHandle 주석 참고)
+    // 핸들이 만료/무효면 0 을 돌려주므로 별도 분기가 필요 없다.
+    const int32 Stacks = ASC->GetCurrentStackCount(RampStackHandle);
+    if (Stacks <= 0) return 1.f;
+
+    const FDRWaterPumpChipTuning& Tuning =
+        UDRAbilitySystemLibrary::GetChipTuning(GetAvatarActorFromActorInfo()).WaterPump;
+
+    // ★상한은 Config 가 최종 권위다★ — GE 의 Stack Limit 이 더 크게 잡혀 있어도 여기서 자른다.
+    const float Bonus = FMath::Min(Tuning.RampMaxDamageBonus,
+                                   Tuning.RampDamageBonusPerStack * Stacks);
+
+    return 1.f + FMath::Max(0.f, Bonus);
+}
+
+void UDRWaterPump::GrantWaterToAlly(AActor* AllyActor)
+{
+    AActor* Avatar = GetAvatarActorFromActorInfo();
+    if (!IsValid(AllyActor) || !Avatar || !Avatar->HasAuthority()) return;
+    if (!AllyWaterGrantEffect) return;
+
+    UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
+    UAbilitySystemComponent* TargetASC =
+        UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(AllyActor);
+    if (!SourceASC || !TargetASC) return;
+
+    // ★칩 반영 지점★ — 칩 ① 이면 ×0, 칩 ② 면 ×2, 둘 다면 0 × 2 = 0.
+    const float Amount =
+        FMath::Max(0.f, GetUpgradedFloat(EDRUpgradeStat::SkillWaterGrant, AllyWaterGrantAmount));
+
+    // 0 이면 GE 자체를 얹지 않는다 — 0 짜리 이펙트는 큐/로그만 더럽힌다. (칩 ①의 단점 경로)
+    if (Amount <= 0.f) return;
+
+    FGameplayEffectSpecHandle SpecHandle =
+        MakeOutgoingGameplayEffectSpec(AllyWaterGrantEffect, GetAbilityLevel());
+    if (!SpecHandle.IsValid()) return;
+
+    // 적 처치 물 지급(ADREnemy::GrantWaterToPlayers)과 ★같은 SetByCaller 태그★ 를 쓴다.
+    SpecHandle.Data->SetSetByCallerMagnitude(
+        FDRGameplayTags::Get().Water_SetByCaller_Grant, Amount);
+
+    SourceASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
 }
 
 bool UDRWaterPump::GetAimDirection(FVector& OutAimStart, FVector& OutAimDirection) const

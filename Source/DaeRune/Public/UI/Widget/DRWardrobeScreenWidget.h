@@ -10,9 +10,12 @@
 #include "DRWardrobeScreenWidget.generated.h"
 
 class UDRGameInstance;
+class UDRWardrobeSlotWidget;
+class UUniformGridPanel;
+class UButton;
 
 /**
- * 로비 옷장 화면의 C++ 베이스. (Plan.md 15.5 참조)
+ * 로비 옷장 화면의 C++ 베이스. (Plan(옷장))
  * UDRUpgradeScreenWidget 의 자매 클래스이며 같은 구조를 따른다.
  *
  * 이 클래스가 책임지는 것:
@@ -21,7 +24,10 @@ class UDRGameInstance;
  *   3) 장착 요청 중계 (잠긴 항목 거절 포함)
  *   4) 키 입력 처리 (ESC 닫기 / C 전체 해제)
  *
- * 레이아웃과 그리기는 전부 BP(WBP_Wardrobe)가 한다.
+ *   5) ★칸 목록 그리기★ — UniformGridPanel_Slots + SlotWidgetClass 가 있으면 C++ 이 칸을 만든다
+ *   6) Btn_ClearAll 버튼 연결
+ *
+ * 레이아웃(위젯 배치 · 좌표 · 브러시)은 BP(WBP_Wardrobe)가 한다. BP 그래프 배선은 필요 없다.
  *
  * ★NativeDestruct 의 구독 해제가 특히 중요하다★ — UDRGameInstance 는 레벨 전환에도
  * 파괴되지 않으므로, 해제를 빼먹으면 죽은 위젯이 델리게이트에 남아 유령 갱신이나 크래시를 일으킨다.
@@ -60,7 +66,7 @@ public:
 	/**
 	 * 칸 클릭 처리. 성공하면 true.
 	 * 잠긴 항목이면 false 를 돌려주고 OnEquipRejected 를 발행한다
-	 * (BP 가 흔들림 연출 + 조건 문구를 띄우는 지점 — Plan.md 15.7).
+	 * (BP 가 흔들림 연출 + 조건 문구를 띄우는 지점 — Plan(옷장) D-14).
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Cosmetic")
 	bool TryEquip(FName SkinId);
@@ -85,7 +91,7 @@ protected:
 	virtual void NativeDestruct() override;
 	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 
-	// 현재 탭의 칸 목록을 다시 그린다 (GetCurrentSkinViewModels 사용)
+	// 칸 목록을 다시 그린 직후. ★칸 생성은 C++ 이 이미 했다★ — 여기서 또 만들지 말고 연출만 붙인다.
 	UFUNCTION(BlueprintImplementableEvent, Category = "Cosmetic")
 	void OnRefreshSkins();
 
@@ -97,9 +103,8 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Cosmetic")
 	void OnEquipRejected(FName SkinId, const FText& UnlockHint);
 
-	// 장착에 성공한 직후.
-	// 3D 프리뷰(Plan.md 5.8)가 아직 없으므로 ★지금은 BP 가 이 이벤트로 프리뷰/사운드를 붙인다★.
-	// 프리뷰 스테이지가 구현되면 이 자리에서 C++ 이 직접 호출하게 바꾼다.
+	// 장착에 성공한 직후 (BP: 장착 사운드 등 연출).
+	// 3D 프리뷰 갱신은 C++ 이 한다 — OnCosmeticsChanged → HandleCosmeticsChanged → SyncPreview (Plan(옷장) D-11).
 	UFUNCTION(BlueprintImplementableEvent, Category = "Cosmetic")
 	void OnSkinEquipped(FName SkinId);
 
@@ -107,7 +112,7 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Cosmetic")
 	void OnSkinNewlyUnlocked(FName SkinId);
 
-	// 전체 해제 키. 시안의 [C] 버튼과 같은 동작이다. (Plan.md 15.9)
+	// 전체 해제 키. 시안의 [C] 버튼과 같은 동작이다. (Plan(옷장) D-16 · D-17)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cosmetic|Input")
 	FKey ClearAllKey = EKeys::C;
 
@@ -124,12 +129,34 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "Cosmetic")
 	TObjectPtr<class UDRCosmeticPreviewWidget> Preview_Character;
 
+	// 칸 위젯 클래스 (WBP_WardrobeSlot). 이것과 UniformGridPanel_Slots 가 있으면 C++ 이 칸 목록을 그린다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cosmetic")
+	TSubclassOf<UDRWardrobeSlotWidget> SlotWidgetClass;
+
+	// 한 줄에 놓을 칸 수. 216 x 3 + 간격 = 패널 안쪽 폭 (Plan(옷장) D-24)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cosmetic", meta = (ClampMin = "1"))
+	int32 SlotColumns = 3;
+
+	// 칸이 들어갈 그리드 (ScrollBox 안). ★이름 고정★
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "Cosmetic|Widgets")
+	TObjectPtr<UUniformGridPanel> UniformGridPanel_Slots;
+
+	// 화면 우하단 Clear All 버튼. ★이름 고정★ — 있으면 클릭이 ClearAll() 로 연결된다.
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "Cosmetic|Widgets")
+	TObjectPtr<UButton> Btn_ClearAll;
+
 private:
 	UFUNCTION()
 	void HandleCosmeticsChanged(EPlayerCharacterClass CharacterClass);
 
 	UFUNCTION()
 	void HandleSkinUnlocked(FName SkinId);
+
+	UFUNCTION()
+	void HandleClearAllClicked();
+
+	// 현재 탭의 칸을 다시 만든다 (그리드나 칸 클래스가 없으면 아무 것도 하지 않는다)
+	void RebuildSlotGrid();
 
 	/**
 	 * WidgetTree 의 모든 UDRWardrobeTabWidget 에 선택 상태를 밀어 넣는다.

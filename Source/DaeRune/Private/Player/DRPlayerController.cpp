@@ -2,6 +2,7 @@
 
 
 #include "Player/DRPlayerController.h"
+#include "UI/Widget/DRWardrobeScreenWidget.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "DRGameplayTags.h"
 #include "EnhancedInputSubsystems.h"
@@ -23,6 +24,7 @@
 #include "Character/DRCharacter.h"
 #include "Character/DREnemy.h"
 #include "Character/DRRobotVacuumCharacter.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Camera/CameraComponent.h"
 #include "Game/DRStageGameMode.h"
 #include "Phase/DRPhase3.h"
@@ -42,6 +44,7 @@
 #include "UI/DRUpgradeUILibrary.h"
 #include "Game/DRLobbyGameMode.h"
 #include "Game/DRGameInstance.h"
+#include "Game/DRCosmeticCatalog.h"
 #include "Game/DRChipCatalog.h"
 #include "DaeRune/DRLogChannels.h"
 #include "MultiplayerSessionsSubsystem.h"
@@ -289,7 +292,9 @@ ADRRobotVacuumCharacter* ADRPlayerController::FindMountByLineTrace()
 		if (HitVacuum &&
 			OverlappedMounts.Contains(HitVacuum) &&
 			!HitVacuum->bDead &&
-			HitVacuum->RiderOnTop == nullptr) // 이미 라이더가 있으면 프롬프트도 안 띄움 (서버가 최종 검증)
+			HitVacuum->RiderOnTop == nullptr && // 이미 라이더가 있으면 프롬프트도 안 띄움 (서버가 최종 검증)
+			// ★Plan5(탑승칩)★ ③ 이 청소기에서 비상 탈출한 뒤 20초는 프롬프트도 안 띄운다 (서버도 같은 함수로 거부 — D-90)
+			!UDRAbilitySystemLibrary::IsRideBannedFrom(DRCharacter, HitVacuum))
 		{
 			return HitVacuum;
 		}
@@ -1023,10 +1028,15 @@ void ADRPlayerController::OnLevelEntered()
 		bIsUpgradeScreenOpen = false;
 	}
 
-	// 옷장 화면도 같은 처리
+	// 옷장 화면도 같은 처리 (위젯은 C++ 이 만들었으므로 C++ 이 지운다)
 	if (bIsWardrobeScreenOpen)
 	{
 		OnWardrobeScreenClosed();
+		if (WardrobeScreenWidget)
+		{
+			WardrobeScreenWidget->RemoveFromParent();
+			WardrobeScreenWidget = nullptr;
+		}
 		bIsWardrobeScreenOpen = false;
 	}
 
@@ -1041,6 +1051,11 @@ void ADRPlayerController::OnLevelEntered()
 	bIsSpectating = false;
 	CurrentSpectatedCharacter = nullptr;
 	CurrentSpectatedPlayerIndex = 0;
+
+	// 옷 보고는 ★로비 분기보다 앞★ 에서 한다 (Plan(옷장) M3) — 대기실이면 아래에서 일찍 return 하는데,
+	// 리슨 서버 호스트는 OnRep_PlayerState 도 안 불려서 그러면 FreeRoam 에서 남에게 옷이 안 보인다.
+	// (클라이언트는 OnRep_PlayerState 에서도 보고한다. 대기실 디스플레이 캐릭터도 이 목록을 입는다)
+	ReportCosmeticLoadout();
 
 	// ?湲곗떎 媛먯? ??ViewTarget 蹂듭썝 李⑤떒
 	ADRLobbyGameState* LGS = World->GetGameState<ADRLobbyGameState>();
@@ -1561,6 +1576,51 @@ void ADRPlayerController::ServerReportUpgradeLoadout_Implementation(EPlayerChara
 	DRPS->SetEquippedChips(Sanitized);
 }
 
+// ========================= 코스메틱 (Plan(옷장) M3 · D-26) =========================
+
+void ADRPlayerController::ReportCosmeticLoadout()
+{
+	if (!IsLocalController()) return;
+
+	const ADRPlayerState* DRPS = GetPlayerState<ADRPlayerState>();
+	if (!DRPS) return;
+
+	const UDRGameInstance* GI = Cast<UDRGameInstance>(GetGameInstance());
+	if (!GI) return;
+
+	const EPlayerCharacterClass SelectedClass = DRPS->GetSelectedPlayerClass();
+	ServerReportCosmeticLoadout(SelectedClass, GI->GetEquippedSkins(SelectedClass));
+}
+
+void ADRPlayerController::ServerReportCosmeticLoadout_Implementation(EPlayerCharacterClass ForClass,
+	const TArray<FName>& SkinIds)
+{
+	ADRPlayerState* DRPS = GetPlayerState<ADRPlayerState>();
+	if (!DRPS) return;
+
+	// 경합/스푸핑 방어: 서버가 확정한 선택 클래스와 다른 보고는 폐기한다 (칩과 같은 가드)
+	if (ForClass != DRPS->GetSelectedPlayerClass()) return;
+
+	const UDRGameInstance* GI = Cast<UDRGameInstance>(GetGameInstance());
+	const UDRCosmeticCatalog* Catalog = GI ? GI->GetCosmeticCatalog() : nullptr;
+	if (!Catalog)
+	{
+		// 검증할 수 없으면 기본 외형 — 없는 에셋을 가리키는 Id 로 다른 클라가 헤매지 않게 한다
+		DRPS->SetEquippedSkinIds(TArray<FName>());
+		return;
+	}
+
+	// 길이를 카테고리 수로 맞추고, 카탈로그에 없는 Id · 다른 로봇 · 다른 부위를 None 으로.
+	// ★해금 여부는 보지 않는다★ — 협동 PvE 라 잠긴 옷을 보고해도 남에게 피해가 없고, 서버는 남의 해금 상태를 모른다.
+	TArray<FName> Sanitized = SkinIds;
+	if (Catalog->SanitizeLoadout(Sanitized, ForClass))
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cosmetic] %s 의 옷 목록을 정화했습니다."), *DRPS->GetPlayerName());
+	}
+
+	DRPS->SetEquippedSkinIds(Sanitized);
+}
+
 void ADRPlayerController::Client_GrantStageReward_Implementation(const FDRStageRewardReport& Report)
 {
 	UDRGameInstance* GI = Cast<UDRGameInstance>(GetGameInstance());
@@ -1703,6 +1763,24 @@ void ADRPlayerController::DRAddCurrency(int32 Amount)
 	UE_LOG(LogDR, Warning, TEXT("[Cheat] 재화 %d 지급 → 현재 %d"), Amount, GI->GetCurrency());
 }
 
+void ADRPlayerController::DRResetDefaultChips()
+{
+	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
+	if (!GI)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
+		return;
+	}
+
+	GI->DebugResetDefaultLoadout();
+
+	// 세이브만 바꿔서는 이미 스폰된 캐릭터에 반영되지 않는다 — 서버에 다시 보고해야
+	// PlayerState 의 EquippedChips 가 갱신되고 HUD/스탯이 따라온다.
+	ReportUpgradeLoadout();
+
+	UE_LOG(LogDR, Warning, TEXT("[Cheat] 기본 장착 칩을 다시 적용하고 서버에 재보고했습니다."));
+}
+
 void ADRPlayerController::CloseUpgradeScreen()
 {
 	if (!IsLocalController()) return;
@@ -1718,7 +1796,7 @@ void ADRPlayerController::CloseUpgradeScreen()
 	ReportUpgradeLoadout();
 }
 
-// ========================= 로비 옷장 화면 (Plan.md 5.3 / 15) =========================
+// ========================= 로비 옷장 화면 (Plan(옷장)) =========================
 
 void ADRPlayerController::OpenWardrobeScreen()
 {
@@ -1748,7 +1826,21 @@ void ADRPlayerController::OpenWardrobeScreen()
 	SetInputMode(FInputModeUIOnly());
 	SetShowMouseCursor(true);
 
-	// 블루프린트에서 위젯 생성 (업그레이드 화면과 같은 구조)
+	// ★위젯은 C++ 이 만든다★ — BP 의 OnWardrobeScreenOpened 는 연출용이다 (거기서 또 만들면 두 장이 뜬다)
+	if (!WardrobeScreenWidget && WardrobeScreenWidgetClass)
+	{
+		WardrobeScreenWidget = CreateWidget<UDRWardrobeScreenWidget>(this, WardrobeScreenWidgetClass);
+		if (WardrobeScreenWidget)
+		{
+			// 키보드 포커스는 화면의 NativeConstruct 가 직접 잡는다 (ESC / C 키)
+			WardrobeScreenWidget->AddToViewport();
+		}
+	}
+	else if (!WardrobeScreenWidgetClass)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cosmetic] WardrobeScreenWidgetClass 가 지정되지 않았습니다 (BP_DRPlayerController)."));
+	}
+
 	OnWardrobeScreenOpened();
 }
 
@@ -1757,14 +1849,20 @@ void ADRPlayerController::CloseWardrobeScreen()
 	if (!IsLocalController()) return;
 	if (!bIsWardrobeScreenOpen) return;
 
-	// 블루프린트에서 위젯 제거
 	OnWardrobeScreenClosed();
+
+	if (WardrobeScreenWidget)
+	{
+		WardrobeScreenWidget->RemoveFromParent();
+		WardrobeScreenWidget = nullptr;
+	}
 
 	bIsWardrobeScreenOpen = false;
 	RestoreDefaultInputMode();
 
-	// 서버 반영(ReportCosmeticLoadout)은 복제 경로가 구현되는 시점에 여기 붙는다 (Plan.md 5.3 / M3).
-	// 지금은 로컬 세이브에 이미 기록돼 있어 다음 실행에도 선택이 유지된다.
+	// 고른 옷을 서버에 보고 → PlayerState 복제 → 내 캐릭터와 남의 화면에 입혀진다 (Plan(옷장) M3).
+	// 화면이 열려 있는 동안의 변경은 프리뷰에만 보이고, 닫는 순간 한 번에 반영된다.
+	ReportCosmeticLoadout();
 }
 
 void ADRPlayerController::DRUnlockSkins()
@@ -1804,6 +1902,43 @@ void ADRPlayerController::DRDumpCosmetic()
 		static_cast<int32>(Class),
 		GI->GetCosmeticCatalog() ? TEXT("지정됨") : TEXT("★미지정★"),
 		*Line);
+}
+
+void ADRPlayerController::DRDie()
+{
+#if !UE_BUILD_SHIPPING
+	ServerCheatDie();
+#endif
+}
+
+void ADRPlayerController::DRRevive()
+{
+#if !UE_BUILD_SHIPPING
+	ServerCheatRevive();
+#endif
+}
+
+void ADRPlayerController::ServerCheatDie_Implementation()
+{
+#if !UE_BUILD_SHIPPING
+	// Die() 는 오염 상태가 아니면 사망을 막는다 — 확인용이라 사망 처리만 바로 부른다
+	ADRCharacterBase* CheatTarget = Cast<ADRCharacterBase>(GetPawn());
+	if (!CheatTarget || ICombatInterface::Execute_IsDead(CheatTarget)) return;
+
+	CheatTarget->MulticastHandleDeath(FVector::ZeroVector);
+	UE_LOG(LogDR, Warning, TEXT("[Cheat] %s 사망 처리"), *CheatTarget->GetName());
+#endif
+}
+
+void ADRPlayerController::ServerCheatRevive_Implementation()
+{
+#if !UE_BUILD_SHIPPING
+	ADRCharacterBase* CheatTarget = Cast<ADRCharacterBase>(GetPawn());
+	if (!CheatTarget || !ICombatInterface::Execute_IsDead(CheatTarget)) return;
+
+	CheatTarget->Revive(CheatTarget->GetActorLocation(), 1.0f, 1.0f);
+	UE_LOG(LogDR, Warning, TEXT("[Cheat] %s 부활"), *CheatTarget->GetName());
+#endif
 }
 
 void ADRPlayerController::RestoreDefaultInputMode()
@@ -2303,6 +2438,7 @@ void ADRPlayerController::OnRep_PlayerState()
 	// 클라이언트가 자기 PlayerState 를 처음 알게 되는 시점 — 여기서 장착 칩을 보고한다.
 	// (PlayerState 의 BeginPlay 시점에는 컨트롤러 연결이 아직 없을 수 있다. Plan2.md 7.1)
 	ReportUpgradeLoadout();
+	ReportCosmeticLoadout();	// 옷도 같은 이유로 (Plan(옷장) M3)
 }
 
 void ADRPlayerController::ClientRestart_Implementation(APawn* NewPawn)

@@ -83,7 +83,7 @@ public:
 	// (InitializePlayerDefaultAttributes 가 활성 GE 를 제거하고 BaseValue 를 0으로 리셋한다).
 	void RefreshUpgradeEffects();
 
-	// ========== 코스메틱 외형 (Plan.md 5.4 / 15.11) ==========
+	// ========== 코스메틱 외형 (Plan(옷장) D-6 · D-7) ==========
 
 	/**
 	 * 카테고리별 스킨 4종을 이 캐릭터에 반영한다. ★멱등★ — 몇 번 호출해도 안전하다.
@@ -103,6 +103,13 @@ public:
 
 	// 지금 적용돼 있는 목록 (디버그/재적용용)
 	const TArray<FName>& GetAppliedSkins() const { return AppliedSkinIds; }
+
+	/**
+	 * ★대기실 디스플레이 캐릭터 전용★ — 서버가 그 플레이어의 PlayerState 옷 목록을 실어 보낸다 (Plan(옷장) M5 · T-24).
+	 * 디스플레이 캐릭터는 아무도 빙의하지 않아 PlayerState 가 없으므로 M3 경로(PossessedBy · OnRep_PlayerState)를 못 탄다.
+	 * 서버 전용. 리슨 호스트에서는 RepNotify 가 안 불리므로 서버에서 바로 입힌다 (T-23).
+	 */
+	void SetDisplaySkinIds(const TArray<FName>& InSkinIds);
 
 	/**
 	 * 부착물의 가시성 플래그를 부모 메시와 맞춘다.
@@ -192,6 +199,11 @@ public:
 	// 서버 전용: 피격 데미지를 마운트 링크(위/아래 1홉)로 전파 (Damage.MountShared 태그로 재전파 방지)
 	void PropagateSharedDamage(float Damage, const FGameplayEffectContextHandle& SourceContext);
 
+	// ★Plan5(탑승칩)★ 서버: Target 에게 탑승 공유 피해 1건(MountSharedDamageEffectClass · 물리 · Damage.MountShared · 소스 = 나).
+	// PropagateSharedDamage 의 GE 적용부를 뽑아낸 것 — 칩② 이전분도 이 함수로 건다 (Plan5 D-83 · D-91).
+	// 못 걸면(대상 사망 · ASC/GE 없음) false. Damage ≤ 0 이면 아무것도 안 하고 true
+	bool ApplyMountSharedDamageTo(ADRCharacter* Target, float Damage);
+
 	// 탑승 공유 데미지에 사용할 GE (기존 공용 GE_Damage 지정 — BP에서 설정)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mount")
 	TSubclassOf<UGameplayEffect> MountSharedDamageEffectClass;
@@ -242,6 +254,13 @@ public:
 	// Third-person carried part visual. Hidden from the owning player.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Part System")
 	TObjectPtr<UStaticMeshComponent> ThirdPersonPartMesh;
+
+	/**
+	 * ★Plan8(FP)★ 소유 클라가 FirstPersonMesh 에 트는 피격 몽타주. 비우면 FP 피격 없음(기본값).
+	 * Effects.HitReact 태그가 붙을 때 재생 — GA_HitReact 가 실제로 켜질 때만 붙으므로 슈퍼아머·스킬 중 차단을 그대로 따른다 (Plan8 D-40)
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mesh|FirstPerson")
+	TObjectPtr<UAnimMontage> FirstPersonHitReactMontage;
 
 	// �޽� ���ü� ������Ʈ
 	void UpdateMeshVisibility();
@@ -301,6 +320,9 @@ public:
 	void MulticastPlayHitReactFacial();
 
 protected:
+	// ★Plan8(FP)★ Effects.HitReact 태그 → FP 피격 몽타주. 로컬 제어 검사는 호출 시점에 (Plan8 T-38)
+	void FirstPersonHitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -324,8 +346,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade")
 	bool bPreserveVitalRatioOnUpgradeApply = true;
 
+	// ★Plan5(탑승칩)★ RefreshUpgradeEffects 가 모든 머신에서 부른다. 청소기가 탑승칩① 감속 GE 를 다시 맞춘다 (Plan5 D-81)
+	virtual void OnUpgradeEffectsRefreshed() {}
+
 	// 현재 적용 중인 업그레이드 GE 핸들 (재적용 시 먼저 제거 — ASC 가 PlayerState 에 있어 리스폰 후에도 남는다)
 	FActiveGameplayEffectHandle UpgradeStatEffectHandle;
+
+	// 시너지 오라(칩 CM.Asc.Synergy) 구동 컴포넌트. 칩이 없으면 타이머가 돌지 않는다.
+	// (Plan3(공용칩) §17.7)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Upgrade")
+	TObjectPtr<class UDRSynergyAuraComponent> SynergyAuraComponent;
 
 	// ========== ��ǰ ���� ==========
 
@@ -359,8 +389,21 @@ protected:
 private:
 	// ========== 코스메틱 외형 (내부) ==========
 
+	// PlayerState 에 복제된 옷 목록을 입는다 — PossessedBy / OnRep_PlayerState 공용 (Plan(옷장) M3)
+	void ApplyCosmeticsFromPlayerState();
+
+	// 대기실 디스플레이 캐릭터의 옷 (복제 — 다른 플레이어 화면에서도 같은 옷이 보인다). 인게임 폰은 비어 있다 (Plan(옷장) M5)
+	UPROPERTY(ReplicatedUsing = OnRep_DisplaySkinIds)
+	TArray<FName> DisplaySkinIds;
+
+	UFUNCTION()
+	void OnRep_DisplaySkinIds();
+
 	// 로드가 끝난 뒤 실제로 컴포넌트를 만들고 머티리얼을 얹는다
 	void BuildCosmeticVisuals();
+
+	// 옷 위치를 고를 때 쓰는 "이 몸은 어느 로봇인가" — BP 클래스 기준 (Plan(옷장) D-32)
+	EPlayerCharacterClass ResolveCosmeticClass() const;
 
 	// 기존 부착물 컴포넌트를 전부 파괴한다
 	void ClearCosmeticAttachments();
@@ -393,6 +436,16 @@ private:
 	// 세대가 어긋난 콜백은 버린다.
 	TSharedPtr<struct FStreamableHandle> CosmeticLoadHandle;
 	uint32 CosmeticApplyGeneration = 0;
+
+	/**
+	 * 사망 ~ 부활 사이에 부착물을 숨긴다 (Plan(옷장) T-3).
+	 * Dissolve 는 본체 · 무기만 녹이므로 그냥 두면 모자 · 꼬리만 허공에 남는다.
+	 * ★가시성을 직접 끄면 안 된다★ — SyncCosmeticVisibility / SpawnCosmeticAttachment 가 부모 메시의
+	 * 가시성(사망 중에도 보임)을 그대로 복사하므로 시점 전환 한 번에 다시 켜진다. 그래서 플래그로 막는다.
+	 * 로컬 상태다 — 사망/부활 멀티캐스트가 모든 머신에서 순서대로 돌아 그 둘로 켜고 끈다
+	 * (bDead 는 복제 도착 순서가 멀티캐스트와 어긋날 수 있어 쓰지 않는다).
+	 */
+	bool bCosmeticHiddenForDeath = false;
 
 	// 부품 드롭 실제 구현 (쿨다운 검사 없음, 권한/보유 검사는 호출부에서 수행)
 	void DoDropCarriedPart();

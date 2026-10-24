@@ -2,7 +2,9 @@
 
 
 #include "AbilitySystem/Abilities/DRGameplayAbility.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystem/DRAttributeSet.h"
+#include "Game/DRProgressionConfig.h"
 #include "AbilitySystemComponent.h"
 #include "GameFramework/Pawn.h"
 #include "Player/DRPlayerState.h"
@@ -40,6 +42,20 @@ bool UDRGameplayAbility::CheckCost(const FGameplayAbilitySpecHandle Handle, cons
 
     float CurrentWater = AttributeSet->GetWater();
     float CurrentHealth = AttributeSet->GetHealth();
+
+    // ★Plan3(공용칩) §17.8.2★ 피의 계약 칩: 물을 보지 않고 체력만 본다.
+    // ★UExecCalc_WaterCost 의 분기와 반드시 같은 수식(FloorToFloat 포함)이어야 한다.★
+    // 한쪽만 내림하면 경계값에서 "쓸 수 있다고 했는데 체력이 0 이 되는" 사고가 난다.
+    if (UDRAbilitySystemLibrary::HasUpgradeFeature(
+            ASC, FDRGameplayTags::Get().Upgrade_Feature_Combat_BloodCost))
+    {
+        const float Ratio = UDRAbilitySystemLibrary::GetChipTuning(
+            ActorInfo->AvatarActor.Get()).BloodCostHealthRatio;
+        const float RequiredHealth = FMath::FloorToFloat(EffectiveWaterCost * Ratio);
+
+        // 자살 방지: 체력이 소모량을 ★초과★ 해야 시전할 수 있다 (최소 1 은 남는다)
+        return CurrentHealth > RequiredHealth;
+    }
 
     // Water�� ����� ���
     if (CurrentWater >= EffectiveWaterCost)
@@ -84,6 +100,20 @@ void UDRGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, cons
             }
         }
     }
+    else
+    {
+        // ★Plan5(가방칩)★ 물을 써야 하는데 Cost GE 가 없다 — CheckCost 는 통과하고 물은 안 빠진다 (D-138 · T-133).
+        // 예전 GA_VacuumJetJump(Plan5 D-103)와 같은 배선 실수다. 기본 공격처럼 자주 불리므로 클래스당 1회만 알린다.
+        static TSet<FName> WarnedClasses;
+        const FName ClassName = GetClass()->GetFName();
+        if (!WarnedClasses.Contains(ClassName))
+        {
+            WarnedClasses.Add(ClassName);
+            UE_LOG(LogDR, Warning,
+                TEXT("[Upgrade] %s: 물 소모 %.1f 인데 Cost Gameplay Effect Class 가 비어 있어 물이 빠지지 않습니다."),
+                *GetName(), EffectiveWaterCost);
+        }
+    }
 }
 
 void UDRGameplayAbility::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
@@ -106,17 +136,8 @@ void UDRGameplayAbility::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInf
 
 FGameplayTag UDRGameplayAbility::GetUpgradeKeyTag() const
 {
-    // UDRAbilitySystemComponent::GetAbilityTagFromSpec 과 동일한 규칙 ("Abilities" 접두 태그)
-    static const FGameplayTag AbilitiesTag = FGameplayTag::RequestGameplayTag(FName("Abilities"));
-
-    for (const FGameplayTag& Tag : GetAssetTags())
-    {
-        if (Tag.MatchesTag(AbilitiesTag))
-        {
-            return Tag;
-        }
-    }
-    return FGameplayTag();
+    // 같은 규칙이 발사체 액터에도 필요해져 라이브러리로 올렸다. (Plan5(씨앗칩))
+    return UDRAbilitySystemLibrary::GetUpgradeKeyTagFromAbilityTags(GetAssetTags());
 }
 
 const FDRUpgradeRuntime& UDRGameplayAbility::GetUpgradeRuntime() const
@@ -126,27 +147,21 @@ const FDRUpgradeRuntime& UDRGameplayAbility::GetUpgradeRuntime() const
 
 const FDRUpgradeRuntime& UDRGameplayAbility::GetUpgradeRuntimeFor(const FGameplayAbilityActorInfo* ActorInfo) const
 {
-    // 칩이 없는 경우(적/클렌저 사이트 등)를 위한 항등 캐시
+    // 같은 조회가 ExecCalc / AttributeSet / 오라 컴포넌트에도 필요해져 라이브러리로 올렸다.
+    // (Plan3(공용칩) §17.5) — 동작은 이전과 동일하다:
+    //  ASC 소유자(PlayerState) → 아바타의 PlayerState → 빈 캐시 순.
     static const FDRUpgradeRuntime EmptyRuntime;
 
     if (!ActorInfo) return EmptyRuntime;
 
-    // 플레이어는 ASC 를 PlayerState 가 소유하므로 OwnerActor 가 곧 PlayerState 다
+    // ActorInfo->OwnerActor 가 곧 PlayerState 인 경로를 우선 유지한다.
+    // CDO 호출 등으로 ASC 가 비어 있을 수 있어 OwnerActor 를 먼저 본다.
     if (const ADRPlayerState* DRPS = Cast<ADRPlayerState>(ActorInfo->OwnerActor.Get()))
     {
         return DRPS->GetUpgradeRuntime();
     }
 
-    // 폴백: 아바타의 PlayerState (ASC 소유 구조가 다른 캐릭터 대비)
-    if (const APawn* AvatarPawn = Cast<APawn>(ActorInfo->AvatarActor.Get()))
-    {
-        if (const ADRPlayerState* DRPS = AvatarPawn->GetPlayerState<ADRPlayerState>())
-        {
-            return DRPS->GetUpgradeRuntime();
-        }
-    }
-
-    return EmptyRuntime;
+    return UDRAbilitySystemLibrary::GetUpgradeRuntimeForASC(ActorInfo->AbilitySystemComponent.Get());
 }
 
 float UDRGameplayAbility::GetUpgradedFloat(EDRUpgradeStat Stat, float BaseValue) const
@@ -165,10 +180,17 @@ float UDRGameplayAbility::GetEffectiveWaterCost() const
     return GetEffectiveWaterCostFor(GetCurrentActorInfo());
 }
 
+float UDRGameplayAbility::GetAttackSpeedMultiplier() const
+{
+    // GetAbilitySystemComponentFromActorInfo() 는 ActorInfo 가 없으면 ensure 를 띄운다 — BP Pure 노드라 직접 확인한다
+    return UDRAbilitySystemLibrary::GetAttackSpeedMultiplier(
+        CurrentActorInfo ? CurrentActorInfo->AbilitySystemComponent.Get() : nullptr);
+}
+
 float UDRGameplayAbility::GetEffectiveWaterCostFor(const FGameplayAbilityActorInfo* ActorInfo) const
 {
-    if (WaterCost <= 0.f) return 0.f;
-
+    // ★Plan5(가방칩)★ 기본 물이 0 이어도 칩의 Flat 을 더한다 — 예전의 `WaterCost <= 0 → 0` 조기 return 은
+    // "물 0 → 2"(Flat +2)를 통째로 무시했다 (D-125 · T-132). 칩이 없으면 (0 + 0) × 1 = 0 그대로다.
     const float Upgraded = GetUpgradeRuntimeFor(ActorInfo)
         .ApplySkill(GetUpgradeKeyTag(), EDRUpgradeStat::SkillWaterCost, WaterCost);
 

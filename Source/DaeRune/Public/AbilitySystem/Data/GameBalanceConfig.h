@@ -7,6 +7,8 @@
 #include "Phase/DRPhase3DataTypes.h"
 #include "GameBalanceConfig.generated.h"
 
+class UGameplayEffect;
+
 /**
  * 플레이어 컨테이너 시스템 밸런스 설정
  */
@@ -118,6 +120,25 @@ struct FWaterSystemConfig
 };
 
 /**
+ * ★Plan8(모자)★ 벨보이 모자 보호막 설정.
+ * 피해 관문(1회 무효화) · 모자 투사체(아군 장착) · 픽업(주운 대상 장착)이 전부 여기를 본다 (Plan8 D-27).
+ * ★서버에서만 읽는다★ — GameMode 의 DA 라 클라이언트에는 없다. 세 곳 모두 서버 경로라 문제없다.
+ */
+USTRUCT(BlueprintType)
+struct FBellBoyConfig
+{
+	GENERATED_BODY()
+
+	// 1회 모자 — Infinite / Target Tags = Buff.BellBoy.Hat.Single / Cue = GameplayCue.BellBoy.Hat.Single
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "BellBoy|Hat")
+	TSubclassOf<UGameplayEffect> HatSingleEffect;
+
+	// 2회 모자(던진 벨보이 본인이 주웠을 때). 한 번 막으면 Single 로 바뀐다 (Plan8 D-20)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "BellBoy|Hat")
+	TSubclassOf<UGameplayEffect> HatDoubleEffect;
+};
+
+/**
  * 게임 밸런스 통합 설정 DataAsset
  *
  * 게임 내 모든 밸런스 관련 수치를 중앙에서 관리합니다.
@@ -158,6 +179,12 @@ public:
 	// 물 리소스 시스템 설정
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Systems")
 	FWaterSystemConfig WaterSystem;
+
+	// ========== 캐릭터 설정 ==========
+
+	// 벨보이 (Plan8)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character")
+	FBellBoyConfig BellBoy;
 
 	// ========== Phase3 설정 ==========
 

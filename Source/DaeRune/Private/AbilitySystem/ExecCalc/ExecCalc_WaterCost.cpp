@@ -2,11 +2,13 @@
 
 
 #include "AbilitySystem/ExecCalc/ExecCalc_WaterCost.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystem/DRAttributeSet.h"
 #include "AbilitySystemComponent.h"
 #include "DRGameplayTags.h"
+#include "Game/DRProgressionConfig.h"
 
-// CaptureÇÒ ¼Ó¼ºµé Á¤ÀÇ
+// Captureï¿½ï¿½ ï¿½Ó¼ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 struct FWaterCostStatics
 {
     DECLARE_ATTRIBUTE_CAPTUREDEF(Water);
@@ -14,7 +16,7 @@ struct FWaterCostStatics
 
     FWaterCostStatics()
     {
-        // Source(½ÃÀüÀÚ)ÀÇ Water¿Í Health¸¦ Capture
+        // Source(ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)ï¿½ï¿½ Waterï¿½ï¿½ Healthï¿½ï¿½ Capture
         DEFINE_ATTRIBUTE_CAPTUREDEF(UDRAttributeSet, Water, Source, false);
         DEFINE_ATTRIBUTE_CAPTUREDEF(UDRAttributeSet, Health, Source, false);
     }
@@ -28,7 +30,7 @@ static const FWaterCostStatics& WaterCostStatics()
 
 UExecCalc_WaterCost::UExecCalc_WaterCost()
 {
-    // CaptureÇÒ ¼Ó¼ºµé µî·Ï
+    // Captureï¿½ï¿½ ï¿½Ó¼ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
     RelevantAttributesToCapture.Add(WaterCostStatics().WaterDef);
     RelevantAttributesToCapture.Add(WaterCostStatics().HealthDef);
 }
@@ -37,7 +39,7 @@ void UExecCalc_WaterCost::Execute_Implementation(const FGameplayEffectCustomExec
 {
     const FGameplayEffectSpec& Spec = ExecutionParams.GetOwningSpec();
 
-    // SetByCaller·Î Àü´ÞµÈ ÇÊ¿ä Water ¾ç °¡Á®¿À±â
+    // SetByCallerï¿½ï¿½ ï¿½ï¿½ï¿½Þµï¿½ ï¿½Ê¿ï¿½ Water ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
     float RequiredWater = Spec.GetSetByCallerMagnitude(GameplayTags.Cost_Water, false, 0.f);
 
@@ -46,7 +48,7 @@ void UExecCalc_WaterCost::Execute_Implementation(const FGameplayEffectCustomExec
         return;
     }
 
-    // Evaluation Parameters ¼³Á¤
+    // Evaluation Parameters ï¿½ï¿½ï¿½ï¿½
     const FGameplayTagContainer* SourceTags = Spec.CapturedSourceTags.GetAggregatedTags();
     const FGameplayTagContainer* TargetTags = Spec.CapturedTargetTags.GetAggregatedTags();
 
@@ -54,7 +56,7 @@ void UExecCalc_WaterCost::Execute_Implementation(const FGameplayEffectCustomExec
     EvaluationParameters.SourceTags = SourceTags;
     EvaluationParameters.TargetTags = TargetTags;
 
-    // ÇöÀç Water¿Í Health °ª °¡Á®¿À±â
+    // ï¿½ï¿½ï¿½ï¿½ Waterï¿½ï¿½ Health ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     float CurrentWater = 0.f;
     ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(
         WaterCostStatics().WaterDef,
@@ -67,25 +69,37 @@ void UExecCalc_WaterCost::Execute_Implementation(const FGameplayEffectCustomExec
         EvaluationParameters,
         CurrentHealth);
 
-    // Cost °è»ê
+    // Cost ï¿½ï¿½ï¿½
     float ActualWaterCost = 0.f;
     float HealthCost = 0.f;
 
-    if (CurrentWater >= RequiredWater)
+    // â˜…Plan3(ê³µìš©ì¹©) Â§17.8.2â˜… í”¼ì˜ ê³„ì•½ ì¹©: ë¬¼ì„ ì „í˜€ ì“°ì§€ ì•Šê³  ì „ì•¡ì„ ì²´ë ¥ìœ¼ë¡œ ë‚¸ë‹¤.
+    // â˜…UDRGameplayAbility::CheckCost ì˜ ë¶„ê¸°ì™€ ë°˜ë“œì‹œ ê°™ì€ ìˆ˜ì‹(FloorToFloat í¬í•¨)ì´ì–´ì•¼ í•œë‹¤.â˜…
+    const UAbilitySystemComponent* SourceASC = ExecutionParams.GetSourceAbilitySystemComponent();
+    if (UDRAbilitySystemLibrary::HasUpgradeFeature(
+            SourceASC, GameplayTags.Upgrade_Feature_Combat_BloodCost))
     {
-        // Water°¡ ÃæºÐÇÑ °æ¿ì: Water¸¸ Â÷°¨
+        const AActor* TuningContext = SourceASC ? SourceASC->GetAvatarActor() : nullptr;
+        const float Ratio = UDRAbilitySystemLibrary::GetChipTuning(TuningContext).BloodCostHealthRatio;
+
+        ActualWaterCost = 0.f;
+        HealthCost = FMath::FloorToFloat(RequiredWater * Ratio);
+    }
+    else if (CurrentWater >= RequiredWater)
+    {
+        // Waterï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½: Waterï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         ActualWaterCost = RequiredWater;
         HealthCost = 0.f;
     }
     else
     {
-        // Water°¡ ºÎÁ·ÇÑ °æ¿ì: Water ÀüºÎ + Health Ãß°¡ Â÷°¨
+        // Waterï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½: Water ï¿½ï¿½ï¿½ï¿½ + Health ï¿½ß°ï¿½ ï¿½ï¿½ï¿½ï¿½
         ActualWaterCost = CurrentWater;
         float WaterShortage = RequiredWater - CurrentWater;
         HealthCost = FMath::FloorToFloat(WaterShortage * 0.5f);
     }
 
-    // Water Â÷°¨ Àû¿ë
+    // Water ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (ActualWaterCost > 0.f)
     {
         FGameplayModifierEvaluatedData WaterData(
@@ -95,7 +109,7 @@ void UExecCalc_WaterCost::Execute_Implementation(const FGameplayEffectCustomExec
         OutExecutionOutput.AddOutputModifier(WaterData);
     }
 
-    // Health Â÷°¨ Àû¿ë (ÇÊ¿äÇÑ °æ¿ì¸¸)
+    // Health ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½Ê¿ï¿½ï¿½ï¿½ ï¿½ï¿½ì¸¸)
     if (HealthCost > 0.f)
     {
         FGameplayModifierEvaluatedData HealthData(

@@ -28,6 +28,7 @@ void ADRVacuumAirProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 
 	DOREPLIFETIME(ADRVacuumAirProjectile, bEnhanced);
 	DOREPLIFETIME(ADRVacuumAirProjectile, bFading);
+	DOREPLIFETIME(ADRVacuumAirProjectile, bHitsAllies);   // ★Plan5(공기탄칩)★
 }
 
 void ADRVacuumAirProjectile::BeginPlay()
@@ -93,6 +94,24 @@ void ADRVacuumAirProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComp
 	if (const ADRRobotVacuumCharacter* OtherVacuum = Cast<ADRRobotVacuumCharacter>(OtherActor))
 	{
 		if (OtherVacuum->RiderOnTop.Get() == SourceAvatarActor) return;
+	}
+
+	// ★Plan5(공기탄칩)★ ① 아군도 적과 같은 피해 — 강화탄이면 넉백도 일반 피해 경로로 (D-94 · D-95).
+	//   탑승 연결(내 위 탑승자 · 내가 탄 청소기)은 바로 위에서 이미 통과했다 (사용자 확정).
+	//   ★아래 "강화탄 아군 = 넉백만" 분기보다 앞★ 이어야 강화탄도 아군에게 피해를 준다 (T-107)
+	if (bHitsAllies && !UDRAbilitySystemLibrary::IsNotFriend(SourceAvatarActor, OtherActor))
+	{
+		if (!bHit) OnHit();
+		if (HasAuthority())
+		{
+			ApplyImpactDamage(OtherActor);
+			Destroy();
+		}
+		else
+		{
+			bHit = true;
+		}
+		return;
 	}
 
 	// 강화탄 + 아군 플레이어 → 데미지 없이 넉백만 (부모 파이프라인은 IsNotFriend에서 아군을 걸러버림)

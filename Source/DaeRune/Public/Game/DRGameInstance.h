@@ -112,6 +112,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Progression|Upgrade")
 	void DebugSetUpgradeSystemUnlocked(bool bUnlocked);
 
+	/**
+	 * ★치트/디버그 전용★ — 기본 장착(DefaultEquippedChips)을 다시 적용한다.
+	 *
+	 * HUD 표시 칩을 빼면 화면에서 체력/물/스킬 아이콘이 사라지는데, 그 상태에서
+	 * "되돌릴 방법이 없다"고 막히는 일을 막기 위한 안전망이다. (Plan3(공용칩) §6.6)
+	 * 빈 칸이 없으면 꽂히지 않는다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Progression|Upgrade")
+	void DebugResetDefaultLoadout();
+
 	UPROPERTY(BlueprintAssignable, Category = "Progression|Upgrade")
 	FOnUpgradeSystemUnlockedSignature OnUpgradeSystemUnlocked;
 
@@ -178,6 +188,13 @@ public:
 	EDRUpgradeResult CanEquipChip(EPlayerCharacterClass CharacterClass, FName ChipId,
 		int32& OutRequiredSlots, int32& OutFreeSlots) const;
 
+	/**
+	 * ★Plan5(스킬당1칩)★ 이 칩을 끼우면 같은 스킬로 부딪히는 ★이미 장착된★ 칩. 없으면 None.
+	 * 판정은 UDRChipCatalog::FindSkillConflict() 그대로다 — UI 는 이 함수로만 묻는다.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Progression|Chip")
+	FName GetSkillConflictChip(EPlayerCharacterClass CharacterClass, FName ChipId) const;
+
 	// 칩 장착. PreferredSlotIndex(0..MaxSlots-1) 는 드래그앤드롭한 칸(유효하지 않으면 앞에서부터 채운다).
 	UFUNCTION(BlueprintCallable, Category = "Progression|Chip")
 	EDRUpgradeResult EquipChip(EPlayerCharacterClass CharacterClass, FName ChipId, int32 PreferredSlotIndex = -1);
@@ -196,11 +213,12 @@ public:
 
 	// 이 칩을 "이 칸에" 놓을 수 있는가. 잠긴 칸 / 점유 칸(=교체 가능)까지 구분해 돌려준다.
 	// 점유 칸이어도 교체가 성립하면 Success 다 — 드롭 하이라이트가 그대로 쓰는 판정이다.
+	// 단 같은 스킬 칩과 부딪히면(SkillConflict) 어느 칸이든 거부한다 — 먼저 해제해야 한다(Plan5 D-139).
 	UFUNCTION(BlueprintCallable, Category = "Progression|Chip")
 	EDRUpgradeResult CanEquipChipAtSlot(EPlayerCharacterClass CharacterClass, FName ChipId, int32 SlotIndex,
 		int32& OutRequiredSlots, int32& OutFreeSlots) const;
 
-	// 빈 칸이면 장착, 점유 칸이면 기존 칩을 해제하고 교체한다.
+	// 빈 칸이면 장착, 점유 칸이면 기존 칩을 해제하고 교체한다(같은 스킬 칩끼리는 교체하지 않는다 — D-139).
 	// 실패 시 아무 것도 바꾸지 않는다(사본 작업 후 성공했을 때만 커밋).
 	UFUNCTION(BlueprintCallable, Category = "Progression|Chip")
 	EDRUpgradeResult SwapOrEquipChip(EPlayerCharacterClass CharacterClass, FName ChipId, int32 SlotIndex);
@@ -259,10 +277,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Progression|Reward")
 	bool IsRewardClaimed(FName RewardId) const;
 
-	// ========== 코스메틱 / 옷장 (계정 단위, 클라 권위) — Plan.md 5.1 / 15.11 ==========
+	// ========== 코스메틱 / 옷장 (계정 단위, 클라 권위) — Plan(옷장) ==========
 	//
 	// 해금 상태는 ★저장하지 않고 매번 파생★한다 (EarnedAchievements ∪ ClaimedRewards).
-	// 파생값을 저장하면 카탈로그의 해금 조건을 조정했을 때 둘이 어긋난다. (Plan.md 4.5)
+	// 파생값을 저장하면 카탈로그의 해금 조건을 조정했을 때 둘이 어긋난다. (Plan(옷장) D-2)
 
 	UFUNCTION(BlueprintPure, Category = "Cosmetic")
 	UDRCosmeticCatalog* GetCosmeticCatalog() const;
@@ -303,6 +321,10 @@ public:
 	// 이 로봇에 (잠긴 것 포함) 고를 옷이 하나라도 정의돼 있는가. 옷장 프롬프트 표시용.
 	UFUNCTION(BlueprintPure, Category = "Cosmetic")
 	bool HasAnySkinAvailable(EPlayerCharacterClass CharacterClass) const;
+
+	// 스킨 표시 이름 — 해금 토스트("새 옷 해금!") 가 OnSkinUnlocked 의 SkinId 로 부른다. 카탈로그에 없으면 빈 텍스트 (Plan(옷장) M5)
+	UFUNCTION(BlueprintPure, Category = "Cosmetic")
+	FText GetSkinDisplayName(FName SkinId) const;
 
 	// ★치트/디버그 전용★ — 업적을 임의로 달성 처리 (DebugSetUpgradeSystemUnlocked 선례)
 	UFUNCTION(BlueprintCallable, Category = "Cosmetic")
@@ -397,6 +419,19 @@ private:
 	// OutReclaimedCurrency: 해금 수가 줄어들어 환급해야 하는 재화.
 	bool SanitizeClassState(EPlayerCharacterClass CharacterClass, FDRClassUpgradeState& State,
 		int32& OutReclaimedCurrency) const;
+
+	/**
+	 * ★Plan3(공용칩)★ 시작 슬롯 해금 + 기본 칩 장착. ★로봇당 세이브당 1회만★ 동작한다.
+	 *
+	 * EquipChip() 을 쓰지 않는 이유: 그 함수는 IsUpgradeSystemUnlocked() 게이트를 통과해야 하는데,
+	 * 기본 장착은 스테이지1 클리어 전(= 시스템 잠김 상태)에도 반드시 적용돼야 한다. (§6.3 D-5)
+	 *
+	 * 호출 순서 주의: ★SanitizeClassState() 보다 먼저★ 돌아야 한다.
+	 * 이 함수가 SlotChips 배열 길이를 먼저 맞추기 때문이다. (§6.1)
+	 *
+	 * @return 세이브를 건드렸으면 true (호출부가 SaveProgress 를 결정한다)
+	 */
+	bool ApplyDefaultLoadout(EPlayerCharacterClass CharacterClass, FDRClassUpgradeState& State);
 
 	// 환불 비율 (Config 미지정 시 전액 환불로 간주)
 	float GetRefundRatio() const;

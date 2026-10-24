@@ -22,6 +22,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCorruptedStateChangedSignature, b
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnPlayerClassChanged, ADRPlayerState*, PlayerState, EPlayerCharacterClass, NewClass);
 // 준비 상태 변경 알림 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnReadyStateChangedSignature, bool, bIsReady);
+// 장착 칩 수치 캐시 재구축 알림 (UI 가 피처 태그를 다시 읽어야 한다 — Plan3(공용칩) §7.2)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnUpgradeRuntimeChangedSignature);
 
 /**
  * DaeRune �÷��̾��� ���� ���� ���� Ŭ����
@@ -44,6 +46,16 @@ public:
 	void EnterCombat();
 	void ExitCombat();
 	bool IsInCombat() const { return bIsInCombat; }
+
+	/**
+	 * ★Plan3(공용칩)★ 업그레이드가 반영된 전투 이탈 대기 시간(초).
+	 * 이 시간이 지나야 자동 체력 회복이 시작된다.
+	 *
+	 * ★타이머를 거는 시점에 계산한다.★ BeginPlay 에서 캐시하면 칩 목록이 그보다
+	 * 늦게 도착하는 경우(스폰 후 로드아웃 보고)에 반영되지 않는다. (§7.5.2)
+	 */
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	float GetEffectiveCombatExitDelay() const;
 
 	// �����̳� �ý��� ����
 	int32 GetCurrentContainerIndex() const;
@@ -109,6 +121,29 @@ public:
 	// 서버 전용: 정화된 장착 목록을 싣고 캐시를 재구축한다.
 	void SetEquippedChips(const TArray<FName>& InChips);
 
+	/**
+	 * ★Plan3(공용칩)★ 장착 칩이 부여한 기능 스위치 조회.
+	 * UI 가 FDRUpgradeRuntime 내부를 직접 뒤지지 않게 하는 단일 경로다.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Upgrade")
+	bool HasUpgradeFeature(FGameplayTag FeatureTag) const
+	{
+		return CachedUpgradeRuntime.HasFeature(FeatureTag);
+	}
+
+	// 수치 캐시가 다시 만들어졌다 (최초 복제 / 로드아웃 변경 / Seamless Travel).
+	UPROPERTY(BlueprintAssignable, Category = "Upgrade")
+	FOnUpgradeRuntimeChangedSignature OnUpgradeRuntimeChanged;
+
+	// ========== 코스메틱 (Plan(옷장) M3 · D-26) ==========
+
+	// 이 플레이어가 입고 있는 옷 (인덱스 = EDRCosmeticCategory). 클라이언트 신고 → 서버 정화 → 복제 — 칩과 같은 경로
+	UFUNCTION(BlueprintPure, Category = "Cosmetic")
+	const TArray<FName>& GetEquippedSkinIds() const { return EquippedSkinIds; }
+
+	// 서버 전용: 정화된 목록(길이 = 카테고리 수)을 싣고 폰에 바로 입힌다
+	void SetEquippedSkinIds(const TArray<FName>& InSkinIds);
+
 	// ========== 스테이지 처치 수 (업적 판정 / 결과창 표시) ==========
 
 	UFUNCTION(BlueprintPure, Category = "Stage")
@@ -157,6 +192,10 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_EquippedChips, BlueprintReadOnly, Category = "Upgrade")
 	TArray<FName> EquippedChips;
 
+	// 입고 있는 옷 (인덱스 = EDRCosmeticCategory). 남에게 필요한 건 "지금 입은 4벌"뿐이라 이것만 복제한다 (Plan(옷장) D-6)
+	UPROPERTY(ReplicatedUsing = OnRep_EquippedSkinIds, BlueprintReadOnly, Category = "Cosmetic")
+	TArray<FName> EquippedSkinIds;
+
 	// 이번 스테이지 처치 수 (스테이지 한정 값 — Seamless Travel 시 복사하지 않는다)
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Stage")
 	int32 StageKillCount = 0;
@@ -167,6 +206,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_EquippedChips();
+
+	UFUNCTION()
+	void OnRep_EquippedSkinIds();
 
 	UFUNCTION()
 	void OnRep_IsCorrupted();
@@ -189,6 +231,13 @@ protected:
 	// 소유 클라이언트에서만: 현재 선택 클래스의 장착 목록을 서버에 보고
 	void ReportUpgradeLoadoutIfLocal();
 
+	// 입고 있는 옷을 폰에 반영한다. 폰이 아직 없으면 아무것도 안 한다 —
+	// 폰이 나중에 오면 ADRCharacter::PossessedBy / OnRep_PlayerState 가 여기서 끌어간다 (Plan(옷장) M3)
+	void RefreshCosmeticVisuals();
+
+	// 이 머신의 로컬 컨트롤러가 나를 소유하면: 현재 선택 클래스의 옷 목록을 서버에 보고
+	void ReportCosmeticIfLocal();
+
 private:
 	// 장착 칩을 펼친 수치 캐시 (복제 안 함 — 서버/각 클라가 각자 구축)
 	FDRUpgradeRuntime CachedUpgradeRuntime;
@@ -199,6 +248,10 @@ private:
 	// ���� ���� ��� �ð�
 	UPROPERTY(EditDefaultsOnly, Category = "Combat")
 	float CombatExitDelay = 5.0f;
+
+	// 업그레이드로 줄어든 전투 이탈 대기의 하한. 0에 가까우면 "전투 중"이 의미를 잃는다.
+	UPROPERTY(EditDefaultsOnly, Category = "Combat", meta = (ClampMin = "0.1"))
+	float MinCombatExitDelay = 1.0f;
 
 	// ü�� ȸ�� �ý���
 	UPROPERTY(EditDefaultsOnly, Category = "Gameplay Effects")

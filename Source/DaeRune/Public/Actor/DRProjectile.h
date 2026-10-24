@@ -45,6 +45,10 @@ protected:
 	UFUNCTION()
 	virtual void OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
+	// 서버: Target 에게 이 발사체의 피해(넉백 확률 · 사망 임펄스 포함)를 건다.
+	// ★팀 판정은 하지 않는다 — 호출부 책임★. 칩 지식은 없다(적 투사체와 공유 클래스) (Plan5(공기탄칩) D-94 · T-106)
+	void ApplyImpactDamage(AActor* Target);
+
 	// �浹 ������ ��ü ������Ʈ
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TObjectPtr<USphereComponent> Sphere;

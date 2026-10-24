@@ -47,6 +47,7 @@ void ADRPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(ADRPlayerState, bIsReady);
     DOREPLIFETIME(ADRPlayerState, bIsHost);
     DOREPLIFETIME(ADRPlayerState, EquippedChips);
+    DOREPLIFETIME(ADRPlayerState, EquippedSkinIds);
     DOREPLIFETIME(ADRPlayerState, StageKillCount);
 }
 
@@ -70,6 +71,9 @@ void ADRPlayerState::CopyProperties(APlayerState* PlayerState)
 		// 로비↔스테이지 이동 시 장착 칩을 보존한다 (스폰 시점에 이미 알고 있어야 하므로)
 		DRPS->EquippedChips = EquippedChips;
 		DRPS->RebuildUpgradeRuntime();
+
+		// ★입은 채로 스테이지★ — 새 폰의 PossessedBy 가 이 목록을 끌어가 입힌다 (Plan(옷장) M3)
+		DRPS->EquippedSkinIds = EquippedSkinIds;
 
 		// StageKillCount 는 스테이지 한정 값이라 복사하지 않는다
 	}
@@ -104,6 +108,9 @@ void ADRPlayerState::BeginPlay()
 
     // 복제로 이미 도착한 장착 목록이 있으면 캐시를 만든다 (OnRep 이 BeginPlay 보다 앞설 수 있음)
     RebuildUpgradeRuntime();
+
+    // 옷도 같은 이유로 한 번 더 (폰이 이미 붙어 있는 경우)
+    RefreshCosmeticVisuals();
 
     // 최초 보고는 PlayerController 쪽(OnRep_PlayerState / OnLevelEntered)이 담당한다.
     // PlayerState 가 먼저 도착하고 컨트롤러 연결이 늦는 순서를 그쪽이 흡수한다. (Plan2.md 7.1)
@@ -142,6 +149,19 @@ void ADRPlayerState::RebuildUpgradeRuntime()
     {
         DRCharacter->RefreshUpgradeEffects();
     }
+
+    // ★Plan3(공용칩) §17.6.3★ 회복 차단 칩이 새로 켜졌으면 ★이미 돌고 있는★ 재생 GE 를 즉시 뗀다.
+    // 로비에서 칩을 끼고 스테이지에 들어오면 이전 GE 가 살아 있을 수 있는데,
+    // StartHealthRegen 의 가드만으로는 그걸 막지 못한다.
+    if (HasAuthority()
+        && CachedUpgradeRuntime.HasFeature(FDRGameplayTags::Get().Upgrade_Feature_Combat_NoHealing))
+    {
+        StopHealthRegen();
+    }
+
+    // ★Plan3(공용칩)★ 수치가 아닌 기능 스위치(HUD 표시 등)를 UI 가 다시 읽게 한다.
+    // RefreshUpgradeEffects() 는 어트리뷰트만 건드리므로 이 통지가 따로 필요하다.
+    OnUpgradeRuntimeChanged.Broadcast();
 }
 
 void ADRPlayerState::ReportUpgradeLoadoutIfLocal()
@@ -158,6 +178,55 @@ void ADRPlayerState::ReportUpgradeLoadoutIfLocal()
         if (DRPC->PlayerState != this) continue;
 
         DRPC->ReportUpgradeLoadout();
+        return;
+    }
+}
+
+// ========================= 코스메틱 (Plan(옷장) M3 · D-26) =========================
+
+void ADRPlayerState::SetEquippedSkinIds(const TArray<FName>& InSkinIds)
+{
+    if (!HasAuthority()) return;
+
+    EquippedSkinIds = InSkinIds;
+
+    // ★리슨 서버 호스트에서는 RepNotify 가 불리지 않는다★ — 서버에서 직접 입힌다 (Plan(옷장) T-23)
+    RefreshCosmeticVisuals();
+
+    // 대기실 디스플레이 캐릭터는 PlayerState 가 없어 위 경로를 못 탄다 — 로비면 다시 실어 준다 (Plan(옷장) M5 · T-24)
+    if (ADRLobbyGameMode* LobbyGM = GetWorld() ? GetWorld()->GetAuthGameMode<ADRLobbyGameMode>() : nullptr)
+    {
+        LobbyGM->RefreshDisplayCharacterSkin(Cast<AController>(GetOwner()));
+    }
+}
+
+void ADRPlayerState::OnRep_EquippedSkinIds()
+{
+    RefreshCosmeticVisuals();
+}
+
+void ADRPlayerState::RefreshCosmeticVisuals()
+{
+    // 프리뷰 · 대기실 캐릭터는 PlayerState 가 없어 이 경로를 타지 않는다 — 인게임 폰 전용
+    if (ADRCharacter* DRCharacter = Cast<ADRCharacter>(GetPawn()))
+    {
+        DRCharacter->ApplyCosmeticSkins(EquippedSkinIds);
+    }
+}
+
+void ADRPlayerState::ReportCosmeticIfLocal()
+{
+    // ReportUpgradeLoadoutIfLocal 과 같은 탐색 — Owner 포인터는 클라에서 늦게 복제될 수 있어 쓰지 않는다
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+    {
+        ADRPlayerController* DRPC = Cast<ADRPlayerController>(It->Get());
+        if (!DRPC || !DRPC->IsLocalController()) continue;
+        if (DRPC->PlayerState != this) continue;
+
+        DRPC->ReportCosmeticLoadout();
         return;
     }
 }
@@ -215,9 +284,20 @@ void ADRPlayerState::CheckHealthRegenStatus()
     }
 }
 
+float ADRPlayerState::GetEffectiveCombatExitDelay() const
+{
+    // 칩이 없으면 Apply() 가 항등이라 CombatExitDelay 가 그대로 나온다.
+    const float Upgraded = CachedUpgradeRuntime.Apply(EDRUpgradeStat::HealthRegenDelay, CombatExitDelay);
+    return FMath::Max(MinCombatExitDelay, Upgraded);
+}
+
 void ADRPlayerState::EnterCombat()
 {
     if (!HasAuthority()) return;
+
+    // ★두 SetTimer 가 같은 값을 쓰게 한 번만 계산한다.★
+    // 한쪽만 고치면 "첫 피격은 4.5초, 연속 피격은 5.0초" 처럼 조용히 갈린다.
+    const float ExitDelay = GetEffectiveCombatExitDelay();
 
     if (bIsInCombat)
     {
@@ -226,7 +306,7 @@ void ADRPlayerState::EnterCombat()
             CombatTimerHandle,
             this,
             &ADRPlayerState::CheckCombatExit,
-            CombatExitDelay,
+            ExitDelay,
             false
         );
         return;
@@ -248,7 +328,7 @@ void ADRPlayerState::EnterCombat()
         CombatTimerHandle,
         this,
         &ADRPlayerState::CheckCombatExit,
-        CombatExitDelay,
+        ExitDelay,
         false
     );
 
@@ -385,6 +465,10 @@ void ADRPlayerState::StartHealthRegen()
 {
     if (!HasAuthority() || bIsCorrupted) return;
 
+    // ★Plan3(공용칩) §17.6.3★ 회복 차단 칩이면 재생 GE 자체를 얹지 않는다.
+    // (이미 붙어 있던 GE 는 RebuildUpgradeRuntime 이 떼어내고, 틱은 MMC 가 0 으로 막는다)
+    if (CachedUpgradeRuntime.HasFeature(FDRGameplayTags::Get().Upgrade_Feature_Combat_NoHealing)) return;
+
     // �̹� ���� ���̸� ����
     if (HealthRegenEffectHandle.IsValid()) return;
 
@@ -476,6 +560,10 @@ void ADRPlayerState::SetSelectedPlayerClass(EPlayerCharacterClass NewClass)
 	EquippedChips.Reset();
 	RebuildUpgradeRuntime();
 
+	// 옷도 같다 — 자판기 옷을 청소기가 입는 사고 방지 (Plan(옷장) M3)
+	EquippedSkinIds.Reset();
+	RefreshCosmeticVisuals();
+
 	OnPlayerClassChanged.Broadcast(this, SelectedPlayerClass);
 
 	// 로비 대기실에서만 폰 교체 실행
@@ -488,6 +576,10 @@ void ADRPlayerState::SetSelectedPlayerClass(EPlayerCharacterClass NewClass)
 			LobbyGM->RespawnPlayerWithClass(DRPC, NewClass);
 		}
 	}
+
+	// ★리슨 서버 호스트★ 는 OnRep_SelectedPlayerClass 가 불리지 않아 새 로봇의 옷을 보고할 기회가 없다 —
+	// 여기서 바로 보고한다. 원격 클라이언트의 PlayerState 면 이 머신에 그 컨트롤러가 없어 아무 일도 없다.
+	ReportCosmeticIfLocal();
 }
 
 void ADRPlayerState::OnRep_SelectedPlayerClass()
@@ -497,6 +589,7 @@ void ADRPlayerState::OnRep_SelectedPlayerClass()
 
 	// 소유 클라이언트: 새 클래스의 장착 목록을 서버에 보고
 	ReportUpgradeLoadoutIfLocal();
+	ReportCosmeticIfLocal();
 
 	OnPlayerClassChanged.Broadcast(this, SelectedPlayerClass);
 }

@@ -5,6 +5,8 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystem/Data/GameBalanceConfig.h"
 #include "AbilitySystem/DRAttributeSet.h"
+#include "AbilitySystem/DRPlayerAttributeSet.h"
+#include "Game/DRProgressionConfig.h"
 #include "DRAbilityTypes.h"
 #include "DRGameplayTags.h"
 #include "Actor/DRCleanserSite.h"
@@ -21,6 +23,22 @@
 #include "Engine/OverlapResult.h"
 #include "Game/DRStageGameState.h"
 #include "GameFramework/Character.h"
+// ★Plan8(벨보이)★ 모자·도발·몽타주 헬퍼
+#include "AIController.h"
+#include "AI/DRAIController.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/AnimNotifies/AnimNotify.h"
+#include "BehaviorTree/BlackboardComponent.h"
+#include "BehaviorTree/BehaviorTreeComponent.h"
+#include "BehaviorTree/BehaviorTree.h"
+#include "Character/DRCharacterBase.h"
+#include "Character/DRCharacter.h"
+#include "Character/DREnemy.h"
+#include "Character/DRRobotVacuumCharacter.h"
+#include "AbilitySystemGlobals.h"
+#include "Components/CapsuleComponent.h"
+#include "TimerManager.h"
 
 bool UDRAbilitySystemLibrary::MakeWidgetControllerParams(const UObject* WorldContextObject, FWidgetControllerParams& OutWCParams, ADRHUD*& OutDRHUD)
 {
@@ -194,6 +212,373 @@ UGameBalanceConfig* UDRAbilitySystemLibrary::GetGameBalanceConfig(const UObject*
 	return DRGameMode->GameBalanceConfig;
 }
 
+// ========================= 업그레이드 칩 조회 (Plan3(공용칩) §17.5) =========================
+
+const FDRUpgradeRuntime& UDRAbilitySystemLibrary::GetUpgradeRuntimeForASC(const UAbilitySystemComponent* ASC)
+{
+	// 칩이 없는 대상(적 / 클렌저 사이트)을 위한 항등 캐시.
+	// 호출부가 null 분기를 하지 않아도 되도록 항상 유효한 참조를 돌려준다.
+	static const FDRUpgradeRuntime EmptyRuntime;
+
+	if (!ASC) return EmptyRuntime;
+
+	// 플레이어는 ASC 를 PlayerState 가 소유하므로 OwnerActor 가 곧 PlayerState 다
+	if (const ADRPlayerState* DRPS = Cast<ADRPlayerState>(ASC->GetOwnerActor()))
+	{
+		return DRPS->GetUpgradeRuntime();
+	}
+
+	// 폴백: 아바타의 PlayerState (ASC 소유 구조가 다른 경우 대비)
+	if (const APawn* AvatarPawn = Cast<APawn>(ASC->GetAvatarActor()))
+	{
+		if (const ADRPlayerState* DRPS = AvatarPawn->GetPlayerState<ADRPlayerState>())
+		{
+			return DRPS->GetUpgradeRuntime();
+		}
+	}
+
+	return EmptyRuntime;
+}
+
+bool UDRAbilitySystemLibrary::HasUpgradeFeature(const UAbilitySystemComponent* ASC, FGameplayTag FeatureTag)
+{
+	return GetUpgradeRuntimeForASC(ASC).HasFeature(FeatureTag);
+}
+
+const UDRPlayerAttributeSet* UDRAbilitySystemLibrary::GetPlayerAttributeSetFromASC(const UAbilitySystemComponent* ASC)
+{
+	if (!ASC) return nullptr;
+	return Cast<UDRPlayerAttributeSet>(ASC->GetAttributeSet(UDRPlayerAttributeSet::StaticClass()));
+}
+
+const FDRChipTuning& UDRAbilitySystemLibrary::GetChipTuning(const UObject* WorldContextObject)
+{
+	// Config 미지정/월드 없음이어도 기본값으로 동작하게 한다 —
+	// 튜닝 값이 없다고 전투 계산이 0 으로 무너지면 원인 추적이 훨씬 어려워진다.
+	static const FDRChipTuning DefaultTuning;
+
+	if (!WorldContextObject) return DefaultTuning;
+
+	// GameBalanceConfig 와 달리 GameMode 를 타지 않는다 — 클라이언트에서도 필요하다.
+	if (const UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull))
+	{
+		if (const UDRGameInstance* GI = World->GetGameInstance<UDRGameInstance>())
+		{
+			if (const UDRProgressionConfig* Config = GI->ProgressionConfig)
+			{
+				return Config->ChipTuning;
+			}
+		}
+	}
+
+	return DefaultTuning;
+}
+
+// ========================= 공격 속도 (Plan5(공속칩)) =========================
+
+int32 UDRAbilitySystemLibrary::GetEffectStackCountWithTag(const UAbilitySystemComponent* ASC, const FGameplayTag& Tag)
+{
+	if (!ASC || !Tag.IsValid()) return 0;
+
+	// ★Plan5(공기탄칩)★ OwningTags 쿼리 — 에셋 태그 ∪ 부여(Target) 태그를 본다.
+	// 예전의 GetActiveEffectsWithAllTags 는 ★에셋 태그만★ 비교해서(UE 5.5 FGameplayEffectQuery::Matches),
+	// 부여 태그만 단 GE(흡착 표식 등)는 스택이 늘 0 으로 읽혔다. 공속 GE 들은 두 태그를 다 달고 있어 결과는 같다.
+	for (const FActiveGameplayEffectHandle& Handle :
+		ASC->GetActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tag))))
+	{
+		const int32 Stacks = ASC->GetCurrentStackCount(Handle);
+		if (Stacks > 0) return Stacks;
+	}
+	return 0;
+}
+
+float UDRAbilitySystemLibrary::GetAttackSpeedMultiplier(const UAbilitySystemComponent* ASC)
+{
+	if (!ASC) return 1.f;
+
+	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+	const int32 SelfStacks = GetEffectStackCountWithTag(ASC, Tags.Buff_VendingMachine_AttackSpeed);
+	const int32 SharedStacks = GetEffectStackCountWithTag(ASC, Tags.Buff_AttackSpeed_Shared);
+	if (SelfStacks <= 0 && SharedStacks <= 0) return 1.f;
+
+	const FDRAttackSpeedBuffChipTuning& Tuning = GetChipTuning(ASC).AttackSpeedBuff;
+
+	// 자기 버프는 자기만 건다 → 스택당 값은 ★내 칩★ 으로 정한다 (D-64 · D-74).
+	// ②(Share)를 낀 자판기는 자기 버프 대신 공유 버프를 받으므로 SelfStacks 가 0 이다.
+	float SelfPerStack = Tuning.BaseSpeedPerStack;
+	if (SelfStacks > 0)
+	{
+		const FDRUpgradeRuntime& Runtime = GetUpgradeRuntimeForASC(ASC);
+		if (Runtime.HasFeature(Tags.Upgrade_Feature_Skill_AttackSpeedBuff_Overdrive))
+		{
+			SelfPerStack = Tuning.OverdriveSpeedPerStack;
+		}
+		else if (Runtime.HasFeature(Tags.Upgrade_Feature_Skill_AttackSpeedBuff_Decay))
+		{
+			SelfPerStack = Tuning.DecaySpeedPerStack;
+		}
+	}
+
+	// 공유 버프를 거는 길은 칩 ②뿐이라 스택당 값이 하나다. 두 버프는 더한다 (D-64).
+	return 1.f + SelfStacks * SelfPerStack + SharedStacks * Tuning.SharedSpeedPerStack;
+}
+
+void UDRAbilitySystemLibrary::GetAlivePlayersWithinRadius(const UObject* WorldContextObject, const FVector& Origin,
+	float Radius, TArray<AActor*>& OutPlayers)
+{
+	OutPlayers.Reset();
+	if (Radius <= 0.f) return;
+
+	const UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World) return;
+
+	// 오버랩은 여유를 두고 넓게, 실제 판정은 아래 거리로 한다 (FindNearestTeammate 와 같은 방식)
+	TArray<FOverlapResult> Overlaps;
+	World->OverlapMultiByChannel(Overlaps, Origin, FQuat::Identity, ECC_Pawn,
+		FCollisionShape::MakeSphere(Radius + 200.f));
+
+	const float RadiusSq = FMath::Square(Radius);
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		AActor* Candidate = Overlap.GetActor();
+		if (!IsValid(Candidate) || OutPlayers.Contains(Candidate)) continue;
+
+		// 팀원 판정 = 액터 태그 (IsNotFriend · FindNearestTeammate 와 같은 기준)
+		if (!Candidate->ActorHasTag(FName("Player"))) continue;
+		if (!Cast<ADRCharacter>(Candidate)) continue;
+		if (Candidate->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Candidate)) continue;
+		if (!UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Candidate)) continue;
+		if (FVector::DistSquared(Origin, Candidate->GetActorLocation()) > RadiusSq) continue;
+
+		OutPlayers.Add(Candidate);
+	}
+}
+
+// ========== 액터가 스킬 단위 업그레이드를 읽는 길 (Plan5(씨앗칩)) ==========
+
+FGameplayTag UDRAbilitySystemLibrary::GetUpgradeKeyTagFromAbilityTags(const FGameplayTagContainer& AbilityTags)
+{
+	// UDRAbilitySystemComponent::GetAbilityTagFromSpec 과 동일한 규칙 ("Abilities" 접두 태그)
+	static const FGameplayTag AbilitiesTag = FGameplayTag::RequestGameplayTag(FName("Abilities"));
+
+	for (const FGameplayTag& Tag : AbilityTags)
+	{
+		if (Tag.MatchesTag(AbilitiesTag))
+		{
+			return Tag;
+		}
+	}
+	return FGameplayTag();
+}
+
+float UDRAbilitySystemLibrary::ApplySkillUpgrade(const UAbilitySystemComponent* SourceASC,
+	const FGameplayTagContainer& SourceAbilityTags, EDRUpgradeStat Stat, float Base)
+{
+	const FGameplayTag KeyTag = GetUpgradeKeyTagFromAbilityTags(SourceAbilityTags);
+	return GetUpgradeRuntimeForASC(SourceASC).ApplySkill(KeyTag, Stat, Base);
+}
+
+FActiveGameplayEffectHandle UDRAbilitySystemLibrary::ApplyTimedSpeedEffect(
+	AActor* TargetActor, UAbilitySystemComponent* SourceASC,
+	const FDRTimedSpeedEffect& Config, float SpeedMultiplier)
+{
+	if (!IsValid(TargetActor)) return FActiveGameplayEffectHandle();
+
+	// TSoftClassPtr 는 1회 동기 로드한다 (UDRSynergyAuraComponent 와 같은 방식).
+	// 미지정이면 조용히 넘어간다 — 호출부가 매 적중마다 경고를 쏟지 않도록.
+	UClass* EffectClass = Config.Effect.LoadSynchronous();
+	if (!EffectClass) return FActiveGameplayEffectHandle();
+
+	UAbilitySystemComponent* TargetASC =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
+	if (!TargetASC) return FActiveGameplayEffectHandle();
+
+	// 소스 ASC 가 없으면(발사체 주인이 사라진 경우 등) 대상 자신을 소스로 삼는다.
+	UAbilitySystemComponent* EffectSource = SourceASC ? SourceASC : TargetASC;
+
+	FGameplayEffectContextHandle Context = EffectSource->MakeEffectContext();
+	Context.AddSourceObject(EffectSource->GetAvatarActor());
+
+	FGameplayEffectSpecHandle SpecHandle = EffectSource->MakeOutgoingSpec(EffectClass, 1.f, Context);
+	if (!SpecHandle.IsValid()) return FActiveGameplayEffectHandle();
+
+	// ★Duration 이 SetByCaller 인데 값을 안 넣으면 지속시간 0 으로 즉시 사라진다.★
+	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+	SpecHandle.Data->SetSetByCallerMagnitude(Tags.Data_MoveSpeed_Mult, SpeedMultiplier);
+	SpecHandle.Data->SetSetByCallerMagnitude(Tags.Data_Duration, FMath::Max(0.01f, Config.Duration));
+
+	return TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+}
+
+FActiveGameplayEffectHandle UDRAbilitySystemLibrary::ApplyTimedTagEffect(
+	AActor* TargetActor, UAbilitySystemComponent* SourceASC,
+	const TSoftClassPtr<UGameplayEffect>& Effect, float Duration)
+{
+	if (!IsValid(TargetActor)) return FActiveGameplayEffectHandle();
+
+	// TSoftClassPtr 는 1회 동기 로드한다 (ApplyTimedSpeedEffect 와 같은 방식).
+	// 미지정이면 조용히 넘어간다 — 호출부가 매 적중마다 경고를 쏟지 않도록.
+	UClass* EffectClass = Effect.LoadSynchronous();
+	if (!EffectClass) return FActiveGameplayEffectHandle();
+
+	UAbilitySystemComponent* TargetASC =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
+	if (!TargetASC) return FActiveGameplayEffectHandle();
+
+	// 소스 ASC 가 없으면 대상 자신을 소스로 삼는다.
+	UAbilitySystemComponent* EffectSource = SourceASC ? SourceASC : TargetASC;
+
+	FGameplayEffectContextHandle Context = EffectSource->MakeEffectContext();
+	Context.AddSourceObject(EffectSource->GetAvatarActor());
+
+	FGameplayEffectSpecHandle SpecHandle = EffectSource->MakeOutgoingSpec(EffectClass, 1.f, Context);
+	if (!SpecHandle.IsValid()) return FActiveGameplayEffectHandle();
+
+	// ★Duration 이 SetByCaller 인데 값을 안 넣으면 지속시간 0 으로 즉시 사라진다.★
+	SpecHandle.Data->SetSetByCallerMagnitude(
+		FDRGameplayTags::Get().Data_Duration, FMath::Max(0.01f, Duration));
+
+	return TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+}
+
+// ========================= 회복 / 흡혈 (Plan5(발톱칩)) =========================
+
+void UDRAbilitySystemLibrary::ApplyHealToActor(AActor* TargetActor, UAbilitySystemComponent* SourceASC,
+	TSubclassOf<UGameplayEffect> HealEffect, float HealAmount, const UObject* SourceObject)
+{
+	if (!IsValid(TargetActor) || HealAmount <= 0.f || !HealEffect) return;
+
+	UAbilitySystemComponent* TargetASC =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
+	if (!TargetASC) return;
+
+	// 소스 ASC 가 없으면 대상 자신이 소스가 된다(자가 회복 형태 — 씨앗 발사체가 이 경로를 쓴다).
+	UAbilitySystemComponent* EffectSource = SourceASC ? SourceASC : TargetASC;
+
+	FGameplayEffectContextHandle Context = EffectSource->MakeEffectContext();
+	Context.AddSourceObject(SourceObject ? SourceObject : EffectSource->GetAvatarActor());
+
+	FGameplayEffectSpecHandle SpecHandle = EffectSource->MakeOutgoingSpec(HealEffect, 1.f, Context);
+	if (!SpecHandle.IsValid()) return;
+
+	// GE 는 UExecCalc_Heal 이 이 SetByCaller 를 읽어 IncomingHealing 으로 넘긴다.
+	SpecHandle.Data->SetSetByCallerMagnitude(FDRGameplayTags::Get().Heal, HealAmount);
+
+	TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+}
+
+void UDRAbilitySystemLibrary::ApplyHealToActor(AActor* TargetActor, UAbilitySystemComponent* SourceASC,
+	const TSoftClassPtr<UGameplayEffect>& HealEffect, float HealAmount, const UObject* SourceObject)
+{
+	// TSoftClassPtr 는 1회 동기 로드한다 (ApplyTimedSpeedEffect 와 같은 방식).
+	//
+	// ★TSubclassOf 로 ★명시적으로★ 감싼다.★ LoadSynchronous() 의 반환형은 UClass* 인데,
+	// 그건 TSubclassOf 와 TSoftClassPtr 양쪽으로 암시적 변환이 가능해
+	// 그냥 넘기면 두 오버로드 중 어느 것인지 모호해진다(C2668).
+	const TSubclassOf<UGameplayEffect> LoadedClass = HealEffect.LoadSynchronous();
+	ApplyHealToActor(TargetActor, SourceASC, LoadedClass, HealAmount, SourceObject);
+}
+
+float UDRAbilitySystemLibrary::GetHealableAmount(AActor* TargetActor, float RequestedHeal)
+{
+	if (!IsValid(TargetActor) || RequestedHeal <= 0.f) return 0.f;
+
+	const UAbilitySystemComponent* TargetASC =
+		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
+	if (!TargetASC) return 0.f;
+
+	// ★회복 차단(칩 ⑥ 광폭화)★ — HandleIncomingHealing 이 힐을 통째로 버린다.
+	// 버려질 힐에 대가를 치르면 안 되므로 여기서 0 을 돌려준다.
+	if (HasUpgradeFeature(TargetASC, FDRGameplayTags::Get().Upgrade_Feature_Combat_NoHealing))
+	{
+		return 0.f;
+	}
+
+	const UDRAttributeSet* TargetAS = Cast<UDRAttributeSet>(
+		TargetASC->GetAttributeSet(UDRAttributeSet::StaticClass()));
+	if (!TargetAS) return 0.f;
+
+	// ★오염 상태★ — HandleCorruptionPurification 이 회복량과 무관하게 1회 소비해 정화한다.
+	// 체력이 가득 차 있어도 "쓸모 있는" 회복이므로 요청량 전액을 소비된 것으로 본다.
+	if (const UDRPlayerAttributeSet* TargetPlayerAS = Cast<UDRPlayerAttributeSet>(TargetAS))
+	{
+		if (TargetPlayerAS->IsCorrupted())
+		{
+			return RequestedHeal;
+		}
+	}
+
+	// 일반: 빈 체력만큼만 소비된다. 만피면 0 → 호출부가 비용을 물지 않는다.
+	return FMath::Clamp(TargetAS->GetMaxHealth() - TargetAS->GetHealth(), 0.f, RequestedHeal);
+}
+
+float UDRAbilitySystemLibrary::GetLifestealRatioForDamage(const FEffectProperties& Props)
+{
+	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+
+	// ① 소스가 흡혈 칩을 끼고 있는가
+	if (!HasUpgradeFeature(Props.SourceASC, GameplayTags.Upgrade_Feature_Skill_Claw_Lifesteal))
+	{
+		return 0.f;
+	}
+
+	// ② 이 피해가 ★기본 공격에서★ 나왔는가.
+	//    이 검사를 빠뜨리면 씨앗 폭탄·물대포 피해까지 흡혈된다.
+	//    ApplyDamageEffect 가 컨텍스트에 SourceAbilityTags 를 실어 주므로 추가 배선이 필요 없다.
+	const FDRGameplayEffectContext* DRContext =
+		static_cast<const FDRGameplayEffectContext*>(Props.EffectContextHandle.Get());
+	if (!DRContext) return 0.f;
+
+	if (!DRContext->GetSourceAbilityTags().HasTagExact(GameplayTags.Abilities_GardenRobot_ClawSwipe))
+	{
+		return 0.f;
+	}
+
+	// ③ ★시전자가 오염 중이면 막는다★ (2026-10-08 사용자 결정) — 동전 ② 적중 회복(D-42)과 같은 이유.
+	//    HandleCorruptionPurification 은 회복량과 무관하게 정화 + 컨테이너 1칸을 주므로,
+	//    막지 않으면 오염되자마자 적 한 대로 즉시 정화된다. 오염 해제는 아군 회복으로만 하는 팀 메커니즘이다.
+	if (const UDRPlayerAttributeSet* SourcePlayerAS = GetPlayerAttributeSetFromASC(Props.SourceASC))
+	{
+		if (SourcePlayerAS->IsCorrupted()) return 0.f;
+	}
+
+	const AActor* TuningContext = Props.SourceASC ? Props.SourceASC->GetAvatarActor() : nullptr;
+	return FMath::Max(0.f, GetChipTuning(TuningContext).Claw.LifestealRatio);
+}
+
+float UDRAbilitySystemLibrary::GetHitHealAmountForDamage(const FEffectProperties& Props)
+{
+	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+
+	// ① 소스가 적중 회복 칩을 끼고 있는가
+	if (!HasUpgradeFeature(Props.SourceASC, GameplayTags.Upgrade_Feature_Skill_Coin_HitHeal))
+	{
+		return 0.f;
+	}
+
+	// ② 이 피해가 ★자판기 기본 공격에서★ 나왔는가 (흡혈의 ClawSwipe 검사와 같은 이유 —
+	//    빠뜨리면 자판기의 다른 피해원까지 회복된다). 동전·잭팟 캡슐은 둘 다 이 GA 의 태그를 싣는다.
+	const FDRGameplayEffectContext* DRContext =
+		static_cast<const FDRGameplayEffectContext*>(Props.EffectContextHandle.Get());
+	if (!DRContext) return 0.f;
+
+	if (!DRContext->GetSourceAbilityTags().HasTagExact(GameplayTags.Abilities_VendingMachine_BasicAttack))
+	{
+		return 0.f;
+	}
+
+	// ③ ★시전자가 오염 중이면 막는다★ — HandleCorruptionPurification 은 회복량과 무관하게
+	//    정화 + 컨테이너 1칸을 준다. 오염 해제는 아군 회복으로만 하는 팀 메커니즘이다.
+	//    (오염은 플레이어에게만 있다 — 판정 대상은 적이 아니라 ★시전자★ 다)
+	if (const UDRPlayerAttributeSet* SourcePlayerAS = GetPlayerAttributeSetFromASC(Props.SourceASC))
+	{
+		if (SourcePlayerAS->IsCorrupted()) return 0.f;
+	}
+
+	const AActor* TuningContext = Props.SourceASC ? Props.SourceASC->GetAvatarActor() : nullptr;
+	return FMath::Max(0.f, GetChipTuning(TuningContext).Coin.HitHealAmount);
+}
+
 bool UDRAbilitySystemLibrary::IsSuccessfulDebuff(const FGameplayEffectContextHandle& EffectContextHandle)
 {
 	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
@@ -318,21 +703,9 @@ void UDRAbilitySystemLibrary::GetLiveObjectsWithinRadius(const UObject* WorldCon
 	{
 		TArray<FOverlapResult> Overlaps;
 		World->OverlapMultiByObjectType(Overlaps, SphereOrigin, FQuat::Identity, FCollisionObjectQueryParams(FCollisionObjectQueryParams::InitType::AllDynamicObjects), FCollisionShape::MakeSphere(Radius), SphereParams);
-		// [임시 진단]
-		UE_LOG(LogDR, Warning, TEXT("[MoleDiag] A. 반경 %.0f 오버랩 %d개 (중심 %s)"),
-			Radius, Overlaps.Num(), *SphereOrigin.ToCompactString());
 
 		for (FOverlapResult& Overlap : Overlaps)
 		{
-			// [임시 진단] 두더지만 골라 출력
-			if (Overlap.GetActor() && Overlap.GetActor()->GetClass()->GetName().Contains(TEXT("Mole")))
-			{
-				UE_LOG(LogDR, Warning, TEXT("[MoleDiag] B. 두더지 발견: %s / Implements=%d / IsDead=%d"),
-					*Overlap.GetActor()->GetName(),
-					Overlap.GetActor()->Implements<UCombatInterface>() ? 1 : 0,
-					Overlap.GetActor()->Implements<UCombatInterface>() ? (ICombatInterface::Execute_IsDead(Overlap.GetActor()) ? 1 : 0) : -1);
-			}
-
 			if (Overlap.GetActor()->Implements<UCombatInterface>() && !ICombatInterface::Execute_IsDead(Overlap.GetActor()))
 			{
 				OutOverlappingActors.AddUnique(ICombatInterface::Execute_GetAvatar(Overlap.GetActor()));
@@ -464,12 +837,6 @@ FGameplayEffectContextHandle UDRAbilitySystemLibrary::ApplyDamageEffect(const FD
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 	AActor* SourceAvatarActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
 
-	// [임시 진단] 이 함수에 도달한 모든 공격
-	UE_LOG(LogDR, Warning, TEXT("[MoleDiag] F. ApplyDamageEffect 진입: 대상아바타=%s"),
-		DamageEffectParams.TargetAbilitySystemComponent
-			? *GetNameSafe(DamageEffectParams.TargetAbilitySystemComponent->GetAvatarActor())
-			: TEXT("★TargetASC 없음"));
-
 	// ===== 근접 전용 피격 대상 가로채기 (Plan6 §5.11) =====
 	// 홀로그램 두더지처럼 "2m 안에서의 공격만 유효하고 그 밖은 투과"하는 대상을 여기서 처리한다.
 	// 모든 공격이 이 함수를 지나므로 공격 종류마다 손대지 않아도 된다.
@@ -479,10 +846,6 @@ FGameplayEffectContextHandle UDRAbilitySystemLibrary::ApplyDamageEffect(const FD
 		AActor* TargetAvatarActor = DamageEffectParams.TargetAbilitySystemComponent->GetAvatarActor();
 		if (IDRProximityHitOnly* ProximityTarget = Cast<IDRProximityHitOnly>(TargetAvatarActor))
 		{
-			// [임시 진단]
-			UE_LOG(LogDR, Warning, TEXT("[MoleDiag] D. ApplyDamageEffect 도달: 대상=%s / Accepts=%d"),
-				*GetNameSafe(TargetAvatarActor), ProximityTarget->AcceptsHitFrom(SourceAvatarActor) ? 1 : 0);
-
 			if (ProximityTarget->AcceptsHitFrom(SourceAvatarActor))
 			{
 				ProximityTarget->HandleProximityHit(SourceAvatarActor);
@@ -645,4 +1008,533 @@ void UDRAbilitySystemLibrary::ApplyEffectSpecWithSetByCaller(
 
 	SpecHandle.Data.Get()->SetSetByCallerMagnitude(Tag, Magnitude);
 	ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+}
+
+// ========================= ★Plan8(모자)★ 모자 보호막 =========================
+
+bool UDRAbilitySystemLibrary::HasBellBoyHat(AActor* Target)
+{
+	const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
+	return ASC && ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Buff_BellBoy_Hat);   // 부모 태그 — 자식 둘 다 잡힌다
+}
+
+bool UDRAbilitySystemLibrary::TryEquipBellBoyHat(AActor* Target, UAbilitySystemComponent* SourceASC, int32 Charges)
+{
+	ADRCharacterBase* Character = Cast<ADRCharacterBase>(Target);
+	if (!IsValid(Character) || !Character->HasAuthority()) return false;
+	if (ICombatInterface::Execute_IsDead(Character)) return false;
+
+	UAbilitySystemComponent* TargetASC = Character->GetAbilitySystemComponent();
+	if (!TargetASC) return false;
+
+	// 최대 1개 (D-22) — 이미 쓰고 있으면 호출부가 모자를 남긴다
+	if (TargetASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Buff_BellBoy_Hat)) return false;
+
+	const UGameBalanceConfig* Config = GetGameBalanceConfig(Character);
+	const TSubclassOf<UGameplayEffect> EffectClass = !Config ? nullptr
+		: (Charges >= 2 ? Config->BellBoy.HatDoubleEffect : Config->BellBoy.HatSingleEffect);
+	if (!EffectClass)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[BellBoy] DA_GameBalanceConfig.BellBoy 의 모자 GE 가 비어 있다 — 모자 무동작"));
+		return false;
+	}
+
+	// 소스 ASC 가 없으면(던진 벨보이가 나감 등) 대상 자신을 소스로 — ApplyTimedTagEffect 와 같은 처리
+	UAbilitySystemComponent* Source = SourceASC ? SourceASC : TargetASC;
+	FGameplayEffectContextHandle Context = Source->MakeEffectContext();
+	Context.AddSourceObject(Source->GetAvatarActor());
+
+	const FGameplayEffectSpecHandle Spec = Source->MakeOutgoingSpec(EffectClass, 1.f, Context);
+	return Spec.IsValid() && TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get()).IsValid();
+}
+
+bool UDRAbilitySystemLibrary::TryConsumeBellBoyHat(UAbilitySystemComponent* TargetASC)
+{
+	if (!TargetASC || !TargetASC->IsOwnerActorAuthoritative()) return false;
+
+	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+	// ★빠른 탈출★ — 모든 피해가 이 함수를 지난다. 모자가 없으면 태그 조회 한 번으로 끝난다.
+	if (!TargetASC->HasMatchingGameplayTag(Tags.Buff_BellBoy_Hat)) return false;
+
+	FGameplayCueParameters Cue;
+	Cue.Location = TargetASC->GetAvatarActor() ? TargetASC->GetAvatarActor()->GetActorLocation() : FVector::ZeroVector;
+
+	// ① Double → Single ★Single 을 먼저 걸고 Double 을 지운다★ (D-20)
+	//    순서를 거꾸로 하면 한 순간 "모자 없음"이 되어 그 사이 들어온 피해를 못 막는다.
+	const TArray<FActiveGameplayEffectHandle> Doubles =
+		TargetASC->GetActiveEffects(
+			FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tags.Buff_BellBoy_Hat_Double)));
+	if (Doubles.Num() > 0)
+	{
+		const UGameBalanceConfig* Config = GetGameBalanceConfig(TargetASC->GetAvatarActor());
+		if (Config && Config->BellBoy.HatSingleEffect)
+		{
+			const FGameplayEffectSpecHandle Single = TargetASC->MakeOutgoingSpec(
+				Config->BellBoy.HatSingleEffect, 1.f, TargetASC->MakeEffectContext());
+			if (Single.IsValid())
+			{
+				TargetASC->ApplyGameplayEffectSpecToSelf(*Single.Data.Get());
+			}
+		}
+		TargetASC->RemoveActiveGameplayEffect(Doubles[0]);
+		TargetASC->ExecuteGameplayCue(Tags.GameplayCue_BellBoy_HatBlock, Cue);
+		return true;
+	}
+
+	// ② Single → 제거
+	const TArray<FActiveGameplayEffectHandle> Singles =
+		TargetASC->GetActiveEffects(
+			FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tags.Buff_BellBoy_Hat_Single)));
+	if (Singles.Num() > 0)
+	{
+		TargetASC->RemoveActiveGameplayEffect(Singles[0]);
+		TargetASC->ExecuteGameplayCue(Tags.GameplayCue_BellBoy_HatBlock, Cue);
+		return true;
+	}
+	return false;
+}
+
+USceneComponent* UDRAbilitySystemLibrary::GetHatAttachPoint(AActor* Target, FName& OutSocketName, FVector& OutRelativeOffset)
+{
+	OutSocketName = NAME_None;
+	OutRelativeOffset = FVector::ZeroVector;
+
+	ACharacter* Character = Cast<ACharacter>(Target);
+	if (!Character) return Target ? Target->GetRootComponent() : nullptr;
+
+	static const FName HatSocketName(TEXT("HatSocket"));
+	if (USkeletalMeshComponent* Mesh = Character->GetMesh())
+	{
+		if (Mesh->DoesSocketExist(HatSocketName))
+		{
+			OutSocketName = HatSocketName;
+			return Mesh;
+		}
+	}
+
+	// 폴백: 캡슐 꼭대기 + 10uu (머리를 따라 흔들리지는 않지만 모든 적에게 동작한다)
+	UCapsuleComponent* Capsule = Character->GetCapsuleComponent();
+	OutRelativeOffset = FVector(0.f, 0.f, Capsule->GetScaledCapsuleHalfHeight() + 10.f);
+	return Capsule;
+}
+
+// ========================= ★Plan8(시선집중)★ 도발 =========================
+
+void UDRAbilitySystemLibrary::GetAliveEnemiesWithinRadius(const UObject* WorldContextObject, const FVector& Origin,
+	float Radius, TArray<AActor*>& OutEnemies)
+{
+	OutEnemies.Reset();
+	const UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World) return;
+
+	TArray<FOverlapResult> Overlaps;
+	World->OverlapMultiByObjectType(Overlaps, Origin, FQuat::Identity,
+		FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeSphere(Radius));
+
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		ADREnemy* Enemy = Cast<ADREnemy>(Overlap.GetActor());
+		if (!IsValid(Enemy) || ICombatInterface::Execute_IsDead(Enemy)) continue;
+		OutEnemies.AddUnique(Enemy);   // 커스텀 히트박스도 Pawn 타입이라 한 적이 여러 번 잡힌다
+	}
+}
+
+bool UDRAbilitySystemLibrary::CanBeTaunted(AActor* Enemy)
+{
+	const APawn* Pawn = Cast<APawn>(Enemy);
+	const AAIController* AIC = Pawn ? Cast<AAIController>(Pawn->GetController()) : nullptr;
+	const UBlackboardComponent* BB = AIC ? AIC->GetBlackboardComponent() : nullptr;
+	if (!BB) return false;
+
+	return BB->GetKeyID(DRBlackboardKeys::FirstAttacker) != FBlackboard::InvalidKey
+		|| BB->GetKeyID(DRBlackboardKeys::TargetToFollow) != FBlackboard::InvalidKey;
+}
+
+namespace
+{
+	// 이 ASC 에 걸린 도발 GE. 도발 중이 아니면 nullptr. 새 도발이 이전 것을 지우므로 항상 1개다 (Plan8 D-15)
+	// GetTauntInfo 와 ★Plan5(도발칩)★ GetTauntDamageTakenMultiplier 가 같이 쓴다.
+	const FActiveGameplayEffect* FindActiveTauntEffect(const UAbilitySystemComponent* ASC,
+		FActiveGameplayEffectHandle* OutHandle = nullptr)
+	{
+		const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+		if (!ASC || !ASC->HasMatchingGameplayTag(Tags.Debuff_Taunted)) return nullptr;   // 빠른 탈출
+
+		// ★OwningTags 쿼리★ — Debuff.Taunted 는 GE 의 "부여 태그"(Target Tags)다. GetActiveEffectsWithAllTags 는
+		// "에셋 태그"만 비교해서 태그가 붙어 있어도 GE 를 못 찾는다 (Plan8 T-29). 모자 조회도 같은 이유
+		const TArray<FActiveGameplayEffectHandle> Handles =
+			ASC->GetActiveEffects(
+				FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tags.Debuff_Taunted)));
+		if (Handles.Num() == 0) return nullptr;
+
+		if (OutHandle) *OutHandle = Handles[0];
+		return ASC->GetActiveGameplayEffect(Handles[0]);
+	}
+}
+
+bool UDRAbilitySystemLibrary::GetTauntInfo(AActor* Enemy, AActor*& OutTaunter, float& OutDamageMultiplier,
+	FActiveGameplayEffectHandle* OutHandle)
+{
+	OutTaunter = nullptr;
+	OutDamageMultiplier = 1.f;
+
+	FActiveGameplayEffectHandle Handle;
+	const FActiveGameplayEffect* Active =
+		FindActiveTauntEffect(UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Enemy), &Handle);
+	if (!Active) return false;
+
+	if (const UAbilitySystemComponent* SourceASC = Active->Spec.GetContext().GetOriginalInstigatorAbilitySystemComponent())
+	{
+		OutTaunter = SourceASC->GetAvatarActor();                  // ★Instigator(PlayerState)가 아니다 (T-6)★
+	}
+	OutDamageMultiplier = Active->Spec.GetSetByCallerMagnitude(FDRGameplayTags::Get().Data_Taunt_DamageMult, false, 1.f);
+	if (OutHandle) *OutHandle = Handle;
+	return true;
+}
+
+AActor* UDRAbilitySystemLibrary::GetTauntTarget(AActor* Enemy)
+{
+	AActor* Taunter = nullptr;
+	float Multiplier = 1.f;
+	if (!GetTauntInfo(Enemy, Taunter, Multiplier) || !IsValid(Taunter)) return nullptr;
+	if (Taunter->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Taunter)) return nullptr;
+	return Taunter;
+}
+
+float UDRAbilitySystemLibrary::GetTauntDamageMultiplier(AActor* SourceAvatar)
+{
+	AActor* Taunter = nullptr;
+	float Multiplier = 1.f;
+	if (!IsValid(SourceAvatar) || !GetTauntInfo(SourceAvatar, Taunter, Multiplier)) return 1.f;
+	return FMath::Max(0.f, Multiplier);   // 음수로 피해가 회복으로 뒤집히지 않게
+}
+
+float UDRAbilitySystemLibrary::GetTauntDamageTakenMultiplier(const UAbilitySystemComponent* TargetASC)
+{
+	// ★Plan5(도발칩)★ ① 적 피해 관문이 모든 피해마다 부른다 — 도발 중이 아니면 태그 조회 한 번으로 끝난다
+	const FActiveGameplayEffect* Active = FindActiveTauntEffect(TargetASC);
+	if (!Active) return 1.f;
+
+	// 칩 없는 벨보이의 도발은 1.0 을 넣는다(값이 없어도 기본 1.0). 음수로 피해가 회복으로 뒤집히지 않게 (D-129)
+	return FMath::Max(0.f,
+		Active->Spec.GetSetByCallerMagnitude(FDRGameplayTags::Get().Data_Taunt_DamageTakenMult, false, 1.f));
+}
+
+bool UDRAbilitySystemLibrary::ApplyTauntAggro(AAIController* OwnerController)
+{
+	if (!OwnerController || !OwnerController->HasAuthority()) return false;
+
+	APawn* Pawn = OwnerController->GetPawn();
+	UBlackboardComponent* BB = OwnerController->GetBlackboardComponent();
+	auto HasKey = [BB](const FName& Key) { return BB && BB->GetKeyID(Key) != FBlackboard::InvalidKey; };
+
+	AActor* Taunter = nullptr;
+	float Multiplier = 1.f;
+	FActiveGameplayEffectHandle Handle;
+	const bool bTaunted = Pawn && GetTauntInfo(Pawn, Taunter, Multiplier, &Handle);
+
+	const bool bTaunterAlive = bTaunted && IsValid(Taunter)
+		&& !(Taunter->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Taunter));
+
+	if (!bTaunterAlive)
+	{
+		// [임시 진단] 도발 갱신이 멈추는 이유
+		UE_LOG(LogDR, Warning, TEXT("[TauntDiag] 5. 갱신 종료 %s — Taunted=%d Taunter=%s (BB=%d)"),
+			*GetNameSafe(Pawn), bTaunted ? 1 : 0, *GetNameSafe(Taunter), BB ? 1 : 0);
+
+		// 도발자가 죽었거나 사라졌다 → 도발 GE 를 지운다 (D-12).
+		// 블랙보드는 건드리지 않는다 — 죽은 타깃은 BTS_CheckValidTarget 이 알아서 비운다.
+		if (bTaunted)
+		{
+			if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Pawn))
+			{
+				ASC->RemoveActiveGameplayEffect(Handle);
+			}
+		}
+		return false;
+	}
+
+	// ★키 3개를 같이 쓴다★ — TargetToFollow 만 쓰면 HasFirstAttacker 가 false 로 남아
+	// BTS_FindNearestPlayer_* 가 다음 틱에 가장 가까운 플레이어로 덮어쓴다 (바이트코드 확인 — Plan8 §2.4).
+	// 값이 같으면 블랙보드는 옵저버를 깨우지 않으므로 주기적으로 다시 써도 MoveTo 가 재경로를 잡지 않는다.
+
+	// [임시 진단] 타깃이 벨보이가 아닐 때만 찍는다 — 첫 적용, 또는 0.2초 사이에 누가 덮어썼을 때(로그 도배 방지)
+	{
+		const UObject* PrevTarget = HasKey(DRBlackboardKeys::TargetToFollow) ? BB->GetValueAsObject(DRBlackboardKeys::TargetToFollow) : nullptr;
+		if (PrevTarget != Taunter)
+		{
+			const UBehaviorTreeComponent* BTComp = Cast<UBehaviorTreeComponent>(OwnerController->GetBrainComponent());
+			const UBTNode* ActiveNode = BTComp ? BTComp->GetActiveNode() : nullptr;
+			UE_LOG(LogDR, Warning, TEXT("[TauntDiag] 4. 어그로 쓰기 %s : 이전 TargetToFollow=%s → %s | 키 FA=%d HFA=%d TTF=%d Dist=%d Unreach=%d | BT=%s 활성노드=%s"),
+				*GetNameSafe(Pawn), *GetNameSafe(PrevTarget), *GetNameSafe(Taunter),
+				HasKey(DRBlackboardKeys::FirstAttacker) ? 1 : 0, HasKey(DRBlackboardKeys::HasFirstAttacker) ? 1 : 0,
+				HasKey(DRBlackboardKeys::TargetToFollow) ? 1 : 0, HasKey(DRBlackboardKeys::DistanceToTarget) ? 1 : 0,
+				HasKey(DRBlackboardKeys::UnreachableSince) ? 1 : 0,
+				BTComp ? *GetNameSafe(BTComp->GetRootTree()) : TEXT("없음"),
+				ActiveNode ? *ActiveNode->GetNodeName() : TEXT("없음"));
+		}
+	}
+
+	if (HasKey(DRBlackboardKeys::FirstAttacker))    BB->SetValueAsObject(DRBlackboardKeys::FirstAttacker, Taunter);
+	if (HasKey(DRBlackboardKeys::HasFirstAttacker)) BB->SetValueAsBool(DRBlackboardKeys::HasFirstAttacker, true);
+	if (HasKey(DRBlackboardKeys::TargetToFollow))   BB->SetValueAsObject(DRBlackboardKeys::TargetToFollow, Taunter);
+	if (HasKey(DRBlackboardKeys::DistanceToTarget)) BB->SetValueAsFloat(DRBlackboardKeys::DistanceToTarget, Pawn->GetDistanceTo(Taunter));
+
+	OwnerController->SetFocus(Taunter);
+
+	// ★전투 시간 갱신★ — BTS_CheckValidTarget 은 "타깃이 시야 거리보다 멀고 3초간 전투 없음"이면 타깃을 비운다.
+	// 30m 도발은 이 조건에 쉽게 걸리므로, 도발 동안 계속 갱신해 막는다.
+	if (ADRAIController* DRAIC = Cast<ADRAIController>(OwnerController))
+	{
+		DRAIC->UpdateCombatTime();
+	}
+	// ★가림 타이머 초기화★ — BTS_CheckValidTarget 은 벨보이가 벽에 가린 채(IsActorReachable = WorldStatic 라인 트레이스)
+	// 서비스 2틱(≈0.5초)이 지나면 타깃을 비운다. 0 으로 되돌려 두면 서비스는 매 틱 "이제 막 가려짐"으로 보고 넘어간다.
+	// 도발 판정은 시야를 안 보므로(D-19) 벽 뒤에서 걸린 적이 흔하다 — 빼면 0.5초마다 사이트 쪽으로 틀었다 돌아온다 (T-28).
+	if (HasKey(DRBlackboardKeys::UnreachableSince)) BB->SetValueAsFloat(DRBlackboardKeys::UnreachableSince, 0.f);
+
+	// 어그로 연출(ABP) — 첫 피격 어그로(DREnemyAttributeSet)와 같은 플래그
+	if (ADREnemy* Enemy = Cast<ADREnemy>(Pawn))
+	{
+		Enemy->bIsAggroed = true;
+	}
+	return true;
+}
+
+void UDRAbilitySystemLibrary::StartTauntAggroRefresh(AAIController* OwnerController, float Interval)
+{
+	if (!OwnerController || !OwnerController->HasAuthority()) return;
+	UWorld* World = OwnerController->GetWorld();
+	if (!World) return;
+
+	// 타이머 핸들을 람다가 들고 있어야 스스로 멈출 수 있다.
+	// 같은 적에게 다시 도발이 걸려 타이머가 두 개 돌아도 무해하다(같은 값을 쓰고, 둘 다 GE 만료 때 멈춘다).
+	TSharedRef<FTimerHandle> Handle = MakeShared<FTimerHandle>();
+	TWeakObjectPtr<AAIController> WeakController(OwnerController);
+	TWeakObjectPtr<UWorld> WeakWorld(World);
+	World->GetTimerManager().SetTimer(*Handle, FTimerDelegate::CreateLambda([WeakController, WeakWorld, Handle]()
+	{
+		if (!WeakController.IsValid() || !ApplyTauntAggro(WeakController.Get()))
+		{
+			if (UWorld* LiveWorld = WeakWorld.Get())
+			{
+				LiveWorld->GetTimerManager().ClearTimer(*Handle);   // 도발 만료·도발자 사망·적 소멸
+			}
+		}
+	}), FMath::Max(0.05f, Interval), true);
+}
+
+// ========================= ★Plan8(가방)★ 몽타주 =========================
+
+float UDRAbilitySystemLibrary::FindMontageEventTime(const UAnimMontage* Montage, const FGameplayTag& EventTag)
+{
+	if (!Montage || !EventTag.IsValid()) return -1.f;
+
+	static const FName EventTagPropertyName(TEXT("EventTag"));
+	for (const FAnimNotifyEvent& NotifyEvent : Montage->Notifies)
+	{
+		// AN_MontageEvent 는 BP 노티파이다 — C++ 타입을 모르므로 "EventTag" 라는 FGameplayTag 변수를 반사로 찾는다
+		const UAnimNotify* Notify = NotifyEvent.Notify;
+		if (!Notify) continue;
+
+		const FStructProperty* Property =
+			CastField<FStructProperty>(Notify->GetClass()->FindPropertyByName(EventTagPropertyName));
+		if (!Property || Property->Struct != FGameplayTag::StaticStruct()) continue;
+
+		const FGameplayTag* Tag = Property->ContainerPtrToValuePtr<FGameplayTag>(Notify);
+		if (Tag && Tag->MatchesTagExact(EventTag))
+		{
+			return NotifyEvent.GetTriggerTime();
+		}
+	}
+	return -1.f;
+}
+
+// ========================= ★Plan8(FP)★ 1인칭 몽타주 =========================
+
+namespace
+{
+	// 로컬 제어 + FP 메시가 보일 때만 FP AnimInstance 를 돌려준다 (D-33 / T-39)
+	UAnimInstance* GetLocalFirstPersonAnimInstance(AActor* Avatar)
+	{
+		const ADRCharacter* DRChar = Cast<ADRCharacter>(Avatar);
+		if (!DRChar || !DRChar->IsLocallyControlled()) return nullptr;
+
+		USkeletalMeshComponent* FPMesh = DRChar->FirstPersonMesh;
+		if (!FPMesh || !FPMesh->IsVisible()) return nullptr;
+
+		return FPMesh->GetAnimInstance();
+	}
+}
+
+UAnimMontage* UDRAbilitySystemLibrary::PlayFirstPersonMontage(AActor* Avatar, UAnimMontage* Montage, float PlayRate)
+{
+	if (!Montage) return nullptr;
+
+	UAnimInstance* AnimInstance = GetLocalFirstPersonAnimInstance(Avatar);
+	if (!AnimInstance) return nullptr;
+
+	return AnimInstance->Montage_Play(Montage, FMath::Max(0.01f, PlayRate)) > 0.f ? Montage : nullptr;
+}
+
+void UDRAbilitySystemLibrary::SetFirstPersonMontagePlayRate(AActor* Avatar, UAnimMontage* Montage, float PlayRate)
+{
+	if (!Montage) return;
+
+	UAnimInstance* AnimInstance = GetLocalFirstPersonAnimInstance(Avatar);
+	if (AnimInstance && AnimInstance->Montage_IsPlaying(Montage))
+	{
+		AnimInstance->Montage_SetPlayRate(Montage, FMath::Max(0.01f, PlayRate));
+	}
+}
+
+void UDRAbilitySystemLibrary::StopFirstPersonMontage(AActor* Avatar, UAnimMontage* Montage, float BlendOutTime)
+{
+	if (!Montage) return;
+
+	// 숨겨진 뒤에도 멈출 수 있게 가시성은 보지 않는다 — 사망으로 숨긴 FP 메시에 스윙이 남지 않도록
+	const ADRCharacter* DRChar = Cast<ADRCharacter>(Avatar);
+	if (!DRChar || !DRChar->IsLocallyControlled() || !DRChar->FirstPersonMesh) return;
+
+	UAnimInstance* AnimInstance = DRChar->FirstPersonMesh->GetAnimInstance();
+	if (AnimInstance && AnimInstance->Montage_IsPlaying(Montage))
+	{
+		AnimInstance->Montage_Stop(BlendOutTime, Montage);
+	}
+}
+
+float UDRAbilitySystemLibrary::GetFirstPersonSyncTime(const UAnimMontage* FPMontage, const FGameplayTag& SyncTag,
+	const UAnimMontage* TPMontage, float TPEventTime)
+{
+	if (!FPMontage) return TPEventTime;
+
+	const float NotifyTime = FindMontageEventTime(FPMontage, SyncTag);
+	if (NotifyTime > 0.f) return NotifyTime;
+
+	// 노티파이가 없으면 길이 비례 — FP·TP 애니는 같은 동작이라 거의 맞는다 (경고 없음, D-35)
+	const float TPLength = TPMontage ? TPMontage->GetPlayLength() : 0.f;
+	if (TPLength <= KINDA_SMALL_NUMBER) return TPEventTime;
+	return TPEventTime * FPMontage->GetPlayLength() / TPLength;
+}
+
+// ========== 로봇 청소기 탑승 칩 (Plan5(탑승칩)) ==========
+
+float UDRAbilitySystemLibrary::GetRideDamageMultiplier(const AActor* SourceAvatar)
+{
+	const ADRCharacter* Rider = Cast<ADRCharacter>(SourceAvatar);
+	if (!Rider || !IsValid(Rider->MountedOn)) return 1.f;   // 빠른 탈출 — 거의 모든 피해가 여기서 끝난다
+
+	const ADRRobotVacuumCharacter* Bottom = Rider->MountedOn->GetStackBottom();   // 맨 아래만 (D-79)
+	if (!IsValid(Bottom) || Bottom->bDead) return 1.f;
+	if (!HasUpgradeFeature(Bottom->GetAbilitySystemComponent(), FDRGameplayTags::Get().Upgrade_Feature_Skill_Ride_Power)) return 1.f;
+
+	const FDRRideChipTuning& Tuning = GetChipTuning(SourceAvatar).Ride;
+	const float Bonus = FMath::Min(Tuning.PowerDamagePerRider * Bottom->GetRiderCountAbove(), Tuning.PowerMaxDamageBonus);
+	return 1.f + FMath::Max(0.f, Bonus);
+}
+
+ADRRobotVacuumCharacter* UDRAbilitySystemLibrary::FindRideGuard(const ADRCharacter* Rider)
+{
+	if (!Rider) return nullptr;
+	const FGameplayTag& GuardTag = FDRGameplayTags::Get().Upgrade_Feature_Skill_Ride_Guard;
+
+	// 아래로 내려가며 가장 가까운 칩② 청소기 ("위 전원" 보호 — D-83). 상한 8 은 순환 방어용(CanBeMountedBy 가 이미 막는다)
+	int32 Steps = 0;
+	for (ADRRobotVacuumCharacter* Below = Rider->MountedOn; IsValid(Below) && Steps++ < 8; Below = Below->MountedOn)
+	{
+		if (!Below->bDead && HasUpgradeFeature(Below->GetAbilitySystemComponent(), GuardTag))   // 죽은 청소기 건너뛰기 (T-89)
+		{
+			return Below;
+		}
+	}
+	return nullptr;
+}
+
+bool UDRAbilitySystemLibrary::TransferRideDamageToGuard(ADRCharacter* Rider, ADRRobotVacuumCharacter* Guard, float Damage)
+{
+	if (!IsValid(Rider) || !IsValid(Guard) || Guard->bDead) return false;
+
+	// 80% 감소는 ★이전분에만★ — 피격 자체의 1칸 공유는 호출부가 PropagateSharedDamage(L) 로 그대로 보낸다 (D-85 · T-93)
+	const float Ratio = FMath::Clamp(GetChipTuning(Rider).Ride.GuardTransferRatio, 0.f, 1.f);
+	return Rider->ApplyMountSharedDamageTo(Guard, Damage * Ratio);
+}
+
+void UDRAbilitySystemLibrary::TryRideEmergencyEject(ADRCharacter* Rider, bool bEnteredCorruptionThisHit)
+{
+	if (!IsValid(Rider) || !Rider->HasAuthority() || Rider->bDead) return;   // 사망 하차가 이미 일어났다
+
+	ADRRobotVacuumCharacter* Mount = Rider->MountedOn;   // ★바로 위 1명만★ (D-88)
+	if (!IsValid(Mount) || Mount->bDead) return;
+	if (!HasUpgradeFeature(Mount->GetAbilitySystemComponent(), FDRGameplayTags::Get().Upgrade_Feature_Skill_Ride_Eject)) return;
+
+	const UDRPlayerAttributeSet* RiderAS = GetPlayerAttributeSetFromASC(Rider->GetAbilitySystemComponent());
+	if (!RiderAS) return;
+
+	// 오염 진입은 체력이 오염 최대치로 다시 차서 비율로는 못 잡는다 → 따로 받는다 (T-79)
+	const float Ratio = GetChipTuning(Rider).Ride.EjectHealthRatio;
+	const bool bLow = bEnteredCorruptionThisHit
+		|| (RiderAS->GetMaxHealth() > 0.f && RiderAS->GetHealth() <= RiderAS->GetMaxHealth() * Ratio);
+	if (bLow)
+	{
+		Mount->EmergencyEjectRider();
+	}
+}
+
+bool UDRAbilitySystemLibrary::IsRideBannedFrom(const AActor* Rider, const ADRRobotVacuumCharacter* Mount)
+{
+	const UAbilitySystemComponent* RiderASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Rider);
+	const UAbilitySystemComponent* MountASC = Mount ? Mount->GetAbilitySystemComponent() : nullptr;
+	if (!RiderASC || !MountASC) return false;
+
+	const FGameplayTag& BanTag = FDRGameplayTags::Get().Debuff_Ride_Banned;
+	if (!RiderASC->HasMatchingGameplayTag(BanTag)) return false;   // 빠른 탈출
+
+	// ★OwningTags 쿼리★ — 금지 태그는 GE 의 부여 태그다 (T-82, Plan8 T-29 와 같은 이유)
+	for (const FActiveGameplayEffectHandle& Handle :
+		RiderASC->GetActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(BanTag))))
+	{
+		const FActiveGameplayEffect* Active = RiderASC->GetActiveGameplayEffect(Handle);
+		// 시전자 ASC(복제됨)로 "어느 청소기"인지 가린다 (T-83)
+		if (Active && Active->Spec.GetContext().GetOriginalInstigatorAbilitySystemComponent() == MountASC)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+// ========== 청소기 기본 공격 칩 (Plan5(공기탄칩)) ==========
+
+float UDRAbilitySystemLibrary::GetAirShotDragDamageTakenMultiplier(const UAbilitySystemComponent* TargetASC)
+{
+	const FGameplayTag& DragTag = FDRGameplayTags::Get().Debuff_AirShot_Drag;
+	if (!TargetASC || !TargetASC->HasMatchingGameplayTag(DragTag)) return 1.f;   // 빠른 탈출
+
+	const FDRAirShotChipTuning& Tuning = GetChipTuning(TargetASC->GetAvatarActor()).AirShot;
+	// ★스택 수는 태그 카운트가 아니다★ — Aggregate by Target 이라 인스턴스 하나의 스택 (T-98)
+	const int32 Stacks = FMath::Min(GetEffectStackCountWithTag(TargetASC, DragTag), FMath::Max(1, Tuning.DragMaxStacks));
+	return 1.f + FMath::Max(0.f, Tuning.DragDamageTakenPerStack) * Stacks;
+}
+
+void UDRAbilitySystemLibrary::TryApplyAirShotDrag(const FEffectProperties& Props)
+{
+	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
+	if (!HasUpgradeFeature(Props.SourceASC, Tags.Upgrade_Feature_Skill_AirShot_Drag)) return;
+
+	// 공기탄 피해만 — 같은 청소기의 돌진 충돌 피해로는 쌓이지 않는다 (T-99)
+	const FDRGameplayEffectContext* DRContext = static_cast<const FDRGameplayEffectContext*>(Props.EffectContextHandle.Get());
+	if (!DRContext || !DRContext->GetSourceAbilityTags().HasTagExact(Tags.Abilities_RobotVacuum_AirShot)) return;
+
+	ADREnemy* Enemy = Cast<ADREnemy>(Props.TargetAvatarActor);
+	if (!IsValid(Enemy) || Enemy->IsBoss()) return;   // 보스는 감속 · 피해 증가 둘 다 없다 (T-100)
+
+	const FDRAirShotChipTuning& Tuning = GetChipTuning(Enemy).AirShot;
+	ApplyTimedSpeedEffect(Enemy, Props.SourceASC, Tuning.Drag, 1.f - Tuning.Drag.Magnitude);   // 0.9 — 스택은 GE 가 쌓는다
+}
+
+// ========== 무적 (Plan5(물점프칩)) ==========
+
+bool UDRAbilitySystemLibrary::IsInvulnerable(const UAbilitySystemComponent* ASC)
+{
+	return ASC && ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Invulnerable);
 }

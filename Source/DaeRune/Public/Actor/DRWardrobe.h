@@ -18,7 +18,7 @@ class ADRPlayerController;
  * (ADRStageSelectActor 같은 호스트 전용 포털과 다른 점이 이것이다)
  *
  * 배치 위치는 로비의 ★FreeRoam 구역★ 이다. 대기실(WaitingRoom)에는 플레이어 폰 자체가 없어
- * 걸어가서 쓰는 장치를 놓을 수 없다. (Plan.md 1.4 / 5.5)
+ * 걸어가서 쓰는 장치를 놓을 수 없다. (Plan(옷장) D-9)
  */
 UCLASS()
 class DAERUNE_API ADRWardrobe : public AActor
