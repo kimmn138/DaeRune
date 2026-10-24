@@ -283,6 +283,22 @@ bool UDRWardrobeEditorTools::ImportPropertyText(UObject* Target, FName PropertyN
 #endif
 }
 
+FString UDRWardrobeEditorTools::ExportPropertyText(UObject* Target, FName PropertyName)
+{
+#if WITH_EDITOR
+	if (!Target) return FString();
+
+	const FProperty* Property = FindFProperty<FProperty>(Target->GetClass(), PropertyName);
+	if (!Property) return FString();
+
+	FString Text;
+	Property->ExportTextItem_Direct(Text, Property->ContainerPtrToValuePtr<void>(Target), nullptr, Target, PPF_None);
+	return Text;
+#else
+	return FString();
+#endif
+}
+
 bool UDRWardrobeEditorTools::BuildWardrobeTabWidget(FString& OutLog)
 {
 #if WITH_EDITOR

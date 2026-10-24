@@ -37,6 +37,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DaeRune|Editor")
 	static bool ImportPropertyText(UObject* Target, FName PropertyName, const FString& Text, FString& OutError);
 
+	/**
+	 * ImportPropertyText 의 짝 — 프로퍼티 하나를 같은 T3D 텍스트로 꺼낸다. 없거나 실패하면 빈 문자열.
+	 * FText 는 NSLOCTEXT(네임스페이스, 키, 원문) 로 나오므로, 원문만 고쳐 다시 넣으면 번역 키가 유지된다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "DaeRune|Editor")
+	static FString ExportPropertyText(UObject* Target, FName PropertyName);
+
 	// WBP_WardrobeTab — 필 텍스처 · 투명 버튼 · 라벨 폰트/색, BP 잔재(SetSelected · CosmeticCategory · Label) 제거
 	UFUNCTION(BlueprintCallable, Category = "DaeRune|Editor")
 	static bool BuildWardrobeTabWidget(FString& OutLog);
