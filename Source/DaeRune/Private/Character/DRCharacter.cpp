@@ -47,12 +47,22 @@
 #include "Materials/MaterialInterface.h"
 #include "DaeRune/DRLogChannels.h"
 #include "Misc/ScopeExit.h"
+#include "NiagaraSystem.h"
+#include "UObject/ConstructorHelpers.h"
 
 ADRCharacter::ADRCharacter()
 {
 	// 아군 판정용 액터 태그 — UDRAbilitySystemLibrary::IsNotFriend가 "Player" 태그 쌍으로 아군을 판정한다.
 	// BP마다 수동 추가에 의존하면 새 클래스(BP_DRVacuumCleaner 등)에서 누락 시 아군 오사(誤射)가 발생 (Plan3 §15.4)
 	Tags.AddUnique(FName("Player"));
+
+	// 공속 버프 몸 이펙트 — 모든 로봇 공통이라 BP 마다 넣지 않고 여기서 기본값을 준다
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> AttackSpeedBuffVFXFinder(
+		TEXT("/Game/Basic_VFX/Niagara/Buff/NE_Buff.NE_Buff"));
+	if (AttackSpeedBuffVFXFinder.Succeeded())
+	{
+		AttackSpeedBuffVFX = AttackSpeedBuffVFXFinder.Object;
+	}
 
 	// �̵� �������� ȸ�� ����
 	GetCharacterMovement()->bOrientRotationToMovement = false;
@@ -1202,6 +1212,18 @@ void ADRCharacter::InitAbilityActorInfo()
 		).AddUObject(this, &ADRCharacter::FirstPersonHitReactTagChanged);
 	}
 
+	// 공속 버프 몸 이펙트 — 자기 버프 · 공유 버프(칩 ②) 어느 쪽이든.
+	// 클라에서 OnRep_PlayerState 가 여러 번 와도 핸들러가 현재 태그만 보고 맞추므로 중복 바인딩이 무해하다
+	AbilitySystemComponent->RegisterGameplayTagEvent(
+		FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed,
+		EGameplayTagEventType::NewOrRemoved
+	).AddUObject(this, &ADRCharacter::AttackSpeedBuffTagChanged);
+	AbilitySystemComponent->RegisterGameplayTagEvent(
+		FDRGameplayTags::Get().Buff_AttackSpeed_Shared,
+		EGameplayTagEventType::NewOrRemoved
+	).AddUObject(this, &ADRCharacter::AttackSpeedBuffTagChanged);
+	RefreshTagDrivenVFX();   // 바인딩 전에 이미 버프가 있던 경우(늦게 들어온 클라 · 리스폰)
+
 	// 표정 시스템은 명시적 멀티캐스트(MulticastPlayHitReactFacial /
 	// MulticastPlayVendingSkillUse)에서 트리거하므로 태그 바인딩 불필요.
 
@@ -1243,6 +1265,47 @@ void ADRCharacter::FirstPersonHitReactTagChanged(const FGameplayTag CallbackTag,
 	if (NewCount > 0)
 	{
 		UDRAbilitySystemLibrary::PlayFirstPersonMontage(this, FirstPersonHitReactMontage);
+	}
+}
+
+// ========== 공속 버프 몸 이펙트 ==========
+
+void ADRCharacter::AttackSpeedBuffTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
+{
+	// 두 태그 중 하나만 빠져도 다른 쪽이 남아 있을 수 있어 NewCount 대신 현재 태그를 다시 본다
+	RefreshTagDrivenVFX();
+}
+
+void ADRCharacter::RefreshTagDrivenVFX()
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	const FDRGameplayTags& DRTags = FDRGameplayTags::Get();
+	const bool bBuffed = !bDead && AbilitySystemComponent &&
+		(AbilitySystemComponent->HasMatchingGameplayTag(DRTags.Buff_VendingMachine_AttackSpeed) ||
+		 AbilitySystemComponent->HasMatchingGameplayTag(DRTags.Buff_AttackSpeed_Shared));
+
+	if (bBuffed)
+	{
+		if (!AttackSpeedBuffVFXComponent && AttackSpeedBuffVFX && GetMesh())
+		{
+			AttackSpeedBuffVFXComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(
+				AttackSpeedBuffVFX, GetMesh(), AttackSpeedBuffVFXSocket,
+				FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget,
+				/*bAutoDestroy*/ false, /*bAutoActivate*/ false);
+			if (AttackSpeedBuffVFXComponent)
+			{
+				AttackSpeedBuffVFXComponent->SetOwnerNoSee(true);   // 1인칭 본인 화면을 가리지 않게 (3인칭 메시와 같다)
+			}
+		}
+		if (AttackSpeedBuffVFXComponent && !AttackSpeedBuffVFXComponent->IsActive())
+		{
+			AttackSpeedBuffVFXComponent->Activate(true);
+		}
+	}
+	else if (AttackSpeedBuffVFXComponent && AttackSpeedBuffVFXComponent->IsActive())
+	{
+		AttackSpeedBuffVFXComponent->Deactivate();   // 남은 입자는 자연스럽게 사라진다
 	}
 }
 

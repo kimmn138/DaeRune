@@ -251,6 +251,9 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 		StunDebuffComponent->Deactivate();
 	}
 
+	// 태그로 켜는 몸 이펙트(공속 버프 · 도발 표시)도 끈다 — bDead 를 보고 꺼진다
+	RefreshTagDrivenVFX();
+
 	// RepNotify는 클라이언트에서만 자동 호출됨. 서버에서도 동일 처리를 위해 수동 호출.
 	// virtual이므로 ADRCharacter 인스턴스에서는 override가 호출되어 사망 몽타주 재생.
 	OnRep_Dead();
@@ -317,6 +320,8 @@ void ADRCharacterBase::MulticastHandleRevive_Implementation()
 
 	// 디버프 VFX 컴포넌트는 사망 시 비활성화되었으나, 부활 시엔 디버프가 없는 상태이므로
 	// 켜지 않는다 (디버프가 다시 적용되면 각 RepNotify 가 활성화한다).
+	// 태그로 켜는 몸 이펙트는 남은 태그 기준으로 다시 맞춘다.
+	RefreshTagDrivenVFX();
 
 	// BP 측 복원: Dissolve 머티리얼 파라미터 원복, 사망 카메라 애니메이션 해제, 표정 리셋 등
 	K2_OnCharacterRevived();

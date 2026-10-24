@@ -323,6 +323,24 @@ protected:
 	// ★Plan8(FP)★ Effects.HitReact 태그 → FP 피격 몽타주. 로컬 제어 검사는 호출 시점에 (Plan8 T-38)
 	void FirstPersonHitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 
+	// ========== 공속 버프 몸 이펙트 ==========
+
+	/**
+	 * 공속 버프를 받는 동안 몸에 붙는 이펙트 — 자기 버프(Buff.VendingMachine.AttackSpeed)든
+	 * 칩 ② 공유 버프(Buff.AttackSpeed.Shared)든 하나라도 있으면 켠다.
+	 * 태그는 GE 가 붙이고 모든 클라로 복제되므로 버프를 받은 아군의 몸에서도 다른 사람 화면에 보인다.
+	 * 본인 화면(1인칭)에서는 보이지 않는다 — 3인칭 몸과 같은 OwnerNoSee.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "VFX|Buff")
+	TObjectPtr<UNiagaraSystem> AttackSpeedBuffVFX;
+
+	/** 이펙트를 붙일 3인칭 메시 소켓. 비우면 메시 원점(발밑) */
+	UPROPERTY(EditDefaultsOnly, Category = "VFX|Buff")
+	FName AttackSpeedBuffVFXSocket = NAME_None;
+
+	void AttackSpeedBuffTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+	virtual void RefreshTagDrivenVFX() override;
+
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -463,6 +481,10 @@ private:
 
 	// 3P 빔 업데이트 타이머
 	FTimerHandle WaterPumpBeamUpdateTimer;
+
+	// 공속 버프 몸 이펙트 — 처음 켤 때 만들고 이후엔 켜고 끄기만 한다
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> AttackSpeedBuffVFXComponent;
 
 	// 3P 빔 보간용 현재 표시 위치
 	FVector WaterPumpBeamDisplayEndPoint = FVector::ZeroVector;

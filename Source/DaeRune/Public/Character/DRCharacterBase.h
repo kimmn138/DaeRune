@@ -135,6 +135,10 @@ protected:
 	// ���� �±� �ݹ�
 	virtual void StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 
+	// 태그로 켜고 끄는 몸 이펙트(공속 버프 · 도발 표시)를 지금 태그 · 사망 상태에 맞춘다.
+	// 사망/부활 멀티캐스트 끝에서도 불린다 — 죽은 몸에 이펙트가 남지 않게
+	virtual void RefreshTagDrivenVFX() {}
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
 	float BaseWalkSpeed = 250.f;
 

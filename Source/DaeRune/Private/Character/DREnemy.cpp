@@ -24,6 +24,10 @@
 #include "Game/DRGameStateBase.h"
 #include "DaeRune/DaeRune.h"
 #include "Net/UnrealNetwork.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "UObject/ConstructorHelpers.h"
 
 ADREnemy::ADREnemy()
 {
@@ -42,6 +46,14 @@ ADREnemy::ADREnemy()
 	AbilitySystemComponent = CreateDefaultSubobject<UDRAbilitySystemComponent>("AbilitySystemComponent");
 	AbilitySystemComponent->SetIsReplicated(true);
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
+
+	// 도발 표시 이펙트 — 모든 적 공통이라 BP 마다 넣지 않고 여기서 기본값을 준다
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> TauntedVFXFinder(
+		TEXT("/Game/Basic_VFX/Niagara/Taunt/Enemy_Effect/TauntEnemy_NS.TauntEnemy_NS"));
+	if (TauntedVFXFinder.Succeeded())
+	{
+		TauntedVFX = TauntedVFXFinder.Object;
+	}
 
 	// AI 회전 설정 - 직접 회전 제어 (CharacterMovement 회전 비활성화)
 	bUseControllerRotationPitch = false;
@@ -534,6 +546,8 @@ void ADREnemy::InitAbilityActorInfo()
 	Cast<UDRAbilitySystemComponent>(AbilitySystemComponent)->AbilityActorInfoSet();
 	// 스턴 태그 이벤트 바인딩
 	AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Debuff_Stun, EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ADREnemy::StunTagChanged);
+	// 도발 표시 — 태그가 Minimal 복제로 클라에도 오므로 모든 머신에서 바인딩한다
+	AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Debuff_Taunted, EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ADREnemy::TauntedTagChanged);
 
 	// 서버에서만 기본 어트리뷰트 초기화
 	if (HasAuthority())
@@ -547,6 +561,45 @@ void ADREnemy::InitializeDefaultAttributes() const
 {
 	// 캐릭터 클래스와 레벨에 따른 기본 어트리뷰트 초기화
 	UDRAbilitySystemLibrary::InitializeDefaultAttributes(this, CharacterClass, Level, AbilitySystemComponent);
+}
+
+void ADREnemy::TauntedTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
+{
+	RefreshTagDrivenVFX();
+}
+
+void ADREnemy::RefreshTagDrivenVFX()
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	const bool bTaunted = !bDead && AbilitySystemComponent &&
+		AbilitySystemComponent->HasMatchingGameplayTag(FDRGameplayTags::Get().Debuff_Taunted);
+
+	if (bTaunted)
+	{
+		if (!TauntedVFXComponent && TauntedVFX)
+		{
+			// 소켓이 있으면 메시 소켓, 없으면 캡슐 꼭대기 — 적마다 스켈레톤이 달라 캡슐이 공통 기준이다
+			const bool bUseSocket = !TauntedVFXSocket.IsNone() && GetMesh() && GetMesh()->DoesSocketExist(TauntedVFXSocket);
+			USceneComponent* AttachTo = bUseSocket ? static_cast<USceneComponent*>(GetMesh()) : GetCapsuleComponent();
+			const float BaseZ = (!bUseSocket && GetCapsuleComponent()) ? GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight() : 0.f;
+
+			TauntedVFXComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(
+				TauntedVFX, AttachTo, bUseSocket ? TauntedVFXSocket : NAME_None,
+				FVector(0.f, 0.f, BaseZ + TauntedVFXHeightOffset), FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset,
+				/*bAutoDestroy*/ false, /*bAutoActivate*/ false);
+			// ★TauntEnemy_NS 이미터는 Local Space 여야 머리를 따라다닌다(월드 공간이면 처음 위치에 남는다).
+			//   크기는 에셋의 스프라이트 크기로 정한다 — 나이아가라 스프라이트는 컴포넌트 스케일을 따르지 않는다.
+		}
+		if (TauntedVFXComponent && !TauntedVFXComponent->IsActive())
+		{
+			TauntedVFXComponent->Activate(true);
+		}
+	}
+	else if (TauntedVFXComponent && TauntedVFXComponent->IsActive())
+	{
+		TauntedVFXComponent->Deactivate();
+	}
 }
 
 void ADREnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)

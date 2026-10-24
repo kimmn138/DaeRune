@@ -13,6 +13,8 @@ class UDRBillboardWidgetComponent;
 class UBehaviorTree;
 class ADRAIController;
 class UShapeComponent;
+class UNiagaraSystem;
+class UNiagaraComponent;
 
 // Blackboard 키 상수 (하드코딩 방지)
 namespace DRBlackboardKeys
@@ -178,6 +180,26 @@ protected:
 	virtual void InitializeDefaultAttributes() const override;
 	virtual void StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount) override;
 
+	// ========== 도발 표시 (벨보이 시선 집중) ==========
+
+	/**
+	 * 도발당한 동안(Debuff.Taunted — GE_BellBoy_Taunted) 머리 위에 붙는 이펙트.
+	 * 태그는 Minimal 복제로 모든 클라에 오므로 모두에게 보인다. 도발이 풀리거나 죽으면 꺼진다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "VFX|Taunt")
+	TObjectPtr<UNiagaraSystem> TauntedVFX;
+
+	/** 붙일 메시 소켓. 비우면 캡슐 꼭대기(+TauntedVFXHeightOffset) */
+	UPROPERTY(EditDefaultsOnly, Category = "VFX|Taunt")
+	FName TauntedVFXSocket = NAME_None;
+
+	/** 캡슐 꼭대기(또는 소켓)에서 위로 띄우는 높이(uu, 캡슐 기준이면 액터 스케일을 따른다) */
+	UPROPERTY(EditDefaultsOnly, Category = "VFX|Taunt")
+	float TauntedVFXHeightOffset = 40.f;
+
+	void TauntedTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+	virtual void RefreshTagDrivenVFX() override;
+
 	virtual float GetMoveSpeed() override;
 
 	// 액터 회전이 ControlRotation 을 따라잡는 보간 속도 (Tick 의 RInterpTo).
@@ -282,6 +304,10 @@ private:
 	FTimerHandle StunImmunityTimerHandle;
 
 	bool bPartDropped = false;
+
+	// 도발 표시 이펙트 — 처음 걸릴 때 만들고 이후엔 켜고 끄기만 한다
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> TauntedVFXComponent;
 
 protected:
 	// 외곽선 레벨 (초기 복제만 — 스폰 시 고정)
