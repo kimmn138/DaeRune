@@ -10,6 +10,9 @@
 #include "Engine/GameInstance.h"
 #include "Engine/GameViewportClient.h"
 #include "TimerManager.h"
+#include "Game/DRStageGameState.h"
+
+#define LOCTEXT_NAMESPACE "DRLoading"
 
 void UDRLoadingScreenSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -172,6 +175,15 @@ void UDRLoadingScreenSubsystem::OpenLevelWithLoadingScreen(TSubclassOf<UDRLoadin
 
 void UDRLoadingScreenSubsystem::HandlePostLoadMap(UWorld* LoadedWorld)
 {
+	// 스테이지→로비 심리스 귀환 도착. 엔진은 심리스 트래블 최종 도착 맵에서도 이 델리게이트를 쏜다.
+	// 델리게이트가 전역이라(PIE 한 프로세스에 여러 인스턴스) 이 GameInstance 의 월드인지 확인한다.
+	if (bFinishOnSeamlessArrival && LoadedWorld && LoadedWorld->GetGameInstance() == GetGameInstance())
+	{
+		bFinishOnSeamlessArrival = false;
+		FinishLoadingScreen();
+		return;
+	}
+
 	// 우리가 예약한 전환이 아니면 무시(초기 부팅, 심리스 트래블 등).
 	if (!PendingOutroClass)
 	{
@@ -219,12 +231,30 @@ void UDRLoadingScreenSubsystem::HandleSeamlessTravelStart(UWorld* CurrentWorld, 
 		return;
 	}
 
+	// 델리게이트가 전역이라(PIE 한 프로세스에 여러 인스턴스) 이 GameInstance 의 트래블만 처리한다.
+	if (!CurrentWorld || CurrentWorld->GetGameInstance() != GetGameInstance())
+	{
+		return;
+	}
+
+	// 스테이지를 떠나는 심리스 트래블은 로비 귀환뿐이다(게임오버/클리어 → ADRStageGameMode::ReturnToLobby).
+	// 같은 WBP 를 쓰되 문구를 바꾸고, 로비에는 닫는 쪽이 없으므로 도착 시 직접 닫도록 표시해 둔다.
+	const bool bReturningToLobby = CurrentWorld->GetGameState<ADRStageGameState>() != nullptr;
+	bFinishOnSeamlessArrival = bReturningToLobby;
+	SeamlessLoadingMessage = bReturningToLobby
+		? LOCTEXT("ReturningToLobby", "로비로 돌아가는 중...")
+		: FText::GetEmpty();
+
 	// 최소 표시 시간 계산용 시작 시각 기록.
 	SeamlessShowStartTime = FPlatformTime::Seconds();
 
 	// (CreateAndShow가 기존 유지 위젯을 먼저 제거하므로 별도 정리는 불필요)
 	if (UDRLoadingScreenWidget* Widget = CreateAndShow(SeamlessTravelWidgetClass, /*bPersistent=*/true))
 	{
+		if (!SeamlessLoadingMessage.IsEmpty())
+		{
+			Widget->SetLoadingMessage(SeamlessLoadingMessage);
+		}
 		Widget->PlayIntro();
 	}
 }
@@ -234,6 +264,12 @@ void UDRLoadingScreenSubsystem::FinishLoadingScreen()
 	// 심리스 트래블 도착(스테이지)에서 호출.
 	// 유지(persistent) 위젯이 화면을 덮은 상태로, 최소 표시 시간을 채운 뒤 퇴장을 재생한다.
 	if (IsRunningDedicatedServer() || !SeamlessTravelWidgetClass)
+	{
+		return;
+	}
+
+	// 닫을 로딩 화면이 없으면(트래블 없이 맵을 바로 연 경우 등) 퇴장 위젯을 새로 띄우지 않는다.
+	if (!PersistentSlateWidget.IsValid())
 	{
 		return;
 	}
@@ -286,6 +322,11 @@ void UDRLoadingScreenSubsystem::PlaySeamlessOutro()
 		return;
 	}
 
+	if (!SeamlessLoadingMessage.IsEmpty())
+	{
+		Outro->SetLoadingMessage(SeamlessLoadingMessage);
+	}
+
 	TWeakObjectPtr<UDRLoadingScreenWidget> WeakWidget(Outro);
 
 	// 퇴장 애니 종료 시 제거.
@@ -315,3 +356,5 @@ void UDRLoadingScreenSubsystem::PlaySeamlessOutro()
 
 	Outro->PlayOutro();
 }
+
+#undef LOCTEXT_NAMESPACE

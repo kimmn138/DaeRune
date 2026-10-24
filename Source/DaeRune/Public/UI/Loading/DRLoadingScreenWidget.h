@@ -44,6 +44,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Loading")
 	void NotifyOutroFinished();
 
+	// 안내 문구(LoadingTextWidgetName 텍스트 블록)를 바꾼다. 같은 WBP 를 다른 전환에 재사용할 때 쓴다.
+	void SetLoadingMessage(const FText& Message);
+
+	// 안내 문구를 담은 텍스트 블록의 이름(모든 로딩 WBP 공통).
+	static const FName LoadingTextWidgetName;
+
 	FDROnLoadingAnimFinished OnIntroFinished;
 	FDROnLoadingAnimFinished OnOutroFinished;
 };
