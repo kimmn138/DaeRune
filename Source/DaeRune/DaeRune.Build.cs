@@ -17,7 +17,7 @@ public class DaeRune : ModuleRules
 		// 게임 빌드(에디터 아님)에는 들어가지 않는다 — 코드도 WITH_EDITOR 로 감싸 둔다.
 		if (Target.bBuildEditor)
 		{
-			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "UMGEditor", "EngineSettings" });
+			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "UMGEditor", "EngineSettings", "BlueprintGraph" });
 		}
 
 		// Uncomment if you are using Slate UI

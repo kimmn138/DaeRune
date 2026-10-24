@@ -20,13 +20,36 @@
 
 void UDRPlayerAttributeSet::SetContainerInfo(int32 InNumContainers, float InContainerHealth)
 {
-	NumContainers = InNumContainers;
-	ContainerHealth = InContainerHealth;
+	NumContainers = FMath::Max(1, InNumContainers);
+
+	// 칸 크기 = 최대 체력 / 칸 수 (UI 와 같은 규칙). 오염 중이거나 최대 체력이 아직 없을 때만 넘겨받은 값을 쓴다.
+	const float MaxHealthValue = GetMaxHealth();
+	ContainerHealth = (!bCorrupted && MaxHealthValue > 0.f)
+		? MaxHealthValue / static_cast<float>(NumContainers)
+		: InContainerHealth;
+}
+
+float UDRPlayerAttributeSet::GetBaseMaxHealthWithoutModifiers() const
+{
+	const UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent();
+	if (!ASC) return NumContainers * ContainerHealth;
+
+	// 모디파이어(칩 GE 등) 몫 = 현재값 − BaseValue. 오염 중에는 현재값이 100 이라 오염 직전 최대 체력(칸 수 × 칸 크기)에서 뺀다.
+	const float ModifierOffset = GetMaxHealth() - ASC->GetNumericAttributeBase(GetMaxHealthAttribute());
+	const float NormalMaxHealth = bCorrupted ? NumContainers * ContainerHealth : GetMaxHealth();
+	return NormalMaxHealth - ModifierOffset;
 }
 
 void UDRPlayerAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue)
 {
 	Super::PostAttributeChange(Attribute, OldValue, NewValue);
+
+	// 칸 크기는 최대 체력을 따라간다 — 클래스 기본값·칩 GE 가 무엇이든 칸 수 × 칸 크기 = 최대 체력이 유지된다.
+	// 오염 중(최대 체력 100)에는 갱신하지 않는다 — 오염 해제 때 칸 수 × 칸 크기로 원래 최대 체력을 되돌린다.
+	if (Attribute == GetMaxHealthAttribute() && !bCorrupted && NewValue > 0.f && NumContainers > 0)
+	{
+		ContainerHealth = NewValue / static_cast<float>(NumContainers);
+	}
 
 	if (Attribute == GetHealthAttribute() && !bCorrupted)
 	{

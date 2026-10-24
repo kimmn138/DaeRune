@@ -993,7 +993,13 @@ void ADRCharacter::RefreshUpgradeEffects()
 	// ===== 1) 컨테이너 체력 (모든 머신) =====
 	// 플레이어 체력은 컨테이너 시스템이라 MaxHealth 를 직접 올리면 컨테이너 인덱스 계산과
 	// 오염 해제 로직(NumContainers * ContainerHealth)이 깨진다. 칸 용량 자체를 올린다. (Plan2.md 2.2)
-	const float BaseContainerHealth = ContainerHealth;
+	// 칸 크기는 AttributeSet 이 최대 체력 / 칸 수 로 따라가므로(UI 와 같은 규칙), 여기서는 칩이 더할 최대 체력만 구한다.
+	// 기준은 밸런스 설정의 칸 크기가 아니라 ★클래스 기본 최대 체력 / 칸 수★ 다 — 둘이 다르면(예: 기본 300 vs 4×100)
+	// 칸 크기와 최대 체력이 어긋나 회복이 엉뚱한 칸 경계에서 멈춘다.
+	UDRPlayerAttributeSet* ContainerAS = Cast<UDRPlayerAttributeSet>(AttributeSets);
+	const float BaseMaxHealth = ContainerAS ? ContainerAS->GetBaseMaxHealthWithoutModifiers() : NumContainers * ContainerHealth;
+	const float BaseContainerHealth = (NumContainers > 0 && BaseMaxHealth > 0.f)
+		? BaseMaxHealth / static_cast<float>(NumContainers) : ContainerHealth;
 
 	// ★Plan3(공용칩)★ EDRUpgradeStat::MaxHealth 는 "총 HP" 단위 스탯이다.
 	// 불변식(MaxHealth = NumContainers × ContainerHealth)을 지키려면 총량을 칸 수로 나눠
@@ -1006,9 +1012,11 @@ void ADRCharacter::RefreshUpgradeEffects()
 	const float UpgradedContainerHealth = FMath::Max(
 		1.f, Runtime.Apply(EDRUpgradeStat::ContainerHealth, BaseContainerHealth + PerContainerBonus));
 
-	if (UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSets))
+	// 평소에는 아래 칩 GE 가 최대 체력을 바꿀 때 칸 크기가 따라 바뀐다. 오염 중에는 최대 체력이 100 으로 고정이라
+	// 해제 때 되돌릴 칸 크기(= 업그레이드 반영값)를 여기서 직접 넣는다.
+	if (ContainerAS)
 	{
-		PlayerAS->SetContainerInfo(NumContainers, UpgradedContainerHealth);
+		ContainerAS->SetContainerInfo(NumContainers, UpgradedContainerHealth);
 	}
 
 	// ===== 1-2) 시너지 오라 (Plan3(공용칩) §17.7) =====
@@ -1038,6 +1046,31 @@ void ADRCharacter::RefreshUpgradeEffects()
 		if (bCorruptedAtStart)
 		{
 			CorruptAS->ReapplyCorruptMaxHealth(CorruptHealthAtStart);
+		}
+	};
+
+	// 최대치 변화에 맞춰 현재값 비율을 유지한다.
+	// 스폰 시점엔 만피이므로 그대로 만피가 되고, 컨테이너 시스템에서는 "남은 컨테이너 수 유지"와 같다.
+	// (칩 목록이 스폰보다 늦게 도착해 재적용되는 경우에도 공짜 회복이 생기지 않는다)
+	// ★비율은 이전 GE 를 떼기 전에 잰다★ — 뗀 뒤에 재면 최대치만 줄고 현재값은 그대로라 비율이 1 을 넘는다.
+	// ★모든 return 경로에서 적용한다★ — 마지막 칩을 빼면(Runtime 이 빔) GE 를 다시 얹지 않고 return 하는데,
+	// 그때 맞추지 않으면 체력이 줄어든 최대치를 넘은 채로 남는다(예: 200/100).
+	// 위 오염 복구보다 뒤에 선언해 먼저 실행된다(ON_SCOPE_EXIT 는 역순) — 오염 체력은 그쪽이 마지막에 덮어쓴다.
+	UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets);
+	const bool bPreserveVitals = bPreserveVitalRatioOnUpgradeApply && DRAS != nullptr;
+	const float HealthRatio = (bPreserveVitals && DRAS->GetMaxHealth() > 0.f)
+		? DRAS->GetHealth() / DRAS->GetMaxHealth() : -1.f;
+	const float WaterRatio = (bPreserveVitals && DRAS->GetMaxWater() > 0.f)
+		? DRAS->GetWater() / DRAS->GetMaxWater() : -1.f;
+	ON_SCOPE_EXIT
+	{
+		if (HealthRatio >= 0.f)
+		{
+			DRAS->SetHealth(FMath::Clamp(HealthRatio * DRAS->GetMaxHealth(), 0.f, DRAS->GetMaxHealth()));
+		}
+		if (WaterRatio >= 0.f)
+		{
+			DRAS->SetWater(FMath::Clamp(WaterRatio * DRAS->GetMaxWater(), 0.f, DRAS->GetMaxWater()));
 		}
 	};
 
@@ -1083,27 +1116,7 @@ void ADRCharacter::RefreshUpgradeEffects()
 	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MoveSpeed_Flat, SpeedStat.Flat);
 	SpecHandle.Data->SetSetByCallerMagnitude(UpgradeTags.Data_Upgrade_MoveSpeed_Mult, SpeedStat.Mult);
 
-	// 최대치 변화에 맞춰 현재값 비율을 유지한다.
-	// 스폰 시점엔 만피이므로 그대로 만피가 되고, 컨테이너 시스템에서는 "남은 컨테이너 수 유지"와 같다.
-	// (칩 목록이 스폰보다 늦게 도착해 재적용되는 경우에도 공짜 회복이 생기지 않는다)
-	UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets);
-	const bool bPreserveVitals = bPreserveVitalRatioOnUpgradeApply && DRAS != nullptr;
-
-	const float HealthRatio = (bPreserveVitals && DRAS->GetMaxHealth() > 0.f)
-		? DRAS->GetHealth() / DRAS->GetMaxHealth() : -1.f;
-	const float WaterRatio = (bPreserveVitals && DRAS->GetMaxWater() > 0.f)
-		? DRAS->GetWater() / DRAS->GetMaxWater() : -1.f;
-
 	UpgradeStatEffectHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-
-	if (HealthRatio >= 0.f)
-	{
-		DRAS->SetHealth(FMath::Clamp(HealthRatio * DRAS->GetMaxHealth(), 0.f, DRAS->GetMaxHealth()));
-	}
-	if (WaterRatio >= 0.f)
-	{
-		DRAS->SetWater(FMath::Clamp(WaterRatio * DRAS->GetMaxWater(), 0.f, DRAS->GetMaxWater()));
-	}
 }
 
 void ADRCharacter::InitializeMoveSpeedBinding()

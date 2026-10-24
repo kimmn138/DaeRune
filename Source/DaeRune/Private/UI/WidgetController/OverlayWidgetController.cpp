@@ -337,6 +337,19 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 	{
 		DRPS->OnUpgradeRuntimeChanged.AddDynamic(
 			this, &UOverlayWidgetController::RefreshHudFeatureVisibility);
+
+		// 오염 진입/해제 시 체력 HUD 다시 칠하기 (최대 체력이 그대로인 경우 대비)
+		DRPS->OnCorruptedStateChanged.AddUniqueDynamic(
+			this, &UOverlayWidgetController::HandleCorruptedStateChanged);
+	}
+}
+
+void UOverlayWidgetController::HandleCorruptedStateChanged(bool bIsCorrupted)
+{
+	if (UDRAttributeSet* DRAS = GetDRAS())
+	{
+		OnMaxHealthChanged.Broadcast(DRAS->GetMaxHealth());
+		OnHealthChanged.Broadcast(DRAS->GetHealth());
 	}
 }
 
@@ -389,6 +402,8 @@ void UOverlayWidgetController::UnbindAllDelegates()
 	{
 		DRPS->OnUpgradeRuntimeChanged.RemoveDynamic(
 			this, &UOverlayWidgetController::RefreshHudFeatureVisibility);
+		DRPS->OnCorruptedStateChanged.RemoveDynamic(
+			this, &UOverlayWidgetController::HandleCorruptedStateChanged);
 	}
 
 	ADRStageGameState* DRGameState = World->GetGameState<ADRStageGameState>();

@@ -266,6 +266,14 @@ public:
 	UFUNCTION()
 	void RefreshHudFeatureVisibility();
 
+	/**
+	 * 오염 상태가 바뀌면 체력·최대 체력을 다시 보낸다.
+	 * 체력 HUD 는 최대 체력이 바뀔 때만 오염 색을 다시 칠하는데, 기본 최대 체력이 100 인 청소기는
+	 * 오염(최대 체력 100)에 들어가고 나와도 최대 체력이 그대로라 이벤트가 오지 않는다.
+	 */
+	UFUNCTION()
+	void HandleCorruptedStateChanged(bool bIsCorrupted);
+
 private:
 	// State.Carrying 태그 변화 콜백 (부품 픽업/드롭/설치 시 조준선 상태 재계산)
 	void HandleCarryingTagChanged(const FGameplayTag CallbackTag, int32 NewCount);

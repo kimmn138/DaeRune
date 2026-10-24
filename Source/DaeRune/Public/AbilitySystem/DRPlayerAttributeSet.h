@@ -16,7 +16,11 @@ class DAERUNE_API UDRPlayerAttributeSet : public UDRAttributeSet
 
 	public:
 	// �����̳� ���� ���� (���� ���� �� �� ����)
+	// 칸 크기는 최대 체력 / 칸 수 로 정해진다. InContainerHealth 는 최대 체력이 아직 없거나 오염 중일 때만 쓴다.
 	void SetContainerInfo(int32 InNumContainers, float InContainerHealth);
+
+	// 모든 모디파이어(칩 GE 등)를 뺀 평상시 최대 체력(클래스 기본값). 오염 중에도 오염 전 기준으로 돌려준다.
+	float GetBaseMaxHealthWithoutModifiers() const;
 
 	// �����̳� ���� ������
 	int32 GetNumContainers() const { return NumContainers; }
