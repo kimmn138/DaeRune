@@ -87,6 +87,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCrosshairHitConfirmedSignature);
 // 업그레이드 칩에 따른 HUD 모듈 표시/숨김 (Plan3(공용칩) §7.2).
 // 체력/물은 WBP_HealthWaterBar 한 위젯이라 하나의 플래그로 묶인다.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnHudFeatureVisibilityChangedSignature, bool, bShowVitals, bool, bShowSkillIcons);
+// 장착 칩이 최대 물을 늘렸는지 (물 HUD 테두리 교체용 — UDRHealthWaterBarWidget)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWaterTankExpandedChangedSignature, bool, bExpanded);
 
 /**
  * ���� ���� UI �������̸� �����ϴ� ��Ʈ�ѷ�
@@ -265,6 +267,17 @@ public:
 	 */
 	UFUNCTION()
 	void RefreshHudFeatureVisibility();
+
+	/**
+	 * 물 HUD 테두리 교체 신호. 장착 칩이 최대 물을 늘리면(지금은 CM.Stat.MaxWater "확장 물탱크") true.
+	 * 칩 Id 가 아니라 수치(MaxWater 의 Flat > 0 또는 Mult > 1)로 판정해 칩 이름·수치가 바뀌어도 따라간다.
+	 * RefreshHudFeatureVisibility 와 같은 시점(최초 1회 + 장착 칩 변경)에 방송된다.
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "GAS|Upgrade")
+	FOnWaterTankExpandedChangedSignature OnWaterTankExpandedChanged;
+
+	UFUNCTION(BlueprintPure, Category = "GAS|Upgrade")
+	bool IsWaterTankExpanded();
 
 	/**
 	 * 오염 상태가 바뀌면 체력·최대 체력을 다시 보낸다.

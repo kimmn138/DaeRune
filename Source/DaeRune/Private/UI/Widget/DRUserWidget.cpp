@@ -12,6 +12,7 @@ void UDRUserWidget::SetWidgetController(UObject* InWidgetController)
 {
 	// WidgetController ���� ����
 	WidgetController = InWidgetController;
+	NativeWidgetControllerSet();
 	// ��������Ʈ ���� �̺�Ʈ ȣ��
 	WidgetControllerSet();
 }

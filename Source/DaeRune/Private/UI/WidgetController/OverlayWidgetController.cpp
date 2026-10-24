@@ -52,8 +52,20 @@ void UOverlayWidgetController::BroadcastInitialValues()
 	RefreshHudFeatureVisibility();
 }
 
+bool UOverlayWidgetController::IsWaterTankExpanded()
+{
+	const ADRPlayerState* DRPS = GetDRPS();
+	if (!DRPS) return false;
+
+	// FDRResolvedStat::Mult 는 배율(기본 1.0) — Flat 은 기본 0
+	const FDRResolvedStat WaterStat = DRPS->GetUpgradeRuntime().GetGlobalStat(EDRUpgradeStat::MaxWater);
+	return WaterStat.Flat > KINDA_SMALL_NUMBER || WaterStat.Mult > 1.f + KINDA_SMALL_NUMBER;
+}
+
 void UOverlayWidgetController::RefreshHudFeatureVisibility()
 {
+	OnWaterTankExpandedChanged.Broadcast(IsWaterTankExpanded());
+
 	const ADRPlayerState* DRPS = GetDRPS();
 
 	// ★PlayerState 가 아직 없으면 "보이는" 쪽으로 간다.★
