@@ -244,6 +244,10 @@ void UDRVacuumDash::OnBrakePressed()
 	if (!bDashing) return;
 
 	// 브레이크: 자기 데미지 없음, 게이지/버프 소멸
+	if (ADRRobotVacuumCharacter* Vacuum = GetVacuum())
+	{
+		Vacuum->MulticastPlayDashBrakeSound();
+	}
 	FinishDash(false, nullptr);
 }
 

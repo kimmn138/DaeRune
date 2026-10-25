@@ -7,6 +7,7 @@
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Actor/DRVacuumAirProjectile.h"
+#include "Character/DRRobotVacuumCharacter.h"
 #include "DRGameplayTags.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/ProjectileMovementComponent.h"
@@ -40,6 +41,12 @@ void UDRVacuumAirShot::StartCharging()
 	EffectiveChargeInterval = FMath::Max(0.05f, ChargeInterval * WindupScale / FMath::Max(1.f, GetAttackSpeedMultiplier()));
 
 	NotifyGauge(0);
+
+	// 충전음 — 소유 클라는 바로, 다른 머신엔 캐릭터가 복제한다 (클라 · 서버 인스턴스 모두 부른다)
+	if (ADRRobotVacuumCharacter* Vacuum = Cast<ADRRobotVacuumCharacter>(GetAvatarActorFromActorInfo()))
+	{
+		Vacuum->SetAttackChargingSound(true);
+	}
 
 	// 로컬 연출용 단계 상승 통지 타이머 (서버/클라 양쪽에서 돌지만 UI/SFX는 BP에서 소유 클라만 처리)
 	World->GetTimerManager().SetTimer(ChargeUITimerHandle, this, &UDRVacuumAirShot::TickChargeUI, EffectiveChargeInterval, true);
@@ -97,6 +104,12 @@ void UDRVacuumAirShot::ReleaseAndFire()
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(ChargeUITimerHandle);
+	}
+
+	// 발사음 — 소유 클라는 자기 단계로 바로, 다른 머신엔 서버 단계로 멀티캐스트 (충전음은 EndAbility 에서 끈다)
+	if (ADRRobotVacuumCharacter* Vacuum = Cast<ADRRobotVacuumCharacter>(GetAvatarActorFromActorInfo()))
+	{
+		Vacuum->PlayAirShotSound(Stages.Num() > 0 && Stage == Stages.Num() - 1);
 	}
 
 	FireShot(Stage);   // 내부에서 HasAuthority 체크
@@ -216,6 +229,12 @@ void UDRVacuumAirShot::EndAbility(const FGameplayAbilitySpecHandle Handle, const
 
 	// 발사/취소 공통: 스킬 아이콘 게이지 비우기 (LastNotifiedStage 가드로 중복 방송 없음)
 	NotifyGauge(0);
+
+	// 발사/취소 공통: 충전음 끄기
+	if (ADRRobotVacuumCharacter* Vacuum = Cast<ADRRobotVacuumCharacter>(GetAvatarActorFromActorInfo()))
+	{
+		Vacuum->SetAttackChargingSound(false);
+	}
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

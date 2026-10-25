@@ -60,6 +60,12 @@ void UDRVacuumJetJump::ActivateAbility(const FGameplayAbilitySpecHandle Handle, 
 
 	AActor* Avatar = GetAvatarActorFromActorInfo();
 
+	// 점프음 — 소유 클라는 바로, 다른 머신엔 서버가 멀티캐스트 (클라 · 서버 인스턴스 모두 여기를 지난다)
+	if (ADRRobotVacuumCharacter* Vacuum = Cast<ADRRobotVacuumCharacter>(Avatar))
+	{
+		Vacuum->PlayJetJumpSound();
+	}
+
 	// 게임 로직은 서버 권한 전용, 연출은 GameplayCue로 전 클라 전파
 	if (Avatar && Avatar->HasAuthority())
 	{

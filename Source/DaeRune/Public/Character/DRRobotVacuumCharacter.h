@@ -10,6 +10,7 @@
 class UAnimMontage;
 class USphereComponent;
 class UStaticMeshComponent;
+class UAudioComponent;
 class USoundBase;
 class UWidgetComponent;
 
@@ -140,9 +141,12 @@ public:
 
 	// ========== 애님 전용 복제 플래그 (Plan3 §13.6 — ABP가 매 프레임 폴링) ==========
 
-	// 대쉬 게이지 충전 중 (GA_VacuumDash가 서버에서 세팅) — ABP Dash_Charge 상태 전이용
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Animation")
+	// 대쉬 게이지 충전 중 (GA_VacuumDash가 서버에서 세팅) — ABP Dash_Charge 상태 전이용 + 충전 루프 사운드(OnRep)
+	UPROPERTY(ReplicatedUsing = OnRep_IsDashCharging, BlueprintReadOnly, Category = "Animation")
 	bool bIsDashCharging = false;
+
+	UFUNCTION()
+	void OnRep_IsDashCharging();
 
 	// 더블 점프(제트 점프) 체공 중 (GA_VacuumJetJump가 세팅, Landed()에서 해제)
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Animation")
@@ -156,6 +160,24 @@ public:
 
 	void SetDashCharging(bool bNew);   // 서버 전용
 	void SetJetJumping(bool bNew);     // 서버 전용
+
+	// ========== 사운드 ==========
+	// 재생 경로 두 가지:
+	//  - 예측형(공격 · 점프 · 제트 점프): 입력 머신이 바로 재생하고, 서버가 나머지 머신에 멀티캐스트한다 (소유 클라는 건너뜀)
+	//  - 상태형(돌진 충전 · 돌진 중 · 공격 충전 · 걷기): 복제 플래그 / 이동 상태를 보고 각 머신이 루프를 켜고 끈다
+
+	// 공기탄 발사음 — GA_VacuumAirShot 이 ReleaseAndFire 에서 (클라 · 서버 인스턴스 모두) 부른다
+	void PlayAirShotSound(bool bEnhanced);
+
+	// 공기탄 충전음 켜기/끄기 — GA_VacuumAirShot 이 충전 시작 · 발사 · 종료에서 (클라 · 서버 인스턴스 모두) 부른다
+	void SetAttackChargingSound(bool bCharging);
+
+	// 제트 점프음 — GA_VacuumJetJump 가 발동 확정(Commit) 뒤 (클라 · 서버 인스턴스 모두) 부른다
+	void PlayJetJumpSound();
+
+	// 돌진 브레이크음 (서버 전용 — GA_VacuumDash::OnBrakePressed)
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayDashBrakeSound();
 
 	// ========== FP 애니메이션 (Plan5 §5.2) ==========
 
@@ -225,9 +247,48 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Dash")
 	float DashImpactMinSpeed = 350.f;
 
-	// 돌진 충돌 임팩트 사운드 (BP에서 지정)
+	// 돌진 충돌 임팩트 사운드 (기본 SC_VacuumCrash — BP에서 덮어쓸 수 있다)
 	UPROPERTY(EditDefaultsOnly, Category = "Dash")
 	TObjectPtr<USoundBase> DashImpactSound;
+
+	// ---------- 사운드 (기본 에셋은 생성자에서 지정, BP에서 덮어쓸 수 있다) ----------
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> AttackSound;            // 공기탄 0~2단계
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> AttackEnhancedSound;    // 공기탄 최종 단계(강화탄)
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> AttackChargingSound;    // 공기탄 충전 (1회 재생, 놓으면 끊김)
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> DashChargingSound;      // 돌진 게이지 충전 (루프)
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> DashStartSound;         // 돌진 시작 1회
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> DashLoopSound;          // 돌진 중 (루프)
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> DashBrakeSound;         // S 브레이크
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> JumpSound;              // 일반 점프 (스페이스)
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> JetJumpSound;           // 더블 점프 스킬 (Q)
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	TObjectPtr<USoundBase> WalkSound;              // 지면 이동 중 (루프)
+
+	// 이보다 느리면 걷기 소리를 끈다 (수평 속도)
+	UPROPERTY(EditDefaultsOnly, Category = "Sound", meta = (ClampMin = "0.0"))
+	float WalkSoundMinSpeed = 50.f;
+
+	// 일반 점프 — 소유 클라 · 서버에서 불린다 (시뮬 프록시는 서버 멀티캐스트로 듣는다)
+	virtual void OnJumped_Implementation() override;
 
 private:
 	// ★Plan5(탑승칩)★ 서버: 탑승 · 하차 직후 — Rider(청소기면) + 나부터 맨 아래까지 RefreshRideLoad (Plan5 D-81 · T-85)
@@ -238,4 +299,47 @@ private:
 
 	// ★Plan5(돌진칩)★ 내 캡슐 ↔ 아군 캡슐을 서로 IgnoreActorWhenMoving (켜기 · 끄기 공통, 이 머신에서만)
 	void ApplyAllyPassThrough(bool bEnable);
+
+	// ---------- 사운드 ----------
+
+	// 공기탄 충전 중 — 소유 클라는 직접 재생하므로 나머지 머신에만 복제한다 (COND_SkipOwner)
+	UPROPERTY(ReplicatedUsing = OnRep_AttackCharging)
+	bool bIsAttackCharging = false;
+
+	UFUNCTION()
+	void OnRep_AttackCharging();
+
+	// 예측형 사운드: 입력 머신은 바로, 서버는 나머지 머신에 멀티캐스트
+	void PlayPredictedSound(USoundBase* Sound);
+
+	// 소유 클라(이미 직접 재생)는 건너뛴다
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayPredictedSound(USoundBase* Sound);
+
+	// 몸에 붙여 1회 재생 (이 머신에서만)
+	void PlayAttachedSound(USoundBase* Sound) const;
+
+	// 루프 컴포넌트 켜기/끄기 (이 머신에서만). 같은 상태로 여러 번 불러도 안전
+	void SetLoopSound(TObjectPtr<UAudioComponent>& Audio, USoundBase* Sound, bool bPlay);
+
+	// 재생 중이고 페이드 아웃 중이 아니면 true
+	static bool IsLoopSoundActive(const UAudioComponent* Audio);
+
+	// 걷기 루프 갱신 (Tick)
+	void UpdateWalkSound();
+
+	// 사망 · 파괴 시 모든 루프 정지
+	void StopAllLoopSounds();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> WalkAudio;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> DashChargeAudio;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> DashLoopAudio;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> AttackChargeAudio;
 };
