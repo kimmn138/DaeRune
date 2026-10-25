@@ -115,6 +115,7 @@ void UDRVacuumDash::ReleaseGauge()
 	bDashing = true;
 	ApplyBuffStacks(Gauge);
 	Vacuum->SetDashCollisionEnabled(true);
+	Vacuum->SetDashing(true);   // 돌진 이펙트
 
 	// ★Plan5(돌진칩)★ ② 아군 통과 — 돌진하는 동안만. 실제 이동 무시는 캐릭터가 모든 머신에서 맞춘다 (D-115)
 	if (UDRAbilitySystemLibrary::HasUpgradeFeature(
@@ -261,6 +262,7 @@ void UDRVacuumDash::FinishDash(bool bFromImpact, AActor* HitActor)
 	{
 		Vacuum->SetSustainedDash(false);
 		Vacuum->SetDashCollisionEnabled(false);
+		Vacuum->SetDashing(false);
 		Vacuum->SetDashPassThroughAllies(false);   // ★Plan5(돌진칩)★ ② (D-115)
 
 		if (bFromImpact)
@@ -327,6 +329,7 @@ void UDRVacuumDash::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 			Vacuum->SetDashCharging(false);
 			Vacuum->SetSustainedDash(false);
 			Vacuum->SetDashCollisionEnabled(false);
+			Vacuum->SetDashing(false);
 			Vacuum->SetDashPassThroughAllies(false);   // ★Plan5(돌진칩)★ ② 사망 · 스턴 · 강제 취소 경로에서도 (T-125)
 
 			// 강제 취소 경로에서도 게이지 UI 리셋

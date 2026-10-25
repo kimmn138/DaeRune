@@ -9,6 +9,7 @@
 
 class UAnimMontage;
 class USphereComponent;
+class UStaticMeshComponent;
 class USoundBase;
 class UWidgetComponent;
 
@@ -95,6 +96,23 @@ public:
 	// GA가 버프 적용/해제 시 호출 (서버) — 활성 중에만 충돌 판정
 	void SetDashCollisionEnabled(bool bEnabled);
 
+	// 돌진 중 (게이지 해소 ~ 돌진 종료, 일반 · 지속 공통) — 모든 머신이 OnRep 으로 돌진 이펙트를 켜고 끈다
+	UPROPERTY(ReplicatedUsing = OnRep_IsDashing, BlueprintReadOnly, Category = "Dash")
+	bool bIsDashing = false;
+
+	void SetDashing(bool bEnabled);   // 서버 전용 (GA_VacuumDash 가 해소 · 종료 · 강제 취소에서 부른다)
+
+	UFUNCTION()
+	void OnRep_IsDashing();
+
+	/**
+	 * 돌진하는 동안만 보이는 불꽃 껍질 — 구체 메시 + Flames_Mat (팀원 지정: 회전 X -90 · 크기 1.2/1.2/2.0).
+	 * 3인칭 메시에 붙고 본인 1인칭 화면에서는 보이지 않는다 (공속 버프 이펙트와 같은 OwnerNoSee).
+	 * 위치 · 회전 · 크기는 BP_DRVacuumCleaner 컴포넌트에서 조정한다.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "VFX|Dash")
+	TObjectPtr<UStaticMeshComponent> DashVFXMesh;
+
 	// GA가 지속 돌진 시작/종료 시 호출 (서버) — 복제 플래그 + State.RobotVacuum.SustainedDash 태그 동기화
 	void SetSustainedDash(bool bEnabled);
 
@@ -170,6 +188,7 @@ protected:
 
 	// ★Plan5(탑승칩)★ 로드아웃 변경 · 빙의 때 ① 감속을 다시 맞춘다 (Plan5 D-81)
 	virtual void OnUpgradeEffectsRefreshed() override;
+	virtual void RefreshTagDrivenVFX() override;
 
 	// 캡슐 충돌 콜백 — 돌진 충돌 감지 (서버 전용 판정)
 	UFUNCTION()

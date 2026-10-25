@@ -9,6 +9,13 @@
 #include "NiagaraSystem.h"
 
 #if WITH_EDITOR
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "NiagaraEditorUtilities.h"
+#include "NiagaraSystemFactoryNew.h"
+#include "UObject/Package.h"
+#endif
+
+#if WITH_EDITOR
 namespace
 {
 	// 시스템 스크립트 + 이미터마다 모든 스크립트
@@ -150,4 +157,29 @@ int32 UDRVFXEditorTools::ScaleNiagaraModuleConstants(UNiagaraSystem* System, con
 	}
 #endif
 	return Changed;
+}
+
+UNiagaraSystem* UDRVFXEditorTools::CreateNiagaraSystemFromEmitter(UNiagaraEmitter* Emitter, const FString& PackagePath, const FString& AssetName)
+{
+#if WITH_EDITOR
+	if (!Emitter || PackagePath.IsEmpty() || AssetName.IsEmpty()) return nullptr;
+
+	const FString PackageName = PackagePath / AssetName;
+	if (FindPackage(nullptr, *PackageName) || FPackageName::DoesPackageExist(PackageName)) return nullptr;
+
+	UPackage* Package = CreatePackage(*PackageName);
+	UNiagaraSystem* System = NewObject<UNiagaraSystem>(Package, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
+
+	// UNiagaraSystemFactoryNew::FactoryCreateNew 의 "이미터로 만들기" 경로와 같은 순서
+	UNiagaraSystemFactoryNew::InitializeSystem(System, true);
+	FNiagaraEditorUtilities::AddEmitterToSystem(*System, *Emitter, Emitter->GetExposedVersion().VersionGuid);
+	System->RequestCompile(false);
+	System->WaitForCompilationComplete(true, false);
+
+	FAssetRegistryModule::AssetCreated(System);
+	Package->MarkPackageDirty();
+	return System;
+#else
+	return nullptr;
+#endif
 }

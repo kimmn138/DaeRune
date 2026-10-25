@@ -6,6 +6,7 @@
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "DRVFXEditorTools.generated.h"
 
+class UNiagaraEmitter;
 class UNiagaraSystem;
 
 /**
@@ -41,4 +42,11 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "DaeRune|Editor")
 	static int32 ScaleNiagaraModuleConstants(UNiagaraSystem* System, const FString& NameContains, float Factor);
+
+	/**
+	 * 이미터(NE) 하나를 담은 새 시스템(NS) 에셋을 만든다 — 에디터의 "이미터로 시스템 만들기"와 같다 (이미터는 복사되어 들어간다).
+	 * PackagePath 예) "/Game/Basic_VFX/Niagara/Dash". 같은 이름이 이미 있으면 null. 저장은 호출한 쪽이 한다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "DaeRune|Editor")
+	static UNiagaraSystem* CreateNiagaraSystemFromEmitter(UNiagaraEmitter* Emitter, const FString& PackagePath, const FString& AssetName);
 };

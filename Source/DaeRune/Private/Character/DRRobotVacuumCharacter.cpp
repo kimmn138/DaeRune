@@ -12,6 +12,10 @@
 #include "DRGameplayTags.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Net/UnrealNetwork.h"
 #include "Player/DRPlayerController.h"
 #include "Sound/SoundBase.h"
@@ -41,6 +45,30 @@ ADRRobotVacuumCharacter::ADRRobotVacuumCharacter()
 	MountPromptWidget->SetWidgetSpace(EWidgetSpace::Screen);
 	MountPromptWidget->SetDrawSize(FVector2D(300.f, 100.f));
 	MountPromptWidget->SetVisibility(false);
+
+	// 돌진 불꽃 껍질 — 평소엔 숨겨 두고 bIsDashing 동안만 보인다 (RefreshTagDrivenVFX)
+	DashVFXMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DashVFXMesh"));
+	DashVFXMesh->SetupAttachment(GetMesh());
+	DashVFXMesh->SetRelativeLocation(FVector(0.f, 0.f, 45.f));     // 몸통 높이 (메시 원점 = 바닥)
+	DashVFXMesh->SetRelativeRotation(FRotator(0.f, 0.f, -90.f));   // 에디터 표기 (X=-90, 0, 0) = Roll
+	DashVFXMesh->SetRelativeScale3D(FVector(1.2f, 1.2f, 2.0f));
+	DashVFXMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	DashVFXMesh->SetGenerateOverlapEvents(false);
+	DashVFXMesh->SetCastShadow(false);
+	DashVFXMesh->SetOwnerNoSee(true);
+	DashVFXMesh->SetHiddenInGame(true);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> DashSphereFinder(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	if (DashSphereFinder.Succeeded())
+	{
+		DashVFXMesh->SetStaticMesh(DashSphereFinder.Object);
+	}
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DashFlamesFinder(
+		TEXT("/Game/Basic_VFX/Niagara/Dash/Mesh/Flames_Mat.Flames_Mat"));
+	if (DashFlamesFinder.Succeeded())
+	{
+		DashVFXMesh->SetMaterial(0, DashFlamesFinder.Object);
+	}
 }
 
 void ADRRobotVacuumCharacter::BeginPlay()
@@ -151,6 +179,7 @@ void ADRRobotVacuumCharacter::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 
 	DOREPLIFETIME(ADRRobotVacuumCharacter, RiderOnTop);
 	DOREPLIFETIME(ADRRobotVacuumCharacter, bSustainedDash);
+	DOREPLIFETIME(ADRRobotVacuumCharacter, bIsDashing);
 	DOREPLIFETIME(ADRRobotVacuumCharacter, bDashPassThroughAllies);   // ★Plan5(돌진칩)★ 모든 머신이 이동 무시를 맞춘다 (D-115)
 
 	// 애님 전용 플래그 (ABP가 매 프레임 폴링 — RepNotify 불필요)
@@ -432,6 +461,30 @@ void ADRRobotVacuumCharacter::SetDashCollisionEnabled(bool bEnabled)
 {
 	if (!HasAuthority()) return;
 	bDashCollisionArmed = bEnabled;
+}
+
+void ADRRobotVacuumCharacter::SetDashing(bool bEnabled)
+{
+	if (!HasAuthority() || bIsDashing == bEnabled) return;
+	bIsDashing = bEnabled;
+	OnRep_IsDashing();   // 리슨 서버 parity (OnRep_SustainedDash 와 같은 관례)
+}
+
+void ADRRobotVacuumCharacter::OnRep_IsDashing()
+{
+	RefreshTagDrivenVFX();
+}
+
+void ADRRobotVacuumCharacter::RefreshTagDrivenVFX()
+{
+	Super::RefreshTagDrivenVFX();   // 공속 버프 몸 이펙트
+
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	if (DashVFXMesh)
+	{
+		DashVFXMesh->SetHiddenInGame(!(bIsDashing && !bDead));
+	}
 }
 
 void ADRRobotVacuumCharacter::SetSustainedDash(bool bEnabled)
