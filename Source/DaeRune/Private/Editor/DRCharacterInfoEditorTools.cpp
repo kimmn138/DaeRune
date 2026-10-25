@@ -77,6 +77,10 @@ namespace DRCharacterInfoEditor
 	const FKeyIcon KeyE{ TEXT("/Game/DaeRuneAssets/UI/SkillIcon/SkillIcon_E.SkillIcon_E"), FVector2D(126.0f, 159.0f) * (25.0f / 159.0f) };
 	const FKeyIcon KeyQ{ TEXT("/Game/DaeRuneAssets/UI/SkillIcon/SkillIcon_Q.SkillIcon_Q"), FVector2D(112.0f, 117.0f) * (19.8f / 112.0f) };
 
+	// 물 사용량 칸 그림 (133×38) — 예전 그림의 칸 높이 26 에 맞춘다
+	const TCHAR* WaterCostPath = TEXT("/Game/DaeRuneAssets/UI/Tutorial/CharacterInfo-Water.CharacterInfo-Water");
+	const FVector2D WaterCostSize = FVector2D(133.0f, 38.0f) * (26.0f / 38.0f);
+
 	// ===== 캐릭터별 사양 =====
 	// 글자는 예전 WBP 에서 이름(OldName)으로 찾아 FText 째로 옮긴다(번역 키 유지). 없을 때만 Korean 으로 새 키를 만든다.
 	struct FTextSpec
@@ -162,6 +166,26 @@ namespace DRCharacterInfoEditor
 					{ nullptr, TEXT("공기를 폭발시켜 위로 솟구치며, 주변 적에게 피해를 줍니다.") }, { nullptr, TEXT("30") } },
 				{ &KeyRMB, 548.0f, 587.0f, 15.75f, { nullptr, TEXT("돌진") },
 					{ nullptr, TEXT("적을 관통하며 돌진해 피해를 줍니다. <img id=\"RMB\"/>을 길게 누르면 피해량과 속도가 증가합니다.") },
+					{ nullptr, TEXT("20") } },
+			},
+		},
+		{
+			// 배경 그림의 아이콘 순서: 가방(기본 공격 LMB) · 종(도발 E) · 모자(모자 던지기 RMB)
+			TEXT("BellBoy"),
+			TEXT("/Game/Blueprints/UI/CharacterInfo/WBP_BellBoyInfo.WBP_BellBoyInfo"),
+			TEXT("/Game/DaeRuneAssets/UI/Tutorial/UI-CharacterInfo-BellBoy.UI-CharacterInfo-BellBoy"),
+			nullptr, TEXT("BELLBOY"), 282.0f,
+			{ nullptr, TEXT("300") },
+			{ nullptr, TEXT("100") },
+			{ nullptr, TEXT("적의 시선을 끌고 아군을 보호하는 근거리 지원형 로봇입니다.") },
+			{ nullptr, TEXT("조작 난이도: 보통") },
+			{
+				{ &KeyLMB, 292.0f, 334.0f, 15.75f, { nullptr, TEXT("스킬 - 짐 조심하세요!") },
+					{ nullptr, TEXT("가방을 휘둘러 전방의 적에게 피해를 줍니다.") }, {} },
+				{ &KeyE, 419.0f, 457.0f, 15.75f, { nullptr, TEXT("스킬 - 이쪽입니다, 손님!") },
+					{ nullptr, TEXT("주변의 적을 약화시키고 자신을 공격하도록 도발합니다.") }, { nullptr, TEXT("60") } },
+				{ &KeyRMB, 548.0f, 587.0f, 15.75f, { nullptr, TEXT("스킬 - 모자 서비스") },
+					{ nullptr, TEXT("모자를 던집니다. 적에게 적중하면 피해를 주고, 아군에게 적중하면 다음 피해를 한 번 막는 보호막을 부여합니다.") },
 					{ nullptr, TEXT("20") } },
 			},
 		},
@@ -415,17 +439,18 @@ namespace DRCharacterInfoEditor
 
 			if (Row.Cost.OldName || Row.Cost.Korean)
 			{
-				// 물 사용량 칸 — 예전 그림의 칸(84×26, 물방울 뒤 46 에 숫자). 그림이 아직 없어 숨겨 둔다
+				// 물 사용량 칸 — CharacterInfo-Water(133×38)를 예전 그림의 칸 높이 26 에 맞춘다(91×26).
+				// 물방울은 그림의 x 33~43 → 칸에서 23~29, 숫자는 그 뒤 37 부터
+				UTexture2D* WaterTexture = LoadObject<UTexture2D>(nullptr, WaterCostPath);
+				if (!WaterTexture) Log.Error(FString::Printf(TEXT("물 사용량 그림 없음: %s"), WaterCostPath));
 				USizeBox* Cost = Make<USizeBox>(Tree, TEXT("Cost_Skill") + N);
-				Cost->SetWidthOverride(84.0f);
-				Cost->SetHeightOverride(26.0f);
-				Cost->SetVisibility(ESlateVisibility::Collapsed);
+				Cost->SetWidthOverride(WaterCostSize.X);
+				Cost->SetHeightOverride(WaterCostSize.Y);
 				UOverlay* CostOverlay = Make<UOverlay>(Tree, TEXT("Overlay_Skill") + N + TEXT("Cost"));
 				Cost->AddChild(CostOverlay);
 
 				UImage* CostBg = Make<UImage>(Tree, TEXT("Image_Skill") + N + TEXT("CostBg"));
-				CostBg->SetBrush(MakeImageBrush(nullptr, FVector2D(84.0f, 26.0f)));
-				CostBg->SetColorAndOpacity(FLinearColor::Transparent);	// 그림이 오면 브러시를 넣고 불투명으로
+				CostBg->SetBrush(MakeImageBrush(WaterTexture, WaterCostSize));
 				UOverlaySlot* BgSlot = CostOverlay->AddChildToOverlay(CostBg);
 				BgSlot->SetHorizontalAlignment(HAlign_Fill);
 				BgSlot->SetVerticalAlignment(VAlign_Fill);
@@ -435,7 +460,7 @@ namespace DRCharacterInfoEditor
 				UOverlaySlot* TextSlot = CostOverlay->AddChildToOverlay(CostText);
 				TextSlot->SetHorizontalAlignment(HAlign_Left);
 				TextSlot->SetVerticalAlignment(VAlign_Center);
-				TextSlot->SetPadding(FMargin(46.0f, 0.0f, 0.0f, 0.0f));
+				TextSlot->SetPadding(FMargin(37.0f, 0.0f, 0.0f, 0.0f));
 				AddToHBox(Header, Cost, 26.0f);
 			}
 			return Header;
@@ -585,7 +610,7 @@ FString UDRCharacterInfoEditorTools::BuildCharacterInfoWidget(const FString& Cha
 	}
 	if (!Spec)
 	{
-		return FString::Printf(TEXT("ERROR 모르는 캐릭터: %s (Gardener / VendingMachine / RobotVacuum)\n"), *CharacterName);
+		return FString::Printf(TEXT("ERROR 모르는 캐릭터: %s (Gardener / VendingMachine / RobotVacuum / BellBoy)\n"), *CharacterName);
 	}
 
 	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, Spec->WidgetPath);
