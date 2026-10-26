@@ -95,7 +95,8 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Common Class Defaults")
 	TArray<TSubclassOf<UGameplayAbility>> CommonAbilities;
 
-	FCharacterClassDefaultInfo GetClassDefaultInfo(ECharacterClass CharacterClass);
+	// 클래스 기본 정보. 표에 없으면 경고 후 빈 기본값 (예전엔 FindChecked 로 크래시)
+	const FCharacterClassDefaultInfo& GetClassDefaultInfo(ECharacterClass CharacterClass) const;
 };
 
 /**
@@ -121,5 +122,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Common Class Defaults")
 	TObjectPtr<UTexture2D> CrosshairDisabledTexture;
 
-	FCharacterClassDefaultInfo GetClassDefaultInfo(EPlayerCharacterClass CharacterClass);
+	// 클래스 기본 정보. 표에 없으면 경고 후 빈 기본값 (예전엔 FindChecked 로 크래시)
+	const FCharacterClassDefaultInfo& GetClassDefaultInfo(EPlayerCharacterClass CharacterClass) const;
 };

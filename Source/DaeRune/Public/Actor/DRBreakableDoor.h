@@ -101,15 +101,14 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMeshComponent>> DoorPieces;
 
-	struct FPieceInitialTransform
-	{
-		FVector Location;
-		FRotator Rotation;
-	};
-	TArray<FPieceInitialTransform> InitialTransforms;
-
 	FTimerHandle CleanupTimerHandle;
 	bool bShouldSpawnEnemies = true;
+
+	// 이 머신에서 파편 연출(물리 · 이펙트)을 이미 재생했는지 — 늦게 들어온 클라만 OnRep 에서 숨김 처리
+	bool bBreakEffectPlayed = false;
+
+	// 파편을 날리고 이펙트를 재생한다 (머신당 1회)
+	void PlayBreakSequence();
 
 	UFUNCTION()
 	void OnRep_IsBroken();

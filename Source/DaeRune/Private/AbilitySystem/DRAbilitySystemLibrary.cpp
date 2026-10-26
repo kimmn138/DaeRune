@@ -76,10 +76,12 @@ UOverlayWidgetController* UDRAbilitySystemLibrary::GetOverlayWidgetController(co
 
 void UDRAbilitySystemLibrary::InitializeDefaultAttributes(const UObject* WorldContextObject, ECharacterClass CharacterClass, float Level, UAbilitySystemComponent* ASC)
 {
-	AActor* AvatarActor = ASC->GetAvatarActor();
-
+	// 게임모드가 ADRGameModeBase 가 아니면(예: StartupMap 에서 PIE) 클래스 정보가 없다 — 크래시 대신 건너뛴다
 	UCharacterClassInfo* CharacterClassInfo = GetCharacterClassInfo(WorldContextObject);
-	FCharacterClassDefaultInfo ClassDefaultInfo = CharacterClassInfo->GetClassDefaultInfo(CharacterClass);
+	if (!ASC || !CharacterClassInfo) return;
+
+	AActor* AvatarActor = ASC->GetAvatarActor();
+	const FCharacterClassDefaultInfo& ClassDefaultInfo = CharacterClassInfo->GetClassDefaultInfo(CharacterClass);
 
 	// 헬퍼 함수로 간소화
 	CreateAndApplyEffectSpec(ASC, ClassDefaultInfo.PrimaryAttributes, AvatarActor, Level);
@@ -135,7 +137,7 @@ TSubclassOf<UUserWidget> UDRAbilitySystemLibrary::GetCharacterInfoWidgetClass(co
 	UPlayerCharacterClassInfo* ClassInfo = GetPlayerCharacterClassInfo(WorldContextObject);
 	if (ClassInfo == nullptr) return nullptr;
 
-	FCharacterClassDefaultInfo Info = ClassInfo->GetClassDefaultInfo(PlayerClass);
+	const FCharacterClassDefaultInfo& Info = ClassInfo->GetClassDefaultInfo(PlayerClass);
 	return Info.CharacterInfoWidgetClass;
 }
 
@@ -150,7 +152,7 @@ void UDRAbilitySystemLibrary::InitializePlayerDefaultAttributes(
 	// Step 1: 기존 활성 GE 제거 (Infinite/HasDuration GE 대비)
 	for (auto& Pair : ClassInfo->CharacterClassInformation)
 	{
-		FCharacterClassDefaultInfo& Info = Pair.Value;
+		const FCharacterClassDefaultInfo& Info = Pair.Value;
 		if (Info.PrimaryAttributes)
 		{
 			ASC->RemoveActiveGameplayEffectBySourceEffect(Info.PrimaryAttributes, ASC);
@@ -172,7 +174,7 @@ void UDRAbilitySystemLibrary::InitializePlayerDefaultAttributes(
 	}
 
 	// Step 3: 선택된 클래스의 GE 적용 (깨끗한 상태에서)
-	FCharacterClassDefaultInfo ClassDefaultInfo = ClassInfo->GetClassDefaultInfo(PlayerClass);
+	const FCharacterClassDefaultInfo& ClassDefaultInfo = ClassInfo->GetClassDefaultInfo(PlayerClass);
 	CreateAndApplyEffectSpec(ASC, ClassDefaultInfo.PrimaryAttributes, AvatarActor, Level);
 	CreateAndApplyEffectSpec(ASC, ClassDefaultInfo.VitalAttributes, AvatarActor, Level);
 }
@@ -1537,6 +1539,40 @@ void UDRAbilitySystemLibrary::TryApplyAirShotDrag(const FEffectProperties& Props
 bool UDRAbilitySystemLibrary::IsInvulnerable(const UAbilitySystemComponent* ASC)
 {
 	return ASC && ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Invulnerable);
+}
+
+void UDRAbilitySystemLibrary::SplitWaterCost(const UAbilitySystemComponent* ASC, float RequiredWater, float CurrentWater,
+	float& OutWaterCost, float& OutHealthCost)
+{
+	// 물 부족분을 체력으로 낼 때의 비율
+	static constexpr float WaterShortageHealthRatio = 0.5f;
+
+	OutWaterCost = 0.f;
+	OutHealthCost = 0.f;
+	if (RequiredWater <= 0.f) return;
+
+	if (HasUpgradeFeature(ASC, FDRGameplayTags::Get().Upgrade_Feature_Combat_BloodCost))
+	{
+		const AActor* TuningContext = ASC ? ASC->GetAvatarActor() : nullptr;
+		OutHealthCost = FMath::FloorToFloat(RequiredWater * GetChipTuning(TuningContext).BloodCostHealthRatio);
+	}
+	else if (CurrentWater >= RequiredWater)
+	{
+		OutWaterCost = RequiredWater;
+	}
+	else
+	{
+		OutWaterCost = FMath::Max(0.f, CurrentWater);
+		OutHealthCost = FMath::FloorToFloat((RequiredWater - OutWaterCost) * WaterShortageHealthRatio);
+	}
+}
+
+bool UDRAbilitySystemLibrary::CanPayWaterCost(const UAbilitySystemComponent* ASC, float RequiredWater, float CurrentWater, float CurrentHealth)
+{
+	float WaterCost = 0.f;
+	float HealthCost = 0.f;
+	SplitWaterCost(ASC, RequiredWater, CurrentWater, WaterCost, HealthCost);
+	return HealthCost <= 0.f || CurrentHealth > HealthCost;
 }
 
 bool UDRAbilitySystemLibrary::LineTraceWorldGeometry(const UWorld* World, FHitResult& OutHit, const FVector& Start,

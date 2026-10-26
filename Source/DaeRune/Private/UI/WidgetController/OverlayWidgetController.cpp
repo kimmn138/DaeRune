@@ -591,7 +591,7 @@ void UOverlayWidgetController::BroadcastSkillIconWidgetClass()
 	UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(GetWorld());
 	if (!ClassInfo) return;
 
-	FCharacterClassDefaultInfo DefaultInfo = ClassInfo->GetClassDefaultInfo(CharClass);
+	const FCharacterClassDefaultInfo& DefaultInfo = ClassInfo->GetClassDefaultInfo(CharClass);
 	if (DefaultInfo.SkillIconWidgetClass)
 	{
 		OnSkillIconClassChanged.Broadcast(DefaultInfo.SkillIconWidgetClass);
@@ -606,7 +606,7 @@ void UOverlayWidgetController::BroadcastCrosshairImages()
 	UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(GetWorld());
 	if (!ClassInfo) return;
 
-	const FCharacterClassDefaultInfo DefaultInfo = ClassInfo->GetClassDefaultInfo(PS->GetSelectedPlayerClass());
+	const FCharacterClassDefaultInfo& DefaultInfo = ClassInfo->GetClassDefaultInfo(PS->GetSelectedPlayerClass());
 	OnCrosshairImagesChanged.Broadcast(
 		DefaultInfo.CrosshairTexture,
 		ClassInfo->CrosshairDisabledTexture,

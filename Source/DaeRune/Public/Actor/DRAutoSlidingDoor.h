@@ -63,9 +63,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UBoxComponent> TriggerVolume;
 
-	/*UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<UAudioComponent> DoorAudioComponent;*/
-
 	// 에디터 설정 변수
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Settings")
 	float DoorOpenOffset = 150.0f;
@@ -108,6 +105,10 @@ private:
 	void OnRep_DoorState();
 
 	void UpdateDoorPosition(float DeltaTime);
+
+	// CurrentOpenRatio 로 두 문짝 위치를 맞춘다
+	void ApplyDoorRatio();
+
 	void SetDoorState(EDoorState NewState);
 	void CalculateDoorLocations();
 

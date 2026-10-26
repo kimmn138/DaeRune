@@ -534,6 +534,20 @@ public:
 	/** ★Plan5(물점프칩)★ 대상이 무적(State.Invulnerable)인가. 기본 피해 관문이 ★모든 피해마다★ 부른다 — 태그 조회 한 번 */
 	static bool IsInvulnerable(const UAbilitySystemComponent* ASC);
 
+	// ========== 물 비용 ==========
+
+	/**
+	 * 물 비용 RequiredWater 를 물 · 체력으로 나눈다 — CheckCost · ExecCalc_WaterCost · 청소기 돌진 충전이 같은 규칙을 쓴다.
+	 * - 피의 계약 칩: 물 0, 체력 = 내림(비용 × 칩 비율)
+	 * - 물이 충분: 물만
+	 * - 물 부족: 남은 물 전부 + 체력 = 내림(부족분 × 0.5)
+	 */
+	static void SplitWaterCost(const UAbilitySystemComponent* ASC, float RequiredWater, float CurrentWater,
+		float& OutWaterCost, float& OutHealthCost);
+
+	// 위 규칙으로 지금 낼 수 있는지 — 체력으로 낼 때는 최소 1 이 남아야 한다(자살 방지)
+	static bool CanPayWaterCost(const UAbilitySystemComponent* ASC, float RequiredWater, float CurrentWater, float CurrentHealth);
+
 	// ========== 벽 판정 ==========
 
 	/**

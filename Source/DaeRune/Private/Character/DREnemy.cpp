@@ -478,7 +478,7 @@ void ADREnemy::BeginPlay()
 		// CharacterClassInfo에서 DeathAbilities 정보 가져오기
 		if (UCharacterClassInfo* CharacterClassInfo = UDRAbilitySystemLibrary::GetCharacterClassInfo(this))
 		{
-			FCharacterClassDefaultInfo ClassInfo = CharacterClassInfo->GetClassDefaultInfo(CharacterClass);
+			const FCharacterClassDefaultInfo& ClassInfo = CharacterClassInfo->GetClassDefaultInfo(CharacterClass);
 			DeathAbilities = ClassInfo.DeathAbilities;
 		}
 	}

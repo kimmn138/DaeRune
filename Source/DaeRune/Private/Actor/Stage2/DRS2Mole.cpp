@@ -58,6 +58,7 @@ void ADRS2Mole::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ADRS2Mole, bVanishing);
+	DOREPLIFETIME(ADRS2Mole, bKilledByPlayer);
 }
 
 void ADRS2Mole::BeginPlay()

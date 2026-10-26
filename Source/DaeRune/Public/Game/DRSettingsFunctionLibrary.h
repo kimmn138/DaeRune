@@ -37,6 +37,4 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Settings|Helpers")
 	static float ClampAndSnapFloat(float Value, float Min, float Max, float Step);
 
-	UFUNCTION(BlueprintPure, Category = "Settings|Helpers")
-	static int32 GetOptionIndexByName(const TArray<FDRSettingsOption>& Options, FName OptionId);
 };

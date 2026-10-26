@@ -3,7 +3,6 @@
 
 #include "Actor/DRAutoSlidingDoor.h"
 #include "Components/BoxComponent.h"
-#include "Components/AudioComponent.h"
 #include "Character/DRCharacter.h"
 #include "Net/UnrealNetwork.h"
 #include "Kismet/GameplayStatics.h"
@@ -11,6 +10,7 @@
 ADRAutoSlidingDoor::ADRAutoSlidingDoor()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;   // 열리고 닫히는 동안에만 켠다
 	bReplicates = true;
 	bAlwaysRelevant = true;
 
@@ -34,11 +34,6 @@ ADRAutoSlidingDoor::ADRAutoSlidingDoor()
 	TriggerVolume->SetCollisionProfileName(TEXT("Trigger"));
 	TriggerVolume->SetGenerateOverlapEvents(true);
 	TriggerVolume->SetBoxExtent(FVector(200.0f, 300.0f, 200.0f));
-
-	// Audio Component
-	/*DoorAudioComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("DoorAudioComponent"));
-	DoorAudioComponent->SetupAttachment(RootSceneComponent);
-	DoorAudioComponent->bAutoActivate = false;*/
 }
 
 void ADRAutoSlidingDoor::BeginPlay()
@@ -54,10 +49,6 @@ void ADRAutoSlidingDoor::BeginPlay()
 		CurrentDoorState = EDoorState::Open;
 		CurrentOpenRatio = 1.0f;
 		TargetOpenRatio = 1.0f;
-
-		// 즉시 열린 위치로 이동
-		LeftDoorMesh->SetRelativeLocation(LeftDoorOpenLocation);
-		RightDoorMesh->SetRelativeLocation(RightDoorOpenLocation);
 	}
 	else
 	{
@@ -67,7 +58,7 @@ void ADRAutoSlidingDoor::BeginPlay()
 	}
 
 	// 초기 위치 적용
-	UpdateDoorPosition(0.0f);
+	ApplyDoorRatio();
 
 	// Overlap 이벤트 바인딩
 	if (HasAuthority())
@@ -107,36 +98,37 @@ void ADRAutoSlidingDoor::CalculateDoorLocations()
 	RightDoorOpenLocation = RightDoorClosedLocation + FVector(-DoorOpenOffset, 0.0f, 0.0f);
 }
 
+void ADRAutoSlidingDoor::ApplyDoorRatio()
+{
+	LeftDoorMesh->SetRelativeLocation(FMath::Lerp(LeftDoorClosedLocation, LeftDoorOpenLocation, CurrentOpenRatio));
+	RightDoorMesh->SetRelativeLocation(FMath::Lerp(RightDoorClosedLocation, RightDoorOpenLocation, CurrentOpenRatio));
+}
+
 void ADRAutoSlidingDoor::UpdateDoorPosition(float DeltaTime)
 {
 	// 목표 비율을 향해 부드럽게 이동
 	if (!FMath::IsNearlyEqual(CurrentOpenRatio, TargetOpenRatio, 0.001f))
 	{
-		float InterpSpeed = DoorSpeed / DoorOpenOffset; // 속도를 비율 변화량으로 변환
+		const float InterpSpeed = DoorSpeed / DoorOpenOffset; // 속도를 비율 변화량으로 변환
 		CurrentOpenRatio = FMath::FInterpTo(CurrentOpenRatio, TargetOpenRatio, DeltaTime, InterpSpeed);
-
-		// 문 위치 적용
-		FVector LeftNewLocation = FMath::Lerp(LeftDoorClosedLocation, LeftDoorOpenLocation, CurrentOpenRatio);
-		FVector RightNewLocation = FMath::Lerp(RightDoorClosedLocation, RightDoorOpenLocation, CurrentOpenRatio);
-
-		LeftDoorMesh->SetRelativeLocation(LeftNewLocation);
-		RightDoorMesh->SetRelativeLocation(RightNewLocation);
+		ApplyDoorRatio();
+		return;
 	}
-	else
-	{
-		// 이동 완료
-		CurrentOpenRatio = TargetOpenRatio;
 
-		if (CurrentDoorState == EDoorState::Opening)
-		{
-			CurrentDoorState = EDoorState::Open;
-			OnDoorOpened.Broadcast();
-		}
-		else if (CurrentDoorState == EDoorState::Closing)
-		{
-			CurrentDoorState = EDoorState::Closed;
-			OnDoorClosed.Broadcast();
-		}
+	// 이동 완료 — 끝 위치에 맞추고 Tick 을 끈다
+	CurrentOpenRatio = TargetOpenRatio;
+	ApplyDoorRatio();
+	SetActorTickEnabled(false);
+
+	if (CurrentDoorState == EDoorState::Opening)
+	{
+		CurrentDoorState = EDoorState::Open;
+		OnDoorOpened.Broadcast();
+	}
+	else if (CurrentDoorState == EDoorState::Closing)
+	{
+		CurrentDoorState = EDoorState::Closed;
+		OnDoorClosed.Broadcast();
 	}
 }
 
@@ -145,46 +137,15 @@ void ADRAutoSlidingDoor::SetDoorState(EDoorState NewState)
 	if (!HasAuthority()) return;
 	if (bIsLocked && (NewState == EDoorState::Opening || NewState == EDoorState::Open)) return;
 
-	EDoorState PreviousState = CurrentDoorState;
 	CurrentDoorState = NewState;
 
-	// 목표 비율 설정 및 사운드 재생
-	switch (NewState)
-	{
-		case EDoorState::Opening:
-			TargetOpenRatio = 1.0f;
-			if (DoorOpenSound)
-			{
-				UGameplayStatics::PlaySoundAtLocation(this, DoorOpenSound, GetActorLocation());
-			}
-			break;
-
-		case EDoorState::Closing:
-			TargetOpenRatio = 0.0f;
-			if (DoorCloseSound)
-			{
-				UGameplayStatics::PlaySoundAtLocation(this, DoorCloseSound, GetActorLocation());
-			}
-			break;
-
-		case EDoorState::Open:
-			TargetOpenRatio = 1.0f;
-			CurrentOpenRatio = 1.0f;
-			break;
-
-		case EDoorState::Closed:
-			TargetOpenRatio = 0.0f;
-			CurrentOpenRatio = 0.0f;
-			break;
-	}
-
-	// 클라이언트에도 즉시 적용
+	// 서버(리슨 호스트)는 RepNotify 가 자동으로 오지 않는다 — 목표 비율 · 소리는 OnRep 한 곳에서만 처리한다
+	// (예전에는 여기서도 소리를 내 호스트에서 문 소리가 두 번 났다)
 	OnRep_DoorState();
 }
 
 void ADRAutoSlidingDoor::OnRep_DoorState()
 {
-	// 클라이언트에서 상태 변경 시 호출됨
 	switch (CurrentDoorState)
 	{
 		case EDoorState::Opening:
@@ -203,18 +164,21 @@ void ADRAutoSlidingDoor::OnRep_DoorState()
 			}
 			break;
 
+		// 끝 상태는 바로 그 위치로 (늦게 들어온 클라 · 움직임 도중 복제가 끝 상태로 건너뛴 경우)
 		case EDoorState::Open:
 			TargetOpenRatio = 1.0f;
 			CurrentOpenRatio = 1.0f;
-			UpdateDoorPosition(0.0f);
+			ApplyDoorRatio();
 			break;
 
 		case EDoorState::Closed:
 			TargetOpenRatio = 0.0f;
 			CurrentOpenRatio = 0.0f;
-			UpdateDoorPosition(0.0f);
+			ApplyDoorRatio();
 			break;
 	}
+
+	SetActorTickEnabled(CurrentDoorState == EDoorState::Opening || CurrentDoorState == EDoorState::Closing);
 }
 
 void ADRAutoSlidingDoor::OpenDoor()

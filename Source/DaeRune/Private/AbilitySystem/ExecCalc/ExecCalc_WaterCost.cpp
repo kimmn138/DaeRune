@@ -69,35 +69,11 @@ void UExecCalc_WaterCost::Execute_Implementation(const FGameplayEffectCustomExec
         EvaluationParameters,
         CurrentHealth);
 
-    // Cost 계산
+    // Cost 계산 — CheckCost · 청소기 돌진 충전과 같은 규칙 (피의 계약 칩 포함)
     float ActualWaterCost = 0.f;
     float HealthCost = 0.f;
-
-    // ★Plan3(공용칩) §17.8.2★ 피의 계약 칩: 물을 전혀 쓰지 않고 전액을 체력으로 낸다.
-    // ★UDRGameplayAbility::CheckCost 의 분기와 반드시 같은 수식(FloorToFloat 포함)이어야 한다.★
-    const UAbilitySystemComponent* SourceASC = ExecutionParams.GetSourceAbilitySystemComponent();
-    if (UDRAbilitySystemLibrary::HasUpgradeFeature(
-            SourceASC, GameplayTags.Upgrade_Feature_Combat_BloodCost))
-    {
-        const AActor* TuningContext = SourceASC ? SourceASC->GetAvatarActor() : nullptr;
-        const float Ratio = UDRAbilitySystemLibrary::GetChipTuning(TuningContext).BloodCostHealthRatio;
-
-        ActualWaterCost = 0.f;
-        HealthCost = FMath::FloorToFloat(RequiredWater * Ratio);
-    }
-    else if (CurrentWater >= RequiredWater)
-    {
-        // Water가 충분한 경우: Water만 차감
-        ActualWaterCost = RequiredWater;
-        HealthCost = 0.f;
-    }
-    else
-    {
-        // Water가 부족한 경우: Water 전부 + Health 추가 차감
-        ActualWaterCost = CurrentWater;
-        float WaterShortage = RequiredWater - CurrentWater;
-        HealthCost = FMath::FloorToFloat(WaterShortage * 0.5f);
-    }
+    UDRAbilitySystemLibrary::SplitWaterCost(
+        ExecutionParams.GetSourceAbilitySystemComponent(), RequiredWater, CurrentWater, ActualWaterCost, HealthCost);
 
     // Water 차감 적용
     if (ActualWaterCost > 0.f)

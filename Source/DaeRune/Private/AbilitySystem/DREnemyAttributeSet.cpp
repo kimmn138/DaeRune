@@ -42,8 +42,7 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			{
 				if (ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Buff_Elite))
 				{
-					LocalIncomingDamage *= EliteBuffModifier;
-					FMath::RoundToFloat(LocalIncomingDamage);
+					LocalIncomingDamage = FMath::RoundToFloat(LocalIncomingDamage * EliteBuffModifier);
 				}
 			}
 			if (ADRAIController* AIC = Cast<ADRAIController>(Enemy->GetController()))

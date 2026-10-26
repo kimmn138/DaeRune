@@ -46,7 +46,6 @@ void ADRBreakableDoor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 void ADRBreakableDoor::CollectDoorPieces()
 {
 	DoorPieces.Empty();
-	InitialTransforms.Empty();
 
 	// 이 액터의 모든 StaticMeshComponent 수집
 	TArray<UStaticMeshComponent*> MeshComponents;
@@ -57,12 +56,6 @@ void ADRBreakableDoor::CollectDoorPieces()
 		if (MeshComp && MeshComp != RootComponent)
 		{
 			DoorPieces.Add(MeshComp);
-
-			// 초기 Transform 저장
-			FPieceInitialTransform InitialTransform;
-			InitialTransform.Location = MeshComp->GetRelativeLocation();
-			InitialTransform.Rotation = MeshComp->GetRelativeRotation();
-			InitialTransforms.Add(InitialTransform);
 
 			// 물리 시뮬레이션은 일단 비활성화
 			MeshComp->SetSimulatePhysics(false);
@@ -103,8 +96,7 @@ void ADRBreakableDoor::ExecuteBreak()
 	}
 
 	// 서버에서 파괴 효과 실행
-	ApplyImpulseToPieces();
-	PlayBreakEffects();
+	PlayBreakSequence();
 
 	// 모든 클라이언트에 파괴 효과 전파
 	Multicast_PlayBreakEffect();
@@ -130,9 +122,11 @@ void ADRBreakableDoor::ExecuteBreak()
 
 void ADRBreakableDoor::OnRep_IsBroken()
 {
-	if (bIsBroken)
+	// ★연출을 이미 본 머신은 건드리지 않는다★ — 예전에는 파괴 멀티캐스트 직후 도착한 이 복제가
+	// 날아가는 파편을 곧바로 숨겨 원격 클라에서는 문이 그냥 사라졌다.
+	// 연출을 못 본 늦은 참가자만 숨긴다 (멀티캐스트가 더 늦게 오면 PlayBreakSequence 가 다시 보이게 한다).
+	if (bIsBroken && !bBreakEffectPlayed)
 	{
-		// 늦게 참여한 클라이언트를 위한 상태 동기화
 		for (UStaticMeshComponent* Piece : DoorPieces)
 		{
 			if (Piece)
@@ -141,6 +135,23 @@ void ADRBreakableDoor::OnRep_IsBroken()
 			}
 		}
 	}
+}
+
+void ADRBreakableDoor::PlayBreakSequence()
+{
+	if (bBreakEffectPlayed) return;
+	bBreakEffectPlayed = true;
+
+	for (UStaticMeshComponent* Piece : DoorPieces)
+	{
+		if (Piece)
+		{
+			Piece->SetVisibility(true);
+		}
+	}
+
+	ApplyImpulseToPieces();
+	PlayBreakEffects();
 }
 
 void ADRBreakableDoor::ApplyImpulseToPieces()
@@ -206,8 +217,7 @@ void ADRBreakableDoor::Multicast_PlayBreakEffect_Implementation()
 	if (HasAuthority()) return;
 
 	// 클라이언트에서 물리 시뮬레이션 및 이펙트 실행
-	ApplyImpulseToPieces();
-	PlayBreakEffects();
+	PlayBreakSequence();
 }
 
 void ADRBreakableDoor::PlayBreakEffects()
@@ -215,6 +225,7 @@ void ADRBreakableDoor::PlayBreakEffects()
 	// 사운드 재생
 	if (BreakSound)
 	{
+		// 소리는 문 뒤편(적이 튀어나오는 두 번째 스폰 오프셋)에서 난다 — 배치된 문들이 이 값에 맞춰져 있다
 		FVector SoundLocation = GetActorLocation();
 		if (EnemySpawnOffsets.IsValidIndex(1))
 		{

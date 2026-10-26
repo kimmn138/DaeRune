@@ -135,7 +135,9 @@ void ADRAIController::UpdatePlayer(AActor* Player)
 {
 	if (!Player || !GetPawn()) return;
 
-	PerceivedPlayers.Add(Player);
+	// 파괴된 폰(GC 가 null 로 비운 칸)을 걸러 내고, 같은 플레이어를 다시 감지해도 한 번만 센다
+	PerceivedPlayers.RemoveAll([](const AActor* Actor) { return !IsValid(Actor); });
+	PerceivedPlayers.AddUnique(Player);
 
 	if (PerceivedPlayers.Num() > 0)
 	{

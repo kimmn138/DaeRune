@@ -84,18 +84,7 @@ float UDRSettingsFunctionLibrary::ClampAndSnapFloat(float Value, float Min, floa
 		return Clamped;
 	}
 
-	int32 StepCount = FMath::RoundToInt((Clamped - Min) / Step);
-	return Min + StepCount * Step;
-}
-
-int32 UDRSettingsFunctionLibrary::GetOptionIndexByName(const TArray<FDRSettingsOption>& Options, FName OptionId)
-{
-	for (int32 i = 0; i < Options.Num(); ++i)
-	{
-		if (Options[i].OptionId == OptionId)
-		{
-			return i;
-		}
-	}
-	return 0;
+	// 스냅 뒤 다시 범위로 — Max 가 Step 의 배수가 아니면 반올림이 Max 를 넘는다 (예: 0~1, Step 0.4 에서 1.0 → 1.2)
+	const int32 StepCount = FMath::RoundToInt((Clamped - Min) / Step);
+	return FMath::Clamp(Min + StepCount * Step, Min, Max);
 }

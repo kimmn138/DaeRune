@@ -40,35 +40,9 @@ bool UDRGameplayAbility::CheckCost(const FGameplayAbilitySpecHandle Handle, cons
         return false;
     }
 
-    float CurrentWater = AttributeSet->GetWater();
-    float CurrentHealth = AttributeSet->GetHealth();
-
-    // ★Plan3(공용칩) §17.8.2★ 피의 계약 칩: 물을 보지 않고 체력만 본다.
-    // ★UExecCalc_WaterCost 의 분기와 반드시 같은 수식(FloorToFloat 포함)이어야 한다.★
-    // 한쪽만 내림하면 경계값에서 "쓸 수 있다고 했는데 체력이 0 이 되는" 사고가 난다.
-    if (UDRAbilitySystemLibrary::HasUpgradeFeature(
-            ASC, FDRGameplayTags::Get().Upgrade_Feature_Combat_BloodCost))
-    {
-        const float Ratio = UDRAbilitySystemLibrary::GetChipTuning(
-            ActorInfo->AvatarActor.Get()).BloodCostHealthRatio;
-        const float RequiredHealth = FMath::FloorToFloat(EffectiveWaterCost * Ratio);
-
-        // 자살 방지: 체력이 소모량을 ★초과★ 해야 시전할 수 있다 (최소 1 은 남는다)
-        return CurrentHealth > RequiredHealth;
-    }
-
-    // Water 가 충분하면 사용 가능
-    if (CurrentWater >= EffectiveWaterCost)
-    {
-        return true;
-    }
-
-    // Water가 부족한 경우, Health로 보충 가능한지 확인
-    float WaterShortage = EffectiveWaterCost - CurrentWater;
-    float RequiredHealth = FMath::FloorToFloat(WaterShortage * 0.5f);
-
-    // Health가 최소 1 이상 남을 수 있는지 확인
-    return CurrentHealth > RequiredHealth;
+    // 물 · 체력 분배 규칙은 ExecCalc_WaterCost 와 같은 헬퍼를 쓴다 (경계값 불일치 방지)
+    return UDRAbilitySystemLibrary::CanPayWaterCost(
+        ASC, EffectiveWaterCost, AttributeSet->GetWater(), AttributeSet->GetHealth());
 }
 
 void UDRGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const

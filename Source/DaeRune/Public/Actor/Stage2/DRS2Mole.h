@@ -129,6 +129,9 @@ private:
 	FTimerHandle LifetimeTimer;
 	FTimerHandle VanishTimer;
 
-	// 소멸 원인 (연출 구분용)
+	// 소멸 원인 (연출 구분용).
+	// ★bVanishing 과 함께 복제한다★ — 복제하지 않으면 원격 클라의 OnRep_bVanishing 이 늘 "시간 만료" 연출을 냈다.
+	// 같은 틱에 바뀌므로 RepNotify 시점(속성 수신 후)에는 이미 들어와 있다.
+	UPROPERTY(Replicated)
 	bool bKilledByPlayer = false;
 };
