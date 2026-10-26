@@ -116,7 +116,7 @@ void ADRProjectile::ApplyImpactDamage(AActor* Target)
 		const FVector DeathImpulse = GetActorForwardVector() * DamageEffectParams.DeathImpulseMagnitude; 
 		DamageEffectParams.DeathImpulse = DeathImpulse;
 		// 넉백 확률 계산 및 적용
-		const bool bKnockback = FMath::RandRange(1, 100) < DamageEffectParams.KnockbackChance;
+		const bool bKnockback = FMath::RandRange(1, 100) <= DamageEffectParams.KnockbackChance;   // 100 이면 항상, 0 이면 안 함
 		if (bKnockback)
 		{
 			FRotator Rotation = GetActorRotation();

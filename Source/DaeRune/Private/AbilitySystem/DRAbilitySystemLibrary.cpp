@@ -1538,3 +1538,9 @@ bool UDRAbilitySystemLibrary::IsInvulnerable(const UAbilitySystemComponent* ASC)
 {
 	return ASC && ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Invulnerable);
 }
+
+bool UDRAbilitySystemLibrary::LineTraceWorldGeometry(const UWorld* World, FHitResult& OutHit, const FVector& Start,
+	const FVector& End, const FCollisionQueryParams& Params)
+{
+	return World && World->LineTraceSingleByObjectType(OutHit, Start, End, FCollisionObjectQueryParams(ECC_WorldStatic), Params);
+}

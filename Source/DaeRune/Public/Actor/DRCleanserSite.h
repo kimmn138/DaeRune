@@ -6,7 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "AbilitySystemInterface.h"
 #include "Interaction/DRInteractable.h"
-#include "UI/WidgetController/OverlayWidgetController.h"
+#include "UI/WidgetController/DRAttributeChangedDelegate.h"
 #include "DRCleanserSite.generated.h"
 
 class UGameplayEffect;
@@ -30,19 +30,14 @@ enum class ECleanserSiteState : uint8
 	Completed		UMETA(DisplayName = "Completed")		// 방어 완료 (Phase4)
 };
 
-// 클렌저 사이트 파괴 델리게이트
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCleanserSiteDestroyed, ADRCleanserSite*, DestroyedSite);
 // 부품 설치 완료 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPartInstalled, ADRCleanserSite*, Site);
-// 클렌저 사이트 체력 50% 이하 델리게이트
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCleanserSiteHealthHalf, ADRCleanserSite*, Site);
 
 /**
  * 클렌저 설치 지점
- * - Phase1: 3개 중 2개 선택되어 적 스폰
- * - Phase2: 부품 결합 및 활성화
- * - Phase3: 방어 대상 (체력 활성화)
- * - Phase4: 보스전 배경
+ * - 확보 페이즈(UDRPhase1): 하나만 남기고 활성화 → 적 스폰 기준 + 부품 설치
+ * - 방어 페이즈(UDRPhase3): 방어 대상 (체력 사용)
+ * - 스테이지2: 방3+4 의 부품 설치대 (부품 1개, 재시도 시 EjectInstalledPart 로 되돌림)
  */
 UCLASS()
 class DAERUNE_API ADRCleanserSite : public AActor, public IAbilitySystemInterface, public IDRInteractable
@@ -91,10 +86,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	void ActivateSite();
 
-	// 사이트 비활성화
-	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
-	void DeactivateSite();
-
 	// 부품 수집 완료 (Phase2)
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	void SetPartsCollected();
@@ -105,6 +96,7 @@ public:
 
 	// 설치된 부품을 되돌린다 (Plan6 §5.12 - 스테이지2 방4 재시도용).
 	// 설치 카운트를 되돌리고 설치대 옆에 부품을 다시 스폰한다.
+	// 설치 완료 상태였으면 다시 설치를 받는 상태(Active)로 돌린다 — 그래야 재설치 · 상호작용 UI 가 산다.
 	// 스테이지1은 이 함수를 호출하지 않는다.
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
 	class ADRCleanserPart* EjectInstalledPart(TSubclassOf<class ADRCleanserPart> PartClass, float EjectOffset = 150.f);
@@ -145,14 +137,6 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "CleanserSite|Phase2")
 	FOnPartInstalled OnPartInstalled;
 
-	// 클렌저 사이트가 파괴되었을 때
-	UPROPERTY(BlueprintAssignable, Category = "CleanserSite")
-	FOnCleanserSiteDestroyed OnCleanserSiteDestroyed;
-
-	// 클렌저 사이트 체력 50% 이하일 때
-	UPROPERTY(BlueprintAssignable, Category = "CleanserSite")
-	FOnCleanserSiteHealthHalf OnCleanserSiteHealthHalf;
-
 	void InitializeDefaultAttributes() const;
 
 	void UpdateMeshByState();
@@ -162,6 +146,7 @@ public:
 	void RefreshOverlapStateFor(class ADRCharacter* Character);
 
 protected:
+	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
 
 	UFUNCTION()
@@ -259,10 +244,6 @@ protected:
 
 	// ========== 체력 관리 (Phase3 전용) ==========
 
-	// Phase3에서 체력 활성화 여부
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "CleanserSite")
-	bool bHealthEnabled;
-
 	// GAS 관련 함수
 	void ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass) const;
 
@@ -273,9 +254,12 @@ private:
 	// GAS 초기화
 	void InitAbilityActorInfo();
 
-	// 물 메시 초기 스케일 저장
+	// 물 메시 초기 상태 (부품 설치 · 체력으로 바뀐 물을 되돌릴 때 기준)
 	FVector InitialWaterMeshScale;
 	FVector InitialWaterMeshLocation;
+
+	UPROPERTY()
+	TObjectPtr<UStaticMesh> InitialWaterStaticMesh;
 
 	UPROPERTY()
 	TObjectPtr<UAudioComponent> OperatingSoundComponent;

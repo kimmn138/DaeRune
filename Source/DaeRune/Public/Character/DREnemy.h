@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "Character/DRCharacterBase.h"
 #include "Interaction/EnemyInterface.h"
-#include "UI/WidgetController/OverlayWidgetController.h"
+#include "UI/WidgetController/DRAttributeChangedDelegate.h"
 #include "DREnemy.generated.h"
 
 class UBlackboardComponent;

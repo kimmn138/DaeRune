@@ -19,6 +19,7 @@
 #include "Sound/DRSoundDataAsset.h"
 #include "DRAssetManager.h"
 #include "UI/Widget/DRUserWidget.h"
+#include "DaeRune/DRLogChannels.h"
 
 ADRCleanserSite::ADRCleanserSite()
 {
@@ -88,7 +89,6 @@ ADRCleanserSite::ADRCleanserSite()
 
 	// 초기 상태
 	CurrentState = ECleanserSiteState::Inactive;
-	bHealthEnabled = false;
 	InstalledPartsCount = 0;
 }
 
@@ -97,7 +97,6 @@ void ADRCleanserSite::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ADRCleanserSite, CurrentState);
-	DOREPLIFETIME(ADRCleanserSite, bHealthEnabled);
 	DOREPLIFETIME(ADRCleanserSite, InstalledPartsCount);
 }
 
@@ -185,26 +184,14 @@ void ADRCleanserSite::ActivateSite()
 	UpdateMeshByState();
 }
 
-void ADRCleanserSite::DeactivateSite()
-{
-	if (!HasAuthority()) return;
-
-	CurrentState = ECleanserSiteState::Inactive;
-
-	UpdateMeshByState();
-}
-
 void ADRCleanserSite::SetPartsCollected()
 {
 	if (!HasAuthority()) return;
 
 	CurrentState = ECleanserSiteState::PartsCollected;
 
-	// 물 메시 교체
-	if (WaterMesh && WaterMesh_AfterParts)
-	{
-		WaterMesh->SetStaticMesh(WaterMesh_AfterParts);
-	}
+	// 물 메시 교체 (클라는 OnRep_CurrentState 가 같은 함수를 부른다)
+	UpdateMeshByState();
 }
 
 void ADRCleanserSite::InstallPart(ADRCharacter* Character)
@@ -267,9 +254,17 @@ ADRCleanserPart* ADRCleanserSite::EjectInstalledPart(TSubclassOf<ADRCleanserPart
 	OnRep_InstalledPartsCount();
 	UpdateInteractionUI();
 
+	// ★설치 완료(PartsCollected) 상태로 남으면 InstallPart 와 상호작용 감지가 Active 를 요구해 재설치가 영영 막힌다★
+	// (스테이지2 설치대는 부품 1개라 설치 즉시 완료 상태가 된다 — 방4 재시도 소프트락의 원인)
+	if (CurrentState == ECleanserSiteState::PartsCollected && InstalledPartsCount < RequiredPartsCount)
+	{
+		CurrentState = ECleanserSiteState::Active;
+		UpdateMeshByState();
+	}
+
 	if (!PartClass)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[CleanserSite] EjectInstalledPart: PartClass 가 지정되지 않아 부품을 되돌리지 못했습니다."));
+		UE_LOG(LogDR, Error, TEXT("[CleanserSite] EjectInstalledPart: PartClass 가 지정되지 않아 부품을 되돌리지 못했습니다."));
 		return nullptr;
 	}
 
@@ -335,6 +330,19 @@ void ADRCleanserSite::UpdateWaterMeshScale(float HealthRatio)
 	WaterMesh->SetRelativeLocation(NewLocation);
 }
 
+void ADRCleanserSite::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	// BP · 배치 값이 들어간 뒤, 어떤 상태 전환보다 먼저 물 메시의 처음 모습을 기억한다
+	if (WaterMesh)
+	{
+		InitialWaterMeshScale = WaterMesh->GetRelativeScale3D();
+		InitialWaterMeshLocation = WaterMesh->GetRelativeLocation();
+		InitialWaterStaticMesh = WaterMesh->GetStaticMesh();
+	}
+}
+
 void ADRCleanserSite::BeginPlay()
 {
 	Super::BeginPlay();
@@ -342,12 +350,6 @@ void ADRCleanserSite::BeginPlay()
 	if (HasAuthority())
 	{
 		InitAbilityActorInfo();
-	}
-
-	if (WaterMesh)
-	{
-		InitialWaterMeshScale = WaterMesh->GetRelativeScale3D();
-		InitialWaterMeshLocation = WaterMesh->GetRelativeLocation();
 	}
 
 	// 오버랩 이벤트 바인딩
@@ -368,14 +370,14 @@ void ADRCleanserSite::BeginPlay()
 	if (const UDRCleanserSiteAttributeSet* DRCSAS = Cast<UDRCleanserSiteAttributeSet>(AttributeSet))
 	{
 		// 체력 변화 델리게이트 바인딩
-		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRCSAS->GetHealthAttribute()).AddLambda(
-			[this](const FOnAttributeChangeData& Data)
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRCSAS->GetHealthAttribute()).AddWeakLambda(
+			this, [this](const FOnAttributeChangeData& Data)
 			{
 				OnHealthChanged.Broadcast(Data.NewValue);
 			}
 		);
-		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRCSAS->GetMaxHealthAttribute()).AddLambda(
-			[this](const FOnAttributeChangeData& Data)
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(DRCSAS->GetMaxHealthAttribute()).AddWeakLambda(
+			this, [this](const FOnAttributeChangeData& Data)
 			{
 				OnMaxHealthChanged.Broadcast(Data.NewValue);
 			}
@@ -453,9 +455,13 @@ void ADRCleanserSite::OnRep_InstalledPartsCount()
 
 void ADRCleanserSite::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass) const
 {
-	check(IsValid(GetAbilitySystemComponent()));
-	check(GameplayEffectClass);
-	
+	// BP 에서 기본 속성 GE 를 비워 두면 크래시 대신 경고만 남긴다
+	if (!IsValid(GetAbilitySystemComponent()) || !GameplayEffectClass)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[CleanserSite] %s: ASC 또는 GE 클래스가 없어 속성 효과를 적용하지 못했습니다."), *GetName());
+		return;
+	}
+
 	// 컨텍스트 생성 및 소스 설정
 	FGameplayEffectContextHandle ContextHandle = GetAbilitySystemComponent()->MakeEffectContext();
 	ContextHandle.AddSourceObject(this);
@@ -485,10 +491,17 @@ void ADRCleanserSite::UpdateMeshByState()
 
 	case ECleanserSiteState::Active:
 		if (CleanserMesh) CleanserMesh->SetVisibility(true);
-		if (WaterMesh) WaterMesh->SetVisibility(true);
-		// 이미 설치된 부품 복원 (레이트 조인 대비)
-		if (InstalledPartMesh1) InstalledPartMesh1->SetVisibility(InstalledPartsCount >= 1);
-		if (InstalledPartMesh2) InstalledPartMesh2->SetVisibility(InstalledPartsCount >= 2);
+		if (WaterMesh)
+		{
+			// 부품을 되돌려 설치 완료에서 다시 내려온 경우 물을 처음 모습으로 되돌린다
+			if (InitialWaterStaticMesh)
+			{
+				WaterMesh->SetStaticMesh(InitialWaterStaticMesh);
+			}
+			WaterMesh->SetRelativeScale3D(InitialWaterMeshScale);
+			WaterMesh->SetRelativeLocation(InitialWaterMeshLocation);
+			WaterMesh->SetVisibility(true);
+		}
 		break;
 
 	case ECleanserSiteState::PartsCollected:
@@ -500,10 +513,13 @@ void ADRCleanserSite::UpdateMeshByState()
 			WaterMesh->SetStaticMesh(WaterMesh_AfterParts);
 			WaterMesh->SetVisibility(true);
 		}
-		// 모든 부품 슬롯 표시 (이 상태면 2개 모두 설치 완료)
-		if (InstalledPartMesh1) InstalledPartMesh1->SetVisibility(true);
-		if (InstalledPartMesh2) InstalledPartMesh2->SetVisibility(true);
 		break;
+	}
+
+	// 설치된 부품 슬롯은 상태와 무관하게 개수로 정한다 (스테이지2 설치대는 부품 1개 — 완료라도 2번 슬롯은 비어 있다)
+	if (CurrentState != ECleanserSiteState::Inactive)
+	{
+		OnRep_InstalledPartsCount();
 	}
 }
 

@@ -533,4 +533,14 @@ public:
 
 	/** ★Plan5(물점프칩)★ 대상이 무적(State.Invulnerable)인가. 기본 피해 관문이 ★모든 피해마다★ 부른다 — 태그 조회 한 번 */
 	static bool IsInvulnerable(const UAbilitySystemComponent* ASC);
+
+	// ========== 벽 판정 ==========
+
+	/**
+	 * 지형 · 벽만 보는 라인 트레이스 (WorldStatic 오브젝트만).
+	 * ★Visibility 채널을 쓰면 안 된다★ — 스테이지의 벽인 BlockingVolume(InvisibleWall 프로필)은 Visibility 를 무시해 관통하고,
+	 * 반대로 적 메시 · 히트박스는 Visibility 를 막아 다른 적 뒤의 대상이 가려진다.
+	 */
+	static bool LineTraceWorldGeometry(const UWorld* World, FHitResult& OutHit, const FVector& Start, const FVector& End,
+		const FCollisionQueryParams& Params);
 };

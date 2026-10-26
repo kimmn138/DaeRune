@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "UI/WidgetController/DRWidgetController.h"
+#include "UI/WidgetController/DRAttributeChangedDelegate.h"
 #include "OverlayWidgetController.generated.h"
 
 // UI 메시지 표시를 위한 데이터 테이블 구조체
@@ -31,8 +32,6 @@ class UAbilityInfo;
 class UDRAbilitySystemComponent;
 class UStatusEffectInfo;
 
-// 어트리뷰트 변경 시 UI 업데이트용 델리게이트
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAttributeChangedSignature, float, NewValue);
 // 목표 UI 업데이트용 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveTextChangedSignature, const FText&, ObjectiveTitle, const FText&, ProgressText);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveProgressChangedSignature, int32, Current, int32, Max);

@@ -5,17 +5,9 @@
 #include "CoreMinimal.h"
 #include "AttributeSet.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/DRAttributeAccessors.h"
 #include "DRCleanserSiteAttributeSet.generated.h"
 
-// AttributeSet 매크로 정의
-#define ATTRIBUTE_ACCESSORS(ClassName, PropertyName) \
-	GAMEPLAYATTRIBUTE_PROPERTY_GETTER(ClassName, PropertyName) \
-	GAMEPLAYATTRIBUTE_VALUE_GETTER(PropertyName) \
-	GAMEPLAYATTRIBUTE_VALUE_SETTER(PropertyName) \
-	GAMEPLAYATTRIBUTE_VALUE_INITTER(PropertyName)
-
-// 클렌저 사이트 체력 50% 이하 델리게이트
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCleanserSiteHealthBelowHalfSignature);
 // 클렌저 사이트 파괴 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCleanserSiteHealthZeroSignature);
 
@@ -64,10 +56,6 @@ public:
 
 	// ========== Delegates ==========
 
-	// 체력 50% 이하 델리게이트
-	UPROPERTY(BlueprintAssignable, Category = "CleanserSite")
-	FOnCleanserSiteHealthBelowHalfSignature OnHealthBelowHalfDelegate;
-
 	// 체력 0 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "CleanserSite")
 	FOnCleanserSiteHealthZeroSignature OnHealthZeroDelegate;
@@ -79,7 +67,4 @@ protected:
 private:
 	// 데미지 처리 함수
 	void HandleIncomingDamage(const FGameplayEffectModCallbackData& Data);
-
-	// 50% 트리거 플래그 (중복 브로드캐스트 방지)
-	bool bHalfHealthTriggered = false;
 };

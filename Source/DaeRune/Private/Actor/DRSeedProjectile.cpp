@@ -300,14 +300,9 @@ bool ADRSeedProjectile::HasLineOfSight(const FVector& StartLocation, const FVect
     FVector AdjustedStart = StartLocation + FVector(0, 0, 50.f);  // 폭발 중심 높이
     FVector AdjustedEnd = EndLocation + FVector(0, 0, 50.f);  // 타겟 중심 높이
 
-    // 벽 체크용 라인 트레이스 (Visibility 채널 사용)
-    bool bHitResult = GetWorld()->LineTraceSingleByChannel(
-        HitResult,
-        AdjustedStart,
-        AdjustedEnd,
-        ECC_Visibility,  // 벽과 같은 Static 오브젝트 감지
-        QueryParams
-    );
+    // 벽 체크 — 지형 · 벽(WorldStatic)만 본다. 다른 적 · 아군 몸은 폭발을 가리지 않는다
+    const bool bHitResult = UDRAbilitySystemLibrary::LineTraceWorldGeometry(
+        GetWorld(), HitResult, AdjustedStart, AdjustedEnd, QueryParams);
 
     // 벽에 막히지 않았으면 true (시야 확보), 막혔으면 false
     return !bHitResult;

@@ -76,10 +76,11 @@ void UDRCleanserSiteAttributeSet::HandleIncomingDamage(const FGameplayEffectModC
 		{
 			if(UAbilitySystemComponent* ASC = CleanserSite->GetAbilitySystemComponent())
 			{
+				// ★피격 큐는 엘리트 디버프(받는 피해 증가)가 걸린 동안의 피격에만 낸다★ — 사운드를 넣을 때부터 이 자리였다.
+				// 일반 피격마다 내면 적 수십 마리가 동시에 때릴 때 소리가 겹친다.
 				if (ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Debuff_Elite))
 				{
-					LocalIncomingDamage *= EliteDebuffModifier;
-					FMath::RoundToFloat(LocalIncomingDamage);
+					LocalIncomingDamage = FMath::RoundToFloat(LocalIncomingDamage * EliteDebuffModifier);
 
 					FGameplayCueParameters CueParams;
 					CueParams.Location = CleanserSite ? CleanserSite->GetActorLocation() : FVector::ZeroVector;
@@ -94,6 +95,7 @@ void UDRCleanserSiteAttributeSet::HandleIncomingDamage(const FGameplayEffectModC
 		}
 		
 		// 체력 감소
+		const float OldHealth = GetHealth();
 		const float NewHealth = GetHealth() - LocalIncomingDamage;
 		SetHealth(FMath::Clamp(NewHealth, 0.0f, GetMaxHealth()));
 
@@ -105,15 +107,8 @@ void UDRCleanserSiteAttributeSet::HandleIncomingDamage(const FGameplayEffectModC
 			CleanserSite->UpdateWaterMeshScale(HealthRatio);
 		}
 
-		// 체력이 50% 이하이고 아직 트리거 안 됐으면
-		if (HealthRatio <= 0.5f && !bHalfHealthTriggered)
-		{
-			bHalfHealthTriggered = true;
-			OnHealthBelowHalfDelegate.Broadcast();
-		}
-
-		// 체력이 0이 되면 파괴 이벤트
-		if (NewHealth <= 0.0f)
+		// 체력이 0 이 되는 순간에만 파괴 이벤트 (0 이후의 피격마다 다시 방송하지 않는다)
+		if (OldHealth > 0.0f && NewHealth <= 0.0f)
 		{
 			OnHealthZeroDelegate.Broadcast();
 		}

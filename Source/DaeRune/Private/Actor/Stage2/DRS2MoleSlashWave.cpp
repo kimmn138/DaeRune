@@ -96,7 +96,8 @@ void ADRS2MoleSlashWave::Tick(float DeltaSeconds)
 		Params.AddIgnoredActor(DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor());
 	}
 
-	if (GetWorld() && GetWorld()->LineTraceSingleByChannel(Hit, LastTickLocation, Now, ECC_Visibility, Params))
+	// 지형 · 벽(BlockingVolume 포함)에 닿으면 멈춘다 — Visibility 채널은 벽을 관통한다
+	if (UDRAbilitySystemLibrary::LineTraceWorldGeometry(GetWorld(), Hit, LastTickLocation, Now, Params))
 	{
 		SetActorLocation(Hit.ImpactPoint);
 		OnHit();            // 임팩트 연출 + bHit = true
@@ -133,7 +134,7 @@ void ADRS2MoleSlashWave::OnSphereOverlap(UPrimitiveComponent* OverlappedComponen
 	{
 		DamageEffectParams.DeathImpulse = GetActorForwardVector() * DamageEffectParams.DeathImpulseMagnitude;
 
-		const bool bKnockback = FMath::RandRange(1, 100) < DamageEffectParams.KnockbackChance;
+		const bool bKnockback = FMath::RandRange(1, 100) <= DamageEffectParams.KnockbackChance;   // 100 이면 항상, 0 이면 안 함
 		if (bKnockback)
 		{
 			FRotator Rotation = GetActorRotation();
