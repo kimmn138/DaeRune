@@ -221,3 +221,19 @@ void UDRGameplayAbility::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, 
 
     ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, SpecHandle);
 }
+
+void UDRGameplayAbility::WarnIfScalableFloatMisconfigured(const FScalableFloat& Field, const TCHAR* OwnerLabel, const TCHAR* FieldLabel, const TCHAR* ScaleAxis)
+{
+    if (!Field.Curve.RowName.IsNone() && FMath::IsNearlyZero(Field.Value))
+    {
+        UE_LOG(LogDR, Error,
+            TEXT("%s %s: 커브 행(%s)이 지정됐지만 Value 가 0입니다 — 결과가 항상 0이 됩니다. Value 를 1 로 설정하세요."),
+            OwnerLabel, FieldLabel, *Field.Curve.RowName.ToString());
+    }
+    else if (Field.Curve.RowName.IsNone())
+    {
+        UE_LOG(LogDR, Warning,
+            TEXT("%s %s 에 커브가 없어 상수 %.1f 로 동작합니다 (%s 스케일 없음)."),
+            OwnerLabel, FieldLabel, Field.Value, ScaleAxis);
+    }
+}

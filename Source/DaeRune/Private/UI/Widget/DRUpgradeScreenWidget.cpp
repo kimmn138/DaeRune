@@ -5,7 +5,7 @@
 #include "Game/DRGameInstance.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
-#include "Components/PanelWidget.h"	// FindOwnerScreen 이 GetParent() 반환형(UPanelWidget)을 업캐스트한다
+#include "UI/Widget/DRWidgetTreeUtils.h"
 #include "DaeRune/DRLogChannels.h"
 
 EPlayerCharacterClass UDRUpgradeScreenWidget::GetViewedClass() const
@@ -36,29 +36,14 @@ UDRUpgradeUIStyle* UDRUpgradeScreenWidget::GetUIStyle() const
 
 UDRUpgradeScreenWidget* UDRUpgradeScreenWidget::FindOwnerScreen(UWidget* From)
 {
-	if (!From) return nullptr;
-
-	// 1) 디자이너 배치 위젯(슬롯 등) — 화면의 WidgetTree 안에 있으므로 Outer 체인에서 바로 잡힌다
-	if (UDRUpgradeScreenWidget* Screen = From->GetTypedOuter<UDRUpgradeScreenWidget>())
+	UDRUpgradeScreenWidget* Screen = DRWidgetTree::FindOwnerScreen<UDRUpgradeScreenWidget>(From);
+	if (!Screen && From)
 	{
-		return Screen;
+		UE_LOG(LogDR, Warning,
+			TEXT("[Upgrade] %s 가 소속 업그레이드 화면을 찾지 못했습니다. 화면 밖에서 만들어졌거나 아직 부모에 붙지 않았습니다."),
+			*From->GetName());
 	}
-
-	// 2) 런타임 생성 위젯(칩 등) — CreateWidget 의 Owner 가 PlayerController 라 Outer 로는 못 찾는다.
-	//    부모 패널은 화면의 WidgetTree 소속이므로 한 단계만 올라가면 된다.
-	for (UWidget* Cursor = From->GetParent(); Cursor; Cursor = Cursor->GetParent())
-	{
-		if (UDRUpgradeScreenWidget* Screen = Cursor->GetTypedOuter<UDRUpgradeScreenWidget>())
-		{
-			return Screen;
-		}
-	}
-
-	UE_LOG(LogDR, Warning,
-		TEXT("[Upgrade] %s 가 소속 업그레이드 화면을 찾지 못했습니다. 화면 밖에서 만들어졌거나 아직 부모에 붙지 않았습니다."),
-		*From->GetName());
-
-	return nullptr;
+	return Screen;
 }
 
 void UDRUpgradeScreenWidget::RequestClose()

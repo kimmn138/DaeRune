@@ -88,6 +88,10 @@ private:
     void SyncActivationOwnedTags();
 
 protected:
+    // 커브 기반 FScalableFloat 설정 실수를 부여 시점에 알린다 (커브는 있는데 Value 0 → 결과 항상 0 / 커브 없음 → 상수 동작)
+    static void WarnIfScalableFloatMisconfigured(const FScalableFloat& Field, const TCHAR* OwnerLabel, const TCHAR* FieldLabel, const TCHAR* ScaleAxis);
+
+protected:
     // 쿨다운 적용 오버라이드 — CooldownDuration > 0 일 때 업그레이드 보정값을 SetByCaller 로 주입
     virtual void ApplyCooldown(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const override;
 };
