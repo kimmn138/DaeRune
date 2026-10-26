@@ -2099,7 +2099,11 @@ void UDRGameInstance::DebugGrantAchievement(FName AchievementId)
 	UE_LOG(LogDR, Warning, TEXT("[Cheat] 업적 '%s' 달성 처리."), *AchievementId.ToString());
 
 	BroadcastNewlyUnlockedSkins(Before);
+	BroadcastCosmeticsChangedForAllClasses();
+}
 
+void UDRGameInstance::BroadcastCosmeticsChangedForAllClasses()
+{
 	// 해금은 로봇을 가리지 않으므로 전 클래스에 갱신을 알린다 (옷장 화면이 자기 클래스만 걸러 쓴다)
 	const int32 ClassCount = static_cast<int32>(EPlayerCharacterClass::Count);
 	for (int32 Index = 0; Index < ClassCount; ++Index)
@@ -2134,10 +2138,5 @@ void UDRGameInstance::DebugUnlockAllSkins()
 		Save->EarnedAchievements.Num());
 
 	BroadcastNewlyUnlockedSkins(Before);
-
-	const int32 ClassCount = static_cast<int32>(EPlayerCharacterClass::Count);
-	for (int32 Index = 0; Index < ClassCount; ++Index)
-	{
-		OnCosmeticsChanged.Broadcast(static_cast<EPlayerCharacterClass>(Index));
-	}
+	BroadcastCosmeticsChangedForAllClasses();
 }

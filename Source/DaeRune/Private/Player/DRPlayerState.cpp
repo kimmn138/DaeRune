@@ -164,21 +164,29 @@ void ADRPlayerState::RebuildUpgradeRuntime()
     OnUpgradeRuntimeChanged.Broadcast();
 }
 
-void ADRPlayerState::ReportUpgradeLoadoutIfLocal()
+ADRPlayerController* ADRPlayerState::FindLocalOwningController() const
 {
     // Owner 포인터는 클라이언트에서 늦게 복제될 수 있어 신뢰하지 않는다.
     // 이 머신의 로컬 컨트롤러 중 나를 PlayerState 로 가진 것을 찾는다.
     UWorld* World = GetWorld();
-    if (!World) return;
+    if (!World) return nullptr;
 
     for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
     {
         ADRPlayerController* DRPC = Cast<ADRPlayerController>(It->Get());
-        if (!DRPC || !DRPC->IsLocalController()) continue;
-        if (DRPC->PlayerState != this) continue;
+        if (DRPC && DRPC->IsLocalController() && DRPC->PlayerState == this)
+        {
+            return DRPC;
+        }
+    }
+    return nullptr;
+}
 
+void ADRPlayerState::ReportUpgradeLoadoutIfLocal()
+{
+    if (ADRPlayerController* DRPC = FindLocalOwningController())
+    {
         DRPC->ReportUpgradeLoadout();
-        return;
     }
 }
 
@@ -216,18 +224,9 @@ void ADRPlayerState::RefreshCosmeticVisuals()
 
 void ADRPlayerState::ReportCosmeticIfLocal()
 {
-    // ReportUpgradeLoadoutIfLocal 과 같은 탐색 — Owner 포인터는 클라에서 늦게 복제될 수 있어 쓰지 않는다
-    UWorld* World = GetWorld();
-    if (!World) return;
-
-    for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+    if (ADRPlayerController* DRPC = FindLocalOwningController())
     {
-        ADRPlayerController* DRPC = Cast<ADRPlayerController>(It->Get());
-        if (!DRPC || !DRPC->IsLocalController()) continue;
-        if (DRPC->PlayerState != this) continue;
-
         DRPC->ReportCosmeticLoadout();
-        return;
     }
 }
 
@@ -295,22 +294,11 @@ void ADRPlayerState::EnterCombat()
 {
     if (!HasAuthority()) return;
 
-    // ★두 SetTimer 가 같은 값을 쓰게 한 번만 계산한다.★
-    // 한쪽만 고치면 "첫 피격은 4.5초, 연속 피격은 5.0초" 처럼 조용히 갈린다.
-    const float ExitDelay = GetEffectiveCombatExitDelay();
+    // 전투 종료 타이머 (이미 전투 중이면 리셋만) — 첫 피격과 연속 피격이 같은 지연을 쓴다
+    GetWorld()->GetTimerManager().SetTimer(
+        CombatTimerHandle, this, &ADRPlayerState::CheckCombatExit, GetEffectiveCombatExitDelay(), false);
 
-    if (bIsInCombat)
-    {
-        // 이미 전투 중이면 타이머만 리셋
-        GetWorld()->GetTimerManager().SetTimer(
-            CombatTimerHandle,
-            this,
-            &ADRPlayerState::CheckCombatExit,
-            ExitDelay,
-            false
-        );
-        return;
-    }
+    if (bIsInCombat) return;
 
     // 전투 상태 진입
     bIsInCombat = true;
@@ -322,15 +310,6 @@ void ADRPlayerState::EnterCombat()
     }
 
     StopHealthRegen();
-
-    // 전투 종료 타이머 설정
-    GetWorld()->GetTimerManager().SetTimer(
-        CombatTimerHandle,
-        this,
-        &ADRPlayerState::CheckCombatExit,
-        ExitDelay,
-        false
-    );
 
     // 클라이언트에 알림
     OnCombatStateChanged.Broadcast(true);

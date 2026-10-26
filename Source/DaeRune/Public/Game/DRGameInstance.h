@@ -479,6 +479,9 @@ private:
 	// 맵 전환 시 캐릭터 선택 보존용 (GameInstance는 맵 전환에서 절대 파괴되지 않음)
 	TMap<FString, EPlayerCharacterClass> PlayerClassSelections;
 
+	// 전 로봇 클래스에 옷 목록 변경을 알린다 (치트 해금 공용)
+	void BroadcastCosmeticsChangedForAllClasses();
+
 	// 저장 요청 합치기 (SaveProgress → 다음 틱 1회)
 	void FlushPendingSave();
 	bool bSavePending = false;

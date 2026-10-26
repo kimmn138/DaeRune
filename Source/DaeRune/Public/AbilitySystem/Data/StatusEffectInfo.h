@@ -46,7 +46,7 @@ class DAERUNE_API UStatusEffectInfo : public UDataAsset
 	GENERATED_BODY()
 
 public:
-	FEffectInfo FindEffectInfoForTag(const FGameplayTag& EffectTag, bool bLogNotFound = false) const;
+	FEffectInfo FindEffectInfoForTag(const FGameplayTag& EffectTag) const;
     
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TArray<FEffectInfo> EffectsInformation;

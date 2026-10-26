@@ -231,6 +231,9 @@ protected:
 	// 소유 클라이언트에서만: 현재 선택 클래스의 장착 목록을 서버에 보고
 	void ReportUpgradeLoadoutIfLocal();
 
+	// 이 머신에서 나를 PlayerState 로 가진 로컬 컨트롤러 (없으면 null)
+	class ADRPlayerController* FindLocalOwningController() const;
+
 	// 입고 있는 옷을 폰에 반영한다. 폰이 아직 없으면 아무것도 안 한다 —
 	// 폰이 나중에 오면 ADRCharacter::PossessedBy / OnRep_PlayerState 가 여기서 끌어간다 (Plan(옷장) M3)
 	void RefreshCosmeticVisuals();

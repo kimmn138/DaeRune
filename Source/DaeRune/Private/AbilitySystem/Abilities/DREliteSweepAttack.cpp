@@ -27,17 +27,17 @@ void UDREliteSweepAttack::PerformSweepAttack()
 		Origin
 	);
 
-	// 2. Angle filtering (semicircle detection)
+	// 2. Angle filtering (semicircle detection) — 전방은 대상과 무관하니 루프 밖에서 한 번
+	FVector ForwardXY = Forward;
+	ForwardXY.Z = 0.f;
+	if (!ForwardXY.Normalize()) return;
+
 	for (AActor* Target : OverlappingActors)
 	{
 		// Calculate direction on XY plane (ignore Z)
 		FVector ToTarget = Target->GetActorLocation() - Origin;
 		ToTarget.Z = 0.f;
 		if (!ToTarget.Normalize()) continue;
-
-		FVector ForwardXY = Forward;
-		ForwardXY.Z = 0.f;
-		if (!ForwardXY.Normalize()) continue;
 
 		const float DotResult = FVector::DotProduct(ForwardXY, ToTarget);
 

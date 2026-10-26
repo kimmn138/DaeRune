@@ -2,6 +2,7 @@
 
 
 #include "Input/DRInputConfig.h"
+#include "DaeRune/DRLogChannels.h"
 
 const UInputAction* UDRInputConfig::FindAbilityInputActionForTag(const FGameplayTag& InputTag, bool bLogNotFound) const
 {
@@ -16,5 +17,9 @@ const UInputAction* UDRInputConfig::FindAbilityInputActionForTag(const FGameplay
 	}
 
 	// 일치하는 액션이 없으면 nullptr 반환
+	if (bLogNotFound)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[InputConfig] %s 에 입력 태그 [%s] 의 액션이 없습니다."), *GetNameSafe(this), *InputTag.ToString());
+	}
 	return nullptr;
 }

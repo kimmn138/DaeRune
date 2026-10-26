@@ -8,8 +8,8 @@
 
 void UDRFireBolt::SpawnProjectiles(const FVector& ProjectileTargetLocation, const FGameplayTag& SocketTag, bool bOverridePitch, float PitchOverride, AActor* HomingTarget)
 {
-	const bool bIsServer = GetAvatarActorFromActorInfo()->HasAuthority();
-	if (!bIsServer) return;
+	const AActor* Avatar = GetAvatarActorFromActorInfo();
+	if (!Avatar || !Avatar->HasAuthority()) return;
 
 	const FVector SocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(
 		GetAvatarActorFromActorInfo(),
@@ -23,32 +23,21 @@ void UDRFireBolt::SpawnProjectiles(const FVector& ProjectileTargetLocation, cons
 
 	for (const FRotator& Rot : Rotations)
 	{
-		FTransform SpawnTransform; 
-		SpawnTransform.SetLocation(SocketLocation);
-		SpawnTransform.SetRotation(Rot.Quaternion());
-
-		ADRProjectile* Projectile = GetWorld()->SpawnActorDeferred<ADRProjectile>(
-			ProjectileClass,
-			SpawnTransform,
-			GetOwningActorFromActorInfo(),
-			Cast<APawn>(GetOwningActorFromActorInfo()),
-			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-
-		Projectile->DamageEffectParams = MakeDamageEffectParamsFromClassDefaults();
-
-		if (HomingTarget && HomingTarget->Implements<UCombatInterface>())
+		// 스폰 공통 처리(클래스 확인 · 크기 칩 · 피해 파라미터)는 베이스, 유도 설정만 여기서
+		SpawnProjectileWithRotation(SocketLocation, Rot, [&](ADRProjectile& Projectile)
 		{
-			Projectile->ProjectileMovement->HomingTargetComponent = HomingTarget->GetRootComponent();
-		}
-		else
-		{
-			Projectile->HomingTargetSceneComponent = NewObject<USceneComponent>(USceneComponent::StaticClass());
-			Projectile->HomingTargetSceneComponent->SetWorldLocation(ProjectileTargetLocation);
-			Projectile->ProjectileMovement->HomingTargetComponent = Projectile->HomingTargetSceneComponent;
-		}
-		Projectile->ProjectileMovement->HomingAccelerationMagnitude = FMath::FRandRange(HomingAccelerationMin, HomingAccelerationMax);
-		Projectile->ProjectileMovement->bIsHomingProjectile = bLaunchHomingProjectiles;
-
-		Projectile->FinishSpawning(SpawnTransform);
+			if (HomingTarget && HomingTarget->Implements<UCombatInterface>())
+			{
+				Projectile.ProjectileMovement->HomingTargetComponent = HomingTarget->GetRootComponent();
+			}
+			else
+			{
+				Projectile.HomingTargetSceneComponent = NewObject<USceneComponent>(USceneComponent::StaticClass());
+				Projectile.HomingTargetSceneComponent->SetWorldLocation(ProjectileTargetLocation);
+				Projectile.ProjectileMovement->HomingTargetComponent = Projectile.HomingTargetSceneComponent;
+			}
+			Projectile.ProjectileMovement->HomingAccelerationMagnitude = FMath::FRandRange(HomingAccelerationMin, HomingAccelerationMax);
+			Projectile.ProjectileMovement->bIsHomingProjectile = bLaunchHomingProjectiles;
+		});
 	}
 }

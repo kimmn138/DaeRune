@@ -126,4 +126,7 @@ protected:
 	void OnRep_CarryingCharacter();
 
 	void RefreshCarriedState();
+
+	// 들고 있는 사람 화면에 1인칭 부품을 띄운다 (들림 · 들고 있는 사람 복제 둘 다 도착해야 가능)
+	void RefreshFirstPersonPart() const;
 };
