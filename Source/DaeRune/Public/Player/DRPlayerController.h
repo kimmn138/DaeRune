@@ -847,6 +847,9 @@ private:
 
 	class ADRS2TrainCar* FindTrainCarByLineTrace();
 
+	// 결과 화면(게임 오버 · 클리어 · 튜토리얼 클리어) 공통 표시 — 이미 떠 있으면 무시
+	void ShowResultWidget(TSubclassOf<UUserWidget> WidgetClass);
+
 	// ===== 시점 상호작용 트레이스 (감지 주기마다 1회) =====
 	bool GetInteractionViewRay(FVector& OutStart, FVector& OutEnd) const;
 	void RefreshInteractionViewHits();

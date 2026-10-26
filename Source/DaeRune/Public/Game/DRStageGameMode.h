@@ -103,6 +103,9 @@ protected:
 	void EndCurrentPhase();
 
 private:
+	// 스테이지 종료 (클리어 · 게임 오버 공통): 페이즈 정리 → 결과 사운드 · UI → 잠시 뒤 로비로
+	void EndStage(bool bCleared);
+
 	// 현재 페이즈가 진행 중일 때만 OnPhaseEnd 를 부른다.
 	// EndCurrentPhase → StartPhase, 게임 오버/클리어가 겹쳐도 파생 페이즈의 정리 코드가 두 번 돌지 않게 한다.
 	void EndCurrentPhaseIfActive();

@@ -8,7 +8,6 @@
 #include "Character/DRCharacter.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
-#include "Sound/DRSoundManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/DRSoundDataAsset.h"
 #include "DRAssetManager.h"
@@ -34,17 +33,7 @@ void ADRWaterSource::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 
 void ADRWaterSource::MulticastPlayWaterGainSound_Implementation()
 {
-    // Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
-    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
-    {
-        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
-        {
-            if (SoundData->WaterGainSound)
-            {
-                UGameplayStatics::PlaySoundAtLocation(this, SoundData->WaterGainSound, GetActorLocation());
-            }
-        }
-    }
+    UDRSoundDataAsset::PlayAtLocation(this, &UDRSoundDataAsset::WaterGainSound, GetActorLocation());
 }
 
 void ADRWaterSource::OnOverlap(AActor* TargetActor)

@@ -694,21 +694,12 @@ void ADRCharacter::MulticastTeleportToSlot_Implementation(FVector Location, FRot
 
 void ADRCharacter::MulticastPlayVendingCoinShot_Implementation(FVector_NetQuantize Location)
 {
-	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
-	if (!AssetManager) return;
-
-	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
-	if (!SoundData || !SoundData->VendingCoinShotSound) return;
-
-	UGameplayStatics::PlaySoundAtLocation(this, SoundData->VendingCoinShotSound, Location);
+	UDRSoundDataAsset::PlayAtLocation(this, &UDRSoundDataAsset::VendingCoinShotSound, Location);
 }
 
 void ADRCharacter::MulticastPlayVendingCapsuleShot_Implementation(uint8 CapsuleTier, FVector_NetQuantize Location)
 {
-	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
-	if (!AssetManager) return;
-
-	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
+	const UDRSoundDataAsset* SoundData = UDRSoundDataAsset::Get();
 	if (!SoundData) return;
 
 	// 1) Pop 사운드: 모든 Tier 공통
@@ -739,17 +730,14 @@ void ADRCharacter::MulticastPlayVendingSkillUse_Implementation(uint8 NewStacks)
 		FacialExpressionComponent->SetExpression(EFacialExpression::IncreasedAttackSpeed, 2.f);
 	}
 
-	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
-	if (!AssetManager) return;
-
-	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
-	if (!SoundData || !SoundData->VendingSkillUseSound) return;
+	USoundBase* SkillUseSound = UDRSoundDataAsset::Find(&UDRSoundDataAsset::VendingSkillUseSound);
+	if (!SkillUseSound) return;
 
 	// 1.0(1스택) → 1.6(7스택) 정도가 자연스러움.
 	const float Pitch = 1.0f + 0.1f * FMath::Max(0, static_cast<int32>(NewStacks) - 1);
 
 	UAudioComponent* Comp = UGameplayStatics::SpawnSoundAttached(
-		SoundData->VendingSkillUseSound,
+		SkillUseSound,
 		GetRootComponent(),
 		NAME_None,
 		FVector::ZeroVector,

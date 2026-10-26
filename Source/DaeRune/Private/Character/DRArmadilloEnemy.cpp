@@ -478,13 +478,11 @@ void ADRArmadilloEnemy::StartArmadilloRollLoop()
 	// 이미 재생 중이면 무시 (중복 spawn 방지)
 	if (IsValid(RollLoopComponent)) return;
 
-	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
-	if (!AssetManager) return;
-	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
-	if (!SoundData || !SoundData->ArmadilloRollLoopSound) return;
+	USoundBase* RollLoopSound = UDRSoundDataAsset::Find(&UDRSoundDataAsset::ArmadilloRollLoopSound);
+	if (!RollLoopSound) return;
 
 	RollLoopComponent = UGameplayStatics::SpawnSoundAttached(
-		SoundData->ArmadilloRollLoopSound,
+		RollLoopSound,
 		GetRootComponent(),
 		NAME_None,
 		FVector::ZeroVector,
@@ -505,10 +503,5 @@ void ADRArmadilloEnemy::MulticastPlayRollImpactSound_Implementation(FVector_NetQ
 {
 	if (GetNetMode() == NM_DedicatedServer) return;
 
-	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
-	if (!AssetManager) return;
-	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
-	if (!SoundData || !SoundData->ArmadilloImpactSound) return;
-
-	UGameplayStatics::PlaySoundAtLocation(this, SoundData->ArmadilloImpactSound, Location);
+	UDRSoundDataAsset::PlayAtLocation(this, &UDRSoundDataAsset::ArmadilloImpactSound, Location);
 }

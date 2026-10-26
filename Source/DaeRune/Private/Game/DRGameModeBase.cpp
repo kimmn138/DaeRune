@@ -3,6 +3,9 @@
 
 #include "Game/DRGameModeBase.h"
 #include "AbilitySystem/DRPlayerAttributeSet.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
+#include "AbilitySystem/Data/CharacterClassInfo.h"
+#include "Character/DRCharacter.h"
 #include "Character/DRCharacterBase.h"
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/GameStateBase.h"
@@ -126,6 +129,13 @@ bool ADRGameModeBase::RevivePlayer(APlayerController* PC, const FTransform& At, 
 		DRPC->ClientStopSpectating();
 	}
 	return true;
+}
+
+TSubclassOf<ADRCharacter> ADRGameModeBase::FindPlayerCharacterClass(EPlayerCharacterClass CharacterClass) const
+{
+	const UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this);
+	const TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo ? ClassInfo->CharacterBPClasses.Find(CharacterClass) : nullptr;
+	return BPClassPtr ? *BPClassPtr : nullptr;
 }
 
 bool ADRGameModeBase::CheckTeamWipeout()

@@ -13,7 +13,6 @@
 #include "Player/DRPlayerController.h"
 #include "Character/DRCharacter.h"
 #include "Actor/DRCleanserPart.h"
-#include "Sound/DRSoundManager.h"
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/DRSoundDataAsset.h"
@@ -107,18 +106,9 @@ UAbilitySystemComponent* ADRCleanserSite::GetAbilitySystemComponent() const
 
 void ADRCleanserSite::MulticastPlayInstallSound_Implementation(bool bIsComplete)
 {
-	// Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
-	if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
-	{
-		if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
-		{
-			USoundBase* SoundToPlay = bIsComplete ? SoundData->PartInstallCompleteSound : SoundData->PartInstallSound;
-			if (SoundToPlay)
-			{
-				UGameplayStatics::PlaySoundAtLocation(this, SoundToPlay, GetActorLocation());
-			}
-		}
-	}
+	UDRSoundDataAsset::PlayAtLocation(this,
+		bIsComplete ? &UDRSoundDataAsset::PartInstallCompleteSound : &UDRSoundDataAsset::PartInstallSound,
+		GetActorLocation());
 }
 
 void ADRCleanserSite::MulticastStartOperatingSound_Implementation()

@@ -5,7 +5,6 @@
 #include "Interaction/CombatInterface.h"
 #include "Net/UnrealNetwork.h"
 #include "Actor/DRDoorManager.h"
-#include "Sound/DRSoundManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/DRSoundDataAsset.h"
 #include "DRAssetManager.h"
@@ -248,16 +247,7 @@ void ADRStageGameState::OnRep_IsToxicGasWave()
 // Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
 void ADRStageGameState::PlaySound2DFromSoundData(TObjectPtr<USoundBase> UDRSoundDataAsset::* SoundMember)
 {
-    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
-    {
-        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
-        {
-            if (USoundBase* Sound = SoundData->*SoundMember)
-            {
-                UGameplayStatics::PlaySound2D(this, Sound);
-            }
-        }
-    }
+    UDRSoundDataAsset::Play2D(this, SoundMember);
 }
 
 void ADRStageGameState::Multicast_PlayPhaseStartSound_Implementation()

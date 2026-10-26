@@ -272,10 +272,8 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 		if (!PS) continue;
 
 		// 선택된 클래스의 BP 스폰
-		UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this);
-		if (!ClassInfo) continue;
-		TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(PS->GetSelectedPlayerClass());
-		if (!BPClassPtr || !*BPClassPtr) continue;
+		const TSubclassOf<ADRCharacter> PawnClass = FindPlayerCharacterClass(PS->GetSelectedPlayerClass());
+		if (!PawnClass) continue;
 
 		int32* SlotIdx = PlayerSlotMap.Find(PC);
 		FVector SpawnLoc = (SlotIdx && WaitingRoomSlots.IsValidIndex(*SlotIdx))
@@ -287,7 +285,7 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-		ADRCharacter* NewPawn = GetWorld()->SpawnActor<ADRCharacter>(*BPClassPtr, FTransform(SpawnRot, SpawnLoc), SpawnParams);
+		ADRCharacter* NewPawn = GetWorld()->SpawnActor<ADRCharacter>(PawnClass, FTransform(SpawnRot, SpawnLoc), SpawnParams);
 		if (!NewPawn) continue;
 
 		// Possess (최초 1회, 깜빡임 없음)
@@ -572,10 +570,8 @@ void ADRLobbyGameMode::RespawnPlayerWithClass(ADRPlayerController* PC, EPlayerCh
 	}
 
 	// FreeRoam: 기존 폰 교체 로직 (진짜 Possess 필요)
-	UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this);
-	if (!ClassInfo) return;
-	TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(NewClass);
-	if (!BPClassPtr || !*BPClassPtr) return;
+	const TSubclassOf<ADRCharacter> PawnClass = FindPlayerCharacterClass(NewClass);
+	if (!PawnClass) return;
 
 	// 어빌리티 완전 클리어 — 빙의 시점(PossessedBy)에 새 클래스의 시작 어빌리티를 다시 받는다
 	if (ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
@@ -594,7 +590,7 @@ void ADRLobbyGameMode::RespawnPlayerWithClass(ADRPlayerController* PC, EPlayerCh
 
 	const APawn* OldPawn = PC->GetPawn();
 	const FTransform SpawnTransform = OldPawn ? OldPawn->GetActorTransform() : FTransform::Identity;
-	RespawnPlayerPawn(PC, *BPClassPtr, SpawnTransform);
+	RespawnPlayerPawn(PC, PawnClass, SpawnTransform);
 }
 
 UClass* ADRLobbyGameMode::GetDefaultPawnClassForController_Implementation(AController* InController)
@@ -613,15 +609,9 @@ UClass* ADRLobbyGameMode::GetDefaultPawnClassForController_Implementation(AContr
 	{
 		if (ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
 		{
-			EPlayerCharacterClass SelectedClass = PS->GetSelectedPlayerClass();
-
-			if (UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this))
+			if (UClass* PawnClass = FindPlayerCharacterClass(PS->GetSelectedPlayerClass()))
 			{
-				TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(SelectedClass);
-				if (BPClassPtr && *BPClassPtr)
-				{
-					return *BPClassPtr;
-				}
+				return PawnClass;
 			}
 		}
 	}
@@ -632,10 +622,8 @@ UClass* ADRLobbyGameMode::GetDefaultPawnClassForController_Implementation(AContr
 void ADRLobbyGameMode::SpawnDisplayCharacter(AController* Player, EPlayerCharacterClass CharClass, int32 SlotIndex)
 {
 	if (!Player) return;
-	UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this);
-	if (!ClassInfo) return;
-	TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(CharClass);
-	if (!BPClassPtr || !*BPClassPtr) return;
+	const TSubclassOf<ADRCharacter> PawnClass = FindPlayerCharacterClass(CharClass);
+	if (!PawnClass) return;
 
 	if (WaitingRoomSlots.Num() == 0) return;
 
@@ -649,7 +637,7 @@ void ADRLobbyGameMode::SpawnDisplayCharacter(AController* Player, EPlayerCharact
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	ADRCharacter* Display = GetWorld()->SpawnActor<ADRCharacter>(*BPClassPtr, FTransform(Rotation, Location), Params);
+	ADRCharacter* Display = GetWorld()->SpawnActor<ADRCharacter>(PawnClass, FTransform(Rotation, Location), Params);
 	if (!Display) return;
 
 	// 이동 비활성화 (디스플레이용)

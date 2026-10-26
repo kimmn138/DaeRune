@@ -21,6 +21,21 @@ public:
 	{
 		return FPrimaryAssetId(TEXT("SoundData"), GetFName());
 	}
+
+	// ===== 공용 재생 헬퍼 — "에셋 매니저 → SoundData → 사운드 확인 → 재생" 반복을 한 줄로 =====
+
+	using FSoundMember = TObjectPtr<USoundBase> UDRSoundDataAsset::*;
+
+	// 시작 시 에셋 매니저가 로드한 사운드 데이터 (없으면 null)
+	static const UDRSoundDataAsset* Get();
+
+	// 사운드 하나 (데이터 · 사운드가 없으면 null)
+	static USoundBase* Find(FSoundMember Sound);
+
+	// 위치 / 2D 재생 — 데이터 · 사운드가 없으면 조용히 넘어간다
+	static void PlayAtLocation(const UObject* WorldContext, FSoundMember Sound, const FVector& Location);
+	static void Play2D(const UObject* WorldContext, FSoundMember Sound);
+
 	// 게임 진행
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Game")
 	TObjectPtr<USoundBase> PhaseStartSound;

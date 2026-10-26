@@ -36,4 +36,8 @@ public:
 
 	// Execute 시 사운드 재생
 	virtual bool OnExecute_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) const override;
+
+protected:
+	// 이 대상에게 재생할지 (파생: 로컬 플레이어만 등)
+	virtual bool ShouldPlayFor(const AActor* MyTarget) const { return true; }
 };

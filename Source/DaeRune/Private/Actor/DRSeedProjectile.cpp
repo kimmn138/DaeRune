@@ -10,7 +10,6 @@
 #include "Character/DREnemy.h"
 #include "Actor/DRCleanserSite.h"
 #include "Engine/OverlapResult.h"
-#include "Sound/DRSoundManager.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -415,17 +414,7 @@ void ADRSeedProjectile::ApplyHealToAlly(AActor* AllyActor, float HealAmount)
 
 void ADRSeedProjectile::MulticastPlayExplosionSound_Implementation(const FVector& Location)
 {
-    // Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
-    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
-    {
-        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
-        {
-            if (SoundData->SeedExplosionSound)
-            {
-                UGameplayStatics::PlaySoundAtLocation(this, SoundData->SeedExplosionSound, Location);
-            }
-        }
-    }
+    UDRSoundDataAsset::PlayAtLocation(this, &UDRSoundDataAsset::SeedExplosionSound, Location);
 }
 
 void ADRSeedProjectile::MulticastExplodeAtLocation_Implementation(const FVector& ImpactLocation, float RadiusScale)

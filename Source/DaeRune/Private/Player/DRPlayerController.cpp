@@ -39,7 +39,6 @@
 #include "UI/WidgetController/OverlayWidgetController.h"
 #include "Game/DRSettingsManager.h"
 #include "Game/DRGameUserSettings.h"
-#include "Sound/DRSoundManager.h"
 #include "Actor/DRBGMActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "UI/Widget/DRWaitingRoomWidget.h"
@@ -2239,51 +2238,31 @@ bool ADRPlayerController::IsInTutorial() const
 	return GetLevelContext() == EDRLevelContext::Tutorial;
 }
 
-void ADRPlayerController::Client_ShowGameOverUI_Implementation()
+void ADRPlayerController::ShowResultWidget(TSubclassOf<UUserWidget> WidgetClass)
 {
-	// 이미 UI가 표시 중이면 무시
-	if (CurrentResultWidget) return;
+	// 이미 결과 UI 가 떠 있거나 위젯 클래스가 없으면 무시
+	if (CurrentResultWidget || !WidgetClass) return;
 
-	// 위젯 클래스가 설정되지 않았으면 리턴
-	if (!GameOverWidgetClass) return;
-
-	// 게임 오버 위젯 생성
-	CurrentResultWidget = CreateWidget<UUserWidget>(this, GameOverWidgetClass);
+	CurrentResultWidget = CreateWidget<UUserWidget>(this, WidgetClass);
 	if (CurrentResultWidget)
 	{
-		// 뷰포트에 추가
 		CurrentResultWidget->AddToViewport(100);
 	}
+}
+
+void ADRPlayerController::Client_ShowGameOverUI_Implementation()
+{
+	ShowResultWidget(GameOverWidgetClass);
 }
 
 void ADRPlayerController::Client_ShowGameClearUI_Implementation()
 {
-	// 이미 UI가 표시 중이면 무시
-	if (CurrentResultWidget) return;
-
-	// 위젯 클래스가 설정되지 않았으면 리턴
-	if (!GameClearWidgetClass) return;
-
-	// 게임 클리어 위젯 생성
-	CurrentResultWidget = CreateWidget<UUserWidget>(this, GameClearWidgetClass);
-	if (CurrentResultWidget)
-	{
-		// 뷰포트에 추가
-		CurrentResultWidget->AddToViewport(100);
-	}
+	ShowResultWidget(GameClearWidgetClass);
 }
 
 void ADRPlayerController::Client_ShowTutorialClearUI_Implementation()
 {
-	if (CurrentResultWidget) return;
-
-	if (!TutorialGameClearWidgetClass) return;
-
-	CurrentResultWidget = CreateWidget<UUserWidget>(this, TutorialGameClearWidgetClass);
-	if (CurrentResultWidget)
-	{
-		CurrentResultWidget->AddToViewport(100);
-	}
+	ShowResultWidget(TutorialGameClearWidgetClass);
 }
 
 void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)

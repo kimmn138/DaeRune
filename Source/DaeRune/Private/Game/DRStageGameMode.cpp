@@ -42,13 +42,9 @@ UClass* ADRStageGameMode::GetDefaultPawnClassForController_Implementation(AContr
 			}
 		}
 
-		if (UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this))
+		if (UClass* PawnClass = FindPlayerCharacterClass(SelectedClass))
 		{
-			TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(SelectedClass);
-			if (BPClassPtr && *BPClassPtr)
-			{
-				return *BPClassPtr;
-			}
+			return PawnClass;
 		}
 	}
 
@@ -57,41 +53,20 @@ UClass* ADRStageGameMode::GetDefaultPawnClassForController_Implementation(AContr
 
 void ADRStageGameMode::TriggerGameOver()
 {
-	if (!HasAuthority()) return;
-
-	// 이미 게임 오버 처리 중이면 중복 호출 방지
-	if (bIsWipeoutInProgress) return;
-
-	bIsWipeoutInProgress = true;
-
-	EndCurrentPhaseIfActive();
-
-	// Multicast RPC로 모든 클라이언트에서 사운드 재생
-	if (ADRStageGameState* StageGameState = GetGameState<ADRStageGameState>())
-	{
-		StageGameState->Multicast_PlayGameOverSound();
-	}
-
-	// 모든 플레이어에게 게임 오버 알림 (단일 순회)
-	NotifyAllPlayersGameEnd(false);
-
-	// 약간의 딜레이 후 로비로 복귀
-	GetWorldTimerManager().SetTimer(
-		WipeoutTimerHandle,
-		this,
-		&ADRStageGameMode::ReturnToLobby,
-		WipeoutDelayTime,
-		false
-	);
+	EndStage(false);
 }
 
 void ADRStageGameMode::TriggerGameClear()
 {
+	EndStage(true);
+}
+
+void ADRStageGameMode::EndStage(bool bCleared)
+{
 	if (!HasAuthority()) return;
 
-	// 이미 게임 오버 처리 중이면 중복 호출 방지
+	// 이미 종료 처리 중이면 중복 호출 방지
 	if (bIsWipeoutInProgress) return;
-
 	bIsWipeoutInProgress = true;
 
 	EndCurrentPhaseIfActive();
@@ -99,20 +74,21 @@ void ADRStageGameMode::TriggerGameClear()
 	// Multicast RPC로 모든 클라이언트에서 사운드 재생
 	if (ADRStageGameState* StageGameState = GetGameState<ADRStageGameState>())
 	{
-		StageGameState->Multicast_PlayGameClearSound();
+		if (bCleared)
+		{
+			StageGameState->Multicast_PlayGameClearSound();
+		}
+		else
+		{
+			StageGameState->Multicast_PlayGameOverSound();
+		}
 	}
 
-	// 모든 플레이어에게 게임 클리어 알림 (단일 순회)
-	NotifyAllPlayersGameEnd(true);
+	// 모든 플레이어에게 결과 알림 (단일 순회)
+	NotifyAllPlayersGameEnd(bCleared);
 
 	// 약간의 딜레이 후 로비로 복귀
-	GetWorldTimerManager().SetTimer(
-		WipeoutTimerHandle,
-		this,
-		&ADRStageGameMode::ReturnToLobby,
-		WipeoutDelayTime,
-		false
-	);
+	GetWorldTimerManager().SetTimer(WipeoutTimerHandle, this, &ADRStageGameMode::ReturnToLobby, WipeoutDelayTime, false);
 }
 
 void ADRStageGameMode::BeginPlay()

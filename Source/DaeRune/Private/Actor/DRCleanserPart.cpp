@@ -7,7 +7,6 @@
 #include "Components/SphereComponent.h"
 #include "Player/DRPlayerController.h"
 #include "Components/WidgetComponent.h"
-#include "Sound/DRSoundManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/DRSoundDataAsset.h"
 #include "DRAssetManager.h"
@@ -194,17 +193,7 @@ void ADRCleanserPart::DropFromCarrier()
 
 void ADRCleanserPart::MulticastPlayPickupSound_Implementation()
 {
-	// Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
-	if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
-	{
-		if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
-		{
-			if (SoundData->PartPickupSound)
-			{
-				UGameplayStatics::PlaySoundAtLocation(this, SoundData->PartPickupSound, GetActorLocation());
-			}
-		}
-	}
+	UDRSoundDataAsset::PlayAtLocation(this, &UDRSoundDataAsset::PartPickupSound, GetActorLocation());
 }
 
 void ADRCleanserPart::SetInteractionUIVisible(bool bShow)

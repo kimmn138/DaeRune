@@ -9,6 +9,8 @@
 class UAbilityInfo;
 class UCharacterClassInfo;
 class UGameBalanceConfig;
+class ADRCharacter;
+enum class EPlayerCharacterClass : uint8;
 
 /**
  * DaeRune 기본 게임 모드 클래스
@@ -55,6 +57,9 @@ public:
 	 * 살아 있는 플레이어면 아무것도 하지 않고 false.
 	 */
 	bool RevivePlayer(APlayerController* PC, const FTransform& At, float HealthRatio, float WaterRatio);
+
+	// 플레이어 캐릭터 클래스 → 캐릭터 BP (클래스 정보에 없으면 null)
+	TSubclassOf<ADRCharacter> FindPlayerCharacterClass(EPlayerCharacterClass CharacterClass) const;
 
 protected:
 	virtual void BeginPlay() override;

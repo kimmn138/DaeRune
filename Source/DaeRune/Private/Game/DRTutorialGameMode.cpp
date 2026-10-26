@@ -26,15 +26,9 @@ UClass* ADRTutorialGameMode::GetDefaultPawnClassForController_Implementation(ACo
 	{
 		if (ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
 		{
-			EPlayerCharacterClass SelectedClass = PS->GetSelectedPlayerClass();
-
-			if (UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this))
+			if (UClass* PawnClass = FindPlayerCharacterClass(PS->GetSelectedPlayerClass()))
 			{
-				TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(SelectedClass);
-				if (BPClassPtr && *BPClassPtr)
-				{
-					return *BPClassPtr;
-				}
+				return PawnClass;
 			}
 		}
 	}
