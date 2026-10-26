@@ -195,8 +195,7 @@ void UDRAbilitySystemLibrary::GivePlayerStartupAbilities(
 	const FCharacterClassDefaultInfo& DefaultInfo = ClassInfo->GetClassDefaultInfo(PlayerClass);
 	AllAbilities.Append(DefaultInfo.StartupAbilities);
 
-	// AddCharacterAbilities가 DynamicAbilityTags, InputTagToAbilityMap,
-	// bStartupAbilitiesGiven, AbilitiesGivenDelegate를 모두 처리
+	// AddCharacterAbilities 가 입력 태그 · bStartupAbilitiesGiven · AbilitiesGivenDelegate 를 모두 처리
 	DRASC->AddCharacterAbilities(AllAbilities);
 }
 
@@ -1162,10 +1161,6 @@ bool UDRAbilitySystemLibrary::ApplyTauntAggro(AAIController* OwnerController)
 
 	if (!bTaunterAlive)
 	{
-		// [임시 진단] 도발 갱신이 멈추는 이유
-		UE_LOG(LogDR, Warning, TEXT("[TauntDiag] 5. 갱신 종료 %s — Taunted=%d Taunter=%s (BB=%d)"),
-			*GetNameSafe(Pawn), bTaunted ? 1 : 0, *GetNameSafe(Taunter), BB ? 1 : 0);
-
 		// 도발자가 죽었거나 사라졌다 → 도발 GE 를 지운다 (D-12).
 		// 블랙보드는 건드리지 않는다 — 죽은 타깃은 BTS_CheckValidTarget 이 알아서 비운다.
 		if (bTaunted)
@@ -1181,23 +1176,6 @@ bool UDRAbilitySystemLibrary::ApplyTauntAggro(AAIController* OwnerController)
 	// ★키 3개를 같이 쓴다★ — TargetToFollow 만 쓰면 HasFirstAttacker 가 false 로 남아
 	// BTS_FindNearestPlayer_* 가 다음 틱에 가장 가까운 플레이어로 덮어쓴다 (바이트코드 확인 — Plan8 §2.4).
 	// 값이 같으면 블랙보드는 옵저버를 깨우지 않으므로 주기적으로 다시 써도 MoveTo 가 재경로를 잡지 않는다.
-
-	// [임시 진단] 타깃이 벨보이가 아닐 때만 찍는다 — 첫 적용, 또는 0.2초 사이에 누가 덮어썼을 때(로그 도배 방지)
-	{
-		const UObject* PrevTarget = HasKey(DRBlackboardKeys::TargetToFollow) ? BB->GetValueAsObject(DRBlackboardKeys::TargetToFollow) : nullptr;
-		if (PrevTarget != Taunter)
-		{
-			const UBehaviorTreeComponent* BTComp = Cast<UBehaviorTreeComponent>(OwnerController->GetBrainComponent());
-			const UBTNode* ActiveNode = BTComp ? BTComp->GetActiveNode() : nullptr;
-			UE_LOG(LogDR, Warning, TEXT("[TauntDiag] 4. 어그로 쓰기 %s : 이전 TargetToFollow=%s → %s | 키 FA=%d HFA=%d TTF=%d Dist=%d Unreach=%d | BT=%s 활성노드=%s"),
-				*GetNameSafe(Pawn), *GetNameSafe(PrevTarget), *GetNameSafe(Taunter),
-				HasKey(DRBlackboardKeys::FirstAttacker) ? 1 : 0, HasKey(DRBlackboardKeys::HasFirstAttacker) ? 1 : 0,
-				HasKey(DRBlackboardKeys::TargetToFollow) ? 1 : 0, HasKey(DRBlackboardKeys::DistanceToTarget) ? 1 : 0,
-				HasKey(DRBlackboardKeys::UnreachableSince) ? 1 : 0,
-				BTComp ? *GetNameSafe(BTComp->GetRootTree()) : TEXT("없음"),
-				ActiveNode ? *ActiveNode->GetNodeName() : TEXT("없음"));
-		}
-	}
 
 	if (HasKey(DRBlackboardKeys::FirstAttacker))    BB->SetValueAsObject(DRBlackboardKeys::FirstAttacker, Taunter);
 	if (HasKey(DRBlackboardKeys::HasFirstAttacker)) BB->SetValueAsBool(DRBlackboardKeys::HasFirstAttacker, true);

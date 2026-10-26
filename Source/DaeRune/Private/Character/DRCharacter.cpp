@@ -206,7 +206,7 @@ void ADRCharacter::AttachToMountSocket(ADRRobotVacuumCharacter* Mount)
 
 	if (!Mount->GetMesh()->DoesSocketExist(Mount->RideSocketName))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ADRCharacter::AttachToMountSocket: 마운트 메시에 '%s' 소켓이 없습니다 — 메시 루트에 부착됩니다."),
+		UE_LOG(LogDR, Warning, TEXT("ADRCharacter::AttachToMountSocket: 마운트 메시에 '%s' 소켓이 없습니다 — 메시 루트에 부착됩니다."),
 			*Mount->RideSocketName.ToString());
 	}
 
@@ -270,7 +270,7 @@ bool ADRCharacter::ApplyMountSharedDamageTo(ADRCharacter* Target, float Damage)
 
 	if (!MountSharedDamageEffectClass)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("PropagateSharedDamage: MountSharedDamageEffectClass 미설정 (%s BP에서 GE_Damage 지정 필요)"), *GetName());
+		UE_LOG(LogDR, Warning, TEXT("PropagateSharedDamage: MountSharedDamageEffectClass 미설정 (%s BP에서 GE_Damage 지정 필요)"), *GetName());
 		return false;
 	}
 
@@ -778,19 +778,6 @@ void ADRCharacter::BeginPlay()
 
 	// 메쉬 가시성 업데이트
 	UpdateMeshVisibility();
-
-	// 1인칭 시점을 밝게 하는 라이트 추가
-	//if (IsLocallyControlled())
-	//{
-	//	UPointLightComponent* Light = NewObject<UPointLightComponent>(this);
-	//	Light->SetupAttachment(FollowCamera);
-	//	Light->SetRelativeLocation(FVector(-14.2f, 0.f, 23.5f));
-	//	Light->SetIntensity(1500.f);
-	//	Light->SetAttenuationRadius(300.f);
-	//	Light->SetCastShadows(false);
-	//	Light->SetMobility(EComponentMobility::Movable);
-	//	Light->RegisterComponent();
-	//}
 
 	// 표정 시스템 초기화 (3P 메시에 적용)
 	if (FacialExpressionComponent)

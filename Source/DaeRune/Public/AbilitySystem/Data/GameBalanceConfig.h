@@ -126,6 +126,10 @@ struct FWaterSystemConfig
 {
 	GENERATED_BODY()
 
+	// 같은 적을 계속 때려 물을 모으는 것을 막는 "공격당 물 보상 감소"를 쓸지 (현재 꺼 둠 — 테스트 중 비활성화했던 상태 그대로)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water")
+	bool bReduceWaterRewardOnAttack = false;
+
 	// 공격당 물 보상 감소량 (양수로 입력, 내부에서 음수 처리)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water", meta = (ClampMin = "0.0", ClampMax = "50.0"))
 	float WaterReductionPerAttack = 10.f;

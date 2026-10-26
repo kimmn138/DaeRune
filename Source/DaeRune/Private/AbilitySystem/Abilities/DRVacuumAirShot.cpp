@@ -2,6 +2,7 @@
 
 
 #include "AbilitySystem/Abilities/DRVacuumAirShot.h"
+#include "DaeRune/DRLogChannels.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
@@ -131,7 +132,7 @@ void UDRVacuumAirShot::FireShot(int32 Stage)
 	ADRProjectile* Projectile = SpawnProjectile(TargetLocation, FireSocketTag);
 	if (!Projectile)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[VacuumAirShot] 프로젝타일 스폰 실패 — ProjectileClass/Muzzle 소켓 설정 확인"));
+		UE_LOG(LogDR, Warning, TEXT("[VacuumAirShot] 프로젝타일 스폰 실패 — ProjectileClass/Muzzle 소켓 설정 확인"));
 		return;
 	}
 
@@ -174,7 +175,7 @@ void UDRVacuumAirShot::FireShot(int32 Stage)
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[VacuumAirShot] EnhancedAttackMontage 미지정 — 강화탄 애니 생략"));
+		UE_LOG(LogDR, Warning, TEXT("[VacuumAirShot] EnhancedAttackMontage 미지정 — 강화탄 애니 생략"));
 	}
 
 	Projectile->DamageEffectParams.KnockbackChance = 100.f;

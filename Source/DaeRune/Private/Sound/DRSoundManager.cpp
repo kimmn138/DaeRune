@@ -2,6 +2,7 @@
 
 
 #include "Sound/DRSoundManager.h"
+#include "DaeRune/DRLogChannels.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/AudioComponent.h"
 #include "Sound/SoundBase.h"
@@ -44,7 +45,8 @@ void UDRSoundManager::Initialize(FSubsystemCollectionBase& Collection)
 
 	if (!SoundData)
 	{
-}
+		UE_LOG(LogDR, Warning, TEXT("[SoundManager] SoundData 에셋을 찾지 못했습니다."));
+	}
 }
 
 void UDRSoundManager::PlaySound2D(USoundBase* Sound)

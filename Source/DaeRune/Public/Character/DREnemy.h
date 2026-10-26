@@ -190,9 +190,12 @@ protected:
 	UPROPERTY()
 	TObjectPtr<ADRAIController> DRAIController;
 
-	// 공격당 물 보상 감소량 (음수값)
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water System", meta = (ClampMin = "0.0"))
+	// 공격당 물 보상 감소량 (음수값 — 밸런스 설정이 덮어쓴다). ClampMin 0 이면 에디터에서 만지는 순간 0 으로 잘렸다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water System", meta = (ClampMax = "0.0"))
 	float WaterReductionPerAttack = -10.f;
+
+	// 공격당 물 보상 감소 사용 여부 (밸런스 설정 WaterSystem.bReduceWaterRewardOnAttack)
+	bool bReduceWaterRewardOnAttack = false;
 
 	// 물 폭발 반경 (일반 적)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water System", meta = (ClampMin = "100.0"))

@@ -368,10 +368,8 @@ float UDRPlayerAttributeSet::CalculateContainerDamage(float CurrentHealth, float
 
 void UDRPlayerAttributeSet::ApplyHitReactAndKnockback(const FEffectProperties& Props)
 {
-
-
-// Hit React
-	if (Props.TargetCharacter && Props.TargetCharacter->Implements<UCombatInterface>() &&
+	// Hit React
+	if (Props.TargetASC && Props.TargetCharacter && Props.TargetCharacter->Implements<UCombatInterface>() &&
 		!ICombatInterface::Execute_IsBeingShocked(Props.TargetCharacter))
 	{
 		// 피격 표정 트리거 (서버 → 모든 클라이언트). 태그 이벤트는 카운트 누적으로
@@ -381,22 +379,10 @@ void UDRPlayerAttributeSet::ApplyHitReactAndKnockback(const FEffectProperties& P
 			TargetDRChar->MulticastPlayHitReactFacial();
 		}
 
-FGameplayTagContainer TagContainer;
+		FGameplayTagContainer TagContainer;
 		TagContainer.AddTag(FDRGameplayTags::Get().Effects_HitReact);
-		const bool bSuccess = Props.TargetASC->TryActivateAbilitiesByTag(TagContainer);
-if (!bSuccess && Props.TargetASC)
-		{
-			FGameplayTagContainer ActivatableAbilities;
-			TArray<FGameplayAbilitySpec*> MatchingSpecs;
-			Props.TargetASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(TagContainer, MatchingSpecs);
-for (const FGameplayAbilitySpec* Spec : MatchingSpecs)
-			{
-}
-		}
+		Props.TargetASC->TryActivateAbilitiesByTag(TagContainer);
 	}
-	else
-	{
-}
 
 	// Knockback
 	const FVector& KnockbackForce = UDRAbilitySystemLibrary::GetKnockbackForce(Props.EffectContextHandle);

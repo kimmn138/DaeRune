@@ -39,8 +39,8 @@ ADREnemy::ADREnemy()
 
 	// 폰 기본값(3.0)이면 적 100마리가 플레이어와 동순위로 경쟁 - 낮춰서 대역폭 포화 시 플레이어 갱신 보호
 	NetPriority = 2.0f;
-	NetUpdateFrequency = 30.0f;
-	MinNetUpdateFrequency = 15.0f;
+	SetNetUpdateFrequency(30.0f);
+	SetMinNetUpdateFrequency(15.0f);
 
 	// GAS 컴포넌트 초기화 - 리슨서버용 최소 리플리케이션
 	AbilitySystemComponent = CreateDefaultSubobject<UDRAbilitySystemComponent>("AbilitySystemComponent");
@@ -305,33 +305,25 @@ void ADREnemy::ActivateDeathAbilities()
 	FGameplayTagContainer DeathTags;
 	DeathTags.AddTag(GameplayTags.Abilities_Death);
 
-	// 발동 시도
-	bool bActivated = AbilitySystemComponent->TryActivateAbilitiesByTag(DeathTags);
+	AbilitySystemComponent->TryActivateAbilitiesByTag(DeathTags);
 }
 
 void ADREnemy::ReduceWaterReward()
 {
-	//if (!HasAuthority() || !WaterReductionEffectClass) return;
+	// 꺼져 있으면(기본) 아무 일도 하지 않는다 — 밸런스 설정에서 켠다
+	if (!bReduceWaterRewardOnAttack || !HasAuthority() || !WaterReductionEffectClass) return;
 
-	//// 현재 물이 없으면 감소시키지 않음
-	//const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets);
-	//if (!DRAS || DRAS->GetWater() <= 0.f) return;
+	// 현재 물이 없으면 감소시키지 않음
+	const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets);
+	if (!DRAS || DRAS->GetWater() <= 0.f) return;
 
-	//// TEMP: 공격당 물 감소 비활성화 (테스트용, 되돌릴 때 이 라인 제거)
-	//return;
-
-	//// 헬퍼 함수로 간소화된 GE 생성 및 적용
-	//FGameplayEffectSpecHandle SpecHandle = UDRAbilitySystemLibrary::CreateEffectSpec(
-	//	AbilitySystemComponent, WaterReductionEffectClass, this);
-
-	//if (SpecHandle.IsValid())
-	//{
-	//	UDRAbilitySystemLibrary::ApplyEffectSpecWithSetByCaller(
-	//		AbilitySystemComponent,
-	//		SpecHandle,
-	//		FDRGameplayTags::Get().Water_SetByCaller_Reduction,
-	//		WaterReductionPerAttack);
-	//}
+	FGameplayEffectSpecHandle SpecHandle = UDRAbilitySystemLibrary::CreateEffectSpec(
+		AbilitySystemComponent, WaterReductionEffectClass, this);
+	if (SpecHandle.IsValid())
+	{
+		UDRAbilitySystemLibrary::ApplyEffectSpecWithSetByCaller(
+			AbilitySystemComponent, SpecHandle, FDRGameplayTags::Get().Water_SetByCaller_Reduction, WaterReductionPerAttack);
+	}
 }
 
 void ADREnemy::SetKnockbackState(bool bInKnockback)
@@ -485,6 +477,7 @@ void ADREnemy::BeginPlay()
 
 			// 물 시스템 설정
 			WaterReductionPerAttack = BalanceConfig->GetWaterReductionAmount();
+			bReduceWaterRewardOnAttack = BalanceConfig->WaterSystem.bReduceWaterRewardOnAttack;
 			WaterExplosionRadius = BalanceConfig->WaterSystem.WaterExplosionRadius;
 		}
 	}

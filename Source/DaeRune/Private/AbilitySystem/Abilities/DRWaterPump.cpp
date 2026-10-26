@@ -20,6 +20,13 @@
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Game/DRProgressionConfig.h"
 
+namespace
+{
+	// 빔 나이아가라 파라미터 (빔 갱신이 초당 30회라 FName 을 매번 만들지 않는다)
+	const FName WaterCannonScaleParam(TEXT("WaterCannonScale"));
+	const FName HitEffectPositionParam(TEXT("HitEffectPosition"));
+}
+
 FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLocation, bool& bHitObstacle, FHitResult& OutHitResult)
 {
     FVector AimStart, AimDirection;
@@ -69,9 +76,16 @@ FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLoca
     //   **아무 대상도 맞히지 못한다.** 이 경우는 히트가 아닌 것으로 취급한다. (2026-08-27)
     if (bHitObstacle && (OutHitResult.bStartPenetrating || OutHitResult.Distance < 1.f))
     {
-        UE_LOG(LogDR, Warning,
-            TEXT("[WaterPump] 무기 소켓이 막힌 형상(%s) 안에 있어 히트를 무시하고 최대 사거리를 사용한다."),
-            *GetNameSafe(OutHitResult.GetActor()));
+        // 빔 갱신 경로(초당 30회)라 벽에 붙어 있는 동안 로그가 도배되지 않게 5초에 한 번만
+        static double LastBlockedSocketLogTime = -1000.0;
+        const double Now = FPlatformTime::Seconds();
+        if (Now - LastBlockedSocketLogTime > 5.0)
+        {
+            LastBlockedSocketLogTime = Now;
+            UE_LOG(LogDR, Warning,
+                TEXT("[WaterPump] 무기 소켓이 막힌 형상(%s) 안에 있어 히트를 무시하고 최대 사거리를 사용한다."),
+                *GetNameSafe(OutHitResult.GetActor()));
+        }
 
         bHitObstacle = false;
         OutHitResult = FHitResult();
@@ -597,24 +611,24 @@ void UDRWaterPump::StartBeamEffect()
 {
 if (!WaterCannonEffect)
     {
-return;
+        return;
     }
 
     ADRCharacter* Character = Cast<ADRCharacter>(GetAvatarActorFromActorInfo());
     if (!Character)
     {
-return;
+        return;
     }
 
     USkeletalMeshComponent* FPMesh = Character->FirstPersonMesh;
     if (!FPMesh)
     {
-return;
+        return;
     }
 
     if (!FPMesh->DoesSocketExist(MuzzleSocketName))
     {
-return;
+        return;
     }
 
     // 직전 스폰이 정리되지 않은 경우(빠른 토글로 Stop 누락) 누수 방지
@@ -638,11 +652,8 @@ return;
     if (FirstPersonBeam)
     {
         FirstPersonBeam->SetOnlyOwnerSee(true);
-        FirstPersonBeam->SetVectorParameter(FName("HitEffectPosition"), CachedBeamEndPoint);
-}
-    else
-    {
-}
+        FirstPersonBeam->SetVectorParameter(HitEffectPositionParam, CachedBeamEndPoint);
+    }
 }
 
 void UDRWaterPump::UpdateBeamEndpoint()
@@ -688,15 +699,8 @@ void UDRWaterPump::UpdateBeamEndpoint()
     {
         FirstPersonBeam->SetWorldLocation(WeaponSocketLocation);
         FirstPersonBeam->SetWorldRotation(BeamRotation);
-        FirstPersonBeam->SetVectorParameter(
-            FName("WaterCannonScale"),
-            FVector(0.2f, 0.2f, ZScale)
-
-        );
-        FirstPersonBeam->SetVectorParameter(
-            FName("HitEffectPosition"),
-            FVector(XValue, 0.0f, 0.0f)
-        );
+        FirstPersonBeam->SetVectorParameter(WaterCannonScaleParam, FVector(0.2f, 0.2f, ZScale));
+        FirstPersonBeam->SetVectorParameter(HitEffectPositionParam, FVector(XValue, 0.0f, 0.0f));
     }
 
     OnBeamEndPointUpdated(CachedBeamEndPoint);

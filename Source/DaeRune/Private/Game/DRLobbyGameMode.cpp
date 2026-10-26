@@ -20,6 +20,7 @@
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "Game/DRGameInstance.h"
+#include "DaeRune/DRLogChannels.h"
 
 ADRLobbyGameMode::ADRLobbyGameMode()
 {
@@ -421,9 +422,11 @@ void ADRLobbyGameMode::FindWaitingRoomActors()
 		};
 		return GetSlotIndex(A.Get()) < GetSlotIndex(B.Get());
 	});
-if (WaitingRoomSlots.Num() == 0)
+
+	if (WaitingRoomSlots.Num() == 0)
 	{
-}
+		UE_LOG(LogDR, Warning, TEXT("[Lobby] 대기실 슬롯(WaitingRoomSlot)이 레벨에 없습니다."));
+	}
 }
 
 void ADRLobbyGameMode::AssignPlayerToSlot(AController* Player)

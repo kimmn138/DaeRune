@@ -8,7 +8,6 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Character/DRCharacter.h"
 #include "Character/DREnemy.h"
-#include "DrawDebugHelpers.h"
 #include "Actor/DRCleanserSite.h"
 #include "Engine/OverlapResult.h"
 #include "Sound/DRSoundManager.h"
@@ -467,83 +466,5 @@ void ADRSeedProjectile::MulticastExplodeAtLocation_Implementation(const FVector&
             ExplosionComp->SetVariableFloat(RadiusScaleParamName, SafeRadiusScale);
         }
     }
-
-//    #if !UE_BUILD_SHIPPING
-//    // 폭발 범위 표시
-//    // ★Plan5(씨앗칩)★ Resolved 는 서버 전용이라 여기서는 쓸 수 없다.
-//    // 대신 서버가 넘겨준 SafeRadiusScale 을 기본 반경에 곱해 그린다.
-//    DrawDebugSphere(GetWorld(), ImpactLocation, InnerRadius * SafeRadiusScale, 16, FColor::Yellow, false, 1.0f, 0, 3.0f);
-//    DrawDebugSphere(GetWorld(), ImpactLocation, OuterRadius * SafeRadiusScale, 24, FColor::Orange, false, 1.0f, 0, 2.0f);
-//
-//    // 클라이언트도 자기가 직접 계산!
-//    TArray<FOverlapResult> OverlapResults;
-//    FCollisionQueryParams QueryParams;
-//    QueryParams.AddIgnoredActor(this);
-//
-//    if (DamageEffectParams.SourceAbilitySystemComponent)
-//    {
-//        if (AActor* SourceActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor())
-//        {
-//            QueryParams.AddIgnoredActor(SourceActor);
-//        }
-//    }
-//
-//    GetWorld()->OverlapMultiByChannel(
-//        OverlapResults,
-//        ImpactLocation,
-//        FQuat::Identity,
-//        ECC_Pawn,
-//        FCollisionShape::MakeSphere(OuterRadius),
-//        QueryParams
-//    );
-//
-//    // 각 타겟에 대해 라인 그리기
-//    for (const FOverlapResult& Result : OverlapResults)
-//    {
-//        AActor* Target = Result.GetActor();
-//        if (!Target) continue;
-//
-//        if (Target->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Target))
-//        {
-//            continue;
-//        }
-//
-//        float Distance = FVector::Dist(ImpactLocation, Target->GetActorLocation());
-//        if (Distance > OuterRadius) continue;
-//
-//        // 클라이언트가 직접 LOS 체크
-//        FVector AdjustedStart = ImpactLocation + FVector(0, 0, 50.f);
-//        FVector AdjustedEnd = Target->GetActorLocation() + FVector(0, 0, 50.f);
-//
-//        FHitResult HitResult;
-//        FCollisionQueryParams LOSParams;
-//        LOSParams.AddIgnoredActor(this);
-//        LOSParams.AddIgnoredActor(Target);
-//        if (DamageEffectParams.SourceAbilitySystemComponent)
-//        {
-//            if (AActor* SourceActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor())
-//            {
-//                LOSParams.AddIgnoredActor(SourceActor);
-//            }
-//        }
-//
-//        bool bBlocked = GetWorld()->LineTraceSingleByChannel(
-//            HitResult,
-//            AdjustedStart,
-//            AdjustedEnd,
-//            ECC_Visibility,
-//            LOSParams
-//        );
-//
-//        // 라인 그리기
-//        FColor LineColor = bBlocked ? FColor::Red : FColor::Green;
-//        DrawDebugLine(GetWorld(), AdjustedStart, AdjustedEnd, LineColor, false, 1.0f, 0, 1.0f);
-//
-//        if (bBlocked)
-//        {
-//            DrawDebugBox(GetWorld(), HitResult.ImpactPoint, FVector(15.f), FColor::Red, false, 1.0f, 0, 2.0f);
-//        }
-//    }
-//#endif
 }
 
