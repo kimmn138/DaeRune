@@ -18,6 +18,7 @@
 #include "Sound/DRSoundDataAsset.h"
 #include "DRAssetManager.h"
 #include "Tutorial/DRTutorialManager.h"
+#include "Game/DRTutorialGameMode.h"
 #include "DRGameplayTags.h"
 #include "Game/DRProgressionConfig.h"
 #include "DaeRune/DRLogChannels.h"
@@ -256,8 +257,10 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
     }
 
     // 튜토리얼 매니저에 적중 수 보고 (튜토리얼 맵에서만 동작, SeedCannon 어빌리티만 인정)
+    // (튜토리얼 게임모드일 때만 찾는다 — 예전에는 모든 맵에서 폭발마다 전 액터를 순회했다)
     if (EnemyHitCount > 0 &&
-        DamageEffectParams.SourceAbilityTags.HasTag(FDRGameplayTags::Get().Abilities_GardenRobot_SeedCannon))
+        DamageEffectParams.SourceAbilityTags.HasTag(FDRGameplayTags::Get().Abilities_GardenRobot_SeedCannon) &&
+        GetWorld()->GetAuthGameMode<ADRTutorialGameMode>())
     {
         if (ADRTutorialManager* TM = Cast<ADRTutorialManager>(
             UGameplayStatics::GetActorOfClass(GetWorld(), ADRTutorialManager::StaticClass())))

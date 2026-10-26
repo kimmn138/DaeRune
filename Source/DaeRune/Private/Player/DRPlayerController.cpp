@@ -190,34 +190,12 @@ void ADRPlayerController::NotifyCrosshairSiteDetected(bool bDetected)
 
 ADRCleanserPart* ADRPlayerController::FindPartByLineTrace()
 {
-	// 캐릭터 가져오기
-	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
-	if (!DRCharacter) return nullptr;
-
 	// 캐릭터가 이미 부품을 들고 있으면 감지하지 않음
-	if (DRCharacter->IsCarryingPart()) return nullptr;
+	const ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter || DRCharacter->IsCarryingPart()) return nullptr;
 
-	// 카메라 컴포넌트 가져오기
-	UCameraComponent* Camera = DRCharacter->GetFollowCamera();
-	if (!Camera) return nullptr;
-
-	FVector Start = Camera->GetComponentLocation();
-	FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
-
-	// 멀티 라인트레이스: 사이트 메시 등에 가려져도 부품을 찾을 수 있도록 모든 히트를 검사
-	TArray<FHitResult> HitResults;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(DRCharacter);
-
-	GetWorld()->LineTraceMultiByChannel(
-		HitResults,
-		Start,
-		End,
-		ECC_Visibility,
-		QueryParams
-	);
-
-	for (const FHitResult& Hit : HitResults)
+	// 사이트 메시 등에 가려져도 부품을 찾을 수 있도록 겹침 히트까지 모두 본다
+	for (const FHitResult& Hit : InteractionViewHits)
 	{
 		ADRCleanserPart* HitPart = Cast<ADRCleanserPart>(Hit.GetActor());
 		if (HitPart && HitPart->CanBePickedUp())
@@ -258,11 +236,8 @@ ADRRobotVacuumCharacter* ADRPlayerController::FindMountByLineTrace()
 	// 부품 소지 중에는 탑승 불가(F키 의미 충돌), 이미 탑승 중이면 감지 불필요
 	if (DRCharacter->IsCarryingPart() || DRCharacter->IsMounted()) return nullptr;
 
-	UCameraComponent* Camera = DRCharacter->GetFollowCamera();
-	if (!Camera) return nullptr;
-
-	const FVector Start = Camera->GetComponentLocation();
-	const FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
+	FVector Start, End;
+	if (!GetInteractionViewRay(Start, End)) return nullptr;
 
 	// 멀티 라인트레이스: 다른 액터에 일부 가려져도 청소기를 찾을 수 있도록 모든 히트 검사.
 	// 채널(Visibility) 트레이스는 캐릭터를 못 맞춘다 — 캡슐(Pawn 프리셋)은 Visibility를 Ignore하고,
@@ -333,41 +308,14 @@ void ADRPlayerController::ServerRequestDashBrake_Implementation()
 
 ADRCleanserSite* ADRPlayerController::FindSiteByLineTrace()
 {
-	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
-	if (!DRCharacter) return nullptr;
-
 	// 부품을 들고 있어야만 사이트 감지
-	if (!DRCharacter->IsCarryingPart()) return nullptr;
+	const ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter || !DRCharacter->IsCarryingPart()) return nullptr;
 
-	UCameraComponent* Camera = DRCharacter->GetFollowCamera();
-	if (!Camera) return nullptr;
-
-	const FVector Start = Camera->GetComponentLocation();
-	const FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
-
-	FHitResult HitResult;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(DRCharacter);
-
-	const bool bHit = GetWorld()->LineTraceSingleByChannel(
-		HitResult,
-		Start,
-		End,
-		ECC_Visibility,
-		QueryParams
-	);
-
-	if (bHit)
-	{
-		ADRCleanserSite* HitSite = Cast<ADRCleanserSite>(HitResult.GetActor());
-		// 박스 오버랩 중인 사이트인지 확인 (다른 사이트가 시점에 잡히는 케이스 차단)
-		if (HitSite && OverlappedSites.Contains(HitSite))
-		{
-			return HitSite;
-		}
-	}
-
-	return nullptr;
+	// 박스 오버랩 중인 사이트인지 확인 (다른 사이트가 시점에 잡히는 케이스 차단)
+	const FHitResult* Hit = GetInteractionViewBlockingHit();
+	ADRCleanserSite* HitSite = Hit ? Cast<ADRCleanserSite>(Hit->GetActor()) : nullptr;
+	return (HitSite && OverlappedSites.Contains(HitSite)) ? HitSite : nullptr;
 }
 
 void ADRPlayerController::ServerReportTutorialCharacterInfoOpened_Implementation()
@@ -764,6 +712,9 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 	{
 		LineTraceTimer = 0.f;
 
+		// 시점 광선 히트를 한 번 구해 아래 감지들이 나눠 쓴다
+		RefreshInteractionViewHits();
+
 		// 부품 라인트레이스
 		if (bPartDetectionEnabled)
 		{
@@ -793,32 +744,44 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 
 ADRS2TrainCar* ADRPlayerController::FindTrainCarByLineTrace()
 {
-	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
-	if (!DRCharacter) return nullptr;
-
 	// 이미 앉아 있거나 부품을 들고 있으면 감지하지 않는다
-	if (DRCharacter->IsSeatedOnTrain() || DRCharacter->IsCarryingPart()) return nullptr;
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	if (!DRCharacter || DRCharacter->IsSeatedOnTrain() || DRCharacter->IsCarryingPart()) return nullptr;
 
-	UCameraComponent* Camera = DRCharacter->GetFollowCamera();
-	if (!Camera) return nullptr;
+	const FHitResult* Hit = GetInteractionViewBlockingHit();
+	ADRS2TrainCar* HitCar = Hit ? Cast<ADRS2TrainCar>(Hit->GetActor()) : nullptr;
+	return (HitCar && HitCar->CanBeBoardedBy(DRCharacter)) ? HitCar : nullptr;
+}
 
-	const FVector Start = Camera->GetComponentLocation();
-	const FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
+bool ADRPlayerController::GetInteractionViewRay(FVector& OutStart, FVector& OutEnd) const
+{
+	const ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+	const UCameraComponent* Camera = DRCharacter ? DRCharacter->GetFollowCamera() : nullptr;
+	if (!Camera) return false;
 
-	FHitResult HitResult;
+	OutStart = Camera->GetComponentLocation();
+	OutEnd = OutStart + Camera->GetForwardVector() * LineTraceDistance;
+	return true;
+}
+
+void ADRPlayerController::RefreshInteractionViewHits()
+{
+	InteractionViewHits.Reset();
+
+	FVector Start, End;
+	if (!GetInteractionViewRay(Start, End)) return;
+
+	// 부품 · 사이트 · 프롭 · 열차 칸이 같은 시점 광선을 쓴다 — Visibility 멀티 트레이스 한 번으로
+	// 겹침 히트(부품)와 첫 막힘 히트(나머지)를 함께 얻는다 (예전에는 같은 광선을 최대 4번 쐈다)
 	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(DRCharacter);
+	QueryParams.AddIgnoredActor(GetPawn());
+	GetWorld()->LineTraceMultiByChannel(InteractionViewHits, Start, End, ECC_Visibility, QueryParams);
+}
 
-	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams))
-	{
-		ADRS2TrainCar* HitCar = Cast<ADRS2TrainCar>(HitResult.GetActor());
-		if (HitCar && HitCar->CanBeBoardedBy(DRCharacter))
-		{
-			return HitCar;
-		}
-	}
-
-	return nullptr;
+const FHitResult* ADRPlayerController::GetInteractionViewBlockingHit() const
+{
+	// 멀티 트레이스는 첫 막힘 히트를 마지막에 둔다 (없으면 겹침만 있다)
+	return (InteractionViewHits.Num() > 0 && InteractionViewHits.Last().bBlockingHit) ? &InteractionViewHits.Last() : nullptr;
 }
 
 void ADRPlayerController::ServerRequestTrainDeboard_Implementation()
@@ -843,28 +806,11 @@ ADRS2InteractProp* ADRPlayerController::FindPropByLineTrace()
 	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
 	if (!DRCharacter) return nullptr;
 
-	UCameraComponent* Camera = DRCharacter->GetFollowCamera();
-	if (!Camera) return nullptr;
-
-	const FVector Start = Camera->GetComponentLocation();
-	const FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
-
-	FHitResult HitResult;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(DRCharacter);
-
 	// ★프롭 메시에 **심플 콜리전**이 있어야 한다. 라인트레이스는 bTraceComplex=false 라
 	//   콜리전 프리미티브가 없는 메시는 그대로 통과해 감지되지 않는다.
-	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams))
-	{
-		ADRS2InteractProp* HitProp = Cast<ADRS2InteractProp>(HitResult.GetActor());
-		if (HitProp && HitProp->CanInteract(DRCharacter))
-		{
-			return HitProp;
-		}
-	}
-
-	return nullptr;
+	const FHitResult* Hit = GetInteractionViewBlockingHit();
+	ADRS2InteractProp* HitProp = Hit ? Cast<ADRS2InteractProp>(Hit->GetActor()) : nullptr;
+	return (HitProp && HitProp->CanInteract(DRCharacter)) ? HitProp : nullptr;
 }
 
 void ADRPlayerController::Client_OpenSlidePuzzleUI_Implementation(ADRS2SlidePuzzle* Puzzle)
@@ -1421,9 +1367,16 @@ void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 		// 지속 돌진 중 후진 입력 = 브레이크 요청 (Plan3 §8.2 — 서버가 재검증 후 GA에 이벤트 전달)
 		if (ADRRobotVacuumCharacter* Vacuum = Cast<ADRRobotVacuumCharacter>(ControlledPawn))
 		{
+			// ★Reliable RPC 를 매 프레임 보내지 않는다★ — 서버가 돌진을 끝내 복제될 때까지 S 를 누르고 있으면
+			// 프레임마다 쌓였다. 짧은 간격으로 한 번만 보낸다 (응답이 늦어 유실되어도 다음 간격에 다시 간다)
 			if (Vacuum->bSustainedDash && InputAxisVector.Y < -0.5f)
 			{
-				ServerRequestDashBrake();
+				const double Now = GetWorld()->GetTimeSeconds();
+				if (Now - LastDashBrakeRequestTime >= DashBrakeRequestInterval)
+				{
+					LastDashBrakeRequestTime = Now;
+					ServerRequestDashBrake();
+				}
 			}
 		}
 

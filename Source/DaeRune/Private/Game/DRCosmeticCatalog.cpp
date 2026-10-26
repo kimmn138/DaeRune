@@ -21,6 +21,7 @@ void UDRCosmeticCatalog::BuildIndex() const
 {
 	IdToIndex.Reset();
 	IdToIndex.Reserve(Skins.Num());
+	IndexedEntryCount = Skins.Num();
 
 	for (int32 Index = 0; Index < Skins.Num(); ++Index)
 	{

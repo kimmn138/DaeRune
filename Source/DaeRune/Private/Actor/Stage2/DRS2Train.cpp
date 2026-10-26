@@ -12,6 +12,7 @@
 ADRS2Train::ADRS2Train()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;   // 동작 중에만 켠다
 
 	bReplicates = true;
 
@@ -224,6 +225,9 @@ void ADRS2Train::ArriveAtTarget()
 
 void ADRS2Train::OnRep_Movement()
 {
+	// 위치는 서버 시각으로 각자 계산한다 — 달리는 동안만 Tick 한다
+	SetActorTickEnabled(Movement.State == ES2TrainState::Moving);
+
 	// 정지/대기 상태로 바뀌면 위치를 목표에 스냅해 서버-클라 편차를 없앤다.
 	if (Movement.State != ES2TrainState::Moving)
 	{

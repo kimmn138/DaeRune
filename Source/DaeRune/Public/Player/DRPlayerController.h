@@ -77,8 +77,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void SetPartDetectionEnabled(bool bEnabled, class ADRCleanserPart* Part);
 
-	// 라인트레이싱으로 부품 찾기
-	UFUNCTION(BlueprintCallable, Category = "Part System")
+	// 시점 광선 히트(RefreshInteractionViewHits)에서 부품 찾기
 	ADRCleanserPart* FindPartByLineTrace();
 
 	// 현재 감지(라인트레이스) 중인 사이트 (IDRInteractable 구현 액터)
@@ -89,8 +88,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void SetSiteDetectionEnabled(bool bEnabled, ADRCleanserSite* Site);
 
-	// 시점 라인트레이스로 사이트 찾기
-	UFUNCTION(BlueprintCallable, Category = "Part System")
+	// 시점 광선 히트에서 사이트 찾기
 	ADRCleanserSite* FindSiteByLineTrace();
 
 	// 상호작용 요청 통합 RPC (부품 획득 / 사이트 설치)
@@ -109,8 +107,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Mount System")
 	void SetMountDetectionEnabled(bool bEnabled, ADRRobotVacuumCharacter* Mount);
 
-	// 시점 라인트레이스로 탑승 가능한 청소기 찾기
-	UFUNCTION(BlueprintCallable, Category = "Mount System")
+	// 시점 라인트레이스로 탑승 가능한 청소기 찾기 (캡슐을 맞히려고 Pawn 오브젝트 타입 쿼리를 따로 쓴다)
 	ADRRobotVacuumCharacter* FindMountByLineTrace();
 
 	// 하차 요청 (점프키 → 서버 검증 후 DismountRider)
@@ -724,6 +721,10 @@ private:
 	// 사망 → 관전 시작 예약 (서버)
 	FTimerHandle PendingSpectateTimerHandle;
 
+	// 지속 돌진 브레이크 요청 간격 (Move 가 매 프레임 불려도 RPC 는 이 간격으로)
+	double LastDashBrakeRequestTime = -1000.0;
+	static constexpr double DashBrakeRequestInterval = 0.25;
+
 	// 입력 처리 함수들
 	void Move(const FInputActionValue& InputActionValue);
 	void Look(const FInputActionValue& InputActionValue);
@@ -845,6 +846,12 @@ private:
 	TObjectPtr<AActor> CurrentDetectedCar;
 
 	class ADRS2TrainCar* FindTrainCarByLineTrace();
+
+	// ===== 시점 상호작용 트레이스 (감지 주기마다 1회) =====
+	bool GetInteractionViewRay(FVector& OutStart, FVector& OutEnd) const;
+	void RefreshInteractionViewHits();
+	const FHitResult* GetInteractionViewBlockingHit() const;
+	TArray<FHitResult> InteractionViewHits;
 
 	// 점프 키로 하차 요청 (마운트 하차와 동일 관례)
 	UFUNCTION(Server, Reliable)

@@ -8,11 +8,7 @@
 #include "Interaction/CombatInterface.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
-
-void UDRProjectileSpell::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
-{
-	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
-}
+#include "DaeRune/DRLogChannels.h"
 
 ADRProjectile* UDRProjectileSpell::SpawnProjectile(const FVector& ProjectileTargetLocation, const FGameplayTag& SocketTag, bool bOverridePitch, float PitchOverride)
 {
@@ -27,8 +23,15 @@ ADRProjectile* UDRProjectileSpell::SpawnProjectile(const FVector& ProjectileTarg
 
 ADRProjectile* UDRProjectileSpell::SpawnProjectileAt(const FVector& SpawnLocation, const FVector& ProjectileTargetLocation, bool bOverridePitch, float PitchOverride)
 {
-	const bool bIsServer = GetAvatarActorFromActorInfo()->HasAuthority();
-	if (!bIsServer) return nullptr;
+	const AActor* Avatar = GetAvatarActorFromActorInfo();
+	if (!Avatar || !Avatar->HasAuthority()) return nullptr;
+
+	// 투사체 클래스를 BP 에서 비워 두면 크래시 대신 경고
+	if (!ProjectileClass)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Projectile] %s: ProjectileClass 가 비어 있어 발사하지 않습니다."), *GetName());
+		return nullptr;
+	}
 
 	FRotator Rotation = (ProjectileTargetLocation - SpawnLocation).Rotation();
 
@@ -51,6 +54,7 @@ ADRProjectile* UDRProjectileSpell::SpawnProjectileAt(const FVector& SpawnLocatio
 		GetOwningActorFromActorInfo(),
 		Cast<APawn>(GetOwningActorFromActorInfo()),
 		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (!Projectile) return nullptr;
 
 	Projectile->DamageEffectParams = MakeDamageEffectParamsFromClassDefaults();
 

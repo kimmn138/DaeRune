@@ -42,6 +42,27 @@ void UDRGameInstance::Init()
 	}
 
 	LoadProgress();
+	PreloadProgressionEffects();
+}
+
+void UDRGameInstance::PreloadProgressionEffects()
+{
+	if (!ProgressionConfig) return;
+
+	// 칩 튜닝의 GE 들은 소프트 참조라 첫 적중 순간 동기 로드(히치)가 났다 — 시작할 때 모두 불러와 붙잡아 둔다.
+	// 설정 에셋의 모든 TSoftClassPtr 를 반사로 훑으므로 새 칩 GE 를 추가해도 여기를 고칠 필요가 없다.
+	PreloadedProgressionClasses.Reset();
+	for (TPropertyValueIterator<FSoftClassProperty> It(ProgressionConfig->GetClass(), ProgressionConfig); It; ++It)
+	{
+		const FSoftObjectPtr* SoftPtr = static_cast<const FSoftObjectPtr*>(It.Value());
+		if (SoftPtr && !SoftPtr->IsNull())
+		{
+			if (UClass* Loaded = Cast<UClass>(SoftPtr->LoadSynchronous()))
+			{
+				PreloadedProgressionClasses.AddUnique(Loaded);
+			}
+		}
+	}
 }
 
 bool UDRGameInstance::HasCompletedTutorial() const
@@ -87,10 +108,30 @@ void UDRGameInstance::LoadProgress()
 
 void UDRGameInstance::SaveProgress()
 {
+	if (!CurrentSaveGame) return;
+
+	// 칩 장착 · 스왑 · 옷 장착처럼 클릭마다 저장이 불린다 — 같은 프레임의 요청은 다음 틱에 한 번만 디스크에 쓴다
+	if (bSavePending) return;
+	bSavePending = true;
+	GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateUObject(this, &UDRGameInstance::FlushPendingSave));
+}
+
+void UDRGameInstance::FlushPendingSave()
+{
+	if (!bSavePending) return;
+	bSavePending = false;
+
 	if (CurrentSaveGame)
 	{
 		UGameplayStatics::SaveGameToSlot(CurrentSaveGame, UDRSaveGame::SaveSlotName, UDRSaveGame::UserIndex);
 	}
+}
+
+void UDRGameInstance::Shutdown()
+{
+	// 다음 틱을 기다리던 저장이 있으면 종료 전에 쓴다
+	FlushPendingSave();
+	Super::Shutdown();
 }
 
 UDRSaveGame* UDRGameInstance::GetOrLoadSaveGame()

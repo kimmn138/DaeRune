@@ -450,6 +450,13 @@ void ADREnemy::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// Tick 은 서버의 바라보기 회전만 한다 — 클라는 복제된 회전을 따라가므로 적 수(최대 100)만큼의 빈 Tick 을 끈다.
+	// (적 BP 들에는 Event Tick 로직이 없다. 타임라인 · 이동 · 메시 등 컴포넌트 Tick 은 영향 없음)
+	if (!HasAuthority())
+	{
+		SetActorTickEnabled(false);
+	}
+
 	// 커스텀 히트박스 자동 수집 및 콜리전 설정
 	SetupHitboxComponents();
 

@@ -61,6 +61,7 @@ void UDRChipCatalog::BuildIndex() const
 {
 	IdToIndex.Reset();
 	IdToIndex.Reserve(Chips.Num());
+	IndexedEntryCount = Chips.Num();
 	for (int32 Index = 0; Index < Chips.Num(); ++Index)
 	{
 		const FName Id = Chips[Index].ChipId;

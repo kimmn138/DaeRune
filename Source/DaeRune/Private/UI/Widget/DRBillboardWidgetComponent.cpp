@@ -16,7 +16,9 @@ void UDRBillboardWidgetComponent::TickComponent(float DeltaTime, ELevelTick Tick
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!IsVisible())
+	// 회전이 필요 없는 경우는 일찍 끝낸다 — 적마다 붙어 있어(최대 100) 매 프레임 비용이 쌓인다.
+	// 화면 공간 위젯은 늘 카메라를 향하고, 최근에 그려지지 않은(화면 밖 · 가려진) 위젯은 돌릴 필요가 없다
+	if (!IsVisible() || GetWidgetSpace() == EWidgetSpace::Screen || !WasRecentlyRendered(0.2f))
 	{
 		return;
 	}
@@ -41,7 +43,11 @@ void UDRBillboardWidgetComponent::TickComponent(float DeltaTime, ELevelTick Tick
 
 	if (!Direction.IsNearlyZero())
 	{
-		FRotator LookAtRotation = Direction.Rotation();
-		SetWorldRotation(LookAtRotation);
+		// 거의 같은 방향이면 트랜스폼 갱신(자식 · 렌더 상태 갱신)을 건너뛴다
+		const FRotator LookAtRotation = Direction.Rotation();
+		if (!LookAtRotation.Equals(GetComponentRotation(), 0.5f))
+		{
+			SetWorldRotation(LookAtRotation);
+		}
 	}
 }

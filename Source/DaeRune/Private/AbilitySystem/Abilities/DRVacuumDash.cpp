@@ -168,15 +168,18 @@ void UDRVacuumDash::ApplyBuffStacks(int32 Stacks)
 
 	// ★Plan5(돌진칩)★ ③ 칸당 이속 = SpeedBonusPerGauge × SkillSpeedBonus (0.2 → 0.14). GE 는 SetByCaller · MultiplyAdditive · by Target 5 (D-118).
 	//   ★모든 스펙에 넣는다★ — 빠지면 크기 0 → (0 − 1) × 스택 = 이속 0 이하 (T-121)
+	if (Stacks <= 0) return;
+
 	const float BonusPerGauge = FMath::Max(0.f, GetUpgradedFloat(EDRUpgradeStat::SkillSpeedBonus, SpeedBonusPerGauge));
-	for (int32 i = 0; i < Stacks; ++i)
+	const FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(SpeedBuffEffect, GetAbilityLevel(), ContextHandle);
+	if (SpecHandle.IsValid())
 	{
-		const FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(SpeedBuffEffect, GetAbilityLevel(), ContextHandle);
-		if (SpecHandle.IsValid())
-		{
-			SpecHandle.Data->SetSetByCallerMagnitude(FDRGameplayTags::Get().Data_MoveSpeed_Mult, 1.f + BonusPerGauge);
-			SpeedBuffHandle = ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-		}
+		SpecHandle.Data->SetSetByCallerMagnitude(FDRGameplayTags::Get().Data_MoveSpeed_Mult, 1.f + BonusPerGauge);
+
+		// 스펙 하나에 스택 수를 실어 한 번만 적용한다 — 칸마다 따로 적용하면 적용 · 복제 · 효과 이벤트가 칸 수만큼 났다.
+		// (스택형 GE 는 기존 스택에 이 수만큼 더해지고 상한(5)에서 잘린다 — 반복 적용과 결과가 같다)
+		SpecHandle.Data->SetStackCount(Stacks);
+		SpeedBuffHandle = ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 	}
 }
 

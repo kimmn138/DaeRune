@@ -40,6 +40,7 @@ class DAERUNE_API UDRGameInstance : public UGameInstance
 	GENERATED_BODY()
 
 public:
+	virtual void Shutdown() override;
 	virtual void Init() override;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sound")
@@ -477,6 +478,16 @@ private:
 
 	// 맵 전환 시 캐릭터 선택 보존용 (GameInstance는 맵 전환에서 절대 파괴되지 않음)
 	TMap<FString, EPlayerCharacterClass> PlayerClassSelections;
+
+	// 저장 요청 합치기 (SaveProgress → 다음 틱 1회)
+	void FlushPendingSave();
+	bool bSavePending = false;
+
+	// 진행 설정(칩 튜닝)의 소프트 참조 GE 를 시작 시 미리 로드해 GC 되지 않게 붙잡아 둔다
+	void PreloadProgressionEffects();
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UClass>> PreloadedProgressionClasses;
 
 	// 스테이지 선택 디버그 덮어쓰기 (저장 안 함 — DebugSetStageStateOverride)
 	TMap<FName, EDRStageSelectState> DebugStageStateOverrides;
