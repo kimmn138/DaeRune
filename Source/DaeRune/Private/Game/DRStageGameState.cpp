@@ -1,6 +1,5 @@
 ﻿// Copyright DaeRune
 
-
 #include "Game/DRStageGameState.h"
 #include "GameFramework/PlayerState.h"
 #include "Interaction/CombatInterface.h"
@@ -21,11 +20,6 @@ ADRStageGameState::ADRStageGameState()
 {
     // 초기값 설정
     CurrentPhaseIndex = -1;
-    CurrentPhaseState = EPhaseState::NotStarted;
-
-    // Phase 1
-    bCleanserAreaSecured = false;
-    RemainingEnemiesInArea = 0;
 
     // Phase 2
     CollectedParts = 0;
@@ -35,13 +29,9 @@ ADRStageGameState::ADRStageGameState()
     CurrentWaveNumber = 0;
     CurrentWaveLevel = 0;
     TotalWaves = 5; // 기본값
-    CleanserHealth = 1000.0f;
     WaveTimerEndServerTime = 0.0f;
     bIsWaveRestTime = false;
     bIsToxicGasWave = false;
-
-    // Phase 4
-    BossHealth = 1000.0f;
 
     CurrentPhaseObjective.PhaseNumber = 0;  // 0은 "준비 중" 의미
     CurrentPhaseObjective.ObjectiveTitle = LOCTEXT("Phase_PreparingTitle", "준비 중...");
@@ -55,11 +45,6 @@ void ADRStageGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 
     // 상태 리플리케이션
     DOREPLIFETIME(ADRStageGameState, CurrentPhaseIndex);
-    DOREPLIFETIME(ADRStageGameState, CurrentPhaseState);
-
-    // Phase 1
-    DOREPLIFETIME(ADRStageGameState, bCleanserAreaSecured);
-    DOREPLIFETIME(ADRStageGameState, RemainingEnemiesInArea);
 
     // Phase 2
     DOREPLIFETIME(ADRStageGameState, CollectedParts);
@@ -69,7 +54,6 @@ void ADRStageGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ADRStageGameState, CurrentWaveNumber);
     DOREPLIFETIME(ADRStageGameState, CurrentWaveLevel);
     DOREPLIFETIME(ADRStageGameState, TotalWaves);
-    DOREPLIFETIME(ADRStageGameState, CleanserHealth);
     DOREPLIFETIME(ADRStageGameState, WaveTimerEndServerTime);
     DOREPLIFETIME(ADRStageGameState, bIsWaveRestTime);
     DOREPLIFETIME(ADRStageGameState, bIsToxicGasWave);
@@ -79,9 +63,6 @@ void ADRStageGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ADRStageGameState, EnemySpawnPointVFXAsset);
     DOREPLIFETIME(ADRStageGameState, EliteSpawnPointVFXLocations);
     DOREPLIFETIME(ADRStageGameState, EliteSpawnPointVFXAsset);
-
-    // Phase 4
-    DOREPLIFETIME(ADRStageGameState, BossHealth);
 
     // UI 업데이트
     DOREPLIFETIME(ADRStageGameState, CurrentPhaseObjective);
@@ -103,30 +84,6 @@ void ADRStageGameState::SetCurrentPhaseIndex(int32 NewIndex)
 
         // Phase 변경 델리게이트 브로드캐스트
         OnPhaseChangedDelegate.Broadcast(NewIndex);
-    }
-}
-
-void ADRStageGameState::SetCurrentPhaseState(EPhaseState NewState)
-{
-    if (HasAuthority())
-    {
-        CurrentPhaseState = NewState;
-    }
-}
-
-void ADRStageGameState::SetCleanserAreaSecured(bool bSecured)
-{
-    if (HasAuthority())
-    {
-        bCleanserAreaSecured = bSecured;
-    }
-}
-
-void ADRStageGameState::SetRemainingEnemiesInArea(int32 Count)
-{
-    if (HasAuthority())
-    {
-        RemainingEnemiesInArea = FMath::Max(0, Count);
     }
 }
 
@@ -170,20 +127,6 @@ void ADRStageGameState::SetTotalWaves(int32 Total)
     }
 }
 
-void ADRStageGameState::SetCleanserHealth(float Health)
-{
-    if (HasAuthority())
-    {
-        CleanserHealth = FMath::Clamp(Health, 0.0f, 1000.0f);
-
-        // 클렌저 체력이 0이 되면 실패 처리
-        if (CleanserHealth <= 0.0f)
-        {
-            SetCurrentPhaseState(EPhaseState::Failed);
-        }
-    }   
-}
-
 void ADRStageGameState::StartWaveTimer(float DurationSeconds)
 {
     if (HasAuthority())
@@ -211,14 +154,6 @@ void ADRStageGameState::SetIsToxicGasWave(bool bIsToxicGas)
         bIsToxicGasWave = bIsToxicGas;
         // 서버에서 즉시 브로드캐스트 (리슨 서버 플레이어용)
         OnToxicGasWarningDelegate.Broadcast(bIsToxicGas);
-    }
-}
-
-void ADRStageGameState::SetBossHealth(float Health)
-{
-    if (HasAuthority())
-    {
-        BossHealth = FMath::Clamp(Health, 0.0f, 1000.0f);
     }
 }
 
@@ -252,12 +187,6 @@ void ADRStageGameState::OnRep_CurrentPhaseIndex()
 void ADRStageGameState::OnRep_CurrentPhaseObjective()
 {
     OnPhaseObjectiveChangedDelegate.Broadcast();
-}
-
-void ADRStageGameState::OnRep_CurrentPhaseState()
-{
-    // 클라이언트에서 Phase 상태 변경 시 필요한 처리
-    // 현재는 별도 처리 없음
 }
 
 void ADRStageGameState::OnRep_CurrentObjectiveProgress()

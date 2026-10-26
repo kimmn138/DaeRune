@@ -11,8 +11,6 @@
 
 ADRLobbyGameState::ADRLobbyGameState()
 {
-	// 초기값 설정
-	MinPlayersToStart = 1;  // 테스트용 1명, 실제는 2~4명 권장
 }
 
 void ADRLobbyGameState::BeginPlay()
@@ -37,7 +35,7 @@ void ADRLobbyGameState::BeginPlay()
 				else
 				{
 					// 없으면 이벤트 대기
-					Subsystem->MultiplayerOnRoomCodeGenerated.AddDynamic(
+					Subsystem->MultiplayerOnRoomCodeGenerated.AddUniqueDynamic(
 						this,
 						&ADRLobbyGameState::InitializeRoomCode
 					);
@@ -45,6 +43,20 @@ void ADRLobbyGameState::BeginPlay()
 			}
 		}
 	}
+}
+
+void ADRLobbyGameState::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// 세션 서브시스템(GameInstance 소속)이 이 GameState 보다 오래 산다 — 방 코드 대기 바인딩을 푼다
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (UMultiplayerSessionsSubsystem* Subsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>())
+		{
+			Subsystem->MultiplayerOnRoomCodeGenerated.RemoveDynamic(this, &ADRLobbyGameState::InitializeRoomCode);
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void ADRLobbyGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

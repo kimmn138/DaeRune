@@ -3,7 +3,7 @@
 
 #include "Game/DRGameStateBase.h"
 #include "GameFramework/PlayerController.h"
-#include "GameFramework//PlayerState.h"
+#include "GameFramework/PlayerState.h"
 #include "Engine/World.h"
 #include "Character/DRCharacter.h"
 #include "Interaction/CombatInterface.h"
@@ -13,18 +13,6 @@ ADRGameStateBase::ADRGameStateBase()
 {
 	// 리플리케이션 활성화
 	bReplicates = true;
-
-	// 초기값 설정
-	CurrentPlayerCount = 0;
-	MaxPlayerCount = 4;  // 4인 협동 게임
-}
-
-void ADRGameStateBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	DOREPLIFETIME(ADRGameStateBase, CurrentPlayerCount);
-	DOREPLIFETIME(ADRGameStateBase, MaxPlayerCount);
 }
 
 void ADRGameStateBase::AddPlayerState(APlayerState* PlayerState)
@@ -42,18 +30,6 @@ void ADRGameStateBase::AddPlayerState(APlayerState* PlayerState)
 				DRPS->SetIsHost(true);
 			}
 		}
-
-		UpdatePlayerCount();
-	}
-}
-
-void ADRGameStateBase::RemovePlayerState(APlayerState* PlayerState)
-{
-	Super::RemovePlayerState(PlayerState);
-
-	if (HasAuthority())
-	{
-		UpdatePlayerCount();
 	}
 }
 
@@ -98,36 +74,12 @@ TArray<ADRCharacter*> ADRGameStateBase::GetAlivePlayers() const
 		if (!PS) continue;
 
 		// 플레이어의 폰이 살아있는지 확인
-		if (ADRCharacter* PlayerCharacter = Cast<ADRCharacter>(PS->GetPawn()))
+		ADRCharacter* PlayerCharacter = Cast<ADRCharacter>(PS->GetPawn());
+		if (PlayerCharacter && !ICombatInterface::Execute_IsDead(PlayerCharacter))
 		{
-			// IsDead 인터페이스 확인
-			if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(PlayerCharacter))
-			{
-				if (!CombatInterface->Execute_IsDead(PlayerCharacter))
-				{
-					AlivePlayers.Add(PlayerCharacter);
-				}
-			}
+			AlivePlayers.Add(PlayerCharacter);
 		}
 	}
 
 	return AlivePlayers;
-}
-
-void ADRGameStateBase::UpdatePlayerCount()
-{
-	if (!HasAuthority())
-	{
-		return;
-	}
-
-	CurrentPlayerCount = 0;
-
-	for (APlayerState* PS : PlayerArray)
-	{
-		if (PS && !PS->IsSpectator())
-		{
-			CurrentPlayerCount++;
-		}
-	}
 }

@@ -21,19 +21,8 @@ class DAERUNE_API ADRGameStateBase : public AGameState
 public:
 	ADRGameStateBase();
 
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
-	// PlayerArray 오버라이드 - DRPlayerState 타입 보장
+	// 접속 시 호스트 플래그 확정 (리슨 서버의 로컬 컨트롤러 소유 PlayerState)
 	virtual void AddPlayerState(APlayerState* PlayerState) override;
-	virtual void RemovePlayerState(APlayerState* PlayerState) override;
-
-	// 현재 접속 인원
-	UFUNCTION(BlueprintCallable, Category = "Game State")
-	int32 GetCurrentPlayerCount() const { return CurrentPlayerCount; }
-
-	// 최대 플레이어 수
-	UFUNCTION(BlueprintCallable, Category = "Game State")
-	int32 GetMaxPlayerCount() const { return MaxPlayerCount; }
 
 	// 호스트 확인
 	UFUNCTION(BlueprintCallable, Category = "Game State")
@@ -45,16 +34,4 @@ public:
 	// 살아있는 플레이어 리스트 반환
 	UFUNCTION(BlueprintCallable, Category = "Spectating")
 	TArray<ADRCharacter*> GetAlivePlayers() const;
-
-protected:
-	// 현재 플레이어 수
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Game State")
-	int32 CurrentPlayerCount;
-
-	// 최대 플레이어 수
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Game State")
-	int32 MaxPlayerCount;
-
-	// 플레이어 수 업데이트
-	virtual void UpdatePlayerCount();
 };

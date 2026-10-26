@@ -10,7 +10,6 @@
 #include "UI/Widget/DRTutorialStartWidget.h"
 #include "Menu.h"
 #include "Kismet/GameplayStatics.h"
-#include "Engine/LevelStreamingDynamic.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/TargetPoint.h"
@@ -188,7 +187,7 @@ void ADRMainMenuGameMode::ShowLobbyMenuUI(APlayerController* PC)
 		// UMenu인 경우 MenuSetup 호출 (세션 연결 설정)
 		if (UMenu* Menu = Cast<UMenu>(Widget))
 		{
-			Menu->MenuSetup(4, TEXT("/Game/Maps/LobbyMap"));
+			Menu->MenuSetup(MaxPublicConnections, LobbyMapPath);
 		}
 		else
 		{
@@ -243,19 +242,7 @@ void ADRMainMenuGameMode::SkipTutorialAndReloadMenu()
 	if (!GI) return;
 
 	GI->SetTutorialCompleted();
-
-	if (CurrentMenuWidget)
-	{
-		CurrentMenuWidget->RemoveFromParent();
-		CurrentMenuWidget = nullptr;
-	}
-
-	UWorld* World = GetWorld();
-	if (!World) return;
-
-	// 현재 메인 메뉴 맵을 그대로 재오픈 → BeginPlay()가 다시 분기 평가 (로비 프리뷰로 진입)
-	const FName CurrentMapName(*UGameplayStatics::GetCurrentLevelName(World, true));
-	UGameplayStatics::OpenLevel(World, CurrentMapName);
+	ReloadMenu();   // 로비 프리뷰로 진입
 }
 
 void ADRMainMenuGameMode::ResetTutorialAndReloadMenu()
@@ -264,7 +251,11 @@ void ADRMainMenuGameMode::ResetTutorialAndReloadMenu()
 	if (!GI) return;
 
 	GI->ResetTutorialProgress();
+	ReloadMenu();
+}
 
+void ADRMainMenuGameMode::ReloadMenu()
+{
 	if (CurrentMenuWidget)
 	{
 		CurrentMenuWidget->RemoveFromParent();
@@ -274,7 +265,6 @@ void ADRMainMenuGameMode::ResetTutorialAndReloadMenu()
 	UWorld* World = GetWorld();
 	if (!World) return;
 
-	// 현재 메인 메뉴 맵을 그대로 재오픈 → BeginPlay()가 다시 분기 평가
 	const FName CurrentMapName(*UGameplayStatics::GetCurrentLevelName(World, true));
 	UGameplayStatics::OpenLevel(World, CurrentMapName);
 }

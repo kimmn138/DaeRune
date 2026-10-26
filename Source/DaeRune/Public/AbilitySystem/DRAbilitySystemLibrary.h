@@ -12,6 +12,7 @@
 #include "DRAbilitySystemLibrary.generated.h"
 
 class AAIController;
+class ADRHUD;
 class UAbilityInfo;
 class UAnimMontage;
 class UAbilitySystemComponent;
@@ -31,7 +32,7 @@ class DAERUNE_API UDRAbilitySystemLibrary : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 	
 public:
-	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|WidgetController", meta = (DefaultToSelf = "WorldContextObject"))
+	// 위젯 컨트롤러 파라미터 구성 (아래 게터 내부용)
 	static bool MakeWidgetControllerParams(const UObject* WorldContextObject, FWidgetControllerParams& OutWCParams, ADRHUD*& OutDRHUD);
 
 	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|WidgetController", meta = (DefaultToSelf = "WorldContextObject"))
@@ -58,9 +59,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|CharacterClassDefaults")
 	static void GivePlayerStartupAbilities(const UObject* WorldContextObject, UAbilitySystemComponent* ASC, EPlayerCharacterClass PlayerClass);
-
-	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|CharacterClassDefaults")
-	static UAbilityInfo* GetAbilityInfo(const UObject* WorldContextObject);
 
 	// 게임 밸런스 설정 DataAsset 반환
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|GameBalance")
@@ -317,13 +315,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayMechanics")
 	static TArray<FRotator> EvenlySpacedRotators(const FVector& Forward, const FVector& Axis, float Spread, int32 NumRotators);
 
-	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayMechanics")
-	static TArray<FVector> EvenlyRotatedVectors(const FVector& Forward, const FVector& Axis, float Spread, int32 NumVectors);
-
-	// 벽 충돌 체크 유틸리티 함수
-	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|Combat")
-	static bool CheckActorWallCollision(AActor* Target, float CheckDistance = 50.f);
-
 	// ========== GameplayEffect 생성 헬퍼 함수 ==========
 
 	/**
@@ -371,10 +362,6 @@ public:
 		float Magnitude);
 
 	// ========== ★Plan8(모자)★ 모자 보호막 ==========
-
-	/** 대상이 모자를 쓰고 있나 (Single/Double 무관 — 부모 태그 Buff.BellBoy.Hat) */
-	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|BellBoy")
-	static bool HasBellBoyHat(AActor* Target);
 
 	/**
 	 * 대상에게 모자를 씌운다. ★서버 전용★

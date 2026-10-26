@@ -65,7 +65,9 @@ public:
 	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 	virtual void PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue) override;
 
-	TMap<FGameplayTag, TStaticFuncPtr<FGameplayAttribute()>> TagsToAttributes;
+	// Health / Water / MoveSpeed 범위 제한 (Base · Current 값 변경 공용)
+	void ClampAttributeValue(const FGameplayAttribute& Attribute, float& NewValue) const;
+
 
 	/*
 	 * Primary Attributes

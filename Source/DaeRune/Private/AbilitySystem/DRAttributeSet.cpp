@@ -17,11 +17,6 @@
 
 UDRAttributeSet::UDRAttributeSet()
 {
-	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
-
-	/* Primary Attributes */
-	TagsToAttributes.Add(GameplayTags.Attributes_Primary_MaxHealth, GetMaxHealthAttribute);
-	TagsToAttributes.Add(GameplayTags.Attributes_Primary_MoveSpeed, GetMoveSpeedAttribute);
 }
 
 void UDRAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -40,40 +35,32 @@ void UDRAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRAttributeSet, Water, COND_None, REPNOTIFY_Always);
 }
 
-void UDRAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
+void UDRAttributeSet::ClampAttributeValue(const FGameplayAttribute& Attribute, float& NewValue) const
 {
-	Super::PreAttributeBaseChange(Attribute, NewValue);
-
 	if (Attribute == GetHealthAttribute())
 	{
 		NewValue = FMath::RoundToFloat(FMath::Clamp(NewValue, 0.f, GetMaxHealth()));
 	}
-	if (Attribute == GetWaterAttribute())
+	else if (Attribute == GetWaterAttribute())
 	{
 		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxWater());
 	}
-	if (Attribute == GetMoveSpeedAttribute())
+	else if (Attribute == GetMoveSpeedAttribute())
 	{
 		NewValue = FMath::Clamp(NewValue, 0.f, 2000.f);
 	}
 }
 
+void UDRAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
+{
+	Super::PreAttributeBaseChange(Attribute, NewValue);
+	ClampAttributeValue(Attribute, NewValue);
+}
+
 void UDRAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
 {
 	Super::PreAttributeChange(Attribute, NewValue);
-
-	if (Attribute == GetHealthAttribute())
-	{
-		NewValue = FMath::RoundToFloat(FMath::Clamp(NewValue, 0.f, GetMaxHealth()));
-	}
-	if (Attribute == GetWaterAttribute())
-	{
-		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxWater());
-	}
-	if (Attribute == GetMoveSpeedAttribute())
-	{
-		NewValue = FMath::Clamp(NewValue, 0.f, 2000.f);
-	}
+	ClampAttributeValue(Attribute, NewValue);
 }
 
 void UDRAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
@@ -241,6 +228,8 @@ void UDRAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, f
 			}
 		}
 	}
+	// 적은 ASC 오너가 캐릭터라 여기서 이동 속도를 맞춘다 (플레이어는 오너가 PlayerState —
+	// ADRCharacter::InitializeMoveSpeedBinding 이 델리게이트로 맞춘다)
 	if (Attribute == GetMoveSpeedAttribute())
 	{
 		if (ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwningActor()))

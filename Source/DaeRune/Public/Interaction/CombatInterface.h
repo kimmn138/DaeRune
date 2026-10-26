@@ -87,11 +87,9 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
 	FTaggedMontage GetTaggedMontageByTag(const FGameplayTag& MontageTag);
 
+	// 소환수 수 (소환 어빌리티는 삭제됨 — BTT_Attack_Elementalist 가 아직 읽어 남겨 둔다, 항상 0)
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
 	int32 GetMinionCount();
-
-	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
-	void IncremenetMinionCount(int32 Amount);
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
 	ECharacterClass GetCharacterClass();

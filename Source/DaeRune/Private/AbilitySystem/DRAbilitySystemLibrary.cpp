@@ -200,13 +200,6 @@ void UDRAbilitySystemLibrary::GivePlayerStartupAbilities(
 	DRASC->AddCharacterAbilities(AllAbilities);
 }
 
-UAbilityInfo* UDRAbilitySystemLibrary::GetAbilityInfo(const UObject* WorldContextObject)
-{
-	const ADRGameModeBase* DRGameMode = Cast<ADRGameModeBase>(UGameplayStatics::GetGameMode(WorldContextObject));
-	if (DRGameMode == nullptr) return nullptr;
-	return DRGameMode->AbilityInfo;
-}
-
 UGameBalanceConfig* UDRAbilitySystemLibrary::GetGameBalanceConfig(const UObject* WorldContextObject)
 {
 	const ADRGameModeBase* DRGameMode = Cast<ADRGameModeBase>(UGameplayStatics::GetGameMode(WorldContextObject));
@@ -896,70 +889,6 @@ TArray<FRotator> UDRAbilitySystemLibrary::EvenlySpacedRotators(const FVector& Fo
 	return Rotators;
 }
 
-TArray<FVector> UDRAbilitySystemLibrary::EvenlyRotatedVectors(const FVector& Forward, const FVector& Axis, float Spread, int32 NumVectors)
-{
-	TArray<FVector> Vectors; 
-
-	const FVector LeftOfSpread = Forward.RotateAngleAxis(-Spread / 2.f, Axis);
-	if (NumVectors > 1)
-	{
-		const float DeltaSpread = Spread / (NumVectors - 1);
-		for (int32 i = 0; i < NumVectors; i++)
-		{
-			const FVector Direction = LeftOfSpread.RotateAngleAxis(DeltaSpread * i, Axis);
-			Vectors.Add(Direction);
-		}
-	}
-	else
-	{
-		Vectors.Add(Forward);
-	}
-	return Vectors;
-}
-
-bool UDRAbilitySystemLibrary::CheckActorWallCollision(AActor* Target, float CheckDistance)
-{
-	if (!Target)
-	{
-		return false;
-	}
-
-	// 넉백 방향 계산 (타겟의 현재 속도 사용)
-	FVector Velocity = FVector::ZeroVector;
-	if (ACharacter* Character = Cast<ACharacter>(Target))
-	{
-		Velocity = Character->GetVelocity();
-	}
-
-	if (Velocity.IsNearlyZero())
-	{
-		return false;
-	}
-
-	// 벽 체크를 위한 트레이스
-	FVector StartLocation = Target->GetActorLocation();
-	FVector EndLocation = StartLocation + (Velocity.GetSafeNormal() * CheckDistance);
-
-	FHitResult WallHitResult;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(Target);
-
-	bool bHitWall = Target->GetWorld()->LineTraceSingleByChannel(
-		WallHitResult,
-		StartLocation,
-		EndLocation,
-		ECC_WorldStatic,
-		QueryParams
-	);
-
-	if (bHitWall && WallHitResult.bBlockingHit)
-	{
-		return true;
-	}
-
-	return false;
-}
-
 FGameplayEffectSpecHandle UDRAbilitySystemLibrary::CreateAndApplyEffectSpec(
 	UAbilitySystemComponent* ASC,
 	TSubclassOf<UGameplayEffect> EffectClass,
@@ -1012,12 +941,6 @@ void UDRAbilitySystemLibrary::ApplyEffectSpecWithSetByCaller(
 }
 
 // ========================= ★Plan8(모자)★ 모자 보호막 =========================
-
-bool UDRAbilitySystemLibrary::HasBellBoyHat(AActor* Target)
-{
-	const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
-	return ASC && ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Buff_BellBoy_Hat);   // 부모 태그 — 자식 둘 다 잡힌다
-}
 
 bool UDRAbilitySystemLibrary::TryEquipBellBoyHat(AActor* Target, UAbilitySystemComponent* SourceASC, int32 Charges)
 {

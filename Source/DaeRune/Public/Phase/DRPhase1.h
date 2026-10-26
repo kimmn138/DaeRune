@@ -27,7 +27,8 @@ class DAERUNE_API UDRPhase1 : public UDRPhaseBase
 
 public:
 	// 페이즈 완료에 필요한 설치 부품 수 (통로 스폰 그룹 하나당 부품 하나)
-	static constexpr int32 RequiredPartsToComplete = 2;
+	// 설치해야 하는 부품 수 — 남긴 사이트의 BP 설정을 따른다 (부품 수를 한 곳에서만 정한다). 사이트가 없으면 2.
+	int32 GetRequiredParts() const;
 
 	// 부품 운반자의 이동 속도 배율
 	static constexpr float CarrierMoveSpeedRatio = 0.5f;

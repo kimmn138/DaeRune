@@ -69,7 +69,7 @@ void UDRPhase1::OnPhaseStart()
 
 	// 5) GameState 진행률 초기화 (CleanserSite::RequiredPartsCount = 2 고정)
 	FPhaseObjectiveData PhaseObjective = GameState->GetCurrentPhaseObjective();
-	PhaseObjective.RequiredCount = RequiredPartsToComplete;
+	PhaseObjective.RequiredCount = GetRequiredParts();
 	GameState->SetPhaseObjective(PhaseObjective);
 	GameState->UpdatePhaseObjectiveProgress(0);
 }
@@ -78,7 +78,7 @@ bool UDRPhase1::IsCompleted() const
 {
 	// 부품 설치 완료 + 클렌저 활성화 시 페이즈 완료
 	if (!GameState) return false;
-	return GameState->GetCollectedParts() >= RequiredPartsToComplete && GameState->IsCleanserActivated();
+	return GameState->GetCollectedParts() >= GetRequiredParts() && GameState->IsCleanserActivated();
 }
 
 void UDRPhase1::OnPhaseEnd()
@@ -198,15 +198,15 @@ void UDRPhase1::AssignPartCarriersForAllGroups()
 
 	if (!ActiveSite.IsValid()) return;
 
-	// 그룹 하나당 부품 하나 — 그룹은 정확히 RequiredPartsToComplete 개를 권장한다
-	if (SpawnGroups.Num() != RequiredPartsToComplete)
+	// 그룹 하나당 부품 하나 — 그룹은 정확히 GetRequiredParts() 개를 권장한다
+	if (SpawnGroups.Num() != GetRequiredParts())
 	{
 		UE_LOG(LogDR, Warning,
-			TEXT("[Phase1] SpawnGroup count (%d) does not match RequiredPartsToComplete (%d). Will assign carriers to first %d groups."),
-			SpawnGroups.Num(), RequiredPartsToComplete, FMath::Min(SpawnGroups.Num(), RequiredPartsToComplete));
+			TEXT("[Phase1] SpawnGroup count (%d) does not match required parts (%d). Will assign carriers to first %d groups."),
+			SpawnGroups.Num(), GetRequiredParts(), FMath::Min(SpawnGroups.Num(), GetRequiredParts()));
 	}
 
-	const int32 MaxCarrierGroups = FMath::Min(SpawnGroups.Num(), RequiredPartsToComplete);
+	const int32 MaxCarrierGroups = FMath::Min(SpawnGroups.Num(), GetRequiredParts());
 	for (int32 i = 0; i < MaxCarrierGroups; ++i)
 	{
 		ADREnemySpawnGroup* Group = SpawnGroups[i];
@@ -319,4 +319,25 @@ ADRDoorManager* UDRPhase1::GetDoorManager()
 	}
 
 	return CachedDoorManager;
+}
+
+int32 UDRPhase1::GetRequiredParts() const
+{
+	static constexpr int32 FallbackRequiredParts = 2;
+
+	for (const TObjectPtr<ADRCleanserSite>& Site : ActiveCleanserSites)
+	{
+		if (Site)
+		{
+			return Site->GetRequiredPartsCount();
+		}
+	}
+	for (const TObjectPtr<ADRCleanserSite>& Site : CleanserSites)
+	{
+		if (Site)
+		{
+			return Site->GetRequiredPartsCount();
+		}
+	}
+	return FallbackRequiredParts;
 }

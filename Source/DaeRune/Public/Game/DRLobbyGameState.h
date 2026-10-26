@@ -23,6 +23,7 @@ public:
 	ADRLobbyGameState();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// 방 코드 관련
@@ -65,10 +66,6 @@ protected:
 
 	UFUNCTION()
 	void OnRep_RoomCode();
-
-	// 최소 시작 인원
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lobby")
-	int32 MinPlayersToStart;
 
 private:
 	// 룸 코드 초기화

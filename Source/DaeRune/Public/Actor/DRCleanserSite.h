@@ -105,6 +105,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite|Phase2")
 	int32 GetInstalledPartsCount() const { return InstalledPartsCount; }
 
+	// 설치해야 하는 부품 수 (BP 설정 — 스테이지1 사이트 2, 스테이지2 설치대 1)
+	UFUNCTION(BlueprintPure, Category = "CleanserSite|Phase2")
+	int32 GetRequiredPartsCount() const { return RequiredPartsCount; }
+
 	// 부품 설치 완료 여부
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite|Phase2")
 	bool IsPartInstallationComplete() const { return InstalledPartsCount >= RequiredPartsCount; }

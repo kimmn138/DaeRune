@@ -341,7 +341,6 @@ void ADRStageGameMode::StartPhase(int32 PhaseIndex)
 
 	// GameState 업데이트
 	CachedGameState->SetCurrentPhaseIndex(PhaseIndex);
-	CachedGameState->SetCurrentPhaseState(EPhaseState::InProgress);
 
 	// 페이즈 시작
 	if (CurrentPhase)
@@ -351,9 +350,6 @@ void ADRStageGameMode::StartPhase(int32 PhaseIndex)
 
 	// Phase 전환 완료 - Race Condition 방지 플래그 해제
 	bIsTransitioningPhase = false;
-
-	// 델리게이트 이벤트 호출
-	// OnPhaseStarted();
 }
 
 void ADRStageGameMode::EndCurrentPhase()
@@ -363,17 +359,11 @@ void ADRStageGameMode::EndCurrentPhase()
 	// Phase 전환 시작 - Race Condition 방지
 	bIsTransitioningPhase = true;
 
-	// 페이즈 완료 상태로 변경
-	CachedGameState->SetCurrentPhaseState(EPhaseState::Completed);
-
 	// 목표 클리어 연출 알림 (모든 클라이언트 - 마지막 페이즈 클리어도 이 경로를 거침)
 	CachedGameState->Multicast_ObjectiveCompleted();
 
 	// 현재 페이즈 종료 처리
 	EndCurrentPhaseIfActive();
-
-	// 블루프린트 완료 이벤트 호출
-	// OnPhaseCompleted();
 
 	TransitionToNextPhase();
 }

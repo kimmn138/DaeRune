@@ -7,14 +7,6 @@
 #include "AbilitySystemComponent.h"
 #include "DaeRune/Public/DRGameplayTags.h"
 
-void UDRDamageGameplayAbility::CauseDamage(AActor* TargetActor)
-{
-	FGameplayEffectSpecHandle DamageSpecHandle = MakeOutgoingGameplayEffectSpec(DamageEffectClass, 1.f);
-	const float ScaledDamage = GetUpgradedDamage();
-	UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(DamageSpecHandle, DamageType, ScaledDamage);
-	GetAbilitySystemComponentFromActorInfo()->ApplyGameplayEffectSpecToTarget(*DamageSpecHandle.Data.Get(), UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor));
-}
-
 FDamageEffectParams UDRDamageGameplayAbility::MakeDamageEffectParamsFromClassDefaults(AActor* TargetActor) const
 {
 	FDamageEffectParams Params; 

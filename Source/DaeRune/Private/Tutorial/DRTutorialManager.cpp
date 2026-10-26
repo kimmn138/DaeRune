@@ -27,6 +27,7 @@
 ADRTutorialManager::ADRTutorialManager()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;   // 물대포 목표 단계에서만 켠다 (TransitionToObjective)
 	PrimaryActorTick.bStartWithTickEnabled = true;
 	bReplicates = true;
 }
@@ -93,8 +94,7 @@ void ADRTutorialManager::Tick(float DeltaTime)
 	UDRAbilitySystemComponent* ASC = GetPlayerASC();
 	if (!ASC) return;
 
-	static const FGameplayTag RMBTag = FGameplayTag::RequestGameplayTag(FName("InputTag.RMB"));
-	FGameplayAbilitySpec* WaterPumpSpec = ASC->FindAbilitySpecByInputTag(RMBTag);
+	FGameplayAbilitySpec* WaterPumpSpec = ASC->FindAbilitySpecByInputTag(FDRGameplayTags::Get().InputTag_RMB);
 
 	if (WaterPumpSpec && WaterPumpSpec->IsActive())
 	{
@@ -188,6 +188,9 @@ void ADRTutorialManager::TransitionToSection(ETutorialSection NewSection)
 void ADRTutorialManager::TransitionToObjective(ECombatObjective NewObjective)
 {
 	CurrentObjective = NewObjective;
+
+	// Tick 은 물대포 사용 시간을 재는 목표에서만 일한다
+	SetActorTickEnabled(HasAuthority() && NewObjective == ECombatObjective::Objective2_WaterPump);
 
 	switch (NewObjective)
 	{
@@ -325,7 +328,7 @@ void ADRTutorialManager::OnPartInstalledToSite(ADRCleanserSite* Site)
 	UpdateObjectiveUI(
 		NSLOCTEXT("Tutorial", "Obj_Install", "부품을 클렌저사이트에 설치하세요"),
 		NSLOCTEXT("Tutorial", "Obj_InstallFmt", "설치 완료"),
-		Installed, 2
+		Installed, Site->GetRequiredPartsCount()
 	);
 
 	if (Site->IsPartInstallationComplete())
@@ -364,46 +367,6 @@ void ADRTutorialManager::GrantAbilityToPlayer(TSubclassOf<UGameplayAbility> Abil
 	{
 		WC->BroadcastAbilityInfo();
 	}
-}
-
-// ========== SeedCannon 적 스폰/정리 ==========
-
-void ADRTutorialManager::SpawnSeedCannonDummies()
-{
-	if (!DummyEnemyClass) return;
-
-	for (AActor* SpawnPoint : SeedCannonSpawnPoints)
-	{
-		if (!SpawnPoint) continue;
-
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
-		ADREnemy* NewDummy = GetWorld()->SpawnActor<ADREnemy>(
-			DummyEnemyClass,
-			SpawnPoint->GetActorLocation(),
-			SpawnPoint->GetActorRotation(),
-			SpawnParams
-		);
-
-		if (NewDummy)
-		{
-			SetupDummyEnemy(NewDummy);
-			SpawnedSeedCannonDummies.Add(NewDummy);
-		}
-	}
-}
-
-void ADRTutorialManager::CleanupSeedCannonDummies()
-{
-	for (ADREnemy* Dummy : SpawnedSeedCannonDummies)
-	{
-		if (IsValid(Dummy))
-		{
-			Dummy->Destroy();
-		}
-	}
-	SpawnedSeedCannonDummies.Empty();
 }
 
 // ========== 수원지 회복 목표 ==========

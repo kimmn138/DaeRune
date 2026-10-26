@@ -18,6 +18,7 @@
 #include "Character/DRFacialExpressionComponent.h"
 #include "AbilitySystem/DRAttributeSet.h"
 #include "Animation/AnimInstance.h"
+#include "DaeRune/DRLogChannels.h"
 
 namespace
 {
@@ -458,11 +459,6 @@ int32 ADRCharacterBase::GetMinionCount_Implementation()
 	return MinionCount;
 }
 
-void ADRCharacterBase::IncremenetMinionCount_Implementation(int32 Amount)
-{
-	MinionCount += Amount;
-}
-
 ECharacterClass ADRCharacterBase::GetCharacterClass_Implementation()
 {
 	return CharacterClass;
@@ -494,8 +490,12 @@ void ADRCharacterBase::InitAbilityActorInfo()
 
 void ADRCharacterBase::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass) const
 {
-	check(IsValid(GetAbilitySystemComponent()));
-	check(GameplayEffectClass);
+	// BP 에서 기본 속성 GE 를 비워 두면 크래시 대신 경고
+	if (!IsValid(GetAbilitySystemComponent()) || !GameplayEffectClass)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Character] %s: ASC 또는 GE 클래스가 없어 속성 효과를 적용하지 못했습니다."), *GetName());
+		return;
+	}
 	// 컨텍스트 생성 및 소스 설정
 	FGameplayEffectContextHandle ContextHandle = GetAbilitySystemComponent()->MakeEffectContext();
 	ContextHandle.AddSourceObject(this);
