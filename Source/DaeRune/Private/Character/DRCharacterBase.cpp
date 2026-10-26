@@ -348,12 +348,16 @@ void ADRCharacterBase::MulticastHandleRevive_Implementation()
 
 void ADRCharacterBase::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 {
-	bIsStunned = NewCount > 0;
-	GetCharacterMovement()->MaxWalkSpeed = bIsStunned ? StunnedMoveSpeed : GetMoveSpeed();
+	// 이동 속도는 태그를 받은 머신마다 바로 맞춘다
+	const bool bStunnedNow = NewCount > 0;
+	GetCharacterMovement()->MaxWalkSpeed = bStunnedNow ? StunnedMoveSpeed : GetMoveSpeed();
 
+	// ★복제 변수는 서버만 쓴다★ — 클라가 먼저 도착한 태그로 값을 바꿔 두면 이후 복제가 같은 값이라
+	// OnRep_Stunned 가 불리지 않아 입력 차단 · 스턴 VFX 가 빠진다.
 	// 서버(Listen Server 호스트)에서는 RepNotify가 자동 호출되지 않으므로 수동 호출
 	if (HasAuthority())
 	{
+		bIsStunned = bStunnedNow;
 		OnRep_Stunned();
 	}
 }

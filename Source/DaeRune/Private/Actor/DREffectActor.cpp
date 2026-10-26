@@ -5,6 +5,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Actor/DRCleanserSite.h"
+#include "DaeRune/DRLogChannels.h"
 
 ADREffectActor::ADREffectActor()
 {
@@ -31,8 +32,12 @@ void ADREffectActor::ApplyEffectToTarget(AActor* TargetActor, TSubclassOf<UGamep
 	UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
 	if (TargetASC == nullptr) return;
 
-	// GameplayEffect 클래스 유효성 검증
-	check(GameplayEffectClass);
+	// GameplayEffect 클래스 유효성 검증 — BP 에서 비워 두면 크래시 대신 경고
+	if (!GameplayEffectClass)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[EffectActor] %s: 적용할 GE 클래스가 비어 있습니다."), *GetName());
+		return;
+	}
 	// 효과 컨텍스트 생성 - 소스 정보 설정
 	FGameplayEffectContextHandle EffectContextHandle = TargetASC->MakeEffectContext();
 	EffectContextHandle.AddSourceObject(this);

@@ -142,7 +142,7 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 					if (ADRTutorialManager* TM = Cast<ADRTutorialManager>(DummyCheck->TutorialManagerRef.Get()))
 					{
 						FGameplayTagContainer AbilityTags;
-						if (const FDRGameplayEffectContext* DRContext = static_cast<const FDRGameplayEffectContext*>(Props.EffectContextHandle.Get()))
+						if (const FDRGameplayEffectContext* DRContext = FDRGameplayEffectContext::FromHandle(Props.EffectContextHandle))
 						{
 							AbilityTags = DRContext->GetSourceAbilityTags();
 						}
@@ -167,22 +167,22 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 
 		if (ADREnemy* Enemy = Cast<ADREnemy>(Props.TargetAvatarActor))
 		{
-			if (ADRAIController* AIController = Cast<ADRAIController>(Enemy->GetController()))
+			ADRAIController* AIController = Cast<ADRAIController>(Enemy->GetController());
+			// BT 시작 전(스폰 직후 · 튜토리얼 더미)에는 블랙보드가 없다
+			if (UBlackboardComponent* BB = AIController ? AIController->GetBlackboardComponent() : nullptr)
 			{
-				UBlackboardComponent* BB = AIController->GetBlackboardComponent();
-
 				// 공격자가 플레이어인 경우에만 타겟 설정 (적끼리 공격 시 타겟팅 방지)
 				const bool bSourceIsPlayer = Props.SourceAvatarActor && Props.SourceAvatarActor->ActorHasTag(FName("Player"));
 
 				// FirstAttacker가 없으면 설정 (부품 운반자도 공격 가능 — 도망 설계 폐기)
-				if (bSourceIsPlayer && !BB->GetValueAsBool("HasFirstAttacker"))
+				if (bSourceIsPlayer && !BB->GetValueAsBool(DRBlackboardKeys::HasFirstAttacker))
 				{
 					// 첫 공격자 설정
-					BB->SetValueAsObject("FirstAttacker", Props.SourceAvatarActor);
-					BB->SetValueAsBool("HasFirstAttacker", true);
+					BB->SetValueAsObject(DRBlackboardKeys::FirstAttacker, Props.SourceAvatarActor);
+					BB->SetValueAsBool(DRBlackboardKeys::HasFirstAttacker, true);
 
 					// 추적 타겟도 첫 공격자로 설정
-					BB->SetValueAsObject("TargetToFollow", Props.SourceAvatarActor);
+					BB->SetValueAsObject(DRBlackboardKeys::TargetToFollow, Props.SourceAvatarActor);
 
 					// 첫 공격자를 향해 SetFocus
 					AIController->SetFocus(Props.SourceAvatarActor);
@@ -198,13 +198,13 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 				}
 				if (bSourceIsPlayer)
 				{
-					BB->SetValueAsObject("AttackingPlayer", Props.SourceAvatarActor);
+					BB->SetValueAsObject(DRBlackboardKeys::AttackingPlayer, Props.SourceAvatarActor);
 				}
 
 				if (NewHealth <= GetMaxHealth() * 0.3f)
 				{
-					BB->SetValueAsBool("IsHealthLow", true);
-					BB->SetValueAsBool("IsInitialized", false);
+					BB->SetValueAsBool(DRBlackboardKeys::IsHealthLow, true);
+					BB->SetValueAsBool(DRBlackboardKeys::IsInitialized, false);
 				}
 			}
 
@@ -230,11 +230,10 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			ICombatInterface* CombatInterface = Cast<ICombatInterface>(Props.TargetAvatarActor);
 			if (CombatInterface)
 			{
-				FVector Impulse = UDRAbilitySystemLibrary::GetDeathImpulse(Props.EffectContextHandle);
 				CombatInterface->Die(UDRAbilitySystemLibrary::GetDeathImpulse(Props.EffectContextHandle));
 			}
 		}
-		else
+		else if (Props.TargetCharacter)
 		{
 			if (Props.TargetCharacter->Implements<UCombatInterface>() && !ICombatInterface::Execute_IsBeingShocked(Props.TargetCharacter))
 			{
@@ -248,25 +247,10 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			{
 				Props.TargetCharacter->LaunchCharacter(KnockbackForce, true, true);
 
-				// 넉백 상태 설정 추가
+				// 넉백 상태 + 안전 해제 타이머 (최대 1.5초) — 적이 타이머를 들고 있어 연속 넉백이면 다시 잰다
 				if (ADREnemy* Enemy = Cast<ADREnemy>(Props.TargetCharacter))
 				{
-					Enemy->SetKnockbackState(true);
-
-					// 넉백 종료 타이머 (안전장치)
-					FTimerHandle KnockbackEndTimer;
-					Props.TargetCharacter->GetWorld()->GetTimerManager().SetTimer(
-						KnockbackEndTimer,
-						[Enemy]()
-						{
-							if (IsValid(Enemy))
-							{
-								Enemy->SetKnockbackState(false);
-							}
-						},
-						1.5f, // 최대 1.5초 후 자동 해제
-						false
-					);
+					Enemy->BeginKnockback(1.5f);
 				}
 			}
 		}

@@ -158,6 +158,9 @@ void ADRS2TrainTrack::RebuildTrackMesh()
 		USplineMeshComponent* Segment = NewObject<USplineMeshComponent>(this);
 		if (!Segment) continue;
 
+		// ★생성 스크립트 소속으로 표시★ — 이게 없으면(Native) 배치된 선로의 조각이 레벨에 저장되지 않아
+		// 생성 스크립트를 다시 돌리지 않는 쿡 빌드에서 선로 메시가 사라질 수 있다
+		Segment->CreationMethod = EComponentCreationMethod::UserConstructionScript;
 		Segment->SetMobility(TargetMobility);
 		Segment->SetupAttachment(Spline);
 		Segment->RegisterComponent();

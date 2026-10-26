@@ -47,31 +47,31 @@ bool UDRGameplayAbility::CheckCost(const FGameplayAbilitySpecHandle Handle, cons
 
 void UDRGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
 {
-    // 기본 Cost 적용
-    Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
-
     const float EffectiveWaterCost = GetEffectiveWaterCostFor(ActorInfo);
-    if (EffectiveWaterCost <= 0.f || !HasAuthority(&ActivationInfo))
+
+    // 물 비용이 없으면 엔진 기본 처리. 있으면 아래에서 SetByCaller 로 ★한 번만★ 적용한다
+    // (예전에는 Super 가 같은 Cost GE 를 값 없이 한 번 더 적용해 스킬마다 GE · 효과 RPC 가 2번 나갔다)
+    if (EffectiveWaterCost <= 0.f)
+    {
+        Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
+        return;
+    }
+
+    if (!HasAuthority(&ActivationInfo))
     {
         return;
     }
 
-    // Cost GE가 설정되어 있으면 SetByCaller로 WaterCost 전달
     if (GetCostGameplayEffect())
     {
-        UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
-        if (ASC)
+        // ★ActorInfo 를 직접 넘기는 오버로드★ — 인자 없는 판은 CurrentActorInfo 를 check 하는데 CDO 에서 불리면 비어 있다
+        FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(
+            Handle, ActorInfo, ActivationInfo, GetCostGameplayEffect()->GetClass(), GetAbilityLevel(Handle, ActorInfo));
+
+        if (SpecHandle.IsValid())
         {
-            FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(
-                GetCostGameplayEffect()->GetClass(), GetAbilityLevel());
-
-            if (SpecHandle.IsValid())
-            {
-                const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
-                SpecHandle.Data.Get()->SetSetByCallerMagnitude(GameplayTags.Cost_Water, EffectiveWaterCost);
-
-                ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-            }
+            SpecHandle.Data->SetSetByCallerMagnitude(FDRGameplayTags::Get().Cost_Water, EffectiveWaterCost);
+            ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, SpecHandle);
         }
     }
     else
@@ -90,14 +90,28 @@ void UDRGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, cons
     }
 }
 
-void UDRGameplayAbility::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+void UDRGameplayAbility::PostInitProperties()
 {
-    Super::OnGiveAbility(ActorInfo, Spec);
+    Super::PostInitProperties();
+    SyncActivationOwnedTags();
+}
 
-    // ActivationOwnedTags 가 AbilityTags 를 전부 포함하도록 보장.
+void UDRGameplayAbility::PostLoad()
+{
+    Super::PostLoad();
+
+    // ★BP 기본값이 들어온 CDO 에서 한 번★ 맞춘다 — 인스턴스는 CDO 에서 복사되므로 따로 할 필요가 없다.
+    // (예전에는 OnGiveAbility 에서 했는데, 클라는 인스턴스가 복제되기 전이면 엔진이 CDO 로 OnGiveAbility 를 불러
+    //  런타임에 CDO 를 고치는 셈이었다)
+    SyncActivationOwnedTags();
+}
+
+void UDRGameplayAbility::SyncActivationOwnedTags()
+{
+    // ActivationOwnedTags 가 어빌리티 태그를 전부 포함하도록 보장.
     // 이렇게 해야 owner ASC 의 태그 카운트 이벤트가 곧 BlockAbilitiesWithTag 변화의 트리거가 되어
     // 스킬아이콘 차단 UI 가 즉시 갱신된다.
-    for (const FGameplayTag& Tag : AbilityTags)
+    for (const FGameplayTag& Tag : GetAssetTags())
     {
         if (!ActivationOwnedTags.HasTagExact(Tag))
         {
@@ -195,7 +209,8 @@ void UDRGameplayAbility::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, 
         return;
     }
 
-    FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(CooldownGE->GetClass(), GetAbilityLevel());
+    FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(
+        Handle, ActorInfo, ActivationInfo, CooldownGE->GetClass(), GetAbilityLevel(Handle, ActorInfo));
     if (!SpecHandle.IsValid()) return;
 
     const float UpgradedCooldown = GetUpgradeRuntimeFor(ActorInfo)

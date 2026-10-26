@@ -6,6 +6,7 @@
 #include "Character/DRCharacterBase.h"
 #include "Interaction/EnemyInterface.h"
 #include "UI/WidgetController/DRAttributeChangedDelegate.h"
+#include "AI/DRBlackboardKeys.h"
 #include "DREnemy.generated.h"
 
 class UBlackboardComponent;
@@ -17,36 +18,6 @@ class UNiagaraSystem;
 class UNiagaraComponent;
 
 // Blackboard 키 상수 (하드코딩 방지)
-namespace DRBlackboardKeys
-{
-	// AI 상태
-	inline const FName HitReacting = TEXT("HitReacting");
-	inline const FName RangedAttacker = TEXT("RangedAttacker");
-	inline const FName HomeLocation = TEXT("HomeLocation");
-	inline const FName Dead = TEXT("Dead");
-	inline const FName Stunned = TEXT("Stunned");
-
-	// 부품 시스템
-	inline const FName HasPart = TEXT("HasPart");
-
-	// 광폭화 시스템
-	inline const FName IsEnraged = TEXT("bIsEnraged");
-	inline const FName AttackSpeed = TEXT("AttackSpeed");
-	inline const FName EliteAttackSpeed = TEXT("EliteAttackSpeed");
-
-	// 타겟팅
-	inline const FName FirstAttacker = TEXT("FirstAttacker");
-	inline const FName HasFirstAttacker = TEXT("HasFirstAttacker");
-	inline const FName TargetToFollow = TEXT("TargetToFollow");
-	// ★Plan8(시선집중)★ 타깃 서비스들이 쓰는 거리 키 (Plan8 D-16)
-	inline const FName DistanceToTarget = TEXT("DistanceToTarget");
-	// ★Plan8(시선집중)★ BTS_CheckValidTarget 의 "벽에 가림" 타이머 — 도발 동안 0 으로 되돌린다 (Plan8 D-16)
-	inline const FName UnreachableSince = TEXT("UnreachableSince");
-
-	// DragonFly 전용
-	inline const FName IsLockedDown = TEXT("IsLockedDown");
-	inline const FName BasicAttackCount = TEXT("BasicAttackCount");
-}
 
 /**
  * 적 캐릭터 기본 클래스
@@ -109,6 +80,9 @@ public:
 	// 넉백 상태 설정/해제
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	void SetKnockbackState(bool bInKnockback);
+
+	// 넉백 시작 — MaxDuration 뒤 자동 해제 (다시 맞으면 타이머를 새로 건다)
+	void BeginKnockback(float MaxDuration);
 
 	// ===== 튜토리얼 더미 시스템 =====
 
@@ -302,6 +276,9 @@ private:
 
 	// 스턴 면역 타이머
 	FTimerHandle StunImmunityTimerHandle;
+
+	// 넉백 안전 해제 타이머
+	FTimerHandle KnockbackEndTimerHandle;
 
 	bool bPartDropped = false;
 

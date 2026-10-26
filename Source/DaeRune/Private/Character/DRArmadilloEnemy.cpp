@@ -109,8 +109,8 @@ void ADRArmadilloEnemy::MulticastHandleDeath_Implementation(const FVector& Death
 		StopRollCharge();
 	}
 
-	// 2. Force revert to basic form (mesh swap only, no animation)
-	if (bIsBallForm)
+	// 2. Force revert to basic form (mesh swap only, no animation) — 복제 변수라 서버만 쓴다 (클라는 복제로 따라온다)
+	if (bIsBallForm && HasAuthority())
 	{
 		bIsBallForm = false;
 		OnRep_BallForm(); // 메시 가시성 + 캡슐 크기 복원
@@ -221,8 +221,8 @@ void ADRArmadilloEnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 New
 		StopRollCharge();
 	}
 
-	// If stunned while in ball form, revert to basic form (mesh swap only, no animation)
-	if (NewCount > 0 && bIsBallForm)
+	// If stunned while in ball form, revert to basic form (mesh swap only, no animation) — 서버만 (복제 변수)
+	if (NewCount > 0 && bIsBallForm && HasAuthority())
 	{
 		bIsBallForm = false;
 		bPendingBallForm = false;

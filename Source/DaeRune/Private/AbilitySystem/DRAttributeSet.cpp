@@ -154,13 +154,14 @@ void UDRAttributeSet::Debuff(const FEffectProperties& Props)
 	const float DebuffDuration = UDRAbilitySystemLibrary::GetDebuffDuration(Props.EffectContextHandle);
 
 	// 디버프 매핑 (예: 화염 → 불타는 디버프)
-	const FGameplayTag DebuffTag = GameplayTags.DamageTypesToDebuffs[DamageType];
+	// (표에 없는 피해 타입이면 [] 가 check 로 크래시했다 — Find 로)
+	const FGameplayTag* DebuffTag = GameplayTags.DamageTypesToDebuffs.Find(DamageType);
+	if (!DebuffTag) return;
 
 	// AttributeSet에 미리 설정된 DebuffEffectMap에서 해당 태그의 GE 클래스를 가져옴
-	if (!DebuffEffectMap.Contains(DebuffTag)) return;
-
-	TSubclassOf<UGameplayEffect> DebuffEffectClass = DebuffEffectMap[DebuffTag];
-	if (!DebuffEffectClass) return;
+	const TSubclassOf<UGameplayEffect>* DebuffEffectClassPtr = DebuffEffectMap.Find(*DebuffTag);
+	if (!DebuffEffectClassPtr || !*DebuffEffectClassPtr) return;
+	const TSubclassOf<UGameplayEffect> DebuffEffectClass = *DebuffEffectClassPtr;
 
 	// GE 스펙 생성
 	FGameplayEffectSpecHandle SpecHandle = Props.SourceASC->MakeOutgoingSpec(DebuffEffectClass, 1.f, EffectContext);
@@ -172,9 +173,10 @@ void UDRAttributeSet::Debuff(const FEffectProperties& Props)
         MutableSpec->SetDuration(DebuffDuration, true);
 	
 		// Context에 DamageType 설정
-		FDRGameplayEffectContext* DRContext = static_cast<FDRGameplayEffectContext*>(MutableSpec->GetContext().Get());
-		TSharedPtr<FGameplayTag> DebuffDamageType = MakeShareable(new FGameplayTag(DamageType));
-		DRContext->SetDamageType(DebuffDamageType);
+		if (FDRGameplayEffectContext* DRContext = FDRGameplayEffectContext::FromHandle(MutableSpec->GetContext()))
+		{
+			DRContext->SetDamageType(DamageType);
+		}
 		
 		// 최종 적용
 		Props.TargetASC->ApplyGameplayEffectSpecToSelf(*MutableSpec);

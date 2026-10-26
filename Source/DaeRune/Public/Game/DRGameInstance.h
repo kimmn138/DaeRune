@@ -63,9 +63,10 @@ public:
 
 	// ========== 맵 전환 시 캐릭터 선택 보존 ==========
 
-	void SavePlayerClassSelection(const FString& PlayerName, EPlayerCharacterClass SelectedClass);
-	EPlayerCharacterClass LoadPlayerClassSelection(const FString& PlayerName) const;
+	// 키는 플레이어 고유 ID(UniqueNetId) — 이름은 겹치거나(같은 스팀 닉네임) 바뀔 수 있다. ID 가 없으면(오프라인) 이름.
+	EPlayerCharacterClass LoadPlayerClassSelection(const APlayerState* PlayerState) const;
 	void SaveAllPlayerSelections(UWorld* World);
+	static FString GetPlayerSelectionKey(const APlayerState* PlayerState);
 	void ClearPlayerClassSelections();
 
 	// ========== 진행도 저장/로드 ==========

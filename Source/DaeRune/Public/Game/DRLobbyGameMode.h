@@ -117,5 +117,9 @@ protected:
 	void DestroyAllDisplayCharacters();
 
 private:
+	// 대기실 배치: 슬롯 + 디스플레이 캐릭터 + 고정 카메라
+	void PlaceInWaitingRoom(ADRPlayerController* DRPC, EPlayerCharacterClass DisplayClass);
+
+private:
 	void ExecuteTravel(const FString& StageMapName);
 };

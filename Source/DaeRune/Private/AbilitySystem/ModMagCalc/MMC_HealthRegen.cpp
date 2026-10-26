@@ -7,6 +7,7 @@
 #include "AbilitySystem/DRPlayerAttributeSet.h"
 #include "AbilitySystemComponent.h"
 #include "DRGameplayTags.h"
+#include "AbilitySystem/Data/GameBalanceConfig.h"
 
 UMMC_HealthRegen::UMMC_HealthRegen()
 {
@@ -24,8 +25,12 @@ UMMC_HealthRegen::UMMC_HealthRegen()
 
 float UMMC_HealthRegen::CalculateBaseMagnitude_Implementation(const FGameplayEffectSpec& Spec) const
 {
-    // 회복량 상수
-    constexpr float NORMAL_HEAL_PER_TICK = 10.f;
+    // 회복량 (밸런스 설정 — 없으면 기본값)
+    static const FPlayerCombatConfig DefaultPlayerCombat;
+    const UAbilitySystemComponent* InstigatorASC = Spec.GetContext().GetInstigatorAbilitySystemComponent();
+    const UGameBalanceConfig* BalanceConfig = InstigatorASC
+        ? UDRAbilitySystemLibrary::GetGameBalanceConfig(InstigatorASC->GetAvatarActor()) : nullptr;
+    const float NORMAL_HEAL_PER_TICK = (BalanceConfig ? BalanceConfig->PlayerCombat : DefaultPlayerCombat).HealthRegenPerTick;
 
     // 소스·타겟의 Gameplay Tag 컨테이너 가져오기
     const FGameplayTagContainer* SourceTags = Spec.CapturedSourceTags.GetAggregatedTags();

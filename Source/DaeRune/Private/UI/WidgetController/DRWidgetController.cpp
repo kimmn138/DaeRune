@@ -27,8 +27,8 @@ void UDRWidgetController::BindCallbacksToDependencies()
 
 void UDRWidgetController::BroadcastAbilityInfo()
 {
-	// 시작 어빌리티가 아직 부여되지 않았으면 대기
-	if (!GetDRASC()->bStartupAbilitiesGiven) return;
+	// 시작 어빌리티가 아직 부여되지 않았으면 대기. AbilityInfo 는 BP 에서 지정 — 비어 있으면 아이콘 없이 넘어간다
+	if (!GetDRASC() || !GetDRASC()->bStartupAbilitiesGiven || !AbilityInfo) return;
 
 	// 각 어빌리티 정보를 순회하며 UI에 전달
 	FForEachAbility BroadcastDelegate;

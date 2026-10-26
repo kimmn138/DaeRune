@@ -220,7 +220,11 @@ void ADREnemy::Die(const FVector& DeathImpulse)
 	// AI 상태 업데이트
 	if (DRAIController)
 	{
-		DRAIController->GetBlackboardComponent()->SetValueAsBool(DRBlackboardKeys::Dead, true);
+		// 튜토리얼 더미 등 BT 를 돌리지 않는 적은 블랙보드가 없다
+		if (UBlackboardComponent* BB = DRAIController->GetBlackboardComponent())
+		{
+			BB->SetValueAsBool(DRBlackboardKeys::Dead, true);
+		}
 		// AI Focus 해제 - 사망 후 플레이어 방향 추적 중지
 		DRAIController->ClearFocus(EAIFocusPriority::Gameplay);
 	}
@@ -333,6 +337,16 @@ void ADREnemy::ReduceWaterReward()
 void ADREnemy::SetKnockbackState(bool bInKnockback)
 {
 	bIsBeingKnockedBack = bInKnockback;
+}
+
+void ADREnemy::BeginKnockback(float MaxDuration)
+{
+	SetKnockbackState(true);
+
+	// ★멤버 타이머★ — 지역 핸들이면 연속 넉백 때 첫 타이머가 두 번째 넉백을 일찍 풀었고,
+	// 원시 포인터 람다는 적이 파괴된 뒤 불릴 수 있었다 (멤버 함수 바인딩은 파괴 시 함께 정리된다)
+	GetWorldTimerManager().SetTimer(KnockbackEndTimerHandle,
+		FTimerDelegate::CreateUObject(this, &ADREnemy::SetKnockbackState, false), MaxDuration, false);
 }
 
 bool ADREnemy::DropPart()

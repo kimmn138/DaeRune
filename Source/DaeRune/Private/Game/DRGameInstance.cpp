@@ -1701,14 +1701,18 @@ FDRStageRewardResult UDRGameInstance::ApplyStageReward(const FDRStageRewardRepor
 
 // ========================= 캐릭터 선택 보존 =========================
 
-void UDRGameInstance::SavePlayerClassSelection(const FString& PlayerName, EPlayerCharacterClass SelectedClass)
+FString UDRGameInstance::GetPlayerSelectionKey(const APlayerState* PlayerState)
 {
-	PlayerClassSelections.Add(PlayerName, SelectedClass);
+	if (!PlayerState) return FString();
+
+	// (FUniqueNetIdRepl::ToString 은 CoreOnline 모듈 링크가 필요해 내부 ID 의 가상 함수를 쓴다)
+	const FUniqueNetIdPtr UniqueId = PlayerState->GetUniqueId().GetUniqueNetId();
+	return UniqueId.IsValid() ? UniqueId->ToString() : PlayerState->GetPlayerName();
 }
 
-EPlayerCharacterClass UDRGameInstance::LoadPlayerClassSelection(const FString& PlayerName) const
+EPlayerCharacterClass UDRGameInstance::LoadPlayerClassSelection(const APlayerState* PlayerState) const
 {
-	const EPlayerCharacterClass* Found = PlayerClassSelections.Find(PlayerName);
+	const EPlayerCharacterClass* Found = PlayerClassSelections.Find(GetPlayerSelectionKey(PlayerState));
 	return Found ? *Found : EPlayerCharacterClass::Gardener;
 }
 
@@ -1724,7 +1728,7 @@ void UDRGameInstance::SaveAllPlayerSelections(UWorld* World)
 	{
 		if (ADRPlayerState* DRPS = Cast<ADRPlayerState>(PS))
 		{
-			PlayerClassSelections.Add(DRPS->GetPlayerName(), DRPS->GetSelectedPlayerClass());
+			PlayerClassSelections.Add(GetPlayerSelectionKey(DRPS), DRPS->GetSelectedPlayerClass());
 		}
 	}
 }

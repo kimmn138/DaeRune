@@ -528,7 +528,7 @@ float UDRAbilitySystemLibrary::GetLifestealRatioForDamage(const FEffectPropertie
 	//    이 검사를 빠뜨리면 씨앗 폭탄·물대포 피해까지 흡혈된다.
 	//    ApplyDamageEffect 가 컨텍스트에 SourceAbilityTags 를 실어 주므로 추가 배선이 필요 없다.
 	const FDRGameplayEffectContext* DRContext =
-		static_cast<const FDRGameplayEffectContext*>(Props.EffectContextHandle.Get());
+		FDRGameplayEffectContext::FromHandle(Props.EffectContextHandle);
 	if (!DRContext) return 0.f;
 
 	if (!DRContext->GetSourceAbilityTags().HasTagExact(GameplayTags.Abilities_GardenRobot_ClawSwipe))
@@ -561,7 +561,7 @@ float UDRAbilitySystemLibrary::GetHitHealAmountForDamage(const FEffectProperties
 	// ② 이 피해가 ★자판기 기본 공격에서★ 나왔는가 (흡혈의 ClawSwipe 검사와 같은 이유 —
 	//    빠뜨리면 자판기의 다른 피해원까지 회복된다). 동전·잭팟 캡슐은 둘 다 이 GA 의 태그를 싣는다.
 	const FDRGameplayEffectContext* DRContext =
-		static_cast<const FDRGameplayEffectContext*>(Props.EffectContextHandle.Get());
+		FDRGameplayEffectContext::FromHandle(Props.EffectContextHandle);
 	if (!DRContext) return 0.f;
 
 	if (!DRContext->GetSourceAbilityTags().HasTagExact(GameplayTags.Abilities_VendingMachine_BasicAttack))
@@ -583,7 +583,7 @@ float UDRAbilitySystemLibrary::GetHitHealAmountForDamage(const FEffectProperties
 
 bool UDRAbilitySystemLibrary::IsSuccessfulDebuff(const FGameplayEffectContextHandle& EffectContextHandle)
 {
-	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	if (const FDRGameplayEffectContext* DREffectContext = FDRGameplayEffectContext::FromHandle(EffectContextHandle))
 	{
 		return DREffectContext->IsSuccessfulDebuff();
 	}
@@ -592,7 +592,7 @@ bool UDRAbilitySystemLibrary::IsSuccessfulDebuff(const FGameplayEffectContextHan
 
 float UDRAbilitySystemLibrary::GetDebuffDamage(const FGameplayEffectContextHandle& EffectContextHandle)
 {
-	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	if (const FDRGameplayEffectContext* DREffectContext = FDRGameplayEffectContext::FromHandle(EffectContextHandle))
 	{
 		return DREffectContext->GetDebuffDamage();
 	}
@@ -601,7 +601,7 @@ float UDRAbilitySystemLibrary::GetDebuffDamage(const FGameplayEffectContextHandl
 
 float UDRAbilitySystemLibrary::GetDebuffDuration(const FGameplayEffectContextHandle& EffectContextHandle)
 {
-	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	if (const FDRGameplayEffectContext* DREffectContext = FDRGameplayEffectContext::FromHandle(EffectContextHandle))
 	{
 		return DREffectContext->GetDebuffDuration();
 	}
@@ -610,19 +610,16 @@ float UDRAbilitySystemLibrary::GetDebuffDuration(const FGameplayEffectContextHan
 
 FGameplayTag UDRAbilitySystemLibrary::GetDamageType(const FGameplayEffectContextHandle& EffectContextHandle)
 {
-	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	if (const FDRGameplayEffectContext* DREffectContext = FDRGameplayEffectContext::FromHandle(EffectContextHandle))
 	{
-		if (DREffectContext->GetDamageType().IsValid())
-		{
-			return *DREffectContext->GetDamageType();
-		}
+		return DREffectContext->GetDamageType();
 	}
 	return FGameplayTag();
 }
 
 FVector UDRAbilitySystemLibrary::GetDeathImpulse(const FGameplayEffectContextHandle& EffectContextHandle)
 {
-	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	if (const FDRGameplayEffectContext* DREffectContext = FDRGameplayEffectContext::FromHandle(EffectContextHandle))
 	{
 		return DREffectContext->GetDeathImpulse();
 	}
@@ -631,7 +628,7 @@ FVector UDRAbilitySystemLibrary::GetDeathImpulse(const FGameplayEffectContextHan
 
 FVector UDRAbilitySystemLibrary::GetKnockbackForce(const FGameplayEffectContextHandle& EffectContextHandle)
 {
-	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	if (const FDRGameplayEffectContext* DREffectContext = FDRGameplayEffectContext::FromHandle(EffectContextHandle))
 	{
 		return DREffectContext->GetKnockbackForce();
 	}
@@ -640,7 +637,7 @@ FVector UDRAbilitySystemLibrary::GetKnockbackForce(const FGameplayEffectContextH
 
 FGameplayTagContainer UDRAbilitySystemLibrary::GetSourceAbilityTags(const FGameplayEffectContextHandle& EffectContextHandle)
 {
-	if (const FDRGameplayEffectContext* DREffectContext = static_cast<const FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	if (const FDRGameplayEffectContext* DREffectContext = FDRGameplayEffectContext::FromHandle(EffectContextHandle))
 	{
 		return DREffectContext->GetSourceAbilityTags();
 	}
@@ -649,7 +646,7 @@ FGameplayTagContainer UDRAbilitySystemLibrary::GetSourceAbilityTags(const FGamep
 
 void UDRAbilitySystemLibrary::SetIsSuccessfulDebuff(UPARAM(ref)FGameplayEffectContextHandle& EffectContextHandle, bool bInSuccessfulDebuff)
 {
-	if (FDRGameplayEffectContext* DREffectContext = static_cast<FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	if (FDRGameplayEffectContext* DREffectContext = FDRGameplayEffectContext::FromHandle(EffectContextHandle))
 	{
 		DREffectContext->SetIsSuccessfulDebuff(bInSuccessfulDebuff);
 	}
@@ -657,7 +654,7 @@ void UDRAbilitySystemLibrary::SetIsSuccessfulDebuff(UPARAM(ref)FGameplayEffectCo
 
 void UDRAbilitySystemLibrary::SetDebuffDamage(UPARAM(ref)FGameplayEffectContextHandle& EffectContextHandle, float InDamage)
 {
-	if (FDRGameplayEffectContext* DREffectContext = static_cast<FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	if (FDRGameplayEffectContext* DREffectContext = FDRGameplayEffectContext::FromHandle(EffectContextHandle))
 	{
 		DREffectContext->SetDebuffDamage(InDamage);
 	}
@@ -665,7 +662,7 @@ void UDRAbilitySystemLibrary::SetDebuffDamage(UPARAM(ref)FGameplayEffectContextH
 
 void UDRAbilitySystemLibrary::SetDebuffDuration(UPARAM(ref)FGameplayEffectContextHandle& EffectContextHandle, float InDuration)
 {
-	if (FDRGameplayEffectContext* DREffectContext = static_cast<FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	if (FDRGameplayEffectContext* DREffectContext = FDRGameplayEffectContext::FromHandle(EffectContextHandle))
 	{
 		DREffectContext->SetDebuffDuration(InDuration);
 	}
@@ -673,16 +670,15 @@ void UDRAbilitySystemLibrary::SetDebuffDuration(UPARAM(ref)FGameplayEffectContex
 
 void UDRAbilitySystemLibrary::SetDamageType(UPARAM(ref)FGameplayEffectContextHandle& EffectContextHandle, const FGameplayTag& InDamageType)
 {
-	if (FDRGameplayEffectContext* DREffectContext = static_cast<FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	if (FDRGameplayEffectContext* DREffectContext = FDRGameplayEffectContext::FromHandle(EffectContextHandle))
 	{
-		const TSharedPtr<FGameplayTag> DamageType = MakeShared<FGameplayTag>(InDamageType);
-		DREffectContext->SetDamageType(DamageType);
+		DREffectContext->SetDamageType(InDamageType);
 	}
 }
 
 void UDRAbilitySystemLibrary::SetDeathImpulse(UPARAM(ref)FGameplayEffectContextHandle& EffectContextHandle, const FVector& InImpulse)
 {
-	if (FDRGameplayEffectContext* DREffectContext = static_cast<FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	if (FDRGameplayEffectContext* DREffectContext = FDRGameplayEffectContext::FromHandle(EffectContextHandle))
 	{
 		DREffectContext->SetDeathImpulse(InImpulse);
 	}
@@ -690,7 +686,7 @@ void UDRAbilitySystemLibrary::SetDeathImpulse(UPARAM(ref)FGameplayEffectContextH
 
 void UDRAbilitySystemLibrary::SetKnockbackForce(UPARAM(ref)FGameplayEffectContextHandle& EffectContextHandle, const FVector& InForce)
 {
-	if (FDRGameplayEffectContext* DREffectContext = static_cast<FDRGameplayEffectContext*>(EffectContextHandle.Get()))
+	if (FDRGameplayEffectContext* DREffectContext = FDRGameplayEffectContext::FromHandle(EffectContextHandle))
 	{ 
 		DREffectContext->SetKnockbackForce(InForce);
 	}
@@ -837,42 +833,45 @@ bool UDRAbilitySystemLibrary::IsValidDamageTarget(AActor* Attacker, AActor* Targ
 FGameplayEffectContextHandle UDRAbilitySystemLibrary::ApplyDamageEffect(const FDamageEffectParams& DamageEffectParams)
 {
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
-	AActor* SourceAvatarActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
+
+	// 소스 · 대상 ASC 가 없으면 적용할 수 없다 (예전에는 근접 전용 분기만 확인하고 아래에서 역참조했다)
+	UAbilitySystemComponent* SourceASC = DamageEffectParams.SourceAbilitySystemComponent;
+	UAbilitySystemComponent* TargetASC = DamageEffectParams.TargetAbilitySystemComponent;
+	if (!SourceASC || !TargetASC) return FGameplayEffectContextHandle();
+
+	AActor* SourceAvatarActor = SourceASC->GetAvatarActor();
 
 	// ===== 근접 전용 피격 대상 가로채기 (Plan6 §5.11) =====
 	// 홀로그램 두더지처럼 "2m 안에서의 공격만 유효하고 그 밖은 투과"하는 대상을 여기서 처리한다.
 	// 모든 공격이 이 함수를 지나므로 공격 종류마다 손대지 않아도 된다.
 	// GE 는 적용하지 않는다 - 어트리뷰트를 쓰지 않는 대상이라 PostGameplayEffectExecute 를 태우면 위험하다.
-	if (DamageEffectParams.TargetAbilitySystemComponent)
+	if (IDRProximityHitOnly* ProximityTarget = Cast<IDRProximityHitOnly>(TargetASC->GetAvatarActor()))
 	{
-		AActor* TargetAvatarActor = DamageEffectParams.TargetAbilitySystemComponent->GetAvatarActor();
-		if (IDRProximityHitOnly* ProximityTarget = Cast<IDRProximityHitOnly>(TargetAvatarActor))
+		if (ProximityTarget->AcceptsHitFrom(SourceAvatarActor))
 		{
-			if (ProximityTarget->AcceptsHitFrom(SourceAvatarActor))
-			{
-				ProximityTarget->HandleProximityHit(SourceAvatarActor);
-			}
-			// 범위 밖이면 아무 일도 하지 않는다 (투과)
-			return FGameplayEffectContextHandle();
+			ProximityTarget->HandleProximityHit(SourceAvatarActor);
 		}
+		// 범위 밖이면 아무 일도 하지 않는다 (투과)
+		return FGameplayEffectContextHandle();
 	}
 
-	FGameplayEffectContextHandle EffectContexthandle = DamageEffectParams.SourceAbilitySystemComponent->MakeEffectContext();
+	FGameplayEffectContextHandle EffectContexthandle = SourceASC->MakeEffectContext();
 	EffectContexthandle.AddSourceObject(SourceAvatarActor);
 	SetDeathImpulse(EffectContexthandle, DamageEffectParams.DeathImpulse);
 	SetKnockbackForce(EffectContexthandle, DamageEffectParams.KnockbackForce);
-	if (FDRGameplayEffectContext* DRContext = static_cast<FDRGameplayEffectContext*>(EffectContexthandle.Get()))
+	if (FDRGameplayEffectContext* DRContext = FDRGameplayEffectContext::FromHandle(EffectContexthandle))
 	{
 		DRContext->SetSourceAbilityTags(DamageEffectParams.SourceAbilityTags);
 	}
-	const FGameplayEffectSpecHandle SpecHandle = DamageEffectParams.SourceAbilitySystemComponent->MakeOutgoingSpec(DamageEffectParams.DamageGameplayEffectClass, DamageEffectParams.AbilityLevel, EffectContexthandle);
+	const FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageEffectParams.DamageGameplayEffectClass, DamageEffectParams.AbilityLevel, EffectContexthandle);
+	if (!SpecHandle.IsValid()) return EffectContexthandle;   // 피해 GE 클래스 미지정
 
 	UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(SpecHandle, DamageEffectParams.DamageType, DamageEffectParams.BaseDamage);
 	UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(SpecHandle, GameplayTags.Debuff_Chance, DamageEffectParams.DebuffChance);
 	UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(SpecHandle, GameplayTags.Debuff_Damage, DamageEffectParams.DebuffDamage);
 	UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(SpecHandle, GameplayTags.Debuff_Duration, DamageEffectParams.DebuffDuration);
 
-	DamageEffectParams.TargetAbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data);
+	TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data);
 	return EffectContexthandle;
 }
 
@@ -1524,7 +1523,7 @@ void UDRAbilitySystemLibrary::TryApplyAirShotDrag(const FEffectProperties& Props
 	if (!HasUpgradeFeature(Props.SourceASC, Tags.Upgrade_Feature_Skill_AirShot_Drag)) return;
 
 	// 공기탄 피해만 — 같은 청소기의 돌진 충돌 피해로는 쌓이지 않는다 (T-99)
-	const FDRGameplayEffectContext* DRContext = static_cast<const FDRGameplayEffectContext*>(Props.EffectContextHandle.Get());
+	const FDRGameplayEffectContext* DRContext = FDRGameplayEffectContext::FromHandle(Props.EffectContextHandle);
 	if (!DRContext || !DRContext->GetSourceAbilityTags().HasTagExact(Tags.Abilities_RobotVacuum_AirShot)) return;
 
 	ADREnemy* Enemy = Cast<ADREnemy>(Props.TargetAvatarActor);
@@ -1544,9 +1543,6 @@ bool UDRAbilitySystemLibrary::IsInvulnerable(const UAbilitySystemComponent* ASC)
 void UDRAbilitySystemLibrary::SplitWaterCost(const UAbilitySystemComponent* ASC, float RequiredWater, float CurrentWater,
 	float& OutWaterCost, float& OutHealthCost)
 {
-	// 물 부족분을 체력으로 낼 때의 비율
-	static constexpr float WaterShortageHealthRatio = 0.5f;
-
 	OutWaterCost = 0.f;
 	OutHealthCost = 0.f;
 	if (RequiredWater <= 0.f) return;
@@ -1562,8 +1558,13 @@ void UDRAbilitySystemLibrary::SplitWaterCost(const UAbilitySystemComponent* ASC,
 	}
 	else
 	{
+		// 물 부족분을 체력으로 낼 때의 비율 (밸런스 설정 — 없으면 기본값)
+		static const FPlayerCombatConfig DefaultPlayerCombat;
+		const UGameBalanceConfig* BalanceConfig = ASC ? GetGameBalanceConfig(ASC->GetAvatarActor()) : nullptr;
+		const float ShortageRatio = (BalanceConfig ? BalanceConfig->PlayerCombat : DefaultPlayerCombat).WaterShortageHealthRatio;
+
 		OutWaterCost = FMath::Max(0.f, CurrentWater);
-		OutHealthCost = FMath::FloorToFloat((RequiredWater - OutWaterCost) * WaterShortageHealthRatio);
+		OutHealthCost = FMath::FloorToFloat((RequiredWater - OutWaterCost) * ShortageRatio);
 	}
 }
 

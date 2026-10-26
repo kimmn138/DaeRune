@@ -2,6 +2,7 @@
 
 
 #include "AI/DRAIController.h"
+#include "AI/DRBlackboardKeys.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Perception/AIPerceptionComponent.h"
@@ -78,14 +79,14 @@ void ADRAIController::UpdateCombatTime()
 	
 	// 현재 월드 시간을 블랙보드에 저장
 	const float CurrentTime = GetWorld()->GetTimeSeconds();
-	Blackboard->SetValueAsFloat(FName("LastCombatTime"), CurrentTime);
+	Blackboard->SetValueAsFloat(DRBlackboardKeys::LastCombatTime, CurrentTime);
 }
 
 bool ADRAIController::HasCombatTimedOut(float TimeoutSeconds) const
 {
 	if (!Blackboard) return true; // 블랙보드 없으면 전투 종료로 간주
 	
-	const float LastCombatTime = Blackboard->GetValueAsFloat(FName("LastCombatTime"));
+	const float LastCombatTime = Blackboard->GetValueAsFloat(DRBlackboardKeys::LastCombatTime);
 	
 	// 아직 전투한 적 없음 (초기값 0)
 	if (LastCombatTime <= 0.0f) return true;
@@ -139,9 +140,9 @@ void ADRAIController::UpdatePlayer(AActor* Player)
 	PerceivedPlayers.RemoveAll([](const AActor* Actor) { return !IsValid(Actor); });
 	PerceivedPlayers.AddUnique(Player);
 
-	if (PerceivedPlayers.Num() > 0)
+	if (Blackboard && PerceivedPlayers.Num() > 0)
 	{
-		Blackboard->SetValueAsBool("HasPlayerInRange", true);
+		Blackboard->SetValueAsBool(DRBlackboardKeys::HasPlayerInRange, true);
 	}
 }
 
@@ -149,8 +150,8 @@ void ADRAIController::RemovePlayer(AActor* Player)
 {
 	PerceivedPlayers.Remove(Player);
 
-	if (PerceivedPlayers.Num() == 0)
+	if (Blackboard && PerceivedPlayers.Num() == 0)
 	{
-		Blackboard->SetValueAsBool("HasPlayerInRange", false);
+		Blackboard->SetValueAsBool(DRBlackboardKeys::HasPlayerInRange, false);
 	}
 }

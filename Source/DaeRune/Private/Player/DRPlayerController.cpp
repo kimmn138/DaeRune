@@ -1735,6 +1735,7 @@ void ADRPlayerController::OpenUpgradeScreen()
 
 void ADRPlayerController::DRUnlockUpgrade()
 {
+#if !UE_BUILD_SHIPPING   // 로컬 세이브를 바꾸는 치트 — 쉬핑에서는 아무 일도 하지 않는다
 	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
 	if (!GI)
 	{
@@ -1744,18 +1745,22 @@ void ADRPlayerController::DRUnlockUpgrade()
 
 	GI->UnlockUpgradeSystem();
 	UE_LOG(LogDR, Warning, TEXT("[Cheat] 업그레이드 시스템 해금됨 (현재 재화 %d)"), GI->GetCurrency());
+#endif
 }
 
 void ADRPlayerController::DRLockUpgrade()
 {
+#if !UE_BUILD_SHIPPING   // 로컬 세이브를 바꾸는 치트 — 쉬핑에서는 아무 일도 하지 않는다
 	if (UDRGameInstance* GI = GetGameInstance<UDRGameInstance>())
 	{
 		GI->DebugSetUpgradeSystemUnlocked(false);
 	}
+#endif
 }
 
 void ADRPlayerController::DRUnlockSlot(int32 Count)
 {
+#if !UE_BUILD_SHIPPING   // 로컬 세이브를 바꾸는 치트 — 쉬핑에서는 아무 일도 하지 않는다
 	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
 	if (!GI)
 	{
@@ -1786,6 +1791,7 @@ void ADRPlayerController::DRUnlockSlot(int32 Count)
 	}
 
 	DRDumpUpgrade();
+#endif
 }
 
 void ADRPlayerController::DRDumpUpgrade()
@@ -1819,6 +1825,7 @@ EPlayerCharacterClass ADRPlayerController::GetViewedUpgradeClass() const
 
 void ADRPlayerController::DRAddCurrency(int32 Amount)
 {
+#if !UE_BUILD_SHIPPING   // 로컬 세이브를 바꾸는 치트 — 쉬핑에서는 아무 일도 하지 않는다
 	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
 	if (!GI)
 	{
@@ -1828,10 +1835,12 @@ void ADRPlayerController::DRAddCurrency(int32 Amount)
 
 	GI->AddCurrency(Amount);
 	UE_LOG(LogDR, Warning, TEXT("[Cheat] 재화 %d 지급 → 현재 %d"), Amount, GI->GetCurrency());
+#endif
 }
 
 void ADRPlayerController::DRResetDefaultChips()
 {
+#if !UE_BUILD_SHIPPING   // 로컬 세이브를 바꾸는 치트 — 쉬핑에서는 아무 일도 하지 않는다
 	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
 	if (!GI)
 	{
@@ -1846,6 +1855,7 @@ void ADRPlayerController::DRResetDefaultChips()
 	ReportUpgradeLoadout();
 
 	UE_LOG(LogDR, Warning, TEXT("[Cheat] 기본 장착 칩을 다시 적용하고 서버에 재보고했습니다."));
+#endif
 }
 
 void ADRPlayerController::CloseUpgradeScreen()
@@ -2057,6 +2067,7 @@ void ADRPlayerController::DROpenStageSelect()
 
 void ADRPlayerController::DRStageState(const FString& StageId, const FString& State)
 {
+#if !UE_BUILD_SHIPPING   // 로컬 세이브를 바꾸는 치트 — 쉬핑에서는 아무 일도 하지 않는다
 	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
 	if (!GI) return;
 
@@ -2090,14 +2101,17 @@ void ADRPlayerController::DRStageState(const FString& StageId, const FString& St
 	}
 
 	UE_LOG(LogDR, Log, TEXT("[StageSelect] %s → %s (디버그 덮어쓰기, 저장 안 함)"), *StageId, *State);
+#endif
 }
 
 void ADRPlayerController::DRUnlockSkins()
 {
+#if !UE_BUILD_SHIPPING   // 로컬 세이브를 바꾸는 치트 — 쉬핑에서는 아무 일도 하지 않는다
 	if (UDRGameInstance* GI = GetGameInstance<UDRGameInstance>())
 	{
 		GI->DebugUnlockAllSkins();
 	}
+#endif
 }
 
 void ADRPlayerController::DROpenWardrobe()

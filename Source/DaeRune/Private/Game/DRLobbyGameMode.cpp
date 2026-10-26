@@ -26,157 +26,126 @@ ADRLobbyGameMode::ADRLobbyGameMode()
 	WipeoutDelayTime = 2.0f;
 }
 
+namespace
+{
+	// 심리스 트래블 · 관전 등으로 멈춰 있던 폰의 이동 · 충돌을 되살린다
+	void RestorePawnMovement(APawn* Pawn)
+	{
+		if (!Pawn) return;
+
+		if (UCharacterMovementComponent* MovementComp = Cast<UCharacterMovementComponent>(Pawn->GetMovementComponent()))
+		{
+			MovementComp->SetMovementMode(MOVE_Walking);
+			MovementComp->SetComponentTickEnabled(true);
+		}
+
+		if (UCapsuleComponent* CapsuleComp = Cast<UCapsuleComponent>(Pawn->GetRootComponent()))
+		{
+			CapsuleComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		}
+	}
+
+	// 접속 직후 처리를 잠시 미룬다 (클라 초기화 대기). ★게임모드 · PC 둘 다 약참조★ — 그 사이 나가거나 맵이 바뀌어도 안전
+	template <typename FuncType>
+	void DeferForPlayer(ADRLobbyGameMode* GameMode, ADRPlayerController* DRPC, float Delay, FuncType&& Func)
+	{
+		TWeakObjectPtr<ADRPlayerController> WeakPC(DRPC);
+		FTimerHandle Handle;
+		GameMode->GetWorldTimerManager().SetTimer(Handle,
+			FTimerDelegate::CreateWeakLambda(GameMode, [WeakPC, Func = Forward<FuncType>(Func)]()
+			{
+				if (ADRPlayerController* PC = WeakPC.Get())
+				{
+					Func(PC);
+				}
+			}),
+			Delay, false);
+	}
+}
+
+void ADRLobbyGameMode::PlaceInWaitingRoom(ADRPlayerController* DRPC, EPlayerCharacterClass DisplayClass)
+{
+	// 슬롯 배치 + 디스플레이 캐릭터 + 고정 카메라
+	AssignPlayerToSlot(DRPC);
+
+	if (const int32* SlotIdx = PlayerSlotMap.Find(DRPC))
+	{
+		SpawnDisplayCharacter(DRPC, DisplayClass, *SlotIdx);
+	}
+
+	if (WaitingRoomCamera)
+	{
+		DRPC->ClientSetWaitingRoomView(WaitingRoomCamera);
+	}
+}
+
 void ADRLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
 
-	if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(NewPlayer))
+	ADRPlayerController* DRPC = Cast<ADRPlayerController>(NewPlayer);
+	if (!DRPC) return;
+
+	const ADRLobbyGameState* LGS = GetGameState<ADRLobbyGameState>();
+	if (LGS && LGS->GetLobbyState() == ELobbyState::WaitingRoom)
 	{
-		ADRLobbyGameState* LGS = GetGameState<ADRLobbyGameState>();
-
-		// 대기실 상태일 때 슬롯 배치 + 디스플레이 캐릭터 스폰
-		if (LGS && LGS->GetLobbyState() == ELobbyState::WaitingRoom)
+		// 대기실: 슬롯 배치 + 디스플레이 캐릭터 + 고정 카메라
+		DeferForPlayer(this, DRPC, 0.5f, [this](ADRPlayerController* PC)
 		{
-			FTimerHandle SlotTimerHandle;
-			GetWorldTimerManager().SetTimer(
-				SlotTimerHandle,
-				[this, DRPC]()
-				{
-					if (!IsValid(DRPC)) return;
-					AssignPlayerToSlot(DRPC);
-
-					// 디스플레이 캐릭터 스폰
-					ADRPlayerState* PS = DRPC->GetPlayerState<ADRPlayerState>();
-					int32* SlotIdx = PlayerSlotMap.Find(DRPC);
-					if (PS && SlotIdx)
-					{
-						SpawnDisplayCharacter(DRPC, PS->GetSelectedPlayerClass(), *SlotIdx);
-					}
-
-					// 고정 카메라로 ViewTarget 설정
-					if (WaitingRoomCamera)
-					{
-						DRPC->ClientSetWaitingRoomView(WaitingRoomCamera);
-					}
-				},
-				0.5f, false
-			);
-		}
-		else
-		{
-			// FreeRoam 상태: 기존 복원 로직
-			FTimerHandle RestoreTimerHandle;
-			GetWorldTimerManager().SetTimer(
-				RestoreTimerHandle,
-				[DRPC]()
-				{
-					if (!IsValid(DRPC)) return;
-
-					DRPC->ClientStopSpectating();
-
-					if (APawn* ControlledPawn = DRPC->GetPawn())
-					{
-						if (UCharacterMovementComponent* MovementComp = Cast<UCharacterMovementComponent>(ControlledPawn->GetMovementComponent()))
-						{
-							MovementComp->SetMovementMode(MOVE_Walking);
-							MovementComp->SetComponentTickEnabled(true);
-						}
-
-						if (UCapsuleComponent* CapsuleComp = Cast<UCapsuleComponent>(ControlledPawn->GetRootComponent()))
-						{
-							CapsuleComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-						}
-					}
-				},
-				0.5f,
-				false
-			);
-		}
+			const ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>();
+			PlaceInWaitingRoom(PC, PS ? PS->GetSelectedPlayerClass() : EPlayerCharacterClass::Gardener);
+		});
 	}
-
-	if (GameState)
+	else
 	{
-		int32 NumberOfPlayers = GameState.Get()->PlayerArray.Num();
-
-		if (GEngine)
+		// FreeRoam: 관전 해제 + 이동 · 충돌 복원
+		DeferForPlayer(this, DRPC, 0.5f, [](ADRPlayerController* PC)
 		{
-APlayerState* PlayerState = NewPlayer->GetPlayerState<APlayerState>();
-			if (PlayerState)
-			{
-				FString PlayerName = PlayerState->GetPlayerName();
-}
-		}
+			PC->ClientStopSpectating();
+			RestorePawnMovement(PC->GetPawn());
+		});
 	}
 }
 
 void ADRLobbyGameMode::HandleSeamlessTravelPlayer(AController*& C)
 {
 	Super::HandleSeamlessTravelPlayer(C);
-if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(C))
+
+	ADRPlayerController* DRPC = Cast<ADRPlayerController>(C);
+	if (!DRPC) return;
+
+	DeferForPlayer(this, DRPC, 0.5f, [this](ADRPlayerController* PC)
 	{
-		ADRLobbyGameState* LGS = GetGameState<ADRLobbyGameState>();
+		// 관전 모드 강제 종료
+		PC->ClientStopSpectating();
 
-		FTimerHandle RestoreTimerHandle;
-		GetWorldTimerManager().SetTimer(
-			RestoreTimerHandle,
-			[this, DRPC, LGS]()
+		const ADRLobbyGameState* LGS = GetGameState<ADRLobbyGameState>();
+		if (LGS && LGS->GetLobbyState() == ELobbyState::WaitingRoom)
+		{
+			// SeamlessTravel로 가져온 Pawn 정리 (대기실에서는 디스플레이 사용)
+			if (APawn* TravelPawn = PC->GetPawn())
 			{
-				if (!IsValid(DRPC)) return;
+				PC->UnPossess();
+				TravelPawn->Destroy();
+			}
 
-				// 관전 모드 강제 종료
-				DRPC->ClientStopSpectating();
-
-				if (LGS && LGS->GetLobbyState() == ELobbyState::WaitingRoom)
+			// PlayerController 캐시에서 선택 클래스 복원 (Seamless Travel 시 PlayerState 유실 방지)
+			const EPlayerCharacterClass CachedClass = PC->GetCachedSelectedClass();
+			if (ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
+			{
+				if (PS->GetSelectedPlayerClass() != CachedClass)
 				{
-					// SeamlessTravel로 가져온 Pawn 정리 (대기실에서는 디스플레이 사용)
-					if (APawn* TravelPawn = DRPC->GetPawn())
-					{
-						DRPC->UnPossess();
-						TravelPawn->Destroy();
-					}
-
-					// 대기실 모드: 슬롯 배치 + 디스플레이 캐릭터 + 고정 카메라
-					AssignPlayerToSlot(DRPC);
-
-					ADRPlayerState* PS = DRPC->GetPlayerState<ADRPlayerState>();
-					int32* SlotIdx = PlayerSlotMap.Find(DRPC);
-					if (PS && SlotIdx)
-					{
-						// PlayerController 캐시에서 선택 클래스 복원 (Seamless Travel 시 PlayerState 유실 방지)
-						EPlayerCharacterClass CachedClass = DRPC->GetCachedSelectedClass();
-						if (PS->GetSelectedPlayerClass() != CachedClass)
-						{
-							PS->SetSelectedPlayerClass(CachedClass);
-						}
-						SpawnDisplayCharacter(DRPC, CachedClass, *SlotIdx);
-					}
-
-					if (WaitingRoomCamera)
-					{
-						DRPC->ClientSetWaitingRoomView(WaitingRoomCamera);
-					}
+					PS->SetSelectedPlayerClass(CachedClass);
 				}
-				else
-				{
-					// 자유 조작 모드: 기존 복원 로직
-					if (APawn* ControlledPawn = DRPC->GetPawn())
-					{
-						if (UCharacterMovementComponent* MovementComp = Cast<UCharacterMovementComponent>(ControlledPawn->GetMovementComponent()))
-						{
-							MovementComp->SetMovementMode(MOVE_Walking);
-							MovementComp->SetComponentTickEnabled(true);
-						}
-
-						if (UCapsuleComponent* CapsuleComp = Cast<UCapsuleComponent>(ControlledPawn->GetRootComponent()))
-						{
-							CapsuleComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-						}
-					}
-				}
-			},
-			0.5f, false
-		);
-	}
+			}
+			PlaceInWaitingRoom(PC, CachedClass);
+		}
+		else
+		{
+			// 자유 조작 모드: 이동 · 충돌 복원
+			RestorePawnMovement(PC->GetPawn());
+		}
+	});
 }
 
 void ADRLobbyGameMode::Logout(AController* Exiting)
@@ -185,10 +154,8 @@ void ADRLobbyGameMode::Logout(AController* Exiting)
 	DestroyDisplayCharacter(Exiting);
 
 	// 슬롯 매핑에서 제거
-	if (PlayerSlotMap.Contains(Exiting))
+	if (PlayerSlotMap.Remove(Exiting) > 0)
 	{
-		PlayerSlotMap.Remove(Exiting);
-
 		// 대기실 상태면 남은 플레이어 재배치
 		ADRLobbyGameState* LGS = GetGameState<ADRLobbyGameState>();
 		if (LGS && LGS->GetLobbyState() == ELobbyState::WaitingRoom)
@@ -198,16 +165,6 @@ void ADRLobbyGameMode::Logout(AController* Exiting)
 	}
 
 	Super::Logout(Exiting);
-
-	APlayerState* PlayerState = Exiting->GetPlayerState<APlayerState>();
-	if (PlayerState)
-	{
-		int32 NumberOfPlayers = GameState.Get()->PlayerArray.Num();
-		if (GEngine)
-		{
-FString PlayerName = PlayerState->GetPlayerName();
-}
-	}
 }
 
 void ADRLobbyGameMode::TravelToStage(const FString& StageMapName, ADRPlayerController* Requester)
@@ -348,15 +305,16 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 
 	// 5. 전환 완료 후 FreeRoam으로 상태 변경 (카메라 연출 시간만큼 딜레이)
 	FTimerHandle TransitionTimerHandle;
+	TWeakObjectPtr<ADRLobbyGameState> WeakLGS(LGS);
 	GetWorldTimerManager().SetTimer(
 		TransitionTimerHandle,
-		[LGS]()
+		FTimerDelegate::CreateWeakLambda(this, [WeakLGS]()
 		{
-			if (IsValid(LGS))
+			if (ADRLobbyGameState* State = WeakLGS.Get())
 			{
-				LGS->SetLobbyState(ELobbyState::FreeRoam);
+				State->SetLobbyState(ELobbyState::FreeRoam);
 			}
-		},
+		}),
 		2.0f, // 카메라 전환 시간
 		false
 	);

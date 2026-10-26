@@ -33,7 +33,7 @@ UClass* ADRStageGameMode::GetDefaultPawnClassForController_Implementation(AContr
 		{
 			if (UDRGameInstance* GI = Cast<UDRGameInstance>(GetGameInstance()))
 			{
-				SelectedClass = GI->LoadPlayerClassSelection(PS->GetPlayerName());
+				SelectedClass = GI->LoadPlayerClassSelection(PS);
 				// PlayerState 에도 동기화
 				if (PS->GetSelectedPlayerClass() != SelectedClass)
 				{

@@ -52,7 +52,7 @@ public:
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     const TArray<TObjectPtr<ADRCleanserSite>>& GetCleanserSites() const { return CleanserSites; }
-    int32 GetInitialPlayerCount() { return InitialPlayerCount; }
+    int32 GetInitialPlayerCount() const { return InitialPlayerCount; }
     void SetCleanserSites(const TArray<ADRCleanserSite*>& InCleanserSites)
     {
         CleanserSites.Reset(InCleanserSites.Num());
@@ -61,7 +61,7 @@ public:
             CleanserSites.Add(Site);
         }
     }
-    void SetInitialPlayerCount(float NewInitialPlayerCount) { InitialPlayerCount = NewInitialPlayerCount; }
+    void SetInitialPlayerCount(int32 NewInitialPlayerCount) { InitialPlayerCount = NewInitialPlayerCount; }
 
     // DoorManager 등록
     UFUNCTION(BlueprintCallable, Category = "Stage")
@@ -294,7 +294,7 @@ private:
 
     // Phase1 시작 시점의 플레이어 수
     UPROPERTY()
-    int32 InitialPlayerCount;
+    int32 InitialPlayerCount = 0;
     
     // ========== 상태 리플리케이션 변수들 ==========
     UPROPERTY(ReplicatedUsing = OnRep_CurrentPhaseIndex)
