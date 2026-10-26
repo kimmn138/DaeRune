@@ -25,29 +25,29 @@ ADRCleanserSite::ADRCleanserSite()
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
 
-	// ��Ʈ ������Ʈ ����
+	// 루트 컴포넌트 생성
 	RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootComponent"));
 	SetRootComponent(RootSceneComponent);
 
-	// Ŭ���� �޽� ����
+	// 클렌저 메시 생성
 	CleanserMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CleanserMesh"));
 	CleanserMesh->SetupAttachment(RootComponent);
 	CleanserMesh->SetVisibility(false);
 	CleanserMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	CleanserMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 
-	// Ŭ���� �� �޽� ����
+	// 클렌저 물 메시 생성
 	WaterMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WaterMesh"));
 	WaterMesh->SetupAttachment(CleanserMesh);
 	WaterMesh->SetVisibility(false);
 	WaterMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	WaterMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 
-	// �� �޽� �ʱ� ������ �� ��ġ ����
+	// 물 메시 초기 스케일 및 위치 저장
 	InitialWaterMeshScale = FVector(1.0f, 1.0f, 1.0f);
 	InitialWaterMeshLocation = FVector::ZeroVector;
 
-	// ��ȣ�ۿ� �ڽ� ����
+	// 상호작용 박스 생성
 	InteractionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractionBox"));
 	InteractionBox->SetupAttachment(RootComponent);
 	InteractionBox->SetBoxExtent(FVector(200.0f, 200.0f, 100.0f));
@@ -55,7 +55,7 @@ ADRCleanserSite::ADRCleanserSite()
 	InteractionBox->SetCollisionResponseToAllChannels(ECR_Ignore);
 	InteractionBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-	// UI ���� ����
+	// UI 위젯 생성
 	InteractionWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidget"));
 	InteractionWidget->SetupAttachment(RootComponent);
 	InteractionWidget->SetRelativeLocation(FVector(0.0f, 0.0f, 150.0f));
@@ -64,7 +64,7 @@ ADRCleanserSite::ADRCleanserSite()
 	InteractionWidget->SetVisibility(false);
 	InteractionWidget->SetOwnerNoSee(false);
 
-	// GAS ������Ʈ ����
+	// GAS 컴포넌트 생성
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetIsReplicated(true);
 	// 플레이어 소유가 아닌 액터라 GE/큐 전체 복제가 불필요 - 어트리뷰트만 복제되는 Minimal이면 충분
@@ -86,7 +86,7 @@ ADRCleanserSite::ADRCleanserSite()
 	InstalledPartMesh2->SetVisibility(false);
 	InstalledPartMesh2->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	// �ʱ� ����
+	// 초기 상태
 	CurrentState = ECleanserSiteState::Inactive;
 	bHealthEnabled = false;
 	InstalledPartsCount = 0;
@@ -211,34 +211,34 @@ void ADRCleanserSite::InstallPart(ADRCharacter* Character)
 {
 	if (!HasAuthority() || !Character) return;
 
-	// Phase2�� �ƴϸ� ����
+	// Phase2가 아니면 무시
 	if (CurrentState != ECleanserSiteState::Active) return;
 
-	// �̹� ��ǰ�� �� ��ġ�Ǿ����� ����
+	// 이미 부품이 다 설치되었으면 무시
 	if (InstalledPartsCount >= RequiredPartsCount) return;
 
-	// ĳ���Ͱ� ��ǰ�� ��� �ִ��� Ȯ��
+	// 캐릭터가 부품을 들고 있는지 확인
 	if (!Character->IsCarryingPart()) return;
 
-	// ��ǰ ��ġ ó��
+	// 부품 설치 처리
 	Character->InstallCarriedPart();
 
 	// 설치된 슬롯의 부품 메시 표시 (카운트 증가 전에 호출하여 SlotIndex로 사용)
 	MulticastShowInstalledPart(InstalledPartsCount);
 
-	// ��ġ ���� ����
+	// 설치 개수 증가
 	InstalledPartsCount++;
 
 	bool bIsComplete = (InstalledPartsCount >= RequiredPartsCount);
 	MulticastPlayInstallSound(bIsComplete);
 
-	// UI ������Ʈ
+	// UI 업데이트
 	UpdateInteractionUI();
 
-	// ��������Ʈ ��ε�ĳ��Ʈ
+	// 델리게이트 브로드캐스트
 	OnPartInstalled.Broadcast(this);
 
-	// ��� ��ǰ�� ��ġ�Ǹ� ���� ����
+	// 모든 부품이 설치되면 상태 변경
 	if (InstalledPartsCount >= RequiredPartsCount)
 	{
 		SetPartsCollected();
@@ -302,13 +302,13 @@ FVector ADRCleanserSite::GetClosestSurfacePoint(const FVector& FromLocation) con
     
 	FVector ClosestPoint;
     
-	// ���� �ݸ��� ���¿��� ���� ����� �� ���
+	// 실제 콜리전 형태에서 가장 가까운 점 계산
 	if (CleanserMesh->GetClosestPointOnCollision(FromLocation, ClosestPoint))
 	{
 		return ClosestPoint;
 	}
     
-	// �����ϸ� ���� ��ġ ��ȯ
+	// 실패하면 액터 위치 반환
 	return GetActorLocation();
 }
 
@@ -317,20 +317,20 @@ void ADRCleanserSite::UpdateWaterMeshScale(float HealthRatio)
 	if (!WaterMesh) return;
 	if (CurrentState != ECleanserSiteState::PartsCollected) return;
 
-	// ü�� ������ 0~1 ���̷� ����
+	// 체력 비율을 0~1 사이로 제한
 	HealthRatio = FMath::Clamp(HealthRatio, 0.0f, 1.0f);
 
-	// �� ������ ���
+	// 새 스케일 계산
 	FVector NewScale = InitialWaterMeshScale;
 	NewScale.Z = InitialWaterMeshScale.Z * HealthRatio;
 
-	// �� ��ġ ���
+	// 새 위치 계산
 	const float ScaleChange = InitialWaterMeshScale.Z - NewScale.Z;
 	const float LocationOffset = ScaleChange * WaterMeshScaleToOffsetRatio;
 	FVector NewLocation = InitialWaterMeshLocation;
 	NewLocation.Z = InitialWaterMeshLocation.Z + LocationOffset;
 
-	// ����
+	// 적용
 	WaterMesh->SetRelativeScale3D(NewScale);
 	WaterMesh->SetRelativeLocation(NewLocation);
 }
@@ -350,7 +350,7 @@ void ADRCleanserSite::BeginPlay()
 		InitialWaterMeshLocation = WaterMesh->GetRelativeLocation();
 	}
 
-	// ������ �̺�Ʈ ���ε�
+	// 오버랩 이벤트 바인딩
 	InteractionBox->OnComponentBeginOverlap.AddDynamic(this, &ADRCleanserSite::OnBoxBeginOverlap);
 	InteractionBox->OnComponentEndOverlap.AddDynamic(this, &ADRCleanserSite::OnBoxEndOverlap);
 
@@ -425,7 +425,7 @@ void ADRCleanserSite::SetInteractionUIVisible(bool bShow)
 
 void ADRCleanserSite::UpdateInteractionUI() const
 {
-	// ��ǰ�� �� ��ġ�Ǿ����� UI ����
+	// 부품이 다 설치되었으면 UI 숨김
 	if (InstalledPartsCount >= RequiredPartsCount)
 	{
 		InteractionWidget->SetVisibility(false);
@@ -434,7 +434,7 @@ void ADRCleanserSite::UpdateInteractionUI() const
 
 void ADRCleanserSite::OnRep_CurrentState()
 {
-	// Ŭ���̾�Ʈ���� ���� ���� �� �޽� ������Ʈ
+	// 클라이언트에서 상태 변경 시 메시 업데이트
 	UpdateMeshByState();
 }
 
@@ -456,18 +456,18 @@ void ADRCleanserSite::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEff
 	check(IsValid(GetAbilitySystemComponent()));
 	check(GameplayEffectClass);
 	
-	// ���ؽ�Ʈ ���� �� �ҽ� ����
+	// 컨텍스트 생성 및 소스 설정
 	FGameplayEffectContextHandle ContextHandle = GetAbilitySystemComponent()->MakeEffectContext();
 	ContextHandle.AddSourceObject(this);
 	
-	// ���� ���� �� ���� (���� 1�� ����)
+	// 스펙 생성 및 적용 (레벨 1로 고정)
 	const FGameplayEffectSpecHandle SpecHandle = GetAbilitySystemComponent()->MakeOutgoingSpec(GameplayEffectClass, 1.0f, ContextHandle);
 	GetAbilitySystemComponent()->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), GetAbilitySystemComponent());
 }
 
 void ADRCleanserSite::InitializeDefaultAttributes() const
 {
-	// �⺻ ü�� �Ӽ� �ʱ�ȭ
+	// 기본 체력 속성 초기화
 	ApplyEffectToSelf(DefaultPrimaryAttributes);
 	ApplyEffectToSelf(DefaultVitalAttributes);
 }

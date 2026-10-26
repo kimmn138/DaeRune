@@ -12,12 +12,12 @@ class UAbilitySystemComponent;
 class UNiagaraSystem;
 class UAnimMontage;
 
-// GAS ½Ã½ºÅÛ µî·Ï ¾Ë¸² µ¨¸®°ÔÀÌÆ®
+// GAS ì‹œìŠ¤í…œ ë“±ë¡ ì•Œë¦¼ ë¸ë¦¬ê²Œì´íŠ¸
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnASCRegistered, UAbilitySystemComponent*)
-// »ç¸Á ÀÌº¥Æ® µ¨¸®°ÔÀÌÆ®
+// ì‚¬ë§ ì´ë²¤íŠ¸ ë¸ë¦¬ê²Œì´íŠ¸
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDeathSignature, AActor*, DeadActor);
 
-// °ÔÀÓÇÃ·¹ÀÌ ÅÂ±×¿Í ¿¬°áµÈ ¾Ö´Ï¸ŞÀÌ¼Ç ¸ùÅ¸ÁÖ ±¸Á¶Ã¼
+// ê²Œì„í”Œë ˆì´ íƒœê·¸ì™€ ì—°ê²°ëœ ì• ë‹ˆë©”ì´ì…˜ ëª½íƒ€ì£¼ êµ¬ì¡°ì²´
 USTRUCT(BlueprintType)
 struct FTaggedMontage
 {
@@ -45,7 +45,7 @@ class UCombatInterface : public UInterface
 
 
 /**
- * ÀüÅõ ½Ã½ºÅÛÀÇ ÇÙ½É ÀÎÅÍÆäÀÌ½º
+ * ì „íˆ¬ ì‹œìŠ¤í…œì˜ í•µì‹¬ ì¸í„°í˜ì´ìŠ¤
  */
 class DAERUNE_API ICombatInterface
 {
@@ -53,22 +53,22 @@ class DAERUNE_API ICombatInterface
 
 	// Add interface functions to this class. This is the class that will be inherited to implement this interface.
 public:
-	// ·¹º§ ½Ã½ºÅÛ
+	// ë ˆë²¨ ì‹œìŠ¤í…œ
 	UFUNCTION(BlueprintNativeEvent)
 	int32 GetPlayerLevel();
 
-	// °ø°İ ¼ÒÄÏ °ü¸®
+	// ê³µê²© ì†Œì¼“ ê´€ë¦¬
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
 	FVector GetCombatSocketLocation(const FGameplayTag& MontageTag);
 
-	// Å¸°Ù ¹æÇâ ÀüÈ¯
+	// íƒ€ê²Ÿ ë°©í–¥ ì „í™˜
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable)
 	void UpdateFacingTarget(const FVector& Target);
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
 	UAnimMontage* GetHitReactMontage();
 
-	// »ı»ç °ü¸®
+	// ìƒì‚¬ ê´€ë¦¬
 	virtual void Die(const FVector& DeathImpulse) = 0;
 	virtual FOnDeathSignature& GetOnDeathDelegate() = 0;
 
@@ -96,7 +96,7 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
 	ECharacterClass GetCharacterClass();
 
-	// GAS ½Ã½ºÅÛ ¿¬µ¿
+	// GAS ì‹œìŠ¤í…œ ì—°ë™
 	virtual FOnASCRegistered& GetOnASCRegisteredDelegate() = 0;
 
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable)

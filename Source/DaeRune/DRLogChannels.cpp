@@ -1,4 +1,4 @@
 #include "DRLogChannels.h"
 
-// DaeRune Àü¿ë ·Î±× Ã¤³Î ±¸ÇöºÎ
+// DaeRune ì „ìš© ë¡œê·¸ ì±„ë„ êµ¬í˜„ë¶€
 DEFINE_LOG_CATEGORY(LogDR);

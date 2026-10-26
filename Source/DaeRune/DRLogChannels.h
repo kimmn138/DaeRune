@@ -3,5 +3,5 @@
 #include "CoreMinimal.h"
 #include "Logging/LogMacros.h"
 
-// DaeRune Àü¿ë ·Î±× Ã¤³Î Á¤ÀÇ
+// DaeRune ì „ìš© ë¡œê·¸ ì±„ë„ ì •ì˜
 DECLARE_LOG_CATEGORY_EXTERN(LogDR, Log, All);

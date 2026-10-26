@@ -7,7 +7,7 @@
 #include "DRGameplayCue_Sound_LocalOnly.generated.h"
 
 /**
- * ·ÎÄÃ Àü¿ë »ç¿îµå GameplayCue
+ * ë¡œì»¬ ì „ìš© ì‚¬ìš´ë“œ GameplayCue
  */
 UCLASS()
 class DAERUNE_API UDRGameplayCue_Sound_LocalOnly : public UDRGameplayCue_Sound

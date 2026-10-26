@@ -12,8 +12,8 @@ class ADRCleanserSite;
 class ADRPlayerController;
 
 /**
- * �������� ���� ���
- * 4�� ������ �ý����� �����ϴ� ���� ���� Ŭ����
+ * 스테이지 게임 모드
+ * 4개 페이즈 시스템을 관리하는 서버 권한 클래스
  */
 UCLASS()
 class DAERUNE_API ADRStageGameMode : public ADRGameModeBase
@@ -26,7 +26,7 @@ public:
 	// 플레이어별 DefaultPawnClass 결정
 	virtual UClass* GetDefaultPawnClassForController_Implementation(AController* InController) override;
 
-	// ������ �Ϸ� ������ �����ߴ��� Ȯ��
+	// 페이즈 완료 조건을 만족했는지 확인
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	bool ValidatePhaseCompletion();
 
@@ -39,14 +39,14 @@ protected:
 
 public:
 
-	// Phase�� ���� ���� Ʈ����
+	// Phase별 게임 오버 트리거
 	UFUNCTION()
 	void TriggerGameOver();
 
 	UFUNCTION()
 	void TriggerGameClear();
 
-	// ���� ������� ��ȯ�ϱ� ���� ȣ��
+	// 다음 페이즈로 전환하기 위해 호출
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	void TransitionToNextPhase();
 
@@ -56,7 +56,7 @@ protected:
 
 	void BlockJoinInProgress();
 
-	// �κ� ������ �̵�
+	// 로비 맵으로 이동
 	void ReturnToLobby();
 
 
@@ -82,17 +82,17 @@ public:
 
 protected:
 
-	// �κ� �� �̸�
+	// 로비 맵 이름
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage|Config")
 	FString LobbyMapName = TEXT("LobbyMap");
 
-	// ========== Ŭ���� ����Ʈ ==========
+	// ========== 클렌저 사이트 ==========
 
-	// Ŭ���� ����Ʈ�� ã�� �� ����� �±�
+	// 클렌저 사이트를 찾을 때 사용할 태그
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage|CleanserSites")
 	FName CleanserSiteTag = TEXT("CleanserSite");
 
-	// ========== ������ ���� ==========
+	// ========== 페이즈 관리 ==========
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	void InitializePhaseSystem();
 

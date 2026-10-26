@@ -24,7 +24,7 @@ UDRGameUserSettings* UDRGameUserSettings::GetDRGameUserSettings()
 
 void UDRGameUserSettings::ApplyCustomSettings()
 {
-    // ���⼱ ������ ��ȿ�� ����
+    // 여기선 데이터 유효성 검증
     MasterVolume = FMath::Clamp(MasterVolume, 0.0f, 1.0f);
     BGMVolume = FMath::Clamp(BGMVolume, 0.0f, 1.0f);
     SFXVolume = FMath::Clamp(SFXVolume, 0.0f, 1.0f);

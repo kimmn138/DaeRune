@@ -38,11 +38,11 @@ class DAERUNE_API UDRWaterPump : public UDRDamageGameplayAbility
 	GENERATED_BODY()
 
 public:
-    // 1. ���� ���Ͽ��� ���� �������� ����Ʈ���̽�
+    // 1. 무기 소켓에서 에임 방향으로 레이트레이싱
     UFUNCTION(BlueprintCallable, Category = "Water Pump")
     FVector CalculateWaterBeamEndPoint(const FVector& WeaponSocketLocation, bool& bHitObstacle, FHitResult& OutHitResult);
 
-    // 2. ������ ��� ���� ��� �� ã�� (BoxOverlap)
+    // 2. 물대포 경로 상의 모든 적 찾기 (BoxOverlap)
     UFUNCTION(BlueprintCallable, Category = "Water Pump")
     AActor* FindClosestTargetInBeam(const FVector& WeaponSocketLocation, const FVector& BeamEndPoint);
 
@@ -55,7 +55,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Water Pump")
     void PerformWaterPumpTick();
 
-    // ���� Ÿ�� ����
+    // 현재 타겟 관리
     UFUNCTION(BlueprintPure, Category = "Water Pump")
     AActor* GetCurrentTarget() const { return CurrentTarget.Get(); }
 
@@ -68,7 +68,7 @@ public:
     UFUNCTION(BlueprintPure, Category = "Water Pump")
     FVector GetBeamEndPoint() const { return CachedBeamEndPoint; }
 
-    // ��������Ʈ �̺�Ʈ (����� �߰�)
+    // 블루프린트 이벤트 (헤더에 추가)
     UFUNCTION(BlueprintImplementableEvent, Category = "Water Pump")
     void OnTargetChanged(AActor* OldTarget, AActor* NewTarget);
 
@@ -113,7 +113,7 @@ protected:
     // 슬로우 GE 핸들 (Stop/EndAbility에서 제거하기 위해 보관)
     FActiveGameplayEffectHandle ActiveSlowSelfHandle;
 
-    // �߻� ���� �̸�
+    // 발사 소켓 이름
     UPROPERTY(EditDefaultsOnly, Category = "Effects")
     FName MuzzleSocketName = FName("TestRightHand");
 
@@ -121,35 +121,35 @@ protected:
     UPROPERTY()
     TObjectPtr<UNiagaraComponent> FirstPersonBeam;
 
-    // Ÿ�̸�
+    // 타이머
     FTimerHandle BeamUpdateTimer;
 
-    // �Լ���
+    // 함수들
     void StartBeamEffect();
     void UpdateBeamEndpoint();
     void StopBeamEffect();
 
-    // ���� �����Ÿ�
+    // 무기 사정거리
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Pump")
     float WeaponRange = 1000.f;
 
-    // ������ ��
+    // 물대포 폭
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Pump")
     float BeamWidth = 25.f;
 
-    // ������ ����
+    // 물대포 높이
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Pump")
     float BeamHeight = 25.f;
 
-    // Tick ���� (0.1��)
+    // Tick 간격 (0.1초)
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Pump")
     float TickInterval = 0.1f;
 
-    // ������ ���� ���� (1�� = 10 ticks)
+    // 데미지 적용 간격 (1초 = 10 ticks)
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Pump")
     int32 DamageApplicationInterval = 10;
 
-    // ����� �ð�ȭ Ȱ��ȭ
+    // 디버그 시각화 활성화
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Pump")
     bool bShowDebugVisualization = false;
 
@@ -179,24 +179,24 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Pump", meta = (ClampMin = "1"))
     int32 MaxPierceTargets = 8;
 
-    // ���� Ÿ�ٰ� ���� Ÿ�� ����
+    // 현재 타겟과 이전 타겟 추적
     UPROPERTY(BlueprintReadOnly, Category = "Water Pump")
     TWeakObjectPtr<AActor> CurrentTarget;
 
     UPROPERTY(BlueprintReadOnly, Category = "Water Pump")
     TWeakObjectPtr<AActor> PreviousTarget;
 
-    // ĳ�õ� ������ ���� (��������Ʈ���� ����Ʈ ��ġ�� ���)
+    // 캐시된 물대포 끝점 (블루프린트에서 이펙트 위치로 사용)
     UPROPERTY(BlueprintReadOnly, Category = "Water Pump")
     FVector CachedBeamEndPoint;
 
 private:
     FTimerHandle WaterPumpTimerHandle;
 
-    // ���� ī����
+    // 단일 카운터
     int32 DamageTickCounter = 0;
 
-    // ī�޶� ���� ���� ���
+    // 카메라 에임 방향 계산
     bool GetAimDirection(FVector& OutAimStart, FVector& OutAimDirection) const;
 
     // ========== Plan5(물대포칩) ==========

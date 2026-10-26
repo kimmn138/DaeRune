@@ -11,12 +11,12 @@
 
 ADRGameStateBase::ADRGameStateBase()
 {
-	// ���ø����̼� Ȱ��ȭ
+	// 리플리케이션 활성화
 	bReplicates = true;
 
-	// �ʱⰪ ����
+	// 초기값 설정
 	CurrentPlayerCount = 0;
-	MaxPlayerCount = 4;  // 4�� ���� ����
+	MaxPlayerCount = 4;  // 4인 협동 게임
 }
 
 void ADRGameStateBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -69,7 +69,7 @@ APlayerState* ADRGameStateBase::GetHostPlayer() const
 		}
 	}
 
-	// �� ã���� ù ��° �÷��̾ ȣ��Ʈ��
+	// 못 찾으면 첫 번째 플레이어를 호스트로
 	if (PlayerArray.Num() > 0)
 	{
 		return PlayerArray[0];

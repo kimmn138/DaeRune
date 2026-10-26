@@ -18,7 +18,7 @@ class DAERUNE_API ADRDoorManager : public AActor
 public:
 	ADRDoorManager();
 
-	// Phase¿¡¼­ È£ÃâÇÒ ÇÔ¼ö
+	// Phaseì—ì„œ í˜¸ì¶œí•  í•¨ìˆ˜
 	UFUNCTION(BlueprintCallable, Category = "DoorManager")
 	void OnPhase1Ended();
 
@@ -28,11 +28,11 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USceneComponent> RootSceneComponent;
 
-	// ÀÚµ¿¹® ÂüÁ¶
+	// ìë™ë¬¸ ì°¸ì¡°
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DoorManager|AutoDoors")
 	TObjectPtr<ADRAutoSlidingDoor> AutoDoor_Room1ToRoom6;
 
-	// ºÎ¼­Áö´Â ¹® ÂüÁ¶
+	// ë¶€ì„œì§€ëŠ” ë¬¸ ì°¸ì¡°
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DoorManager|BreakableDoors")
 	TObjectPtr<ADRBreakableDoor> BreakableDoor_Room1ToRoom2;
 
@@ -45,14 +45,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DoorManager|BreakableDoors")
 	TObjectPtr<ADRBreakableDoor> BreakableDoor_Room5ToRoom6;
 
-	// ½ºÆù ±×·ì ÂüÁ¶
+	// ìŠ¤í° ê·¸ë£¹ ì°¸ì¡°
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DoorManager|SpawnGroups")
 	TObjectPtr<ADREnemySpawnGroup> SpawnGroup_Room4;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DoorManager|SpawnGroups")
 	TObjectPtr<ADREnemySpawnGroup> SpawnGroup_Room5;
 
-	// Å¸ÀÌ¹Ö ¼³Á¤
+	// íƒ€ì´ë° ì„¤ì •
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DoorManager|Timing")
 	float DelayAfterAutoDoorClosed = 0.5f;
 

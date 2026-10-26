@@ -6,7 +6,7 @@
 #include "UI/WidgetController/DRWidgetController.h"
 #include "OverlayWidgetController.generated.h"
 
-// UI �޽��� ǥ�ø� ���� ������ ���̺� ����ü
+// UI 메시지 표시를 위한 데이터 테이블 구조체
 struct FDRAbilityInfo;
 USTRUCT(BlueprintType)
 struct FUIWidgetRow : public FTableRowBase
@@ -31,21 +31,21 @@ class UAbilityInfo;
 class UDRAbilitySystemComponent;
 class UStatusEffectInfo;
 
-// ��Ʈ����Ʈ ���� �� UI ������Ʈ�� ��������Ʈ
+// 어트리뷰트 변경 시 UI 업데이트용 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAttributeChangedSignature, float, NewValue);
-// ��ǥ UI ������Ʈ�� ��������Ʈ
+// 목표 UI 업데이트용 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveTextChangedSignature, const FText&, ObjectiveTitle, const FText&, ProgressText);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveProgressChangedSignature, int32, Current, int32, Max);
 // 목표 진행도(숫자) UI 표시/숨김 델리게이트 (Max==0이면 false로 브로드캐스트)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnObjectiveProgressVisibilityChangedSignature, bool, bShouldShow);
 // 목표 클리어 연출 델리게이트 (클리어 애니메이션 → 시작 애니메이션 시퀀스 트리거)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnObjectiveCompletedSignature);
-// ����� ����� ��������Ʈ
+// 디버프 변경시 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FStatusEffectWidgetSignature, const FEffectInfo&, EffectInfo);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FEffectTagRemovedSignature, FGameplayTag, EffectTag, bool, IsDebuff);
-// ���̺� Ÿ�̸� ��������Ʈ
+// 웨이브 타이머 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWaveTimerChangedSignature, int32, WaveNumber, float, RemainingTime, bool, bIsRestTime);
-// ���̺� �˸� ��������Ʈ
+// 웨이브 알림 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPhaseAlarmSignature, const FText&, PhaseText);
 // Phase3 타이머 UI 표시/숨김 델리게이트 (Phase 3 진입 시 true, 그 외 false)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPhase3TimerVisibilitySignature, bool, bShouldShow);
@@ -89,7 +89,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnHudFeatureVisibilityChangedSigna
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWaterTankExpandedChangedSignature, bool, bExpanded);
 
 /**
- * ���� ���� UI �������̸� �����ϴ� ��Ʈ�ѷ�
+ * 메인 게임 UI 오버레이를 관리하는 컨트롤러
  */
 UCLASS(BlueprintType, Blueprintable)
 class DAERUNE_API UOverlayWidgetController : public UDRWidgetController
@@ -97,28 +97,28 @@ class DAERUNE_API UOverlayWidgetController : public UDRWidgetController
 	GENERATED_BODY()
 	
 public:
-	// �θ� Ŭ���� ���� �Լ� �������̵�
+	// 부모 클래스 가상 함수 오버라이드
 	virtual void BroadcastInitialValues() override;
 	virtual void BindCallbacksToDependencies() override;
 
-	// ��������Ʈ ����ε� �Լ�
+	// 델리게이트 언바인딩 함수
 	void UnbindAllDelegates();
 
-	// ü�� ���� UI ������Ʈ ��������Ʈ
+	// 체력 관련 UI 업데이트 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnHealthChanged;
 
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnMaxHealthChanged;
 
-	// �� ���� UI ������Ʈ ��������Ʈ
+	// 물 관련 UI 업데이트 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnWaterChanged;
 
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnMaxWaterChanged;
 
-	// ��ǥ UI ������Ʈ ��������Ʈ
+	// 목표 UI 업데이트 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Objective")
 	FOnObjectiveTextChangedSignature OnObjectiveTextChanged;
 
@@ -133,7 +133,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Objective")
 	FOnObjectiveCompletedSignature OnObjectiveCompleted;
 
-	// ����� ���� ��ε�ĳ��Ʈ ��������Ʈ
+	// 디버프 변경 브로드캐스트 델리게이트
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Debuff")
 	TObjectPtr<UStatusEffectInfo> StatusEffectData;
 	
@@ -143,11 +143,11 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Debuff")
 	FEffectTagRemovedSignature EffectTagRemovedDelegate;
 
-	// ���̺� Ÿ�̸� ������Ʈ ��������Ʈ
+	// 웨이브 타이머 업데이트 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Wave")
 	FOnWaveTimerChangedSignature OnWaveTimerChanged;
 
-	// ���̺� �˶� ��������Ʈ
+	// 웨이브 알람 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Alarm")
 	FOnPhaseAlarmSignature OnPhaseAlarm;
 
@@ -321,7 +321,7 @@ private:
 	FTimerHandle PhaseAlarmBindingDelayTimer;
 	FTimerHandle ToxicGasWarningBindingDelayTimer;
 
-	// ��������Ʈ �ڵ� ����� ����
+	// 델리게이트 핸들 저장용 변수
 	FDelegateHandle PhaseObjectiveDelegateHandle;
 	FDelegateHandle ObjectiveCompletedDelegateHandle;
 	FDelegateHandle WaveTimerDelegateHandle;

@@ -19,7 +19,7 @@ class UGameplayAbility;
 class UAnimMontage;
 
 /**
- * ��� ĳ������ ���̽� Ŭ����
+ * 모든 캐릭터의 베이스 클래스
  */
 UCLASS(Abstract)
 class DAERUNE_API ADRCharacterBase : public ACharacter, public IAbilitySystemInterface, public ICombatInterface
@@ -52,11 +52,11 @@ public:
 	virtual bool IsBeingShocked_Implementation() const override;
 	/** end Combat Interface */
 
-	// ��������Ʈ
+	// 델리게이트
 	FOnASCRegistered OnAscRegistered;
 	FOnDeathSignature OnDeathDelegate;
 
-	// ��� ó�� RPC
+	// 사망 처리 RPC
 	UFUNCTION(NetMulticast, Reliable)
 	virtual void MulticastHandleDeath(const FVector& DeathImpulse);
 
@@ -76,11 +76,11 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Combat|Revive")
 	void K2_OnCharacterRevived();
 
-	// ���� ��Ÿ�� �迭
+	// 공격 몽타주 배열
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	TArray<FTaggedMontage> AttackMontages;
 
-	// ����� ����
+	// 디버프 상태
 	UPROPERTY(ReplicatedUsing=OnRep_Stunned, BlueprintReadOnly)
 	bool bIsStunned = false;
 
@@ -90,7 +90,7 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly)
 	bool bIsBeingShocked = false;
 
-	// RepNotify �Լ���
+	// RepNotify 함수들
 	UFUNCTION()
 	virtual void OnRep_Stunned();
 
@@ -101,16 +101,16 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void Destroyed() override;
 
-	// ����
+	// 레벨
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Class Defaults")
 	int32 Level = 1;
 	
-	// ���� ������Ʈ
+	// 무기 컴포넌트
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
 	TObjectPtr<USkeletalMeshComponent> Weapon;
 
 public:
-	// ���� �̸���
+	// 소켓 이름들
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	FName WeaponTipSocketName;
 
@@ -132,7 +132,7 @@ public:
 	virtual void OnRep_Dead();
 
 protected:
-	// ���� �±� �ݹ�
+	// 스턴 태그 콜백
 	virtual void StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 
 	// 태그로 켜고 끄는 몸 이펙트(공속 버프 · 도발 표시)를 지금 태그 · 사망 상태에 맞춘다.
@@ -154,7 +154,7 @@ protected:
 
 	virtual void InitAbilityActorInfo();
 
-	// �⺻ �Ӽ� GameplayEffect
+	// 기본 속성 GameplayEffect
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Attributes")
 	TSubclassOf<UGameplayEffect> DefaultPrimaryAttributes;
 
@@ -170,7 +170,7 @@ protected:
 
 	virtual float GetMoveSpeed();
 
-	// Dissolve ȿ��
+	// Dissolve 효과
 	void Dissolve();
 
 	UFUNCTION(BlueprintImplementableEvent)
@@ -188,13 +188,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
 	UNiagaraSystem* BloodEffect;
 
-	// ��ȯ�� ����
+	// 소환수 관련
 	int32 MinionCount = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Class Defaults")
 	ECharacterClass CharacterClass = ECharacterClass::Warrior;
 
-	// ����� ���̾ư��� ������Ʈ��
+	// 디버프 나이아가라 컴포넌트들
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UDebuffNiagaraComponent> BurnDebuffComponent;
 
@@ -202,14 +202,14 @@ protected:
 	TObjectPtr<UDebuffNiagaraComponent> StunDebuffComponent;
 
 private:
-	// ���� �� �ο��� �����Ƽ��
+	// 시작 시 부여할 어빌리티들
 	UPROPERTY(EditAnywhere, Category = "Abilities")
 	TArray<TSubclassOf<UGameplayAbility>> StartupAbilities;
 
 	UPROPERTY(EditAnywhere, Category = "Abilities")
 	TArray<TSubclassOf<UGameplayAbility>> StartupPassiveAbilities;
 
-	// �ǰ� ��Ÿ��
+	// 피격 몽타주
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	TArray<TObjectPtr<UAnimMontage>> HitReactMontages;
 };

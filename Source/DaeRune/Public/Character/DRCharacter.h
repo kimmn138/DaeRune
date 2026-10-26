@@ -20,7 +20,7 @@ class UAnimMontage;
 struct FGameplayEffectContextHandle;
 
 /**
- * �÷��̾� ĳ���� Ŭ����
+ * 플레이어 캐릭터 클래스
  */
 UCLASS()
 class DAERUNE_API ADRCharacter : public ADRCharacterBase
@@ -35,12 +35,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category = "Character Class Defaults")
 	EPlayerCharacterClass PlayerCharacterClass = EPlayerCharacterClass::Gardener;
 
-	// �������� ��Ʈ�ѷ��� ���ǵ� �� ȣ�� (������ GAS �ʱ�ȭ)
+	// 서버에서 컨트롤러가 빙의될 때 호출 (서버용 GAS 초기화)
 	virtual void PossessedBy(AController* NewController) override;
-	// PlayerState ���ø����̼� �� ȣ�� (Ŭ���̾�Ʈ�� GAS �ʱ�ȭ)
+	// PlayerState 리플리케이션 시 호출 (클라이언트용 GAS 초기화)
 	virtual void OnRep_PlayerState() override;
 
-	// �÷��̾� ���� ����� RepNotify �Լ���
+	// 플레이어 전용 디버프 RepNotify 함수들
 	virtual void OnRep_Stunned() override;
 	virtual void OnRep_Burned() override;
 
@@ -120,28 +120,28 @@ public:
 	 */
 	void SyncCosmeticVisibility();
 
-	// �����̳� �ý��� ����
+	// 컨테이너 시스템 설정
 	UPROPERTY(EditDefaultsOnly, Category = "Container System")
 	int32 NumContainers = 4;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Container System")
 	float ContainerHealth = 100.f;
 
-	// ========== ��ǰ �ý��� ==========
+	// ========== 부품 시스템 ==========
 
-	// ��ǰ ���� ���� ��ȸ
+	// 부품 보유 상태 조회
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	bool IsCarryingPart() const { return bIsCarryingPart; }
 
-	// ��ǰ ȹ�� ó��
+	// 부품 획득 처리
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	bool PickupPart(class ADRCleanserPart* Part);
 
-	// ��ǰ ��ġ ó��
+	// 부품 설치 처리
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void InstallCarriedPart();
 
-	// ��ǰ ����߸���
+	// 부품 떨어뜨리기
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void DropCarriedPart();
 
@@ -208,9 +208,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mount")
 	TSubclassOf<UGameplayEffect> MountSharedDamageEffectClass;
 
-	// ========== ī�޶� ==========
+	// ========== 카메라 ==========
 
-	// ���� ī�޶� ����
+	// 죽음 카메라 연출
 	UFUNCTION(BlueprintImplementableEvent, Category = "Death")
 	void PlayDeathCameraAnimation();
 
@@ -241,9 +241,9 @@ public:
 	UFUNCTION()
 	void OnRep_WaterPumpActive();
 
-	// ========== 1��Ī/3��Ī �޽� �ý��� ==========
+	// ========== 1인칭/3인칭 메쉬 시스템 ==========
 
-	// 1��Ī �޽�
+	// 1인칭 메쉬
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mesh")
 	TObjectPtr<USkeletalMeshComponent> FirstPersonMesh;
 
@@ -262,7 +262,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mesh|FirstPerson")
 	TObjectPtr<UAnimMontage> FirstPersonHitReactMontage;
 
-	// �޽� ���ü� ������Ʈ
+	// 메쉬 가시성 업데이트
 	void UpdateMeshVisibility();
 
 	// 1인칭 부품 메시 표시 (부품 픽업 시 호출)
@@ -375,24 +375,24 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Upgrade")
 	TObjectPtr<class UDRSynergyAuraComponent> SynergyAuraComponent;
 
-	// ========== ��ǰ ���� ==========
+	// ========== 부품 상태 ==========
 
-	// ��ǰ ���� ����
+	// 부품 보유 여부
 	UPROPERTY(ReplicatedUsing = OnRep_bIsCarryingPart, BlueprintReadOnly, Category = "Part System")
 	bool bIsCarryingPart;
 
-	// ��� �ִ� ��ǰ
+	// 들고 있는 부품
 	UPROPERTY(ReplicatedUsing = OnRep_CarriedPart, BlueprintReadOnly, Category = "Part System")
 	TObjectPtr<class ADRCleanserPart> CarriedPart;
 
-	// ��ǰ ȹ�� �ð� ���
+	// 부품 획득 시간 기록
 	float LastPartPickupTime = 0.f;
 
-	// ��ǰ ����Ʈ���� ��ٿ� �ð�
+	// 부품 떨어트리기 쿨다운 시간
 	UPROPERTY(EditDefaultsOnly, Category = "Part System", meta = (ClampMin = "0.0", ClampMax = "5.0"))
 	float PartDropCooldown = 2.0f;
 
-	// ========== ���ø����̼� �ݹ� ==========
+	// ========== 리플리케이션 콜백 ==========
 
 	UFUNCTION()
 	void OnRep_bIsCarryingPart();
@@ -400,7 +400,7 @@ protected:
 	UFUNCTION()
 	void OnRep_CarriedPart();
 
-	// ========== �̵��ӵ� ���� ==========
+	// ========== 이동속도 관련 ==========
 
 	virtual float GetMoveSpeed() override;
 
@@ -498,7 +498,7 @@ private:
 	// 이동 속도 바인딩 초기화 (PossessedBy, OnRep_PlayerState에서 공통 사용)
 	void InitializeMoveSpeedBinding();
 
-	// ī�޶� �ý���
+	// 카메라 시스템
 	UPROPERTY(VisibleAnywhere, Category = Camera)
 	TObjectPtr<class USpringArmComponent> CameraBoom;
 

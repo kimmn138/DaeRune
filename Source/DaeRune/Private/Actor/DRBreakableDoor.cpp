@@ -22,9 +22,9 @@ ADRBreakableDoor::ADRBreakableDoor()
 	RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootSceneComponent"));
 	SetRootComponent(RootSceneComponent);
 
-	// NavModifier Component ����
+	// NavModifier Component 생성
 	NavModifierComponent = CreateDefaultSubobject<UNavModifierComponent>(TEXT("NavModifierComponent"));
-	// �ʱ⿡�� NavArea_Null�� ����
+	// 초기에는 NavArea_Null로 설정
 	NavModifierComponent->SetAreaClass(UNavArea_Null::StaticClass());
 }
 
@@ -32,7 +32,7 @@ void ADRBreakableDoor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// ��� ���� ����
+	// 모든 조각 수집
 	CollectDoorPieces();
 }
 
@@ -48,7 +48,7 @@ void ADRBreakableDoor::CollectDoorPieces()
 	DoorPieces.Empty();
 	InitialTransforms.Empty();
 
-	// �� ������ ��� StaticMeshComponent ����
+	// 이 액터의 모든 StaticMeshComponent 수집
 	TArray<UStaticMeshComponent*> MeshComponents;
 	GetComponents<UStaticMeshComponent>(MeshComponents);
 
@@ -58,13 +58,13 @@ void ADRBreakableDoor::CollectDoorPieces()
 		{
 			DoorPieces.Add(MeshComp);
 
-			// �ʱ� Transform ����
+			// 초기 Transform 저장
 			FPieceInitialTransform InitialTransform;
 			InitialTransform.Location = MeshComp->GetRelativeLocation();
 			InitialTransform.Rotation = MeshComp->GetRelativeRotation();
 			InitialTransforms.Add(InitialTransform);
 
-			// ���� �ùķ��̼��� �ϴ� ��Ȱ��ȭ
+			// 물리 시뮬레이션은 일단 비활성화
 			MeshComp->SetSimulatePhysics(false);
 			MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		}
@@ -95,27 +95,27 @@ void ADRBreakableDoor::ExecuteBreak()
 {
 	bIsBroken = true;
 
-	// NavModifier ������ ������ �� �ְ� ����
+	// NavModifier 영역을 지나갈 수 있게 변경
 	if (NavModifierComponent)
 	{
-		// NavArea_Default�� �����Ͽ� AI�� ������ �� �ְ� ��
+		// NavArea_Default로 변경하여 AI가 지나갈 수 있게 함
 		NavModifierComponent->SetAreaClass(UNavArea_Default::StaticClass());
 	}
 
-	// �������� �ı� ȿ�� ����
+	// 서버에서 파괴 효과 실행
 	ApplyImpulseToPieces();
 	PlayBreakEffects();
 
-	// ��� Ŭ���̾�Ʈ�� �ı� ȿ�� ����
+	// 모든 클라이언트에 파괴 효과 전파
 	Multicast_PlayBreakEffect();
 
-	// ���� ����
+	// 몬스터 스폰
 	if (bSpawnEnemiesOnBreak && bShouldSpawnEnemies)
 	{
 		SpawnEnemies();
 	}
 
-	// ���� ���� Ÿ�̸� ����
+	// 파편 정리 타이머 시작
 	GetWorld()->GetTimerManager().SetTimer(
 		CleanupTimerHandle,
 		this,
@@ -124,7 +124,7 @@ void ADRBreakableDoor::ExecuteBreak()
 		false
 	);
 
-	// Delegate ��ε�ĳ��Ʈ
+	// Delegate 브로드캐스트
 	OnDoorBroken.Broadcast();
 }
 
@@ -132,7 +132,7 @@ void ADRBreakableDoor::OnRep_IsBroken()
 {
 	if (bIsBroken)
 	{
-		// �ʰ� ������ Ŭ���̾�Ʈ�� ���� ���� ����ȭ
+		// 늦게 참여한 클라이언트를 위한 상태 동기화
 		for (UStaticMeshComponent* Piece : DoorPieces)
 		{
 			if (Piece)
@@ -150,44 +150,44 @@ void ADRBreakableDoor::ApplyImpulseToPieces()
 		UStaticMeshComponent* Piece = DoorPieces[i];
 		if (!Piece) continue;
 
-		// ���� �ùķ��̼� Ȱ��ȭ
+		// 물리 시뮬레이션 활성화
 		Piece->SetSimulatePhysics(true);
 		Piece->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		Piece->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore); // �÷��̾�� �浹 ����
-		Piece->SetCanEverAffectNavigation(false); // ������ NavMesh�� ������ ���� ����
+		Piece->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore); // 플레이어와 충돌 무시
+		Piece->SetCanEverAffectNavigation(false); // 파편이 NavMesh 에 영향을 주지 않게
 
-		// Impulse ��� �� ����
+		// Impulse 계산 및 적용
 		FVector Impulse = CalculatePieceImpulse(Piece, i);
-		Piece->AddImpulse(Impulse, NAME_None, true); // bVelChange = true (���� ����)
+		Piece->AddImpulse(Impulse, NAME_None, true); // bVelChange = true (질량 무시)
 	}
 }
 
 FVector ADRBreakableDoor::CalculatePieceImpulse(UStaticMeshComponent* Piece, int32 PieceIndex)
 {
-	// �⺻ ����
+	// 기본 방향
 	FVector BaseDirection = BreakDirection.GetSafeNormal();
 
-	// ������ ��� ��ġ ��������
+	// 조각의 상대 위치 가져오기
 	FVector PieceLocation = Piece->GetRelativeLocation();
 
-	// �¿� �л� ��� (������ Y ��ġ�� ����)
-	// ���� �߽��� �������� ����/���������� �������
-	float SideOffset = PieceLocation.Y; // ���� Y ��ǥ
+	// 좌우 분산 계산 (조각의 Y 위치에 따라)
+	// 문의 중심을 기준으로 왼쪽/오른쪽으로 흩어지게
+	float SideOffset = PieceLocation.Y; // 로컬 Y 좌표
 	FVector SidewaysDirection = FVector(0.0f, FMath::Sign(SideOffset), 0.0f);
-	float SidewaysStrength = FMath::Abs(SideOffset) / 100.0f; // �߽ɿ��� �ּ��� �� ���� �����
+	float SidewaysStrength = FMath::Abs(SideOffset) / 100.0f; // 중심에서 멀수록 더 많이 흩어짐
 	SidewaysStrength = FMath::Clamp(SidewaysStrength, 0.0f, 1.0f);
 
-	// ���� ��
+	// 위쪽 힘
 	FVector UpwardDirection = FVector(0.0f, 0.0f, 1.0f);
 
-	// ���� ����
+	// 랜덤 변동
 	FVector RandomOffset = FVector(
 		FMath::FRandRange(-1.0f, 1.0f),
 		FMath::FRandRange(-1.0f, 1.0f),
-		FMath::FRandRange(0.0f, 1.0f) // Z�� ����� (���θ�)
+		FMath::FRandRange(0.0f, 1.0f) // Z는 양수만 (위로만)
 	) * RandomVariation;
 
-	// ���� ���� �ռ�
+	// 최종 방향 합성
 	FVector FinalDirection = BaseDirection
 		+ (SidewaysDirection * SidewaysStrength * SidewaysSpreadRatio)
 		+ (UpwardDirection * UpwardForceRatio)
@@ -195,7 +195,7 @@ FVector ADRBreakableDoor::CalculatePieceImpulse(UStaticMeshComponent* Piece, int
 
 	FinalDirection = FinalDirection.GetSafeNormal();
 
-	// ���� Impulse
+	// 최종 Impulse
 	FVector FinalImpulse = FinalDirection * ImpulseStrength;
 
 	return FinalImpulse;
@@ -205,14 +205,14 @@ void ADRBreakableDoor::Multicast_PlayBreakEffect_Implementation()
 {
 	if (HasAuthority()) return;
 
-	// Ŭ���̾�Ʈ���� ���� �ùķ��̼� �� ����Ʈ ����
+	// 클라이언트에서 물리 시뮬레이션 및 이펙트 실행
 	ApplyImpulseToPieces();
 	PlayBreakEffects();
 }
 
 void ADRBreakableDoor::PlayBreakEffects()
 {
-	// ���� ���
+	// 사운드 재생
 	if (BreakSound)
 	{
 		FVector SoundLocation = GetActorLocation();
@@ -224,7 +224,7 @@ void ADRBreakableDoor::PlayBreakEffects()
 		UGameplayStatics::PlaySoundAtLocation(this, BreakSound, SoundLocation);
 	}
 
-	// ��ƼŬ ����Ʈ
+	// 파티클 이펙트
 	if (BreakParticle)
 	{
 		UGameplayStatics::SpawnEmitterAtLocation(
@@ -235,7 +235,7 @@ void ADRBreakableDoor::PlayBreakEffects()
 		);
 	}
 
-	// ���̾ư��� ����Ʈ
+	// 나이아가라 이펙트
 	if (BreakNiagara)
 	{
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
@@ -254,13 +254,13 @@ void ADRBreakableDoor::SpawnEnemies()
 
 	int32 SpawnCount = FMath::Min(EnemySpawnCount, EnemySpawnOffsets.Num());
 
-	// SpawnOffsets�� ��������� �⺻ ��ġ���� ����
+	// SpawnOffsets이 비어있으면 기본 위치에서 스폰
 	if (EnemySpawnOffsets.Num() == 0)
 	{
 		SpawnCount = EnemySpawnCount;
 	}
 
-	// Launch ���� ���
+	// Launch 방향 계산
 	FVector LaunchDirection = BreakDirection.GetSafeNormal();
 	LaunchDirection.Z += EnemyLaunchUpwardRatio;
 	LaunchDirection = LaunchDirection.GetSafeNormal();
@@ -272,14 +272,14 @@ void ADRBreakableDoor::SpawnEnemies()
 
 		if (EnemySpawnOffsets.IsValidIndex(i))
 		{
-			// ���� �������� ���� ��ǥ�� ��ȯ
+			// 로컬 오프셋을 월드 좌표로 변환
 			SpawnLocation = GetActorLocation() + GetActorRotation().RotateVector(EnemySpawnOffsets[i]);
 		}
 		else
 		{
-			// �� ���ʿ��� ����
+			// 문 뒤쪽에서 스폰
 			FVector Offset = -BreakDirection.GetSafeNormal() * 100.0f;
-			Offset.Y += (i - SpawnCount / 2.0f) * 150.0f; // �¿�� �л�
+			Offset.Y += (i - SpawnCount / 2.0f) * 150.0f; // 좌우로 분산
 			SpawnLocation = GetActorLocation() + Offset;
 		}
 
@@ -295,7 +295,7 @@ void ADRBreakableDoor::SpawnEnemies()
 
 		if (SpawnedEnemy)
 		{
-			// ���� BreakDirection �������� �о��ֱ�
+			// 적을 BreakDirection 방향으로 밀어주기
 			SpawnedEnemy->LaunchCharacter(LaunchVelocity, true, true);
 		}
 	}
@@ -307,11 +307,11 @@ void ADRBreakableDoor::CleanupPieces()
 	{
 		if (Piece)
 		{
-			// ���� �ùķ��̼� ����
+			// 물리 시뮬레이션 중지
 			Piece->SetSimulatePhysics(false);
-			// �����
+			// 숨기기
 			Piece->SetVisibility(false);
-			// �浹�� ����
+			// 충돌도 끄기
 			Piece->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		}
 	}

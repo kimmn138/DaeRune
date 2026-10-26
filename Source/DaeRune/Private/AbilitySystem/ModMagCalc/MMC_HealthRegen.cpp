@@ -24,29 +24,29 @@ UMMC_HealthRegen::UMMC_HealthRegen()
 
 float UMMC_HealthRegen::CalculateBaseMagnitude_Implementation(const FGameplayEffectSpec& Spec) const
 {
-    // ȸ���� ���
+    // 회복량 상수
     constexpr float NORMAL_HEAL_PER_TICK = 10.f;
 
-    // �ҽ���Ÿ���� Gameplay Tag �����̳� ��������
+    // 소스·타겟의 Gameplay Tag 컨테이너 가져오기
     const FGameplayTagContainer* SourceTags = Spec.CapturedSourceTags.GetAggregatedTags();
     const FGameplayTagContainer* TargetTags = Spec.CapturedTargetTags.GetAggregatedTags();
 
-    // �±� ��� ���͸������� ���� �� ����� EvaluationParameters ����
+    // 태그 기반 필터링·조건 적용 시 사용할 EvaluationParameters 설정
     FAggregatorEvaluateParameters EvaluationParameters;
     EvaluationParameters.SourceTags = SourceTags;
     EvaluationParameters.TargetTags = TargetTags;
 
-    // Health �� ĸó (�Ӽ� ĸó ���)
+    // Health 값 캡처 (속성 캡처 방식)
     float CurrentHealth = 0.f;
     GetCapturedAttributeMagnitude(HealthDef, Spec, EvaluationParameters, CurrentHealth);
 
     float MaxHealth = 0.f;
     GetCapturedAttributeMagnitude(MaxHealthDef, Spec, EvaluationParameters, MaxHealth);
 
-    // ü���� �̹� �ִ�ġ�� ȸ�� ���ʿ�
+    // 체력이 이미 최대치면 회복 불필요
     if (CurrentHealth >= MaxHealth) return 0.f;
 
-    // AttributeSet ��������
+    // AttributeSet 가져오기
     const UAbilitySystemComponent* TargetASC = nullptr;
     if (Spec.GetContext().GetInstigatorAbilitySystemComponent())
     {
@@ -60,10 +60,10 @@ float UMMC_HealthRegen::CalculateBaseMagnitude_Implementation(const FGameplayEff
 
     if (!PlayerAS) return 0.f;
 
-    // ���� ���� Ȯ��
+    // 부패 상태 확인
     if (PlayerAS->IsCorrupted())
     {
-        return 0.f; // ���� ���¿����� �ڿ� ȸ�� ����
+        return 0.f; // 부패 상태에서는 자연 회복 없음
     }
 
     // ★Plan3(공용칩) §17.6.3★ 회복 차단 칩: GE 가 어떤 경로로든 남아 있어도 틱을 0 으로 만든다.
@@ -75,18 +75,18 @@ float UMMC_HealthRegen::CalculateBaseMagnitude_Implementation(const FGameplayEff
         return 0.f;
     }
 
-    // ���� �����̳� ���
+    // 현재 컨테이너 계산
     const int32 ContainerIndex = PlayerAS->GetCurrentContainerIndex();
     const float ContainerHealth = PlayerAS->GetContainerHealth();
     const float ContainerMax = (ContainerIndex + 1) * ContainerHealth;
 
-    // ���� �����̳ʰ� ���� ���� ȸ�� ����
+    // 현재 컨테이너가 가득 차면 회복 중지
     if (FMath::IsNearlyEqual(CurrentHealth, ContainerMax, 0.1f))
     {
         return 0.f;
     }
 
-    // ȸ�� ���ɷ� ��� (���� �����̳� �ִ�ġ������)
+    // 회복 가능량 계산 (현재 컨테이너 최대치까지만)
     const float PossibleHeal = ContainerMax - CurrentHealth;
     return FMath::Min(NORMAL_HEAL_PER_TICK, PossibleHeal);
 }

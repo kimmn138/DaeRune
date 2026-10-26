@@ -15,11 +15,11 @@ class UNiagaraSystem;
 class UDRSoundDataAsset;
 class USoundBase;
 
-// ������ ��ǥ ������Ʈ ��������Ʈ
+// 페이즈 목표 업데이트 델리게이트
 DECLARE_MULTICAST_DELEGATE(FOnPhaseObjectiveChanged);
-// Phase ���� ��������Ʈ
+// Phase 변경 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPhaseChangedSignature, int32, NewPhaseIndex);
-// ���̺� Ÿ�̸� ���� ������Ʈ ��������Ʈ
+// 웨이브 타이머 정보 업데이트 델리게이트
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnWaveTimerChanged, int32 /*WaveNumber*/, float /*RemainingTime*/, bool /*bIsRestTime*/);
 // 독가스 경고 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnToxicGasWarningSignature, bool, bIsToxicGasWave);
@@ -28,7 +28,7 @@ DECLARE_MULTICAST_DELEGATE(FOnObjectiveCompleted);
 // 웨이브 방어 UI(웨이브 타이머 + 클렌저 사이트 HP) 표시 여부 델리게이트 (Plan6 §5.4)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWaveDefenseUIActiveSignature, bool, bIsActive);
 
-// ������ ���� ������
+// 페이즈 상태 열거형
 UENUM(BlueprintType)
 enum class EPhaseState : uint8
 {
@@ -63,14 +63,14 @@ public:
     }
     void SetInitialPlayerCount(float NewInitialPlayerCount) { InitialPlayerCount = NewInitialPlayerCount; }
 
-    // DoorManager ���
+    // DoorManager 등록
     UFUNCTION(BlueprintCallable, Category = "Stage")
     void RegisterDoorManager(ADRDoorManager* InDoorManager);
 
     UFUNCTION(BlueprintPure, Category = "Stage")
     ADRDoorManager* GetDoorManager() const { return DoorManager; }
 
-    // ========== ���� ���ø����̼� ==========
+    // ========== 상태 리플리케이션 ==========
     UFUNCTION(BlueprintCallable, Category = "Phase")
     int32 GetCurrentPhaseIndex() const { return CurrentPhaseIndex; }
 
@@ -80,31 +80,31 @@ public:
     void SetCurrentPhaseIndex(int32 NewIndex);
     void SetCurrentPhaseState(EPhaseState NewState);
 
-    // ========== Phase 1: Ŭ���� Ȯ�� ==========
+    // ========== Phase 1: 클렌저 확보 ==========
     UFUNCTION(BlueprintCallable, Category = "Phase|Cleanser")
     bool IsCleanserAreaSecured() const { return bCleanserAreaSecured; }
 
     UFUNCTION(BlueprintCallable, Category = "Phase|Cleanser")
     int32 GetRemainingEnemiesInArea() const { return RemainingEnemiesInArea; }
 
-    // ������ ������ Ȯ������ ��
+    // 지역을 완전히 확보했을 때
     void SetCleanserAreaSecured(bool bSecured);
-    // ���� óġ�� ������ ȣ�� (���� �� ��)
+    // 적을 처치할 때마다 호출 (남은 적 수)
     void SetRemainingEnemiesInArea(int32 Count);
 
-    // ========== Phase 2: ��ǰ ȸ�� ==========
+    // ========== Phase 2: 부품 회수 ==========
     UFUNCTION(BlueprintCallable, Category = "Phase|Parts")
     int32 GetCollectedParts() const { return CollectedParts; }
 
     UFUNCTION(BlueprintCallable, Category = "Phase|Parts")
     bool IsCleanserActivated() const { return bCleanserActivated; }
 
-    // ��ǰ�� ȹ���� ������ ȣ�� (ȹ���� ����)
+    // 부품을 획득할 때마다 호출 (획득한 갯수)
     void SetCollectedParts(int32 Count);
-    // Ŭ������ Ȱ��ȭ���� ��
+    // 클렌저를 활성화했을 때
     void SetCleanserActivated(bool bActivated);
 
-    // ========== Phase 3: ��� ==========
+    // ========== Phase 3: 방어 ==========
     UFUNCTION(BlueprintCallable, Category = "Phase|Defense")
     int32 GetCurrentWaveNumber() const { return CurrentWaveNumber; }
 
@@ -123,16 +123,16 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Phase|Defense")
     bool IsWaveRestTime() const { return bIsWaveRestTime; }
 
-    // �� ���̺� ���� �� (���� ���̺� ��ȣ)
+    // 새 웨이브 시작 시 (현재 웨이브 번호)
     void SetCurrentWaveNumber(int32 WaveNumber);
-    // �� ���̺� ���� �� (���� ���̺� ����)
+    // 새 웨이브 레벨 시 (현재 웨이브 레벨)
     void SetCurrentWaveLevel(int32 WaveLevel);
-    // �� ���̺� ��
+    // 총 웨이브 수
     void SetTotalWaves(int32 Total);
-    // Ŭ������ ������ ���� �� (Ŭ���� ���� ü��)
+    // 클렌저가 데미지 받을 때 (클렌저 남은 체력)
     void SetCleanserHealth(float Health);
     
-    // ���̺� Ÿ�̸� ������Ʈ
+    // 웨이브 타이머 업데이트
     // 웨이브/휴식 타이머 시작 - 종료 시각만 1회 복제하고 남은 시간은 각 머신이 로컬 계산
     void StartWaveTimer(float DurationSeconds);
     void SetIsWaveRestTime(bool bIsRest);
@@ -147,17 +147,17 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "Phase|Warning")
     FOnToxicGasWarningSignature OnToxicGasWarningDelegate;
 
-    // ���̺� Ÿ�̸� ��������Ʈ
+    // 웨이브 타이머 델리게이트
     FOnWaveTimerChanged OnWaveTimerChangedDelegate;
 
-    // ========== Phase 4: ���� ==========
+    // ========== Phase 4: 보스 ==========
     UFUNCTION(BlueprintCallable, Category = "Phase|Boss")
     float GetBossHealth() const { return BossHealth; }
 
-    // ������ ������ ���� �� (���� ���� ü��)
+    // 보스가 데미지 받을 때 (현재 보스 체력)
     void SetBossHealth(float Health);
 
-    // Phase ��ǥ UI ����
+    // Phase 목표 UI 관련
     FOnPhaseObjectiveChanged OnPhaseObjectiveChangedDelegate;
 
     UPROPERTY(BlueprintAssignable, Category = "Phase")
@@ -236,7 +236,7 @@ public:
     void ClearEliteSpawnPointVFX();
 
 protected:
-    // ========== ���ø����̼� �ݹ� ==========
+    // ========== 리플리케이션 콜백 ==========
     UFUNCTION()
     void OnRep_CurrentPhaseIndex();
 
@@ -292,32 +292,32 @@ private:
     UPROPERTY()
     TObjectPtr<ADRDoorManager> DoorManager;
 
-    // Phase1 ���� ������ �÷��̾� ��
+    // Phase1 시작 시점의 플레이어 수
     UPROPERTY()
     int32 InitialPlayerCount;
     
-    // ========== ���� ���ø����̼� ������ ==========
+    // ========== 상태 리플리케이션 변수들 ==========
     UPROPERTY(ReplicatedUsing = OnRep_CurrentPhaseIndex)
     int32 CurrentPhaseIndex;
 
     UPROPERTY(ReplicatedUsing = OnRep_CurrentPhaseState)
     EPhaseState CurrentPhaseState;
 
-    // ========== Phase 1: Ŭ���� Ȯ�� ==========
+    // ========== Phase 1: 클렌저 확보 ==========
     UPROPERTY(Replicated)
     bool bCleanserAreaSecured;
 
     UPROPERTY(Replicated)
     int32 RemainingEnemiesInArea;
 
-    // ========== Phase 2: ��ǰ ȸ�� ==========
+    // ========== Phase 2: 부품 회수 ==========
     UPROPERTY(Replicated)
     int32 CollectedParts;
 
     UPROPERTY(Replicated)
     bool bCleanserActivated;
 
-    // ========== Phase 3: ��� ==========
+    // ========== Phase 3: 방어 ==========
     UPROPERTY(Replicated)
     int32 CurrentWaveNumber;
 
@@ -344,11 +344,11 @@ private:
     UPROPERTY(ReplicatedUsing = OnRep_PoisonGasLoopActive)
     bool bPoisonGasLoopActive = false;
 
-    // ========== Phase 4: ���� ==========
+    // ========== Phase 4: 보스 ==========
     UPROPERTY(Replicated)
     float BossHealth;
 
-    // ========== UI ������Ʈ ==========
+    // ========== UI 업데이트 ==========
     UPROPERTY(ReplicatedUsing = OnRep_CurrentObjectiveProgress)
     int32 CurrentObjectiveProgress = 0;
 

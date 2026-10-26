@@ -19,14 +19,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	FGameplayTag StartupInputTag;
 
-    // Water Cost ���� (��������Ʈ���� ���� ����)
+    // Water Cost 설정 (블루프린트에서 설정 가능)
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cost")
     float WaterCost = 0.f;
 
-    // Cost üũ �������̵�
+    // Cost 체크 오버라이드
     virtual bool CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, FGameplayTagContainer* OptionalRelevantTags) const override;
 
-    // Cost ���� �������̵�
+    // Cost 적용 오버라이드  
     virtual void ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const override;
 
     // 스킬 차단 UI 트리거를 위해 AbilityTags 를 ActivationOwnedTags 에 자동 머지

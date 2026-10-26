@@ -4,7 +4,7 @@
 bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
 {
 	uint32 RepBits = 0;
-	// Á÷·ÄÈ­ÇÒ µ¥ÀÌÅÍ ºñÆ® ¸¶½ºÅ·
+	// ì§ë ¬í™”í•  ë°ì´í„° ë¹„íŠ¸ ë§ˆìŠ¤í‚¹
 	if (Ar.IsSaving())
 	{
 		if (bReplicateInstigator && Instigator.IsValid())
@@ -61,7 +61,7 @@ bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool
 		}
 	}
 
-	// ºñÆ® ¸¶½ºÅ© Á÷·ÄÈ­
+	// ë¹„íŠ¸ ë§ˆìŠ¤í¬ ì§ë ¬í™”
 	Ar.SerializeBits(&RepBits, 13);
 
 	if (RepBits & (1 << 0))
@@ -136,7 +136,7 @@ bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool
 		KnockbackForce.NetSerialize(Ar, Map, bOutSuccess);
 	}
 
-	// ·Îµù ½Ã InstigatorAbilitySystemComponent ÃÊ±âÈ­
+	// ë¡œë”© ì‹œ InstigatorAbilitySystemComponent ì´ˆê¸°í™”
 	if (Ar.IsLoading())
 	{
 		AddInstigator(Instigator.Get(), EffectCauser.Get()); // Just to initialize InstigatorAbilitySystemComponent

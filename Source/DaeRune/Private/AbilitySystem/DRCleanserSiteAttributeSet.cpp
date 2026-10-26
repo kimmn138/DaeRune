@@ -21,10 +21,10 @@ void UDRCleanserSiteAttributeSet::OnRep_Health(const FGameplayAttributeData& Old
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRCleanserSiteAttributeSet, Health, OldHealth);
 
-	// Å¬¶óÀÌ¾ğÆ®¿¡¼­µµ Ã¼·Â º¯È­¿¡ µû¶ó ¹° ¸Ş½¬ ¾÷µ¥ÀÌÆ®
+	// í´ë¼ì´ì–¸íŠ¸ì—ì„œë„ ì²´ë ¥ ë³€í™”ì— ë”°ë¼ ë¬¼ ë©”ì‰¬ ì—…ë°ì´íŠ¸
 	if (ADRCleanserSite* CleanserSite = Cast<ADRCleanserSite>(GetOwningActor()))
 	{
-		// Ã¼·Â ºñÀ² °è»ê
+		// ì²´ë ¥ ë¹„ìœ¨ ê³„ì‚°
 		const float HealthRatio = GetMaxHealth() > 0.0f ? GetHealth() / GetMaxHealth() : 0.0f;
 		CleanserSite->UpdateWaterMeshScale(HealthRatio);
 	}
@@ -39,7 +39,7 @@ void UDRCleanserSiteAttributeSet::PreAttributeChange(const FGameplayAttribute& A
 {
 	Super::PreAttributeChange(Attribute, NewValue);
 
-	// Ã¼·ÂÀº 0°ú ÃÖ´ëÃ¼·Â »çÀÌ·Î Á¦ÇÑ
+	// ì²´ë ¥ì€ 0ê³¼ ìµœëŒ€ì²´ë ¥ ì‚¬ì´ë¡œ ì œí•œ
 	if (Attribute == GetHealthAttribute())
 	{
 		NewValue = FMath::Clamp(NewValue, 0.0f, GetMaxHealth());
@@ -50,7 +50,7 @@ void UDRCleanserSiteAttributeSet::PostGameplayEffectExecute(const FGameplayEffec
 {
 	Super::PostGameplayEffectExecute(Data);
 
-	// IncomingDamage Ã³¸®
+	// IncomingDamage ì²˜ë¦¬
 	if (Data.EvaluatedData.Attribute == GetIncomingDamageAttribute())
 	{
 		HandleIncomingDamage(Data);
@@ -93,11 +93,11 @@ void UDRCleanserSiteAttributeSet::HandleIncomingDamage(const FGameplayEffectModC
 			}
 		}
 		
-		// Ã¼·Â °¨¼Ò
+		// ì²´ë ¥ ê°ì†Œ
 		const float NewHealth = GetHealth() - LocalIncomingDamage;
 		SetHealth(FMath::Clamp(NewHealth, 0.0f, GetMaxHealth()));
 
-		// Ã¼·Â ºñÀ² °è»ê
+		// ì²´ë ¥ ë¹„ìœ¨ ê³„ì‚°
 		const float HealthRatio = GetMaxHealth() > 0.0f ? NewHealth / GetMaxHealth() : 0.0f;
 
 		if (ADRCleanserSite* CleanserSite = Cast<ADRCleanserSite>(GetOwningActor()))
@@ -105,14 +105,14 @@ void UDRCleanserSiteAttributeSet::HandleIncomingDamage(const FGameplayEffectModC
 			CleanserSite->UpdateWaterMeshScale(HealthRatio);
 		}
 
-		// Ã¼·ÂÀÌ 50% ÀÌÇÏÀÌ°í ¾ÆÁ÷ Æ®¸®°Å ¾È µÆÀ¸¸é
+		// ì²´ë ¥ì´ 50% ì´í•˜ì´ê³  ì•„ì§ íŠ¸ë¦¬ê±° ì•ˆ ëìœ¼ë©´
 		if (HealthRatio <= 0.5f && !bHalfHealthTriggered)
 		{
 			bHalfHealthTriggered = true;
 			OnHealthBelowHalfDelegate.Broadcast();
 		}
 
-		// Ã¼·ÂÀÌ 0ÀÌ µÇ¸é ÆÄ±« ÀÌº¥Æ®
+		// ì²´ë ¥ì´ 0ì´ ë˜ë©´ íŒŒê´´ ì´ë²¤íŠ¸
 		if (NewHealth <= 0.0f)
 		{
 			OnHealthZeroDelegate.Broadcast();

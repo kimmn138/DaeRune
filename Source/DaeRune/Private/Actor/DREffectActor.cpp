@@ -10,7 +10,7 @@ ADREffectActor::ADREffectActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	// ±âº» ¾À ÄÄÆ÷³ÍÆ® ¼³Á¤
+	// ê¸°ë³¸ ì”¬ ì»´í¬ë„ŒíŠ¸ ì„¤ì •
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>("SceneRoot"));
 }
 
@@ -21,34 +21,34 @@ void ADREffectActor::BeginPlay()
 
 void ADREffectActor::ApplyEffectToTarget(AActor* TargetActor, TSubclassOf<UGameplayEffect> GameplayEffectClass)
 {
-	// Àû ÅÂ±× È®ÀÎ - bApplyEffectsToEnemies ¼³Á¤¿¡ µû¶ó ÇÊÅÍ¸µ
+	// ì  íƒœê·¸ í™•ì¸ - bApplyEffectsToEnemies ì„¤ì •ì— ë”°ë¼ í•„í„°ë§
 	if (TargetActor->ActorHasTag(FName("Enemy")) && !bApplyEffectsToEnemies) return;
 
-	// Å¬·»Àú»çÀÌÆ® ÇÊÅÍ¸µ
+	// í´ë Œì €ì‚¬ì´íŠ¸ í•„í„°ë§
 	if (Cast<ADRCleanserSite>(TargetActor)) return;
 
-	// Å¸°ÙÀÇ AbilitySystemComponent °¡Á®¿À±â
+	// íƒ€ê²Ÿì˜ AbilitySystemComponent ê°€ì ¸ì˜¤ê¸°
 	UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
 	if (TargetASC == nullptr) return;
 
-	// GameplayEffect Å¬·¡½º À¯È¿¼º °ËÁõ
+	// GameplayEffect í´ë˜ìŠ¤ ìœ íš¨ì„± ê²€ì¦
 	check(GameplayEffectClass);
-	// È¿°ú ÄÁÅØ½ºÆ® »ı¼º - ¼Ò½º Á¤º¸ ¼³Á¤
+	// íš¨ê³¼ ì»¨í…ìŠ¤íŠ¸ ìƒì„± - ì†ŒìŠ¤ ì •ë³´ ì„¤ì •
 	FGameplayEffectContextHandle EffectContextHandle = TargetASC->MakeEffectContext();
 	EffectContextHandle.AddSourceObject(this);
 	EffectContextHandle.AddInstigator(this, this);
-	// GameplayEffect ½ºÆå »ı¼º ¹× Àû¿ë
+	// GameplayEffect ìŠ¤í™ ìƒì„± ë° ì ìš©
 	const FGameplayEffectSpecHandle EffectSpecHandle = TargetASC->MakeOutgoingSpec(GameplayEffectClass, ActorLevel, EffectContextHandle);
 	const FActiveGameplayEffectHandle ActiveEffectHandle = TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpecHandle.Data.Get());
 
-	// ¹«ÇÑ Áö¼Ó È¿°úÀÌ°í ¿À¹ö·¦ Á¾·á ½Ã Á¦°Å Á¤Ã¥ÀÎ °æ¿ì ÇÚµé ÀúÀå
+	// ë¬´í•œ ì§€ì† íš¨ê³¼ì´ê³  ì˜¤ë²„ë© ì¢…ë£Œ ì‹œ ì œê±° ì •ì±…ì¸ ê²½ìš° í•¸ë“¤ ì €ì¥
 	const bool bIsInfinite = EffectSpecHandle.Data.Get()->Def.Get()->DurationPolicy == EGameplayEffectDurationType::Infinite;
 	if (bIsInfinite && InfiniteEffectRemovalPolicy == EEffectRemovalPolicy::RemoveOnEndOverlap)
 	{
 		ActiveEffectHandles.Add(ActiveEffectHandle, TargetASC);
 	}
 
-	// È¿°ú Àû¿ë ÈÄ ¾×ÅÍ ÆÄ±« (¹«ÇÑ È¿°ú´Â Á¦¿Ü)
+	// íš¨ê³¼ ì ìš© í›„ ì•¡í„° íŒŒê´´ (ë¬´í•œ íš¨ê³¼ëŠ” ì œì™¸)
 	if (bDestroyOnEffectApplication && !bIsInfinite)
 	{
 		Destroy();
@@ -57,13 +57,13 @@ void ADREffectActor::ApplyEffectToTarget(AActor* TargetActor, TSubclassOf<UGamep
 
 void ADREffectActor::OnOverlap(AActor* TargetActor)
 {
-	// Àû ÇÊÅÍ¸µ
+	// ì  í•„í„°ë§
 	if (TargetActor->ActorHasTag(FName("Enemy")) && !bApplyEffectsToEnemies) return;
 
-	// Å¬·»Àú»çÀÌÆ® ÇÊÅÍ¸µ
+	// í´ë Œì €ì‚¬ì´íŠ¸ í•„í„°ë§
 	if (Cast<ADRCleanserSite>(TargetActor)) return;
 
-	// °¢ È¿°ú Å¸ÀÔº° Àû¿ë Á¤Ã¥¿¡ µû¶ó ¿À¹ö·¦ ½Ã È¿°ú Àû¿ë
+	// ê° íš¨ê³¼ íƒ€ì…ë³„ ì ìš© ì •ì±…ì— ë”°ë¼ ì˜¤ë²„ë© ì‹œ íš¨ê³¼ ì ìš©
 	if (InstantEffectApplicationPolicy == EEffectApplicationPolicy::ApplyOnOverlap)
 	{
 		ApplyEffectToTarget(TargetActor, InstantGameplayEffectClass);
@@ -80,13 +80,13 @@ void ADREffectActor::OnOverlap(AActor* TargetActor)
 
 void ADREffectActor::OnEndOverlap(AActor* TargetActor)
 {
-	// Àû ÇÊÅÍ¸µ
+	// ì  í•„í„°ë§
 	if (TargetActor->ActorHasTag(FName("Enemy")) && !bApplyEffectsToEnemies) return;
 
-	// Å¬·»Àú»çÀÌÆ® ÇÊÅÍ¸µ
+	// í´ë Œì €ì‚¬ì´íŠ¸ í•„í„°ë§
 	if (Cast<ADRCleanserSite>(TargetActor)) return;
 
-	// ¿À¹ö·¦ Á¾·á ½Ã È¿°ú Àû¿ë
+	// ì˜¤ë²„ë© ì¢…ë£Œ ì‹œ íš¨ê³¼ ì ìš©
 	if (InstantEffectApplicationPolicy == EEffectApplicationPolicy::ApplyOnEndOverlap)
 	{
 		ApplyEffectToTarget(TargetActor, InstantGameplayEffectClass);
@@ -99,24 +99,24 @@ void ADREffectActor::OnEndOverlap(AActor* TargetActor)
 	{
 		ApplyEffectToTarget(TargetActor, InfiniteGameplayEffectClass);
 	}
-	// ¹«ÇÑ È¿°ú Á¦°Å Ã³¸®
+	// ë¬´í•œ íš¨ê³¼ ì œê±° ì²˜ë¦¬
 	if (InfiniteEffectRemovalPolicy == EEffectRemovalPolicy::RemoveOnEndOverlap)
 	{
 		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
 		if (!IsValid(TargetASC)) return;
 
-		// ÇØ´ç Å¸°ÙÀÇ ¸ğµç È°¼º ¹«ÇÑ È¿°ú Á¦°Å
+		// í•´ë‹¹ íƒ€ê²Ÿì˜ ëª¨ë“  í™œì„± ë¬´í•œ íš¨ê³¼ ì œê±°
 		TArray<FActiveGameplayEffectHandle> HandlesToRemove;
 		for (TTuple<FActiveGameplayEffectHandle, UAbilitySystemComponent*> HandlePair : ActiveEffectHandles)
 		{
 			if (TargetASC == HandlePair.Value)
 			{
-				// È¿°ú Á¦°Å (½ºÅÃ 1°³ Á¦°Å)
+				// íš¨ê³¼ ì œê±° (ìŠ¤íƒ 1ê°œ ì œê±°)
 				TargetASC->RemoveActiveGameplayEffect(HandlePair.Key, 1);
 				HandlesToRemove.Add(HandlePair.Key);
 			}
 		}
-		// Á¦°ÅµÈ ÇÚµéµéÀ» ¸Ê¿¡¼­ »èÁ¦
+		// ì œê±°ëœ í•¸ë“¤ë“¤ì„ ë§µì—ì„œ ì‚­ì œ
 		for (FActiveGameplayEffectHandle& Handle : HandlesToRemove)
 		{
 			ActiveEffectHandles.FindAndRemoveChecked(Handle);

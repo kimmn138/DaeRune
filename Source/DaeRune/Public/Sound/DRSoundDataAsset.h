@@ -21,7 +21,7 @@ public:
 	{
 		return FPrimaryAssetId(TEXT("SoundData"), GetFName());
 	}
-	// ���� ����
+	// 게임 진행
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Game")
 	TObjectPtr<USoundBase> PhaseStartSound;
 
@@ -38,7 +38,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TObjectPtr<USoundBase> UIButtonClickSound;
 
-	// Ŭ����/����
+	// 클렌저/액터
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Actor")
 	TObjectPtr<USoundBase> CleanserOperatingSound;
 

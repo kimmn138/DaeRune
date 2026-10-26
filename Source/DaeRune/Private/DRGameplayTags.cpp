@@ -9,7 +9,7 @@ FDRGameplayTags FDRGameplayTags::GameplayTags;
 void FDRGameplayTags::InitializeNativeGameplayTags()
 {
 	/*
-	 * ���ҽ� ���
+	 * 리소스 비용
 	 */
 
 	GameplayTags.Cost_Water = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -18,7 +18,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * �⺻ �Ӽ�
+	 * 기본 속성
 	 */
 
 	GameplayTags.Attributes_Primary_MaxHealth = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -37,7 +37,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * �Է� �±�
+	 * 입력 태그
 	 */
 
 	GameplayTags.InputTag_LMB = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -129,7 +129,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * �⺻ ������, Ÿ�� �� ������
+	 * 기본 데미지, 타입 별 데미지
 	 */
 
 	GameplayTags.Damage = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -169,7 +169,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * �⺻ ��
+	 * 기본 힐
 	 */
 
 	GameplayTags.Heal = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -178,7 +178,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ����� ȿ��
+	 * 디버프 효과
 	 */
 
 	GameplayTags.Buff_Elite = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -207,7 +207,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 	
 	/*
-	 * ����� ȿ��
+	 * 디버프 효과
 	 */
 
 	GameplayTags.Debuff_Arcane = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -241,7 +241,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ����� ���� �±�
+	 * 디버프 계산용 태그
 	 */
 
 	GameplayTags.Debuff_Chance = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -260,7 +260,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ������ Ÿ�� �迭
+	 * 데미지 타입 배열
 	 */
 
 	GameplayTags.DamageTypeTags.Add(GameplayTags.Damage_Arcane);
@@ -270,7 +270,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.DamageTypeTags.Add(GameplayTags.Damage_Bite);
 
 	/*
-	 * ������ Ÿ��, ����� ����
+	 * 데미지 타입, 디버프 매핑
 	 */
 
 	GameplayTags.DamageTypesToDebuffs.Add(GameplayTags.Damage_Arcane, GameplayTags.Debuff_Arcane);
@@ -280,7 +280,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	GameplayTags.DamageTypesToDebuffs.Add(GameplayTags.Damage_Bite, GameplayTags.Debuff_Bleed);
 
 	/*
-	 * Ÿ�� ���� ����Ʈ
+	 * 타격 반응 이펙트
 	 */
 
 	GameplayTags.Effects_HitReact = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -294,7 +294,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * �� �ý��� (SetByCaller ���)
+	 * 물 시스템 (SetByCaller 방식)
 	 */
 
 	GameplayTags.Water_SetByCaller_Reduction = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -613,7 +613,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * �����Ƽ �з�
+	 * 어빌리티 분류
 	 */
 
 	GameplayTags.Abilities_Attack = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -642,7 +642,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ��ü�� �����Ƽ 
+	 * 구체적 어빌리티 
 	 */
 
 	GameplayTags.Abilities_Fire_FireBolt = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -703,7 +703,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 
 
 	/*
-	 * Ÿ�� ����
+	 * 타격 반응
 	 */
 
 	GameplayTags.Abilities_HitReact = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -712,7 +712,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * �����Ƽ Ÿ�� �з�
+	 * 어빌리티 타입 분류
 	 */
 
 	GameplayTags.Abilities_Type_None = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -731,7 +731,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * �����Ƽ ��ٿ�
+	 * 어빌리티 쿨다운
 	 */
 
 	GameplayTags.Cooldown_Fire_FireBolt = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -760,7 +760,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ���� ��ġ ����
+	 * 공격 위치 소켓
 	 */
 
 	GameplayTags.CombatSocket_Weapon = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -784,7 +784,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * ���� ��Ÿ��
+	 * 공격 몽타주
 	 */
 
 	GameplayTags.Montage_Attack_1 = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -808,7 +808,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * �Է� ����
+	 * 입력 블록
 	 */
 
 	GameplayTags.Player_Block_InputHeld = UGameplayTagsManager::Get().AddNativeGameplayTag(
@@ -827,7 +827,7 @@ void FDRGameplayTags::InitializeNativeGameplayTags()
 	);
 
 	/*
-	 * GameplayCue - ����
+	 * GameplayCue - 사운드
 	 */
 
 	GameplayTags.GameplayCue_Player_Damage = UGameplayTagsManager::Get().AddNativeGameplayTag(

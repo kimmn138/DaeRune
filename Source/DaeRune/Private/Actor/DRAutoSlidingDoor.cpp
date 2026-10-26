@@ -45,17 +45,17 @@ void ADRAutoSlidingDoor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// ¹® À§Ä¡ °è»ê
+	// ë¬¸ ìœ„ì¹˜ ê³„ì‚°
 	CalculateDoorLocations();
 
-	// ½ÃÀÛ »óÅÂ ¼³Á¤
+	// ì‹œì‘ ìƒíƒœ ì„¤ì •
 	if (bStartOpen)
 	{
 		CurrentDoorState = EDoorState::Open;
 		CurrentOpenRatio = 1.0f;
 		TargetOpenRatio = 1.0f;
 
-		// Áï½Ã ¿­¸° À§Ä¡·Î ÀÌµ¿
+		// ì¦‰ì‹œ ì—´ë¦° ìœ„ì¹˜ë¡œ ì´ë™
 		LeftDoorMesh->SetRelativeLocation(LeftDoorOpenLocation);
 		RightDoorMesh->SetRelativeLocation(RightDoorOpenLocation);
 	}
@@ -66,10 +66,10 @@ void ADRAutoSlidingDoor::BeginPlay()
 		TargetOpenRatio = 0.0f;
 	}
 
-	// ÃÊ±â À§Ä¡ Àû¿ë
+	// ì´ˆê¸° ìœ„ì¹˜ ì ìš©
 	UpdateDoorPosition(0.0f);
 
-	// Overlap ÀÌº¥Æ® ¹ÙÀÎµù
+	// Overlap ì´ë²¤íŠ¸ ë°”ì¸ë”©
 	if (HasAuthority())
 	{
 		TriggerVolume->OnComponentBeginOverlap.AddDynamic(this, &ADRAutoSlidingDoor::OnTriggerBeginOverlap);
@@ -89,7 +89,7 @@ void ADRAutoSlidingDoor::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// ¹®ÀÌ ¿òÁ÷ÀÌ´Â ÁßÀÌ¸é À§Ä¡ ¾÷µ¥ÀÌÆ®
+	// ë¬¸ì´ ì›€ì§ì´ëŠ” ì¤‘ì´ë©´ ìœ„ì¹˜ ì—…ë°ì´íŠ¸
 	if (CurrentDoorState == EDoorState::Opening || CurrentDoorState == EDoorState::Closing)
 	{
 		UpdateDoorPosition(DeltaTime);
@@ -98,24 +98,24 @@ void ADRAutoSlidingDoor::Tick(float DeltaTime)
 
 void ADRAutoSlidingDoor::CalculateDoorLocations()
 {
-	// ÇöÀç À§Ä¡¸¦ ´İÈù À§Ä¡·Î ÀúÀå
+	// í˜„ì¬ ìœ„ì¹˜ë¥¼ ë‹«íŒ ìœ„ì¹˜ë¡œ ì €ì¥
 	LeftDoorClosedLocation = LeftDoorMesh->GetRelativeLocation();
 	RightDoorClosedLocation = RightDoorMesh->GetRelativeLocation();
 
-	// ¿­¸° À§Ä¡ °è»ê
+	// ì—´ë¦° ìœ„ì¹˜ ê³„ì‚°
 	LeftDoorOpenLocation = LeftDoorClosedLocation + FVector(DoorOpenOffset, 0.0f, 0.0f);
 	RightDoorOpenLocation = RightDoorClosedLocation + FVector(-DoorOpenOffset, 0.0f, 0.0f);
 }
 
 void ADRAutoSlidingDoor::UpdateDoorPosition(float DeltaTime)
 {
-	// ¸ñÇ¥ ºñÀ²À» ÇâÇØ ºÎµå·´°Ô ÀÌµ¿
+	// ëª©í‘œ ë¹„ìœ¨ì„ í–¥í•´ ë¶€ë“œëŸ½ê²Œ ì´ë™
 	if (!FMath::IsNearlyEqual(CurrentOpenRatio, TargetOpenRatio, 0.001f))
 	{
-		float InterpSpeed = DoorSpeed / DoorOpenOffset; // ¼Óµµ¸¦ ºñÀ² º¯È­·®À¸·Î º¯È¯
+		float InterpSpeed = DoorSpeed / DoorOpenOffset; // ì†ë„ë¥¼ ë¹„ìœ¨ ë³€í™”ëŸ‰ìœ¼ë¡œ ë³€í™˜
 		CurrentOpenRatio = FMath::FInterpTo(CurrentOpenRatio, TargetOpenRatio, DeltaTime, InterpSpeed);
 
-		// ¹® À§Ä¡ Àû¿ë
+		// ë¬¸ ìœ„ì¹˜ ì ìš©
 		FVector LeftNewLocation = FMath::Lerp(LeftDoorClosedLocation, LeftDoorOpenLocation, CurrentOpenRatio);
 		FVector RightNewLocation = FMath::Lerp(RightDoorClosedLocation, RightDoorOpenLocation, CurrentOpenRatio);
 
@@ -124,7 +124,7 @@ void ADRAutoSlidingDoor::UpdateDoorPosition(float DeltaTime)
 	}
 	else
 	{
-		// ÀÌµ¿ ¿Ï·á
+		// ì´ë™ ì™„ë£Œ
 		CurrentOpenRatio = TargetOpenRatio;
 
 		if (CurrentDoorState == EDoorState::Opening)
@@ -148,7 +148,7 @@ void ADRAutoSlidingDoor::SetDoorState(EDoorState NewState)
 	EDoorState PreviousState = CurrentDoorState;
 	CurrentDoorState = NewState;
 
-	// ¸ñÇ¥ ºñÀ² ¼³Á¤ ¹× »ç¿îµå Àç»ı
+	// ëª©í‘œ ë¹„ìœ¨ ì„¤ì • ë° ì‚¬ìš´ë“œ ì¬ìƒ
 	switch (NewState)
 	{
 		case EDoorState::Opening:
@@ -178,13 +178,13 @@ void ADRAutoSlidingDoor::SetDoorState(EDoorState NewState)
 			break;
 	}
 
-	// Å¬¶óÀÌ¾ğÆ®¿¡µµ Áï½Ã Àû¿ë
+	// í´ë¼ì´ì–¸íŠ¸ì—ë„ ì¦‰ì‹œ ì ìš©
 	OnRep_DoorState();
 }
 
 void ADRAutoSlidingDoor::OnRep_DoorState()
 {
-	// Å¬¶óÀÌ¾ğÆ®¿¡¼­ »óÅÂ º¯°æ ½Ã È£ÃâµÊ
+	// í´ë¼ì´ì–¸íŠ¸ì—ì„œ ìƒíƒœ ë³€ê²½ ì‹œ í˜¸ì¶œë¨
 	switch (CurrentDoorState)
 	{
 		case EDoorState::Opening:
@@ -244,7 +244,7 @@ void ADRAutoSlidingDoor::SetDoorLocked(bool bLocked)
 
 	bIsLocked = bLocked;
 
-	// Àá±ä »óÅÂ¿¡¼­ ¿­·ÁÀÖÀ¸¸é ´İ±â
+	// ì ê¸´ ìƒíƒœì—ì„œ ì—´ë ¤ìˆìœ¼ë©´ ë‹«ê¸°
 	if (bIsLocked && (CurrentDoorState == EDoorState::Open || CurrentDoorState == EDoorState::Opening))
 	{
 		CloseDoor();
@@ -253,7 +253,7 @@ void ADRAutoSlidingDoor::SetDoorLocked(bool bLocked)
 
 void ADRAutoSlidingDoor::OnTriggerBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	// ÇÃ·¹ÀÌ¾îÀÎÁö È®ÀÎ
+	// í”Œë ˆì´ì–´ì¸ì§€ í™•ì¸
 	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
 	if (!Character) return;
 
@@ -267,7 +267,7 @@ void ADRAutoSlidingDoor::OnTriggerBeginOverlap(UPrimitiveComponent* OverlappedCo
 
 void ADRAutoSlidingDoor::OnTriggerEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	// ÇÃ·¹ÀÌ¾îÀÎÁö È®ÀÎ
+	// í”Œë ˆì´ì–´ì¸ì§€ í™•ì¸
 	ADRCharacter* Character = Cast<ADRCharacter>(OtherActor);
 	if (!Character) return;
 

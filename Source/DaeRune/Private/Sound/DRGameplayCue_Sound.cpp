@@ -7,7 +7,7 @@
 
 UDRGameplayCue_Sound::UDRGameplayCue_Sound()
 {
-	// Static Cue�� �ν��Ͻ� ���� �� ��
+	// Static Cue는 인스턴스 생성 안 함
 	IsOverride = true;
 }
 

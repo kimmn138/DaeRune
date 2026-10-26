@@ -30,7 +30,7 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// ¿ÜºÎ¿¡¼­ È£ÃâÇÒ ÇÔ¼öµé
+	// ì™¸ë¶€ì—ì„œ í˜¸ì¶œí•  í•¨ìˆ˜ë“¤
 	UFUNCTION(BlueprintCallable, Category = "Door")
 	void OpenDoor();
 
@@ -50,7 +50,7 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
-	// ÄÄÆ÷³ÍÆ®
+	// ì»´í¬ë„ŒíŠ¸
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USceneComponent> RootSceneComponent;
 
@@ -66,7 +66,7 @@ protected:
 	/*UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UAudioComponent> DoorAudioComponent;*/
 
-	// ¿¡µğÅÍ ¼³Á¤ º¯¼ö
+	// ì—ë””í„° ì„¤ì • ë³€ìˆ˜
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Settings")
 	float DoorOpenOffset = 150.0f;
 
@@ -82,7 +82,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Settings")
 	bool bOpenOnPlayerLeave = false;
 
-	// »ç¿îµå
+	// ì‚¬ìš´ë“œ
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Sound")
 	TObjectPtr<USoundBase> DoorOpenSound;
 
@@ -111,7 +111,7 @@ private:
 	void SetDoorState(EDoorState NewState);
 	void CalculateDoorLocations();
 
-	// Overlap ÀÌº¥Æ®
+	// Overlap ì´ë²¤íŠ¸
 	UFUNCTION()
 	void OnTriggerBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 

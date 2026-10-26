@@ -4,9 +4,9 @@
 
 #include "CoreMinimal.h"
 
-// ÇÁ·ÎÁ§Æ® Àü¿ª¿¡¼­ »ç¿ëµÇ´Â °øÅë Á¤ÀÇ, ¸ÅÅ©·Î¸¦ °ü¸®
+// í”„ë¡œì íŠ¸ ì „ì—­ì—ì„œ ì‚¬ìš©ë˜ëŠ” ê³µí†µ ì •ì˜, ë§¤í¬ë¡œë¥¼ ê´€ë¦¬
 
-// ¹ß»çÃ¼ Àü¿ë Äİ¸®Àü Ã¤³Î
+// ë°œì‚¬ì²´ ì „ìš© ì½œë¦¬ì „ ì±„ë„
 #define ECC_Projectile ECollisionChannel::ECC_GameTraceChannel1
-// Å¸°Ù Àü¿ë Äİ¸®Àü Ã¤³Î
+// íƒ€ê²Ÿ ì „ìš© ì½œë¦¬ì „ ì±„ë„
 #define ECC_Target ECollisionChannel::ECC_GameTraceChannel2

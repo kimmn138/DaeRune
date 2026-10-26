@@ -64,7 +64,7 @@ ADRCharacter::ADRCharacter()
 		AttackSpeedBuffVFX = AttackSpeedBuffVFXFinder.Object;
 	}
 
-	// �̵� �������� ȸ�� ����
+	// 이동 방향으로 회전 설정
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 400.f, 0.f);
 	GetCharacterMovement()->bConstrainToPlane = true;
@@ -73,7 +73,7 @@ ADRCharacter::ADRCharacter()
 	// Pawn 간 겹침 시 밀어내기 속도 제한 (튕김 방지)
 	GetCharacterMovement()->MaxDepenetrationWithPawn = 10.f;
 
-	// ī�޶� �� ����
+	// 카메라 붐 설정
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(GetCapsuleComponent());
 	CameraBoom->SetRelativeLocation(FVector(30.f, 0.f, 50.f));
@@ -81,12 +81,12 @@ ADRCharacter::ADRCharacter()
 	CameraBoom->bUsePawnControlRotation = true;
 	CameraBoom->bDoCollisionTest = false;
 
-	// ����ٴϴ� ī�޶� ����
+	// 따라다니는 카메라 설정
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
-	// 1��Ī �޽� ����
+	// 1인칭 메쉬 설정
 	FirstPersonMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonMesh"));
 	FirstPersonMesh->SetupAttachment(FollowCamera); 
 	FirstPersonMesh->SetOnlyOwnerSee(true);
@@ -365,20 +365,20 @@ void ADRCharacter::OnRep_Stunned()
 	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(AbilitySystemComponent))
 	{
 		const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
-		// �Է� ���� �±׵� ����
+		// 입력 차단 태그들 설정
 		FGameplayTagContainer BlockedTags;
 		BlockedTags.AddTag(GameplayTags.Player_Block_InputHeld);
 		BlockedTags.AddTag(GameplayTags.Player_Block_InputPressed);
 		BlockedTags.AddTag(GameplayTags.Player_Block_InputReleased);
 		if (bIsStunned)
 		{
-			// ���� ����: �Է� ���� + ���� ����Ʈ Ȱ��ȭ
+			// 스턴 시작: 입력 차단 + 스턴 이펙트 활성화
 			DRASC->AddLooseGameplayTags(BlockedTags);
 			StunDebuffComponent->Activate();
 		}
 		else
 		{
-			// ���� ����: �Է� ���� + ���� ����Ʈ ��Ȱ��ȭ
+			// 스턴 종료: 입력 복구 + 스턴 이펙트 비활성화
 			DRASC->RemoveLooseGameplayTags(BlockedTags);
 			StunDebuffComponent->Deactivate();
 		}
@@ -428,15 +428,15 @@ bool ADRCharacter::PickupPart(ADRCleanserPart* Part)
 {
 	if (!HasAuthority() || !Part || bIsCarryingPart) return false;
 
-	// ��ǰ ȹ�� ó��
+	// 부품 획득 처리
 	Part->PickupPart(this);
 
 	SetCarryingState(true, Part);
 
-	// ȹ�� �ð� ���
+	// 획득 시간 기록
 	LastPartPickupTime = GetWorld()->GetTimeSeconds();
 
-	// PlayerController���� UI ǥ�� ��û
+	// PlayerController에게 UI 표시 요청
 	if (ADRPlayerController* PC = Cast<ADRPlayerController>(GetController()))
 	{
 		PC->ClientShowPartPickupUI();
@@ -449,7 +449,7 @@ void ADRCharacter::InstallCarriedPart()
 {
 	if (!HasAuthority() || !bIsCarryingPart || !CarriedPart) return;
 
-	// ��ǰ ��ġ ó��
+	// 부품 설치 처리
 	CarriedPart->InstallPart();
 
 	SetCarryingState(false);
@@ -457,13 +457,13 @@ void ADRCharacter::InstallCarriedPart()
 
 void ADRCharacter::DropCarriedPart()
 {
-	// ���������� ����
+	// 서버에서만 실행
 	if (!HasAuthority()) return;
 
-	// ��ǰ�� ��� ���� ������ ����
+	// 부품을 들고 있지 않으면 무시
 	if (!bIsCarryingPart || !CarriedPart) return;
 
-	// ��ٿ� üũ
+	// 쿨다운 체크
 	const float CurrentTime = GetWorld()->GetTimeSeconds();
 	const float TimeSincePickup = CurrentTime - LastPartPickupTime;
 	if (TimeSincePickup < PartDropCooldown) return;
@@ -485,7 +485,7 @@ void ADRCharacter::ForceDropCarriedPart()
 
 void ADRCharacter::DoDropCarriedPart()
 {
-	// ��ǰ���� ��������� ��û
+	// 부품에게 떨어지라고 요청
 	CarriedPart->DropFromCarrier();
 
 	SetCarryingState(false);
@@ -522,12 +522,12 @@ void ADRCharacter::SetCarryingState(bool bNewCarrying, ADRCleanserPart* Part)
 
 void ADRCharacter::UpdateMeshVisibility()
 {
-	// ���� �÷��̾����� Ȯ��
+	// 로컬 플레이어인지 확인
 	const bool bIsLocalPlayer = IsLocallyControlled();
 
 	if (bIsLocalPlayer)
 	{
-		// ���� �÷��̾�: 1��Ī �޽� ����, 3��Ī �޽� ����
+		// 로컬 플레이어: 1인칭 메쉬 보임, 3인칭 메쉬 숨김
 		if (FirstPersonMesh)
 		{
 			FirstPersonMesh->SetVisibility(true);
@@ -540,7 +540,7 @@ void ADRCharacter::UpdateMeshVisibility()
 	}
 	else
 	{
-		// �ٸ� �÷��̾�: 3��Ī �޽� ����, 1��Ī �޽� ����
+		// 다른 플레이어: 3인칭 메쉬 보임, 1인칭 메쉬 숨김
 		if (FirstPersonMesh)
 		{
 			FirstPersonMesh->SetVisibility(false);
@@ -776,10 +776,10 @@ void ADRCharacter::BeginPlay()
 		}
 	}
 
-	// �޽� ���ü� ������Ʈ
+	// 메쉬 가시성 업데이트
 	UpdateMeshVisibility();
 
-	// 1��Ī ���� ��� �ϴ� ����Ʈ �߰�
+	// 1인칭 시점을 밝게 하는 라이트 추가
 	//if (IsLocallyControlled())
 	//{
 	//	UPointLightComponent* Light = NewObject<UPointLightComponent>(this);
@@ -1158,7 +1158,7 @@ float ADRCharacter::GetMoveSpeed()
 
 void ADRCharacter::InitAbilityActorInfo()
 {
-	// PlayerState ��ȿ�� �˻�
+	// PlayerState 유효성 검사
 	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
 	if (!DRPlayerState) return;
 
@@ -1166,7 +1166,7 @@ void ADRCharacter::InitAbilityActorInfo()
 	UAbilitySystemComponent* ASC = DRPlayerState->GetAbilitySystemComponent();
 	if (!ASC) return;
 
-	// GAS ������Ʈ���� PlayerState���� ������ �ʱ�ȭ
+	// GAS 컴포넌트들을 PlayerState에서 가져와 초기화
 	ASC->InitAbilityActorInfo(DRPlayerState, this);
 	Cast<UDRAbilitySystemComponent>(ASC)->AbilityActorInfoSet();
 
@@ -1187,16 +1187,16 @@ void ADRCharacter::InitAbilityActorInfo()
 		}
 	}
 
-	// �÷��̾� AttributeSet�� �����̳� ���� ����
+	// 플레이어 AttributeSet에 컨테이너 정보 설정
 	if (UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSets))
 	{
 		PlayerAS->SetContainerInfo(NumContainers, ContainerHealth);
 	}
 
-	// ASC ��� �Ϸ� �̺�Ʈ ��ε�ĳ��Ʈ
+	// ASC 등록 완료 이벤트 브로드캐스트
 	OnAscRegistered.Broadcast(AbilitySystemComponent);
 
-	// GAS �±� ���ε�
+	// GAS 태그 바인딩
 	AbilitySystemComponent->RegisterGameplayTagEvent(
 		FDRGameplayTags::Get().Debuff_Stun,
 		EGameplayTagEventType::NewOrRemoved
@@ -1227,7 +1227,7 @@ void ADRCharacter::InitAbilityActorInfo()
 	// 표정 시스템은 명시적 멀티캐스트(MulticastPlayHitReactFacial /
 	// MulticastPlayVendingSkillUse)에서 트리거하므로 태그 바인딩 불필요.
 
-	// �÷��̾� ��Ʈ�ѷ��� HUD �ʱ�ȭ ��û
+	// 플레이어 컨트롤러에 HUD 초기화 요청
 	if (ADRPlayerController* DRPlayerController = Cast<ADRPlayerController>(GetController()))
 	{
 		// 대기실이면 HUD 오버레이 초기화 스킵 (FreeRoam 진입 시 별도 호출)

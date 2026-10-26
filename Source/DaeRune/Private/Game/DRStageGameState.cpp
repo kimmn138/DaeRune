@@ -19,7 +19,7 @@
 
 ADRStageGameState::ADRStageGameState()
 {
-    // �ʱⰪ ����
+    // 초기값 설정
     CurrentPhaseIndex = -1;
     CurrentPhaseState = EPhaseState::NotStarted;
 
@@ -34,7 +34,7 @@ ADRStageGameState::ADRStageGameState()
     // Phase 3
     CurrentWaveNumber = 0;
     CurrentWaveLevel = 0;
-    TotalWaves = 5; // �⺻��
+    TotalWaves = 5; // 기본값
     CleanserHealth = 1000.0f;
     WaveTimerEndServerTime = 0.0f;
     bIsWaveRestTime = false;
@@ -53,7 +53,7 @@ void ADRStageGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-    // ���� ���ø����̼�
+    // 상태 리플리케이션
     DOREPLIFETIME(ADRStageGameState, CurrentPhaseIndex);
     DOREPLIFETIME(ADRStageGameState, CurrentPhaseState);
 
@@ -176,7 +176,7 @@ void ADRStageGameState::SetCleanserHealth(float Health)
     {
         CleanserHealth = FMath::Clamp(Health, 0.0f, 1000.0f);
 
-        // Ŭ���� ü���� 0�� �Ǹ� ���� ó��
+        // 클렌저 체력이 0이 되면 실패 처리
         if (CleanserHealth <= 0.0f)
         {
             SetCurrentPhaseState(EPhaseState::Failed);

@@ -236,31 +236,31 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Water System")
 	TSubclassOf<UGameplayEffect> WaterGrantEffectClass;
 
-	// ========== 占쏙옙 占썸돌 占쏙옙占쏙옙 占시쏙옙占쏙옙 占쌩곤옙 ==========
+	// ========== 벽 충돌 기절 시스템 추가 ==========
 
-	// Hit 占싱븝옙트 占쌘들러
+	// Hit 이벤트 핸들러
 	UFUNCTION()
 	void OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit);
 
-	// 占쏙옙 占쏙옙占쏙옙 占쏙옙占쏙옙 占쌉쇽옙
+	// 벽 스턴 적용 함수
 	void ApplyWallStun();
 
-	// 占쏙옙占쏙옙 占썽역 占쏙옙占쏙옙
+	// 스턴 면역 종료
 	void EndStunImmunity();
 
 	// 넉백 상태 플래그
 	UPROPERTY(BlueprintReadOnly, Category = "Combat|Wall Stun")
 	bool bIsBeingKnockedBack = false;
 
-	// 占썸돌 占쏙옙占쏙옙 占쌈계값
+	// 충돌 강도 임계값
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "100.0", ClampMax = "2000.0"))
 	float MinSpeedForStun = 50.f;
 
-	// 占쏙옙占쏙옙 占쏙옙占쏙옙 占시곤옙
+	// 스턴 지속 시간
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "0.5", ClampMax = "5.0"))
 	float WallStunDuration = 5.0f;
 
-	// 占쏙옙占쏙옙 占썽역 占시곤옙 (占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙)
+	// 스턴 면역 시간 (스턴 종료 후)
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "0.0", ClampMax = "10.0"))
 	float StunImmunityDuration = 5.0f;
 
@@ -297,10 +297,10 @@ private:
 	UPROPERTY()
 	int32 AttackCount = 0;
 
-	// 占쏙옙占쏙옙 占썽역 占쏙옙占쏙옙
+	// 스턴 면역 상태
 	bool bIsStunImmune = false;
 
-	// 占쏙옙占쏙옙 占썽역 타占싱몌옙
+	// 스턴 면역 타이머
 	FTimerHandle StunImmunityTimerHandle;
 
 	bool bPartDropped = false;

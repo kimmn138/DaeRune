@@ -10,8 +10,8 @@
 class ADRCharacter;
 
 /**
- * DaeRuneÀÇ GameState º£ÀÌ½º Å¬·¡½º
- * ·Îºñ¿Í ½ºÅ×ÀÌÁö¿¡¼­ °øÅëÀ¸·Î »ç¿ëÇÏ´Â ±â´É Æ÷ÇÔ
+ * DaeRuneì˜ GameState ë² ì´ìŠ¤ í´ë˜ìŠ¤
+ * ë¡œë¹„ì™€ ìŠ¤í…Œì´ì§€ì—ì„œ ê³µí†µìœ¼ë¡œ ì‚¬ìš©í•˜ëŠ” ê¸°ëŠ¥ í¬í•¨
  */
 UCLASS()
 class DAERUNE_API ADRGameStateBase : public AGameState
@@ -23,38 +23,38 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// PlayerArray ¿À¹ö¶óÀÌµå - DRPlayerState Å¸ÀÔ º¸Àå
+	// PlayerArray ì˜¤ë²„ë¼ì´ë“œ - DRPlayerState íƒ€ì… ë³´ì¥
 	virtual void AddPlayerState(APlayerState* PlayerState) override;
 	virtual void RemovePlayerState(APlayerState* PlayerState) override;
 
-	// ÇöÀç Á¢¼Ó ÀÎ¿ø
+	// í˜„ì¬ ì ‘ì† ì¸ì›
 	UFUNCTION(BlueprintCallable, Category = "Game State")
 	int32 GetCurrentPlayerCount() const { return CurrentPlayerCount; }
 
-	// ÃÖ´ë ÇÃ·¹ÀÌ¾î ¼ö
+	// ìµœëŒ€ í”Œë ˆì´ì–´ ìˆ˜
 	UFUNCTION(BlueprintCallable, Category = "Game State")
 	int32 GetMaxPlayerCount() const { return MaxPlayerCount; }
 
-	// È£½ºÆ® È®ÀÎ
+	// í˜¸ìŠ¤íŠ¸ í™•ì¸
 	UFUNCTION(BlueprintCallable, Category = "Game State")
 	APlayerState* GetHostPlayer() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Game State")
 	bool IsPlayerHost(APlayerState* PlayerState) const;
 
-	// »ì¾ÆÀÖ´Â ÇÃ·¹ÀÌ¾î ¸®½ºÆ® ¹İÈ¯
+	// ì‚´ì•„ìˆëŠ” í”Œë ˆì´ì–´ ë¦¬ìŠ¤íŠ¸ ë°˜í™˜
 	UFUNCTION(BlueprintCallable, Category = "Spectating")
 	TArray<ADRCharacter*> GetAlivePlayers() const;
 
 protected:
-	// ÇöÀç ÇÃ·¹ÀÌ¾î ¼ö
+	// í˜„ì¬ í”Œë ˆì´ì–´ ìˆ˜
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Game State")
 	int32 CurrentPlayerCount;
 
-	// ÃÖ´ë ÇÃ·¹ÀÌ¾î ¼ö
+	// ìµœëŒ€ í”Œë ˆì´ì–´ ìˆ˜
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Game State")
 	int32 MaxPlayerCount;
 
-	// ÇÃ·¹ÀÌ¾î ¼ö ¾÷µ¥ÀÌÆ®
+	// í”Œë ˆì´ì–´ ìˆ˜ ì—…ë°ì´íŠ¸
 	virtual void UpdatePlayerCount();
 };

@@ -7,21 +7,21 @@
 #include "AbilitySystemComponent.h"
 #include "DRCleanserSiteAttributeSet.generated.h"
 
-// AttributeSet ¸ÅÅ©·Î Á¤ÀÇ
+// AttributeSet ë§¤í¬ë¡œ ì •ì˜
 #define ATTRIBUTE_ACCESSORS(ClassName, PropertyName) \
 	GAMEPLAYATTRIBUTE_PROPERTY_GETTER(ClassName, PropertyName) \
 	GAMEPLAYATTRIBUTE_VALUE_GETTER(PropertyName) \
 	GAMEPLAYATTRIBUTE_VALUE_SETTER(PropertyName) \
 	GAMEPLAYATTRIBUTE_VALUE_INITTER(PropertyName)
 
-// Å¬·»Àú »çÀÌÆ® Ã¼·Â 50% ÀÌÇÏ µ¨¸®°ÔÀÌÆ®
+// í´ë Œì € ì‚¬ì´íŠ¸ ì²´ë ¥ 50% ì´í•˜ ë¸ë¦¬ê²Œì´íŠ¸
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCleanserSiteHealthBelowHalfSignature);
-// Å¬·»Àú »çÀÌÆ® ÆÄ±« µ¨¸®°ÔÀÌÆ®
+// í´ë Œì € ì‚¬ì´íŠ¸ íŒŒê´´ ë¸ë¦¬ê²Œì´íŠ¸
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCleanserSiteHealthZeroSignature);
 
 /**
- * Å¬·»Àú »çÀÌÆ® Àü¿ë AttributeSet
- * Phase3¿¡¼­ ¹æ¾î ´ë»óÀ¸·Î »ç¿ëµÉ ¶§ Ã¼·Â °ü¸®
+ * í´ë Œì € ì‚¬ì´íŠ¸ ì „ìš© AttributeSet
+ * Phase3ì—ì„œ ë°©ì–´ ëŒ€ìƒìœ¼ë¡œ ì‚¬ìš©ë  ë•Œ ì²´ë ¥ ê´€ë¦¬
  */
 UCLASS()
 class DAERUNE_API UDRCleanserSiteAttributeSet : public UAttributeSet
@@ -33,12 +33,12 @@ public:
 
 	// ========== Attributes ==========
 
-	// ÇöÀç Ã¼·Â
+	// í˜„ì¬ ì²´ë ¥
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Health, Category = "Vital Attributes")
 	FGameplayAttributeData Health;
 	ATTRIBUTE_ACCESSORS(UDRCleanserSiteAttributeSet, Health);
 
-	// ÃÖ´ë Ã¼·Â
+	// ìµœëŒ€ ì²´ë ¥
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxHealth, Category = "Vital Attributes")
 	FGameplayAttributeData MaxHealth;
 	ATTRIBUTE_ACCESSORS(UDRCleanserSiteAttributeSet, MaxHealth);
@@ -51,24 +51,24 @@ public:
 	UFUNCTION()
 	void OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth) const;
 
-	// ========== Meta Attributes (ÀÓ½Ã µ¥¹ÌÁö °è»ê¿ë) ==========
+	// ========== Meta Attributes (ì„ì‹œ ë°ë¯¸ì§€ ê³„ì‚°ìš©) ==========
 
 	UPROPERTY(BlueprintReadOnly, Category = "Meta Attributes")
 	FGameplayAttributeData IncomingDamage;
 	ATTRIBUTE_ACCESSORS(UDRCleanserSiteAttributeSet, IncomingDamage);
 
-	// ========== Attribute º¯°æ Ã³¸® ==========
+	// ========== Attribute ë³€ê²½ ì²˜ë¦¬ ==========
 
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 
 	// ========== Delegates ==========
 
-	// Ã¼·Â 50% ÀÌÇÏ µ¨¸®°ÔÀÌÆ®
+	// ì²´ë ¥ 50% ì´í•˜ ë¸ë¦¬ê²Œì´íŠ¸
 	UPROPERTY(BlueprintAssignable, Category = "CleanserSite")
 	FOnCleanserSiteHealthBelowHalfSignature OnHealthBelowHalfDelegate;
 
-	// Ã¼·Â 0 µ¨¸®°ÔÀÌÆ®
+	// ì²´ë ¥ 0 ë¸ë¦¬ê²Œì´íŠ¸
 	UPROPERTY(BlueprintAssignable, Category = "CleanserSite")
 	FOnCleanserSiteHealthZeroSignature OnHealthZeroDelegate;
 
@@ -77,9 +77,9 @@ protected:
 	float EliteDebuffModifier = 2.0f;
 
 private:
-	// µ¥¹ÌÁö Ã³¸® ÇÔ¼ö
+	// ë°ë¯¸ì§€ ì²˜ë¦¬ í•¨ìˆ˜
 	void HandleIncomingDamage(const FGameplayEffectModCallbackData& Data);
 
-	// 50% Æ®¸®°Å ÇÃ·¡±× (Áßº¹ ºê·ÎµåÄ³½ºÆ® ¹æÁö)
+	// 50% íŠ¸ë¦¬ê±° í”Œë˜ê·¸ (ì¤‘ë³µ ë¸Œë¡œë“œìºìŠ¤íŠ¸ ë°©ì§€)
 	bool bHalfHealthTriggered = false;
 };

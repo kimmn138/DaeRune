@@ -24,12 +24,12 @@
 
 ADRSeedProjectile::ADRSeedProjectile()
 {
-    // ������ ������ ���� �߷� Ȱ��ȭ
+    // 포물선 궤적을 위한 중력 활성화
     ProjectileMovement->ProjectileGravityScale = 1.0f;
     ProjectileMovement->InitialSpeed = 700.f;
     ProjectileMovement->MaxSpeed = 700.f;
 
-    // ���� ��� ��Ȱ��ȭ (���� ������ ����)
+    // 유도 기능 비활성화 (직선 포물선 궤적)
     ProjectileMovement->bIsHomingProjectile = false;
 }
 
@@ -37,7 +37,7 @@ void ADRSeedProjectile::BeginPlay()
 {
     Super::BeginPlay();
 
-    // �õ� �߻�ü�� �̵� ����ȭ ��Ȱ��ȭ (���������� ó��)
+    // 시드 발사체는 이동 동기화 비활성화 (서버에서만 처리)
     SetReplicateMovement(false);
 
     // ★Plan5(씨앗칩)★ 업그레이드 칩 해석은 서버에서만 필요하다 —
@@ -118,13 +118,13 @@ void ADRSeedProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent
     AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
     bool bFromSweep, const FHitResult& SweepResult)
 {
-    // �ߺ� ���� ����
+    // 중복 폭발 방지
     if (bHasExploded) return;
 
-    // �ڱ� �ڽ��̰ų� �����ڸ� ����
+    // 자기 자신이거나 소유자면 무시
     if (!OtherActor || OtherActor == GetOwner()) return;
 
-    // �߻��� ĳ���ʹ� ��� (���� ����)
+    // 발사한 캐릭터는 통과 (자폭 방지)
     if (DamageEffectParams.SourceAbilitySystemComponent)
     {
         AActor* SourceActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
@@ -133,7 +133,7 @@ void ADRSeedProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent
 
     if (OtherComp)
     {
-        // �浹 ���� ��� (��Ȯ�� ���� ��ġ ����)
+        // 충돌 지점 계산 (정확한 폭발 위치 설정)
         FVector ImpactPoint = SweepResult.Location;
         if (ImpactPoint.IsZero())
         {
@@ -156,16 +156,16 @@ void ADRSeedProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent
 
 void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
 {
-    // �ߺ� ���� ����, ���������� ���� ������/�� ó��
+    // 중복 폭발 방지, 서버에서만 범위 데미지/힐 처리
     if (!HasAuthority() || bHasExploded) return;
     bHasExploded = true;
 
-    // ���� ����Ʈ ��� (���� OnHit �Լ� Ȱ��)
+    // 폭발 이펙트 재생 (기존 OnHit 함수 활용)
     OnHit();
 
     MulticastPlayExplosionSound(ImpactLocation);
 
-    // ��� Ŭ���̾�Ʈ���� ���� ��ġ ���� (����� ��ο��)
+    // 모든 클라이언트에게 폭발 위치 전달 (디버그 드로우용)
     // ★Plan5(씨앗칩)★ 범위 칩이 붙으면 VFX 도 같이 커져야 한다.
     // Resolved 는 서버에만 있으므로 "기본 대비 몇 배인가"를 인자로 넘긴다.
     // 칩이 없으면 정확히 1.0 이라 기존과 동일하다.
@@ -175,12 +175,12 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
 
     MulticastExplodeAtLocation(ImpactLocation, ExplosionRadiusScale);
 
-    // ���� �� ��� ���� �˻�
+    // 범위 내 모든 액터 검색
     TArray<FOverlapResult> OverlapResults;
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(this);
 
-    // �߻��� ĳ���ʹ� ����
+    // 발사한 캐릭터는 제외
     if (DamageEffectParams.SourceAbilitySystemComponent)
     {
         AActor* SourceActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
@@ -190,7 +190,7 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
         }
     }
 
-    // ��ü ������ üũ
+    // 구체 오버랩 체크
     bool bOverlapSuccess = GetWorld()->OverlapMultiByChannel(
         OverlapResults,
         ImpactLocation,
@@ -206,7 +206,7 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
         return;
     }
 
-    // �� ���Ϳ� ���� ó��
+    // 각 액터에 대해 처리
     int32 AffectedCount = 0;
     int32 BlockedCount = 0;
     int32 EnemyHitCount = 0;
@@ -219,22 +219,22 @@ void ADRSeedProjectile::ExplodeAtLocation(const FVector& ImpactLocation)
         if (ProcessedTargets.Contains(Target)) continue;
         ProcessedTargets.Add(Target);
 
-        // ���� ĳ���ʹ� ����
+        // 죽은 캐릭터는 무시
         if (Target->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Target))
         {
             continue;
         }
 
-        // Ŭ���� ����Ʈ�� ����
+        // 클렌저 사이트는 무시
         if (ADRCleanserSite* CleanserSite = Cast<ADRCleanserSite>(Target))
         {
             continue;
         }
 
-        // �Ÿ� ���
+        // 거리 계산
         float Distance = FVector::Dist(ImpactLocation, Target->GetActorLocation());
 
-        // ���� ���̸� ����
+        // 범위 밖이면 무시
         if (Distance > Resolved.OuterRadius) continue;
 
         bool bCanApply = HasLineOfSight(ImpactLocation, Target->GetActorLocation(), Target);
@@ -281,10 +281,10 @@ bool ADRSeedProjectile::HasLineOfSight(const FVector& StartLocation, const FVect
 {
     FHitResult HitResult;
     FCollisionQueryParams QueryParams;
-    QueryParams.AddIgnoredActor(this);  // �߻�ü �ڽ��� ����
-    QueryParams.AddIgnoredActor(TargetActor);  // Ÿ�� ���͵� ����
+    QueryParams.AddIgnoredActor(this);  // 발사체 자신은 무시
+    QueryParams.AddIgnoredActor(TargetActor);  // 타겟 액터도 무시
 
-    // �߻��� ĳ���͵� ����
+    // 발사한 캐릭터도 무시
     if (DamageEffectParams.SourceAbilitySystemComponent)
     {
         if (AActor* SourceActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor())
@@ -296,20 +296,20 @@ bool ADRSeedProjectile::HasLineOfSight(const FVector& StartLocation, const FVect
     QueryParams.bTraceComplex = false;
     QueryParams.bReturnPhysicalMaterial = false;
 
-    // �������� ������ ���� (���� �߽ɰ� Ÿ�� �߽�)
-    FVector AdjustedStart = StartLocation + FVector(0, 0, 50.f);  // ���� �߽� ����
-    FVector AdjustedEnd = EndLocation + FVector(0, 0, 50.f);  // Ÿ�� �߽� ����
+    // 시작점과 끝점을 조정 (폭발 중심과 타겟 중심)
+    FVector AdjustedStart = StartLocation + FVector(0, 0, 50.f);  // 폭발 중심 높이
+    FVector AdjustedEnd = EndLocation + FVector(0, 0, 50.f);  // 타겟 중심 높이
 
-    // �� üũ�� ���� Ʈ���̽� (Visibility ä�� ���)
+    // 벽 체크용 라인 트레이스 (Visibility 채널 사용)
     bool bHitResult = GetWorld()->LineTraceSingleByChannel(
         HitResult,
         AdjustedStart,
         AdjustedEnd,
-        ECC_Visibility,  // ���� ���� Static ������Ʈ ����
+        ECC_Visibility,  // 벽과 같은 Static 오브젝트 감지
         QueryParams
     );
 
-    // ���� ������ �ʾ����� true (�þ� Ȯ��), �������� false
+    // 벽에 막히지 않았으면 true (시야 확보), 막혔으면 false
     return !bHitResult;
 }
 
@@ -317,18 +317,18 @@ void ADRSeedProjectile::ApplyEffectToActor(AActor* Target, float Distance)
 {
     if (!Target) return;
 
-    // AbilitySystemComponent ��������
+    // AbilitySystemComponent 가져오기
     UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
     if (!TargetASC) return;
 
-    // �߻��� ĳ���� ����
+    // 발사한 캐릭터 정보
     AActor* SourceActor = nullptr;
     if (DamageEffectParams.SourceAbilitySystemComponent)
     {
         SourceActor = DamageEffectParams.SourceAbilitySystemComponent->GetAvatarActor();
     }
 
-    // �Ʊ�/���� �Ǻ�
+    // 아군/적군 판별
     bool bIsAlly = !UDRAbilitySystemLibrary::IsNotFriend(SourceActor, Target);
 
     if (bIsAlly)
@@ -471,13 +471,13 @@ void ADRSeedProjectile::MulticastExplodeAtLocation_Implementation(const FVector&
     }
 
 //    #if !UE_BUILD_SHIPPING
-//    // ���� ���� ǥ��
+//    // 폭발 범위 표시
 //    // ★Plan5(씨앗칩)★ Resolved 는 서버 전용이라 여기서는 쓸 수 없다.
 //    // 대신 서버가 넘겨준 SafeRadiusScale 을 기본 반경에 곱해 그린다.
 //    DrawDebugSphere(GetWorld(), ImpactLocation, InnerRadius * SafeRadiusScale, 16, FColor::Yellow, false, 1.0f, 0, 3.0f);
 //    DrawDebugSphere(GetWorld(), ImpactLocation, OuterRadius * SafeRadiusScale, 24, FColor::Orange, false, 1.0f, 0, 2.0f);
 //
-//    // Ŭ���̾�Ʈ�� �ڱⰡ ���� ���!
+//    // 클라이언트도 자기가 직접 계산!
 //    TArray<FOverlapResult> OverlapResults;
 //    FCollisionQueryParams QueryParams;
 //    QueryParams.AddIgnoredActor(this);
@@ -499,7 +499,7 @@ void ADRSeedProjectile::MulticastExplodeAtLocation_Implementation(const FVector&
 //        QueryParams
 //    );
 //
-//    // �� Ÿ�ٿ� ���� ���� �׸���
+//    // 각 타겟에 대해 라인 그리기
 //    for (const FOverlapResult& Result : OverlapResults)
 //    {
 //        AActor* Target = Result.GetActor();
@@ -513,7 +513,7 @@ void ADRSeedProjectile::MulticastExplodeAtLocation_Implementation(const FVector&
 //        float Distance = FVector::Dist(ImpactLocation, Target->GetActorLocation());
 //        if (Distance > OuterRadius) continue;
 //
-//        // Ŭ���̾�Ʈ�� ���� LOS üũ
+//        // 클라이언트가 직접 LOS 체크
 //        FVector AdjustedStart = ImpactLocation + FVector(0, 0, 50.f);
 //        FVector AdjustedEnd = Target->GetActorLocation() + FVector(0, 0, 50.f);
 //
@@ -537,7 +537,7 @@ void ADRSeedProjectile::MulticastExplodeAtLocation_Implementation(const FVector&
 //            LOSParams
 //        );
 //
-//        // ���� �׸���
+//        // 라인 그리기
 //        FColor LineColor = bBlocked ? FColor::Red : FColor::Green;
 //        DrawDebugLine(GetWorld(), AdjustedStart, AdjustedEnd, LineColor, false, 1.0f, 0, 1.0f);
 //

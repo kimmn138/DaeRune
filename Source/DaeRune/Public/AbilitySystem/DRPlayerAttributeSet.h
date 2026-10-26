@@ -15,19 +15,19 @@ class DAERUNE_API UDRPlayerAttributeSet : public UDRAttributeSet
 	GENERATED_BODY()
 
 	public:
-	// �����̳� ���� ���� (���� ���� �� �� ����)
+	// 컨테이너 정보 설정 (게임 시작 시 한 번만)
 	// 칸 크기는 최대 체력 / 칸 수 로 정해진다. InContainerHealth 는 최대 체력이 아직 없거나 오염 중일 때만 쓴다.
 	void SetContainerInfo(int32 InNumContainers, float InContainerHealth);
 
 	// 모든 모디파이어(칩 GE 등)를 뺀 평상시 최대 체력(클래스 기본값). 오염 중에도 오염 전 기준으로 돌려준다.
 	float GetBaseMaxHealthWithoutModifiers() const;
 
-	// �����̳� ���� ������
+	// 컨테이너 정보 접근자
 	int32 GetNumContainers() const { return NumContainers; }
 	float GetContainerHealth() const { return ContainerHealth; }
 	float GetCorruptMaxHealth() const { return CorruptMaxHealth; }
 
-	// ���� �����̳� �ε��� ���
+	// 현재 컨테이너 인덱스 계산
 	int32 GetCurrentContainerIndex() const;
 
 	void EnterCorruptedState(const FEffectProperties& Props);
@@ -62,7 +62,7 @@ private:
 	// 로비/튜토리얼 등 사망 방지가 필요한 모드인지 확인
 	bool ShouldPreventDeath() const;
 
-	// ĳ���ͺ� �����̳� ���� (Replicate ���ʿ� - �� Ŭ���̾�Ʈ�� ��ü ���)
+	// 캐릭터별 컨테이너 설정 (Replicate 불필요 - 각 클라이언트가 자체 계산)
 	UPROPERTY()
 	int32 NumContainers = 4;
 
@@ -74,6 +74,6 @@ private:
 
 	bool bCorrupted = false;
 
-	// �����÷ο� �Ӱ谪
+	// 오버플로우 임계값
 	static constexpr float OVERFLOW_THRESHOLD = 0.1f;
 };

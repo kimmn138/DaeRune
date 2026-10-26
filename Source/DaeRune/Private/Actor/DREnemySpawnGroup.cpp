@@ -21,7 +21,7 @@ void ADREnemySpawnGroup::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// �̸� ��ġ�� ���� ���
+	// 미리 배치된 적들 등록
 	if (HasAuthority())
 	{
 		for (const TSoftObjectPtr<ADREnemy>& SoftEnemy : PrePlacedEnemies)
@@ -47,7 +47,7 @@ void ADREnemySpawnGroup::RegisterEnemy(ADREnemy* Enemy)
 	if (!HasAuthority()) return;
 	if (!Enemy) return;
 
-	// �ߺ� ��� ����
+	// 중복 등록 방지
 	for (const TWeakObjectPtr<ADREnemy>& Registered : RegisteredEnemies)
 	{
 		if (Registered.Get() == Enemy) return;
@@ -56,7 +56,7 @@ void ADREnemySpawnGroup::RegisterEnemy(ADREnemy* Enemy)
 	RegisteredEnemies.Add(Enemy);
 	AliveEnemyCount++;
 
-	// �� ��� �̺�Ʈ ���ε�
+	// 적 사망 이벤트 바인딩
 	Enemy->OnDestroyed.AddDynamic(this, &ADREnemySpawnGroup::OnEnemyDestroyed);
 }
 
@@ -68,11 +68,11 @@ void ADREnemySpawnGroup::ActivateAllEnemies()
 	{
 		if (ADREnemy* Enemy = WeakEnemy.Get())
 		{
-			// �� Ȱ��ȭ (DREnemy�� �� �Լ��� �ִٰ� ����)
+			// 적 활성화 (DREnemy에 이 함수가 있다고 가정)
 			Enemy->SetActorHiddenInGame(false);
 			Enemy->SetActorEnableCollision(true);
 
-			// AI Ȱ��ȭ�� DREnemy�� �Լ��� ó��
+			// AI 활성화는 DREnemy의 함수로 처리
 			// Enemy->ActivateAI();
 		}
 	}
@@ -87,7 +87,7 @@ void ADREnemySpawnGroup::OnEnemyDestroyed(AActor* DestroyedActor)
 
 	AliveEnemyCount = FMath::Max(0, AliveEnemyCount - 1);
 
-	// ���� ��� delegate
+	// 개별 사망 delegate
 	OnEnemyDied.Broadcast(DeadEnemy);
 
 	CheckAllEnemiesDead();
@@ -99,7 +99,7 @@ void ADREnemySpawnGroup::CheckAllEnemiesDead()
 	{
 		bAllEnemiesDead = true;
 
-		// ���� delegate
+		// 전멸 delegate
 		OnAllEnemiesDead.Broadcast();
 	}
 }
@@ -108,8 +108,14 @@ void ADREnemySpawnGroup::OnRep_AllEnemiesDead()
 {
 	if (bAllEnemiesDead)
 	{
-		// Ŭ���̾�Ʈ���� �ʿ��� ó�� (UI ������Ʈ ��)
+		// 클라이언트에서 필요한 처리 (UI 업데이트 등)
 	}
+}
+
+void ADREnemySpawnGroup::SetPartCarrierEnemy(ADREnemy* Carrier)
+{
+	// 헤더에서는 ADREnemy 가 전방 선언뿐이라 약포인터 대입을 여기서 한다
+	PartCarrierEnemy = Carrier;
 }
 
 TArray<ADREnemy*> ADREnemySpawnGroup::GetRegisteredEnemies() const

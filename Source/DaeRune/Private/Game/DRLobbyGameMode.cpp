@@ -34,7 +34,7 @@ void ADRLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 	{
 		ADRLobbyGameState* LGS = GetGameState<ADRLobbyGameState>();
 
-		// ?湲곗떎 ?곹깭?????щ’ 諛곗튂 + ?붿뒪?뚮젅??罹먮┃???ㅽ룿
+		// 대기실 상태일 때 슬롯 배치 + 디스플레이 캐릭터 스폰
 		if (LGS && LGS->GetLobbyState() == ELobbyState::WaitingRoom)
 		{
 			FTimerHandle SlotTimerHandle;
@@ -45,7 +45,7 @@ void ADRLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 					if (!IsValid(DRPC)) return;
 					AssignPlayerToSlot(DRPC);
 
-					// ?붿뒪?뚮젅??罹먮┃???ㅽ룿
+					// 디스플레이 캐릭터 스폰
 					ADRPlayerState* PS = DRPC->GetPlayerState<ADRPlayerState>();
 					int32* SlotIdx = PlayerSlotMap.Find(DRPC);
 					if (PS && SlotIdx)
@@ -53,7 +53,7 @@ void ADRLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 						SpawnDisplayCharacter(DRPC, PS->GetSelectedPlayerClass(), *SlotIdx);
 					}
 
-					// 怨좎젙 移대찓?쇰줈 ViewTarget ?ㅼ젙
+					// 고정 카메라로 ViewTarget 설정
 					if (WaitingRoomCamera)
 					{
 						DRPC->ClientSetWaitingRoomView(WaitingRoomCamera);
@@ -64,7 +64,7 @@ void ADRLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 		}
 		else
 		{
-			// FreeRoam ?곹깭: 湲곗〈 蹂듭썝 濡쒖쭅
+			// FreeRoam 상태: 기존 복원 로직
 			FTimerHandle RestoreTimerHandle;
 			GetWorldTimerManager().SetTimer(
 				RestoreTimerHandle,
@@ -123,26 +123,26 @@ if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(C))
 			{
 				if (!IsValid(DRPC)) return;
 
-				// 愿??紐⑤뱶 媛뺤젣 醫낅즺
+				// 관전 모드 강제 종료
 				DRPC->ClientStopSpectating();
 
 				if (LGS && LGS->GetLobbyState() == ELobbyState::WaitingRoom)
 				{
-					// SeamlessTravel濡?媛?몄삩 Pawn ?뺣━ (?湲곗떎?먯꽌???붿뒪?뚮젅???ъ슜)
+					// SeamlessTravel로 가져온 Pawn 정리 (대기실에서는 디스플레이 사용)
 					if (APawn* TravelPawn = DRPC->GetPawn())
 					{
 						DRPC->UnPossess();
 						TravelPawn->Destroy();
 					}
 
-					// ?湲곗떎 紐⑤뱶: ?щ’ 諛곗튂 + ?붿뒪?뚮젅??罹먮┃??+ 怨좎젙 移대찓??
+					// 대기실 모드: 슬롯 배치 + 디스플레이 캐릭터 + 고정 카메라
 					AssignPlayerToSlot(DRPC);
 
 					ADRPlayerState* PS = DRPC->GetPlayerState<ADRPlayerState>();
 					int32* SlotIdx = PlayerSlotMap.Find(DRPC);
 					if (PS && SlotIdx)
 					{
-						// PlayerController 罹먯떆?먯꽌 ?좏깮 ?대옒??蹂듭썝 (Seamless Travel ??PlayerState ?좎떎 諛⑹?)
+						// PlayerController 캐시에서 선택 클래스 복원 (Seamless Travel 시 PlayerState 유실 방지)
 						EPlayerCharacterClass CachedClass = DRPC->GetCachedSelectedClass();
 						if (PS->GetSelectedPlayerClass() != CachedClass)
 						{
@@ -158,7 +158,7 @@ if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(C))
 				}
 				else
 				{
-					// ?먯쑀 議곗옉 紐⑤뱶: 湲곗〈 蹂듭썝 濡쒖쭅
+					// 자유 조작 모드: 기존 복원 로직
 					if (APawn* ControlledPawn = DRPC->GetPawn())
 					{
 						if (UCharacterMovementComponent* MovementComp = Cast<UCharacterMovementComponent>(ControlledPawn->GetMovementComponent()))
@@ -181,15 +181,15 @@ if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(C))
 
 void ADRLobbyGameMode::Logout(AController* Exiting)
 {
-	// ?붿뒪?뚮젅??罹먮┃???쒓굅
+	// 디스플레이 캐릭터 제거
 	DestroyDisplayCharacter(Exiting);
 
-	// ?щ’ 留ㅽ븨?먯꽌 ?쒓굅
+	// 슬롯 매핑에서 제거
 	if (PlayerSlotMap.Contains(Exiting))
 	{
 		PlayerSlotMap.Remove(Exiting);
 
-		// ?湲곗떎 ?곹깭硫??⑥? ?뚮젅?댁뼱 ?щ같移?
+		// 대기실 상태면 남은 플레이어 재배치
 		ADRLobbyGameState* LGS = GetGameState<ADRLobbyGameState>();
 		if (LGS && LGS->GetLobbyState() == ELobbyState::WaitingRoom)
 		{
@@ -212,13 +212,13 @@ FString PlayerName = PlayerState->GetPlayerName();
 
 void ADRLobbyGameMode::TravelToStage(const FString& StageMapName, ADRPlayerController* Requester)
 {
-	// 占쏙옙占쏙옙 체크
+	// 서버 체크
 	if (!HasAuthority()) return;
 
-	// 호占쏙옙트 占쏙옙占쏙옙 체크
+	// 호스트 권한 체크
 	if (!Requester || !Requester->IsLocalController()) return;
 
-	// 占쏙옙 占싱몌옙 占쏙옙효占쏙옙
+	// 맵 이름 유효성
 	if (StageMapName.IsEmpty()) return;
 
 	ExecuteTravel(StageMapName);
@@ -236,7 +236,7 @@ void ADRLobbyGameMode::HandleWipeout()
 {
 	if (!HasAuthority()) return;
 
-	// TODO: 占쏙옙占쏙옙 UI 표占쏙옙 (占싸븝옙占?占쏙옙占쏙옙占쏙옙 UI)
+	// TODO: 전멸 UI 표시 (로비는 가벼운 UI)
 
 	RestartLobby();
 }
@@ -251,7 +251,7 @@ void ADRLobbyGameMode::AllowJoinInProgress()
 	UMultiplayerSessionsSubsystem* SessionsSubsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>();
 	if (SessionsSubsystem)
 	{
-		// 占싸비에쇽옙占쏙옙 占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙占?
+		// 로비에서는 도중 참가 허용!
 		SessionsSubsystem->UpdateSessionJoinability(true);
 	}
 }
@@ -265,17 +265,17 @@ void ADRLobbyGameMode::RestartLobby()
 	{
 		FString CurrentMapName = World->GetMapName();
 
-		// PIE(Play In Editor) 占쏙옙占쏙옙占싫쏙옙 占쏙옙占쏙옙
-		// PIE占쏙옙占쏙옙占쏙옙 "UEDPIE_0_MapName" 占쏙옙占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙
+		// PIE(Play In Editor) 프리픽스 제거
+		// PIE에서는 "UEDPIE_0_MapName" 형식으로 나옴
 		CurrentMapName.RemoveFromStart(World->StreamingLevelsPrefix);
 
 		bUseSeamlessTravel = true;
 
-		// 占쏙옙占쏙옙 占쏙옙 占쏙옙占쏙옙占?
+		// 같은 맵 재시작
 		World->ServerTravel(CurrentMapName + TEXT("?listen"));
 	}
 
-	// 占시뤄옙占쏙옙 占쏙옙占쏙옙
+	// 플래그 리셋
 	bIsWipeoutInProgress = false;
 }
 
@@ -283,28 +283,28 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 {
 	if (!HasAuthority()) return;
 
-	// ?몄뒪??沅뚰븳 泥댄겕
+	// 호스트 권한 체크
 	if (!Requester || !Requester->IsLocalController()) return;
 
 	ADRLobbyGameState* LGS = GetGameState<ADRLobbyGameState>();
 	if (!LGS) return;
 
-	// ?湲곗떎 ?곹깭?먯꽌留?媛??
+	// 대기실 상태에서만 가능
 	if (LGS->GetLobbyState() != ELobbyState::WaitingRoom) return;
 
 	// 모든 비호스트 플레이어가 준비 상태여야 PowerOn 가능
 	if (!LGS->AreAllNonHostPlayersReady()) return;
 
-	// 1. ?몄뀡 李멸? 李⑤떒
+	// 1. 세션 참가 차단
 	BlockJoinInProgress();
 
-	// 2. ?꾪솚 ?곹깭濡?蹂寃?
+	// 2. 전환 상태로 변경
 	LGS->SetLobbyState(ELobbyState::Transitioning);
 
-	// 3. ?붿뒪?뚮젅??罹먮┃???쒓굅
+	// 3. 디스플레이 캐릭터 제거
 	DestroyAllDisplayCharacters();
 
-	// 4. 紐⑤뱺 ?뚮젅?댁뼱?먭쾶 吏꾩쭨 罹먮┃???ㅽ룿 + Possess
+	// 4. 모든 플레이어에게 진짜 캐릭터 스폰 + Possess
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
 		ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get());
@@ -313,7 +313,7 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 		ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>();
 		if (!PS) continue;
 
-		// ?좏깮???대옒?ㅼ쓽 BP ?ㅽ룿
+		// 선택된 클래스의 BP 스폰
 		UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this);
 		if (!ClassInfo) continue;
 		TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(PS->GetSelectedPlayerClass());
@@ -332,21 +332,21 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 		ADRCharacter* NewPawn = GetWorld()->SpawnActor<ADRCharacter>(*BPClassPtr, FTransform(SpawnRot, SpawnLoc), SpawnParams);
 		if (!NewPawn) continue;
 
-		// Possess (理쒖큹 1?? 源쒕묀???놁쓬)
+		// Possess (최초 1회, 깜빡임 없음)
 		PC->Possess(NewPawn);
 
-		// ?대룞 ?쒖꽦??
+		// 이동 활성화
 		NewPawn->SetReplicateMovement(true);
 		if (UCharacterMovementComponent* CMC = Cast<UCharacterMovementComponent>(NewPawn->GetMovementComponent()))
 		{
 			CMC->SetMovementMode(MOVE_Walking);
 		}
 
-		// 移대찓???꾪솚 紐낅졊 (Client RPC)
+		// 카메라 전환 명령 (Client RPC)
 		PC->ClientStartCameraTransitionToCharacter();
 	}
 
-	// 5. ?꾪솚 ?꾨즺 ??FreeRoam?쇰줈 ?곹깭 蹂寃?(移대찓???곗텧 ?쒓컙留뚰겮 ?쒕젅??
+	// 5. 전환 완료 후 FreeRoam으로 상태 변경 (카메라 연출 시간만큼 딜레이)
 	FTimerHandle TransitionTimerHandle;
 	GetWorldTimerManager().SetTimer(
 		TransitionTimerHandle,
@@ -357,7 +357,7 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 				LGS->SetLobbyState(ELobbyState::FreeRoam);
 			}
 		},
-		2.0f, // 移대찓???꾪솚 ?쒓컙
+		2.0f, // 카메라 전환 시간
 		false
 	);
 }
@@ -385,27 +385,27 @@ void ADRLobbyGameMode::KickPlayer(ADRPlayerController* Requester, ADRPlayerContr
 {
 	if (!HasAuthority()) return;
 
-	// ?몄뒪??沅뚰븳 泥댄겕
+	// 호스트 권한 체크
 	if (!Requester || !Requester->IsLocalController()) return;
 
-	// ?寃??좏슚??泥댄겕
+	// 타겟 유효성 체크
 	if (!TargetPlayer) return;
 
-	// ?먭린 ?먯떊? ??遺덇?
+	// 자기 자신은 킥 불가
 	if (Requester == TargetPlayer) return;
 
-	// ?湲곗떎 ?곹깭?먯꽌留?媛??
+	// 대기실 상태에서만 가능
 	ADRLobbyGameState* LGS = GetGameState<ADRLobbyGameState>();
 	if (!LGS || LGS->GetLobbyState() != ELobbyState::WaitingRoom) return;
 
-	// ?붿뒪?뚮젅??罹먮┃??+ ?щ’?먯꽌 ?쒓굅
+	// 디스플레이 캐릭터 + 슬롯에서 제거
 	DestroyDisplayCharacter(TargetPlayer);
 	PlayerSlotMap.Remove(TargetPlayer);
 
-	// ?대씪?댁뼵?몄뿉寃????뚮┝ ??硫붿씤 硫붾돱濡??대룞
+	// 클라이언트에게 킥 알림 → 메인 메뉴로 이동
 	TargetPlayer->ClientKicked(TEXT("You have been kicked by the host."));
 
-	// ?섎㉧吏 ?뚮젅?댁뼱 ?щ같移?(?대??먯꽌 BroadcastRefreshWaitingRoomUI ?몄텧)
+	// 나머지 플레이어 재배치 (내부에서 BroadcastRefreshWaitingRoomUI 호출)
 	RepositionAllPlayers();
 }
 
@@ -425,14 +425,14 @@ void ADRLobbyGameMode::BlockJoinInProgress()
 
 void ADRLobbyGameMode::FindWaitingRoomActors()
 {
-	// 移대찓???먯깋
+	// 카메라 탐색
 	for (TActorIterator<ADRWaitingRoomCameraActor> It(GetWorld()); It; ++It)
 	{
 		WaitingRoomCamera = *It;
-		break; // ?섎굹留??꾩슂
+		break; // 하나만 필요
 	}
 
-	// "WaitingRoomSlot" ?쒓렇媛 ?덈뒗 ATargetPoint ?먯깋
+	// "WaitingRoomSlot" 태그가 있는 ATargetPoint 탐색
 	WaitingRoomSlots.Empty();
 	for (TActorIterator<ATargetPoint> It(GetWorld()); It; ++It)
 	{
@@ -446,7 +446,7 @@ void ADRLobbyGameMode::FindWaitingRoomActors()
 		}
 	}
 
-	// ?쒓렇 suffix ?レ옄 湲곗? ?뺣젹 (WaitingRoomSlot_0, WaitingRoomSlot_1, ...)
+	// 태그 suffix 숫자 기준 정렬 (WaitingRoomSlot_0, WaitingRoomSlot_1, ...)
 	WaitingRoomSlots.Sort([](const TObjectPtr<AActor>& A, const TObjectPtr<AActor>& B)
 	{
 		auto GetSlotIndex = [](const AActor* Actor) -> int32
@@ -475,7 +475,7 @@ void ADRLobbyGameMode::AssignPlayerToSlot(AController* Player)
 	int32 SlotIndex = NextAvailableSlot++;
 	PlayerSlotMap.Add(Player, SlotIndex);
 
-	// PlayerState??沅뚯쐞???щ’ ?몃뜳???ㅼ젙 (?대씪?댁뼵?몄뿉 蹂듭젣??
+	// PlayerState에 권위적 슬롯 인덱스 설정 (클라이언트에 복제됨)
 	if (APlayerController* PC = Cast<APlayerController>(Player))
 	{
 		if (ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
@@ -494,12 +494,12 @@ void ADRLobbyGameMode::PositionPawnAtSlot(APawn* Pawn, int32 SlotIndex)
 {
 	if (!Pawn || WaitingRoomSlots.Num() == 0) return;
 
-	// ?щ’ ?몃뜳???대옩??(踰붿쐞 珥덇낵 ??留덉?留??щ’ ?ъ슜)
+	// 슬롯 인덱스 클램프 (범위 초과 시 마지막 슬롯 사용)
 	int32 ClampedIndex = FMath::Clamp(SlotIndex, 0, WaitingRoomSlots.Num() - 1);
 	AActor* SlotActor = WaitingRoomSlots[ClampedIndex];
 	if (!SlotActor) return;
 
-	// 移대찓?쇰? ?ν븯???뚯쟾 怨꾩궛
+	// 카메라를 향하는 회전 계산
 	FRotator FacingRotation = FRotator::ZeroRotator;
 	if (WaitingRoomCamera)
 	{
@@ -508,16 +508,16 @@ void ADRLobbyGameMode::PositionPawnAtSlot(APawn* Pawn, int32 SlotIndex)
 
 	FVector SlotLocation = SlotActor->GetActorLocation();
 
-	// CMC ?꾩튂 由ы뵆由ъ??댁뀡 鍮꾪솢?깊솕 (unreliable ?꾩튂 蹂댁젙??Multicast 寃곌낵瑜???뼱?곕뒗 寃?諛⑹?)
+	// CMC 위치 리플리케이션 비활성화 (unreliable 위치 보정이 Multicast 결과를 덮어쓰는 것 방지)
 	Pawn->SetReplicateMovement(false);
 
-	// Multicast RPC濡?紐⑤뱺 ?붾뱶?ъ씤?몄뿉??吏곸젒 ?꾩튂 ?ㅼ젙 (CMC ?고쉶)
+	// Multicast RPC로 모든 엔드포인트에서 직접 위치 설정 (CMC 우회)
 	if (ADRCharacter* DRChar = Cast<ADRCharacter>(Pawn))
 	{
 		DRChar->MulticastTeleportToSlot(SlotLocation, FacingRotation);
 	}
 
-	// CMC 鍮꾪솢?깊솕 (?쒕쾭?먯꽌留????대룞 ?낅젰 李⑤떒??
+	// CMC 비활성화 (서버에서만 — 이동 입력 차단용)
 	if (UCharacterMovementComponent* MovementComp =
 		Cast<UCharacterMovementComponent>(Pawn->GetMovementComponent()))
 	{
@@ -530,24 +530,24 @@ void ADRLobbyGameMode::RepositionAllPlayers()
 {
 	if (WaitingRoomSlots.Num() == 0) return;
 
-	// 湲곗〈 留ㅽ븨 ?섏쭛 (?몄뒪???곗꽑)
+	// 기존 매핑 수집 (호스트 우선)
 	TArray<AController*> OrderedPlayers;
 
-	// ?몄뒪?몃? 癒쇱? 李얘린
+	// 호스트를 먼저 찾기
 	for (auto& Pair : PlayerSlotMap)
 	{
 		if (ADRPlayerController* PC = Cast<ADRPlayerController>(Pair.Key))
 		{
 			if (PC->IsLocalController() && HasAuthority())
 			{
-				OrderedPlayers.Insert(Pair.Key, 0); // ?몄뒪?몃? 留??욎뿉
+				OrderedPlayers.Insert(Pair.Key, 0); // 호스트를 맨 앞에
 				continue;
 			}
 		}
 		OrderedPlayers.Add(Pair.Key);
 	}
 
-	// 留ㅽ븨 ?ш뎄??
+	// 매핑 재구성
 	PlayerSlotMap.Empty();
 	NextAvailableSlot = 0;
 
@@ -556,7 +556,7 @@ void ADRLobbyGameMode::RepositionAllPlayers()
 		AssignPlayerToSlot(Player);
 	}
 
-	// ?붿뒪?뚮젅??罹먮┃???꾩튂 媛깆떊 (NetMulticast RPC濡?紐⑤뱺 ?대씪?댁뼵?몄뿉 ?꾪뙆)
+	// 디스플레이 캐릭터 위치 갱신 (NetMulticast RPC로 모든 클라이언트에 전파)
 	for (auto& Pair : DisplayCharacterMap)
 	{
 		if (ADRCharacter* Display = Pair.Value.Get())
@@ -569,19 +569,19 @@ void ADRLobbyGameMode::RepositionAllPlayers()
 					? WaitingRoomCamera->GetCharacterFacingRotation()
 					: FRotator::ZeroRotator;
 
-				// 罹≪뒓 諛섎넂?대쭔??Z 蹂댁젙 (TargetPoint媛 諛붾떏 ?덈꺼??寃쎌슦 諛붾떏 ?ル┝ 諛⑹?)
+				// 캡슐 반높이만큼 Z 보정 (TargetPoint가 바닥 레벨인 경우 바닥 뚫림 방지)
 				if (UCapsuleComponent* Capsule = Display->GetCapsuleComponent())
 				{
 					Loc.Z += Capsule->GetScaledCapsuleHalfHeight();
 				}
 
-				// NetMulticast RPC濡?紐⑤뱺 ?붾뱶?ъ씤?몄뿉???꾩튂 媛깆떊
+				// NetMulticast RPC로 모든 엔드포인트에서 위치 갱신
 				Display->MulticastTeleportToSlot(Loc, Rot);
 			}
 		}
 	}
 
-	// 紐⑤뱺 ?대씪?댁뼵?몄쓽 ?湲곗떎 UI 媛깆떊 (Client RPC ?ъ슜)
+	// 모든 클라이언트의 대기실 UI 갱신 (Client RPC 사용)
 	BroadcastRefreshWaitingRoomUI();
 }
 
@@ -602,7 +602,7 @@ void ADRLobbyGameMode::RespawnPlayerWithClass(ADRPlayerController* PC, EPlayerCh
 
 	ADRLobbyGameState* LGS = GetGameState<ADRLobbyGameState>();
 
-	// ?湲곗떎: ?붿뒪?뚮젅?대쭔 援먯껜 (Possess/UnPossess ?놁쓬 ??源쒕묀??洹쇰낯 ?쒓굅)
+	// 대기실: 디스플레이만 교체 (Possess/UnPossess 없음 → 깜빡임 근본 제거)
 	if (LGS && LGS->GetLobbyState() == ELobbyState::WaitingRoom)
 	{
 		UpdateDisplayCharacter(PC, NewClass);
@@ -610,7 +610,7 @@ void ADRLobbyGameMode::RespawnPlayerWithClass(ADRPlayerController* PC, EPlayerCh
 		return;
 	}
 
-	// FreeRoam: 湲곗〈 ??援먯껜 濡쒖쭅 (吏꾩쭨 Possess ?꾩슂)
+	// FreeRoam: 기존 폰 교체 로직 (진짜 Possess 필요)
 	UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this);
 	if (!ClassInfo) return;
 	TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(NewClass);
@@ -630,7 +630,7 @@ void ADRLobbyGameMode::RespawnPlayerWithClass(ADRPlayerController* PC, EPlayerCh
 	ADRCharacter* NewPawn = GetWorld()->SpawnActor<ADRCharacter>(*BPClassPtr, SpawnTransform, SpawnParams);
 	if (!NewPawn) return;
 
-	// ?대퉴由ы떚 ?꾩쟾 ?대━??
+	// 어빌리티 완전 클리어
 	ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>();
 	if (PS)
 	{
@@ -655,14 +655,14 @@ UClass* ADRLobbyGameMode::GetDefaultPawnClassForController_Implementation(AContr
 {
 	ADRLobbyGameState* LGS = GetGameState<ADRLobbyGameState>();
 
-	// ?湲곗떎/?꾪솚 以묒뿉??Pawn ?ㅽ룿 ?듭젣 (?붿뒪?뚮젅??罹먮┃???ъ슜)
+	// 대기실/전환 중에는 Pawn 스폰 억제 (디스플레이 캐릭터 사용)
 	if (LGS && (LGS->GetLobbyState() == ELobbyState::WaitingRoom
 			 || LGS->GetLobbyState() == ELobbyState::Transitioning))
 	{
 		return nullptr;
 	}
 
-	// FreeRoam: 湲곗〈 濡쒖쭅 (?좏깮???대옒?ㅼ쓽 BP 諛섑솚)
+	// FreeRoam: 기존 로직 (선택된 클래스의 BP 반환)
 	if (APlayerController* PC = Cast<APlayerController>(InController))
 	{
 		if (ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
@@ -693,7 +693,7 @@ void ADRLobbyGameMode::SpawnDisplayCharacter(AController* Player, EPlayerCharact
 
 	if (WaitingRoomSlots.Num() == 0) return;
 
-	// ?щ’ ?꾩튂/?뚯쟾 怨꾩궛
+	// 슬롯 위치/회전 계산
 	int32 ClampedIndex = FMath::Clamp(SlotIndex, 0, WaitingRoomSlots.Num() - 1);
 	FVector Location = WaitingRoomSlots[ClampedIndex]->GetActorLocation();
 	FRotator Rotation = WaitingRoomCamera
@@ -706,14 +706,14 @@ void ADRLobbyGameMode::SpawnDisplayCharacter(AController* Player, EPlayerCharact
 	ADRCharacter* Display = GetWorld()->SpawnActor<ADRCharacter>(*BPClassPtr, FTransform(Rotation, Location), Params);
 	if (!Display) return;
 
-	// ?대룞 鍮꾪솢?깊솕 (?붿뒪?뚮젅?댁슜)
+	// 이동 비활성화 (디스플레이용)
 	if (UCharacterMovementComponent* CMC = Cast<UCharacterMovementComponent>(Display->GetMovementComponent()))
 	{
 		CMC->StopMovementImmediately();
 		CMC->DisableMovement();
 	}
 
-	// 由ы뵆由ъ??댄듃 ?대룞 鍮꾪솢?깊솕
+	// 리플리케이트 이동 비활성화
 	Display->SetReplicateMovement(false);
 
 	// 대기실에서도 입은 옷이 보이게 — 보고가 아직이면 빈 목록이고, 도착하면 RefreshDisplayCharacterSkin 이 다시 싣는다 (Plan(옷장) M5)
@@ -775,27 +775,27 @@ void ADRLobbyGameMode::ExecuteTravel(const FString& StageMapName)
 {
 	if (!HasAuthority()) return;
 
-	// 留??꾪솚 ??罹먮┃???좏깮 ?뺣낫瑜?GameInstance?????(留??꾪솚 諛⑹떇??愿怨꾩뾾??蹂댁〈)
+	// 맵 전환 전 캐릭터 선택 정보를 GameInstance 에 저장 (맵 전환 방식과 관계없이 보존)
 	if (UDRGameInstance* GI = Cast<UDRGameInstance>(GetGameInstance()))
 	{
 		GI->SaveAllPlayerSelections(GetWorld());
 	}
 
-	// 留??꾪솚 ???뺣━ ?묒뾽 (遺紐??대옒?ㅼ쓽 怨듯넻 ?⑥닔 ?ъ슜)
+	// 맵 전환 전 정리 작업 (부모 클래스의 공통 함수 사용)
 	PrepareForTravel();
 
 	UWorld* World = GetWorld();
 	if (World)
 	{
 		bUseSeamlessTravel = true;
-		// URL 援ъ꽦
+		// URL 구성
 		FString TravelURL = StageMapName;
 		if (!TravelURL.Contains(TEXT("?")))
 		{
 			TravelURL += TEXT("?listen");
 		}
 
-		// 留??대룞
+		// 맵 이동
 		World->ServerTravel(TravelURL);
 	}
 }

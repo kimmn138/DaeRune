@@ -36,15 +36,15 @@ void ADRGameModeBase::OnPlayerDied(APlayerState* DeadPlayer)
 	// 전멸 처리와 무관하게 항상 전달한다.
 	NotifyPhasePlayerDied(DeadPlayer);
 
-	// �̹� ���� ó�� ���̸� ����
+	// 이미 전멸 처리 중이면 무시
 	if (bIsWipeoutInProgress) return;
 
-	// ���� üũ
+	// 전멸 체크
 	if (CheckTeamWipeout())
 	{
 		bIsWipeoutInProgress = true;
 
-		// ��� �÷��̾�� ���� ���� UI ǥ��
+		// 모든 플레이어에게 게임 오버 UI 표시
 		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 		{
 			if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
@@ -53,7 +53,7 @@ void ADRGameModeBase::OnPlayerDied(APlayerState* DeadPlayer)
 			}
 		}
 
-		// ���� �ð� �� ���� ó��
+		// 일정 시간 후 전멸 처리
 		GetWorldTimerManager().SetTimer(
 			WipeoutTimerHandle,
 			this,
@@ -74,18 +74,18 @@ bool ADRGameModeBase::CheckTeamWipeout()
 	int32 AlivePlayerCount = 0;
 	int32 TotalPlayerCount = 0;
 
-	// ��� PlayerState ��ȸ	
+	// 모든 PlayerState 순회	
 	for (APlayerState* PlayerState : GameStateBase->PlayerArray)
 	{
 		if (!PlayerState) continue;
 
 		TotalPlayerCount++;
 
-		// Character ��������
+		// Character 가져오기
 		ADRCharacterBase* Character = Cast<ADRCharacterBase>(PlayerState->GetPawn());
 		if (!Character) continue;
 
-		// CombatInterface�� ���� üũ
+		// CombatInterface로 죽음 체크
 		if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(Character))
 		{
 			if (!CombatInterface->Execute_IsDead(Character)) 
@@ -95,7 +95,7 @@ bool ADRGameModeBase::CheckTeamWipeout()
 		}
 	}
 
-	// �÷��̾ 1�� �̻� �ְ�, �����ڰ� 0���̸� ����
+	// 플레이어가 1명 이상 있고, 생존자가 0명이면 전멸
 	return (TotalPlayerCount > 0) && (AlivePlayerCount == 0);
 }
 

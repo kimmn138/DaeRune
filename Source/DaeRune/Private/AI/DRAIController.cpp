@@ -14,54 +14,54 @@
 
 ADRAIController::ADRAIController()
 {
-	// �������� ������Ʈ ���� - AI ���� ������ �����
+	// 블랙보드 컴포넌트 생성 - AI 상태 데이터 저장소
 	Blackboard = CreateDefaultSubobject<UBlackboardComponent>("BlackboardComponent");
 	check(Blackboard);
-	// �����̺�� Ʈ�� ������Ʈ ���� - AI �ൿ ���� ����
+	// 비헤이비어 트리 컴포넌트 생성 - AI 행동 로직 실행
 	BehaviorTreeComponent = CreateDefaultSubobject<UBehaviorTreeComponent>("BehaviorTreeComponent");
 	check(BehaviorTreeComponent);
 
-	// AI Perception ������Ʈ ����
+	// AI Perception 컴포넌트 생성
 	AIPerceptionComponent = CreateDefaultSubobject<UAIPerceptionComponent>("AIPerceptionComponent");
 	SetPerceptionComponent(*AIPerceptionComponent);
 
-	// �þ� ���� ����
+	// 시야 감지 설정
 	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>("SightConfig");
-	SightConfig->SightRadius = 2000.f;  // �þ� �Ÿ�
-	SightConfig->LoseSightRadius = SightConfig->SightRadius + 500.f;  // �þ� �Ҵ� �Ÿ�
-	SightConfig->PeripheralVisionAngleDegrees = 360.f;  // �þ߰�
-	SightConfig->SetMaxAge(3.f);  // ��� ���� �ð�
+	SightConfig->SightRadius = 2000.f;  // 시야 거리
+	SightConfig->LoseSightRadius = SightConfig->SightRadius + 500.f;  // 시야 잃는 거리
+	SightConfig->PeripheralVisionAngleDegrees = 360.f;  // 시야각
+	SightConfig->SetMaxAge(3.f);  // 기억 유지 시간
 
-	// ������ ��ġ 1000 ���� �̳��� �ڵ� ����
+	// 마지막 위치 1000 유닛 이내면 자동 성공
 	SightConfig->AutoSuccessRangeFromLastSeenLocation = 1000.f;
 
-	// ���� ��� ���� - �÷��̾ ����
+	// 감지 대상 설정 - 플레이어만 감지
 	SightConfig->DetectionByAffiliation.bDetectEnemies = true;
 	SightConfig->DetectionByAffiliation.bDetectFriendlies = false;
 	SightConfig->DetectionByAffiliation.bDetectNeutrals = false;
 
 	SetGenericTeamId(FGenericTeamId(1));
 
-	// Perception�� ���� ���� �߰�
+	// Perception에 감지 설정 추가
 	AIPerceptionComponent->ConfigureSense(*SightConfig);
 	AIPerceptionComponent->SetDominantSense(SightConfig->GetSenseImplementation());
 }
 
 ETeamAttitude::Type ADRAIController::GetTeamAttitudeTowards(const AActor& Other) const
 {
-	// �÷��̾� ��Ʈ�ѷ� üũ
+	// 플레이어 컨트롤러 체크
 	if (const APawn* OtherPawn = Cast<APawn>(&Other))
 	{
 		if (const IGenericTeamAgentInterface* TeamAgent = Cast<const IGenericTeamAgentInterface>(OtherPawn->GetController()))
 		{
 			FGenericTeamId OtherTeamId = TeamAgent->GetGenericTeamId();
 
-			// TeamId 0 = �÷��̾� = ��
+			// TeamId 0 = 플레이어 = 적
 			if (OtherTeamId == 0)
 			{
 				return ETeamAttitude::Hostile;
 			}
-			// TeamId 1 = �ٸ� AI = �Ʊ�
+			// TeamId 1 = 다른 AI = 아군
 			else if (OtherTeamId == 1)
 			{
 				return ETeamAttitude::Friendly;
@@ -76,18 +76,18 @@ void ADRAIController::UpdateCombatTime()
 {
 	if (!Blackboard) return;
 	
-	// ���� ���� �ð��� �������忡 ����
+	// 현재 월드 시간을 블랙보드에 저장
 	const float CurrentTime = GetWorld()->GetTimeSeconds();
 	Blackboard->SetValueAsFloat(FName("LastCombatTime"), CurrentTime);
 }
 
 bool ADRAIController::HasCombatTimedOut(float TimeoutSeconds) const
 {
-	if (!Blackboard) return true; // �������� ������ ���� ����� ����
+	if (!Blackboard) return true; // 블랙보드 없으면 전투 종료로 간주
 	
 	const float LastCombatTime = Blackboard->GetValueAsFloat(FName("LastCombatTime"));
 	
-	// ���� ������ �� ���� (�ʱⰪ 0)
+	// 아직 전투한 적 없음 (초기값 0)
 	if (LastCombatTime <= 0.0f) return true;
 	
 	const float CurrentTime = GetWorld()->GetTimeSeconds();
@@ -100,7 +100,7 @@ void ADRAIController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Perception �̺�Ʈ ���ε�
+	// Perception 이벤트 바인딩
 	if (AIPerceptionComponent)
 	{
 		AIPerceptionComponent->OnTargetPerceptionUpdated.AddDynamic(this, &ADRAIController::OnTargetPerceptionUpdated);
@@ -110,23 +110,23 @@ void ADRAIController::BeginPlay()
 
 void ADRAIController::OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
 {
-	// ���������� ó��
+	// 서버에서만 처리
 	if (!HasAuthority()) return;
 
 	APawn* PerceivedPawn = Cast<APawn>(Actor);
 	if (!PerceivedPawn) return;
 
-	// �÷��̾� ��Ʈ�ѷ����� Ȯ��
+	// 플레이어 컨트롤러인지 확인
 	if (!PerceivedPawn->IsPlayerControlled()) return;
 
 	if (Stimulus.WasSuccessfullySensed())
 	{
-		// �÷��̾� ������ - �ʿ� �߰�
+		// 플레이어 감지됨 - 맵에 추가
 		UpdatePlayer(Actor);
 	}
 	else
 	{
-		// �÷��̾� �þ߿��� ��� - �ʿ��� ����
+		// 플레이어 시야에서 벗어남 - 맵에서 제거
 		RemovePlayer(Actor);
 	}
 }

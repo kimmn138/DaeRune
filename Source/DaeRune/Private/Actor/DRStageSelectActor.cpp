@@ -16,12 +16,12 @@ ADRStageSelectActor::ADRStageSelectActor()
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
 
-    // ��Ʈ ������Ʈ
+    // 루트 컴포넌트
     PortalMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PortalMesh"));
     RootComponent = PortalMesh;
     PortalMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-    // ��ȣ�ۿ� �ڽ�
+    // 상호작용 박스
     InteractionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractionBox"));
     InteractionBox->SetupAttachment(RootComponent);
     InteractionBox->SetBoxExtent(FVector(200.0f, 200.0f, 100.0f));
@@ -29,7 +29,7 @@ ADRStageSelectActor::ADRStageSelectActor()
     InteractionBox->SetCollisionResponseToAllChannels(ECR_Ignore);
     InteractionBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-    // UI ����
+    // UI 위젯
     InteractionWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidget"));
     InteractionWidget->SetupAttachment(RootComponent);
     InteractionWidget->SetRelativeLocation(FVector(0.0f, 0.0f, 150.0f));
@@ -46,7 +46,7 @@ void ADRStageSelectActor::BeginPlay()
 {
 	Super::BeginPlay();
 	
-    // ���������� ������ �̺�Ʈ ó��
+    // 서버에서만 오버랩 이벤트 처리
     if (HasAuthority())
     {
         InteractionBox->OnComponentBeginOverlap.AddDynamic(this, &ADRStageSelectActor::OnBoxBeginOverlap);
@@ -95,7 +95,7 @@ void ADRStageSelectActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
         World->GetTimerManager().ClearTimer(HostSetupTimerHandle);
     }
 
-    // ��������Ʈ ���� ����
+    // 델리게이트 구독 해제
     if (OverlappingHostController)
     {
         OverlappingHostController->OnInteractPressed.RemoveDynamic(this, &ADRStageSelectActor::OnHostInteract);
@@ -117,15 +117,15 @@ void ADRStageSelectActor::OnBoxBeginOverlap(UPrimitiveComponent* OverlappedCompo
     ADRPlayerController* DRPC = Cast<ADRPlayerController>(Character->GetController());
     if (!DRPC) return;
 
-    // ȣ��Ʈ�� ��ȣ�ۿ� ����
+    // 호스트만 상호작용 가능
     if (!DRPC->IsLocalController()) return;
 
-    // �̹� �ٸ� ȣ��Ʈ�� ������ ����
+    // 이미 다른 호스트가 있으면 무시
     if (OverlappingHostController) return;
 
     OverlappingHostController = DRPC;
 
-    // ��������Ʈ ����
+    // 델리게이트 구독
     OverlappingHostController->OnInteractPressed.AddDynamic(this, &ADRStageSelectActor::OnHostInteract);
 }
 
@@ -139,10 +139,10 @@ void ADRStageSelectActor::OnBoxEndOverlap(UPrimitiveComponent* OverlappedCompone
     ADRPlayerController* DRPC = Cast<ADRPlayerController>(Character->GetController());
     if (!DRPC) return;
 
-    // ���� ������ ���� ȣ��Ʈ�� �ƴϸ� ����
+    // 현재 오버랩 중인 호스트가 아니면 무시
     if (OverlappingHostController != DRPC) return;
 
-    // ��������Ʈ ���� ����
+    // 델리게이트 구독 해제
     OverlappingHostController->OnInteractPressed.RemoveDynamic(this, &ADRStageSelectActor::OnHostInteract);
     OverlappingHostController = nullptr;
 }
@@ -164,10 +164,10 @@ void ADRStageSelectActor::ServerRequestTravel_Implementation()
 {
     if (!HasAuthority()) return;
 
-    // ȣ��Ʈ�� ���� �ȿ� �ִ��� Ȯ��
+    // 호스트가 범위 안에 있는지 확인
     if (!OverlappingHostController) return;
 
-    // GameMode�� ����
+    // GameMode에 위임
     ADRLobbyGameMode* LobbyGameMode = Cast<ADRLobbyGameMode>(GetWorld()->GetAuthGameMode());
     if (!LobbyGameMode) return;
 

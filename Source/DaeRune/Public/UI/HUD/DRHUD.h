@@ -15,7 +15,7 @@ class UUserWidget;
 struct FWidgetControllerParams;
 
 /**
- * DaeRune ���� HUD Ŭ����
+ * DaeRune 메인 HUD 클래스
  */
 UCLASS()
 class DAERUNE_API ADRHUD : public AHUD
@@ -23,7 +23,7 @@ class DAERUNE_API ADRHUD : public AHUD
 	GENERATED_BODY()
 	
 public:
-	// OverlayWidgetController ������ (�̱��� ����)
+	// OverlayWidgetController 접근자 (싱글톤 패턴)
 	UOverlayWidgetController* GetOverlayWidgetController(const FWidgetControllerParams& WCParams);
 
 	// 이미 생성된 컨트롤러를 그대로 반환 (생성/캐싱은 InitOverlay 단계에서 끝남)
@@ -33,10 +33,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	UDRUserWidget* GetOverlayWidget() const { return OverlayWidget; }
 
-	// �������� UI �ʱ�ȭ
+	// 오버레이 UI 초기화
 	void InitOverlay(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS);
 
-	// ������ �������� ������Ʈ
+	// 관전용 오버레이 업데이트
 	void UpdateOverlayForSpectating(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS);
 
 	// 오버레이 제거 (대기실 전환 시 잘못 생성된 오버레이 정리용)
@@ -53,19 +53,19 @@ public:
 protected:
 
 private:
-	// ���� �������� ���� �ν��Ͻ�
+	// 메인 오버레이 위젯 인스턴스
 	UPROPERTY()
 	TObjectPtr<UDRUserWidget>  OverlayWidget;
 
-	// ��������Ʈ���� ������ �������� ���� Ŭ����
+	// 블루프린트에서 설정할 오버레이 위젯 클래스
 	UPROPERTY(EditAnywhere)
 	TSubclassOf<UDRUserWidget> OverlayWidgetClass;
 
-	// �������� ���� ��Ʈ�ѷ� �ν��Ͻ�
+	// 오버레이 위젯 컨트롤러 인스턴스
 	UPROPERTY()
 	TObjectPtr<UOverlayWidgetController> OverlayWidgetController;
 
-	// ��������Ʈ���� ������ ���� ��Ʈ�ѷ� Ŭ����
+	// 블루프린트에서 설정할 위젯 컨트롤러 클래스
 	UPROPERTY(EditAnywhere)
 	TSubclassOf<UOverlayWidgetController> OverlayWidgetControllerClass;
 

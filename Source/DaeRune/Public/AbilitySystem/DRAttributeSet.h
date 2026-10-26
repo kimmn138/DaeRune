@@ -128,7 +128,7 @@ public:
 
 	void Debuff(const FEffectProperties& Props);
 
-	// µğ¹öÇÁ GE ¸Ê
+	// ë””ë²„í”„ GE ë§µ
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Debuff")
 	TMap<FGameplayTag, TSubclassOf<UGameplayEffect>> DebuffEffectMap;
 
@@ -137,7 +137,7 @@ protected:
 	virtual void HandleIncomingHealing(const FEffectProperties& Props);
 	void ShowFloatingText(const FEffectProperties& Props, float Damage) const;
 
-	// ÀüÅõ »óÅÂ ÁøÀÔÀ» ¾Ë¸®´Â ÇÔ¼ö
+	// ì „íˆ¬ ìƒíƒœ ì§„ì…ì„ ì•Œë¦¬ëŠ” í•¨ìˆ˜
 	void NotifyEnterCombat(const FEffectProperties& Props) const;
 
 private:

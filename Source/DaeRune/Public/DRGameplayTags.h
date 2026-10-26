@@ -8,7 +8,7 @@
 /**
  * DRGameplayTags
  *
- * ������Ʈ �������� ���Ǵ� GameplayTag���� �߾� �����ϴ� �̱��� Ŭ����
+ * 프로젝트 전역에서 사용되는 GameplayTag들을 중앙 관리하는 싱글톤 클래스
  */
 
 struct FDRGameplayTags
@@ -17,15 +17,15 @@ public:
 	static const FDRGameplayTags& Get() { return GameplayTags; }
 	static void InitializeNativeGameplayTags();
 
-	// ���ҽ� ���
+	// 리소스 비용
 	FGameplayTag Cost_Water;
 
-	// �⺻ �Ӽ�
+	// 기본 속성
 	FGameplayTag Attributes_Primary_MaxHealth;
 	FGameplayTag Attributes_Primary_MaxWater;
 	FGameplayTag Attributes_Primary_MoveSpeed;
 
-	// �Է� �±�
+	// 입력 태그
 	FGameplayTag InputTag_LMB;
 	FGameplayTag InputTag_RMB;
 	FGameplayTag InputTag_Q;
@@ -49,7 +49,7 @@ public:
 	// Phase1 적 식별 태그 (플레이어에게 주는 대미지 30% 감소 트리거)
 	FGameplayTag State_Enemy_Phase1;
 
-	// �⺻ ������, Ÿ�� �� ������
+	// 기본 데미지, 타입 별 데미지
 	FGameplayTag Damage;
 	FGameplayTag Damage_Fire;
 	FGameplayTag Damage_Lightning;
@@ -60,10 +60,10 @@ public:
 	// 탑승 공유 데미지 식별 (재전파 방지용 — DamageTypeTags에는 포함하지 않음)
 	FGameplayTag Damage_MountShared;
 
-	// �⺻ ��
+	// 기본 힐
 	FGameplayTag Heal;
 
-	// ���� ȿ��
+	// 버프 효과
 	FGameplayTag Buff_Elite;
 	FGameplayTag Buff_Elite_Roar;
 	FGameplayTag Buff_VendingMachine_AttackSpeed;
@@ -71,7 +71,7 @@ public:
 	FGameplayTag Buff_AttackSpeed_Shared;
 	FGameplayTag Buff_RobotVacuum_DashSpeed;
 	
-	// ����� ȿ��
+	// 디버프 효과
 	FGameplayTag Debuff_Burn; 
 	FGameplayTag Debuff_Stun;
 	FGameplayTag Debuff_Arcane;
@@ -79,16 +79,16 @@ public:
 	FGameplayTag Debuff_Bleed;
 	FGameplayTag Debuff_Elite;
 
-	// ����� ���� �±�
+	// 디버프 계산용 태그
 	FGameplayTag Debuff_Chance; 
 	FGameplayTag Debuff_Damage;
 	FGameplayTag Debuff_Duration;
 
-	// Ÿ�� ���� ����Ʈ
+	// 타격 반응 이펙트
 	FGameplayTag Effects_HitReact;
 	FGameplayTag Effects_CannotAttack;
 
-	// �� �ý��� (SetByCaller ���)
+	// 물 시스템 (SetByCaller 방식)
 	FGameplayTag Water_SetByCaller_Reduction;
 	FGameplayTag Water_SetByCaller_Grant;
 
@@ -203,14 +203,14 @@ public:
 	// 게임플레이 이벤트 (GA 통지용)
 	FGameplayTag Event_Dash_Brake;
 
-	// �����Ƽ �з�
+	// 어빌리티 분류
 	FGameplayTag Abilities_Attack;
 	FGameplayTag Abilities_Death;
 	FGameplayTag Abilities_Summon;
 	FGameplayTag Abilities_Skill1;
 	FGameplayTag Abilities_Skill2;
 
-	// ��ü�� �����Ƽ
+	// 구체적 어빌리티 
 	FGameplayTag Abilities_Fire_FireBolt;
 	FGameplayTag Abilities_Lightning_Electrocute;
 	FGameplayTag Abilities_GardenRobot_ClawSwipe;
@@ -225,44 +225,44 @@ public:
 	FGameplayTag Abilities_RobotVacuum_JetJump;
 	FGameplayTag Abilities_RobotVacuum_Dash;
 
-	// Ÿ�� ����
+	// 타격 반응
 	FGameplayTag Abilities_HitReact;
 
-	// �����Ƽ Ÿ�� �з�
+	// 어빌리티 타입 분류
 	FGameplayTag Abilities_Type_Offensive;
 	FGameplayTag Abilities_Type_Passive;
 	FGameplayTag Abilities_Type_None;
 
-	// �����Ƽ ��Ÿ��
+	// 어빌리티 쿨타임
 	FGameplayTag Cooldown_Fire_FireBolt;
 	FGameplayTag Cooldown_RobotVacuum_JetJump;
 	FGameplayTag Cooldown_Armadillo_RollCharge;
 	FGameplayTag Cooldown_Elite_Sweep;
 	FGameplayTag Cooldown_Elite_Roar;
 
-	// ���� ��ġ ����
+	// 공격 위치 소켓
 	FGameplayTag CombatSocket_Weapon;
 	FGameplayTag CombatSocket_RightHand;
 	FGameplayTag CombatSocket_LeftHand;
 	FGameplayTag CombatSocket_Tail;
 
-	// ���� ��Ÿ��
+	// 공격 몽타주
 	FGameplayTag Montage_Attack_1;
 	FGameplayTag Montage_Attack_2;
 	FGameplayTag Montage_Attack_3;
 	FGameplayTag Montage_Attack_4;
 
-	// ������ Ÿ�� �迭
+	// 데미지 타입 배열
 	TArray<FGameplayTag> DamageTypeTags;
-	// ������ Ÿ��, ����� ����
+	// 데미지 타입, 디버프 매핑
 	TMap<FGameplayTag, FGameplayTag> DamageTypesToDebuffs;
 
-	// �Է� ����
+	// 입력 블록
 	FGameplayTag Player_Block_InputPressed; 
 	FGameplayTag Player_Block_InputHeld;
 	FGameplayTag Player_Block_InputReleased;
 
-	// ����
+	// 사운드
 	FGameplayTag GameplayCue_Player_Damage;
 	FGameplayTag GameplayCue_Player_Death;
 	FGameplayTag GameplayCue_Player_LowHealth;

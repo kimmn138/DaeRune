@@ -10,7 +10,7 @@
 class UAbilitySystemComponent;
 class UGameplayEffect;
 
-// °ÔÀÓÇÃ·¹ÀÌ ÀÌÆåÆ® Àû¿ë Á¤Ã¥
+// ê²Œì„í”Œë ˆì´ ì´í™íŠ¸ ì ìš© ì •ì±…
 UENUM(BlueprintType)
 enum class EEffectApplicationPolicy : uint8
 {
@@ -19,7 +19,7 @@ enum class EEffectApplicationPolicy : uint8
 	DoNotApply
 };
 
-// ¹«ÇÑ Áö¼Ó ÀÌÆåÆ® Á¦°Å Á¤Ã¥
+// ë¬´í•œ ì§€ì† ì´í™íŠ¸ ì œê±° ì •ì±…
 UENUM(BlueprintType)
 enum class EEffectRemovalPolicy : uint8
 {
@@ -28,7 +28,7 @@ enum class EEffectRemovalPolicy : uint8
 };
 
 /**
- * GameplayEffect¸¦ Àû¿ëÇÏ´Â ¹ü¿ë ¾×ÅÍ
+ * GameplayEffectë¥¼ ì ìš©í•˜ëŠ” ë²”ìš© ì•¡í„°
  */
 UCLASS()
 class DAERUNE_API ADREffectActor : public AActor
@@ -41,58 +41,58 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
-	// Å¸°Ù¿¡°Ô ÁöÁ¤µÈ GameplayEffect Àû¿ë
+	// íƒ€ê²Ÿì—ê²Œ ì§€ì •ëœ GameplayEffect ì ìš©
 	UFUNCTION(BlueprintCallable)
 	void ApplyEffectToTarget(AActor* TargetActor, TSubclassOf<UGameplayEffect> GameplayEffectClass);
 
-	// ¿À¹ö·¦ ½ÃÀÛ ½Ã È£Ãâ - ºí·çÇÁ¸°Æ®¿¡¼­ ¿À¹ö¶óÀÌµå °¡´É
+	// ì˜¤ë²„ë© ì‹œì‘ ì‹œ í˜¸ì¶œ - ë¸”ë£¨í”„ë¦°íŠ¸ì—ì„œ ì˜¤ë²„ë¼ì´ë“œ ê°€ëŠ¥
 	UFUNCTION(BlueprintCallable)
 	virtual void OnOverlap(AActor* TargetActor);
 
-	// ¿À¹ö·¦ Á¾·á ½Ã È£Ãâ - ºí·çÇÁ¸°Æ®¿¡¼­ ¿À¹ö¶óÀÌµå °¡´É
+	// ì˜¤ë²„ë© ì¢…ë£Œ ì‹œ í˜¸ì¶œ - ë¸”ë£¨í”„ë¦°íŠ¸ì—ì„œ ì˜¤ë²„ë¼ì´ë“œ ê°€ëŠ¥
 	UFUNCTION(BlueprintCallable)
 	virtual void OnEndOverlap(AActor* TargetActor);
 
-	// È¿°ú Àû¿ë ÈÄ ¾×ÅÍ ÆÄ±« ¿©ºÎ
+	// íš¨ê³¼ ì ìš© í›„ ì•¡í„° íŒŒê´´ ì—¬ë¶€
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Applied Effects")
 	bool bDestroyOnEffectApplication = false;
 
-	// Àû¿¡°Ôµµ È¿°ú Àû¿ë ¿©ºÎ
+	// ì ì—ê²Œë„ íš¨ê³¼ ì ìš© ì—¬ë¶€
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Applied Effects")
 	bool bApplyEffectsToEnemies = false;
 
-	// Áï½Ã Àû¿ë GameplayEffect Å¬·¡½º
+	// ì¦‰ì‹œ ì ìš© GameplayEffect í´ë˜ìŠ¤
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Applied Effects")
 	TSubclassOf<UGameplayEffect> InstantGameplayEffectClass;
 
-	// Áï½Ã È¿°ú Àû¿ë Á¤Ã¥
+	// ì¦‰ì‹œ íš¨ê³¼ ì ìš© ì •ì±…
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Applied Effects")
 	EEffectApplicationPolicy InstantEffectApplicationPolicy = EEffectApplicationPolicy::DoNotApply;
 
-	// Áö¼Ó GameplayEffect Å¬·¡½º
+	// ì§€ì† GameplayEffect í´ë˜ìŠ¤
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Applied Effects")
 	TSubclassOf<UGameplayEffect> DurationGameplayEffectClass;
 
-	// Áö¼Ó È¿°ú Àû¿ë Á¤Ã¥
+	// ì§€ì† íš¨ê³¼ ì ìš© ì •ì±…
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Applied Effects")
 	EEffectApplicationPolicy DurationEffectApplicationPolicy = EEffectApplicationPolicy::DoNotApply;
 
-	// ¹«ÇÑ GameplayEffect Å¬·¡½º
+	// ë¬´í•œ GameplayEffect í´ë˜ìŠ¤
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Applied Effects")
 	TSubclassOf<UGameplayEffect> InfiniteGameplayEffectClass;
 
-	// ¹«ÇÑ È¿°ú Àû¿ë Á¤Ã¥
+	// ë¬´í•œ íš¨ê³¼ ì ìš© ì •ì±…
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Applied Effects")
 	EEffectApplicationPolicy InfiniteEffectApplicationPolicy = EEffectApplicationPolicy::DoNotApply;
 
-	// ¹«ÇÑ È¿°ú Á¦°Å Á¤Ã¥
+	// ë¬´í•œ íš¨ê³¼ ì œê±° ì •ì±…
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Applied Effects")
 	EEffectRemovalPolicy InfiniteEffectRemovalPolicy = EEffectRemovalPolicy::RemoveOnEndOverlap;
 
-	// È°¼º ¹«ÇÑ È¿°ú ÇÚµé ÃßÀû
+	// í™œì„± ë¬´í•œ íš¨ê³¼ í•¸ë“¤ ì¶”ì 
 	TMap<FActiveGameplayEffectHandle, UAbilitySystemComponent*> ActiveEffectHandles;
 
-	// È¿°ú Àû¿ë ½Ã »ç¿ëÇÒ ¾×ÅÍ ·¹º§
+	// íš¨ê³¼ ì ìš© ì‹œ ì‚¬ìš©í•  ì•¡í„° ë ˆë²¨
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Applied Effects")
 	float ActorLevel = 1.f;
 };

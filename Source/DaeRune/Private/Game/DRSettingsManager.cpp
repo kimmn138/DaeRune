@@ -68,7 +68,7 @@ FName UDRSettingsManager::CultureToLanguageOptionId(const FString& CultureCode)
     return NAME_None;
 }
 
-// ========== 湲곗〈 ?⑥닔 (?좎?) ==========
+// ========== 기존 함수 (유지) ==========
 
 void UDRSettingsManager::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -90,7 +90,7 @@ void UDRSettingsManager::Initialize(FSubsystemCollectionBase& Collection)
     {
         SFXSoundClass = LoadObject<USoundClass>(nullptr, TEXT("/Game/Blueprints/Audio/SoundClasses/SC_SFX.SC_SFX"));
     }
-    // 濡쒕뱶 ?ㅽ뙣 ??寃쎄퀬 濡쒓렇
+    // 로드 실패 시 경고 로그
     if (!GameSoundMix)
     {
 }
@@ -105,13 +105,13 @@ void UDRSettingsManager::Initialize(FSubsystemCollectionBase& Collection)
 }
     if (UDRGameUserSettings* Settings = GetSettings())
     {
-        // 湲곕낯 ?ㅼ젙 ?곸슜
+        // 기본 설정 적용
         Settings->ApplySettings(false);
 
-        // 而ㅼ뒪? ?ㅼ젙 ?곸슜
+        // 커스텀 설정 적용
         Settings->ApplyCustomSettings();
 
-        // ??λ맂 Scalability ?ㅼ젙 ?곸슜
+        // 저장된 Scalability 설정 적용
         ApplyGraphicsQualitySettings();
     }
 }
@@ -131,24 +131,24 @@ void UDRSettingsManager::ApplyAndSaveAllSettings()
     UDRGameUserSettings* Settings = GetSettings();
     if (!Settings) return;
 
-    // 而ㅼ뒪? ?ㅼ젙 ?좏슚??寃??
+    // 커스텀 설정 유효성 검사
     Settings->ApplyCustomSettings();
 
-    // ?댁긽??李쎈え???곸슜
+    // 해상도/창모드 적용
     Settings->ApplyResolutionSettings(false);
     Settings->ApplyNonResolutionSettings();
     Settings->ConfirmVideoMode();
 
-    // 洹몃옒???덉쭏 ?곸슜
+    // 그래픽 품질 적용
     ApplyGraphicsQualitySettings();
 
-    // ?ㅻ뵒???곸슜
+    // 오디오 적용
     ApplyAudioSettings();
 
     // ???
     Settings->SaveSettings();
 
-    // ?몃━寃뚯씠??釉뚮줈?쒖틦?ㅽ듃
+    // 델리게이트 브로드캐스트
     OnSettingsApplied.Broadcast();
 }
 
@@ -207,10 +207,10 @@ void UDRSettingsManager::ApplySoundMixToWorld(UWorld* World)
 
     if (!GameSoundMix) return;
 
-    // SoundMix ?쒖꽦??
+    // SoundMix 활성화
     UGameplayStatics::PushSoundMixModifier(World, GameSoundMix);
 
-    // 媛??대옒??蹂쇰ⅷ ?ㅼ젙
+    // 각 클래스 볼륨 설정
     if (MasterSoundClass)
     {
         UGameplayStatics::SetSoundMixClassOverride(World, GameSoundMix, MasterSoundClass, Settings->MasterVolume, 1.0f, 0.0f, true);
@@ -297,7 +297,7 @@ TArray<FIntPoint> UDRSettingsManager::GetSupportedResolutions() const
     TArray<FIntPoint> Resolutions;
     UKismetSystemLibrary::GetSupportedFullscreenResolutions(Resolutions);
 
-    // 理쒖냼 ?댁긽???꾪꽣留?
+    // 최소 해상도 필터링
     TArray<FIntPoint> FilteredResolutions;
     for (const FIntPoint& Res : Resolutions)
     {
@@ -324,12 +324,12 @@ void UDRSettingsManager::ApplyGraphicsQualitySettings()
 {
     if (UDRGameUserSettings* Settings = GetSettings())
     {
-        // Scalability ?ㅼ젙 ?곸슜
+        // Scalability 설정 적용
         Settings->ApplyNonResolutionSettings();
     }
 }
 
-// ========== ?곗씠??二쇰룄 愿由??덉씠??==========
+// ========== 데이터 주도 관리 레이어 ==========
 
 void UDRSettingsManager::InitSettings()
 {
@@ -401,7 +401,7 @@ void UDRSettingsManager::BuildDefinitions()
         Def.bShowSeparator = true;
         Def.bEnabled = true;
 
-        // 吏???댁긽???숈쟻 ?앹꽦
+        // 지원 해상도 동적 생성
         TArray<FIntPoint> Resolutions = GetSupportedResolutions();
         for (int32 i = 0; i < Resolutions.Num(); ++i)
         {
@@ -467,7 +467,7 @@ void UDRSettingsManager::BuildDefinitions()
 
         {
             FDRSettingsValue DefaultVal = UDRSettingsFunctionLibrary::MakeIntValue(120);
-            DefaultVal.SelectedIndex = 2; // 120? [30,60,120,UNLIMITED] 以??몃뜳??2
+            DefaultVal.SelectedIndex = 2; // 120은 [30,60,120,UNLIMITED] 중 인덱스 2
             Def.DefaultValue = DefaultVal;
         }
 
@@ -699,7 +699,7 @@ void UDRSettingsManager::LoadFromGameUserSettings()
 
         // Resolution
         FIntPoint Res = Settings->GetScreenResolution();
-        // SelectedIndex 怨꾩궛
+        // SelectedIndex 계산
         TArray<FIntPoint> SupportedRes = GetSupportedResolutions();
         int32 ResIndex = 0;
         for (int32 i = 0; i < SupportedRes.Num(); ++i)
@@ -715,7 +715,7 @@ void UDRSettingsManager::LoadFromGameUserSettings()
         // VSync
         CurrentValues.Add(FName("Graphics.VSync"), UDRSettingsFunctionLibrary::MakeBoolValue(Settings->IsVSyncEnabled()));
 
-        // FPSLimit (SelectedIndex瑜?Options 諛곗뿴 留ㅼ묶?쇰줈 怨꾩궛)
+        // FPSLimit (SelectedIndex를 Options 배열 매칭으로 계산)
         float FPSLimit = Settings->GetFrameRateLimit();
         int32 FPSInt = FMath::RoundToInt(FPSLimit);
         int32 FPSIndex = 0;
@@ -740,10 +740,10 @@ void UDRSettingsManager::LoadFromGameUserSettings()
         // Scalability
         {
             int32 ScalabilityLevel = Settings->GetOverallScalabilityLevel();
-            if (ScalabilityLevel < 0) ScalabilityLevel = 3; // Mixed ??Epic 湲곕낯媛?
+            if (ScalabilityLevel < 0) ScalabilityLevel = 3; // Mixed → Epic 기본값
             ScalabilityLevel = FMath::Clamp(ScalabilityLevel, 0, 4);
             FDRSettingsValue ScalVal = UDRSettingsFunctionLibrary::MakeIntValue(ScalabilityLevel);
-            ScalVal.SelectedIndex = ScalabilityLevel; // 媛믨낵 ?몃뜳?ㅺ? ?숈씪 (0~4)
+            ScalVal.SelectedIndex = ScalabilityLevel; // 값과 인덱스가 동일 (0~4)
             CurrentValues.Add(FName("Graphics.Scalability"), ScalVal);
         }
 
@@ -753,7 +753,7 @@ void UDRSettingsManager::LoadFromGameUserSettings()
 
     // Gameplay
     {
-        // CameraSensitivity: 0.1~5.0 ??0~100 蹂??
+        // CameraSensitivity: 0.1~5.0 → 0~100 변환
         float NormalizedSens = ((Settings->MouseSensitivity - 0.1f) / (5.0f - 0.1f)) * 100.f;
         CurrentValues.Add(FName("Gameplay.CameraSensitivity"), UDRSettingsFunctionLibrary::MakeFloatValue(NormalizedSens));
 
@@ -780,7 +780,7 @@ void UDRSettingsManager::LoadFromGameUserSettings()
         CurrentValues.Add(FName("Gameplay.Language"), UDRSettingsFunctionLibrary::MakeNameValue(LangOptionId, LangIndex));
     }
 
-    // Audio: 0.0~1.0 ??0~100 蹂??
+    // Audio: 0.0~1.0 → 0~100 변환
     {
         CurrentValues.Add(FName("Audio.MasterVolume"), UDRSettingsFunctionLibrary::MakeFloatValue(Settings->MasterVolume * 100.f));
         CurrentValues.Add(FName("Audio.MusicVolume"), UDRSettingsFunctionLibrary::MakeFloatValue(Settings->BGMVolume * 100.f));
@@ -887,7 +887,7 @@ TArray<FDRSettingDefinition> UDRSettingsManager::GetDefinitionsByTab(EDRSettings
         }
     }
 
-    // Order濡??뺣젹
+    // Order로 정렬
     Result.Sort([](const FDRSettingDefinition& A, const FDRSettingDefinition& B)
     {
         return A.Order < B.Order;
@@ -913,7 +913,7 @@ void UDRSettingsManager::SetPendingValue(FName SettingId, const FDRSettingsValue
 {
     PendingValues.Add(SettingId, NewValue);
 
-    // Dirty ?곹깭 媛깆떊
+    // Dirty 상태 갱신
     const FDRSettingsValue* CurrentVal = CurrentValues.Find(SettingId);
     if (CurrentVal && UDRSettingsFunctionLibrary::IsSettingsValueEqual(*CurrentVal, NewValue))
     {
@@ -928,7 +928,7 @@ void UDRSettingsManager::SetPendingValue(FName SettingId, const FDRSettingsValue
 
     OnPendingValueChanged.Broadcast(SettingId, NewValue);
 
-    // Instant 紐⑤뱶硫?利됱떆 ?곸슜
+    // Instant 모드면 즉시 적용
     FDRSettingDefinition Def;
     if (GetDefinitionById(SettingId, Def))
     {
@@ -959,7 +959,7 @@ void UDRSettingsManager::ApplyPendingSettings()
     // GameUserSettings?????
     SaveToGameUserSettings();
 
-    // ?댁긽??李쎈え???곸슜
+    // 해상도/창모드 적용
     ApplyResolutionSettings();
     ApplyNonResolutionSettings();
 

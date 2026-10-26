@@ -16,8 +16,8 @@ class ADRPlayerController;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnPartPickedUp, ADRCleanserPart*, Part, ADRCharacter*, Character);
 
 /**
- * Ŭ���� ��ǰ ����
- * Phase2���� �÷��̾ �����Ͽ� Ŭ���� ����Ʈ�� ��ġ�ϴ� ��ǰ
+ * 클렌저 부품 액터
+ * Phase2에서 플레이어가 수집하여 클렌저 사이트에 설치하는 부품
  */
 UCLASS()
 class DAERUNE_API ADRCleanserPart : public AActor, public IDRInteractable
@@ -27,9 +27,9 @@ class DAERUNE_API ADRCleanserPart : public AActor, public IDRInteractable
 public:
 	ADRCleanserPart();
 
-	// ========== ��ǰ ���� ��ȸ ==========
+	// ========== 부품 상태 조회 ==========
 
-	// ȹ�� ���� ���� Ȯ��
+	// 획득 가능 여부 확인
 	UFUNCTION(BlueprintCallable, Category = "CleanserPart")
 	bool CanBePickedUp() const;
 
@@ -45,24 +45,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CleanserPart")
 	UStaticMeshComponent* GetPartMesh() const { return PartMesh; }
 
-	// ========== ��ǰ ó�� ==========
+	// ========== 부품 처리 ==========
 
-	// ��ǰ ȹ�� ó��
+	// 부품 획득 처리
 	UFUNCTION(BlueprintCallable, Category = "CleanserPart")
 	void PickupPart(ADRCharacter* Character);
 
-	// ��ǰ ��ġ ó��
+	// 부품 설치 처리
 	UFUNCTION(BlueprintCallable, Category = "CleanserPart")
 	void InstallPart();
 
-	// ĳ���ͷκ��� ����߸��� 
+	// 캐릭터로부터 떨어뜨리기 
 	UFUNCTION(BlueprintCallable, Category = "CleanserPart")
 	void DropFromCarrier();
 
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayPickupSound();
 
-	// ========== ����Ʈ���̽� �ݹ� ========== 
+	// ========== 라인트레이싱 콜백 ========== 
 
 	// 상호작용 UI 표시/숨김 (IDRInteractable - 로컬에서 직접 호출)
 	virtual void SetInteractionUIVisible(bool bShow) override;
@@ -75,41 +75,41 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// ========== ������Ʈ ==========
+	// ========== 컴포넌트 ==========
 
-	// ��ǰ �޽�
+	// 부품 메시
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent> PartMesh;
 
-	// ���� ���� (����Ʈ���̽� Ȱ��ȭ��)
+	// 감지 범위 (라인트레이싱 활성화용)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USphereComponent> DetectionSphere;
 
-	// ȹ�� UI ���� 
+	// 획득 UI 위젯 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UWidgetComponent> InteractionWidget;
 
-	// ========== ���� ==========
+	// ========== 설정 ==========
 
-	// ĳ���Ϳ� ������ ���� �̸�
+	// 캐릭터에 부착할 소켓 이름
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "CleanserPart|Config")
 	FName AttachSocketName = "TestPartHand";
 
-	// ���� ���� �ݰ�
+	// 감지 범위 반경
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "CleanserPart|Config")
 	float DetectionRadius = 300.f;
 
-	// ========== ��ǰ ���� ==========
+	// ========== 부품 상태 ==========
 
-	// �÷��̾ ��� �ִ� ����
+	// 플레이어가 들고 있는 상태
 	UPROPERTY(ReplicatedUsing = OnRep_bIsCarried, BlueprintReadOnly, Category = "CleanserPart")
 	bool bIsCarried;
 
-	// ��ǰ�� ��� �ִ� ĳ����
+	// 부품을 들고 있는 캐릭터
 	UPROPERTY(ReplicatedUsing = OnRep_CarryingCharacter, BlueprintReadOnly, Category = "CleanserPart")
 	TObjectPtr<ADRCharacter> CarryingCharacter;
 
-	// ========== ������ �̺�Ʈ ==========
+	// ========== 오버랩 이벤트 ==========
 
 	UFUNCTION()
 	void OnDetectionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
@@ -117,7 +117,7 @@ protected:
 	UFUNCTION()
 	void OnDetectionSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
-	// ========== ���ø����̼� �ݹ� ==========
+	// ========== 리플리케이션 콜백 ==========
 
 	UFUNCTION()
 	void OnRep_bIsCarried();

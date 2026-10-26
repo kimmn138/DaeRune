@@ -10,10 +10,10 @@
 
 void UDRUserWidget::SetWidgetController(UObject* InWidgetController)
 {
-	// WidgetController ���� ����
+	// WidgetController 참조 저장
 	WidgetController = InWidgetController;
 	NativeWidgetControllerSet();
-	// ��������Ʈ ���� �̺�Ʈ ȣ��
+	// 블루프린트 구현 이벤트 호출
 	WidgetControllerSet();
 }
 

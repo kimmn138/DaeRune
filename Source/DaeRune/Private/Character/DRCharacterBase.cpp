@@ -24,24 +24,24 @@ ADRCharacterBase::ADRCharacterBase()
 	PrimaryActorTick.bCanEverTick = false;
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get(); 
 
-	// ȭ�� ����� ���̾ư��� ������Ʈ ����
+	// 화상 디버프 나이아가라 컴포넌트 생성
 	BurnDebuffComponent = CreateDefaultSubobject<UDebuffNiagaraComponent>("BurnDebuffComponent");
 	BurnDebuffComponent->SetupAttachment(GetRootComponent());
 	BurnDebuffComponent->DebuffTag = GameplayTags.Debuff_Burn;
 
-	// ���� ����� ���̾ư��� ������Ʈ ����
+	// 스턴 디버프 나이아가라 컴포넌트 생성
 	StunDebuffComponent = CreateDefaultSubobject<UDebuffNiagaraComponent>("StunDebuffComponent");
 	StunDebuffComponent->SetupAttachment(GetRootComponent());
 	StunDebuffComponent->DebuffTag = GameplayTags.Debuff_Stun;
 
-	// ī�޶� �浹 ���� ����
+	// 카메라 충돌 무시 설정
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	GetCapsuleComponent()->SetGenerateOverlapEvents(false);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Projectile, ECR_Overlap);
 	GetMesh()->SetGenerateOverlapEvents(false);
 
-	// ���� ������Ʈ ���� �� ���� ����
+	// 무기 컴포넌트 생성 및 소켓 부착
 	Weapon = CreateDefaultSubobject<USkeletalMeshComponent>("Weapon");
 	Weapon->SetupAttachment(GetMesh(), FName("WeaponHandSocket"));
 	Weapon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -68,19 +68,19 @@ UAbilitySystemComponent* ADRCharacterBase::GetAbilitySystemComponent() const
 
 UAnimMontage* ADRCharacterBase::GetHitReactMontage_Implementation()
 {
-	// �迭�� ��������� nullptr ��ȯ
+	// 배열이 비어있으면 nullptr 반환
 	if (HitReactMontages.Num() == 0)
 	{
 		return nullptr;
 	}
 
-	// �迭�� �ϳ��� ������ �װ��� ��ȯ
+	// 배열에 하나만 있으면 그것을 반환
 	if (HitReactMontages.Num() == 1)
 	{
 		return HitReactMontages[0];
 	}
 
-	// ���� �� ������ �������� ����
+	// 여러 개 있으면 랜덤으로 선택
 	const int32 RandomIndex = FMath::RandRange(0, HitReactMontages.Num() - 1);
 	return HitReactMontages[RandomIndex];
 }
@@ -153,7 +153,7 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 	}
 	else
 	{
-		// AI�� �ٸ� ĳ���ʹ� ���������� ��� ó��
+		// AI나 다른 캐릭터는 정상적으로 사망 처리
 		Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
 		MulticastHandleDeath(DeathImpulse);
 	}
@@ -171,7 +171,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 
 	bDead = true;
 
-	// ���� ī�޶� ����
+	// 죽음 카메라 연출
 	if (ADRCharacter* PlayerCharacter = Cast<ADRCharacter>(this))
 	{
 		PlayerCharacter->PlayDeathCameraAnimation();
@@ -187,7 +187,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 			);
 		}
 
-		// 1��Ī �޽� ����� 3��Ī �޽� ���̰�
+		// 1인칭 메쉬 숨기고 3인칭 메쉬 보이게
 		if (PlayerCharacter->IsLocallyControlled())
 		{
 			if (PlayerCharacter->FirstPersonMesh)
@@ -205,7 +205,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 		}
 	}
 
-	// ĸ�� �浹 ��Ȱ��ȭ
+	// 캡슐 충돌 비활성화
 	if (GetCapsuleComponent())
 	{
 		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -222,7 +222,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 		// MovementMode가 MOVE_None이고 StopMovementImmediately가 호출됐으므로 CMC가 계속 tick해도 부하 미미.
 	}
 
-	// �޽ø� ���� ��ġ�� ����
+	// 메시를 현재 위치에 고정
 	if (USkeletalMeshComponent* MeshComp = GetMesh())
 	{
 		MeshComp->SetSimulatePhysics(false);
@@ -238,10 +238,10 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 		}
 	}
 
-	// Dissolve ȿ�� ����
+	// Dissolve 효과 시작
 	Dissolve();
 
-	// ����� ������Ʈ ��Ȱ��ȭ
+	// 디버프 컴포넌트 비활성화
 	if (BurnDebuffComponent)
 	{
 		BurnDebuffComponent->Deactivate();
@@ -258,7 +258,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 	// virtual이므로 ADRCharacter 인스턴스에서는 override가 호출되어 사망 몽타주 재생.
 	OnRep_Dead();
 
-	// ��� �̺�Ʈ ��ε�ĳ��Ʈ
+	// 사망 이벤트 브로드캐스트
 	OnDeathDelegate.Broadcast(this);
 }
 
@@ -359,7 +359,7 @@ void ADRCharacterBase::BeginPlay()
 
 void ADRCharacterBase::Destroyed()
 {
-	// ��� AudioComponent �����ϰ� ����
+	// 모든 AudioComponent 안전하게 정리
 	TArray<UAudioComponent*> AudioComps;
 	GetComponents<UAudioComponent>(AudioComps);
 
@@ -367,7 +367,7 @@ void ADRCharacterBase::Destroyed()
 	{
 		if (AudioComp && AudioComp->IsPlaying())
 		{
-			// ���̵� �ƿ����� �ε巴�� ����
+			// 페이드 아웃으로 부드럽게 정지
 			AudioComp->FadeOut(0.1f, 0.0f);
 		}
 	}
@@ -377,7 +377,7 @@ void ADRCharacterBase::Destroyed()
 
 FVector ADRCharacterBase::GetCombatSocketLocation_Implementation(const FGameplayTag& MontageTag)
 {
-	// ���� ���� ��ġ ��ȯ
+	// 전투 소켓 위치 반환
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 	if (MontageTag.MatchesTagExact(GameplayTags.CombatSocket_Weapon) && IsValid(Weapon))
 	{
@@ -473,10 +473,10 @@ void ADRCharacterBase::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEf
 {
 	check(IsValid(GetAbilitySystemComponent()));
 	check(GameplayEffectClass);
-	// ���ؽ�Ʈ ���� �� �ҽ� ����
+	// 컨텍스트 생성 및 소스 설정
 	FGameplayEffectContextHandle ContextHandle = GetAbilitySystemComponent()->MakeEffectContext();
 	ContextHandle.AddSourceObject(this);
-	// ���� ���� �� ����
+	// 스펙 생성 및 적용
 	const FGameplayEffectSpecHandle SpecHandle = GetAbilitySystemComponent()->MakeOutgoingSpec(GameplayEffectClass, Level, ContextHandle);
 	GetAbilitySystemComponent()->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), GetAbilitySystemComponent());
 }
@@ -492,7 +492,7 @@ void ADRCharacterBase::AddCharacterAbilities()
 	UDRAbilitySystemComponent* DRASC = CastChecked<UDRAbilitySystemComponent>(AbilitySystemComponent);
 	if (!HasAuthority()) return;
 
-	// ��Ƽ�� �����Ƽ�� �нú� �����Ƽ �߰�
+	// 액티브 어빌리티와 패시브 어빌리티 추가
 	DRASC->AddCharacterAbilities(StartupAbilities);
 	DRASC->AddCharacterPassiveAbilities(StartupPassiveAbilities);
 }
@@ -509,14 +509,14 @@ float ADRCharacterBase::GetMoveSpeed()
 
 void ADRCharacterBase::Dissolve()
 {
-	// ĳ���� �޽� Dissolve
+	// 캐릭터 메시 Dissolve
 	if (IsValid(DissolveMaterialInstance))
 	{
 		UMaterialInstanceDynamic* DynamicMatInst = UMaterialInstanceDynamic::Create(DissolveMaterialInstance, this);
 		GetMesh()->SetMaterial(0, DynamicMatInst);
 		StartDissolveTimeline(DynamicMatInst);
 	}
-	// ���� Dissolve
+	// 무기 Dissolve
 	if (IsValid(WeaponDissolveMaterialInstance))
 	{
 		UMaterialInstanceDynamic* DynamicMatInst = UMaterialInstanceDynamic::Create(WeaponDissolveMaterialInstance, this);

@@ -13,20 +13,20 @@
 
 bool UDRGameplayAbility::CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, FGameplayTagContainer* OptionalRelevantTags) const
 {
-    // �⺻ Cost üũ
+    // 기본 Cost 체크
     if (!Super::CheckCost(Handle, ActorInfo, OptionalRelevantTags))
     {
         return false;
     }
 
-    // Water Cost�� ������ ���
+    // Water Cost가 없으면 통과
     const float EffectiveWaterCost = GetEffectiveWaterCostFor(ActorInfo);
     if (EffectiveWaterCost <= 0.f)
     {
         return true;
     }
 
-    // AttributeSet ��������
+    // AttributeSet 가져오기
     UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
     if (!ASC)
     {
@@ -57,23 +57,23 @@ bool UDRGameplayAbility::CheckCost(const FGameplayAbilitySpecHandle Handle, cons
         return CurrentHealth > RequiredHealth;
     }
 
-    // Water�� ����� ���
+    // Water 가 충분하면 사용 가능
     if (CurrentWater >= EffectiveWaterCost)
     {
         return true;
     }
 
-    // Water�� ������ ���, Health�� ���� �������� Ȯ��
+    // Water가 부족한 경우, Health로 보충 가능한지 확인
     float WaterShortage = EffectiveWaterCost - CurrentWater;
     float RequiredHealth = FMath::FloorToFloat(WaterShortage * 0.5f);
 
-    // Health�� �ּ� 1 �̻� ���� �� �ִ��� Ȯ��
+    // Health가 최소 1 이상 남을 수 있는지 확인
     return CurrentHealth > RequiredHealth;
 }
 
 void UDRGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
 {
-    // �⺻ Cost ����
+    // 기본 Cost 적용
     Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
 
     const float EffectiveWaterCost = GetEffectiveWaterCostFor(ActorInfo);
@@ -82,7 +82,7 @@ void UDRGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, cons
         return;
     }
 
-    // Cost GE�� �����Ǿ� ������ SetByCaller�� WaterCost ����
+    // Cost GE가 설정되어 있으면 SetByCaller로 WaterCost 전달
     if (GetCostGameplayEffect())
     {
         UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();

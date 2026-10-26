@@ -3,5 +3,5 @@
 #include "DaeRune.h"
 #include "Modules/ModuleManager.h"
 
-// DaeRune °ÔÀÓ ¸ğµâÀ» ¾ğ¸®¾ó¿¡ µî·Ï
+// DaeRune ê²Œì„ ëª¨ë“ˆì„ ì–¸ë¦¬ì–¼ì— ë“±ë¡
 IMPLEMENT_PRIMARY_GAME_MODULE( FDefaultGameModuleImpl, DaeRune, "DaeRune" );

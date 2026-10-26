@@ -7,16 +7,16 @@
 #include "DRGameplayCue_Sound.generated.h"
 
 /**
- * »ç¿îµå Àç»ı¿ë GameplayCue º£ÀÌ½º Å¬·¡½º
+ * ì‚¬ìš´ë“œ ì¬ìƒìš© GameplayCue ë² ì´ìŠ¤ í´ë˜ìŠ¤
  * 
- * »ç¿ë¹ı:
- * 1. ÀÌ Å¬·¡½º¸¦ »ó¼ÓÇÑ ºí·çÇÁ¸°Æ® »ı¼º (¿¹: GC_Player_Damage)
- * 2. Sound º¯¼ö¿¡ »ç¿îµå ¿¡¼Â ¼³Á¤
- * 3. GameplayEffectÀÇ GameplayCues¿¡ ÅÂ±× Ãß°¡
+ * ì‚¬ìš©ë²•:
+ * 1. ì´ í´ë˜ìŠ¤ë¥¼ ìƒì†í•œ ë¸”ë£¨í”„ë¦°íŠ¸ ìƒì„± (ì˜ˆ: GC_Player_Damage)
+ * 2. Sound ë³€ìˆ˜ì— ì‚¬ìš´ë“œ ì—ì…‹ ì„¤ì •
+ * 3. GameplayEffectì˜ GameplayCuesì— íƒœê·¸ ì¶”ê°€
  * 
  * Execute vs WhileActive:
- * - Execute (OnExecute): Áï½Ã ÇÑ ¹ø Àç»ı (µ¥¹ÌÁö, »ç¸Á µî)
- * - WhileActive (OnActive/OnRemove): Áö¼Ó ½Ã°£ µ¿¾È (¹öÇÁ/µğ¹öÇÁ µî)
+ * - Execute (OnExecute): ì¦‰ì‹œ í•œ ë²ˆ ì¬ìƒ (ë°ë¯¸ì§€, ì‚¬ë§ ë“±)
+ * - WhileActive (OnActive/OnRemove): ì§€ì† ì‹œê°„ ë™ì•ˆ (ë²„í”„/ë””ë²„í”„ ë“±)
  */
 UCLASS()
 class DAERUNE_API UDRGameplayCue_Sound : public UGameplayCueNotify_Static
@@ -26,14 +26,14 @@ class DAERUNE_API UDRGameplayCue_Sound : public UGameplayCueNotify_Static
 public:
 	UDRGameplayCue_Sound();
 
-	// Àç»ıÇÒ »ç¿îµå
+	// ì¬ìƒí•  ì‚¬ìš´ë“œ
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sound")
 	TObjectPtr<USoundBase> Sound;
 
-	// 3D »ç¿îµå ¿©ºÎ
+	// 3D ì‚¬ìš´ë“œ ì—¬ë¶€
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sound")
 	bool bIs3DSound = true;
 
-	// Execute ½Ã »ç¿îµå Àç»ı
+	// Execute ì‹œ ì‚¬ìš´ë“œ ì¬ìƒ
 	virtual bool OnExecute_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) const override;
 };

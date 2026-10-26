@@ -33,7 +33,7 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			);
 		}
 
-		// �������� �߻��ϸ� ���� ���� ����
+		// 데미지가 발생하면 전투 상태 진입
 		NotifyEnterCombat(Props);
 
 		if (ADREnemy* Enemy = Cast<ADREnemy>(Props.TargetAvatarActor))
@@ -249,12 +249,12 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 			{
 				Props.TargetCharacter->LaunchCharacter(KnockbackForce, true, true);
 
-				// �˹� ���� ���� �߰�
+				// 넉백 상태 설정 추가
 				if (ADREnemy* Enemy = Cast<ADREnemy>(Props.TargetCharacter))
 				{
 					Enemy->SetKnockbackState(true);
 
-					// �˹� ���� Ÿ�̸� (������ġ)
+					// 넉백 종료 타이머 (안전장치)
 					FTimerHandle KnockbackEndTimer;
 					Props.TargetCharacter->GetWorld()->GetTimerManager().SetTimer(
 						KnockbackEndTimer,
@@ -265,7 +265,7 @@ void UDREnemyAttributeSet::HandleIncomingDamage(const FEffectProperties& Props)
 								Enemy->SetKnockbackState(false);
 							}
 						},
-						1.5f, // �ִ� 1.5�� �� �ڵ� ����
+						1.5f, // 최대 1.5초 후 자동 해제
 						false
 					);
 				}

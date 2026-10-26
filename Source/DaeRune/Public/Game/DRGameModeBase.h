@@ -11,7 +11,7 @@ class UCharacterClassInfo;
 class UGameBalanceConfig;
 
 /**
- * DaeRune �⺻ ���� ��� Ŭ����
+ * DaeRune 기본 게임 모드 클래스
  */
 UCLASS()
 class DAERUNE_API ADRGameModeBase : public AGameMode
@@ -25,7 +25,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Character Class Defaults")
 	TObjectPtr<UCharacterClassInfo> EnemyCharacterClassInfo;
 
-	// �����Ƽ ���� ������ ����
+	// 어빌리티 정보 데이터 에셋
 	UPROPERTY(EditDefaultsOnly, Category = "Ability Info")
 	TObjectPtr<UAbilityInfo> AbilityInfo;
 
@@ -33,10 +33,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Game Balance")
 	TObjectPtr<UGameBalanceConfig> GameBalanceConfig;
 
-	// �÷��̾ ������� �� ȣ��
+	// 플레이어가 사망했을 때 호출
 	void OnPlayerDied(APlayerState* DeadPlayer);
 
-	// �� ���� üũ
+	// 팀 전멸 체크
 	virtual bool CheckTeamWipeout();
 
 	// 플레이어 접속 종료 (Plan6 §5.10)
@@ -56,13 +56,13 @@ protected:
 	// 맵 전환 전 정리 작업 (설정창 닫기, 오디오 정리)
 	virtual void PrepareForTravel();
 
-	// ���� �� ó�� ���۱��� ��� �ð�
+	// 전멸 후 처리 시작까지 대기 시간
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GameMode|Config")
 	float WipeoutDelayTime = 3.0f;
 
-	// ���� ó�� Ÿ�̸� �ڵ�
+	// 전멸 처리 타이머 핸들
 	FTimerHandle WipeoutTimerHandle;
 
-	// ���� ó�� ������ ����
+	// 전멸 처리 중인지 여부
 	bool bIsWipeoutInProgress = false;
 };

@@ -21,21 +21,21 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// �ܺο��� ȣ���� �Լ�
+	// 외부에서 호출할 함수
 
-	// �׷쿡 �� ���
+	// 그룹에 적 등록
 	UFUNCTION(BlueprintCallable, Category = "SpawnGroup")
 	void RegisterEnemy(ADREnemy* Enemy);
 
-	// �׷��� ��� �� Ȱ��ȭ
+	// 그룹의 모든 적 활성화
 	UFUNCTION(BlueprintCallable, Category = "SpawnGroup")
 	void ActivateAllEnemies();
 
-	// ���� �� �� ��ȯ
+	// 남은 적 수 반환
 	UFUNCTION(BlueprintPure, Category = "SpawnGroup")
 	int32 GetAliveEnemyCount() const { return AliveEnemyCount; }
 
-	// ���� ����
+	// 전멸 여부
 	UFUNCTION(BlueprintPure, Category = "SpawnGroup")
 	bool AreAllEnemiesDead() const { return bAllEnemiesDead; }
 
@@ -47,7 +47,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpawnGroup")
 	ADREnemy* GetPartCarrierEnemy() const { return PartCarrierEnemy.Get(); }
 
-	void SetPartCarrierEnemy(ADREnemy* Carrier) { PartCarrierEnemy = Carrier; }
+	void SetPartCarrierEnemy(ADREnemy* Carrier);
 
 	// Delegates
 	UPROPERTY(BlueprintAssignable, Category = "SpawnGroup")
@@ -59,11 +59,11 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
-	// ������Ʈ
+	// 컴포넌트
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USceneComponent> RootSceneComponent;
 
-	// �̸� ��ġ�� �� ����
+	// 미리 배치된 적 참조
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "SpawnGroup|PrePlaced")
 	TArray<TSoftObjectPtr<ADREnemy>> PrePlacedEnemies;
 

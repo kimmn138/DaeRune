@@ -144,25 +144,25 @@ void UDRAttributeSet::Debuff(const FEffectProperties& Props)
 {
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 
-	// Context ����
+	// Context 생성
 	FGameplayEffectContextHandle EffectContext = Props.SourceASC->MakeEffectContext();
 	EffectContext.AddSourceObject(Props.SourceAvatarActor);
 
-	// ����� ���� �Ķ����
+	// 디버프 관련 파라미터
 	const FGameplayTag DamageType = UDRAbilitySystemLibrary::GetDamageType(Props.EffectContextHandle);
 	const float DebuffDamage = UDRAbilitySystemLibrary::GetDebuffDamage(Props.EffectContextHandle);
 	const float DebuffDuration = UDRAbilitySystemLibrary::GetDebuffDuration(Props.EffectContextHandle);
 
-	// ����� ���� (��: ȭ�� �� ��Ÿ�� �����)
+	// 디버프 매핑 (예: 화염 → 불타는 디버프)
 	const FGameplayTag DebuffTag = GameplayTags.DamageTypesToDebuffs[DamageType];
 
-	// AttributeSet�� �̸� ������ DebuffEffectMap���� �ش� �±��� GE Ŭ������ ������
+	// AttributeSet에 미리 설정된 DebuffEffectMap에서 해당 태그의 GE 클래스를 가져옴
 	if (!DebuffEffectMap.Contains(DebuffTag)) return;
 
 	TSubclassOf<UGameplayEffect> DebuffEffectClass = DebuffEffectMap[DebuffTag];
 	if (!DebuffEffectClass) return;
 
-	// GE ���� ����
+	// GE 스펙 생성
 	FGameplayEffectSpecHandle SpecHandle = Props.SourceASC->MakeOutgoingSpec(DebuffEffectClass, 1.f, EffectContext);
 	if (!SpecHandle.IsValid()) return;
 
@@ -171,22 +171,22 @@ void UDRAttributeSet::Debuff(const FEffectProperties& Props)
 	    MutableSpec->SetSetByCallerMagnitude(GameplayTags.Debuff_Damage, DebuffDamage);
         MutableSpec->SetDuration(DebuffDuration, true);
 	
-		// Context�� DamageType ����
+		// Context에 DamageType 설정
 		FDRGameplayEffectContext* DRContext = static_cast<FDRGameplayEffectContext*>(MutableSpec->GetContext().Get());
 		TSharedPtr<FGameplayTag> DebuffDamageType = MakeShareable(new FGameplayTag(DamageType));
 		DRContext->SetDamageType(DebuffDamageType);
 		
-		// ���� ����
+		// 최종 적용
 		Props.TargetASC->ApplyGameplayEffectSpecToSelf(*MutableSpec);
 	}
 }
 
 void UDRAttributeSet::NotifyEnterCombat(const FEffectProperties& Props) const
 {
-	// ���������� ó��
+	// 서버에서만 처리
 	if (!Props.TargetAvatarActor || !Props.TargetAvatarActor->HasAuthority()) return;
 
-	// �ҽ��� �÷��̾��� ���
+	// 소스가 플레이어인 경우
 	if (Props.SourceController && Props.SourceController->IsPlayerController())
 	{
 		if (ADRPlayerState* PS = Props.SourceController->GetPlayerState<ADRPlayerState>())
@@ -195,7 +195,7 @@ void UDRAttributeSet::NotifyEnterCombat(const FEffectProperties& Props) const
 		}
 	}
 
-	// Ÿ���� �÷��̾��� ���
+	// 타겟이 플레이어인 경우
 	if (Props.TargetController && Props.TargetController->IsPlayerController())
 	{
 		if (ADRPlayerState* PS = Props.TargetController->GetPlayerState<ADRPlayerState>())

@@ -7,7 +7,7 @@
 #include "DRGameUserSettings.generated.h"
 
 /**
- * DaeRune Ŀ���� ���� ���� Ŭ����
+ * DaeRune 커스텀 설정 저장 클래스
  */
 UCLASS()
 class DAERUNE_API UDRGameUserSettings : public UGameUserSettings
@@ -15,13 +15,13 @@ class DAERUNE_API UDRGameUserSettings : public UGameUserSettings
 	GENERATED_BODY()
 	
 public:
-    // �̱��� ������
+    // 싱글톤 접근자
     static UDRGameUserSettings* GetDRGameUserSettings();
 
-    // Ŀ���� ���� ����
+    // 커스텀 설정 적용
     void ApplyCustomSettings();
 
-    // �⺻������ �ʱ�ȭ
+    // 기본값으로 초기화
     virtual void SetToDefaults() override;
 
 public:

@@ -11,24 +11,24 @@
 
 ADRLobbyGameState::ADRLobbyGameState()
 {
-	// �ʱⰪ ����
-	MinPlayersToStart = 1;  // �׽�Ʈ�� 1��, ������ 2~4�� ����
+	// 초기값 설정
+	MinPlayersToStart = 1;  // 테스트용 1명, 실제는 2~4명 권장
 }
 
 void ADRLobbyGameState::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// ���������� ����
+	// 서버에서만 실행
 	if (HasAuthority())
 	{
-		// �� �ڵ� �ʱ�ȭ
-		// ���� ����ý����� �̺�Ʈ ����
+		// 방 코드 초기화
+		// 세션 서브시스템의 이벤트 구독
 		if (UGameInstance* GameInstance = GetGameInstance())
 		{
 			if (UMultiplayerSessionsSubsystem* Subsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>())
 			{
-				// �̹� �� �ڵ尡 ������ ��� ����
+				// 이미 방 코드가 있으면 즉시 설정
 				FString ExistingCode = Subsystem->GetCurrentRoomCode();
 				if (!ExistingCode.IsEmpty())
 				{
@@ -36,7 +36,7 @@ void ADRLobbyGameState::BeginPlay()
 				}
 				else
 				{
-					// ������ �̺�Ʈ ���
+					// 없으면 이벤트 대기
 					Subsystem->MultiplayerOnRoomCodeGenerated.AddDynamic(
 						this,
 						&ADRLobbyGameState::InitializeRoomCode

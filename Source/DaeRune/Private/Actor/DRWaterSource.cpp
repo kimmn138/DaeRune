@@ -52,7 +52,7 @@ void ADRWaterSource::OnOverlap(AActor* TargetActor)
     if (!HasAuthority()) return;
     if (!bIsAvailable) return;
 
-    // �÷��̾�� �� ä��� �õ�
+    // 플레이어면 물 채우기 시도
     if (ADRCharacter* PlayerCharacter = Cast<ADRCharacter>(TargetActor))
     {
         FillPlayerWater(PlayerCharacter);
@@ -61,7 +61,7 @@ void ADRWaterSource::OnOverlap(AActor* TargetActor)
 
 void ADRWaterSource::OnEndOverlap(AActor* TargetActor)
 {
-    // ��������Ʈ���� �ʿ�� �������̵�
+    // 블루프린트에서 필요시 오버라이드
 }
 
 void ADRWaterSource::FillPlayerWater(AActor* TargetActor)
@@ -80,13 +80,13 @@ void ADRWaterSource::FillPlayerWater(AActor* TargetActor)
     );
     if (!TargetAS) return;
 
-    // �̹� ���� ���� �������� ����
+    // 이미 물이 가득 차있으면 무시
     if (FMath::IsNearlyEqual(TargetAS->GetWater(), TargetAS->GetMaxWater()))
     {
         return;
     }
 
-    // �� ä��� ȿ�� ����
+    // 물 채우기 효과 적용
     if (WaterFillEffectClass)
     {
         FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
@@ -104,11 +104,11 @@ void ADRWaterSource::FillPlayerWater(AActor* TargetActor)
 
             MulticastPlayWaterGainSound();
 
-            // ���� �˸�
+            // 사용됨 알림
             SetWaterSourceAvailable(false);
             StartRechargeTimer();
 
-            // ��������Ʈ �̺�Ʈ ȣ��
+            // 블루프린트 이벤트 호출
             OnWaterSourceUsed(PlayerCharacter);
 
             // C++ 델리게이트 브로드캐스트 (튜토리얼 매니저 등 외부 리스너 통지)
@@ -148,7 +148,7 @@ void ADRWaterSource::OnSourceRecharged()
 
     SetWaterSourceAvailable(true);
 
-    // ��������Ʈ �̺�Ʈ ȣ��
+    // 블루프린트 이벤트 호출
     OnWaterSourceRecharged();
 }
 

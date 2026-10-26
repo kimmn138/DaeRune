@@ -22,7 +22,7 @@
 
 void UOverlayWidgetController::BroadcastInitialValues()
 {
-	// ���� ���� �� ���� ��Ʈ����Ʈ ������ UI�� ����
+	// 게임 시작 시 현재 어트리뷰트 값들을 UI에 전송
 	OnHealthChanged.Broadcast(GetDRAS()->GetHealth());
 	OnMaxHealthChanged.Broadcast(GetDRAS()->GetMaxHealth());
 	OnWaterChanged.Broadcast(GetDRAS()->GetWater());
@@ -100,7 +100,7 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 	// 약 참조 캡처로 안전한 람다 바인딩
 	TWeakObjectPtr<UOverlayWidgetController> WeakThis(this);
 
-	// �ݹ� ���ε�
+	// 콜백 바인딩
 	FDelegateHandle HealthHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetHealthAttribute()).AddLambda(
 		[WeakThis](const FOnAttributeChangeData& Data)
 		{
@@ -146,7 +146,7 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 	ASCDelegateHandles.Add(MaxWaterHandle);
 	
 
-	// �����Ƽ ���� �ʱ�ȭ ó��
+	// 어빌리티 정보 초기화 처리
 	if (GetDRASC())
 	{
 		// 자판기 잭팟 스택 변경 델리게이트 바인딩
@@ -245,14 +245,14 @@ void UOverlayWidgetController::BindCallbacksToDependencies()
 			}
 		);
 		
-		// ���� �����Ƽ�� �̹� �ο��Ǿ��ٸ� ��� ��ε�ĳ��Ʈ
+		// 시작 어빌리티가 이미 부여되었다면 즉시 브로드캐스트
 		if (GetDRASC()->bStartupAbilitiesGiven)
 		{
 			BroadcastAbilityInfo();
 		}
 		else
 		{
-			// ���� �ο����� �ʾҴٸ� �ο� �Ϸ� ������ ��ε�ĳ��Ʈ�ϵ��� ��������Ʈ ���ε�
+			// 아직 부여되지 않았다면 부여 완료 시점에 브로드캐스트하도록 델리게이트 바인딩
 			GetDRASC()->AbilitiesGivenDelegate.AddUObject(this, &UOverlayWidgetController::BroadcastAbilityInfo);
 		}
 
