@@ -40,13 +40,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Room1")
 	FName SpawnPointRoomID = TEXT("Room1");
 
-	// ========== 콜백 ==========
+	// ========== 방 트리거 ==========
 
-	UFUNCTION()
-	void HandleAllInsideRoom1();
-
-	UFUNCTION()
-	void HandleInsideCountChanged(int32 InsideCount, int32 AliveTotal);
+	// 전원 방1 입장 → 봉쇄 + 웨이브 예약
+	virtual void OnRoomAllInside() override;
+	virtual bool HasRoomStarted() const override { return bCombatStarted; }
 
 	// ========== 런타임 상태 ==========
 

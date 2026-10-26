@@ -26,12 +26,14 @@ class DAERUNE_API UDRPhase1 : public UDRPhaseBase
 	GENERATED_BODY()
 
 public:
-	// 페이즈 완료에 필요한 설치 부품 수
+	// 페이즈 완료에 필요한 설치 부품 수 (통로 스폰 그룹 하나당 부품 하나)
 	static constexpr int32 RequiredPartsToComplete = 2;
+
+	// 부품 운반자의 이동 속도 배율
+	static constexpr float CarrierMoveSpeedRatio = 0.5f;
 
 	virtual void OnPhaseStart() override;
 	virtual void OnPhaseEnd() override;
-	virtual void OnEnemyDeath(AActor* DeadEnemy) override;
 	virtual bool IsCompleted() const override;
 
 protected:
@@ -40,7 +42,6 @@ protected:
 
 	// ========== 사이트 주변 스폰 ==========
 	void SpawnEnemiesAroundCleanserSite(ADRCleanserSite* Site);
-	AActor* SpawnEnemy(TSubclassOf<AActor> EnemyClass, const FVector& Location);
 
 	// ========== 통로 스폰 그룹 / 부품 운반자 ==========
 	void CollectSpawnGroups();

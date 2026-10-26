@@ -1,4 +1,4 @@
-﻿// Copyright DaeRune
+// Copyright DaeRune
 
 #pragma once
 
@@ -54,6 +54,7 @@ enum class EWaveState : uint8
 	Completed UMETA(DisplayName = "Completed")
 };
 
+// DataTable 이 없을 때 쓰는 폴백 구조 (FWaveDataRow 와 같은 필드 — BP 에 저장된 폴백 데이터 호환을 위해 따로 둔다)
 USTRUCT(BlueprintType)
 struct FWaveData
 {
@@ -66,6 +67,7 @@ struct FWaveData
 	float RestDuration = 10.0f;
 };
 
+// DataTable 이 없을 때 쓰는 폴백 구조 (FWaveLevelModifierRow 와 같은 필드)
 USTRUCT(BlueprintType)
 struct FWaveLevelModifier
 {
@@ -90,21 +92,26 @@ struct FWaveLevelModifier
 	bool bSpawnEliteBoss = false;
 };
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCleanserSiteReadySignature, ADRCleanserSite*, FirstCleanserSite, ADRCleanserSite*, SecondCleanserSite);
-
+/**
+ * 방어 페이즈 (페이즈 인덱스 1). 모든 웨이브를 클리어하면 완료된다.
+ */
 UCLASS()
 class DAERUNE_API UDRPhase3 : public UDRPhaseBase
 {
 	GENERATED_BODY()
 
 public:
-	UDRPhase3();
-
 	// 총 웨이브 수 (GameState의 TotalWaves 로도 전달됨)
 	static constexpr int32 TotalWaveCount = 5;
 
+	// 웨이브 레벨 상한 (DataTable 행 Level1..Level5)
+	static constexpr int32 MaxWaveLevel = 5;
+
 	// 한 배치에 동시 스폰하는 몬스터 수 (= 사용하는 스폰 포인트 수)
 	static constexpr int32 SpawnBatchSize = 4;
+
+	// 이 레벨부터 적의 광폭화 체력 비율을 낮춘다(HighLevelEnrageThreshold)
+	static constexpr int32 HighLevelEnrageWaveLevel = 4;
 
 	virtual void OnPhaseStart() override;
 	virtual void OnPhaseEnd() override;
@@ -114,11 +121,9 @@ public:
 	// 치트: 현재 웨이브에서 스폰된 적을 모두 제거하고 다음 웨이브로 즉시 진행. 마지막 웨이브였다면 페이즈 종료.
 	void SkipToNextWave();
 
+	// 엘리트 보스 사망 · 소멸
 	UFUNCTION()
 	void OnEliteEnemyDeath(AActor* DeadEnemy);
-
-	UPROPERTY(BlueprintAssignable)
-	FOnCleanserSiteReadySignature OnCleanserSiteReadyDelegate;
 
 protected:
 	virtual void BeginDestroy() override;
@@ -152,10 +157,15 @@ protected:
 
 	void SpawnEliteMonster(const FVector& SpawnLocation);
 
+	// 웨이브 레벨 · 플래그를 BeginPlay 전에 넣는다 (일반 적 · 엘리트 공용)
+	void ConfigureWaveEnemy(ADREnemy& Enemy) const;
+
+	// 엘리트 보스를 조용히 제거하고 보스 BGM 을 끝낸다 (페이즈 종료 · 웨이브 스킵 공용)
+	void DestroyEliteBosses();
+
 	FWaveLevelModifier GetWaveLevelModifier(int32 WaveLevel) const;
 	FWaveLevelModifier GetDefaultWaveLevelModifier(int32 WaveLevel) const;
 	FWaveData GetWaveData(int32 WaveNumber) const;
-	FWaveData GetDefaultWaveData(int32 WaveNumber) const;
 
 	// 웨이브 시작 시 1회 계산해 캐시 (스폰 틱마다 DataTable 조회 + 정규화 재수행 방지)
 	FWaveData CachedWaveData;
@@ -165,12 +175,6 @@ protected:
 
 	void InitializeCleanserSite();
 	void InitializeActiveSpawnPoints();
-
-	UFUNCTION()
-	void OnCleanserSiteDestroyed(ADRCleanserSite* DestroyedSite) const;
-
-	UFUNCTION()
-	void OnCleanserSiteHealthBelowHalf();
 
 	UFUNCTION()
 	void OnCleanserSiteHealthZero();
@@ -209,8 +213,9 @@ protected:
 	void FindPoisonGasSpawnPoints();
 
 private:
-	void GrantEliteBossTag();
-	void RemoveEliteBossTag();
+	// 엘리트 보스 등장/퇴장 시 BGM 전환
+	void StartEliteBossBGM();
+	void EndEliteBossBGM();
 
 	UPROPERTY(EditDefaultsOnly, Category = "Phase3|Config|DataTable")
 	TObjectPtr<UDataTable> WaveDataTable;
@@ -225,9 +230,6 @@ private:
 	TMap<int32, FWaveLevelModifier> WaveLevelModifiers;
 
 	int32 MaxMonsterCount = 100;
-	float DefenseDuration = 300.0f;
-	float SpawnDistanceMin = 500.0f;
-	float SpawnDistanceMax = 2000.0f;
 	float HighLevelEnrageThreshold = 0.25f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Phase3|Enemies")
@@ -248,12 +250,13 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<AActor>> EnemySpawnPoints;
 
-	// 한 배치(4개 포인트)에서 아직 사용하지 않은 인덱스 목록
-	TArray<int32> RemainingEnemySpawnPointIndices;
+	// 한 배치(4개 포인트)에서 아직 사용하지 않은 스폰 포인트
+	FDRShuffledIndexPool SpawnPointPool;
 
 	UPROPERTY()
 	int32 CurrentWaveNumber = 0;
 
+	// 초기 웨이브 레벨은 1
 	UPROPERTY()
 	int32 CurrentWaveLevel = 1;
 
@@ -271,7 +274,6 @@ private:
 
 	FTimerHandle WaveTimerHandle;
 	FTimerHandle SpawnTimerHandle;
-	FTimerHandle DefenseTimerHandle;
 	FTimerHandle PoisonGasSpawnTimerHandle;
 
 	int32 CurrentSpawnTick = 0;
@@ -281,6 +283,9 @@ private:
 
 	// 페이즈 목표 UI에 현재 살아있는 적 수(일반 + 엘리트)를 브로드캐스트한다.
 	void BroadcastAliveEnemyObjective();
+
+	// 살아 있는 엘리트 보스 수
+	int32 GetAliveEliteCount() const;
 
 	// MonsterSpawnCycle에서 현재 읽을 인덱스
 	int32 CurrentSpawnCycleIndex = 0;
@@ -304,8 +309,4 @@ private:
 	float EliteSpawnVFXDuration = 3.0f;
 
 	FTimerHandle EliteSpawnVFXTimerHandle;
-
-	TMap<TObjectPtr<ADRCleanserSite>, bool> CleanserSiteHalfHealthTriggered;
-
-	float DefenseStartTime = 0.0f;
 };

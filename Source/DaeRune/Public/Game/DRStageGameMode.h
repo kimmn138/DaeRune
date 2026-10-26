@@ -103,6 +103,10 @@ protected:
 	void EndCurrentPhase();
 
 private:
+	// 현재 페이즈가 진행 중일 때만 OnPhaseEnd 를 부른다.
+	// EndCurrentPhase → StartPhase, 게임 오버/클리어가 겹쳐도 파생 페이즈의 정리 코드가 두 번 돌지 않게 한다.
+	void EndCurrentPhaseIfActive();
+
 	// 현재 실행 중인 페이즈
 	UPROPERTY()
 	TObjectPtr<UDRPhaseBase> CurrentPhase;
@@ -116,6 +120,7 @@ private:
 	TArray<TObjectPtr<UDRPhaseBase>> PhaseInstances;
 
 	// GameState 캐시
+	UPROPERTY()
 	TObjectPtr<ADRStageGameState> CachedGameState;
 
 	// 레벨에서 찾은 클렌저 사이트들 (BeginPlay에서 자동 탐색)

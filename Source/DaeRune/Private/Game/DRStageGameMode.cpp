@@ -64,10 +64,7 @@ void ADRStageGameMode::TriggerGameOver()
 
 	bIsWipeoutInProgress = true;
 
-	if (CurrentPhase && IsValid(CurrentPhase))
-	{
-		CurrentPhase->OnPhaseEnd();
-	}
+	EndCurrentPhaseIfActive();
 
 	// Multicast RPC濡?紐⑤뱺 ?대씪?댁뼵?몄뿉???ъ슫???ъ깮
 	if (ADRStageGameState* StageGameState = GetGameState<ADRStageGameState>())
@@ -97,10 +94,7 @@ void ADRStageGameMode::TriggerGameClear()
 
 	bIsWipeoutInProgress = true;
 
-	if (CurrentPhase && IsValid(CurrentPhase))
-	{
-		CurrentPhase->OnPhaseEnd();
-	}
+	EndCurrentPhaseIfActive();
 
 	// Multicast RPC濡?紐⑤뱺 ?대씪?댁뼵?몄뿉???ъ슫???ъ깮
 	if (ADRStageGameState* StageGameState = GetGameState<ADRStageGameState>())
@@ -329,7 +323,7 @@ void ADRStageGameMode::StartPhase(int32 PhaseIndex)
 		// 占쏙옙占쏙옙 Phase占쏙옙 ActiveCleanserSites 占쏙옙占쏙옙
 		TArray<TObjectPtr<ADRCleanserSite>> PreviousActiveSites = CurrentPhase->GetActiveCleanserSites();
 
-		CurrentPhase->OnPhaseEnd();
+		EndCurrentPhaseIfActive();
 
 		// 占쏙옙 Phase占쏙옙 占쏙옙占쏙옙
 		if (PhaseIndex > 0 && PreviousActiveSites.Num() > 0)
@@ -376,15 +370,20 @@ void ADRStageGameMode::EndCurrentPhase()
 	CachedGameState->Multicast_ObjectiveCompleted();
 
 	// 占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙 처占쏙옙
-	if (CurrentPhase)
-	{
-		CurrentPhase->OnPhaseEnd(); // PhaseBase占쏙옙占쏙옙 占쏙옙占쏙옙
-	}
+	EndCurrentPhaseIfActive();
 
 	// 占쏙옙占쏙옙占쏙옙占쏙옙트 占싹뤄옙 占싱븝옙트 호占쏙옙
 	// OnPhaseCompleted();
 
 	TransitionToNextPhase();
+}
+
+void ADRStageGameMode::EndCurrentPhaseIfActive()
+{
+	if (IsValid(CurrentPhase) && CurrentPhase->IsPhaseActive())
+	{
+		CurrentPhase->OnPhaseEnd();
+	}
 }
 
 void ADRStageGameMode::TransitionToNextPhase()

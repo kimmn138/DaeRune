@@ -8,15 +8,11 @@
 #include "AbilitySystem/Abilities/DRVendingMachineAttackSpeedBuff.h"
 #include "GameplayEffect.h"
 #include "AbilitySystem/DRAttributeSet.h"
-#include "AbilitySystem/DRCleanserSiteAttributeSet.h"
 #include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "AbilitySystem/Data/StatusEffectInfo.h"
-#include "Actor/DRCleanserSite.h"
 #include "Game/DRChipCatalog.h"
 #include "Game/DRGameInstance.h"
-#include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
-#include "Phase/DRPhase3.h"
 #include "Phase/DRPhaseBase.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
@@ -365,18 +361,6 @@ void UOverlayWidgetController::HandleCorruptedStateChanged(bool bIsCorrupted)
 	}
 }
 
-void UOverlayWidgetController::BindCallbacksCleanserSiteToDependencies()
-{
-	// 클렌저사이트 체력 델리게이트 바인딩 (서버 전용)
-	if (ADRStageGameMode* SGM = Cast<ADRStageGameMode>(GetWorld()->GetAuthGameMode()))
-	{
-		if(UDRPhase3* Phase3 = Cast<UDRPhase3>(SGM->GetCurrentPhase()))
-		{
-			Phase3->OnCleanserSiteReadyDelegate.AddDynamic(this, &UOverlayWidgetController::BindCleanserSite);
-		}
-	}
-}
-
 void UOverlayWidgetController::UnbindAllDelegates()
 {
 	UWorld* World = GetWorld();
@@ -396,16 +380,6 @@ void UOverlayWidgetController::UnbindAllDelegates()
 		}
 		ASCDelegateHandles.Empty();
 	}
-
-	// CleanserSite ASC 델리게이트 언바인딩
-	for (const auto& Pair : CleanserSiteDelegateHandles)
-	{
-		if (UAbilitySystemComponent* ASC = Pair.Key.Get())
-		{
-			// 핸들이 유효하면 언바인딩 (람다에서 WeakThis 체크로 안전)
-		}
-	}
-	CleanserSiteDelegateHandles.Empty();
 
 	// 장착 칩 변경 델리게이트 언바인딩 (Plan3(공용칩) §7.2).
 	// ★아래 GameState 조기 반환보다 먼저★ 해야 한다 — GameState 가 없을 때도 반드시 풀려야
@@ -643,9 +617,6 @@ void UOverlayWidgetController::HandleWaveDefenseUIActiveChanged(bool bIsActive)
 
 	if (bIsActive)
 	{
-		// 클렌저 사이트 HP UI 바인딩 (기존에는 페이즈 인덱스 == 2 조건이었음)
-		BindCallbacksCleanserSiteToDependencies();
-
 		if (CachedWavePhaseNumber != 2)
 		{
 			CachedWavePhaseNumber = 2;
@@ -852,74 +823,6 @@ void UOverlayWidgetController::UpdateCrosshairState(bool bForceBroadcast)
 
 	CachedCrosshairState = NewState;
 	OnCrosshairStateChanged.Broadcast(NewState);
-}
-
-void UOverlayWidgetController::BindCleanserSite(ADRCleanserSite* FirstCleanserSite,ADRCleanserSite* SecondCleanserSite)
-{
-	if (!FirstCleanserSite || !SecondCleanserSite) return;
-
-	UAbilitySystemComponent* FirstSiteAsc = FirstCleanserSite->GetAbilitySystemComponent();
-	const UDRCleanserSiteAttributeSet* FirstSiteAs = FirstCleanserSite->GetAttributeSet();
-	if (!FirstSiteAsc || !FirstSiteAs) return;
-
-	UAbilitySystemComponent* SecondSiteAsc = SecondCleanserSite->GetAbilitySystemComponent();
-	const UDRCleanserSiteAttributeSet* SecondSiteAs = SecondCleanserSite->GetAttributeSet();
-	if (!SecondSiteAsc || !SecondSiteAs) return;
-
-	// 약 참조 캡처로 안전한 람다 바인딩
-	TWeakObjectPtr<UOverlayWidgetController> WeakThis(this);
-
-	// 첫 번째 CleanserSite 체력 변경 바인딩
-	FDelegateHandle FirstHealthHandle = FirstSiteAsc->GetGameplayAttributeValueChangeDelegate(FirstSiteAs->GetHealthAttribute()).AddLambda(
-		[WeakThis](const FOnAttributeChangeData& Data)
-		{
-			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-			{
-				StrongThis->OnFirstCleanserHealthChanged.Broadcast(Data.NewValue);
-			}
-		}
-	);
-	CleanserSiteDelegateHandles.Add(TPair<TWeakObjectPtr<UAbilitySystemComponent>, FDelegateHandle>(FirstSiteAsc, FirstHealthHandle));
-
-	FDelegateHandle FirstMaxHealthHandle = FirstSiteAsc->GetGameplayAttributeValueChangeDelegate(FirstSiteAs->GetMaxHealthAttribute()).AddLambda(
-		[WeakThis](const FOnAttributeChangeData& Data)
-		{
-			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-			{
-				StrongThis->OnFirstCleanserMaxHealthChanged.Broadcast(Data.NewValue);
-			}
-		}
-	);
-	CleanserSiteDelegateHandles.Add(TPair<TWeakObjectPtr<UAbilitySystemComponent>, FDelegateHandle>(FirstSiteAsc, FirstMaxHealthHandle));
-
-	// 두 번째 CleanserSite 체력 변경 바인딩
-	FDelegateHandle SecondHealthHandle = SecondSiteAsc->GetGameplayAttributeValueChangeDelegate(SecondSiteAs->GetHealthAttribute()).AddLambda(
-		[WeakThis](const FOnAttributeChangeData& Data)
-		{
-			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-			{
-				StrongThis->OnSecondCleanserHealthChanged.Broadcast(Data.NewValue);
-			}
-		}
-	);
-	CleanserSiteDelegateHandles.Add(TPair<TWeakObjectPtr<UAbilitySystemComponent>, FDelegateHandle>(SecondSiteAsc, SecondHealthHandle));
-
-	FDelegateHandle SecondMaxHealthHandle = SecondSiteAsc->GetGameplayAttributeValueChangeDelegate(SecondSiteAs->GetMaxHealthAttribute()).AddLambda(
-		[WeakThis](const FOnAttributeChangeData& Data)
-		{
-			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-			{
-				StrongThis->OnSecondCleanserMaxHealthChanged.Broadcast(Data.NewValue);
-			}
-		}
-	);
-	CleanserSiteDelegateHandles.Add(TPair<TWeakObjectPtr<UAbilitySystemComponent>, FDelegateHandle>(SecondSiteAsc, SecondMaxHealthHandle));
-
-	// 초기값 UI 표시
-	OnFirstCleanserHealthChanged.Broadcast(FirstSiteAs->GetHealth());
-	OnFirstCleanserMaxHealthChanged.Broadcast(FirstSiteAs->GetMaxHealth());
-	OnSecondCleanserHealthChanged.Broadcast(SecondSiteAs->GetHealth());
-	OnSecondCleanserMaxHealthChanged.Broadcast(SecondSiteAs->GetMaxHealth());
 }
 
 #undef LOCTEXT_NAMESPACE

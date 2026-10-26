@@ -30,8 +30,6 @@ class UDRUserWidget;
 class UAbilityInfo;
 class UDRAbilitySystemComponent;
 class UStatusEffectInfo;
-class ADRCleanserSite;
-class UDRCleanserSiteAttributeSet;
 
 // ��Ʈ����Ʈ ���� �� UI ������Ʈ�� ��������Ʈ
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAttributeChangedSignature, float, NewValue);
@@ -102,7 +100,6 @@ public:
 	// �θ� Ŭ���� ���� �Լ� �������̵�
 	virtual void BroadcastInitialValues() override;
 	virtual void BindCallbacksToDependencies() override;
-	void BindCallbacksCleanserSiteToDependencies();
 
 	// ��������Ʈ ����ε� �Լ�
 	void UnbindAllDelegates();
@@ -120,19 +117,6 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnMaxWaterChanged;
-
-	// Ŭ��������Ʈ ü�� ���� UI ������Ʈ ��������Ʈ
-	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
-	FOnAttributeChangedSignature  OnFirstCleanserHealthChanged;
-
-	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
-	FOnAttributeChangedSignature  OnFirstCleanserMaxHealthChanged;
-
-	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
-	FOnAttributeChangedSignature  OnSecondCleanserHealthChanged;
-
-	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
-	FOnAttributeChangedSignature  OnSecondCleanserMaxHealthChanged;
 
 	// ��ǥ UI ������Ʈ ��������Ʈ
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Objective")
@@ -331,9 +315,6 @@ private:
 	// 목표 데이터에 PhaseAlarmText가 없을 때 사용하는 레거시 문구 (스테이지1 호환)
 	FText GetLegacyPhaseAlarmText(int32 PhaseIndex) const;
 	
-	// Ŭ���� ����Ʈ ASC/AttributeSet ���ε� �Լ�
-	UFUNCTION()
-	void BindCleanserSite(ADRCleanserSite* FirstCleanserSite, ADRCleanserSite* SecondCleanserSite);
 
 	FTimerHandle PhaseBindingDelayTimer;
 	FTimerHandle WaveTimerBindingDelayTimer;
@@ -347,7 +328,6 @@ private:
 
 	// ASC 델리게이트 핸들 (안전한 정리를 위해)
 	TArray<FDelegateHandle> ASCDelegateHandles;
-	TArray<TPair<TWeakObjectPtr<UAbilitySystemComponent>, FDelegateHandle>> CleanserSiteDelegateHandles;
 	
 	// Phase 알람용 캐시 (Phase 변경 시 알람 표시 여부 판단)
 	int32 CachedPhaseNumber = -1;
