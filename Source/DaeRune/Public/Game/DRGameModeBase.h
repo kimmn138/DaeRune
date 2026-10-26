@@ -43,6 +43,19 @@ public:
 	// 프로젝트에 Logout 오버라이드가 없어 신규 추가한다.
 	virtual void Logout(AController* Exiting) override;
 
+	/**
+	 * 컨트롤러에 PawnClass 의 새 폰을 만들어 빙의시킨다 (서버). 기존 폰은 파괴한다.
+	 * ASC 는 PlayerState 에 있어 어빌리티 · 효과 · 속성이 그대로 이어진다 — 클래스를 바꾸는 쪽(로비)은 미리 비운다.
+	 */
+	APawn* RespawnPlayerPawn(AController* Controller, TSubclassOf<APawn> PawnClass, const FTransform& SpawnTransform);
+
+	/**
+	 * 사망한 플레이어를 At 에서 되살린다 (서버).
+	 * 사망 직후라 폰이 남아 있으면 그 폰을 되살리고, 시체가 이미 정리됐으면 같은 클래스의 새 폰을 만든다.
+	 * 살아 있는 플레이어면 아무것도 하지 않고 false.
+	 */
+	bool RevivePlayer(APlayerController* PC, const FTransform& At, float HealthRatio, float WaterRatio);
+
 protected:
 	virtual void BeginPlay() override;
 

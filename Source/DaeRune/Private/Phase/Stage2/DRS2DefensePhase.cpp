@@ -295,23 +295,23 @@ void UDRS2DefensePhase::ReviveAllDeadPlayers(ADRS2StageDirector* Director)
 		return;
 	}
 
+	// ★사망 2.2초 뒤 시체(폰)가 정리된다★ — 폰이 없는 사망자도 대상이다.
+	// 게임모드가 폰이 남아 있으면 되살리고, 없으면 같은 클래스로 새로 만든다 (ADRGameModeBase::RevivePlayer)
 	int32 Slot = 0;
 	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 	{
-		ADRCharacter* Character = It->IsValid() ? Cast<ADRCharacter>(It->Get()->GetPawn()) : nullptr;
-		if (!Character) continue;
-
-		// IsDead 는 ICombatInterface 의 BlueprintNativeEvent
-		if (!ICombatInterface::Execute_IsDead(Character)) continue;
+		APlayerController* PC = It->Get();
+		if (!PC) continue;
 
 		const int32 PointIndex = Director->Room3RevivePoints.IsValidIndex(Slot) ? Slot : 0;
 		const AActor* RevivePoint = Director->Room3RevivePoints[PointIndex];
 		if (!IsValid(RevivePoint)) continue;
 
-		Character->Revive(RevivePoint->GetActorLocation(), ReviveHealthRatio, ReviveWaterRatio);
+		// 살아 있는 플레이어는 false — 부활 지점 슬롯을 쓰지 않는다
+		if (!GameMode->RevivePlayer(PC, RevivePoint->GetActorTransform(), ReviveHealthRatio, ReviveWaterRatio)) continue;
 		++Slot;
 
-		UE_LOG(LogDR, Log, TEXT("[S2P3] 부활: %s"), *Character->GetName());
+		UE_LOG(LogDR, Log, TEXT("[S2P3] 부활: %s"), PC->PlayerState ? *PC->PlayerState->GetPlayerName() : *PC->GetName());
 	}
 }
 

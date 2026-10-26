@@ -67,6 +67,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Combat|Revive")
 	virtual void Revive(const FVector& ReviveLocation, float HealthRatio = 0.5f, float WaterRatio = 0.5f);
 
+	// 체력 · 물을 최대치에 대한 비율로 맞춘다 (서버). 새 폰으로 부활시킬 때도 쓴다.
+	void SetReviveAttributes(float HealthRatio, float WaterRatio);
+
 	// 부활 상태 복원 RPC (전 클라 공통 연출/컴포넌트 복원)
 	UFUNCTION(NetMulticast, Reliable)
 	virtual void MulticastHandleRevive();
@@ -100,6 +103,12 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void Destroyed() override;
+
+	// 부활 직전 서버 처리 (파생: 오염 해제 등). 체력 · 물 비율을 맞추기 전에 불린다.
+	virtual void PrepareRevive() {}
+
+	// 플레이어 사망 후 시체 정리 타이머 — 그 전에 부활하면 Revive 가 취소한다
+	FTimerHandle DeathCleanupTimerHandle;
 
 	// 레벨
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Class Defaults")

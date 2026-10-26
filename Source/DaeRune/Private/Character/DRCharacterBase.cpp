@@ -19,6 +19,16 @@
 #include "AbilitySystem/DRAttributeSet.h"
 #include "Animation/AnimInstance.h"
 
+namespace
+{
+	// 플레이어 사망 → 시체 정리 · 관전 시작까지의 시간 (사망 연출이 끝날 즈음)
+	constexpr float PlayerBodyCleanupDelay = 2.2f;
+	constexpr float PlayerSpectateDelay = 2.5f;
+
+	// 무기가 붙는 3인칭 메시 소켓 (사망 시 서버에서 떼고, 부활 시 다시 붙인다)
+	const FName WeaponAttachSocketName(TEXT("WeaponHandSocket"));
+}
+
 ADRCharacterBase::ADRCharacterBase()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -43,7 +53,7 @@ ADRCharacterBase::ADRCharacterBase()
 
 	// 무기 컴포넌트 생성 및 소켓 부착
 	Weapon = CreateDefaultSubobject<USkeletalMeshComponent>("Weapon");
-	Weapon->SetupAttachment(GetMesh(), FName("WeaponHandSocket"));
+	Weapon->SetupAttachment(GetMesh(), WeaponAttachSocketName);
 	Weapon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Weapon->SetOwnerNoSee(true);
 }
@@ -123,32 +133,22 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 			}
 		}
 
-		// 관전 시작
+		// 관전 시작 예약 — 그 전에 부활하면 취소된다 (예약은 PC 가 들고 있다: 폰은 곧 정리된다)
 		if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
 		{
-			// 딜레이 후 관전 모드 전환
-			FTimerHandle SpectatorTimerHandle;
-			GetWorld()->GetTimerManager().SetTimer(
-				SpectatorTimerHandle,
-				FTimerDelegate::CreateWeakLambda(DRPC, [DRPC]()
-				{
-					DRPC->ClientStartSpectating();
-				}),
-				2.5f,
-				false
-			);
+			DRPC->ScheduleSpectating(PlayerSpectateDelay);
 		}
 
-		// 캐릭터 액터 파괴
-		FTimerHandle DestroyTimerHandle;
-		GetWorld()->GetTimerManager().SetTimer(
-		   DestroyTimerHandle,
-		   FTimerDelegate::CreateWeakLambda(this, [this]()
-		   {
-			  Destroy();
-		   }),
-		   2.2f,
-		   false
+		// 시체 정리 — 그 전에 부활하면 Revive 가 취소한다.
+		// 정리된 뒤의 부활은 게임모드가 새 폰을 만들어 처리한다 (ADRGameModeBase::RevivePlayer)
+		GetWorldTimerManager().SetTimer(
+			DeathCleanupTimerHandle,
+			FTimerDelegate::CreateWeakLambda(this, [this]()
+			{
+				Destroy();
+			}),
+			PlayerBodyCleanupDelay,
+			false
 		);
 	}
 	else
@@ -266,27 +266,40 @@ void ADRCharacterBase::Revive(const FVector& ReviveLocation, float HealthRatio, 
 {
 	if (!HasAuthority() || !bDead) return;
 
+	// 사망 처리가 예약해 둔 시체 정리를 취소한다 — 이 폰을 그대로 되살린다
+	GetWorldTimerManager().ClearTimer(DeathCleanupTimerHandle);
+
 	// 부활 지점으로 이동 (물리 텔레포트 - 스윕 없이)
 	SetActorLocation(ReviveLocation, false, nullptr, ETeleportType::TeleportPhysics);
 
-	// 어트리뷰트 복원. 어트리뷰트 세트 종류에 무관하게 태그 기반으로 처리하지 않고
-	// 기본 Health/MaxHealth 만 다루므로 UDRAttributeSet 공통 경로를 사용한다.
-	if (AbilitySystemComponent)
-	{
-		if (const UDRAttributeSet* DRAttributes = Cast<UDRAttributeSet>(
-			AbilitySystemComponent->GetAttributeSet(UDRAttributeSet::StaticClass())))
-		{
-			const float TargetHealth = FMath::Max(1.f, DRAttributes->GetMaxHealth() * HealthRatio);
-			AbilitySystemComponent->SetNumericAttributeBase(DRAttributes->GetHealthAttribute(), TargetHealth);
-
-			const float TargetWater = DRAttributes->GetMaxWater() * WaterRatio;
-			AbilitySystemComponent->SetNumericAttributeBase(DRAttributes->GetWaterAttribute(), TargetWater);
-		}
-	}
+	PrepareRevive();
+	SetReviveAttributes(HealthRatio, WaterRatio);
 
 	// 사망 상태 해제 -> 전 클라에서 상태/연출 복원
 	bDead = false;
 	MulticastHandleRevive();
+
+	// 관전 예약 취소 + 관전 중이었으면 내 시점 · HUD 로 복귀
+	if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(GetController()))
+	{
+		DRPC->CancelPendingSpectate();
+		DRPC->ClientStopSpectating();
+	}
+}
+
+void ADRCharacterBase::SetReviveAttributes(float HealthRatio, float WaterRatio)
+{
+	if (!HasAuthority() || !AbilitySystemComponent) return;
+
+	// 어트리뷰트 세트 종류(플레이어 · 적)와 무관하게 공통 Health / Water 만 다룬다
+	const UDRAttributeSet* DRAttributes = AbilitySystemComponent->GetSet<UDRAttributeSet>();
+	if (!DRAttributes) return;
+
+	const float TargetHealth = FMath::Max(1.f, DRAttributes->GetMaxHealth() * HealthRatio);
+	AbilitySystemComponent->SetNumericAttributeBase(DRAttributes->GetHealthAttribute(), TargetHealth);
+
+	const float TargetWater = DRAttributes->GetMaxWater() * WaterRatio;
+	AbilitySystemComponent->SetNumericAttributeBase(DRAttributes->GetWaterAttribute(), TargetWater);
 }
 
 void ADRCharacterBase::MulticastHandleRevive_Implementation()
@@ -315,6 +328,12 @@ void ADRCharacterBase::MulticastHandleRevive_Implementation()
 		if (UAnimInstance* AnimInstance = MeshComp->GetAnimInstance())
 		{
 			AnimInstance->StopAllMontages(0.1f);
+		}
+
+		// 사망 시(서버) 떼어 둔 무기를 다시 손에 붙인다 — 클라에서는 떼지 않았으므로 그대로다
+		if (Weapon && Weapon->GetAttachParent() != MeshComp)
+		{
+			Weapon->AttachToComponent(MeshComp, FAttachmentTransformRules::SnapToTargetNotIncludingScale, WeaponAttachSocketName);
 		}
 	}
 

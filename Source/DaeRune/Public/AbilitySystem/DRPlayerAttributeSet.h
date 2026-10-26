@@ -31,7 +31,10 @@ class DAERUNE_API UDRPlayerAttributeSet : public UDRAttributeSet
 	int32 GetCurrentContainerIndex() const;
 
 	void EnterCorruptedState(const FEffectProperties& Props);
-	void ExitCorruptedState(const FEffectProperties& Props);
+
+	// 오염 해제 (서버): 최대 체력을 오염 전 값으로 되돌리고 첫 칸만 채운 뒤 PlayerState 에 알린다.
+	// 오염 중 회복(정화)과 부활이 같이 쓴다. 오염 중이 아니면 아무것도 하지 않는다.
+	void ExitCorruptedState();
 
 	bool IsCorrupted() const { return bCorrupted; }
 
@@ -53,7 +56,6 @@ private:
 	void ProcessNormalDamage(const FEffectProperties& Props, float Damage);
 	float CalculateContainerDamage(float CurrentHealth, float Damage) const;
 	void ApplyHitReactAndKnockback(const FEffectProperties& Props);
-	void HandleCorruptionPurification(const FEffectProperties& Props, float HealAmount);
 
 	// ★Plan5(탑승칩)★ MaxHealth 의 ★현재값★을 Desired 로 맞춘다 (Plan5 D-87).
 	// SetMaxHealth 는 BaseValue 를 바꿔 칩 GE(AddBase)의 가산이 그 위에 다시 붙는다 — 그 몫을 빼고 넣는다

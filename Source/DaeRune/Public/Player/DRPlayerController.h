@@ -23,6 +23,7 @@ class UDRAbilitySystemComponent;
 class ADRCleanserPart;
 class ADRCleanserSite;
 class ADRRobotVacuumCharacter;
+class ADRCharacter;
 class ADRWaitingRoomCameraActor;
 class UDRWaitingRoomWidget;
 class UDRStageSelectScreenWidget;
@@ -62,17 +63,9 @@ public:
 	UFUNCTION(Client, Unreliable)
 	void ShowDamageNumber(float DamageAmount, ACharacter* TargetCharacter);
 
-	// 부패 상태 변경 처리
-	UFUNCTION(BlueprintCallable, Category = "Corruption")
-	void CorruptedStateChanged(bool bIsStateChanged);
-
 	// 아군/적 구분 표시 변경
 	UFUNCTION(BlueprintImplementableEvent, Category = "Corruption")
 	void SetTeamVisualsEnabled(bool bEnabled);
-
-	// 부패 상태 확인
-	UFUNCTION(BlueprintCallable, Category = "Corruption")
-	bool IsInCorruptedState() const { return bIsCorrupted; }
 
 	// 상호작용 이벤트
 	UPROPERTY(BlueprintAssignable, Category = "Input")
@@ -167,7 +160,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Spectating")
 	void SpectateNextPlayer();
 
-	// 이전 플레이어로 전환
+	// 사망 후 Delay 초 뒤 관전을 시작한다 (서버). 그 전에 부활하면 CancelPendingSpectate 로 취소된다.
+	void ScheduleSpectating(float Delay);
+	void CancelPendingSpectate();
 	UFUNCTION(BlueprintCallable, Category = "Spectating")
 	void SpectatePreviousPlayer();
 
@@ -547,10 +542,6 @@ protected:
 	virtual void ReceivedPlayer() override;
 	virtual void PostSeamlessTravel() override;
 
-	// 부패 상태 플래그
-	UPROPERTY(BlueprintReadOnly, Category = "Corruption")
-	bool bIsCorrupted = false;
-
 	// 게임 오버 위젯 클래스
 	UPROPERTY(EditDefaultsOnly, Category = "UI|GameResult")
 	TSubclassOf<UUserWidget> GameOverWidgetClass;
@@ -719,6 +710,19 @@ private:
 	// 관전 대상 사망 처리
 	UFUNCTION()
 	void OnSpectatedPlayerDied(AActor* DeadActor);
+
+	// 생존자가 한 명이면 그 사람을 관전 대상으로 고정하고 true (다음/이전 전환 공용)
+	bool SpectateOnlySurvivor(const TArray<ADRCharacter*>& AliveCharacters);
+
+	// 관전 대상의 사망 델리게이트를 옮겨 묶는다 (로컬 컨트롤러 전용 — bIsSpectating 은 로컬에만 있다)
+	void BindSpectatedDeath(ACharacter* NewTarget);
+	void UnbindSpectatedDeath();
+
+	// 관전하며 다른 플레이어에게 묶어 둔 HUD 를 내 PlayerState 로 되돌린다
+	void RestoreOwnOverlay();
+
+	// 사망 → 관전 시작 예약 (서버)
+	FTimerHandle PendingSpectateTimerHandle;
 
 	// 입력 처리 함수들
 	void Move(const FInputActionValue& InputActionValue);

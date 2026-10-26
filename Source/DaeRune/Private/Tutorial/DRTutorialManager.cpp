@@ -56,15 +56,29 @@ void ADRTutorialManager::BeginPlay()
 		TutorialCleanserSite->OnPartInstalled.AddDynamic(this, &ADRTutorialManager::OnPartInstalledToSite);
 	}
 
-	// 초기 UI 설정 (약간의 딜레이로 HUD 초기화 대기)
-	FTimerHandle InitUITimer;
-	GetWorldTimerManager().SetTimer(InitUITimer, [this]()
+	// 초기 UI 설정 (HUD 초기화 대기)
+	ShowInitialObjectiveWhenReady();
+}
+
+void ADRTutorialManager::ShowInitialObjectiveWhenReady()
+{
+	static constexpr float RetryInterval = 0.25f;
+	static constexpr int32 MaxRetries = 40;   // 10초
+
+	if (!GetOverlayWidgetController())
 	{
-		UpdateObjectiveUI(
-			NSLOCTEXT("Tutorial", "Obj_Section1", "장애물을 넘어 다음 구역으로 가시오"),
-			FText::GetEmpty(), 0, 0
-		);
-	}, 0.5f, false);
+		if (++InitialObjectiveRetries <= MaxRetries)
+		{
+			GetWorldTimerManager().SetTimer(InitialObjectiveTimerHandle, this,
+				&ADRTutorialManager::ShowInitialObjectiveWhenReady, RetryInterval, false);
+		}
+		return;
+	}
+
+	UpdateObjectiveUI(
+		NSLOCTEXT("Tutorial", "Obj_Section1", "장애물을 넘어 다음 구역으로 가시오"),
+		FText::GetEmpty(), 0, 0
+	);
 }
 
 void ADRTutorialManager::Tick(float DeltaTime)
@@ -336,14 +350,8 @@ void ADRTutorialManager::GrantAbilityToPlayer(TSubclassOf<UGameplayAbility> Abil
 	FGameplayAbilitySpec AbilitySpec(AbilityClass, 1);
 	if (const UDRGameplayAbility* DRAbility = Cast<UDRGameplayAbility>(AbilitySpec.Ability))
 	{
-		AbilitySpec.DynamicAbilityTags.AddTag(DRAbility->StartupInputTag);
-		FGameplayAbilitySpecHandle Handle = ASC->GiveAbility(AbilitySpec);
-
-		// InputTag 캐시에 추가
-		if (DRAbility->StartupInputTag.IsValid())
-		{
-			ASC->AddToInputTagCache(AbilitySpec);
-		}
+		AbilitySpec.GetDynamicSpecSourceTags().AddTag(DRAbility->StartupInputTag);
+		ASC->GiveAbility(AbilitySpec);
 	}
 
 	// BroadcastAbilityInfo가 일찍 return하지 않도록 플래그 설정
@@ -520,9 +528,10 @@ UOverlayWidgetController* ADRTutorialManager::GetOverlayWidgetController() const
 	ADRHUD* HUD = Cast<ADRHUD>(PC->GetHUD());
 	if (!HUD) return nullptr;
 
-	// WidgetController가 이미 생성되어 있어야 한다 (InitOverlay 이후)
-	FWidgetControllerParams Params(PC, PC->PlayerState, nullptr, nullptr);
-	return HUD->GetOverlayWidgetController(Params);
+	// ★이미 만들어진 컨트롤러만 쓴다★ — 생성용 게터에 빈 ASC 를 넘기면 오버레이 초기화 전에 불렸을 때
+	// ASC 없는 컨트롤러가 만들어져 바인딩에서 터지고, 그 고장 난 컨트롤러가 이후 InitOverlay 에 재사용된다.
+	// 아직 없으면(오버레이 초기화 전) null — 호출자는 다음 갱신 때 다시 시도한다.
+	return HUD->GetOverlayWidgetControllerCached();
 }
 
 UDRAbilitySystemComponent* ADRTutorialManager::GetPlayerASC() const

@@ -616,26 +616,10 @@ void ADRLobbyGameMode::RespawnPlayerWithClass(ADRPlayerController* PC, EPlayerCh
 	TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(NewClass);
 	if (!BPClassPtr || !*BPClassPtr) return;
 
-	APawn* OldPawn = PC->GetPawn();
-	FTransform SpawnTransform = OldPawn ? OldPawn->GetActorTransform() : FTransform::Identity;
-
-	if (OldPawn)
+	// 어빌리티 완전 클리어 — 빙의 시점(PossessedBy)에 새 클래스의 시작 어빌리티를 다시 받는다
+	if (ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
 	{
-		PC->UnPossess();
-		OldPawn->Destroy();
-	}
-
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	ADRCharacter* NewPawn = GetWorld()->SpawnActor<ADRCharacter>(*BPClassPtr, SpawnTransform, SpawnParams);
-	if (!NewPawn) return;
-
-	// 어빌리티 완전 클리어
-	ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>();
-	if (PS)
-	{
-		UAbilitySystemComponent* ASC = PS->GetAbilitySystemComponent();
-		if (ASC)
+		if (UAbilitySystemComponent* ASC = PS->GetAbilitySystemComponent())
 		{
 			ASC->CancelAllAbilities();
 			ASC->ClearAllAbilities();
@@ -643,12 +627,13 @@ void ADRLobbyGameMode::RespawnPlayerWithClass(ADRPlayerController* PC, EPlayerCh
 			if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(ASC))
 			{
 				DRASC->bStartupAbilitiesGiven = false;
-				DRASC->ClearInputTagCache();
 			}
 		}
 	}
 
-	PC->Possess(NewPawn);
+	const APawn* OldPawn = PC->GetPawn();
+	const FTransform SpawnTransform = OldPawn ? OldPawn->GetActorTransform() : FTransform::Identity;
+	RespawnPlayerPawn(PC, *BPClassPtr, SpawnTransform);
 }
 
 UClass* ADRLobbyGameMode::GetDefaultPawnClassForController_Implementation(AController* InController)

@@ -205,5 +205,10 @@ private:
 	void UpdateObjectiveUI(const FText& Title, const FText& ProgressFormat, int32 Current, int32 Max);
 
 	UOverlayWidgetController* GetOverlayWidgetController() const;
+
+	// 첫 목표 UI — HUD 오버레이 컨트롤러가 준비될 때까지 잠시 간격으로 다시 시도한다
+	void ShowInitialObjectiveWhenReady();
+	FTimerHandle InitialObjectiveTimerHandle;
+	int32 InitialObjectiveRetries = 0;
 	UDRAbilitySystemComponent* GetPlayerASC() const;
 };

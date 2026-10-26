@@ -54,16 +54,18 @@ void ADRHUD::InitOverlay(APlayerController* PC, APlayerState* PS, UAbilitySystem
 	Widget->AddToViewport();
 }
 
-void ADRHUD::UpdateOverlayForSpectating(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS)
+void ADRHUD::ReleaseOverlayWidgetController()
 {
-	// 기존 WidgetController 파괴
 	if (OverlayWidgetController)
 	{
 		OverlayWidgetController->UnbindAllDelegates();
-
-		OverlayWidgetController->ConditionalBeginDestroy();
 		OverlayWidgetController = nullptr;
 	}
+}
+
+void ADRHUD::RebindOverlay(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS)
+{
+	ReleaseOverlayWidgetController();
 
 	// 새로운 파라미터로 WidgetController 생성
 	const FWidgetControllerParams WidgetControllerParams(PC, PS, ASC, AS);
@@ -88,12 +90,7 @@ void ADRHUD::RemoveOverlay()
 		OverlayWidget = nullptr;
 	}
 
-	if (OverlayWidgetController)
-	{
-		OverlayWidgetController->UnbindAllDelegates();
-		OverlayWidgetController->ConditionalBeginDestroy();
-		OverlayWidgetController = nullptr;
-	}
+	ReleaseOverlayWidgetController();
 
 	if (CharacterInfoWidget)
 	{

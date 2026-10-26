@@ -68,6 +68,12 @@ public:
 	// 부활 시 1인칭/3인칭 메시 가시성 원복 (Plan6 §5.9)
 	virtual void MulticastHandleRevive_Implementation() override;
 
+protected:
+	// 플레이어는 오염 상태에서만 죽는다 — 부활 전에 오염을 풀어 최대 체력을 원래대로 돌린다
+	virtual void PrepareRevive() override;
+
+public:
+
 	// 사망 상태 동기화 override (bDead가 true가 되면 몽타주 재생)
 	virtual void OnRep_Dead() override;
 

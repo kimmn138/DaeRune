@@ -543,7 +543,7 @@ void ADREnemy::InitAbilityActorInfo()
 {
 	// GAS 초기화
 	AbilitySystemComponent->InitAbilityActorInfo(this, this);
-	Cast<UDRAbilitySystemComponent>(AbilitySystemComponent)->AbilityActorInfoSet();
+	// AbilityActorInfoSet(플레이어 HUD 용 콜백)은 묶지 않는다 — 적 ASC 에는 듣는 UI 가 없다
 	// 스턴 태그 이벤트 바인딩
 	AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Debuff_Stun, EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ADREnemy::StunTagChanged);
 	// 도발 표시 — 태그가 Minimal 복제로 클라에도 오므로 모든 머신에서 바인딩한다

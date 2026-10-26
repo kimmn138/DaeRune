@@ -316,28 +316,23 @@ private:
 	FText GetLegacyPhaseAlarmText(int32 PhaseIndex) const;
 	
 
-	FTimerHandle PhaseBindingDelayTimer;
-	FTimerHandle WaveTimerBindingDelayTimer;
-	FTimerHandle PhaseAlarmBindingDelayTimer;
-	FTimerHandle ToxicGasWarningBindingDelayTimer;
+	// GameState 델리게이트 묶기 (목표 · 페이즈 알람 · 독가스 경고). GameState 가 아직 없으면 재시도한다.
+	void TryBindGameStateDelegates();
+	FTimerHandle GameStateBindRetryTimer;
+	bool bGameStateDelegatesBound = false;
+	static constexpr float GameStateBindRetryInterval = 0.1f;
 
-	// 델리게이트 핸들 저장용 변수
-	FDelegateHandle PhaseObjectiveDelegateHandle;
-	FDelegateHandle ObjectiveCompletedDelegateHandle;
-	FDelegateHandle WaveTimerDelegateHandle;
+	// Buff.* / Debuff.* 상태 아이콘 태그인지 (디버프면 bOutIsDebuff = true)
+	static bool IsStatusEffectTag(const FGameplayTag& Tag, bool& bOutIsDebuff);
 
-	// ASC 델리게이트 핸들 (안전한 정리를 위해)
-	TArray<FDelegateHandle> ASCDelegateHandles;
+	// 값 변화 델리게이트를 묶은 어트리뷰트 (해제용)
+	TArray<FGameplayAttribute> BoundAttributes;
 	
 	// Phase 알람용 캐시 (Phase 변경 시 알람 표시 여부 판단)
 	int32 CachedPhaseNumber = -1;
 
 	// 웨이브 타이머용 캐시 (Phase 3 웨이브 타이머 바인딩 여부 판단)
 	int32 CachedWavePhaseNumber = -1;
-
-	int32 CachedProgress = -1;
-	int32 CachedRequiredCount = -1;
-	FText CachedObjectiveTitle;
 
 	// 페이즈 알람 중복 방지용 플래그
 	bool bPhaseAlarmShown = false;

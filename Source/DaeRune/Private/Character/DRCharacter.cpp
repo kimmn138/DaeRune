@@ -1168,7 +1168,10 @@ void ADRCharacter::InitAbilityActorInfo()
 
 	// GAS 컴포넌트들을 PlayerState에서 가져와 초기화
 	ASC->InitAbilityActorInfo(DRPlayerState, this);
-	Cast<UDRAbilitySystemComponent>(ASC)->AbilityActorInfoSet();
+	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(ASC))
+	{
+		DRASC->AbilityActorInfoSet();   // 재빙의마다 불려도 1회만 묶는다
+	}
 
 	AbilitySystemComponent = ASC;
 	AttributeSets = DRPlayerState->GetAttributeSet();
@@ -1384,10 +1387,21 @@ void ADRCharacter::OnRep_SeatedOn()
 	}
 }
 
+void ADRCharacter::PrepareRevive()
+{
+	if (UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSets))
+	{
+		PlayerAS->ExitCorruptedState();
+	}
+}
+
 void ADRCharacter::MulticastHandleRevive_Implementation()
 {
 	// 베이스: 콜리전/이동/메시/몽타주 복원 + BP 훅
 	Super::MulticastHandleRevive_Implementation();
+
+	// 다음 사망 때 사망 몽타주가 다시 재생되도록 (1회 재생 가드 해제)
+	bDeathMontagePlayed = false;
 
 	// 사망 시 1인칭 메시를 숨기고 3인칭 메시를 소유자에게도 보이게 바꿨으므로 원복한다
 	// (MulticastHandleDeath 의 IsLocallyControlled 분기 역연산)
@@ -1409,10 +1423,10 @@ void ADRCharacter::MulticastHandleRevive_Implementation()
 		}
 	}
 
-	// 표정 리셋 (사망 표정 해제)
+	// 표정 리셋 (사망 표정 해제 + 깜빡임 재개)
 	if (FacialExpressionComponent)
 	{
-		FacialExpressionComponent->RevertToDefault();
+		FacialExpressionComponent->OnRevive();
 	}
 
 	// ★코스메틱 재적용 — 반드시 필요하다★
@@ -1580,6 +1594,15 @@ void ADRCharacter::RefreshSkinVisuals()
 
 void ADRCharacter::BuildCosmeticVisuals()
 {
+	// ★아래 머티리얼 초기화가 얼굴 슬롯의 표정 MID 까지 걷어 낸다★ — 끝나면 어느 경로로 나가든 다시 꽂는다
+	ON_SCOPE_EXIT
+	{
+		if (FacialExpressionComponent)
+		{
+			FacialExpressionComponent->RefreshFaceMaterial();
+		}
+	};
+
 	ClearCosmeticAttachments();
 
 	// 1) 본체 머티리얼을 BP 기본값으로 되돌린다.

@@ -115,22 +115,14 @@ void UDRPlayerAttributeSet::EnterCorruptedState(const FEffectProperties& Props)
 	SetMaxHealthCurrentValue(GetCorruptMaxHealth());
 	SetHealth(GetCorruptMaxHealth());
 
-	// PlayerState에 알림
-	if (Props.TargetAvatarActor && Props.TargetController)
+	// PlayerState에 알림 (플레이어 ASC 의 오너가 PlayerState 다)
+	if (ADRPlayerState* DRPS = Cast<ADRPlayerState>(GetOwningActor()))
 	{
-		if (ADRPlayerState* DRPS = Props.TargetController->GetPlayerState<ADRPlayerState>())
-		{
-			DRPS->SetCorruptedState(true);
-		}
-
-		if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(Props.TargetController))
-		{
-			DRPC->CorruptedStateChanged(true);
-		}
+		DRPS->SetCorruptedState(true);
 	}
 }
 
-void UDRPlayerAttributeSet::ExitCorruptedState(const FEffectProperties& Props)
+void UDRPlayerAttributeSet::ExitCorruptedState()
 {
 	if (!bCorrupted) return;
 
@@ -141,18 +133,9 @@ void UDRPlayerAttributeSet::ExitCorruptedState(const FEffectProperties& Props)
 	SetMaxHealthCurrentValue(NormalMaxHealth);   // ★Plan5(탑승칩)★ (D-87 · T-87)
 	SetHealth(ContainerHealth); // 첫 번째 컨테이너만 회복
 
-	// PlayerState에 알림
-	if (Props.TargetAvatarActor && Props.TargetController)
+	if (ADRPlayerState* DRPS = Cast<ADRPlayerState>(GetOwningActor()))
 	{
-		if (ADRPlayerState* PS = Props.TargetController->GetPlayerState<ADRPlayerState>())
-		{
-			PS->SetCorruptedState(false);
-		}
-
-		if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(Props.TargetController))
-		{
-			DRPC->CorruptedStateChanged(false);
-		}
+		DRPS->SetCorruptedState(false);
 	}
 }
 
@@ -443,11 +426,10 @@ void UDRPlayerAttributeSet::HandleIncomingHealing(const FEffectProperties& Props
 	const float CurrentHealth = GetHealth();
 	const float MaxHealthValue = GetMaxHealth();
 
-	// 부패 상태 확인
+	// 오염 중 회복 = 정화 (힐량과 무관하게 오염 해제 + 첫 칸)
 	if (IsCorrupted())
 	{
-		// 부패 정화 처리
-		HandleCorruptionPurification(Props, LocalIncomingHealing);
+		ExitCorruptedState();
 		return;
 	}
 
@@ -482,24 +464,4 @@ bool UDRPlayerAttributeSet::ShouldPreventDeath() const
 	if (!GM) return false;
 
 	return GM->IsA<ADRLobbyGameMode>() || GM->IsA<ADRTutorialGameMode>();
-}
-
-void UDRPlayerAttributeSet::HandleCorruptionPurification(const FEffectProperties& Props, float HealAmount)
-{
-bCorrupted = false;
-
-	// 1. 정상 상태로 복원 (최대 체력을 원래대로)
-	const float NormalMaxHealth = NumContainers * ContainerHealth;
-	SetMaxHealthCurrentValue(NormalMaxHealth);   // ★Plan5(탑승칩)★ (D-87 · T-87)
-	SetHealth(ContainerHealth);
-
-	// DRPlayerState의 SetCorruptedState 사용
-	if (ADRCharacter* Owner = Cast<ADRCharacter>(Props.TargetAvatarActor))
-	{
-		if (ADRPlayerState* PlayerState = Owner->GetPlayerState<ADRPlayerState>())
-		{
-			// false로 설정하여 부패 상태 해제
-			PlayerState->SetCorruptedState(false);
-}
-	}
 }

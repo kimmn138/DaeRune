@@ -113,6 +113,30 @@ void UDRFacialExpressionComponent::RevertToDefault()
 	ApplyTexture(GetTextureForExpression(EFacialExpression::Default));
 }
 
+void UDRFacialExpressionComponent::OnRevive()
+{
+	bIsDead = false;
+	RevertToDefault();
+	StartBlinkTimer();
+}
+
+void UDRFacialExpressionComponent::RefreshFaceMaterial()
+{
+	if (!TargetMesh) return;   // 아직 InitializeFaceMaterial 전 — 그때 현재 머티리얼로 만든다
+
+	UMaterialInterface* SlotMaterial = TargetMesh->GetMaterial(FaceMaterialIndex);
+	if (!SlotMaterial || SlotMaterial == FaceDynamicMaterial) return;
+
+	if (!FaceDynamicMaterial || FaceDynamicMaterial->Parent != SlotMaterial)
+	{
+		FaceDynamicMaterial = UMaterialInstanceDynamic::Create(SlotMaterial, this);
+	}
+	TargetMesh->SetMaterial(FaceMaterialIndex, FaceDynamicMaterial);
+
+	// 새로 만든 MID 에도 지금 표정을 입힌다
+	ApplyTexture(GetTextureForExpression(CurrentExpression));
+}
+
 void UDRFacialExpressionComponent::SetExpressionTexture(EFacialExpression Expression, UTexture* Texture)
 {
 	if (Texture)

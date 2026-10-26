@@ -62,11 +62,6 @@ ADRPlayerController::ADRPlayerController()
 	LineTraceTimer = 0.f;
 }
 
-void ADRPlayerController::CorruptedStateChanged(bool bIsStateChanged)
-{
-	bIsCorrupted = bIsStateChanged;
-}
-
 void ADRPlayerController::ShowDamageNumber_Implementation(float DamageAmount, ACharacter* TargetCharacter)
 {
 	// 내가 적을 타격한 경우 조준선 히트마커 표시
@@ -505,15 +500,11 @@ void ADRPlayerController::ClientStopSpectating_Implementation()
 	bIsSpectating = false;
 	CurrentSpectatedPlayerIndex = 0;
 
-	// 델리게이트 해제
-	if (CurrentSpectatedCharacter.IsValid())
-	{
-		if (ADRCharacterBase* OldTarget = Cast<ADRCharacterBase>(CurrentSpectatedCharacter.Get()))
-		{
-			OldTarget->OnDeathDelegate.RemoveDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
-		}
-	}
+	UnbindSpectatedDeath();
 	CurrentSpectatedCharacter.Reset();
+
+	// 관전 중 HUD 가 다른 플레이어에게 묶여 있었다면 내 상태로 되돌린다 (부활)
+	RestoreOwnOverlay();
 
 	// 대기실이면 ViewTarget 복원 스킵 (ClientSetWaitingRoomView가 담당)
 	if (bIsInWaitingRoom)
@@ -544,6 +535,55 @@ void ADRPlayerController::ClientStopSpectating_Implementation()
 	}
 }
 
+void ADRPlayerController::ScheduleSpectating(float Delay)
+{
+	if (!HasAuthority()) return;
+
+	GetWorldTimerManager().SetTimer(PendingSpectateTimerHandle,
+		FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			// 예약과 실행 사이에 다른 경로로 새 폰을 받았으면(부활) 관전으로 넘어가지 않는다
+			const APawn* MyPawn = GetPawn();
+			if (MyPawn && !(MyPawn->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(MyPawn)))
+			{
+				return;
+			}
+			ClientStartSpectating();
+		}),
+		Delay, false);
+}
+
+void ADRPlayerController::CancelPendingSpectate()
+{
+	GetWorldTimerManager().ClearTimer(PendingSpectateTimerHandle);
+}
+
+void ADRPlayerController::RestoreOwnOverlay()
+{
+	ADRHUD* DRHUD = GetHUD<ADRHUD>();
+	ADRPlayerState* DRPS = GetPlayerState<ADRPlayerState>();
+	if (!DRHUD || !DRHUD->GetOverlayWidget() || !DRPS) return;
+
+	UAbilitySystemComponent* ASC = DRPS->GetAbilitySystemComponent();
+	UAttributeSet* AS = DRPS->GetAttributeSet();
+	if (!ASC || !AS) return;
+
+	DRHUD->RebindOverlay(this, DRPS, ASC, AS);
+}
+
+bool ADRPlayerController::SpectateOnlySurvivor(const TArray<ADRCharacter*>& AliveCharacters)
+{
+	if (AliveCharacters.Num() != 1) return false;
+
+	// 생존자가 한 명뿐이면 그 사람으로 고정한다 — 보던 대상이 막 죽어 마지막 생존자로 넘어가야 하는 경우 포함
+	if (CurrentSpectatedCharacter.Get() != AliveCharacters[0])
+	{
+		CurrentSpectatedPlayerIndex = 0;
+		SetSpectateTarget(AliveCharacters[0]);
+	}
+	return true;
+}
+
 void ADRPlayerController::SpectateNextPlayer()
 {
 	if (!bIsSpectating || !IsLocalController()) return;
@@ -558,8 +598,8 @@ void ADRPlayerController::SpectateNextPlayer()
 		CurrentSpectatedCharacter.Reset();
 		return;
 	}
-	
-	if(AliveCharacters.Num() == 1) return;
+
+	if (SpectateOnlySurvivor(AliveCharacters)) return;
 
 	// 다음 인덱스 계산
 	CurrentSpectatedPlayerIndex = (CurrentSpectatedPlayerIndex + 1) % AliveCharacters.Num();
@@ -582,7 +622,7 @@ void ADRPlayerController::SpectatePreviousPlayer()
 		return;
 	}
 
-	if(AliveCharacters.Num() == 1) return;
+	if (SpectateOnlySurvivor(AliveCharacters)) return;
 
 	// 이전 인덱스 계산
 	CurrentSpectatedPlayerIndex--;
@@ -1251,13 +1291,19 @@ void ADRPlayerController::HandleSpectatePrevious()
 
 void ADRPlayerController::SetSpectateTarget(ACharacter* NewTarget)
 {
-	// 클라이언트: 서버에 요청 + 로컬에서 ViewTarget 설정
+	// ★사망 델리게이트는 로컬 컨트롤러에서 묶는다★ — 관전 여부(bIsSpectating)는 로컬에만 있고,
+	// 사망 멀티캐스트가 모든 머신에서 OnDeathDelegate 를 방송하므로 원격 클라도 직접 받는다.
+	// (서버 쪽 PC 객체에 묶으면 bIsSpectating 이 늘 false 라 원격 클라는 다음 대상으로 넘어가지 못했다)
+	if (IsLocalController())
+	{
+		BindSpectatedDeath(NewTarget);
+	}
+	CurrentSpectatedCharacter = NewTarget;
+
+	// 클라이언트: 서버에도 알려 서버 쪽 ViewTarget(관련성 판정 기준)을 맞추고, 로컬 ViewTarget 은 바로 바꾼다
 	if (!HasAuthority())
 	{
 		ServerSetSpectateTarget(NewTarget);
-
-		// 클라이언트에서도 ViewTarget과 캐릭터 캐시 설정
-		CurrentSpectatedCharacter = NewTarget;
 		if (NewTarget)
 		{
 			SetViewTarget(NewTarget);
@@ -1265,32 +1311,30 @@ void ADRPlayerController::SetSpectateTarget(ACharacter* NewTarget)
 		return;
 	}
 
-	// 서버: 전체 로직 실행
-
-	// 이전 대상의 사망 델리게이트 해제
-	if (CurrentSpectatedCharacter.IsValid())
-	{
-		if (ADRCharacterBase* OldTarget = Cast<ADRCharacterBase>(CurrentSpectatedCharacter.Get()))
-		{
-			OldTarget->OnDeathDelegate.RemoveDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
-		}
-	}
-
-	CurrentSpectatedCharacter = NewTarget;
-
 	if (NewTarget)
 	{
-		// ViewTarget ?ㅼ젙
 		SetViewTarget(NewTarget);
 
-		// UI 업데이트
+		// HUD 를 관전 대상에게 묶는다
 		ClientUpdateSpectatorUI(NewTarget);
+	}
+}
 
-		// 새 대상의 사망 델리게이트 바인딩
-		if (ADRCharacterBase* DRTarget = Cast<ADRCharacterBase>(NewTarget))
-		{
-			DRTarget->OnDeathDelegate.AddDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
-		}
+void ADRPlayerController::BindSpectatedDeath(ACharacter* NewTarget)
+{
+	UnbindSpectatedDeath();
+
+	if (ADRCharacterBase* DRTarget = Cast<ADRCharacterBase>(NewTarget))
+	{
+		DRTarget->OnDeathDelegate.AddUniqueDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
+	}
+}
+
+void ADRPlayerController::UnbindSpectatedDeath()
+{
+	if (ADRCharacterBase* OldTarget = Cast<ADRCharacterBase>(CurrentSpectatedCharacter.Get()))
+	{
+		OldTarget->OnDeathDelegate.RemoveDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
 	}
 }
 
@@ -1326,8 +1370,8 @@ void ADRPlayerController::UpdateSpectatorUI(ACharacter* SpectatedTarget)
 
 	if (!SpectatedASC || !SpectatedAS) return;
 
-	// 기존 WidgetController를 파괴하고 새로 만들어줌
-	DRHUD->UpdateOverlayForSpectating(this, SpectatedPS, SpectatedASC, SpectatedAS);
+	// HUD 를 관전 대상의 PlayerState 에 다시 묶는다
+	DRHUD->RebindOverlay(this, SpectatedPS, SpectatedASC, SpectatedAS);
 }
 
 void ADRPlayerController::OnSpectatedPlayerDied(AActor* DeadActor)
@@ -2116,11 +2160,23 @@ void ADRPlayerController::ServerCheatDie_Implementation()
 void ADRPlayerController::ServerCheatRevive_Implementation()
 {
 #if !UE_BUILD_SHIPPING
-	ADRCharacterBase* CheatTarget = Cast<ADRCharacterBase>(GetPawn());
-	if (!CheatTarget || !ICombatInterface::Execute_IsDead(CheatTarget)) return;
+	ADRGameModeBase* GM = GetWorld()->GetAuthGameMode<ADRGameModeBase>();
+	if (!GM) return;
 
-	CheatTarget->Revive(CheatTarget->GetActorLocation(), 1.0f, 1.0f);
-	UE_LOG(LogDR, Warning, TEXT("[Cheat] %s 부활"), *CheatTarget->GetName());
+	// 시체가 남아 있으면 그 자리, 이미 정리됐으면 시작 지점에서 되살린다
+	FTransform At = GetPawn() ? GetPawn()->GetActorTransform() : FTransform::Identity;
+	if (!GetPawn())
+	{
+		if (const AActor* Start = GM->FindPlayerStart(this))
+		{
+			At = Start->GetActorTransform();
+		}
+	}
+
+	if (GM->RevivePlayer(this, At, 1.0f, 1.0f))
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cheat] %s 부활"), *GetName());
+	}
 #endif
 }
 
