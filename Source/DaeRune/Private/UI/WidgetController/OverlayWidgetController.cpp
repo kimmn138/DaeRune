@@ -362,7 +362,7 @@ void UOverlayWidgetController::HandlePhaseObjectiveChanged()
 		FText AlarmText = ObjectiveData.PhaseAlarmText;
 		if (AlarmText.IsEmpty())
 		{
-			AlarmText = GetLegacyPhaseAlarmText(CachedPhaseNumber);
+			AlarmText = GetFallbackPhaseAlarmText(CachedPhaseNumber);
 		}
 
 		if (!AlarmText.IsEmpty())
@@ -543,17 +543,16 @@ void UOverlayWidgetController::OnPhaseChanged(int32 NewPhaseIndex)
 	}
 }
 
-FText UOverlayWidgetController::GetLegacyPhaseAlarmText(int32 PhaseIndex) const
+FText UOverlayWidgetController::GetFallbackPhaseAlarmText(int32 PhaseIndex) const
 {
-	// 목표 DataTable에 PhaseAlarmText가 채워지기 전까지 사용하는 폴백 (스테이지1 호환)
+	// 목표 DataTable 의 PhaseAlarmText 가 비어 있을 때의 폴백 — 스테이지1(DT_S1PhaseObjective)이 이 경로를 쓴다.
+	// 스테이지1 은 2페이즈다: 0 = 확보(부품 수집 포함), 1 = 방어. (옛 3페이즈 문구 "페이즈 2: 수집" 이 방어 페이즈에 떴다)
 	switch (PhaseIndex)
 	{
 	case 0:
 		return LOCTEXT("Phase_Alarm_1", "페이즈 1: 확보");
 	case 1:
-		return LOCTEXT("Phase_Alarm_2", "페이즈 2: 수집");
-	case 2:
-		return LOCTEXT("Phase_Alarm_3", "페이즈 3: 방어");
+		return LOCTEXT("Phase_Alarm_2", "페이즈 2: 방어");
 	default:
 		return FText::GetEmpty();
 	}

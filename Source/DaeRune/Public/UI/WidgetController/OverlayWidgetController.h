@@ -311,8 +311,8 @@ private:
 	UFUNCTION()
 	void HandleWaveDefenseUIActiveChanged(bool bIsActive);
 
-	// 목표 데이터에 PhaseAlarmText가 없을 때 사용하는 레거시 문구 (스테이지1 호환)
-	FText GetLegacyPhaseAlarmText(int32 PhaseIndex) const;
+	// 목표 데이터에 PhaseAlarmText 가 없을 때의 폴백 문구 (스테이지1 — 2페이즈 기준)
+	FText GetFallbackPhaseAlarmText(int32 PhaseIndex) const;
 	
 
 	// GameState 델리게이트 묶기 (목표 · 페이즈 알람 · 독가스 경고). GameState 가 아직 없으면 재시도한다.
