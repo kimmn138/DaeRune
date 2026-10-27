@@ -636,15 +636,6 @@ void ADREnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 	}
 }
 
-float ADREnemy::GetMoveSpeed()
-{
-	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets))
-	{
-		return DRAS->GetMoveSpeed();
-	}
-	return Super::GetMoveSpeed();
-}
-
 void ADREnemy::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit)
 {
 	// 서버에서만 넉백 처리

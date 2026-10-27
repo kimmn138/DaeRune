@@ -28,7 +28,6 @@ public:
 	void TriggerTutorialComplete();
 
 protected:
-	virtual void BeginPlay() override;
 	virtual void HandleWipeout() override;
 
 	// 메인 메뉴 맵 이름

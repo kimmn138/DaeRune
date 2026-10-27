@@ -10,8 +10,11 @@
 ADRDoorManager::ADRDoorManager()
 {
 	PrimaryActorTick.bCanEverTick = false;
+
+	// 복제할 상태는 없다. bReplicates 는 클라에서 역할을 SimulatedProxy 로 바꿔 HasAuthority() 서버 판정을 지키려고만 켜 두고
+	// (복제 안 하는 레벨 배치 액터는 클라에서도 Authority 다), 처음부터 휴면(DORM_Initial)으로 두어 액터 채널을 열지 않는다.
 	bReplicates = true;
-	bAlwaysRelevant = true;
+	NetDormancy = DORM_Initial;
 
 	// Root Component
 	RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootSceneComponent"));

@@ -64,7 +64,7 @@ void UDRAbilitySystemComponent::AddCharacterPassiveAbilities(const TArray<TSubcl
 void UDRAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& InputTag)
 {
 	if (!InputTag.IsValid()) return;
-	if (HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
+	// Block.InputPressed 는 호출자(ADRPlayerController::AbilityInputTagPressed)가 UI 피드백과 함께 이미 거른다
 
 	FGameplayAbilitySpec* AbilitySpec = FindAbilitySpecByInputTag(InputTag);
 	if (AbilitySpec)

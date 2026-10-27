@@ -236,7 +236,7 @@ void ADRArmadilloEnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 New
 
 AActor* ADRArmadilloEnemy::FindRollTarget() const
 {
-	// 1. GameState의 플레이어 목록에서 생존 플레이어 수집 (월드 전체 액터 순회 방지)
+	// 1. GameState의 플레이어 목록에서 생존 플레이어 수집 (월드 전체 액터 순회 방지 · 사망자는 여기서 이미 빠진다)
 	TArray<ADRCharacter*> AllPlayers;
 	if (const ADRGameStateBase* GS = GetWorld()->GetGameState<ADRGameStateBase>())
 	{
@@ -247,16 +247,9 @@ AActor* ADRArmadilloEnemy::FindRollTarget() const
 	TArray<AActor*> ValidTargets;
 	const FVector MyLocation = GetActorLocation();
 
-
 	for (AActor* Player : AllPlayers)
 	{
 		if (!Player || Player->IsHidden()) continue;
-
-		// Check if player is dead
-		if (const ICombatInterface* CombatInterface = Cast<ICombatInterface>(Player))
-		{
-			if (CombatInterface->Execute_IsDead(Player)) continue;
-		}
 
 		const float Distance = FVector::Dist(MyLocation, Player->GetActorLocation());
 		if (Distance > RollTargetSearchRange)
@@ -290,11 +283,7 @@ AActor* ADRArmadilloEnemy::FindRollTarget() const
 		return nullptr;
 	}
 
-	const int32 RandomIndex = FMath::RandRange(0, ValidTargets.Num() - 1);
-	AActor* ChosenTarget = ValidTargets[RandomIndex];
-
-
-	return ChosenTarget;
+	return ValidTargets[FMath::RandRange(0, ValidTargets.Num() - 1)];
 }
 
 void ADRArmadilloEnemy::StartRollCharge(FVector TargetLocation)

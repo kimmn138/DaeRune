@@ -14,7 +14,6 @@
 #include "Game/DRGameModeBase.h" 
 #include "Player/DRPlayerController.h"
 #include "Character/DRCharacter.h"
-#include "Components/AudioComponent.h"
 #include "Character/DRFacialExpressionComponent.h"
 #include "AbilitySystem/DRAttributeSet.h"
 #include "Animation/AnimInstance.h"
@@ -376,29 +375,6 @@ void ADRCharacterBase::OnRep_Dead()
 	// 기본 구현은 비어있음. 파생 클래스(ADRCharacter)에서 사망 애니메이션 재생.
 }
 
-void ADRCharacterBase::BeginPlay()
-{
-	Super::BeginPlay();
-}
-
-void ADRCharacterBase::Destroyed()
-{
-	// 모든 AudioComponent 안전하게 정리
-	TArray<UAudioComponent*> AudioComps;
-	GetComponents<UAudioComponent>(AudioComps);
-
-	for (UAudioComponent* AudioComp : AudioComps)
-	{
-		if (AudioComp && AudioComp->IsPlaying())
-		{
-			// 페이드 아웃으로 부드럽게 정지
-			AudioComp->FadeOut(0.1f, 0.0f);
-		}
-	}
-
-	Super::Destroyed();
-}
-
 FVector ADRCharacterBase::GetCombatSocketLocation_Implementation(const FGameplayTag& MontageTag)
 {
 	// 전투 소켓 위치 반환
@@ -527,6 +503,11 @@ void ADRCharacterBase::OnMoveSpeedChanged(const FOnAttributeChangeData& Data)
 
 float ADRCharacterBase::GetMoveSpeed()
 {
+	// MoveSpeed 어트리뷰트 (플레이어 · 적 공통). 어트리뷰트 셋이 아직 없으면 기본 걷기 속도
+	if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets))
+	{
+		return DRAS->GetMoveSpeed();
+	}
 	return BaseWalkSpeed;
 }
 

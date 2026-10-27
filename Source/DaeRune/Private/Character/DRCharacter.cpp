@@ -50,6 +50,13 @@
 #include "NiagaraSystem.h"
 #include "UObject/ConstructorHelpers.h"
 
+namespace
+{
+	// 3P 물대포 빔 나이아가라 파라미터 (빔 갱신이 초당 30회라 FName 을 매번 만들지 않는다)
+	const FName ThirdPersonBeamScaleParam(TEXT("WaterCannonScale"));
+	const FName ThirdPersonBeamHitParam(TEXT("HitEffectPosition"));
+}
+
 ADRCharacter::ADRCharacter()
 {
 	// 아군 판정용 액터 태그 — UDRAbilitySystemLibrary::IsNotFriend가 "Player" 태그 쌍으로 아군을 판정한다.
@@ -793,19 +800,7 @@ void ADRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		MountedOn->DismountRider(false);
 	}
 
-	// 타이머 정리 (메모리 누수 방지)
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(WaterPumpBeamUpdateTimer);
-	}
-
-	// 3P 빔 정리
-	if (WaterPumpThirdPersonBeam)
-	{
-		WaterPumpThirdPersonBeam->DeactivateImmediate();
-		WaterPumpThirdPersonBeam->DestroyComponent();
-		WaterPumpThirdPersonBeam = nullptr;
-	}
+	StopWaterPumpThirdPersonBeam();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -819,13 +814,7 @@ void ADRCharacter::OnRep_WaterPumpActive()
 	if (bWaterPumpActive)
 	{
 		// 빠른 토글로 OnRep이 false 분기를 건너뛰고 들어온 경우 이전 빔 누수 방지
-		if (WaterPumpThirdPersonBeam)
-		{
-			WaterPumpThirdPersonBeam->DeactivateImmediate();
-			WaterPumpThirdPersonBeam->DestroyComponent();
-			WaterPumpThirdPersonBeam = nullptr;
-		}
-		GetWorldTimerManager().ClearTimer(WaterPumpBeamUpdateTimer);
+		StopWaterPumpThirdPersonBeam();
 
 		// 3P Niagara 빔 생성
 		USkeletalMeshComponent* ThirdPersonMesh = GetMesh();
@@ -845,8 +834,7 @@ void ADRCharacter::OnRep_WaterPumpActive()
 			if (WaterPumpThirdPersonBeam)
 			{
 				WaterPumpThirdPersonBeam->SetOwnerNoSee(true);
-				WaterPumpThirdPersonBeam->SetVectorParameter(
-					FName("HitEffectPosition"), WaterPumpBeamEndPoint);
+				WaterPumpThirdPersonBeam->SetVectorParameter(ThirdPersonBeamHitParam, WaterPumpBeamEndPoint);
 			}
 		}
 
@@ -868,16 +856,23 @@ void ADRCharacter::OnRep_WaterPumpActive()
 	else
 	{
 		// 3P Niagara 빔 파괴
-		GetWorldTimerManager().ClearTimer(WaterPumpBeamUpdateTimer);
-
-		if (WaterPumpThirdPersonBeam)
-		{
-			WaterPumpThirdPersonBeam->DeactivateImmediate();
-			WaterPumpThirdPersonBeam->DestroyComponent();
-			WaterPumpThirdPersonBeam = nullptr;
-		}
-
+		StopWaterPumpThirdPersonBeam();
 		WaterPumpBeamDisplayEndPoint = FVector::ZeroVector;
+	}
+}
+
+void ADRCharacter::StopWaterPumpThirdPersonBeam()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(WaterPumpBeamUpdateTimer);
+	}
+
+	if (WaterPumpThirdPersonBeam)
+	{
+		WaterPumpThirdPersonBeam->DeactivateImmediate();
+		WaterPumpThirdPersonBeam->DestroyComponent();
+		WaterPumpThirdPersonBeam = nullptr;
 	}
 }
 
@@ -920,16 +915,10 @@ void ADRCharacter::UpdateWaterPumpThirdPersonBeam()
 	WaterPumpThirdPersonBeam->SetWorldRotation(BeamRotation);
 
 	// 빔 길이 반영
-	WaterPumpThirdPersonBeam->SetVectorParameter(
-		FName("WaterCannonScale"),
-		FVector(0.2f, 0.2f, ZScale)
-	);
+	WaterPumpThirdPersonBeam->SetVectorParameter(ThirdPersonBeamScaleParam, FVector(0.2f, 0.2f, ZScale));
 
 	// 우선 기존 3인칭 방식 유지
-	WaterPumpThirdPersonBeam->SetVectorParameter(
-		FName("HitEffectPosition"),
-		FVector(XValue, 0.0f, 0.0f)
-	);
+	WaterPumpThirdPersonBeam->SetVectorParameter(ThirdPersonBeamHitParam, FVector(XValue, 0.0f, 0.0f));
 }
 
 void ADRCharacter::OnRep_bIsCarryingPart()
@@ -1119,16 +1108,6 @@ void ADRCharacter::InitializeMoveSpeedBinding()
 		// 초기 이동 속도 설정
 		GetCharacterMovement()->MaxWalkSpeed = DRAS->GetMoveSpeed();
 	}
-}
-
-float ADRCharacter::GetMoveSpeed()
-{
-	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets))
-	{
-		return DRAS->GetMoveSpeed();
-	}
-
-	return Super::GetMoveSpeed();
 }
 
 void ADRCharacter::InitAbilityActorInfo()

@@ -15,6 +15,9 @@
 
 ADRWaterSource::ADRWaterSource()
 {
+    // bIsAvailable 복제 · 사운드 멀티캐스트용 (BP 설정에 기대지 않는다)
+    bReplicates = true;
+
     AvailableVFXComponent1 = CreateDefaultSubobject<UNiagaraComponent>(TEXT("AvailableVFX1"));
     AvailableVFXComponent1->SetupAttachment(RootComponent);
     AvailableVFXComponent1->bAutoActivate = false;

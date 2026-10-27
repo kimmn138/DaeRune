@@ -406,10 +406,6 @@ protected:
 	UFUNCTION()
 	void OnRep_CarriedPart();
 
-	// ========== 이동속도 관련 ==========
-
-	virtual float GetMoveSpeed() override;
-
 private:
 	// ========== 코스메틱 외형 (내부) ==========
 
@@ -497,6 +493,9 @@ private:
 
 	// 3P 빔 위치 업데이트 함수 (타이머 콜백)
 	void UpdateWaterPumpThirdPersonBeam();
+
+	// 3P 빔 컴포넌트 · 갱신 타이머 정리 (끄기 · 다시 켜기 · EndPlay 공용)
+	void StopWaterPumpThirdPersonBeam();
 
 	// GAS 초기화
 	virtual void InitAbilityActorInfo() override;

@@ -312,9 +312,6 @@ void ADRRobotVacuumCharacter::MountRider(ADRCharacter* Rider)
 
 	// ★Plan5(탑승칩)★ ① 탑 인원이 바뀌었다 — 감속 다시 맞추기 (D-81)
 	RefreshRideLoadsAfterLinkChange(Rider);
-
-	// 리슨 서버 parity (클라는 RepNotify 경로)
-	OnRep_RiderOnTop();
 }
 
 void ADRRobotVacuumCharacter::DismountRider(bool bLaunchOff)
@@ -328,7 +325,6 @@ void ADRRobotVacuumCharacter::DismountRider(bool bLaunchOff)
 	if (!IsValid(Rider))
 	{
 		RefreshRideLoadsAfterLinkChange(nullptr);   // ★Plan5(탑승칩)★ (D-81)
-		OnRep_RiderOnTop();
 		return;
 	}
 
@@ -361,12 +357,6 @@ void ADRRobotVacuumCharacter::DismountRider(bool bLaunchOff)
 	// ★Plan5(탑승칩)★ ① 탑 인원이 바뀌었다 — 내린 청소기는 맨 아래가 됐다 (D-81)
 	RefreshRideLoadsAfterLinkChange(Rider);
 
-	OnRep_RiderOnTop();
-}
-
-void ADRRobotVacuumCharacter::OnRep_RiderOnTop()
-{
-	// TODO(Plan3 Phase B): 탑승 프롬프트 갱신 등 클라 코스메틱 처리
 }
 
 void ADRRobotVacuumCharacter::SetInteractionUIVisible(bool bShow)
@@ -495,7 +485,7 @@ void ADRRobotVacuumCharacter::SetDashing(bool bEnabled)
 {
 	if (!HasAuthority() || bIsDashing == bEnabled) return;
 	bIsDashing = bEnabled;
-	OnRep_IsDashing();   // 리슨 서버 parity (OnRep_SustainedDash 와 같은 관례)
+	OnRep_IsDashing();   // 리슨 서버 parity (서버에서 직접 호출하는 관례)
 }
 
 void ADRRobotVacuumCharacter::OnRep_IsDashing()
@@ -547,14 +537,6 @@ void ADRRobotVacuumCharacter::SetSustainedDash(bool bEnabled)
 			ASC->RemoveReplicatedLooseGameplayTag(DashTag);
 		}
 	}
-
-	// 리슨 서버 parity (Armadillo OnRep_IsRolling 패턴)
-	OnRep_SustainedDash();
-}
-
-void ADRRobotVacuumCharacter::OnRep_SustainedDash()
-{
-	// TODO(Plan3 Phase F): 지속 돌진 루프 사운드/VFX 시작·정지
 }
 
 // ========== 돌진칩② 아군 통과 (Plan5(돌진칩)) ==========
@@ -563,7 +545,7 @@ void ADRRobotVacuumCharacter::SetDashPassThroughAllies(bool bEnabled)
 {
 	if (!HasAuthority() || bDashPassThroughAllies == bEnabled) return;
 	bDashPassThroughAllies = bEnabled;
-	OnRep_DashPassThroughAllies();   // 리슨 서버 parity (OnRep_SustainedDash 와 같은 관례)
+	OnRep_DashPassThroughAllies();   // 리슨 서버 parity (서버에서 직접 호출하는 관례)
 }
 
 void ADRRobotVacuumCharacter::OnRep_DashPassThroughAllies()

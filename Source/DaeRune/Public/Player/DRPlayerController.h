@@ -742,9 +742,6 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UDRInputConfig> InputConfig;
 
-	UPROPERTY()
-	TObjectPtr<UDRAbilitySystemComponent> DRAbilitySystemComponent;
-
 	UDRAbilitySystemComponent* GetASC() const;
 
 	// 해당 InputTag 의 어빌리티가 지금 차단 상태인지 (Carrying 중이거나 BlockedAbilityTags 에 걸린 상태)

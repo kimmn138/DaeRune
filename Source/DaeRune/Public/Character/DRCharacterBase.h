@@ -100,9 +100,6 @@ public:
 	virtual void OnRep_Burned();
 
 protected:
-	virtual void BeginPlay() override;
-	virtual void Destroyed() override;
-
 	// 부활 직전 서버 처리 (파생: 오염 해제 등). 체력 · 물 비율을 맞추기 전에 불린다.
 	virtual void PrepareRevive() {}
 

@@ -173,11 +173,6 @@ bool ADRGameModeBase::CheckTeamWipeout()
 	return (TotalPlayerCount > 0) && (AlivePlayerCount == 0);
 }
 
-void ADRGameModeBase::BeginPlay()
-{
-	Super::BeginPlay();
-}
-
 void ADRGameModeBase::HandleWipeout()
 {
 	if (!HasAuthority()) return;

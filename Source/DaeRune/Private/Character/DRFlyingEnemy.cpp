@@ -154,10 +154,11 @@ void ADRFlyingEnemy::StartSkillLockdown()
 		Context.AddSourceObject(this);
 		FGameplayEffectSpecHandle Spec = AbilitySystemComponent->MakeOutgoingSpec(
 			LockdownEffectClass, 1.f, Context);
-
-		Spec.Data->SetDuration(SkillLockdownDuration, true);
-
-		LockdownEffectHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*Spec.Data);
+		if (Spec.IsValid())
+		{
+			Spec.Data->SetDuration(SkillLockdownDuration, true);
+			LockdownEffectHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*Spec.Data);
+		}
 	}
 
 	// 경직 종료 타이머

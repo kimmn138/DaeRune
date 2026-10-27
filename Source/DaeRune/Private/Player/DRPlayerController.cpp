@@ -2169,7 +2169,7 @@ void ADRPlayerController::RestoreDefaultInputMode()
 		if (LGS && (LGS->GetLobbyState() == ELobbyState::WaitingRoom
 				  || LGS->GetLobbyState() == ELobbyState::Transitioning))
 		{
-			// TEST: 대기실은 GameAndUI로 통일 (ClientSetWaitingRoomView와 일치)
+			// 대기실은 GameAndUI 로 통일 (ClientSetWaitingRoomView 와 일치)
 			FInputModeGameAndUI InputMode;
 			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 			InputMode.SetHideCursorDuringCapture(false);
@@ -2276,13 +2276,11 @@ void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 
 	if (bIsSpectating) return;
 
-	// 입력 블록 확인 후 어빌리티 입력 처리
-	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
+	// 입력 블록 확인 후 어빌리티 입력 처리 (블록 중이면 아래 UI 피드백도 내지 않는다 — 그래서 ASC 가 아니라 여기서 본다)
+	UDRAbilitySystemComponent* ASC = GetASC();
+	if (!ASC || ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
 
-	if (GetASC())
-	{
-		GetASC()->AbilityInputTagPressed(InputTag);
-	}
+	ASC->AbilityInputTagPressed(InputTag);
 
 	// 스킬 아이콘 UI 피드백 브로드캐스트 (로컬 컨트롤러만, 차단 중이면 발화 안 함)
 	if (IsLocalController() && !IsAbilityInputBlocked(InputTag))
@@ -2306,10 +2304,10 @@ void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 	if (bIsSpectating) return;
 
 	// 입력 해제 블록 확인
-	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputReleased)) return;
+	UDRAbilitySystemComponent* ASC = GetASC();
+	if (!ASC || ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputReleased)) return;
 
-	if (GetASC() == nullptr) return;
-	GetASC()->AbilityInputTagReleased(InputTag);
+	ASC->AbilityInputTagReleased(InputTag);
 
 	// 스킬 아이콘 UI 피드백 브로드캐스트 (로컬 컨트롤러만, 차단 중이면 발화 안 함)
 	if (IsLocalController() && !IsAbilityInputBlocked(InputTag))
@@ -2327,12 +2325,12 @@ void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 void ADRPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
 {
 	if (bIsSpectating) return;
-		
-	// 입력 홀드 블록 확인
-	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputHeld)) return;
 
-	if (GetASC() == nullptr) return;
-	GetASC()->AbilityInputTagHeld(InputTag);
+	// 입력 홀드 블록 확인
+	UDRAbilitySystemComponent* ASC = GetASC();
+	if (!ASC || ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputHeld)) return;
+
+	ASC->AbilityInputTagHeld(InputTag);
 }
 
 UDRAbilitySystemComponent* ADRPlayerController::GetASC() const
@@ -2459,9 +2457,7 @@ void ADRPlayerController::ClientSetWaitingRoomView_Implementation(
 	// 즉시 고정 카메라로 전환
 	SetViewTargetWithBlend(CameraActor, 0.f);
 
-	// UI Only 모드 (마우스 커서 ON)
-	// TEST: GameAndUI mode for waiting room (Tab/ESC focus issue test)
-	// Revert: change block back to SetInputMode(FInputModeUIOnly());
+	// 대기실 입력: GameAndUI + 커서 (UIOnly 는 Tab/ESC 가 위젯 포커스에 막혀 GameAndUI 로 바꿨다)
 	{
 		FInputModeGameAndUI InputMode;
 		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);

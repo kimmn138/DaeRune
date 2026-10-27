@@ -19,8 +19,6 @@ class DAERUNE_API ADREnemySpawnGroup : public AActor
 public:
 	ADREnemySpawnGroup();
 
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
 	// 외부에서 호출할 함수
 
 	// 그룹에 적 등록
@@ -31,11 +29,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpawnGroup")
 	void ActivateAllEnemies();
 
-	// 남은 적 수 반환
+	// 남은 적 수 반환 (서버 전용 — 복제하지 않는다)
 	UFUNCTION(BlueprintPure, Category = "SpawnGroup")
 	int32 GetAliveEnemyCount() const { return AliveEnemyCount; }
 
-	// 전멸 여부
+	// 전멸 여부 (서버 전용)
 	UFUNCTION(BlueprintPure, Category = "SpawnGroup")
 	bool AreAllEnemiesDead() const { return bAllEnemiesDead; }
 
@@ -74,14 +72,9 @@ private:
 	// 서버 권위: Phase1이 선정한 부품 운반자
 	TWeakObjectPtr<ADREnemy> PartCarrierEnemy;
 
-	UPROPERTY(Replicated)
+	// 서버 집계 (클라에서 읽는 곳이 없어 복제하지 않는다)
 	int32 AliveEnemyCount = 0;
-
-	UPROPERTY(ReplicatedUsing = OnRep_AllEnemiesDead)
 	bool bAllEnemiesDead = false;
-
-	UFUNCTION()
-	void OnRep_AllEnemiesDead();
 
 	UFUNCTION()
 	void OnEnemyDestroyed(AActor* DestroyedActor);

@@ -15,11 +15,6 @@ ADRTutorialGameMode::ADRTutorialGameMode()
 	WipeoutDelayTime = 2.0f;
 }
 
-void ADRTutorialGameMode::BeginPlay()
-{
-	Super::BeginPlay();
-}
-
 UClass* ADRTutorialGameMode::GetDefaultPawnClassForController_Implementation(AController* InController)
 {
 	if (APlayerController* PC = Cast<APlayerController>(InController))

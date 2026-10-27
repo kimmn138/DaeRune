@@ -4,13 +4,15 @@
 #include "Actor/DREnemySpawnGroup.h"
 #include "Character/DREnemy.h"
 #include "Components/BillboardComponent.h"
-#include "Net/UnrealNetwork.h"
 
 ADREnemySpawnGroup::ADREnemySpawnGroup()
 {
 	PrimaryActorTick.bCanEverTick = false;
+
+	// 복제할 상태는 없다. bReplicates 는 클라에서 역할을 SimulatedProxy 로 바꿔 HasAuthority() 서버 판정을 지키려고만 켜 두고
+	// (복제 안 하는 레벨 배치 액터는 클라에서도 Authority 다), 처음부터 휴면(DORM_Initial)으로 두어 액터 채널을 열지 않는다.
 	bReplicates = true;
-	bAlwaysRelevant = true;
+	NetDormancy = DORM_Initial;
 
 	// Root Component
 	RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootSceneComponent"));
@@ -32,14 +34,6 @@ void ADREnemySpawnGroup::BeginPlay()
 			}
 		}
 	}
-}
-
-void ADREnemySpawnGroup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	DOREPLIFETIME(ADREnemySpawnGroup, AliveEnemyCount);
-	DOREPLIFETIME(ADREnemySpawnGroup, bAllEnemiesDead);
 }
 
 void ADREnemySpawnGroup::RegisterEnemy(ADREnemy* Enemy)
@@ -68,12 +62,8 @@ void ADREnemySpawnGroup::ActivateAllEnemies()
 	{
 		if (ADREnemy* Enemy = WeakEnemy.Get())
 		{
-			// 적 활성화 (DREnemy에 이 함수가 있다고 가정)
 			Enemy->SetActorHiddenInGame(false);
 			Enemy->SetActorEnableCollision(true);
-
-			// AI 활성화는 DREnemy의 함수로 처리
-			// Enemy->ActivateAI();
 		}
 	}
 }
@@ -101,14 +91,6 @@ void ADREnemySpawnGroup::CheckAllEnemiesDead()
 
 		// 전멸 delegate
 		OnAllEnemiesDead.Broadcast();
-	}
-}
-
-void ADREnemySpawnGroup::OnRep_AllEnemiesDead()
-{
-	if (bAllEnemiesDead)
-	{
-		// 클라이언트에서 필요한 처리 (UI 업데이트 등)
 	}
 }
 

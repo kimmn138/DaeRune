@@ -92,4 +92,7 @@ public:
 	/** 수치 1건 포맷 (Percent 는 0.12 → "+12%", Flat 은 20 → "+20") */
 	UFUNCTION(BlueprintPure, Category = "Upgrade|UI")
 	static FText FormatValue(float Value, EDRUpgradeOp Op);
+
+	/** 수치 표기 공통 숫자 포맷 — FormatValue 와 FDRUpgradeModifier::GetDetailText 가 같이 쓴다 */
+	static FNumberFormattingOptions MakeValueFormatOptions();
 };

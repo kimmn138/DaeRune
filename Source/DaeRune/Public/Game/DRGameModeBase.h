@@ -62,8 +62,6 @@ public:
 	TSubclassOf<ADRCharacter> FindPlayerCharacterClass(EPlayerCharacterClass CharacterClass) const;
 
 protected:
-	virtual void BeginPlay() override;
-
 	// 사망/이탈을 현재 페이즈에 통지 (스테이지 게임모드가 오버라이드)
 	virtual void NotifyPhasePlayerDied(APlayerState* DeadPlayerState) {}
 	virtual void NotifyPhasePlayerLeft(APlayerState* LeftPlayerState) {}
