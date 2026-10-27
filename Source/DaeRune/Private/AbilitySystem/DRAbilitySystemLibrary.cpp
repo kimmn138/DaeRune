@@ -1283,6 +1283,15 @@ float UDRAbilitySystemLibrary::GetFirstPersonSyncTime(const UAnimMontage* FPMont
 	return TPEventTime * FPMontage->GetPlayLength() / TPLength;
 }
 
+float UDRAbilitySystemLibrary::GetFirstPersonSyncRate(const UAnimMontage* FPMontage, const FGameplayTag& SyncTag,
+	const UAnimMontage* TPMontage, const FGameplayTag& TPEventTag)
+{
+	const float TPEventTime = FindMontageEventTime(TPMontage, TPEventTag);
+	if (!FPMontage || TPEventTime <= 0.f) return 1.f;
+
+	return GetFirstPersonSyncTime(FPMontage, SyncTag, TPMontage, TPEventTime) / TPEventTime;
+}
+
 // ========== 로봇 청소기 탑승 칩 (Plan5(탑승칩)) ==========
 
 float UDRAbilitySystemLibrary::GetRideDamageMultiplier(const AActor* SourceAvatar)

@@ -162,9 +162,6 @@ private:
 	// 자릿값 배열을 텍스처로 반영한다
 	void ApplyDigitTextures(const TArray<int32>& DisplayDigits);
 
-	// 자릿값 -> 텍스처 (음수/범위 밖이면 EmptySlotTexture)
-	UTexture2D* DigitToTexture(int32 Digit) const;
-
 	UPROPERTY()
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> DisplayMIDs;
 

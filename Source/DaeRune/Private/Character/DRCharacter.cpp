@@ -21,7 +21,6 @@
 #include "Actor/DRCleanserPart.h"
 #include "Actor/DRCleanserSite.h"
 #include "Net/UnrealNetwork.h"
-#include "Components/PointLightComponent.h"
 #include "Game/DRGameUserSettings.h"
 #include "UObject/UObjectIterator.h"
 #include "Components/WidgetComponent.h"

@@ -1,6 +1,7 @@
 // Copyright DaeRune
 
 #include "Actor/Stage2/DRS2CodeScreen.h"
+#include "Actor/Stage2/DRS2DigitDisplay.h"
 
 #include "Materials/MaterialInstanceDynamic.h"
 #include "DaeRune/DRLogChannels.h"
@@ -46,61 +47,13 @@ void ADRS2CodeScreen::EnsureDisplayMIDs()
 		return;
 	}
 
-	const int32 SlotTotal = ScreenMesh->GetNumMaterials();
-
-	for (int32 Slot : DigitMaterialSlots)
-	{
-		if (Slot < 0 || Slot >= SlotTotal)
-		{
-			UE_LOG(LogDR, Error,
-				TEXT("[S2Screen] %s: 머티리얼 슬롯 %d 이 범위(0~%d) 밖입니다."),
-				*GetName(), Slot, SlotTotal - 1);
-			DisplayMIDs.Add(nullptr);
-			continue;
-		}
-
-		UMaterialInstanceDynamic* MID = ScreenMesh->CreateAndSetMaterialInstanceDynamic(Slot);
-		if (!MID)
-		{
-			UE_LOG(LogDR, Error,
-				TEXT("[S2Screen] %s: 슬롯 %d 의 MID 생성 실패. 그 슬롯에 머티리얼이 있는지 확인하세요."),
-				*GetName(), Slot);
-		}
-
-		DisplayMIDs.Add(MID);
-	}
-
-	if (DigitTextures.Num() < 10)
-	{
-		UE_LOG(LogDR, Warning,
-			TEXT("[S2Screen] %s: DigitTextures 가 %d개뿐입니다. 0~9 를 채우세요."),
-			*GetName(), DigitTextures.Num());
-	}
-}
-
-UTexture2D* ADRS2CodeScreen::DigitToTexture(int32 Digit) const
-{
-	if (!DigitTextures.IsValidIndex(Digit))
-	{
-		return EmptySlotTexture.Get();
-	}
-
-	UTexture2D* Texture = DigitTextures[Digit].Get();
-	return Texture ? Texture : EmptySlotTexture.Get();
+	DRS2DigitDisplay::BuildMIDs(ScreenMesh, DigitMaterialSlots, DigitTextures.Num(),
+		FString::Printf(TEXT("[S2Screen] %s:"), *GetName()), DisplayMIDs);
 }
 
 void ADRS2CodeScreen::ApplyDigitTextures()
 {
-	for (int32 SlotIndex = 0; SlotIndex < DisplayMIDs.Num(); ++SlotIndex)
-	{
-		UMaterialInstanceDynamic* MID = DisplayMIDs[SlotIndex];
-		if (!MID) continue;
-
-		// 배열보다 자리가 많으면 남는 자리는 미표시로 둔다.
-		const int32 Digit = Digits.IsValidIndex(SlotIndex) ? Digits[SlotIndex] : INDEX_NONE;
-
-		MID->SetTextureParameterValue(TextureParameterName, DigitToTexture(Digit));
-	}
+	DRS2DigitDisplay::ApplyDigits(DisplayMIDs, TextureParameterName, DigitTextures, EmptySlotTexture, Digits);
 }
 
 void ADRS2CodeScreen::SetDigits(const TArray<int32>& InDigits)

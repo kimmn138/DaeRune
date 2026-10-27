@@ -472,6 +472,13 @@ public:
 	static float GetFirstPersonSyncTime(const UAnimMontage* FPMontage, const FGameplayTag& SyncTag,
 		const UAnimMontage* TPMontage, float TPEventTime);
 
+	/**
+	 * TP 를 속도 1 로 틀 때, FP 의 SyncTag 순간이 TP 의 TPEventTag 순간과 겹치게 하는 FP 재생 속도.
+	 * TP 이벤트 노티파이가 없거나 FP 몽타주가 비면 1 (벨보이 도발 · 모자 던지기 공용, Plan8 D-35)
+	 */
+	static float GetFirstPersonSyncRate(const UAnimMontage* FPMontage, const FGameplayTag& SyncTag,
+		const UAnimMontage* TPMontage, const FGameplayTag& TPEventTag);
+
 	// ========== 로봇 청소기 탑승 칩 (Plan5(탑승칩)) ==========
 
 	/**

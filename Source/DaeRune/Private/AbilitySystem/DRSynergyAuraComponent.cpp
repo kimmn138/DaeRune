@@ -8,7 +8,6 @@
 #include "Character/DRCharacter.h"
 #include "DRGameplayTags.h"
 #include "DaeRune/DRLogChannels.h"
-#include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "Game/DRProgressionConfig.h"
 #include "GameplayEffect.h"
@@ -109,50 +108,25 @@ void UDRSynergyAuraComponent::TickAura()
 AActor* UDRSynergyAuraComponent::FindNearestTeammate(const FVector& Origin, float Radius) const
 {
 	AActor* Owner = GetOwner();
-	UWorld* World = GetWorld();
-	if (!Owner || !World || Radius <= 0.f) return nullptr;
+	if (!Owner) return nullptr;
 
-	// UDREliteRoar::TickRoarAura 와 같은 방식 —
-	// Z 차이를 감안해 오버랩 반경에 여유를 두고, 실제 판정은 아래에서 다시 한다.
-	TArray<FOverlapResult> Overlaps;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(Owner);
-
-	World->OverlapMultiByChannel(
-		Overlaps,
-		Origin,
-		FQuat::Identity,
-		ECC_Pawn,
-		FCollisionShape::MakeSphere(Radius + 200.f),
-		QueryParams);
+	// 팀원 판정("Player" 태그 → ADRCharacter → 생존 → ASC 보유 → 거리)은 라이브러리와 같다 — 그중 가장 가까운 한 명
+	TArray<AActor*> Teammates;
+	UDRAbilitySystemLibrary::GetAlivePlayersWithinRadius(Owner, Origin, Radius, Teammates);
 
 	AActor* Best = nullptr;
 	float BestDistSq = TNumericLimits<float>::Max();
-
-	for (const FOverlapResult& Result : Overlaps)
+	for (AActor* Candidate : Teammates)
 	{
-		AActor* Candidate = Result.GetActor();
-		if (!Candidate || Candidate == Owner) continue;
-
-		// 팀원 판정 = 액터 태그 (UDRAbilitySystemLibrary::IsNotFriend 와 같은 기준)
-		if (!Candidate->ActorHasTag(FName("Player"))) continue;
-		if (!Cast<ADRCharacter>(Candidate)) continue;
-
-		if (Candidate->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(Candidate)) continue;
-
-		// ASC 가 없으면 버프를 걸 수 없다
-		if (!UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Candidate)) continue;
+		if (Candidate == Owner) continue;
 
 		const float DistSq = FVector::DistSquared(Candidate->GetActorLocation(), Origin);
-		if (DistSq > Radius * Radius) continue;
-
 		if (DistSq < BestDistSq)
 		{
 			BestDistSq = DistSq;
 			Best = Candidate;
 		}
 	}
-
 	return Best;
 }
 

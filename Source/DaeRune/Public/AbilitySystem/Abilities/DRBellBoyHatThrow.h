@@ -72,5 +72,6 @@ private:
 	// 모자가 나갈 위치 — FP 고정 소켓이 있으면 그것, 없으면 TP 소켓 (Plan8 D-39)
 	FVector GetReleaseLocation() const;
 
+	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> ActiveFirstPersonMontage;   // 로컬 제어일 때만 채워진다 (Plan8 D-33)
 };

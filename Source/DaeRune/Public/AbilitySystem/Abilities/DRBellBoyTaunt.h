@@ -111,5 +111,6 @@ private:
 	// ★Plan5(도발칩)★ ② 이번 시전의 반경(uu) — OnTauntStart 에서 1회 구해 스캔 · 큐가 같이 쓴다 (Plan5 D-130 · T-149)
 	float EffectiveTauntRadius = 0.f;
 
+	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> ActiveFirstPersonMontage;   // 로컬 제어일 때만 채워진다 (Plan8 D-33)
 };

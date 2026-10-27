@@ -44,12 +44,8 @@ void UDRBellBoyTaunt::ActivateAbility(const FGameplayAbilitySpecHandle Handle, c
 	MontageTask->ReadyForActivation();
 
 	// Plan8(FP) FP 포즈 프레임이 TP 판정 시작과 같은 순간에 오도록 (D-35). TP 는 속도 1
-	float FPRate = 1.f;
-	const float TPEventTime = UDRAbilitySystemLibrary::FindMontageEventTime(TauntMontage, TauntStartEventTag);
-	if (FirstPersonTauntMontage && TPEventTime > 0.f)
-	{
-		FPRate = UDRAbilitySystemLibrary::GetFirstPersonSyncTime(FirstPersonTauntMontage, FirstPersonSyncTag, TauntMontage, TPEventTime) / TPEventTime;
-	}
+	const float FPRate = UDRAbilitySystemLibrary::GetFirstPersonSyncRate(
+		FirstPersonTauntMontage, FirstPersonSyncTag, TauntMontage, TauntStartEventTag);
 	ActiveFirstPersonMontage = UDRAbilitySystemLibrary::PlayFirstPersonMontage(GetAvatarActorFromActorInfo(), FirstPersonTauntMontage, FPRate);
 }
 

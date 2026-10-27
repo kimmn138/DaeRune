@@ -906,9 +906,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Progression|Budget")
 	int32 GetSlotUnlockCostForClass() const;
 
-	// 총 획득 >= 총 필요 인지 검사. 콘텐츠 작업 후 1회 실행할 것. (Plan2.md 5.4)
+	// 총 획득 >= 총 필요 인지 검사 (+ 보상 Id 중복 · 해금 스테이지 · 카탈로그 · 기본 장착). 콘텐츠 작업 후 1회 실행할 것. (Plan2.md 5.4)
 	UFUNCTION(BlueprintCallable, Category = "Progression|Budget")
 	bool ValidateCurrencyBudget(TArray<FString>& OutErrors) const;
+
+	/**
+	 * 칩 튜닝 정합성 — 잭팟 확률표 · 공속/청소기 칩 GE · 벨보이 칩 수치 (Plan5). 문제가 없으면 true.
+	 * 비우거나 틀리면 칩이 ★에러 없이★ 기본 동작처럼 굴어서 따로 검사한다. OutErrors 에 덧붙인다.
+	 */
+	bool ValidateChipTuning(TArray<FString>& OutErrors) const;
 
 	/**
 	 * 업적 · 스팀 키 · 옷 해금 조건의 정합성 (Plan(옷장) D-29). 문제가 없으면 true.

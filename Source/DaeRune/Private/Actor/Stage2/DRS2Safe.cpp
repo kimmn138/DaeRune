@@ -1,6 +1,7 @@
 // Copyright DaeRune
 
 #include "Actor/Stage2/DRS2Safe.h"
+#include "Actor/Stage2/DRS2DigitDisplay.h"
 
 #include "Actor/DRCleanserPart.h"
 #include "Actor/Stage2/DRS2CodeScreen.h"
@@ -58,53 +59,12 @@ void ADRS2Safe::EnsureDisplayMIDs()
 		return;
 	}
 
-	const int32 SlotTotal = TargetMesh->GetNumMaterials();
-
-	for (int32 Slot : DigitMaterialSlots)
-	{
-		if (Slot < 0 || Slot >= SlotTotal)
-		{
-			UE_LOG(LogDR, Error, TEXT("[S2Safe] 머티리얼 슬롯 %d 이 범위(0~%d) 밖입니다."), Slot, SlotTotal - 1);
-			DisplayMIDs.Add(nullptr);
-			continue;
-		}
-
-		UMaterialInstanceDynamic* MID = TargetMesh->CreateAndSetMaterialInstanceDynamic(Slot);
-		if (!MID)
-		{
-			UE_LOG(LogDR, Error, TEXT("[S2Safe] 슬롯 %d 의 MID 생성 실패. 그 슬롯에 머티리얼이 있는지 확인하세요."), Slot);
-		}
-
-		DisplayMIDs.Add(MID);
-	}
-
-	if (DigitTextures.Num() < 10)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[S2Safe] DigitTextures 가 %d개뿐입니다. 0~9 를 채우세요."), DigitTextures.Num());
-	}
-}
-
-UTexture2D* ADRS2Safe::DigitToTexture(int32 Digit) const
-{
-	if (!DigitTextures.IsValidIndex(Digit))
-	{
-		return EmptySlotTexture.Get();
-	}
-
-	UTexture2D* Texture = DigitTextures[Digit].Get();
-	return Texture ? Texture : EmptySlotTexture.Get();
+	DRS2DigitDisplay::BuildMIDs(TargetMesh, DigitMaterialSlots, DigitTextures.Num(), TEXT("[S2Safe]"), DisplayMIDs);
 }
 
 void ADRS2Safe::ApplyDigitTextures(const TArray<int32>& DisplayDigits)
 {
-	for (int32 SlotIndex = 0; SlotIndex < DisplayMIDs.Num(); ++SlotIndex)
-	{
-		UMaterialInstanceDynamic* MID = DisplayMIDs[SlotIndex];
-		if (!MID) continue;
-
-		const int32 Digit = DisplayDigits.IsValidIndex(SlotIndex) ? DisplayDigits[SlotIndex] : INDEX_NONE;
-		MID->SetTextureParameterValue(TextureParameterName, DigitToTexture(Digit));
-	}
+	DRS2DigitDisplay::ApplyDigits(DisplayMIDs, TextureParameterName, DigitTextures, EmptySlotTexture, DisplayDigits);
 }
 
 void ADRS2Safe::RegisterButton(ADRS2SafeButton* Button)

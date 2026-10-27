@@ -319,6 +319,24 @@ bool UDRProgressionConfig::ValidateCurrencyBudget(TArray<FString>& OutErrors) co
 		}
 	}
 
+	if (OutErrors.Num() > 0)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[ProgressionConfig] %s: 검증 오류 %d건 (첫 항목: %s)"),
+			*GetName(), OutErrors.Num(), *OutErrors[0]);
+	}
+	else
+	{
+		UE_LOG(LogDR, Log, TEXT("[ProgressionConfig] %s: 검증 통과. 재화 예산 %d / 필요 %d"),
+			*GetName(), Budget, Required);
+	}
+
+	return OutErrors.Num() == 0;
+}
+
+bool UDRProgressionConfig::ValidateChipTuning(TArray<FString>& OutErrors) const
+{
+	const int32 ErrorCountBefore = OutErrors.Num();
+
 	// ===== ★Plan5(잭팟칩)★ 잭팟 확률표 검사 (D-61) =====
 	// 합이 1 이 아니어도 코드는 정규화로 버티지만, 그러면 디자이너가 쓴 숫자와 다른 확률이 조용히 나간다.
 	{
@@ -570,18 +588,7 @@ bool UDRProgressionConfig::ValidateCurrencyBudget(TArray<FString>& OutErrors) co
 		}
 	}
 
-	if (OutErrors.Num() > 0)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[ProgressionConfig] %s: 검증 오류 %d건 (첫 항목: %s)"),
-			*GetName(), OutErrors.Num(), *OutErrors[0]);
-	}
-	else
-	{
-		UE_LOG(LogDR, Log, TEXT("[ProgressionConfig] %s: 검증 통과. 재화 예산 %d / 필요 %d"),
-			*GetName(), Budget, Required);
-	}
-
-	return OutErrors.Num() == 0;
+	return OutErrors.Num() == ErrorCountBefore;
 }
 
 bool UDRProgressionConfig::ValidateStageSelect(TArray<FString>& OutErrors) const
@@ -646,6 +653,9 @@ void UDRProgressionConfig::PostEditChangeProperty(FPropertyChangedEvent& Propert
 	// 편집 즉시 검증 — 재화 예산 미달/칩 정합성 오류를 로그로 알린다.
 	TArray<FString> Errors;
 	ValidateCurrencyBudget(Errors);
+
+	// 칩 튜닝 (잭팟 확률표 · 칩 GE · 벨보이 칩 수치)
+	ValidateChipTuning(Errors);
 
 	// 업적 · 스팀 키 · 옷 해금 조건 (Plan(옷장) D-29)
 	TArray<FString> AchievementErrors;

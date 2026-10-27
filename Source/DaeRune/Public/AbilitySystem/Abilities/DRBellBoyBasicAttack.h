@@ -150,6 +150,7 @@ private:
 	float PendingFirstPersonRecoveryRate = 1.f;
 	float PendingRecoveryTime = 0.4f;          // ★Plan5(가방칩)★ 실제 후딜(초) — 칩 · 공속 반영. 끝 = 타격 + 이 값 (Plan5 D-122)
 	float ActiveHitWindowDuration = 0.1f;      // ★Plan5(가방칩)★ 이번 판정 창 = min(HitWindowDuration, 실제 후딜) (Plan5 D-122)
+	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> ActiveFirstPersonMontage;   // 로컬 제어일 때만 채워진다 (Plan8 D-33)
 	bool bHitEventReceived = false;
 	bool bRecoveryDone = false;                // ★Plan5(가방칩)★ 예전 bMontageDone — 몽타주 끝은 타격이 없을 때만 본다 (Plan5 T-151)
