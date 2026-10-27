@@ -147,6 +147,9 @@ void UDRGameInstance::EnsureProgressInitialized()
 {
 	if (!CurrentSaveGame) return;
 
+	// 아래 단계 중 하나라도 세이브를 바꾸면 끝에서 한 번만 저장한다 (버전만 올라간 경우도 포함)
+	bool bNeedsSave = false;
+
 	// ===== 세이브 포맷 마이그레이션 =====
 	// v0 = 방금 생성된 새 세이브, v1 = 경험치/레벨(폐기), v2 = 랭크 구매형 업그레이드(폐기),
 	// v3 = 슬롯 카테고리 분리(폐기 — 통합 6칸으로 대체).
@@ -173,6 +176,7 @@ void UDRGameInstance::EnsureProgressInitialized()
 		CurrentSaveGame->PendingSteamAchievements.Reset();
 
 		CurrentSaveGame->SaveVersion = UDRSaveGame::CurrentSaveVersion;
+		bNeedsSave = true;
 	}
 
 	// 누락된 로봇 키를 빈 상태로 lazy 초기화 (enum 추가 시 자동 대응)
@@ -203,10 +207,7 @@ void UDRGameInstance::EnsureProgressInitialized()
 				static_cast<int32>(Pair.Key));
 		}
 
-		if (bCosmeticChanged)
-		{
-			SaveProgress();
-		}
+		bNeedsSave |= bCosmeticChanged;
 	}
 
 	// ★Plan3(공용칩)★ 기본 장착 — 반드시 SanitizeClassState 보다 ★먼저★ 돌아야 한다.
@@ -248,10 +249,12 @@ void UDRGameInstance::EnsureProgressInitialized()
 			CurrentSaveGame->Currency += TotalReclaimed;
 		}
 
-		if (bAnyChanged || bDefaultsChanged)
-		{
-			SaveProgress();
-		}
+		bNeedsSave |= bAnyChanged || bDefaultsChanged;
+	}
+
+	if (bNeedsSave)
+	{
+		SaveProgress();
 	}
 }
 

@@ -21,8 +21,6 @@ class DAERUNE_API UDRSaveGame : public USaveGame
 	GENERATED_BODY()
 
 public:
-	UDRSaveGame();
-
 	// 튜토리얼 완료 플래그
 	UPROPERTY(VisibleAnywhere, Category = "Progress")
 	bool bHasCompletedTutorial = false;

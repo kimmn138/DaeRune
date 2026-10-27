@@ -3,7 +3,6 @@
 
 #include "Actor/Stage2/DRS2MoleSlashWave.h"
 
-#include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Character/DRCharacter.h"
@@ -130,24 +129,8 @@ void ADRS2MoleSlashWave::OnSphereOverlap(UPrimitiveComponent* OverlappedComponen
 
 	if (!HasAuthority()) return;
 
-	if (UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(OtherActor))
-	{
-		DamageEffectParams.DeathImpulse = GetActorForwardVector() * DamageEffectParams.DeathImpulseMagnitude;
-
-		const bool bKnockback = FMath::RandRange(1, 100) <= DamageEffectParams.KnockbackChance;   // 100 이면 항상, 0 이면 안 함
-		if (bKnockback)
-		{
-			FRotator Rotation = GetActorRotation();
-			Rotation.Pitch = 45.f;
-			// ★Roll 은 칼날 기울기라 넉백 방향에 섞이면 안 된다.
-			Rotation.Roll = 0.f;
-
-			DamageEffectParams.KnockbackForce = Rotation.Vector() * DamageEffectParams.KnockbackForceMagnitude;
-		}
-
-		DamageEffectParams.TargetAbilitySystemComponent = TargetASC;
-		UDRAbilitySystemLibrary::ApplyDamageEffect(DamageEffectParams);
-	}
+	// 피해 · 넉백은 투사체 공용 경로 (칼날 기울기 Roll 은 FRotator::Vector 가 쓰지 않아 넉백 방향에 섞이지 않는다)
+	ApplyImpactDamage(OtherActor);
 
 	// ★MaxPierceCount = 0 이면 이 블록에 절대 들어가지 않는다 = 무제한 관통.
 	//   검기를 멈추는 것은 오직 지형(Tick)과 수명뿐이다.

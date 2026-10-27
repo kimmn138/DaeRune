@@ -6,7 +6,6 @@
 #include "Actor/DRCleanserSite.h"
 #include "Phase/DRPhaseBase.h"
 #include "EngineUtils.h"
-#include "MultiplayerSessionsSubsystem.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
 #include "Character/DRCharacter.h"
@@ -96,7 +95,7 @@ void ADRStageGameMode::BeginPlay()
 	Super::BeginPlay();
 
 	// 도중 참가 차단
-	BlockJoinInProgress();
+	SetJoinInProgress(false);   // 스테이지에서는 도중 참가 차단
 
 	// GameState 캐싱
 	CachedGameState = GetGameState<ADRStageGameState>();
@@ -131,21 +130,6 @@ void ADRStageGameMode::HandleWipeout()
 	ReturnToLobby();
 }
 
-void ADRStageGameMode::BlockJoinInProgress()
-{
-	if (!HasAuthority()) return;
-
-	UGameInstance* GameInstance = GetGameInstance();
-	if (!GameInstance) return;
-
-	UMultiplayerSessionsSubsystem* SessionsSubsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>();
-	if (SessionsSubsystem)
-	{
-		// 스테이지에서는 도중 참가 차단!
-		SessionsSubsystem->UpdateSessionJoinability(false);
-	}
-}
-
 void ADRStageGameMode::ReturnToLobby()
 {
 	if (!HasAuthority()) return;
@@ -175,51 +159,48 @@ void ADRStageGameMode::NotifyAllPlayersGameEnd(bool bIsGameClear)
 		? TotalPhases
 		: (CachedGameState ? FMath::Max(0, CachedGameState->GetCurrentPhaseIndex()) : 0);
 
-	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	ForEachDRPlayerController([&](ADRPlayerController* PC)
 	{
-		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
+		// 재화 보상 통지를 결과 UI 표시보다 먼저 보낸다 (결과창이 반영된 지갑을 읽도록)
+		FDRStageRewardReport Report;
+		Report.StageId = StageId;
+		Report.bGameClear = bIsGameClear;
+		Report.ClearedPhaseCount = ClearedPhaseCount;
+
+		if (const ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
 		{
-			// 재화 보상 통지를 결과 UI 표시보다 먼저 보낸다 (결과창이 반영된 지갑을 읽도록)
-			FDRStageRewardReport Report;
-			Report.StageId = StageId;
-			Report.bGameClear = bIsGameClear;
-			Report.ClearedPhaseCount = ClearedPhaseCount;
+			Report.PlayedClass = PS->GetSelectedPlayerClass();
+			Report.KillCount = PS->GetStageKillCount();
+		}
 
-			if (const ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
+		// 업적/클리어 조건은 클리어를 전제로 한다 (Plan2.md 12-2)
+		if (bIsGameClear)
+		{
+			Report.AchievementIds = GlobalPendingAchievements;
+			if (const TArray<FName>* PlayerAchievements = PendingAchievements.Find(PC))
 			{
-				Report.PlayedClass = PS->GetSelectedPlayerClass();
-				Report.KillCount = PS->GetStageKillCount();
-			}
-
-			// 업적/클리어 조건은 클리어를 전제로 한다 (Plan2.md 12-2)
-			if (bIsGameClear)
-			{
-				Report.AchievementIds = GlobalPendingAchievements;
-				if (const TArray<FName>* PlayerAchievements = PendingAchievements.Find(PC))
+				for (const FName& Id : *PlayerAchievements)
 				{
-					for (const FName& Id : *PlayerAchievements)
-					{
-						Report.AchievementIds.AddUnique(Id);
-					}
+					Report.AchievementIds.AddUnique(Id);
 				}
 			}
-
-			PC->Client_GrantStageReward(Report);
-
-			// UI 표시
-			if (bIsGameClear)
-			{
-				PC->Client_ShowGameClearUI();
-			}
-			else
-			{
-				PC->Client_ShowGameOverUI();
-			}
-
-			// 오디오 정리 (맵 전환 전 미리 수행)
-			PC->ClientStopAllAudio();
 		}
-	}
+
+		PC->Client_GrantStageReward(Report);
+
+		// UI 표시
+		if (bIsGameClear)
+		{
+			PC->Client_ShowGameClearUI();
+		}
+		else
+		{
+			PC->Client_ShowGameOverUI();
+		}
+
+		// 오디오 정리 (맵 전환 전 미리 수행)
+		PC->ClientStopAllAudio();
+	});
 }
 
 void ADRStageGameMode::NotifyPhasePlayerDied(APlayerState* DeadPlayerState)

@@ -96,8 +96,8 @@ ADRHUD
 - Multicast RPCs for synchronized effects (death, VFX)
 
 **Team System**:
-- Players (Team 1) via `ADRPlayerController` implementing `IGenericTeamAgentInterface`
-- AI (Team 2) via `ADRAIController`
+- Players (TeamId 0) via `ADRPlayerController` implementing `IGenericTeamAgentInterface`
+- AI (TeamId 1) via `ADRAIController`
 
 ## Gameplay Tag Structure
 

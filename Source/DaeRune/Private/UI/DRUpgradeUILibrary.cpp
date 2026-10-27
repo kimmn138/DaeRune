@@ -123,6 +123,9 @@ FText UDRUpgradeUILibrary::GetStatDisplayName(EDRUpgradeStat Stat)
 		break;
 	}
 
+	// switch 에 빠진 스탯 — UMETA DisplayName 은 에디터 전용 · 현지화 불가라 화면 글자로 쓰면 안 된다
+	// (패키징하면 열거자 이름이 그대로 보인다). 새 스탯을 추가했으면 위 switch 에 LOCTEXT 를 넣는다.
+	ensureMsgf(false, TEXT("GetStatDisplayName: 스탯 %d 의 표시 이름이 없다 — switch 에 LOCTEXT 를 추가할 것"), static_cast<int32>(Stat));
 	return UEnum::GetDisplayValueAsText(Stat);
 }
 

@@ -20,8 +20,6 @@ ADRFlyingEnemy::ADRFlyingEnemy()
 	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
 	MoveComp->DefaultLandMovementMode = EMovementMode::MOVE_Flying;
 	MoveComp->SetMovementMode(MOVE_Flying);
-	MoveComp->MaxFlySpeed = FlyingSpeed;
-	MoveComp->BrakingDecelerationFlying = FlyingDeceleration;
 	MoveComp->GravityScale = 0.f;
 	MoveComp->bOrientRotationToMovement = false;
 	MoveComp->NavAgentProps.bCanFly = true;
@@ -43,6 +41,14 @@ ADRFlyingEnemy::ADRFlyingEnemy()
 void ADRFlyingEnemy::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 비행 속도 · 감속 — 생성자에서 넣으면 BP · 배치 인스턴스에서 바꾼 값이 반영되지 않는다.
+	// (MoveSpeed 어트리뷰트는 적의 MaxWalkSpeed 만 맞춘다 — 비행 속도는 이 값이 그대로 쓰인다)
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->MaxFlySpeed = FlyingSpeed;
+		MoveComp->BrakingDecelerationFlying = FlyingDeceleration;
+	}
 
 	// FixedAltitude가 지정되지 않았다면 현재 Z를 기준으로 설정
 	if (FixedAltitude < 0.f)

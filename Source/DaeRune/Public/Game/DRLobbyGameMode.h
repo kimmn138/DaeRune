@@ -59,12 +59,6 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void HandleWipeout() override;
 
-	// 세션 참가 허용
-	void AllowJoinInProgress();
-
-	// 세션 참가 차단
-	void BlockJoinInProgress();
-
 	// 로비 재시작
 	void RestartLobby();
 

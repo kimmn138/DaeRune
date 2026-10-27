@@ -85,11 +85,8 @@ void ADRTutorialGameMode::NotifyAllPlayersTutorialComplete()
 {
 	if (!HasAuthority()) return;
 
-	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	ForEachDRPlayerController([&](ADRPlayerController* PC)
 	{
-		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
-		{
-			PC->Client_ShowTutorialClearUI();
-		}
-	}
+		PC->Client_ShowTutorialClearUI();
+	});
 }

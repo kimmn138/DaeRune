@@ -40,6 +40,36 @@
 #include "Components/CapsuleComponent.h"
 #include "TimerManager.h"
 
+namespace
+{
+	// "소스(없으면 대상 자신) 컨텍스트 → 스펙" 공통 블록 — 시간제 효과 · 회복 · 모자가 같이 쓴다.
+	// 소스 ASC 가 없으면(발사체 주인이 사라진 경우 등) 대상 자신을 소스로 삼는다.
+	FGameplayEffectSpecHandle MakeSpecFromSourceOrTarget(UAbilitySystemComponent* SourceASC, UAbilitySystemComponent* TargetASC,
+		TSubclassOf<UGameplayEffect> EffectClass, const UObject* SourceObject = nullptr)
+	{
+		UAbilitySystemComponent* EffectSource = SourceASC ? SourceASC : TargetASC;
+		FGameplayEffectContextHandle Context = EffectSource->MakeEffectContext();
+		Context.AddSourceObject(SourceObject ? SourceObject : EffectSource->GetAvatarActor());
+		return EffectSource->MakeOutgoingSpec(EffectClass, 1.f, Context);
+	}
+
+	// 적중 회복류 칩(흡혈 · 동전 적중 회복) 공통 판정
+	// ① 소스가 그 칩을 끼고 있고 ② 이 피해가 ★그 기본 공격에서★ 나왔고(빠뜨리면 다른 피해원까지 회복된다 —
+	//    ApplyDamageEffect 가 컨텍스트에 SourceAbilityTags 를 실어 준다) ③ ★시전자가 오염 중이 아니어야★ 한다.
+	//    HandleCorruptionPurification 은 회복량과 무관하게 정화 + 컨테이너 1칸을 주므로, 막지 않으면 오염되자마자
+	//    적 한 대로 즉시 정화된다 — 오염 해제는 아군 회복으로만 하는 팀 메커니즘이다 (2026-10-08 사용자 결정, D-42).
+	bool PassesHitHealGate(const FEffectProperties& Props, const FGameplayTag& FeatureTag, const FGameplayTag& SourceAbilityTag)
+	{
+		if (!UDRAbilitySystemLibrary::HasUpgradeFeature(Props.SourceASC, FeatureTag)) return false;
+
+		const FDRGameplayEffectContext* DRContext = FDRGameplayEffectContext::FromHandle(Props.EffectContextHandle);
+		if (!DRContext || !DRContext->GetSourceAbilityTags().HasTagExact(SourceAbilityTag)) return false;
+
+		const UDRPlayerAttributeSet* SourcePlayerAS = UDRAbilitySystemLibrary::GetPlayerAttributeSetFromASC(Props.SourceASC);
+		return !(SourcePlayerAS && SourcePlayerAS->IsCorrupted());
+	}
+}
+
 bool UDRAbilitySystemLibrary::MakeWidgetControllerParams(const UObject* WorldContextObject, FWidgetControllerParams& OutWCParams, ADRHUD*& OutDRHUD)
 {
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(WorldContextObject, 0))
@@ -91,29 +121,25 @@ void UDRAbilitySystemLibrary::InitializeDefaultAttributes(const UObject* WorldCo
 void UDRAbilitySystemLibrary::GiveStartupAbilities(const UObject* WorldContextObject, UAbilitySystemComponent* ASC, ECharacterClass CharacterClass)
 {
 	UCharacterClassInfo* CharacterClassInfo = GetCharacterClassInfo(WorldContextObject);
-	if (CharacterClassInfo == nullptr) return;
+	if (CharacterClassInfo == nullptr || ASC == nullptr) return;
 
 	int32 CharacterLevel = 1;
-	if (ASC->GetAvatarActor()->Implements<UCombatInterface>())
+	AActor* Avatar = ASC->GetAvatarActor();
+	if (Avatar && Avatar->Implements<UCombatInterface>())
 	{
-		CharacterLevel = ICombatInterface::Execute_GetPlayerLevel(ASC->GetAvatarActor());
+		CharacterLevel = ICombatInterface::Execute_GetPlayerLevel(Avatar);
 	}
-	
-	for (TSubclassOf<UGameplayAbility> AbilityClass : CharacterClassInfo->CommonAbilities)
-	{
-		FGameplayAbilitySpec AbilitySpec = FGameplayAbilitySpec(AbilityClass, CharacterLevel);
-		ASC->GiveAbility(AbilitySpec);
-	}
+
+	// 공용 → 클래스 시작 → 사망 어빌리티 순으로 부여
 	const FCharacterClassDefaultInfo& DefaultInfo = CharacterClassInfo->GetClassDefaultInfo(CharacterClass);
-	for (TSubclassOf<UGameplayAbility> AbilityClass : DefaultInfo.StartupAbilities)
+	const TArray<TSubclassOf<UGameplayAbility>>* AbilityLists[] =
+		{ &CharacterClassInfo->CommonAbilities, &DefaultInfo.StartupAbilities, &DefaultInfo.DeathAbilities };
+	for (const TArray<TSubclassOf<UGameplayAbility>>* AbilityList : AbilityLists)
 	{
-		FGameplayAbilitySpec AbilitySpec = FGameplayAbilitySpec(AbilityClass, CharacterLevel);
-		ASC->GiveAbility(AbilitySpec);
-	}
-	for (TSubclassOf<UGameplayAbility> AbilityClass : DefaultInfo.DeathAbilities)
-	{
-		FGameplayAbilitySpec AbilitySpec = FGameplayAbilitySpec(AbilityClass, CharacterLevel);
-		ASC->GiveAbility(AbilitySpec);
+		for (const TSubclassOf<UGameplayAbility>& AbilityClass : *AbilityList)
+		{
+			ASC->GiveAbility(FGameplayAbilitySpec(AbilityClass, CharacterLevel));
+		}
 	}
 }
 
@@ -387,13 +413,7 @@ FActiveGameplayEffectHandle UDRAbilitySystemLibrary::ApplyTimedSpeedEffect(
 		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
 	if (!TargetASC) return FActiveGameplayEffectHandle();
 
-	// 소스 ASC 가 없으면(발사체 주인이 사라진 경우 등) 대상 자신을 소스로 삼는다.
-	UAbilitySystemComponent* EffectSource = SourceASC ? SourceASC : TargetASC;
-
-	FGameplayEffectContextHandle Context = EffectSource->MakeEffectContext();
-	Context.AddSourceObject(EffectSource->GetAvatarActor());
-
-	FGameplayEffectSpecHandle SpecHandle = EffectSource->MakeOutgoingSpec(EffectClass, 1.f, Context);
+	FGameplayEffectSpecHandle SpecHandle = MakeSpecFromSourceOrTarget(SourceASC, TargetASC, EffectClass);
 	if (!SpecHandle.IsValid()) return FActiveGameplayEffectHandle();
 
 	// ★Duration 이 SetByCaller 인데 값을 안 넣으면 지속시간 0 으로 즉시 사라진다.★
@@ -419,13 +439,7 @@ FActiveGameplayEffectHandle UDRAbilitySystemLibrary::ApplyTimedTagEffect(
 		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
 	if (!TargetASC) return FActiveGameplayEffectHandle();
 
-	// 소스 ASC 가 없으면 대상 자신을 소스로 삼는다.
-	UAbilitySystemComponent* EffectSource = SourceASC ? SourceASC : TargetASC;
-
-	FGameplayEffectContextHandle Context = EffectSource->MakeEffectContext();
-	Context.AddSourceObject(EffectSource->GetAvatarActor());
-
-	FGameplayEffectSpecHandle SpecHandle = EffectSource->MakeOutgoingSpec(EffectClass, 1.f, Context);
+	FGameplayEffectSpecHandle SpecHandle = MakeSpecFromSourceOrTarget(SourceASC, TargetASC, EffectClass);
 	if (!SpecHandle.IsValid()) return FActiveGameplayEffectHandle();
 
 	// ★Duration 이 SetByCaller 인데 값을 안 넣으면 지속시간 0 으로 즉시 사라진다.★
@@ -447,12 +461,7 @@ void UDRAbilitySystemLibrary::ApplyHealToActor(AActor* TargetActor, UAbilitySyst
 	if (!TargetASC) return;
 
 	// 소스 ASC 가 없으면 대상 자신이 소스가 된다(자가 회복 형태 — 씨앗 발사체가 이 경로를 쓴다).
-	UAbilitySystemComponent* EffectSource = SourceASC ? SourceASC : TargetASC;
-
-	FGameplayEffectContextHandle Context = EffectSource->MakeEffectContext();
-	Context.AddSourceObject(SourceObject ? SourceObject : EffectSource->GetAvatarActor());
-
-	FGameplayEffectSpecHandle SpecHandle = EffectSource->MakeOutgoingSpec(HealEffect, 1.f, Context);
+	FGameplayEffectSpecHandle SpecHandle = MakeSpecFromSourceOrTarget(SourceASC, TargetASC, HealEffect, SourceObject);
 	if (!SpecHandle.IsValid()) return;
 
 	// GE 는 UExecCalc_Heal 이 이 SetByCaller 를 읽어 IncomingHealing 으로 넘긴다.
@@ -508,32 +517,11 @@ float UDRAbilitySystemLibrary::GetHealableAmount(AActor* TargetActor, float Requ
 
 float UDRAbilitySystemLibrary::GetLifestealRatioForDamage(const FEffectProperties& Props)
 {
+	// 흡혈 칩 + 정원로봇 기본 공격(씨앗 폭탄 · 물대포 피해는 제외) + 시전자 오염 아님
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
-
-	// ① 소스가 흡혈 칩을 끼고 있는가
-	if (!HasUpgradeFeature(Props.SourceASC, GameplayTags.Upgrade_Feature_Skill_Claw_Lifesteal))
+	if (!PassesHitHealGate(Props, GameplayTags.Upgrade_Feature_Skill_Claw_Lifesteal, GameplayTags.Abilities_GardenRobot_ClawSwipe))
 	{
 		return 0.f;
-	}
-
-	// ② 이 피해가 ★기본 공격에서★ 나왔는가.
-	//    이 검사를 빠뜨리면 씨앗 폭탄·물대포 피해까지 흡혈된다.
-	//    ApplyDamageEffect 가 컨텍스트에 SourceAbilityTags 를 실어 주므로 추가 배선이 필요 없다.
-	const FDRGameplayEffectContext* DRContext =
-		FDRGameplayEffectContext::FromHandle(Props.EffectContextHandle);
-	if (!DRContext) return 0.f;
-
-	if (!DRContext->GetSourceAbilityTags().HasTagExact(GameplayTags.Abilities_GardenRobot_ClawSwipe))
-	{
-		return 0.f;
-	}
-
-	// ③ ★시전자가 오염 중이면 막는다★ (2026-10-08 사용자 결정) — 동전 ② 적중 회복(D-42)과 같은 이유.
-	//    HandleCorruptionPurification 은 회복량과 무관하게 정화 + 컨테이너 1칸을 주므로,
-	//    막지 않으면 오염되자마자 적 한 대로 즉시 정화된다. 오염 해제는 아군 회복으로만 하는 팀 메커니즘이다.
-	if (const UDRPlayerAttributeSet* SourcePlayerAS = GetPlayerAttributeSetFromASC(Props.SourceASC))
-	{
-		if (SourcePlayerAS->IsCorrupted()) return 0.f;
 	}
 
 	const AActor* TuningContext = Props.SourceASC ? Props.SourceASC->GetAvatarActor() : nullptr;
@@ -542,31 +530,11 @@ float UDRAbilitySystemLibrary::GetLifestealRatioForDamage(const FEffectPropertie
 
 float UDRAbilitySystemLibrary::GetHitHealAmountForDamage(const FEffectProperties& Props)
 {
+	// 적중 회복 칩 + 자판기 기본 공격(동전 · 잭팟 캡슐 모두 이 GA 태그를 싣는다) + 시전자 오염 아님
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
-
-	// ① 소스가 적중 회복 칩을 끼고 있는가
-	if (!HasUpgradeFeature(Props.SourceASC, GameplayTags.Upgrade_Feature_Skill_Coin_HitHeal))
+	if (!PassesHitHealGate(Props, GameplayTags.Upgrade_Feature_Skill_Coin_HitHeal, GameplayTags.Abilities_VendingMachine_BasicAttack))
 	{
 		return 0.f;
-	}
-
-	// ② 이 피해가 ★자판기 기본 공격에서★ 나왔는가 (흡혈의 ClawSwipe 검사와 같은 이유 —
-	//    빠뜨리면 자판기의 다른 피해원까지 회복된다). 동전·잭팟 캡슐은 둘 다 이 GA 의 태그를 싣는다.
-	const FDRGameplayEffectContext* DRContext =
-		FDRGameplayEffectContext::FromHandle(Props.EffectContextHandle);
-	if (!DRContext) return 0.f;
-
-	if (!DRContext->GetSourceAbilityTags().HasTagExact(GameplayTags.Abilities_VendingMachine_BasicAttack))
-	{
-		return 0.f;
-	}
-
-	// ③ ★시전자가 오염 중이면 막는다★ — HandleCorruptionPurification 은 회복량과 무관하게
-	//    정화 + 컨테이너 1칸을 준다. 오염 해제는 아군 회복으로만 하는 팀 메커니즘이다.
-	//    (오염은 플레이어에게만 있다 — 판정 대상은 적이 아니라 ★시전자★ 다)
-	if (const UDRPlayerAttributeSet* SourcePlayerAS = GetPlayerAttributeSetFromASC(Props.SourceASC))
-	{
-		if (SourcePlayerAS->IsCorrupted()) return 0.f;
 	}
 
 	const AActor* TuningContext = Props.SourceASC ? Props.SourceASC->GetAvatarActor() : nullptr;
@@ -963,11 +931,7 @@ bool UDRAbilitySystemLibrary::TryEquipBellBoyHat(AActor* Target, UAbilitySystemC
 	}
 
 	// 소스 ASC 가 없으면(던진 벨보이가 나감 등) 대상 자신을 소스로 — ApplyTimedTagEffect 와 같은 처리
-	UAbilitySystemComponent* Source = SourceASC ? SourceASC : TargetASC;
-	FGameplayEffectContextHandle Context = Source->MakeEffectContext();
-	Context.AddSourceObject(Source->GetAvatarActor());
-
-	const FGameplayEffectSpecHandle Spec = Source->MakeOutgoingSpec(EffectClass, 1.f, Context);
+	const FGameplayEffectSpecHandle Spec = MakeSpecFromSourceOrTarget(SourceASC, TargetASC, EffectClass);
 	return Spec.IsValid() && TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get()).IsValid();
 }
 

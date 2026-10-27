@@ -12,6 +12,7 @@
 #include "TimerManager.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
+#include "MultiplayerSessionsSubsystem.h"
 
 ADRGameModeBase::ADRGameModeBase()
 {
@@ -50,13 +51,10 @@ void ADRGameModeBase::OnPlayerDied(APlayerState* DeadPlayer)
 		bIsWipeoutInProgress = true;
 
 		// 모든 플레이어에게 게임 오버 UI 표시
-		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+		ForEachDRPlayerController([&](ADRPlayerController* PC)
 		{
-			if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
-			{
-				PC->Client_ShowGameOverUI();
-			}
-		}
+			PC->Client_ShowGameOverUI();
+		});
 
 		// 일정 시간 후 전멸 처리
 		GetWorldTimerManager().SetTimer(
@@ -138,6 +136,28 @@ TSubclassOf<ADRCharacter> ADRGameModeBase::FindPlayerCharacterClass(EPlayerChara
 	return BPClassPtr ? *BPClassPtr : nullptr;
 }
 
+void ADRGameModeBase::ForEachDRPlayerController(TFunctionRef<void(ADRPlayerController*)> Func) const
+{
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
+		{
+			Func(PC);
+		}
+	}
+}
+
+void ADRGameModeBase::SetJoinInProgress(bool bAllow)
+{
+	if (!HasAuthority()) return;
+
+	const UGameInstance* GameInstance = GetGameInstance();
+	if (UMultiplayerSessionsSubsystem* SessionsSubsystem = GameInstance ? GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>() : nullptr)
+	{
+		SessionsSubsystem->UpdateSessionJoinability(bAllow);
+	}
+}
+
 bool ADRGameModeBase::CheckTeamWipeout()
 {
 	if (!HasAuthority()) return false;
@@ -186,13 +206,10 @@ void ADRGameModeBase::PrepareForTravel()
 	if (!HasAuthority()) return;
 
 	// 모든 클라이언트에게 설정창 닫기 및 오디오 정리 요청
-	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	ForEachDRPlayerController([&](ADRPlayerController* PC)
 	{
-		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
-		{
-			PC->ClientCloseSettingsMenu();
-			PC->ClientStopAllAudio();
-		}
-	}
+		PC->ClientCloseSettingsMenu();
+		PC->ClientStopAllAudio();
+	});
 }
 

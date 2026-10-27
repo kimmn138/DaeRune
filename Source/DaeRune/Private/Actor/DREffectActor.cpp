@@ -15,11 +15,6 @@ ADREffectActor::ADREffectActor()
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>("SceneRoot"));
 }
 
-void ADREffectActor::BeginPlay()
-{
-	Super::BeginPlay();
-}
-
 void ADREffectActor::ApplyEffectToTarget(AActor* TargetActor, TSubclassOf<UGameplayEffect> GameplayEffectClass)
 {
 	// 적 태그 확인 - bApplyEffectsToEnemies 설정에 따라 필터링
@@ -44,6 +39,7 @@ void ADREffectActor::ApplyEffectToTarget(AActor* TargetActor, TSubclassOf<UGamep
 	EffectContextHandle.AddInstigator(this, this);
 	// GameplayEffect 스펙 생성 및 적용
 	const FGameplayEffectSpecHandle EffectSpecHandle = TargetASC->MakeOutgoingSpec(GameplayEffectClass, ActorLevel, EffectContextHandle);
+	if (!EffectSpecHandle.IsValid()) return;
 	const FActiveGameplayEffectHandle ActiveEffectHandle = TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpecHandle.Data.Get());
 
 	// 무한 지속 효과이고 오버랩 종료 시 제거 정책인 경우 핸들 저장
@@ -110,21 +106,19 @@ void ADREffectActor::OnEndOverlap(AActor* TargetActor)
 		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
 		if (!IsValid(TargetASC)) return;
 
-		// 해당 타겟의 모든 활성 무한 효과 제거
-		TArray<FActiveGameplayEffectHandle> HandlesToRemove;
-		for (TTuple<FActiveGameplayEffectHandle, UAbilitySystemComponent*> HandlePair : ActiveEffectHandles)
+		// 해당 타겟의 모든 활성 무한 효과 제거 (대상이 이미 사라진 핸들도 같이 비운다)
+		for (auto It = ActiveEffectHandles.CreateIterator(); It; ++It)
 		{
-			if (TargetASC == HandlePair.Value)
+			const UAbilitySystemComponent* HandleASC = It->Value.Get();
+			if (HandleASC == TargetASC)
 			{
-				// 효과 제거 (스택 1개 제거)
-				TargetASC->RemoveActiveGameplayEffect(HandlePair.Key, 1);
-				HandlesToRemove.Add(HandlePair.Key);
+				TargetASC->RemoveActiveGameplayEffect(It->Key, 1);   // 스택 1개 제거
+				It.RemoveCurrent();
 			}
-		}
-		// 제거된 핸들들을 맵에서 삭제
-		for (FActiveGameplayEffectHandle& Handle : HandlesToRemove)
-		{
-			ActiveEffectHandles.FindAndRemoveChecked(Handle);
+			else if (!HandleASC)
+			{
+				It.RemoveCurrent();
+			}
 		}
 	}
 }

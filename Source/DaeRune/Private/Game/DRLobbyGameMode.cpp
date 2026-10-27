@@ -8,7 +8,6 @@
 #include "GameFramework/PlayerState.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
-#include "MultiplayerSessionsSubsystem.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Actor/DRWaitingRoomCameraActor.h"
@@ -187,7 +186,7 @@ void ADRLobbyGameMode::BeginPlay()
 	Super::BeginPlay();
 
 	FindWaitingRoomActors();
-	AllowJoinInProgress();
+	SetJoinInProgress(true);   // 로비에서는 도중 참가 허용
 }
 
 void ADRLobbyGameMode::HandleWipeout()
@@ -197,21 +196,6 @@ void ADRLobbyGameMode::HandleWipeout()
 	// TODO: 전멸 UI 표시 (로비는 가벼운 UI)
 
 	RestartLobby();
-}
-
-void ADRLobbyGameMode::AllowJoinInProgress()
-{
-	if (!HasAuthority()) return;
-
-	UGameInstance* GameInstance = GetGameInstance();
-	if (!GameInstance) return;
-
-	UMultiplayerSessionsSubsystem* SessionsSubsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>();
-	if (SessionsSubsystem)
-	{
-		// 로비에서는 도중 참가 허용!
-		SessionsSubsystem->UpdateSessionJoinability(true);
-	}
 }
 
 void ADRLobbyGameMode::RestartLobby()
@@ -254,7 +238,7 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 	if (!LGS->AreAllNonHostPlayersReady()) return;
 
 	// 1. 세션 참가 차단
-	BlockJoinInProgress();
+	SetJoinInProgress(false);
 
 	// 2. 전환 상태로 변경
 	LGS->SetLobbyState(ELobbyState::Transitioning);
@@ -364,20 +348,6 @@ void ADRLobbyGameMode::KickPlayer(ADRPlayerController* Requester, ADRPlayerContr
 
 	// 나머지 플레이어 재배치 (내부에서 BroadcastRefreshWaitingRoomUI 호출)
 	RepositionAllPlayers();
-}
-
-void ADRLobbyGameMode::BlockJoinInProgress()
-{
-	if (!HasAuthority()) return;
-
-	UGameInstance* GameInstance = GetGameInstance();
-	if (!GameInstance) return;
-
-	UMultiplayerSessionsSubsystem* SessionsSubsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>();
-	if (SessionsSubsystem)
-	{
-		SessionsSubsystem->UpdateSessionJoinability(false);
-	}
 }
 
 void ADRLobbyGameMode::FindWaitingRoomActors()
@@ -546,13 +516,10 @@ void ADRLobbyGameMode::RepositionAllPlayers()
 
 void ADRLobbyGameMode::BroadcastRefreshWaitingRoomUI()
 {
-	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	ForEachDRPlayerController([&](ADRPlayerController* PC)
 	{
-		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
-		{
-			PC->ClientRefreshWaitingRoomUI();
-		}
-	}
+		PC->ClientRefreshWaitingRoomUI();
+	});
 }
 
 void ADRLobbyGameMode::RespawnPlayerWithClass(ADRPlayerController* PC, EPlayerCharacterClass NewClass)

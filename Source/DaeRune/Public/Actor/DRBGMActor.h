@@ -43,6 +43,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "BGM")
 	void StopBGM(float FadeOutDuration = 2.0f);
 
+	// 월드의 모든 BGM 액터 정지 (게임 클리어 · 게임 오버 · 스테이지 종료 공용)
+	static void StopAllBGM(const UObject* WorldContext, float FadeOutDuration);
+
 	// 보스 BGM으로 전환 (서버에서 호출)
 	UFUNCTION(BlueprintCallable, Category = "BGM|Boss")
 	void StartBossBGM();

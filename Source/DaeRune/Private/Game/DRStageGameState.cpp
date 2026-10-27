@@ -262,32 +262,14 @@ void ADRStageGameState::Multicast_PlayWaveStartSound_Implementation()
 
 void ADRStageGameState::Multicast_PlayGameClearSound_Implementation()
 {
-    // BGM 정지
-    TArray<AActor*> FoundBGMActors;
-    UGameplayStatics::GetAllActorsOfClass(this, ADRBGMActor::StaticClass(), FoundBGMActors);
-    for (AActor* BGMActor : FoundBGMActors)
-    {
-        if (ADRBGMActor* BGM = Cast<ADRBGMActor>(BGMActor))
-        {
-            BGM->StopBGM(2.0f);
-        }
-    }
+    ADRBGMActor::StopAllBGM(this, 2.0f);
 
     PlaySound2DFromSoundData(&UDRSoundDataAsset::GameClearSound);
 }
 
 void ADRStageGameState::Multicast_PlayGameOverSound_Implementation()
 {
-    // BGM 정지
-    TArray<AActor*> FoundBGMActors;
-    UGameplayStatics::GetAllActorsOfClass(this, ADRBGMActor::StaticClass(), FoundBGMActors);
-    for (AActor* BGMActor : FoundBGMActors)
-    {
-        if (ADRBGMActor* BGM = Cast<ADRBGMActor>(BGMActor))
-        {
-            BGM->StopBGM(2.0f);
-        }
-    }
+    ADRBGMActor::StopAllBGM(this, 2.0f);
 
     PlaySound2DFromSoundData(&UDRSoundDataAsset::GameOverSound);
 }
@@ -405,58 +387,34 @@ void ADRStageGameState::OnRep_EliteSpawnPointVFXLocations()
 
 void ADRStageGameState::RefreshEnemySpawnPointVFX()
 {
-    for (UNiagaraComponent* Comp : EnemySpawnPointVFXComponents)
-    {
-        if (Comp && IsValid(Comp))
-        {
-            Comp->DeactivateImmediate();
-            Comp->DestroyComponent();
-        }
-    }
-    EnemySpawnPointVFXComponents.Empty();
-
-    if (!EnemySpawnPointVFXAsset) return;
-
-    for (const FVector_NetQuantize& Location : EnemySpawnPointVFXLocations)
-    {
-        UNiagaraComponent* NewComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-            this,
-            EnemySpawnPointVFXAsset,
-            Location,
-            FRotator::ZeroRotator,
-            FVector(1.f),
-            false,
-            true,
-            ENCPoolMethod::None,
-            true
-        );
-
-        if (NewComp)
-        {
-            EnemySpawnPointVFXComponents.Add(NewComp);
-        }
-    }
+    RebuildSpawnPointVFX(EnemySpawnPointVFXComponents, EnemySpawnPointVFXLocations, EnemySpawnPointVFXAsset);
 }
 
 void ADRStageGameState::RefreshEliteSpawnPointVFX()
 {
-    for (UNiagaraComponent* Comp : EliteSpawnPointVFXComponents)
+    RebuildSpawnPointVFX(EliteSpawnPointVFXComponents, EliteSpawnPointVFXLocations, EliteSpawnPointVFXAsset);
+}
+
+void ADRStageGameState::RebuildSpawnPointVFX(TArray<TObjectPtr<UNiagaraComponent>>& Components,
+    const TArray<FVector_NetQuantize>& Locations, UNiagaraSystem* NiagaraAsset)
+{
+    for (UNiagaraComponent* Comp : Components)
     {
-        if (Comp && IsValid(Comp))
+        if (IsValid(Comp))
         {
             Comp->DeactivateImmediate();
             Comp->DestroyComponent();
         }
     }
-    EliteSpawnPointVFXComponents.Empty();
+    Components.Empty();
 
-    if (!EliteSpawnPointVFXAsset) return;
+    if (!NiagaraAsset) return;
 
-    for (const FVector_NetQuantize& Location : EliteSpawnPointVFXLocations)
+    for (const FVector_NetQuantize& Location : Locations)
     {
         UNiagaraComponent* NewComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
             this,
-            EliteSpawnPointVFXAsset,
+            NiagaraAsset,
             Location,
             FRotator::ZeroRotator,
             FVector(1.f),
@@ -468,7 +426,7 @@ void ADRStageGameState::RefreshEliteSpawnPointVFX()
 
         if (NewComp)
         {
-            EliteSpawnPointVFXComponents.Add(NewComp);
+            Components.Add(NewComp);
         }
     }
 }

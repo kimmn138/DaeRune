@@ -584,17 +584,7 @@ void ADRPlayerController::SpectatePreviousPlayer()
 
 void ADRPlayerController::ClientStopAllAudio_Implementation()
 {
-	// BGM 정지
-	TArray<AActor*> BGMActors;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ADRBGMActor::StaticClass(), BGMActors);
-	for (AActor* Actor : BGMActors)
-	{
-		if (ADRBGMActor* BGMActor = Cast<ADRBGMActor>(Actor))
-		{
-			BGMActor->StopBGM(0.0f);
-		}
-	}
-
+	ADRBGMActor::StopAllBGM(this, 0.0f);
 }
 
 void ADRPlayerController::CheatSkipToNextPhase()

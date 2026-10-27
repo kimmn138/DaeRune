@@ -39,8 +39,6 @@ public:
 	ADREffectActor();
 
 protected:
-	virtual void BeginPlay() override;
-
 	// 타겟에게 지정된 GameplayEffect 적용
 	UFUNCTION(BlueprintCallable)
 	void ApplyEffectToTarget(AActor* TargetActor, TSubclassOf<UGameplayEffect> GameplayEffectClass);
@@ -89,8 +87,8 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Applied Effects")
 	EEffectRemovalPolicy InfiniteEffectRemovalPolicy = EEffectRemovalPolicy::RemoveOnEndOverlap;
 
-	// 활성 무한 효과 핸들 추적
-	TMap<FActiveGameplayEffectHandle, UAbilitySystemComponent*> ActiveEffectHandles;
+	// 활성 무한 효과 핸들 추적 (대상 ASC 는 약참조 — 대상이 먼저 사라져도 매달린 포인터가 남지 않는다)
+	TMap<FActiveGameplayEffectHandle, TWeakObjectPtr<UAbilitySystemComponent>> ActiveEffectHandles;
 
 	// 효과 적용 시 사용할 액터 레벨
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Applied Effects")

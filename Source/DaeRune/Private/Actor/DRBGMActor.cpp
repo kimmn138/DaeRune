@@ -8,6 +8,7 @@
 #include "Engine/AssetManager.h"
 #include "DRAssetManager.h"
 #include "Sound/DRSoundDataAsset.h"
+#include "EngineUtils.h"
 
 ADRBGMActor::ADRBGMActor()
 {
@@ -170,6 +171,17 @@ void ADRBGMActor::PlayPlaylistTrackLocal(int32 Index, float FadeIn)
 	AudioComponent->SetSound(Track);
 	AudioComponent->SetVolumeMultiplier(Volume);
 	AudioComponent->FadeIn(FadeIn);
+}
+
+void ADRBGMActor::StopAllBGM(const UObject* WorldContext, float FadeOutDuration)
+{
+	UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContext, EGetWorldErrorMode::ReturnNull) : nullptr;
+	if (!World) return;
+
+	for (TActorIterator<ADRBGMActor> It(World); It; ++It)
+	{
+		It->StopBGM(FadeOutDuration);
+	}
 }
 
 void ADRBGMActor::StopBGM(float FadeOutDuration)

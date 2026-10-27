@@ -55,6 +55,9 @@ private:
 	void ProcessCorruptedDamage(const FEffectProperties& Props, float Damage);
 	void ProcessNormalDamage(const FEffectProperties& Props, float Damage);
 	float CalculateContainerDamage(float CurrentHealth, float Damage) const;
+
+	// 체력값 → 0-based 컨테이너 인덱스 (인덱스 0 = 마지막 칸, 칸 경계에 정확히 서 있으면 아래 칸, 체력 0 이하면 -1)
+	int32 ContainerIndexForHealth(float HealthValue) const;
 	void ApplyHitReactAndKnockback(const FEffectProperties& Props);
 
 	// ★Plan5(탑승칩)★ MaxHealth 의 ★현재값★을 Desired 로 맞춘다 (Plan5 D-87).
@@ -74,6 +77,7 @@ private:
 	UPROPERTY()
 	float CorruptMaxHealth = 100.f;
 
+	// 서버 전용(복제 안 함) — 클라 UI 는 복제되는 ADRPlayerState::IsPlayerCorrupted 를 본다 (UDRHealthUILibrary)
 	bool bCorrupted = false;
 
 	// 오버플로우 임계값

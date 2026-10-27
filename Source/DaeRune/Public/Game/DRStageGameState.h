@@ -239,6 +239,9 @@ protected:
     void UpdatePoisonGasLoopSound();
     void RefreshEnemySpawnPointVFX();
     void RefreshEliteSpawnPointVFX();
+    // 기존 컴포넌트를 지우고 위치마다 다시 스폰 (일반 · 엘리트 공용)
+    void RebuildSpawnPointVFX(TArray<TObjectPtr<UNiagaraComponent>>& Components,
+        const TArray<FVector_NetQuantize>& Locations, UNiagaraSystem* NiagaraAsset);
 
     // SoundDataAsset의 지정 사운드를 2D로 재생하는 공용 헬퍼
     // (AssetManager → SoundData → 널체크 보일러플레이트 제거)

@@ -10,6 +10,7 @@ class UAbilityInfo;
 class UCharacterClassInfo;
 class UGameBalanceConfig;
 class ADRCharacter;
+class ADRPlayerController;
 enum class EPlayerCharacterClass : uint8;
 
 /**
@@ -60,6 +61,12 @@ public:
 
 	// 플레이어 캐릭터 클래스 → 캐릭터 BP (클래스 정보에 없으면 null)
 	TSubclassOf<ADRCharacter> FindPlayerCharacterClass(EPlayerCharacterClass CharacterClass) const;
+
+	// 접속한 모든 ADRPlayerController 에 Func 실행 (Client RPC 일괄 전송 등)
+	void ForEachDRPlayerController(TFunctionRef<void(ADRPlayerController*)> Func) const;
+
+	// 세션 도중 참가 허용/차단 (로비는 허용, 스테이지는 차단)
+	void SetJoinInProgress(bool bAllow);
 
 protected:
 	// 사망/이탈을 현재 페이즈에 통지 (스테이지 게임모드가 오버라이드)

@@ -53,20 +53,8 @@ void UDRPlayerAttributeSet::PostAttributeChange(const FGameplayAttribute& Attrib
 
 	if (Attribute == GetHealthAttribute() && !bCorrupted)
 	{
-		// 체력값으로부터 0-based 컨테이너 인덱스 계산 (인덱스 0 = 마지막 컨테이너)
-		auto ContainerIndexFromHealth = [this](float HealthValue) -> int32
-		{
-			if (HealthValue <= 0.f) return -1;
-			int32 Idx = FMath::FloorToInt(HealthValue / ContainerHealth);
-			if (FMath::IsNearlyEqual(HealthValue, Idx * ContainerHealth))
-			{
-				Idx = FMath::Max(0, Idx - 1);
-			}
-			return FMath::Clamp(Idx, 0, NumContainers - 1);
-		};
-
-		const int32 OldIndex = ContainerIndexFromHealth(OldValue);
-		const int32 NewIndex = ContainerIndexFromHealth(NewValue);
+		const int32 OldIndex = ContainerIndexForHealth(OldValue);
+		const int32 NewIndex = ContainerIndexForHealth(NewValue);
 
 		// 컨테이너 N → 1 전이 시점에만 큐 발동 (1개 상태에서 매 피격마다 울리지 않도록)
 		if (OldIndex > 0 && NewIndex == 0)
@@ -90,13 +78,17 @@ void UDRPlayerAttributeSet::PostAttributeChange(const FGameplayAttribute& Attrib
 
 int32 UDRPlayerAttributeSet::GetCurrentContainerIndex() const
 {
-	const float CurrentHealth = GetHealth();
-	if (CurrentHealth <= 0.f) return -1;
+	return ContainerIndexForHealth(GetHealth());
+}
 
-	int32 ContainerIndex = FMath::FloorToInt(CurrentHealth / ContainerHealth);
+int32 UDRPlayerAttributeSet::ContainerIndexForHealth(float HealthValue) const
+{
+	if (HealthValue <= 0.f) return -1;
+
+	int32 ContainerIndex = FMath::FloorToInt(HealthValue / ContainerHealth);
 
 	// 정확히 컨테이너 경계에 있는 경우
-	if (FMath::IsNearlyEqual(CurrentHealth, ContainerIndex * ContainerHealth))
+	if (FMath::IsNearlyEqual(HealthValue, ContainerIndex * ContainerHealth))
 	{
 		ContainerIndex = FMath::Max(0, ContainerIndex - 1);
 	}
@@ -335,12 +327,7 @@ float UDRPlayerAttributeSet::CalculateContainerDamage(float CurrentHealth, float
 
 	while (RemainingDamage > 0.f && NewHealth > 0.f)
 	{
-		int32 ContainerIndex = FMath::FloorToInt(NewHealth / ContainerHealth);
-		if (FMath::IsNearlyEqual(NewHealth, ContainerIndex * ContainerHealth))
-		{
-			ContainerIndex = FMath::Max(0, ContainerIndex - 1);
-		}
-		ContainerIndex = FMath::Clamp(ContainerIndex, 0, NumContainers - 1);
+		const int32 ContainerIndex = ContainerIndexForHealth(NewHealth);   // 루프 조건상 NewHealth > 0 → 0 이상
 
 		float HealthInContainer = NewHealth - (ContainerIndex * ContainerHealth);
 
