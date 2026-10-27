@@ -33,11 +33,20 @@
 #include "Settings/LevelEditorPlaySettings.h"
 #include "UI/Widget/DRWardrobeTabWidget.h"
 #include "DaeRune/DRLogChannels.h"
+#include "DREditorToolCommon.h"
 #endif
 
 #if WITH_EDITOR
 namespace DRWardrobeEditor
 {
+	// 세 도구 공용 헬퍼 (DREditorToolCommon.h)
+	using DREditorToolCommon::SRGB;
+	using DREditorToolCommon::PickTypeface;
+	using DREditorToolCommon::DiscardRecursive;
+	using DREditorToolCommon::Load;
+	using DREditorToolCommon::CompileAndMark;
+	using DREditorToolCommon::SetObjectProperty;
+
 	// ===== 에셋 경로 (Plan(옷장) D-27) =====
 	const TCHAR* TabWBPPath = TEXT("/Game/Blueprints/UI/Closet/WBP_WardrobeTab.WBP_WardrobeTab");
 	const TCHAR* SlotWBPPath = TEXT("/Game/Blueprints/UI/Closet/WBP_WardrobeSlot.WBP_WardrobeSlot");
@@ -71,39 +80,8 @@ namespace DRWardrobeEditor
 		}
 	};
 
-	template <typename T>
-	T* Load(const TCHAR* Path, FLog& Log)
-	{
-		T* Object = LoadObject<T>(nullptr, Path);
-		if (!Object)
-		{
-			Log.Add(FString::Printf(TEXT("★에셋 없음★ %s"), Path));
-		}
-		return Object;
-	}
 
-	FLinearColor SRGB(uint8 R, uint8 G, uint8 B, float A = 1.0f)
-	{
-		FLinearColor Color = FLinearColor::FromSRGBColor(FColor(R, G, B, 255));
-		Color.A = A;
-		return Color;
-	}
 
-	// 컴포지트 폰트의 기본 타입페이스 이름 (없으면 None — 엔진이 첫 항목을 쓴다)
-	FName PickTypeface(const UObject* FontObject)
-	{
-		if (const UFont* Font = Cast<UFont>(FontObject))
-		{
-			if (const FCompositeFont* Composite = Font->GetCompositeFont())
-			{
-				if (Composite->DefaultTypeface.Fonts.Num() > 0)
-				{
-					return Composite->DefaultTypeface.Fonts[0].Name;
-				}
-			}
-		}
-		return NAME_None;
-	}
 
 	FSlateFontInfo MakeFont(const UObject* FontObject, float Size)
 	{
@@ -141,23 +119,6 @@ namespace DRWardrobeEditor
 		return Widget;
 	}
 
-	// 트리에서 떼어 내고 이름을 비운다 (같은 이름으로 새 위젯을 만들 수 있게). 자식까지 전부.
-	void DiscardRecursive(UWidgetTree* Tree, UWidget* Widget)
-	{
-		if (!Widget) return;
-
-		if (UPanelWidget* Panel = Cast<UPanelWidget>(Widget))
-		{
-			TArray<UWidget*> Children = Panel->GetAllChildren();
-			for (UWidget* Child : Children)
-			{
-				DiscardRecursive(Tree, Child);
-			}
-		}
-
-		Tree->RemoveWidget(Widget);
-		Widget->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional | REN_DoNotDirty);
-	}
 
 	UCanvasPanelSlot* PlaceOnCanvas(UWidget* Widget, const FAnchors& Anchors, const FVector2D& Alignment,
 		const FVector2D& Position, const FVector2D& Size, bool bAutoSize = false)
@@ -205,32 +166,7 @@ namespace DRWardrobeEditor
 		}
 	}
 
-	// 반사로 오브젝트 프로퍼티를 넣는다 (protected 라 직접 접근할 수 없는 CDO 기본값용)
-	bool SetObjectProperty(UObject* Object, FName PropertyName, UObject* Value, FLog& Log)
-	{
-		FObjectPropertyBase* Property = Object ? FindFProperty<FObjectPropertyBase>(Object->GetClass(), PropertyName) : nullptr;
-		if (!Property)
-		{
-			Log.Add(FString::Printf(TEXT("프로퍼티 없음: %s"), *PropertyName.ToString()));
-			return false;
-		}
 
-		Object->Modify();
-		Property->SetObjectPropertyValue_InContainer(Object, Value);
-		Log.Add(FString::Printf(TEXT("기본값 %s = %s"), *PropertyName.ToString(), Value ? *Value->GetName() : TEXT("None")));
-		return true;
-	}
-
-	bool CompileAndMark(UWidgetBlueprint* Blueprint, FLog& Log)
-	{
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		Blueprint->MarkPackageDirty();
-
-		const bool bOk = Blueprint->Status != BS_Error;
-		Log.Add(FString::Printf(TEXT("컴파일 %s: %s"), bOk ? TEXT("성공") : TEXT("★실패★"), *Blueprint->GetName()));
-		return bOk;
-	}
 
 	UObject* GetCDO(UWidgetBlueprint* Blueprint)
 	{

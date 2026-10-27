@@ -25,11 +25,20 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Materials/MaterialInterface.h"
 #include "DaeRune/DRLogChannels.h"
+#include "DREditorToolCommon.h"
 #endif
 
 #if WITH_EDITOR
 namespace DRStageSelectEditor
 {
+	// 세 도구 공용 헬퍼 (DREditorToolCommon.h)
+	using DREditorToolCommon::SRGB;
+	using DREditorToolCommon::PickTypeface;
+	using DREditorToolCommon::DiscardRecursive;
+	using DREditorToolCommon::Load;
+	using DREditorToolCommon::CompileAndMark;
+	using DREditorToolCommon::SetObjectProperty;
+
 	// ===== 에셋 경로 =====
 	const TCHAR* CardWBPPath = TEXT("/Game/Blueprints/UI/StageSelect/WBP_StageSelectCard.WBP_StageSelectCard");
 	const TCHAR* ScreenWBPPath = TEXT("/Game/Blueprints/UI/StageSelect/WBP_StageSelect.WBP_StageSelect");
@@ -48,24 +57,7 @@ namespace DRStageSelectEditor
 		}
 	};
 
-	template <typename T>
-	T* Load(const TCHAR* Path, FLog& Log)
-	{
-		T* Object = LoadObject<T>(nullptr, Path);
-		if (!Object)
-		{
-			Log.Add(FString::Printf(TEXT("★에셋 없음★ %s"), Path));
-		}
-		return Object;
-	}
 
-	// 시안의 CSS 색(sRGB)을 그대로 옮긴다 — UMG 색 값은 선형이다
-	FLinearColor SRGB(uint8 R, uint8 G, uint8 B, float A = 1.0f)
-	{
-		FLinearColor Color = FLinearColor::FromSRGBColor(FColor(R, G, B, 255));
-		Color.A = A;
-		return Color;
-	}
 
 	// ===== 시안 :root 변수 =====
 	const FLinearColor Line = SRGB(0x8F, 0xE3, 0xFF);	// --line
@@ -74,20 +66,6 @@ namespace DRStageSelectEditor
 	const FLinearColor Sub = SRGB(0x9D, 0xB9, 0xD6);		// --sub
 	const FLinearColor Ink = SRGB(0x04, 0x12, 0x2A);		// 시작 버튼 글자
 
-	FName PickTypeface(const UObject* FontObject)
-	{
-		if (const UFont* Font = Cast<UFont>(FontObject))
-		{
-			if (const FCompositeFont* Composite = Font->GetCompositeFont())
-			{
-				if (Composite->DefaultTypeface.Fonts.Num() > 0)
-				{
-					return Composite->DefaultTypeface.Fonts[0].Name;
-				}
-			}
-		}
-		return NAME_None;
-	}
 
 	// Px 는 시안의 CSS px. UMG 폰트 크기는 72dpi 포인트라 ×0.75. LetterSpacingEm 은 CSS letter-spacing(em)
 	FSlateFontInfo MakeFont(const UObject* FontObject, float Px, float LetterSpacingEm = 0.0f)
@@ -125,22 +103,6 @@ namespace DRStageSelectEditor
 		return Brush;
 	}
 
-	void DiscardRecursive(UWidgetTree* Tree, UWidget* Widget)
-	{
-		if (!Widget) return;
-
-		if (UPanelWidget* Panel = Cast<UPanelWidget>(Widget))
-		{
-			TArray<UWidget*> Children = Panel->GetAllChildren();
-			for (UWidget* Child : Children)
-			{
-				DiscardRecursive(Tree, Child);
-			}
-		}
-
-		Tree->RemoveWidget(Widget);
-		Widget->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional | REN_DoNotDirty);
-	}
 
 	// 트리를 비우고 새 루트를 만든다 — 멱등을 위해 매번 처음부터 짓는다
 	template <typename T>
@@ -237,31 +199,8 @@ namespace DRStageSelectEditor
 		Button->bIsVariable = true;
 	}
 
-	bool CompileAndMark(UWidgetBlueprint* Blueprint, FLog& Log)
-	{
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		Blueprint->MarkPackageDirty();
 
-		const bool bOk = Blueprint->Status != BS_Error;
-		Log.Add(FString::Printf(TEXT("컴파일 %s: %s"), bOk ? TEXT("성공") : TEXT("★실패★"), *Blueprint->GetName()));
-		return bOk;
-	}
 
-	bool SetObjectProperty(UObject* Object, FName PropertyName, UObject* Value, FLog& Log)
-	{
-		FObjectPropertyBase* Property = Object ? FindFProperty<FObjectPropertyBase>(Object->GetClass(), PropertyName) : nullptr;
-		if (!Property)
-		{
-			Log.Add(FString::Printf(TEXT("프로퍼티 없음: %s"), *PropertyName.ToString()));
-			return false;
-		}
-
-		Object->Modify();
-		Property->SetObjectPropertyValue_InContainer(Object, Value);
-		Log.Add(FString::Printf(TEXT("기본값 %s = %s"), *PropertyName.ToString(), Value ? *Value->GetName() : TEXT("None")));
-		return true;
-	}
 }
 #endif
 

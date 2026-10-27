@@ -31,11 +31,20 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "DaeRune/DRLogChannels.h"
+#include "DREditorToolCommon.h"
 #endif
 
 #if WITH_EDITOR
 namespace DRCharacterInfoEditor
 {
+	// 세 도구 공용 헬퍼 (DREditorToolCommon.h)
+	using DREditorToolCommon::SRGB;
+	using DREditorToolCommon::PickTypeface;
+	using DREditorToolCommon::DiscardRecursive;
+	using DREditorToolCommon::Load;
+	using DREditorToolCommon::CompileAndMark;
+	using DREditorToolCommon::SetObjectProperty;
+
 	const TCHAR* TitleFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/HakgyoansimUndongjangL_Font.HakgyoansimUndongjangL_Font");
 	const TCHAR* BodyFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/HakgyoansimUndongjangL_Font.HakgyoansimUndongjangL_Font");
 	const TCHAR* NumberFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/BrunoAceSC-Regular_Font.BrunoAceSC-Regular_Font");
@@ -54,12 +63,6 @@ namespace DRCharacterInfoEditor
 	const FLinearColor SkillTitleColor(0.515f, 0.871f, 1.0f);	// 스킬 이름
 	const FLinearColor NumberColor = FLinearColor::White;		// 체력 · 물 · 물 사용량
 
-	FLinearColor SRGB(uint8 R, uint8 G, uint8 B, float A = 1.0f)
-	{
-		FLinearColor Color = FLinearColor::FromSRGBColor(FColor(R, G, B, 255));
-		Color.A = A;
-		return Color;
-	}
 
 	// 캐릭터 이름 — 예전 그림에 박혀 있던 글자의 색(실측)
 	const FLinearColor TitleColor = SRGB(158, 237, 255);
@@ -207,37 +210,7 @@ namespace DRCharacterInfoEditor
 		}
 	};
 
-	FName PickTypeface(const UObject* FontObject)
-	{
-		if (const UFont* Font = Cast<UFont>(FontObject))
-		{
-			if (const FCompositeFont* Composite = Font->GetCompositeFont())
-			{
-				if (Composite->DefaultTypeface.Fonts.Num() > 0)
-				{
-					return Composite->DefaultTypeface.Fonts[0].Name;
-				}
-			}
-		}
-		return NAME_None;
-	}
 
-	void DiscardRecursive(UWidgetTree* Tree, UWidget* Widget)
-	{
-		if (!Widget) return;
-
-		if (UPanelWidget* Panel = Cast<UPanelWidget>(Widget))
-		{
-			TArray<UWidget*> Children = Panel->GetAllChildren();
-			for (UWidget* Child : Children)
-			{
-				DiscardRecursive(Tree, Child);
-			}
-		}
-
-		Tree->RemoveWidget(Widget);
-		Widget->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional | REN_DoNotDirty);
-	}
 
 	template <typename T>
 	T* Make(UWidgetTree* Tree, const FString& Name)
@@ -583,16 +556,7 @@ namespace DRCharacterInfoEditor
 		return DecoratorBlueprint->GeneratedClass.Get();
 	}
 
-	bool CompileAndMark(UWidgetBlueprint* Blueprint, FLog& Log)
-	{
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		Blueprint->MarkPackageDirty();
 
-		const bool bOk = Blueprint->Status != BS_Error;
-		Log.Add(FString::Printf(TEXT("컴파일 %s: %s"), bOk ? TEXT("성공") : TEXT("★실패★"), *Blueprint->GetName()));
-		return bOk;
-	}
 }
 #endif
 
