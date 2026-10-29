@@ -7,8 +7,7 @@
 #include "DRStageSelectEditorTools.generated.h"
 
 /**
- * 스테이지 선택 화면(시안: 스테이지 선택.html) 에디터 자동화 — ★에디터 전용★.
- * 게임 빌드에서는 본문이 비어 있다. UDRWardrobeEditorTools 와 같은 방식이다.
+ * 스테이지 선택 화면 에디터 자동화 — ★에디터 전용★. (아트: Figma "대룬 ui > 스테이지", 2026-10-29)
  *
  * Python(에디터 스크립팅)에서 부른다:
  *   log = unreal.DRStageSelectEditorTools.build_stage_select_card_widget()
@@ -16,7 +15,9 @@
  *
  * WBP 에셋은 미리 만들어 둬야 한다(부모 클래스 UDRStageSelectCardWidget / UDRStageSelectScreenWidget).
  * 트리는 ★매번 통째로 다시 만든다★ — 몇 번을 돌려도 같은 결과(멱등). 디자이너가 손으로 고친 배치는 덮어써진다.
- * 이미지 아트가 아직 없어서 전부 색 브러시 + 머티리얼(배경/썸네일 그라데이션)로 시안을 재현한다.
+ * 좌표 · 글자 크기는 Figma 프레임(1920x1080)을 100% 로 떠서 잰 값이다 (cpp 의 Spec 주석).
+ * 카드 그림은 스테이지마다 다르므로 데이터(DA_ProgressionConfig > StageSelectList > CardArt)에서 온다 —
+ * WBP 에 넣는 브러시는 디자이너 미리보기용 스테이지 1 그림이다.
  * 저장은 하지 않는다 — 부른 쪽(Python)이 저장한다.
  */
 UCLASS()
@@ -25,11 +26,11 @@ class DAERUNEEDITOR_API UDRStageSelectEditorTools : public UBlueprintFunctionLib
 	GENERATED_BODY()
 
 public:
-	// WBP_StageSelectCard — 테두리 · 썸네일 · 번호 · 배지 · CLEARED 도장 · 자물쇠 · 정보 영역
+	// WBP_StageSelectCard — 베이스 · 그림 · 테두리 · CLEARED 도장 · 번호 · 이름 · 배지 · 임무 · 자물쇠 + LockBlendMaterial
 	UFUNCTION(BlueprintCallable, Category = "DaeRune|Editor")
 	static bool BuildStageSelectCardWidget(FString& OutLog);
 
-	// WBP_StageSelect — 배경 · 머리말(제목/클리어 수) · 카드 영역 · 바닥글(문구/뒤로/시작) + CardWidgetClass
+	// WBP_StageSelect — 어둡게 덮기 · 제목 · 카드 줄 · ESC BACK / ENTER START 키 안내 + CardWidgetClass
 	UFUNCTION(BlueprintCallable, Category = "DaeRune|Editor")
 	static bool BuildStageSelectScreenWidget(FString& OutLog);
 

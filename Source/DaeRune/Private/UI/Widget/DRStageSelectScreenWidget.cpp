@@ -8,11 +8,8 @@
 #include "Components/PanelWidget.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
-#include "Components/TextBlock.h"
 #include "Components/Button.h"
 #include "DaeRune/DRLogChannels.h"
-
-#define LOCTEXT_NAMESPACE "DRStageSelect"
 
 UDRGameInstance* UDRStageSelectScreenWidget::GetProgression() const
 {
@@ -40,7 +37,7 @@ void UDRStageSelectScreenWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// 화면이 FInputModeUIOnly 로 열리므로(ADRPlayerController::OpenStageSelectScreen)
+	// 화면이 FInputModeUIOnly 로 열리므로(ADRPlayerController::OpenScreen)
 	// 키 입력은 위젯이 직접 받아야 한다. 포커스가 없으면 키 이벤트가 아예 오지 않는다.
 	SetIsFocusable(true);
 	SetKeyboardFocus();
@@ -64,11 +61,9 @@ void UDRStageSelectScreenWidget::NativeConstruct()
 	}
 
 	SelectedIndex = INDEX_NONE;
-	FocusedIndex = INDEX_NONE;
 	bStarting = false;
 
 	RefreshAll();
-	ShowIdleMessage();
 }
 
 void UDRStageSelectScreenWidget::NativeDestruct()
@@ -95,7 +90,8 @@ void UDRStageSelectScreenWidget::NativeDestruct()
 
 void UDRStageSelectScreenWidget::RefreshAll()
 {
-	// 다시 그려도 선택은 StageId 로 유지한다. 잠겨 버렸으면 선택을 푼다 (시안 dev 패널 동작)
+	// 다시 그려도 선택은 StageId 로 유지한다. 잠겨 버렸거나 처음 여는 것이면 기본 카드를 고른다
+	const int32 PrevIndex = SelectedIndex;
 	const FName PrevSelectedId = HasSelection() ? ViewModels[SelectedIndex].StageId : NAME_None;
 
 	if (const UDRGameInstance* GI = GetProgression())
@@ -112,22 +108,48 @@ void UDRStageSelectScreenWidget::RefreshAll()
 	{
 		const int32 Found = ViewModels.IndexOfByPredicate(
 			[PrevSelectedId](const FDRStageSelectViewModel& ViewModel) { return ViewModel.StageId == PrevSelectedId; });
-		if (IsValidIndex(Found) && ViewModels[Found].IsSelectable())
+		if (IsSelectable(Found))
 		{
 			SelectedIndex = Found;
 		}
 	}
-
-	if (!IsValidIndex(FocusedIndex))
+	if (SelectedIndex == INDEX_NONE)
 	{
-		FocusedIndex = INDEX_NONE;
+		SelectedIndex = PickDefaultSelection();
 	}
 
 	RebuildCards();
 	UpdateCardStates();
-	UpdateCounters();
 	UpdateButtons();
 	OnRefreshStages();
+
+	if (SelectedIndex != PrevIndex)
+	{
+		OnSelectionChanged(SelectedIndex);
+	}
+}
+
+int32 UDRStageSelectScreenWidget::PickDefaultSelection() const
+{
+	if (IsSelectable(InitialSelectedIndex))
+	{
+		return InitialSelectedIndex;
+	}
+
+	// 아직 안 깬 첫 스테이지 — 새로 열린 스테이지가 바로 선택돼 있게 (시안: 2번이 열리면 2번이 선택돼 있다)
+	const int32 FirstAvailable = ViewModels.IndexOfByPredicate(
+		[](const FDRStageSelectViewModel& ViewModel) { return ViewModel.State == EDRStageSelectState::Available; });
+	if (FirstAvailable != INDEX_NONE)
+	{
+		return FirstAvailable;
+	}
+
+	// 다 깼으면 마지막 스테이지
+	for (int32 Index = ViewModels.Num() - 1; Index >= 0; --Index)
+	{
+		if (IsSelectable(Index)) return Index;
+	}
+	return INDEX_NONE;
 }
 
 void UDRStageSelectScreenWidget::RebuildCards()
@@ -148,12 +170,12 @@ void UDRStageSelectScreenWidget::RebuildCards()
 
 		UPanelSlot* PanelSlot = Box_Cards->AddChild(Card);
 
-		// 시안: grid-template-columns 1fr 1fr + gap 64px → 같은 폭으로 나누고 사이만 띄운다
+		// 카드는 그림 크기 그대로, 아래쪽을 맞춘다 (1번 카드는 위 계단만큼 더 높다)
 		if (UHorizontalBoxSlot* BoxSlot = Cast<UHorizontalBoxSlot>(PanelSlot))
 		{
-			BoxSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-			BoxSlot->SetHorizontalAlignment(HAlign_Fill);
-			BoxSlot->SetVerticalAlignment(VAlign_Fill);
+			BoxSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+			BoxSlot->SetHorizontalAlignment(HAlign_Left);
+			BoxSlot->SetVerticalAlignment(VAlign_Bottom);
 			BoxSlot->SetPadding(FMargin(Index > 0 ? CardSpacing : 0.0f, 0.0f, 0.0f, 0.0f));
 		}
 	}
@@ -166,26 +188,12 @@ void UDRStageSelectScreenWidget::UpdateCardStates()
 		if (UDRStageSelectCardWidget* Card = Cards[Index])
 		{
 			Card->SetSelected(Index == SelectedIndex);
-			Card->SetKeyboardFocused(Index == FocusedIndex);
 		}
-	}
-}
-
-void UDRStageSelectScreenWidget::UpdateCounters()
-{
-	if (Txt_ClearCount)
-	{
-		Txt_ClearCount->SetText(FText::AsNumber(GetClearedCount()));
-	}
-	if (Txt_StageCount)
-	{
-		Txt_StageCount->SetText(FText::AsNumber(GetStageCount()));
 	}
 }
 
 void UDRStageSelectScreenWidget::UpdateButtons()
 {
-	// 시안: 선택 전에는 시작 버튼 비활성
 	if (Btn_Start)
 	{
 		Btn_Start->SetIsEnabled(HasSelection() && !bStarting);
@@ -209,40 +217,17 @@ bool UDRStageSelectScreenWidget::SelectStage(int32 Index)
 		{
 			Cards[Index]->PlayRejectFeedback();
 		}
-		ShowLockedMessage(Index);
 		OnSelectRejected(Index, ViewModel.LockHint);
 		return false;
 	}
 
-	const bool bChanged = SelectedIndex != Index;
+	if (SelectedIndex == Index) return true;
+
 	SelectedIndex = Index;
-
 	UpdateCardStates();
 	UpdateButtons();
-	ShowIdleMessage();
-
-	if (bChanged)
-	{
-		OnSelectionChanged(SelectedIndex);
-	}
+	OnSelectionChanged(SelectedIndex);
 	return true;
-}
-
-void UDRStageSelectScreenWidget::ClearSelection()
-{
-	if (bStarting) return;
-
-	const bool bChanged = HasSelection();
-	SelectedIndex = INDEX_NONE;
-
-	UpdateCardStates();
-	UpdateButtons();
-	SetMessage(LOCTEXT("MsgCanceled", "선택이 취소되었습니다."));
-
-	if (bChanged)
-	{
-		OnSelectionChanged(INDEX_NONE);
-	}
 }
 
 bool UDRStageSelectScreenWidget::StartSelectedStage()
@@ -261,30 +246,14 @@ bool UDRStageSelectScreenWidget::StartSelectedStage()
 
 	if (!PC->RequestStageTravel(ViewModel.StageId))
 	{
+		// 이유는 RequestStageTravel 이 로그로 남긴다
 		bStarting = false;
 		UpdateButtons();
-		SetMessage(LOCTEXT("MsgStartFailed", "지금은 출발할 수 없습니다."), true);
 		return false;
 	}
 
-	SetMessage(FText::Format(LOCTEXT("MsgStarting", "▶ 스테이지 {0} 시작!"), FText::AsNumber(ViewModel.StageNumber)));
 	OnStageStarting(ViewModel.StageId);
 	return true;
-}
-
-void UDRStageSelectScreenWidget::RequestBack()
-{
-	if (bStarting) return;
-
-	// 시안의 "뒤로"는 선택 취소다. 선택이 없을 때 한 번 더 누르면 화면을 닫는다.
-	if (HasSelection())
-	{
-		ClearSelection();
-	}
-	else
-	{
-		RequestClose();
-	}
 }
 
 void UDRStageSelectScreenWidget::RequestClose()
@@ -298,59 +267,35 @@ void UDRStageSelectScreenWidget::RequestClose()
 	}
 }
 
-void UDRStageSelectScreenWidget::MoveFocus(int32 Delta)
+void UDRStageSelectScreenWidget::MoveSelection(int32 Delta)
 {
-	if (bStarting || ViewModels.Num() == 0) return;
+	const int32 Num = ViewModels.Num();
+	if (bStarting || Num == 0 || Delta == 0) return;
 
-	if (!IsValidIndex(FocusedIndex))
+	const int32 Step = Delta > 0 ? 1 : -1;
+	int32 Index = HasSelection() ? SelectedIndex : (Step > 0 ? -1 : Num);
+
+	// 잠긴 카드는 건너뛴다. 한 바퀴 돌아도 없으면 그대로
+	for (int32 Tries = 0; Tries < Num; ++Tries)
 	{
-		// 첫 입력은 이동하지 않고 시작 카드에 포커스만 준다: 선택된 카드 → InitialFocusIndex → 첫 진행 가능 카드
-		if (IsValidIndex(SelectedIndex))
+		Index = ((Index + Step) % Num + Num) % Num;
+		if (IsSelectable(Index))
 		{
-			FocusedIndex = SelectedIndex;
-		}
-		else if (IsValidIndex(InitialFocusIndex))
-		{
-			FocusedIndex = InitialFocusIndex;
-		}
-		else
-		{
-			FocusedIndex = ViewModels.IndexOfByPredicate(
-				[](const FDRStageSelectViewModel& ViewModel) { return ViewModel.IsSelectable(); });
-			if (!IsValidIndex(FocusedIndex)) FocusedIndex = 0;
+			SelectStage(Index);
+			return;
 		}
 	}
-	else
-	{
-		const int32 Num = ViewModels.Num();
-		FocusedIndex = ((FocusedIndex + Delta) % Num + Num) % Num;
-	}
-
-	UpdateCardStates();
-	ShowCardMessage(FocusedIndex);
 }
 
 // ========================= 카드 → 화면 =========================
 
 void UDRStageSelectScreenWidget::NotifyCardHovered(int32 Index)
 {
-	if (bStarting || !IsValidIndex(Index)) return;
-
-	// 마우스가 잡으면 키보드 포커스 표시는 내려놓는다 (두 카드가 동시에 강조되지 않게)
-	if (FocusedIndex != INDEX_NONE)
+	// 마우스를 올리면 선택이 따라온다. 잠긴 카드는 올리기만 해서는 반응하지 않는다 (누르면 흔들린다)
+	if (IsSelectable(Index))
 	{
-		FocusedIndex = INDEX_NONE;
-		UpdateCardStates();
+		SelectStage(Index);
 	}
-
-	ShowCardMessage(Index);
-}
-
-void UDRStageSelectScreenWidget::NotifyCardUnhovered(int32 Index)
-{
-	if (bStarting) return;
-
-	ShowIdleMessage();
 }
 
 void UDRStageSelectScreenWidget::NotifyCardClicked(int32 Index)
@@ -360,7 +305,7 @@ void UDRStageSelectScreenWidget::NotifyCardClicked(int32 Index)
 
 void UDRStageSelectScreenWidget::NotifyCardDoubleClicked(int32 Index)
 {
-	// 시안: 잠긴 카드는 더블클릭해도 시작하지 않는다 (SelectStage 가 거절)
+	// 잠긴 카드는 더블클릭해도 시작하지 않는다 (SelectStage 가 거절)
 	if (SelectStage(Index))
 	{
 		StartSelectedStage();
@@ -371,38 +316,30 @@ void UDRStageSelectScreenWidget::NotifyCardDoubleClicked(int32 Index)
 
 FReply UDRStageSelectScreenWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
-	// Preview(터널링) 단계에서 받는다 — 시작/뒤로 버튼이 포커스를 가져가도 키가 먼저 여기로 온다
+	// Preview(터널링) 단계에서 받는다 — 버튼이 포커스를 가져가도 키가 먼저 여기로 온다
 	const FKey Key = InKeyEvent.GetKey();
 
 	if (Key == EKeys::Left || Key == EKeys::Gamepad_DPad_Left || Key == EKeys::Gamepad_LeftStick_Left)
 	{
-		MoveFocus(-1);
+		MoveSelection(-1);
 		return FReply::Handled();
 	}
 
 	if (Key == EKeys::Right || Key == EKeys::Gamepad_DPad_Right || Key == EKeys::Gamepad_LeftStick_Right)
 	{
-		MoveFocus(+1);
+		MoveSelection(+1);
 		return FReply::Handled();
 	}
 
 	if (Key == EKeys::Enter || Key == EKeys::Gamepad_FaceButton_Bottom)
 	{
-		// 포커스된 카드가 아직 선택 전이면 선택, 이미 선택된 상태면 시작
-		if (IsValidIndex(FocusedIndex) && FocusedIndex != SelectedIndex)
-		{
-			SelectStage(FocusedIndex);
-		}
-		else
-		{
-			StartSelectedStage();
-		}
+		StartSelectedStage();
 		return FReply::Handled();
 	}
 
 	if (Key == EKeys::Escape || Key == EKeys::Gamepad_FaceButton_Right)
 	{
-		RequestBack();
+		RequestClose();
 		return FReply::Handled();
 	}
 
@@ -416,7 +353,7 @@ void UDRStageSelectScreenWidget::HandleStartClicked()
 
 void UDRStageSelectScreenWidget::HandleBackClicked()
 {
-	RequestBack();
+	RequestClose();
 }
 
 void UDRStageSelectScreenWidget::HandleStatesChanged()
@@ -425,63 +362,4 @@ void UDRStageSelectScreenWidget::HandleStatesChanged()
 	if (bStarting) return;
 
 	RefreshAll();
-	ShowIdleMessage();
 }
-
-// ========================= 문구 =========================
-
-void UDRStageSelectScreenWidget::SetMessage(const FText& Message, bool bIsWarning)
-{
-	if (Txt_Message)
-	{
-		Txt_Message->SetText(Message);
-		Txt_Message->SetColorAndOpacity(FSlateColor(bIsWarning ? WarningMessageColor : MessageColor));
-	}
-	OnMessageChanged(Message, bIsWarning);
-}
-
-void UDRStageSelectScreenWidget::ShowIdleMessage()
-{
-	if (HasSelection())
-	{
-		SetMessage(FText::Format(LOCTEXT("MsgSelected", "스테이지 {0} 선택됨. 시작 버튼 또는 더블클릭"),
-			FText::AsNumber(ViewModels[SelectedIndex].StageNumber)));
-	}
-	else
-	{
-		SetMessage(LOCTEXT("MsgIdle", "스테이지를 선택하세요."));
-	}
-}
-
-void UDRStageSelectScreenWidget::ShowCardMessage(int32 Index)
-{
-	if (!IsValidIndex(Index)) return;
-
-	const FDRStageSelectViewModel& ViewModel = ViewModels[Index];
-	switch (ViewModel.State)
-	{
-	case EDRStageSelectState::Locked:
-		ShowLockedMessage(Index);
-		break;
-
-	case EDRStageSelectState::Cleared:
-		SetMessage(FText::Format(LOCTEXT("MsgHoverCleared", "스테이지 {0} — 클리어 완료 · 다시 플레이 가능"),
-			FText::AsNumber(ViewModel.StageNumber)));
-		break;
-
-	case EDRStageSelectState::Available:
-	default:
-		SetMessage(FText::Format(LOCTEXT("MsgHoverAvailable", "스테이지 {0} — 클릭하여 선택"),
-			FText::AsNumber(ViewModel.StageNumber)));
-		break;
-	}
-}
-
-void UDRStageSelectScreenWidget::ShowLockedMessage(int32 Index)
-{
-	if (!IsValidIndex(Index)) return;
-
-	SetMessage(FText::Format(LOCTEXT("MsgLocked", "잠긴 스테이지입니다. {0}"), ViewModels[Index].LockHint), true);
-}
-
-#undef LOCTEXT_NAMESPACE

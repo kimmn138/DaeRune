@@ -11,9 +11,11 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/PanelWidget.h"
 #include "Engine/Font.h"
+#include "Engine/Texture.h"
 #include "Fonts/CompositeFont.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "TextureCompiler.h"
 
 namespace DREditorToolCommon
 {
@@ -64,6 +66,12 @@ namespace DREditorToolCommon
 		if (!Object)
 		{
 			Log.Add(FString::Printf(TEXT("★에셋 없음★ %s"), Path));
+		}
+		// 에디터는 텍스처를 비동기로 컴파일한다 — 끝나기 전엔 GetSurfaceWidth 가 자리표시 그림 크기를 돌려줘서
+		// 그 크기가 브러시에 구워진다 (에디터를 새로 켠 직후 자물쇠 아이콘이 몇 px 로 구워졌다, 2026-10-29)
+		else if (UTexture* Texture = Cast<UTexture>(static_cast<UObject*>(Object)))
+		{
+			FTextureCompilingManager::Get().FinishCompilation({ Texture });
 		}
 		return Object;
 	}

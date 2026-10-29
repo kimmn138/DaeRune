@@ -7,8 +7,11 @@
 #include "WidgetBlueprint.h"
 #include "Blueprint/WidgetTree.h"
 #include "Blueprint/UserWidget.h"
-#include "Components/Border.h"
+#include "Components/BackgroundBlur.h"
 #include "Components/Button.h"
+#include "Components/ButtonSlot.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
@@ -18,11 +21,8 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
-#include "Engine/Font.h"
+#include "Engine/Texture2D.h"
 #include "Internationalization/TextNamespaceUtil.h"
-#include "Fonts/CompositeFont.h"
-#include "Kismet2/BlueprintEditorUtils.h"
-#include "Kismet2/KismetEditorUtilities.h"
 #include "Materials/MaterialInterface.h"
 #include "DaeRune/DRLogChannels.h"
 #include "DREditorToolCommon.h"
@@ -42,10 +42,22 @@ namespace DRStageSelectEditor
 	// ===== 에셋 경로 =====
 	const TCHAR* CardWBPPath = TEXT("/Game/Blueprints/UI/StageSelect/WBP_StageSelectCard.WBP_StageSelectCard");
 	const TCHAR* ScreenWBPPath = TEXT("/Game/Blueprints/UI/StageSelect/WBP_StageSelect.WBP_StageSelect");
-	const TCHAR* BackgroundMaterialPath = TEXT("/Game/Blueprints/UI/StageSelect/Material/M_UI_StageSelect_BG.M_UI_StageSelect_BG");
-	const TCHAR* ThumbnailMaterialPath = TEXT("/Game/Blueprints/UI/StageSelect/Material/M_UI_StageSelect_Thumb.M_UI_StageSelect_Thumb");
-	// 시안 폰트는 Pretendard — 프로젝트에 있는 굵기는 SemiBold 하나다 (시안의 700/800 굵기는 표현 못 한다)
-	const TCHAR* BodyFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/Pretendard-SemiBold__1__Font.Pretendard-SemiBold__1__Font");
+	const TCHAR* LockBlendMaterialPath = TEXT("/Game/Blueprints/UI/StageSelect/Material/M_UI_StageSelect_LockBlend.M_UI_StageSelect_LockBlend");
+
+	// 카드 미리보기 브러시 (스테이지 1) — 런타임에는 카드 위젯이 스테이지 데이터(CardArt)로 갈아 끼운다
+	const TCHAR* PreviewBasePath = TEXT("/Game/DaeRuneAssets/UI/StageSelect/Stage1/T_StageSelect_S1_Base.T_StageSelect_S1_Base");
+	const TCHAR* PreviewPicturePath = TEXT("/Game/DaeRuneAssets/UI/StageSelect/Stage1/T_StageSelect_S1_Picture.T_StageSelect_S1_Picture");
+	const TCHAR* PreviewOutlinePath = TEXT("/Game/DaeRuneAssets/UI/StageSelect/Stage1/T_StageSelect_S1_Outline.T_StageSelect_S1_Outline");
+	const TCHAR* PreviewNumberPath = TEXT("/Game/DaeRuneAssets/UI/StageSelect/Stage1/T_StageSelect_S1_Number.T_StageSelect_S1_Number");
+	const TCHAR* PreviewBadgePath = TEXT("/Game/DaeRuneAssets/UI/StageSelect/Stage1/T_StageSelect_S1_Badge.T_StageSelect_S1_Badge");
+	const TCHAR* LockIconPath = TEXT("/Game/DaeRuneAssets/UI/StageSelect/T_StageSelect_Lock.T_StageSelect_Lock");
+	const TCHAR* ClearedStampPath = TEXT("/Game/DaeRuneAssets/UI/StageSelect/T_StageSelect_Cleared.T_StageSelect_Cleared");
+	const TCHAR* KeyEscPath = TEXT("/Game/DaeRuneAssets/UI/Settimgs/T_Key_ESC.T_Key_ESC");
+	const TCHAR* KeyEnterPath = TEXT("/Game/DaeRuneAssets/UI/Settimgs/T_Key_ENTER.T_Key_ENTER");
+
+	// 스테이지 이름 · "스테이지 N" · 제목 · 키 안내는 학교안심 운동장, 임무 설명은 Pretendard (Figma 글꼴을 렌더링해 맞춰 봤다)
+	const TCHAR* HakgyoansimFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/HakgyoansimUndongjangL_Font.HakgyoansimUndongjangL_Font");
+	const TCHAR* PretendardFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/Pretendard-SemiBold__1__Font.Pretendard-SemiBold__1__Font");
 
 	struct FLog
 	{
@@ -57,22 +69,80 @@ namespace DRStageSelectEditor
 		}
 	};
 
+	// Figma 글자색 #DDF7FF (모든 글자 · 번호 그림이 같은 색)
+	const FLinearColor TextColor = SRGB(0xDD, 0xF7, 0xFF);
 
-
-	// ===== 시안 :root 변수 =====
-	const FLinearColor Line = SRGB(0x8F, 0xE3, 0xFF);	// --line
-	const FLinearColor Line2 = SRGB(0x4F, 0xB4, 0xE6);	// --line2
-	const FLinearColor Text = SRGB(0xE6, 0xF4, 0xFF);	// --text
-	const FLinearColor Sub = SRGB(0x9D, 0xB9, 0xD6);		// --sub
-	const FLinearColor Ink = SRGB(0x04, 0x12, 0x2A);		// 시작 버튼 글자
-
-
-	// Px 는 시안의 CSS px. UMG 폰트 크기는 72dpi 포인트라 ×0.75. LetterSpacingEm 은 CSS letter-spacing(em)
-	FSlateFontInfo MakeFont(const UObject* FontObject, float Px, float LetterSpacingEm = 0.0f)
+	// ===== Spec — Figma 프레임 "Slide 16:9 - 7 / 8" 을 100% 로 떠서 잰 값 (1920x1080 기준 px) =====
+	namespace Spec
 	{
-		FSlateFontInfo Font(FontObject, Px * 0.75f, PickTypeface(FontObject));
-		Font.LetterSpacing = FMath::RoundToInt(LetterSpacingEm * 1000.0f);
-		return Font;
+		// 카드 레이어 위치 (카드 모양 왼쪽 위 기준, 원래 크기)
+		const FVector2D GlowLayerOffset(-50.0, -50.0);	// 베이스 · 테두리 = 글로우 캔버스 (사방 50px)
+		const FVector2D PictureOffset(-13.0, -1.0);		// "스테이지N 그림" 내보내기 프레임 자리
+
+		// 번호 그림 — 아래쪽 기준 (두 카드의 높이가 달라 위 기준으로는 안 맞는다). 1번: 카드 (38,58) 에 72x70
+		const FMargin NumberPadding(38.0f, 0.0f, 0.0f, 542.0f);
+		const float NumberHeight = 70.0f;
+
+		// 이름 · 배지 · 임무 묶음 — 아래쪽 기준. 글꼴 줄 높이(학교안심 1.0em · Pretendard 1.19em)로 잉크 위치를 맞췄다
+		const FMargin TextBlockPadding(34.0f, 0.0f, 0.0f, 48.6f);
+		const float BadgeGap = 18.3f;				// 이름 글자 상자 끝 → 배지
+		const float MissionGap = 23.5f;				// 이름 줄 → 임무 줄
+		const float TitlePx = 40.0f;				// "연구 격납고" 학교안심 40px
+		const float BadgePx = 24.0f;				// "스테이지 1" 학교안심 24px
+		const float MissionPx = 24.5f;				// 임무 Pretendard 24.5px (SemiBold 기준 폭 맞춤)
+
+		// CLEARED 도장 — 카드 가운데에서 (+5,-1), 475x165, 반시계 11도.
+		// ★Slate 가운데 정렬은 여백 차(왼-오른, 위-아래)만큼 그대로 민다★ (절반이 아니다 — LayoutUtils AlignChild)
+		const FMargin StampPadding(5.0f, 0.0f, 0.0f, 1.0f);
+		const FVector2D StampSize(475.0, 165.0);
+		const float StampAngle = -11.0f;
+
+		// 자물쇠 — 오른쪽 위, 원래 크기(125x125, 글로우 포함). 아래쪽 기준으로 두 카드 공통
+		const FMargin LockPadding(0.0f, 0.0f, 24.0f, 517.0f);
+
+		// 화면
+		const float ScreenTitleTop = 86.9f;			// "스테이지 선택" 학교안심 55px — 잉크 위 90
+		const float ScreenTitlePx = 55.0f;
+		const float CardsTop = 223.0f;				// 1번 카드 위(계단 포함). 2번은 아래쪽 맞춤으로 232 에 온다
+
+		// 키 안내 — 오른쪽 아래. 버튼 안쪽 여백(8,4) 포함한 묶음의 오른쪽 끝 · 세로 가운데
+		const FVector2D KeyHintsAnchorOffset(-73.2, -94.5);
+		const FMargin KeyButtonPadding(8.0f, 4.0f);
+		const float KeyIconHeight = 31.0f;			// ESC 57x31 · ENTER 85x31
+		const float KeyLabelGapBack = 9.0f;			// ESC 아이콘 → BACK
+		const float KeyLabelGapStart = 10.0f;		// ENTER 아이콘 → START
+		const float KeyButtonGap = 14.6f;			// BACK 버튼 → START 버튼
+		const float BackPx = 23.0f;					// "BACK" 학교안심 23px
+		const float StartPx = 29.0f;				// "START" 학교안심 29px (시안에서 BACK 보다 크다)
+
+		// 배경 — 시안의 어두운 복도 톤에 맞춰 로비 화면을 어둡게 덮는다
+		const FLinearColor DimColor = SRGB(6, 10, 20, 0.72f);
+		const float BlurStrength = 3.0f;
+	}
+
+	// Px 는 시안 px. UMG 폰트 크기는 72dpi 포인트라 ×0.75
+	FSlateFontInfo MakeFont(const UObject* FontObject, float Px)
+	{
+		return FSlateFontInfo(FontObject, Px * 0.75f, PickTypeface(FontObject));
+	}
+
+	FSlateBrush MakeTextureBrush(UTexture2D* Texture, FVector2D Size = FVector2D::ZeroVector)
+	{
+		FSlateBrush Brush;
+		Brush.DrawAs = ESlateBrushDrawType::Image;
+		if (Texture)
+		{
+			Brush.SetResourceObject(Texture);
+			Brush.ImageSize = Size.IsNearlyZero() ? FVector2D(Texture->GetSurfaceWidth(), Texture->GetSurfaceHeight()) : Size;
+		}
+		return Brush;
+	}
+
+	// 높이를 정하고 가로는 그림 비율대로
+	FVector2D SizeForHeight(const UTexture2D* Texture, float Height)
+	{
+		if (!Texture || Texture->GetSurfaceHeight() <= 0.0f) return FVector2D(Height, Height);
+		return FVector2D(Texture->GetSurfaceWidth() * Height / Texture->GetSurfaceHeight(), Height);
 	}
 
 	FSlateBrush MakeColorBrush(const FLinearColor& Color)
@@ -83,26 +153,22 @@ namespace DRStageSelectEditor
 		return Brush;
 	}
 
-	// 둥근 사각형. Fill 의 알파가 0 이면 외곽선만 그린다
-	FSlateBrush MakeRoundedBrush(const FLinearColor& Fill, float Radius, const FLinearColor& Outline = FLinearColor::Transparent, float OutlineWidth = 0.0f)
+	FSlateBrush MakeRoundedBrush(const FLinearColor& Fill, float Radius)
 	{
 		FSlateBrush Brush;
 		Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
 		Brush.TintColor = FSlateColor(Fill);
-		Brush.OutlineSettings = FSlateBrushOutlineSettings(FVector4(Radius, Radius, Radius, Radius), FSlateColor(Outline), OutlineWidth);
+		Brush.OutlineSettings = FSlateBrushOutlineSettings(FVector4(Radius, Radius, Radius, Radius), FSlateColor(FLinearColor::Transparent), 0.0f);
 		Brush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
 		return Brush;
 	}
 
-	FSlateBrush MakeMaterialBrush(UObject* Material)
+	FSlateBrush MakeNoDrawBrush()
 	{
 		FSlateBrush Brush;
-		Brush.DrawAs = ESlateBrushDrawType::Image;
-		Brush.SetResourceObject(Material);
-		Brush.ImageSize = FVector2D(32.0, 32.0);
+		Brush.DrawAs = ESlateBrushDrawType::NoDrawType;
 		return Brush;
 	}
-
 
 	// 트리를 비우고 새 루트를 만든다 — 멱등을 위해 매번 처음부터 짓는다
 	template <typename T>
@@ -133,6 +199,24 @@ namespace DRStageSelectEditor
 		return Widget;
 	}
 
+	UImage* MakeImage(UWidgetTree* Tree, const TCHAR* Name, UTexture2D* Texture, bool bVariable, FVector2D Size = FVector2D::ZeroVector)
+	{
+		UImage* Image = Make<UImage>(Tree, Name, bVariable);
+		Image->SetBrush(MakeTextureBrush(Texture, Size));
+		Image->SetVisibility(ESlateVisibility::HitTestInvisible);
+		return Image;
+	}
+
+	UTextBlock* MakeText(UWidgetTree* Tree, const TCHAR* Name, const FText& Text, const UObject* Font, float Px, bool bVariable)
+	{
+		UTextBlock* TextBlock = Make<UTextBlock>(Tree, Name, bVariable);
+		TextBlock->SetText(Text);
+		TextBlock->SetFont(MakeFont(Font, Px));
+		TextBlock->SetColorAndOpacity(FSlateColor(TextColor));
+		TextBlock->SetVisibility(ESlateVisibility::HitTestInvisible);
+		return TextBlock;
+	}
+
 	UOverlaySlot* AddToOverlay(UOverlay* Parent, UWidget* Child, EHorizontalAlignment H, EVerticalAlignment V, const FMargin& Padding = FMargin(0.0f))
 	{
 		UOverlaySlot* OverlaySlot = Parent->AddChildToOverlay(Child);
@@ -142,55 +226,49 @@ namespace DRStageSelectEditor
 		return OverlaySlot;
 	}
 
-	UVerticalBoxSlot* AddToVBox(UVerticalBox* Parent, UWidget* Child, bool bFill, EHorizontalAlignment H, EVerticalAlignment V, const FMargin& Padding = FMargin(0.0f))
+	UVerticalBoxSlot* AddToVBox(UVerticalBox* Parent, UWidget* Child, EHorizontalAlignment H, const FMargin& Padding = FMargin(0.0f))
 	{
 		UVerticalBoxSlot* BoxSlot = Parent->AddChildToVerticalBox(Child);
-		BoxSlot->SetSize(FSlateChildSize(bFill ? ESlateSizeRule::Fill : ESlateSizeRule::Automatic));
+		BoxSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
 		BoxSlot->SetHorizontalAlignment(H);
-		BoxSlot->SetVerticalAlignment(V);
+		BoxSlot->SetVerticalAlignment(VAlign_Top);
 		BoxSlot->SetPadding(Padding);
 		return BoxSlot;
 	}
 
-	UHorizontalBoxSlot* AddToHBox(UHorizontalBox* Parent, UWidget* Child, bool bFill, EHorizontalAlignment H, EVerticalAlignment V, const FMargin& Padding = FMargin(0.0f))
+	UHorizontalBoxSlot* AddToHBox(UHorizontalBox* Parent, UWidget* Child, EVerticalAlignment V, const FMargin& Padding = FMargin(0.0f))
 	{
 		UHorizontalBoxSlot* BoxSlot = Parent->AddChildToHorizontalBox(Child);
-		BoxSlot->SetSize(FSlateChildSize(bFill ? ESlateSizeRule::Fill : ESlateSizeRule::Automatic));
-		BoxSlot->SetHorizontalAlignment(H);
+		BoxSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+		BoxSlot->SetHorizontalAlignment(HAlign_Left);
 		BoxSlot->SetVerticalAlignment(V);
 		BoxSlot->SetPadding(Padding);
 		return BoxSlot;
 	}
 
-	UTextBlock* MakeText(UWidgetTree* Tree, const TCHAR* Name, const FString& Sample, const UObject* Font, float Px,
-		const FLinearColor& Color, bool bVariable, float LetterSpacingEm = 0.0f)
+	UCanvasPanelSlot* AddToCanvas(UCanvasPanel* Canvas, UWidget* Child, const FAnchors& Anchors, const FVector2D& Alignment,
+		const FVector2D& Position, bool bAutoSize, const FVector2D& Size = FVector2D::ZeroVector)
 	{
-		UTextBlock* TextBlock = Make<UTextBlock>(Tree, Name, bVariable);
-		// 런타임 글자는 C++ 이 넣는다. 고정 문구가 아닌 것은 번역 수집에서 빠지도록 CultureInvariant 로 둔다
-		TextBlock->SetText(FText::AsCultureInvariant(Sample));
-		TextBlock->SetFont(MakeFont(Font, Px, LetterSpacingEm));
-		TextBlock->SetColorAndOpacity(FSlateColor(Color));
-		TextBlock->SetVisibility(ESlateVisibility::HitTestInvisible);
-		return TextBlock;
+		UCanvasPanelSlot* CanvasSlot = Canvas->AddChildToCanvas(Child);
+		CanvasSlot->SetAnchors(Anchors);
+		CanvasSlot->SetAlignment(Alignment);
+		CanvasSlot->SetAutoSize(bAutoSize);
+		// 앵커가 한 점이면 (X, Y, 폭, 높이), 늘이기면 (왼, 위, 오른, 아래 여백)
+		CanvasSlot->SetOffsets(FMargin(Position.X, Position.Y, Size.X, Size.Y));
+		return CanvasSlot;
 	}
 
-	// 버튼 4상태. 배경은 둥근 사각형 + 외곽선 (시안 .btn)
-	void StyleButton(UButton* Button, const FLinearColor& Fill, const FLinearColor& Outline,
-		const FLinearColor& HoverFill, const FLinearColor& HoverOutline)
+	// 키 안내 버튼 — 배경은 안 그리고 마우스를 올렸을 때만 옅게 밝힌다. 키 입력은 화면이 받으므로 포커스는 받지 않는다
+	void StyleKeyHintButton(UButton* Button)
 	{
 		FButtonStyle Style = Button->GetStyle();
-		const FSlateBrush Normal = MakeRoundedBrush(Fill, 4.0f, Outline, 3.0f);
-		const FSlateBrush Hovered = MakeRoundedBrush(HoverFill, 4.0f, HoverOutline, 3.0f);
-		FSlateBrush Pressed = Hovered;
-		Pressed.TintColor = FSlateColor(HoverFill * FLinearColor(0.85f, 0.85f, 0.85f, 1.0f));
-		// 시안 .btn:disabled{opacity:.35}
-		const FSlateBrush Disabled = MakeRoundedBrush(Fill * FLinearColor(1.0f, 1.0f, 1.0f, 0.35f), 4.0f,
-			Outline * FLinearColor(1.0f, 1.0f, 1.0f, 0.35f), 3.0f);
-		Style.SetNormal(Normal).SetHovered(Hovered).SetPressed(Pressed).SetDisabled(Disabled);
-		Style.SetNormalPadding(FMargin(48.0f, 0.0f)).SetPressedPadding(FMargin(48.0f, 2.0f, 48.0f, 0.0f));
+		Style.SetNormal(MakeNoDrawBrush())
+			.SetHovered(MakeRoundedBrush(SRGB(143, 227, 255, 0.12f), 6.0f))
+			.SetPressed(MakeRoundedBrush(SRGB(143, 227, 255, 0.22f), 6.0f))
+			.SetDisabled(MakeNoDrawBrush());
+		Style.SetNormalPadding(Spec::KeyButtonPadding).SetPressedPadding(Spec::KeyButtonPadding);
 		Button->SetStyle(Style);
 
-		// 버튼이 키보드 포커스를 가져가지 않게 — 키 입력은 화면이 받는다 (Enter / ESC / ←→)
 		// (InitIsFocusable 은 protected · 멤버 직접 접근은 deprecated — 디자이너에서 체크를 끄는 것과 같게 반사로 넣는다)
 		if (FBoolProperty* FocusableProperty = FindFProperty<FBoolProperty>(UButton::StaticClass(), TEXT("IsFocusable")))
 		{
@@ -198,9 +276,6 @@ namespace DRStageSelectEditor
 		}
 		Button->bIsVariable = true;
 	}
-
-
-
 }
 #endif
 
@@ -212,128 +287,90 @@ bool UDRStageSelectEditorTools::BuildStageSelectCardWidget(FString& OutLog)
 	FLog Log{ OutLog };
 
 	UWidgetBlueprint* Blueprint = Load<UWidgetBlueprint>(CardWBPPath, Log);
-	UMaterialInterface* ThumbnailMaterial = Load<UMaterialInterface>(ThumbnailMaterialPath, Log);
-	UObject* Font = Load<UObject>(BodyFontPath, Log);
+	UMaterialInterface* LockBlendMaterial = Load<UMaterialInterface>(LockBlendMaterialPath, Log);
+	UTexture2D* BaseTexture = Load<UTexture2D>(PreviewBasePath, Log);
+	UTexture2D* PictureTexture = Load<UTexture2D>(PreviewPicturePath, Log);
+	UTexture2D* OutlineTexture = Load<UTexture2D>(PreviewOutlinePath, Log);
+	UTexture2D* NumberTexture = Load<UTexture2D>(PreviewNumberPath, Log);
+	UTexture2D* BadgeTexture = Load<UTexture2D>(PreviewBadgePath, Log);
+	UTexture2D* LockTexture = Load<UTexture2D>(LockIconPath, Log);
+	UTexture2D* StampTexture = Load<UTexture2D>(ClearedStampPath, Log);
+	UObject* Hakgyoansim = Load<UObject>(HakgyoansimFontPath, Log);
+	UObject* Pretendard = Load<UObject>(PretendardFontPath, Log);
 	if (!Blueprint || !Blueprint->WidgetTree) return false;
 
 	Blueprint->Modify();
 	UWidgetTree* Tree = Blueprint->WidgetTree;
 	Tree->Modify();
 
-	// 카드 = Overlay. 뒤에 넣은 것이 위에 그려진다 — 패널 바탕 → 내용 → 선택 표시 → 테두리
-	UOverlay* Root = ResetTree<UOverlay>(Blueprint, TEXT("Overlay_Card"));
+	// 루트 = 카드 모양 크기 (런타임에 CardArt.CardSize 로 바뀐다). 글로우는 이 밖으로 그린다
+	USizeBox* Root = ResetTree<USizeBox>(Blueprint, TEXT("SizeBox_Card"));
+	Root->bIsVariable = true;
+	Root->SetWidthOverride(787.0f);
+	Root->SetHeightOverride(670.0f);
 
-	// 1) 카드 바탕 (시안 --panel rgba(150,200,240,.10), radius 6)
-	UBorder* PanelBack = Make<UBorder>(Tree, TEXT("Border_Panel"));
-	PanelBack->SetBrush(MakeRoundedBrush(SRGB(150, 200, 240, 0.10f), 6.0f));
-	PanelBack->SetVisibility(ESlateVisibility::HitTestInvisible);
-	AddToOverlay(Root, PanelBack, HAlign_Fill, VAlign_Fill);
+	// Overlay 는 뒤에 넣은 것이 위에 그려진다 — 레이어가이드 순서(아래 → 위)
+	UOverlay* Card = Make<UOverlay>(Tree, TEXT("Overlay_Card"));
+	Card->SetVisibility(ESlateVisibility::HitTestInvisible);
+	Root->SetContent(Card);
 
-	// 2) 내용 — 테두리 두께(2)만큼 안쪽
-	UVerticalBox* Body = Make<UVerticalBox>(Tree, TEXT("VerticalBox_Body"));
-	Body->SetVisibility(ESlateVisibility::HitTestInvisible);
-	AddToOverlay(Root, Body, HAlign_Fill, VAlign_Fill, FMargin(2.0f));
-
-	// 2-1) 썸네일 영역 (flex:1)
-	UOverlay* Thumb = Make<UOverlay>(Tree, TEXT("Overlay_Thumb"));
-	AddToVBox(Body, Thumb, true, HAlign_Fill, VAlign_Fill);
-
-	// 배경 이미지 — 아트가 없으면 그라데이션 머티리얼(시안 .thumb 기본 배경). C++ 이 잠긴 카드는 어둡게 틴트한다
-	UImage* Thumbnail = Make<UImage>(Tree, TEXT("Image_Thumbnail"), true);
-	Thumbnail->SetBrush(ThumbnailMaterial ? MakeMaterialBrush(ThumbnailMaterial) : MakeColorBrush(SRGB(0x2A, 0x4A, 0x7C)));
-	Thumbnail->SetVisibility(ESlateVisibility::HitTestInvisible);
-	AddToOverlay(Thumb, Thumbnail, HAlign_Fill, VAlign_Fill);
-
-	// 큰 번호 — 130px, rgba(230,244,255,.9), 글로우 대신 그림자 (left 32, top 10)
-	UTextBlock* Number = MakeText(Tree, TEXT("Txt_Number"), TEXT("01"), Font, 130.0f, SRGB(230, 244, 255, 0.9f), true);
-	Number->SetShadowOffset(FVector2D(0.0, 2.0));
-	Number->SetShadowColorAndOpacity(SRGB(5, 15, 35, 0.75f));
-	AddToOverlay(Thumb, Number, HAlign_Left, VAlign_Top, FMargin(32.0f, 10.0f, 0.0f, 0.0f));
-
-	// 배지 — right 48, top 24, padding 8 22, 테두리 1.5, 배경 rgba(5,15,35,.7). 외곽선 색은 C++ 이 상태별로 바꾼다
-	UBorder* Badge = Make<UBorder>(Tree, TEXT("Border_Badge"), true);
-	Badge->SetBrush(MakeRoundedBrush(SRGB(5, 15, 35, 0.7f), 3.0f, Line, 1.5f));
-	Badge->SetPadding(FMargin(22.0f, 8.0f));
-	Badge->SetVisibility(ESlateVisibility::HitTestInvisible);
-	AddToOverlay(Thumb, Badge, HAlign_Right, VAlign_Top, FMargin(0.0f, 24.0f, 48.0f, 0.0f));
-	Badge->SetContent(MakeText(Tree, TEXT("Txt_Badge"), TEXT("진행 가능"), Font, 20.0f, Line, true, 0.14f));
-
-	// CLEARED 도장 — 가운데, -12도, 78px, 테두리 8 (시안은 double 테두리 — UMG 는 한 줄만)
-	UBorder* Stamp = Make<UBorder>(Tree, TEXT("Panel_Cleared"), true);
-	Stamp->SetBrush(MakeRoundedBrush(SRGB(4, 18, 30, 0.55f), 8.0f, Line, 8.0f));
-	Stamp->SetPadding(FMargin(44.0f, 10.0f));
-	Stamp->SetRenderTransformAngle(-12.0f);
-	Stamp->SetVisibility(ESlateVisibility::Collapsed);	// 클리어일 때 C++ 이 켠다
-	AddToOverlay(Thumb, Stamp, HAlign_Center, VAlign_Center);
-	Stamp->SetContent(MakeText(Tree, TEXT("Txt_Stamp"), TEXT("CLEARED"), Font, 78.0f, Line, false, 0.16f));
-
-	// 잠김 덮개 — 어두운 막 rgba(5,10,25,.55) + 자물쇠 (이모지 글리프가 폰트에 없어 도형으로 그린다)
-	UOverlay* Locked = Make<UOverlay>(Tree, TEXT("Panel_Locked"), true);
-	Locked->SetVisibility(ESlateVisibility::Collapsed);	// 잠겼을 때 C++ 이 켠다
-	AddToOverlay(Thumb, Locked, HAlign_Fill, VAlign_Fill);
+	// 베이스 · 그림 · 테두리는 카드 밖으로 넘치는 그림이라 캔버스에 원래 크기로 둔다.
+	// ★Overlay 에 두면 안 된다★ — 왼/위 정렬이어도 남은 공간(카드 크기 - 여백)으로 줄여 그려서 카드가 6% 작아진다
+	UCanvasPanel* Layers = Make<UCanvasPanel>(Tree, TEXT("Canvas_Layers"));
+	Layers->SetVisibility(ESlateVisibility::HitTestInvisible);
+	AddToOverlay(Card, Layers, HAlign_Fill, VAlign_Fill);
 	{
-		UImage* Dim = Make<UImage>(Tree, TEXT("Image_LockDim"));
-		Dim->SetBrush(MakeColorBrush(SRGB(5, 10, 25, 0.55f)));
-		AddToOverlay(Locked, Dim, HAlign_Fill, VAlign_Fill);
-
-		const FLinearColor LockColor = SRGB(0xC9, 0xD6, 0xE6);
-		UVerticalBox* LockIcon = Make<UVerticalBox>(Tree, TEXT("VerticalBox_LockIcon"));
-		AddToOverlay(Locked, LockIcon, HAlign_Center, VAlign_Center);
-
-		// 고리: 외곽선만 있는 둥근 사각형의 위쪽 절반 (아래 절반은 몸통이 덮는다)
-		USizeBox* ShackleBox = Make<USizeBox>(Tree, TEXT("SizeBox_LockShackle"));
-		ShackleBox->SetWidthOverride(64.0f);
-		ShackleBox->SetHeightOverride(70.0f);
-		UBorder* Shackle = Make<UBorder>(Tree, TEXT("Border_LockShackle"));
-		Shackle->SetBrush(MakeRoundedBrush(FLinearColor::Transparent, 32.0f, LockColor, 11.0f));
-		ShackleBox->SetContent(Shackle);
-		AddToVBox(LockIcon, ShackleBox, false, HAlign_Center, VAlign_Top, FMargin(0.0f, 0.0f, 0.0f, -34.0f));
-
-		// 몸통
-		USizeBox* BodyBox = Make<USizeBox>(Tree, TEXT("SizeBox_LockBody"));
-		BodyBox->SetWidthOverride(104.0f);
-		BodyBox->SetHeightOverride(82.0f);
-		UBorder* LockBody = Make<UBorder>(Tree, TEXT("Border_LockBody"));
-		LockBody->SetBrush(MakeRoundedBrush(LockColor, 12.0f));
-		BodyBox->SetContent(LockBody);
-		AddToVBox(LockIcon, BodyBox, false, HAlign_Center, VAlign_Top);
+		const FAnchors TopLeft(0.0f, 0.0f);
+		AddToCanvas(Layers, MakeImage(Tree, TEXT("Image_Base"), BaseTexture, true), TopLeft, FVector2D::ZeroVector, Spec::GlowLayerOffset, true);
+		AddToCanvas(Layers, MakeImage(Tree, TEXT("Image_Thumbnail"), PictureTexture, true), TopLeft, FVector2D::ZeroVector, Spec::PictureOffset, true);
+		AddToCanvas(Layers, MakeImage(Tree, TEXT("Image_Frame"), OutlineTexture, true), TopLeft, FVector2D::ZeroVector, Spec::GlowLayerOffset, true);
 	}
 
-	// 2-2) 정보 영역 — padding 28 36 34, 배경 rgba(5,15,35,.55)
-	UBorder* Info = Make<UBorder>(Tree, TEXT("Border_Info"));
-	Info->SetBrush(MakeColorBrush(SRGB(5, 15, 35, 0.55f)));
-	Info->SetPadding(FMargin(36.0f, 28.0f, 36.0f, 34.0f));
-	Info->SetVisibility(ESlateVisibility::HitTestInvisible);
-	AddToVBox(Body, Info, false, HAlign_Fill, VAlign_Fill);
+	// CLEARED 도장 — 클리어일 때 C++ 이 켠다
+	UImage* Stamp = MakeImage(Tree, TEXT("Panel_Cleared"), StampTexture, true, Spec::StampSize);
+	Stamp->SetRenderTransformAngle(Spec::StampAngle);
+	Stamp->SetVisibility(ESlateVisibility::Collapsed);
+	AddToOverlay(Card, Stamp, HAlign_Center, VAlign_Center, Spec::StampPadding);
+
+	// 번호 + 글자 묶음 — 카드마다 ContentOffset 만큼 옮기고, 잠기면 묶음째 40%
+	UOverlay* Content = Make<UOverlay>(Tree, TEXT("Panel_Content"), true);
+	Content->SetVisibility(ESlateVisibility::HitTestInvisible);
+	AddToOverlay(Card, Content, HAlign_Fill, VAlign_Fill);
 	{
-		UVerticalBox* InfoBox = Make<UVerticalBox>(Tree, TEXT("VerticalBox_Info"));
-		Info->SetContent(InfoBox);
+		UImage* Number = MakeImage(Tree, TEXT("Image_Number"), NumberTexture, true, SizeForHeight(NumberTexture, Spec::NumberHeight));
+		Number->SetRenderOpacity(0.7f);
+		AddToOverlay(Content, Number, HAlign_Left, VAlign_Bottom, Spec::NumberPadding);
 
-		AddToVBox(InfoBox, MakeText(Tree, TEXT("Txt_Title"), TEXT("스테이지 1 · 연구 격납고"), Font, 36.0f, Text, true),
-			false, HAlign_Left, VAlign_Top, FMargin(0.0f, 0.0f, 0.0f, 10.0f));
+		UVerticalBox* TextBlock = Make<UVerticalBox>(Tree, TEXT("VerticalBox_Text"));
+		TextBlock->SetVisibility(ESlateVisibility::HitTestInvisible);
+		AddToOverlay(Content, TextBlock, HAlign_Left, VAlign_Bottom, Spec::TextBlockPadding);
 
-		UTextBlock* Mission = MakeText(Tree, TEXT("Txt_Mission"), TEXT("적들로부터 클렌저를 지키세요"), Font, 24.0f, Sub, true);
-		Mission->SetAutoWrapText(true);
-		AddToVBox(InfoBox, Mission, false, HAlign_Fill, VAlign_Top);
+		UHorizontalBox* NameRow = Make<UHorizontalBox>(Tree, TEXT("HorizontalBox_Name"));
+		NameRow->SetVisibility(ESlateVisibility::HitTestInvisible);
+		AddToVBox(TextBlock, NameRow, HAlign_Left);
 
-		UTextBlock* Done = MakeText(Tree, TEXT("Txt_Done"), TEXT("임무 완료 · 다시 도전 가능"), Font, 22.0f, Line, true);
-		Done->SetVisibility(ESlateVisibility::Collapsed);	// 클리어일 때 C++ 이 켠다
-		AddToVBox(InfoBox, Done, false, HAlign_Left, VAlign_Top, FMargin(0.0f, 12.0f, 0.0f, 0.0f));
+		// 런타임 글자는 C++ 이 넣는다 — 미리보기 글자는 번역 수집에서 빠지도록 CultureInvariant
+		AddToHBox(NameRow, MakeText(Tree, TEXT("Txt_Title"), FText::AsCultureInvariant(TEXT("연구 격납고")), Hakgyoansim, Spec::TitlePx, true), VAlign_Center);
+
+		UOverlay* Badge = Make<UOverlay>(Tree, TEXT("Overlay_Badge"));
+		Badge->SetVisibility(ESlateVisibility::HitTestInvisible);
+		AddToHBox(NameRow, Badge, VAlign_Center, FMargin(Spec::BadgeGap, 0.0f, 0.0f, 0.0f));
+		AddToOverlay(Badge, MakeImage(Tree, TEXT("Image_Badge"), BadgeTexture, true), HAlign_Fill, VAlign_Fill);
+		AddToOverlay(Badge, MakeText(Tree, TEXT("Txt_Badge"), FText::AsCultureInvariant(TEXT("스테이지 1")), Hakgyoansim, Spec::BadgePx, true), HAlign_Center, VAlign_Center);
+
+		AddToVBox(TextBlock, MakeText(Tree, TEXT("Txt_Mission"), FText::AsCultureInvariant(TEXT("적들로부터 클렌저를 지키세요")), Pretendard, Spec::MissionPx, true),
+			HAlign_Left, FMargin(0.0f, Spec::MissionGap, 0.0f, 0.0f));
 	}
 
-	// 3) 선택 표시 — 시안 .card.sel 의 밝은 바탕 (rgba(143,227,255,.18) - 기본 .10 ≈ +.08)
-	UBorder* Selected = Make<UBorder>(Tree, TEXT("Panel_Selected"), true);
-	Selected->SetBrush(MakeRoundedBrush(SRGB(143, 227, 255, 0.08f), 6.0f));
-	Selected->SetVisibility(ESlateVisibility::Collapsed);	// 선택됐을 때 C++ 이 켠다
-	AddToOverlay(Root, Selected, HAlign_Fill, VAlign_Fill);
+	// 자물쇠 — 잠겼을 때 C++ 이 켠다 (잠금 효과 위에 그려지므로 컬러 그대로)
+	UImage* Lock = MakeImage(Tree, TEXT("Panel_Locked"), LockTexture, true);
+	Lock->SetVisibility(ESlateVisibility::Collapsed);
+	AddToOverlay(Card, Lock, HAlign_Right, VAlign_Bottom, Spec::LockPadding);
 
-	// 4) 테두리 — 외곽선만. 실제 색은 런타임에 C++ 이 외곽선 색을 바꾼다 (기본 / 강조 / 잠김 / 경고)
-	UBorder* Frame = Make<UBorder>(Tree, TEXT("Border_Frame"), true);
-	Frame->SetBrush(MakeRoundedBrush(FLinearColor::Transparent, 6.0f, Line2, 2.0f));
-	Frame->SetVisibility(ESlateVisibility::HitTestInvisible);
-	AddToOverlay(Root, Frame, HAlign_Fill, VAlign_Fill);
+	if (!CompileAndMark(Blueprint, Log)) return false;
 
-	return CompileAndMark(Blueprint, Log);
+	SetObjectProperty(Blueprint->GeneratedClass->GetDefaultObject(), TEXT("LockBlendMaterial"), LockBlendMaterial, Log);
+	return CompileAndMark(Blueprint, Log);	// CDO 를 고쳤으면 다시 컴파일 (옷장 T-32)
 #else
 	return false;
 #endif
@@ -348,134 +385,82 @@ bool UDRStageSelectEditorTools::BuildStageSelectScreenWidget(FString& OutLog)
 
 	UWidgetBlueprint* Blueprint = Load<UWidgetBlueprint>(ScreenWBPPath, Log);
 	UWidgetBlueprint* CardBlueprint = Load<UWidgetBlueprint>(CardWBPPath, Log);
-	UMaterialInterface* BackgroundMaterial = Load<UMaterialInterface>(BackgroundMaterialPath, Log);
-	UObject* Font = Load<UObject>(BodyFontPath, Log);
+	UTexture2D* KeyEscTexture = Load<UTexture2D>(KeyEscPath, Log);
+	UTexture2D* KeyEnterTexture = Load<UTexture2D>(KeyEnterPath, Log);
+	UObject* Hakgyoansim = Load<UObject>(HakgyoansimFontPath, Log);
 	if (!Blueprint || !Blueprint->WidgetTree) return false;
 
 	Blueprint->Modify();
 	UWidgetTree* Tree = Blueprint->WidgetTree;
 	Tree->Modify();
 
-	// 1920x1080 기준 (시안 .wrap) — Overlay 루트라 해상도가 바뀌면 DPI 스케일이 맞춘다
-	UOverlay* Root = ResetTree<UOverlay>(Blueprint, TEXT("Overlay_Root"));
+	// 1920x1080 기준 캔버스 — 해상도가 바뀌면 DPI 스케일이 맞춘다
+	UCanvasPanel* Root = ResetTree<UCanvasPanel>(Blueprint, TEXT("CanvasPanel_Root"));
+	const FAnchors Stretch(0.0f, 0.0f, 1.0f, 1.0f);
+	const FAnchors TopCenter(0.5f, 0.0f);
+	const FAnchors BottomRight(1.0f, 1.0f);
 
-	// 1) 배경 — 슬레이트 블루 그라데이션 + 좌상단 광원 + 왼쪽 가로 줄무늬 (머티리얼 하나로)
-	UImage* Background = Make<UImage>(Tree, TEXT("Image_Background"));
-	Background->SetBrush(BackgroundMaterial ? MakeMaterialBrush(BackgroundMaterial) : MakeColorBrush(SRGB(0x41, 0x52, 0x69)));
+	// 1) 로비 화면을 살짝 흐리고 어둡게 덮는다 (시안의 배경은 로비 복도 그림이라 따로 받지 않았다)
+	UBackgroundBlur* Blur = Make<UBackgroundBlur>(Tree, TEXT("Blur_Background"));
+	Blur->SetBlurStrength(Spec::BlurStrength);
+	Blur->SetVisibility(ESlateVisibility::HitTestInvisible);
+	AddToCanvas(Root, Blur, Stretch, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
+
+	UImage* Dim = Make<UImage>(Tree, TEXT("Image_Dim"));
+	Dim->SetBrush(MakeColorBrush(Spec::DimColor));
 	// ★Visible★ — 화면 뒤의 게임 월드로 클릭이 새지 않게 막는다
-	Background->SetVisibility(ESlateVisibility::Visible);
-	AddToOverlay(Root, Background, HAlign_Fill, VAlign_Fill);
+	Dim->SetVisibility(ESlateVisibility::Visible);
+	AddToCanvas(Root, Dim, Stretch, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 
-	// 2) 내용 — padding 56 120 48
-	UVerticalBox* Content = Make<UVerticalBox>(Tree, TEXT("VerticalBox_Content"));
-	AddToOverlay(Root, Content, HAlign_Fill, VAlign_Fill, FMargin(120.0f, 56.0f, 120.0f, 48.0f));
+	// 2) 제목 — 가운데, 학교안심 55px
+	UTextBlock* Title = MakeText(Tree, TEXT("Txt_ScreenTitle"), NSLOCTEXT("DRStageSelect", "ScreenTitle", "스테이지 선택"), Hakgyoansim, Spec::ScreenTitlePx, false);
+	Title->SetJustification(ETextJustify::Center);
+	AddToCanvas(Root, Title, TopCenter, FVector2D(0.5, 0.0), FVector2D(0.0, Spec::ScreenTitleTop), true);
 
-	// 2-1) 머리말 — 제목(좌) · 클리어 수(우), 아래 정렬
-	UHorizontalBox* Header = Make<UHorizontalBox>(Tree, TEXT("HorizontalBox_Header"));
-	AddToVBox(Content, Header, false, HAlign_Fill, VAlign_Top, FMargin(0.0f, 0.0f, 0.0f, 12.0f));
+	// 3) 카드 줄 — ★이름 Box_Cards 고정★ C++ 이 카드를 아래쪽 맞춤 · 23px 간격으로 채운다
+	UHorizontalBox* Cards = Make<UHorizontalBox>(Tree, TEXT("Box_Cards"), true);
+	AddToCanvas(Root, Cards, TopCenter, FVector2D(0.5, 0.0), FVector2D(0.0, Spec::CardsTop), true);
+
+	// 4) 키 안내 — [ESC] BACK   [ENTER] START (클릭도 된다)
+	UHorizontalBox* KeyHints = Make<UHorizontalBox>(Tree, TEXT("HorizontalBox_KeyHints"));
+	AddToCanvas(Root, KeyHints, BottomRight, FVector2D(1.0, 0.5), Spec::KeyHintsAnchorOffset, true);
 	{
-		UVerticalBox* TitleBox = Make<UVerticalBox>(Tree, TEXT("VerticalBox_Title"));
-		AddToHBox(Header, TitleBox, true, HAlign_Left, VAlign_Bottom);
-
-		UTextBlock* SubTitle = MakeText(Tree, TEXT("Txt_SubTitle"), TEXT(""), Font, 18.0f, Sub, false, 0.3f);
-		SubTitle->SetText(NSLOCTEXT("DRStageSelect", "ScreenSubTitle", "STAGE SELECT"));
-		AddToVBox(TitleBox, SubTitle, false, HAlign_Left, VAlign_Top, FMargin(0.0f, 0.0f, 0.0f, 4.0f));
-
-		UTextBlock* Title = MakeText(Tree, TEXT("Txt_ScreenTitle"), TEXT(""), Font, 48.0f, Text, false, 0.08f);
-		Title->SetText(NSLOCTEXT("DRStageSelect", "ScreenTitle", "스테이지 선택"));
-		AddToVBox(TitleBox, Title, false, HAlign_Left, VAlign_Top);
-
-		// "클리어 0 / 2" — 숫자만 크게 (시안 .prog b)
-		UHorizontalBox* Progress = Make<UHorizontalBox>(Tree, TEXT("HorizontalBox_Progress"));
-		AddToHBox(Header, Progress, false, HAlign_Right, VAlign_Bottom);
-
-		UTextBlock* ClearLabel = MakeText(Tree, TEXT("Txt_ClearLabel"), TEXT(""), Font, 22.0f, Sub, false);
-		ClearLabel->SetText(NSLOCTEXT("DRStageSelect", "ClearLabel", "클리어"));
-		AddToHBox(Progress, ClearLabel, false, HAlign_Left, VAlign_Bottom, FMargin(0.0f, 0.0f, 8.0f, 4.0f));
-		AddToHBox(Progress, MakeText(Tree, TEXT("Txt_ClearCount"), TEXT("0"), Font, 34.0f, Line, true),
-			false, HAlign_Left, VAlign_Bottom);
-		AddToHBox(Progress, MakeText(Tree, TEXT("Txt_ClearSlash"), TEXT("/"), Font, 22.0f, Sub, false),
-			false, HAlign_Left, VAlign_Bottom, FMargin(8.0f, 0.0f, 8.0f, 4.0f));
-		AddToHBox(Progress, MakeText(Tree, TEXT("Txt_StageCount"), TEXT("2"), Font, 22.0f, Sub, true),
-			false, HAlign_Left, VAlign_Bottom, FMargin(0.0f, 0.0f, 0.0f, 4.0f));
-	}
-
-	// 머리말 밑줄 2px --line2
-	{
-		USizeBox* LineBox = Make<USizeBox>(Tree, TEXT("SizeBox_HeaderLine"));
-		LineBox->SetHeightOverride(2.0f);
-		UImage* HeaderLine = Make<UImage>(Tree, TEXT("Image_HeaderLine"));
-		HeaderLine->SetBrush(MakeColorBrush(Line2));
-		LineBox->SetContent(HeaderLine);
-		AddToVBox(Content, LineBox, false, HAlign_Fill, VAlign_Top);
-	}
-
-	// 2-2) 카드 영역 — 위아래 gap 36, 높이 680 (시안 .card max-height), 가운데
-	{
-		USizeBox* CardsBox = Make<USizeBox>(Tree, TEXT("SizeBox_Cards"));
-		CardsBox->SetHeightOverride(680.0f);
-		AddToVBox(Content, CardsBox, true, HAlign_Fill, VAlign_Center, FMargin(0.0f, 36.0f));
-
-		// ★이름 Box_Cards 고정★ — C++ 이 카드를 같은 폭으로 채운다 (CardSpacing = 64)
-		UHorizontalBox* Cards = Make<UHorizontalBox>(Tree, TEXT("Box_Cards"), true);
-		CardsBox->SetContent(Cards);
-	}
-
-	// 바닥글 윗줄 2px --line2
-	{
-		USizeBox* LineBox = Make<USizeBox>(Tree, TEXT("SizeBox_FooterLine"));
-		LineBox->SetHeightOverride(2.0f);
-		UImage* FooterLine = Make<UImage>(Tree, TEXT("Image_FooterLine"));
-		FooterLine->SetBrush(MakeColorBrush(Line2));
-		LineBox->SetContent(FooterLine);
-		AddToVBox(Content, LineBox, false, HAlign_Fill, VAlign_Top);
-	}
-
-	// 2-3) 바닥글 — 문구(남는 폭) · 뒤로 · 시작, gap 32, padding-top 14
-	UHorizontalBox* Footer = Make<UHorizontalBox>(Tree, TEXT("HorizontalBox_Footer"));
-	AddToVBox(Content, Footer, false, HAlign_Fill, VAlign_Top, FMargin(0.0f, 14.0f, 0.0f, 0.0f));
-	{
-		UTextBlock* Message = MakeText(Tree, TEXT("Txt_Message"), TEXT("스테이지를 선택하세요."), Font, 24.0f, Sub, true);
-		Message->SetAutoWrapText(true);
-		AddToHBox(Footer, Message, true, HAlign_Fill, VAlign_Center);
-
-		struct FButtonSpec
+		struct FKeySpec
 		{
-			const TCHAR* Name;
-			const TCHAR* SizeName;
+			const TCHAR* ButtonName;
+			const TCHAR* RowName;
+			const TCHAR* IconName;
 			const TCHAR* LabelName;
+			UTexture2D* Icon;
 			FText Label;
-			bool bPrimary;
+			float LabelPx;
+			float LabelGap;
+			float ButtonGap;
 		};
-		const FButtonSpec Specs[] = {
-			{ TEXT("Btn_Back"), TEXT("SizeBox_Back"), TEXT("Txt_Back"), NSLOCTEXT("DRStageSelect", "BackButton", "뒤로 (ESC)"), false },
-			{ TEXT("Btn_Start"), TEXT("SizeBox_Start"), TEXT("Txt_Start"), NSLOCTEXT("DRStageSelect", "StartButton", "시작 (Enter)"), true },
+		const FKeySpec Keys[] = {
+			{ TEXT("Btn_Back"), TEXT("HorizontalBox_Back"), TEXT("Image_KeyEsc"), TEXT("Txt_Back"), KeyEscTexture,
+				NSLOCTEXT("DRStageSelect", "KeyHintBack", "BACK"), Spec::BackPx, Spec::KeyLabelGapBack, 0.0f },
+			{ TEXT("Btn_Start"), TEXT("HorizontalBox_Start"), TEXT("Image_KeyEnter"), TEXT("Txt_Start"), KeyEnterTexture,
+				NSLOCTEXT("DRStageSelect", "KeyHintStart", "START"), Spec::StartPx, Spec::KeyLabelGapStart, Spec::KeyButtonGap },
 		};
 
-		for (const FButtonSpec& Spec : Specs)
+		for (const FKeySpec& Key : Keys)
 		{
-			// min-width 260, height 84
-			USizeBox* SizeBox = Make<USizeBox>(Tree, Spec.SizeName);
-			SizeBox->SetMinDesiredWidth(260.0f);
-			SizeBox->SetHeightOverride(84.0f);
-			AddToHBox(Footer, SizeBox, false, HAlign_Right, VAlign_Center, FMargin(32.0f, 0.0f, 0.0f, 0.0f));
+			UButton* Button = Make<UButton>(Tree, Key.ButtonName, true);
+			StyleKeyHintButton(Button);
+			AddToHBox(KeyHints, Button, VAlign_Center, FMargin(Key.ButtonGap, 0.0f, 0.0f, 0.0f));
 
-			UButton* Button = Make<UButton>(Tree, Spec.Name, true);
-			if (Spec.bPrimary)
+			UHorizontalBox* Row = Make<UHorizontalBox>(Tree, Key.RowName);
+			Row->SetVisibility(ESlateVisibility::HitTestInvisible);
+			// 버튼 슬롯 기본 여백(4,2)을 없앤다 — 안쪽 여백은 스타일의 KeyButtonPadding 하나로 (남겨 두면 BACK~ENTER 가 8px 벌어진다)
+			if (UButtonSlot* ContentSlot = Cast<UButtonSlot>(Button->SetContent(Row)))
 			{
-				// 시안 .btn.go — 그라데이션(#2a7fc0→#4fb4e6) 대신 중간색, 글자 진남색
-				StyleButton(Button, SRGB(0x3C, 0x9A, 0xD3), Line, SRGB(0x5C, 0xB9, 0xEA), Line);
+				ContentSlot->SetPadding(FMargin(0.0f));
 			}
-			else
-			{
-				StyleButton(Button, SRGB(150, 200, 240, 0.10f), Line2, SRGB(143, 227, 255, 0.20f), Line);
-			}
-			SizeBox->SetContent(Button);
 
-			UTextBlock* Label = MakeText(Tree, Spec.LabelName, TEXT(""), Font, 28.0f, Spec.bPrimary ? Ink : Text, false, 0.1f);
-			Label->SetText(Spec.Label);
-			Label->SetJustification(ETextJustify::Center);
-			Button->SetContent(Label);
+			AddToHBox(Row, MakeImage(Tree, Key.IconName, Key.Icon, false, SizeForHeight(Key.Icon, Spec::KeyIconHeight)), VAlign_Center);
+			AddToHBox(Row, MakeText(Tree, Key.LabelName, Key.Label, Hakgyoansim, Key.LabelPx, false), VAlign_Center,
+				FMargin(Key.LabelGap, 0.0f, 0.0f, 0.0f));
 		}
 	}
 

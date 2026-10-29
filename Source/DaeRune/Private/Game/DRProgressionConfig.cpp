@@ -625,6 +625,25 @@ bool UDRProgressionConfig::ValidateStageSelect(TArray<FString>& OutErrors) const
 				TEXT("[스테이지 선택] '%s' 가 StageRewards 에 없습니다 — 클리어해도 기록되지 않습니다."),
 				*Def.StageId.ToString()));
 		}
+
+		// 카드 그림 — 비어 있는 레이어는 카드에서 그냥 빠져 보인다
+		const FDRStageCardArt& Art = Def.CardArt;
+		if (Def.Thumbnail.IsNull() || !Art.HasStateLayers() || Art.NumberImage.IsNull() || Art.BadgeImage.IsNull())
+		{
+			OutErrors.Add(FString::Printf(
+				TEXT("[스테이지 선택] '%s' 의 카드 그림(Thumbnail · CardArt 의 Base/Outline/SelectBorder/NumberImage/BadgeImage)이 비어 있습니다."),
+				*Def.StageId.ToString()));
+		}
+		if (!Def.RequiredStageId.IsNone() && !Art.HasLockedLayers())
+		{
+			OutErrors.Add(FString::Printf(
+				TEXT("[스테이지 선택] '%s' 는 잠길 수 있는데 잠금 그림(CardArt 의 LockedBase/LockedOutline)이 없습니다 — 잠겨도 기본 그림으로 보입니다."),
+				*Def.StageId.ToString()));
+		}
+		if (Art.CardSize.X <= 0.0 || Art.CardSize.Y <= 0.0)
+		{
+			OutErrors.Add(FString::Printf(TEXT("[스테이지 선택] '%s' 의 CardArt.CardSize 가 0 입니다."), *Def.StageId.ToString()));
+		}
 	}
 
 	for (const FDRStageSelectDef& Def : StageSelectList)

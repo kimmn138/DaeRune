@@ -3,12 +3,51 @@
 
 #include "UI/Widget/DRStageSelectCardWidget.h"
 #include "UI/Widget/DRStageSelectScreenWidget.h"
-#include "Components/Border.h"
 #include "Components/Image.h"
+#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Engine/Texture2D.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#if WITH_EDITOR
+#include "TextureCompiler.h"
+#endif
 
 #define LOCTEXT_NAMESPACE "DRStageSelect"
+
+namespace DRStageCard
+{
+	// 잠금 효과 머티리얼(M_UI_StageSelect_LockBlend) 파라미터
+	const FName TextureParam(TEXT("Texture"));
+	const FName LockAmountParam(TEXT("LockAmount"));
+
+	// 카드 그림은 데이터 에셋의 소프트 참조라 화면을 처음 열 때 불러온다
+	UTexture2D* Load(const TSoftObjectPtr<UTexture2D>& Soft)
+	{
+		return Soft.IsNull() ? nullptr : Soft.LoadSynchronous();
+	}
+
+	FVector2D TextureSize(UTexture2D* Texture)
+	{
+#if WITH_EDITOR
+		// 에디터는 텍스처를 비동기로 컴파일한다 — 끝나기 전엔 크기가 자리표시 그림 크기로 나와서
+		// PIE 에서 처음 불러온 카드 그림이 몇 px 로 그려졌다. 쿡된 게임은 해당 없다
+		if (Texture->IsCompiling())
+		{
+			FTextureCompilingManager::Get().FinishCompilation({ Texture });
+		}
+#endif
+		return FVector2D(Texture->GetSurfaceWidth(), Texture->GetSurfaceHeight());
+	}
+
+	FSlateBrush MakeBrush(UObject* Resource, const FVector2D& Size)
+	{
+		FSlateBrush Brush;
+		Brush.DrawAs = ESlateBrushDrawType::Image;
+		Brush.SetResourceObject(Resource);
+		Brush.ImageSize = Size;
+		return Brush;
+	}
+}
 
 void UDRStageSelectCardWidget::NativeConstruct()
 {
@@ -23,8 +62,8 @@ void UDRStageSelectCardWidget::InitCard(UDRStageSelectScreenWidget* InOwnerScree
 	OwnerScreen = InOwnerScreen;
 	ViewModel = InViewModel;
 
-	ApplyViewModelVisuals();
-	UpdateFrameVisuals();
+	ApplyStageVisuals();
+	ApplyStateVisuals();
 	OnViewModelUpdated();
 }
 
@@ -33,95 +72,118 @@ void UDRStageSelectCardWidget::SetSelected(bool bInSelected)
 	if (bSelected == bInSelected) return;
 
 	bSelected = bInSelected;
-
-	if (Panel_Selected)
-	{
-		Panel_Selected->SetVisibility(bSelected ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-	}
-	UpdateFrameVisuals();
+	ApplyStateVisuals();
 	OnSelectedChanged(bSelected);
-}
-
-void UDRStageSelectCardWidget::SetKeyboardFocused(bool bInFocused)
-{
-	if (bKeyboardFocused == bInFocused) return;
-
-	const bool bWasHighlighted = IsHighlighted();
-	bKeyboardFocused = bInFocused;
-
-	UpdateFrameVisuals();
-	if (bWasHighlighted != IsHighlighted())
-	{
-		OnHighlightChanged(IsHighlighted());
-	}
-}
-
-void UDRStageSelectCardWidget::SetHovered(bool bInHovered)
-{
-	if (bHovered == bInHovered) return;
-
-	const bool bWasHighlighted = IsHighlighted();
-	bHovered = bInHovered;
-
-	UpdateFrameVisuals();
-	if (bWasHighlighted != IsHighlighted())
-	{
-		OnHighlightChanged(IsHighlighted());
-	}
 }
 
 void UDRStageSelectCardWidget::PlayRejectFeedback()
 {
-	// 시안: 클래스를 뗐다 다시 붙여 애니메이션을 처음부터 — 여기서는 남은 시간을 다시 채운다
+	// 연타해도 처음부터 다시 흔들린다
 	ShakeTimeRemaining = ShakeDuration;
 	OnSelectRejected();
 }
 
-FText UDRStageSelectCardWidget::GetStateLabel(EDRStageSelectState State)
+void UDRStageSelectCardWidget::ApplyStageVisuals()
 {
-	switch (State)
-	{
-	case EDRStageSelectState::Available: return LOCTEXT("BadgeAvailable", "진행 가능");
-	case EDRStageSelectState::Cleared:   return LOCTEXT("BadgeCleared", "CLEAR");
-	case EDRStageSelectState::Locked:
-	default:                             return LOCTEXT("BadgeLocked", "LOCKED");
-	}
-}
+	using namespace DRStageCard;
+	const FDRStageCardArt& Art = ViewModel.CardArt;
 
-void UDRStageSelectCardWidget::ApplyViewModelVisuals()
-{
-	const bool bLocked = ViewModel.State == EDRStageSelectState::Locked;
-	const bool bCleared = ViewModel.State == EDRStageSelectState::Cleared;
-
-	if (Txt_Number)
+	// 카드마다 모양 높이가 다르다(1번 670 = 위 계단 포함, 2번 661). 화면은 아래쪽을 맞춘다.
+	if (SizeBox_Card && Art.CardSize.X > 0.0 && Art.CardSize.Y > 0.0)
 	{
-		// "01", "02" ...
-		FNumberFormattingOptions Options;
-		Options.SetMinimumIntegralDigits(2);
-		Options.SetUseGrouping(false);
-		Txt_Number->SetText(FText::AsNumber(ViewModel.StageNumber, &Options));
+		SizeBox_Card->SetWidthOverride(Art.CardSize.X);
+		SizeBox_Card->SetHeightOverride(Art.CardSize.Y);
 	}
 
-	if (Txt_Badge)
+	// 그림 · 배지는 잠금 효과를 받으므로 머티리얼로 그린다 (켜고 끄는 것은 ApplyStateVisuals 의 LockAmount)
+	SetLockBlendImage(Image_Thumbnail, ThumbnailMID, ViewModel.Thumbnail);
+	SetLockBlendImage(Image_Badge, BadgeMID, Load(Art.BadgeImage));
+
+	UTexture2D* Number = Load(Art.NumberImage);
+	if (Number)
 	{
-		Txt_Badge->SetText(GetStateLabel(ViewModel.State));
+		const FVector2D Size = TextureSize(Number);
+		SetImageTexture(Image_Number, Number, FVector2D(Size.X * NumberHeight / FMath::Max(Size.Y, 1.0), NumberHeight));
+	}
+	else
+	{
+		SetImageTexture(Image_Number, nullptr);
+	}
+
+	if (Panel_Content)
+	{
+		Panel_Content->SetRenderTranslation(Art.ContentOffset);
 	}
 
 	if (Txt_Title)
 	{
-		Txt_Title->SetText(FText::Format(LOCTEXT("CardTitleFmt", "스테이지 {0} · {1}"),
-			FText::AsNumber(ViewModel.StageNumber), ViewModel.DisplayName));
+		Txt_Title->SetText(ViewModel.DisplayName);
 	}
-
+	if (Txt_Badge)
+	{
+		Txt_Badge->SetText(FText::Format(LOCTEXT("BadgeFmt", "스테이지 {0}"), FText::AsNumber(ViewModel.StageNumber)));
+	}
 	if (Txt_Mission)
 	{
 		Txt_Mission->SetText(ViewModel.MissionText);
 	}
+}
 
-	if (Txt_Done)
+void UDRStageSelectCardWidget::ApplyStateVisuals()
+{
+	using namespace DRStageCard;
+	const FDRStageCardArt& Art = ViewModel.CardArt;
+	const bool bLocked = ViewModel.State == EDRStageSelectState::Locked;
+	const bool bCleared = ViewModel.State == EDRStageSelectState::Cleared;
+
+	// 베이스 · 테두리 교체. 잠금 그림이 없으면 기본 그림으로 폴백한다 (데이터 검증이 경고한다)
+	UTexture2D* BaseTexture = (bLocked && !Art.LockedBase.IsNull()) ? Load(Art.LockedBase) : Load(Art.Base);
+
+	UTexture2D* FrameTexture = nullptr;
+	if (bLocked && !Art.LockedOutline.IsNull())
 	{
-		Txt_Done->SetText(LOCTEXT("CardDone", "임무 완료 · 다시 도전 가능"));
-		Txt_Done->SetVisibility(bCleared ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		FrameTexture = Load(Art.LockedOutline);
+	}
+	else if (bSelected && !Art.SelectBorder.IsNull())
+	{
+		FrameTexture = Load(Art.SelectBorder);
+	}
+	else
+	{
+		FrameTexture = Load(Art.Outline);
+	}
+
+	SetImageTexture(Image_Base, BaseTexture);
+	SetImageTexture(Image_Frame, FrameTexture);
+
+	// 잠금 효과 — 베이스/테두리는 텍스처에 구워져 있고, 그림 · 배지는 머티리얼, 글자는 색으로 맞춘다
+	const float LockAmount = bLocked ? 1.0f : 0.0f;
+	if (ThumbnailMID)
+	{
+		ThumbnailMID->SetScalarParameterValue(LockAmountParam, LockAmount);
+	}
+	if (BadgeMID)
+	{
+		BadgeMID->SetScalarParameterValue(LockAmountParam, LockAmount);
+	}
+
+	if (Image_Number)
+	{
+		// 잠기면 묶음(Panel_Content) 전체가 40% 가 되므로 번호 자체는 100% 로 둔다
+		Image_Number->SetRenderOpacity((bLocked || bSelected) ? 1.0f : NumberIdleOpacity);
+	}
+	if (Panel_Content)
+	{
+		Panel_Content->SetRenderOpacity(bLocked ? LockedContentOpacity : 1.0f);
+	}
+
+	const FSlateColor Color(bLocked ? LockedTextColor : TextColor);
+	for (UTextBlock* Text : { Txt_Title.Get(), Txt_Badge.Get(), Txt_Mission.Get() })
+	{
+		if (Text)
+		{
+			Text->SetColorAndOpacity(Color);
+		}
 	}
 
 	// 덮개류는 클릭을 가로채지 않도록 HitTestInvisible 로 켠다
@@ -133,65 +195,40 @@ void UDRStageSelectCardWidget::ApplyViewModelVisuals()
 	{
 		Panel_Locked->SetVisibility(bLocked ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	}
-	if (Panel_Selected)
-	{
-		Panel_Selected->SetVisibility(bSelected ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-	}
-
-	if (Image_Thumbnail)
-	{
-		// 아트가 아직 없으므로 이미지가 지정된 스테이지만 브러시를 바꾼다 (없으면 WBP 기본 브러시 유지)
-		if (ViewModel.Thumbnail)
-		{
-			Image_Thumbnail->SetBrushFromTexture(ViewModel.Thumbnail, /*bMatchSize*/ false);
-		}
-		Image_Thumbnail->SetColorAndOpacity(bLocked ? LockedThumbnailTint : FLinearColor::White);
-	}
 }
 
-void UDRStageSelectCardWidget::UpdateFrameVisuals()
+void UDRStageSelectCardWidget::SetImageTexture(UImage* Image, UTexture2D* Texture, FVector2D DrawSize)
 {
-	const bool bLocked = ViewModel.State == EDRStageSelectState::Locked;
+	if (!Image) return;
 
-	FLinearColor Frame;
-	if (bLocked)
+	if (!Texture)
 	{
-		// 시안 .locked:hover — 떠오르지 않고 경고색으로만 반응한다
-		Frame = IsHighlighted() ? WarningColor : LockedColor;
-	}
-	else
-	{
-		Frame = (IsHighlighted() || bSelected) ? HighlightColor : FrameColor;
+		Image->SetVisibility(ESlateVisibility::Collapsed);
+		return;
 	}
 
-	if (Border_Frame)
+	Image->SetBrush(DRStageCard::MakeBrush(Texture, DrawSize.IsNearlyZero() ? DRStageCard::TextureSize(Texture) : DrawSize));
+	Image->SetVisibility(ESlateVisibility::HitTestInvisible);
+}
+
+void UDRStageSelectCardWidget::SetLockBlendImage(UImage* Image, TObjectPtr<UMaterialInstanceDynamic>& Mid, UTexture2D* Texture)
+{
+	if (!Image) return;
+
+	if (!Texture || !LockBlendMaterial)
 	{
-		// 둥근 사각형 외곽선은 BrushColor 로 물들지 않는다 — 외곽선 색 자체를 바꾼다.
-		// (이미지 · 9-slice 브러시로 바꾸면 그때는 BrushColor 로 틴트한다)
-		if (Border_Frame->Background.DrawAs == ESlateBrushDrawType::RoundedBox && Border_Frame->Background.OutlineSettings.Width > 0.0f)
-		{
-			FSlateBrush Brush = Border_Frame->Background;
-			Brush.OutlineSettings.Color = FSlateColor(Frame);
-			Border_Frame->SetBrush(Brush);
-		}
-		else
-		{
-			Border_Frame->SetBrushColor(Frame);
-		}
+		SetImageTexture(Image, Texture);
+		return;
 	}
 
-	const FLinearColor BadgeColor = bLocked ? LockedColor : HighlightColor;
-	if (Txt_Badge)
+	if (!Mid)
 	{
-		Txt_Badge->SetColorAndOpacity(FSlateColor(BadgeColor));
+		Mid = UMaterialInstanceDynamic::Create(LockBlendMaterial, this);
 	}
-	if (Border_Badge)
-	{
-		// 배경색(BrushColor)은 그대로 두고 외곽선만 바꾼다
-		FSlateBrush Brush = Border_Badge->Background;
-		Brush.OutlineSettings.Color = FSlateColor(BadgeColor);
-		Border_Badge->SetBrush(Brush);
-	}
+	Mid->SetTextureParameterValue(DRStageCard::TextureParam, Texture);
+
+	Image->SetBrush(DRStageCard::MakeBrush(Mid, DRStageCard::TextureSize(Texture)));
+	Image->SetVisibility(ESlateVisibility::HitTestInvisible);
 }
 
 void UDRStageSelectCardWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -201,19 +238,19 @@ void UDRStageSelectCardWidget::NativeTick(const FGeometry& MyGeometry, float InD
 	if (!bUseDefaultMotion) return;
 
 	const bool bLocked = ViewModel.State == EDRStageSelectState::Locked;
-	const float TargetAlpha = (!bLocked && (IsHighlighted() || bSelected)) ? 1.0f : 0.0f;
+	const float TargetAlpha = (!bLocked && bSelected) ? 1.0f : 0.0f;
 	const bool bShaking = ShakeTimeRemaining > 0.0f;
 
 	// 정지 상태면 매 프레임 트랜스폼을 다시 쓰지 않는다
-	if (!bShaking && FMath::IsNearlyEqual(HighlightAlpha, TargetAlpha, KINDA_SMALL_NUMBER)) return;
+	if (!bShaking && FMath::IsNearlyEqual(LiftAlpha, TargetAlpha, KINDA_SMALL_NUMBER)) return;
 
-	HighlightAlpha = FMath::FInterpTo(HighlightAlpha, TargetAlpha, InDeltaTime, HighlightInterpSpeed);
-	if (FMath::IsNearlyEqual(HighlightAlpha, TargetAlpha, 0.001f))
+	LiftAlpha = FMath::FInterpTo(LiftAlpha, TargetAlpha, InDeltaTime, LiftInterpSpeed);
+	if (FMath::IsNearlyEqual(LiftAlpha, TargetAlpha, 0.001f))
 	{
-		HighlightAlpha = TargetAlpha;
+		LiftAlpha = TargetAlpha;
 	}
 
-	// 시안 @keyframes shake: 25% → -8px, 75% → +8px
+	// 25% → -8px, 75% → +8px
 	float ShakeOffset = 0.0f;
 	if (bShaking)
 	{
@@ -222,32 +259,26 @@ void UDRStageSelectCardWidget::NativeTick(const FGeometry& MyGeometry, float InD
 		ShakeOffset = -ShakeAmplitude * FMath::Sin(Progress * 2.0f * PI);
 	}
 
+	// 피벗은 카드 가운데 (Figma 선택 카드도 가운데 기준 1.015배)
 	FWidgetTransform Transform;
-	Transform.Translation = FVector2D(ShakeOffset, -HighlightLift * HighlightAlpha);
-	Transform.Scale = FVector2D(FMath::Lerp(1.0f, HighlightScale, HighlightAlpha));
+	Transform.Translation = FVector2D(ShakeOffset, -SelectedLift * LiftAlpha);
+	Transform.Scale = FVector2D(FMath::Lerp(1.0f, SelectedScale, LiftAlpha));
 	SetRenderTransform(Transform);
 }
 
-void UDRStageSelectCardWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+FReply UDRStageSelectCardWidget::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	Super::NativeOnMouseEnter(InGeometry, InMouseEvent);
-
-	SetHovered(true);
-	if (UDRStageSelectScreenWidget* Screen = OwnerScreen.Get())
+	// 커서가 실제로 움직였을 때만 선택이 따라온다. Slate 는 멈춘 커서 아래에 위젯이 새로 생겨도 변위 0 인
+	// 합성 이동(Enter/Move)을 보내므로, 그것까지 받으면 화면을 열자마자 기본 선택(새로 열린 스테이지)이 덮어써진다
+	if (!bSelected && !InMouseEvent.GetCursorDelta().IsNearlyZero())
 	{
-		Screen->NotifyCardHovered(ViewModel.Index);
+		if (UDRStageSelectScreenWidget* Screen = OwnerScreen.Get())
+		{
+			Screen->NotifyCardHovered(ViewModel.Index);
+		}
 	}
-}
 
-void UDRStageSelectCardWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
-{
-	Super::NativeOnMouseLeave(InMouseEvent);
-
-	SetHovered(false);
-	if (UDRStageSelectScreenWidget* Screen = OwnerScreen.Get())
-	{
-		Screen->NotifyCardUnhovered(ViewModel.Index);
-	}
+	return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
 }
 
 FReply UDRStageSelectCardWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)

@@ -1574,6 +1574,7 @@ void UDRGameInstance::GetStageSelectViewModels(TArray<FDRStageSelectViewModel>& 
 		ViewModel.MissionText = Def.MissionText;
 		ViewModel.State = GetStageSelectState(Def.StageId);
 		ViewModel.Thumbnail = Def.Thumbnail.IsNull() ? nullptr : Def.Thumbnail.LoadSynchronous();
+		ViewModel.CardArt = Def.CardArt;
 
 		// 이름 폴백: 선택 정의 → 보상 정의 → Id
 		ViewModel.DisplayName = Def.DisplayName;
