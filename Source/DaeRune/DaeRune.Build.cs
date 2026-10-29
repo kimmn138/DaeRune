@@ -10,7 +10,7 @@ public class DaeRune : ModuleRules
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "GameplayAbilities", "Slate", "SlateCore", "UMG", "MoviePlayer", "MultiplayerSessions", "NavigationSystem", "OnlineSubsystem", "OnlineSubsystemUtils" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "GameplayTags", "GameplayTasks", "Niagara", "NiagaraAnimNotifies", "AIModule" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "GameplayTags", "GameplayTasks", "Niagara", "NiagaraAnimNotifies", "AIModule", "AssetRegistry" });
 
 		// 카탈로그 저장 시 검증(GameMapsSettings 로 GameInstance 기본값을 찾는다 — EngineSettings)용.
 		// 에디터 도구는 별도 모듈(DaeRuneEditor)로 옮겼다. 코드도 WITH_EDITOR 로 감싸 둔다.

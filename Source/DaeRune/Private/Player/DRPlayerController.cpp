@@ -52,6 +52,7 @@
 #include "Game/DRChipCatalog.h"
 #include "DaeRune/DRLogChannels.h"
 #include "MultiplayerSessionsSubsystem.h"
+#include "Tuning/DRTuningSubsystem.h"
 
 ADRPlayerController::ADRPlayerController()
 {
@@ -618,10 +619,34 @@ void ADRPlayerController::ReceivedPlayer()
 	}
 #endif
 
+#if !UE_BUILD_SHIPPING
+	// 참가자는 방장의 튜닝 값을 받아 쓴다 — 방장(리슨 서버)은 자기 파일을 쓰므로 묻지 않는다
+	if (IsLocalController() && GetNetMode() == NM_Client)
+	{
+		ServerRequestTuning();
+	}
+#endif
+
 	// 로컬 컨트롤러만 처리
 	if (!IsLocalController()) return;
 // 레벨 진입 시 공통 초기화 수행
 	OnLevelEntered();
+}
+
+void ADRPlayerController::ServerRequestTuning_Implementation()
+{
+	if (const UDRTuningSubsystem* Tuning = UDRTuningSubsystem::Get(this))
+	{
+		Tuning->SendTuningToClient(this);
+	}
+}
+
+void ADRPlayerController::ClientReceiveTuningChunk_Implementation(int32 Revision, int32 ChunkIndex, int32 ChunkCount, const TArray<FDRTuningOverride>& Chunk)
+{
+	if (UDRTuningSubsystem* Tuning = UDRTuningSubsystem::Get(this))
+	{
+		Tuning->ReceiveHostChunk(Revision, ChunkIndex, ChunkCount, Chunk);
+	}
 }
 
 void ADRPlayerController::PostSeamlessTravel()

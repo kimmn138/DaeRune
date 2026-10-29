@@ -17,3 +17,6 @@ Build
 
 # Local MCP config (machine-specific absolute paths)
 .mcp.json
+# 튜닝 파일 (UDRTuningSubsystem) — 에디터 · -game 이 만드는 시트와 쿡할 때 만드는 목록 (앞의 / 가 없으면 Source 의 Tuning 폴더까지 무시된다)
+/Tuning/
+/Content/Tuning/

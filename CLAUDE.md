@@ -180,6 +180,18 @@ Tag-driven automatic debuff application:
 
 **Debuff Effects**: Burn (DoT), Stun (immobilize), Arcane (slow), Physical (armor break), Bleed (health drain)
 
+### External Tuning Files (`UDRTuningSubsystem`)
+Designers change gameplay numbers in a packaged Development build without a rebuild (`Source/DaeRune/*/Tuning/`).
+
+- **Sheet**: `<Build>/DaeRune/Tuning/튜닝.csv` (editor/`-game`: `<Project>/Tuning/`, `-TuningFolder=` overrides). Only rows with a `변경값` are applied, via reflection, onto BP CDOs, data assets, DataTable/CurveTable rows, BehaviorTree nodes, and level-placed actors. Asset files are never modified. Results: on-screen + `Tuning/_적용결과.txt`.
+- **What gets listed** is configured in `DefaultGame.ini [/Script/DaeRune.DRTuningSubsystem]` (BP base classes, asset classes, maps, excluded paths, group labels). Top-level CDO properties are listed only if declared by DaeRune C++ or the BP; struct members, BT node values and whitelisted movement-component values are listed too.
+- **List generation**: the `DaeRuneEditor` cook hook (`CookFinished`) writes `Content/Tuning/TuningCatalog.csv` (current values + C++ comment descriptions + Clamp ranges), staged as UFS (gitignored). Only packages that were actually cooked are loaded — loading orphaned broken BPs (e.g. `GA_TestAbility`) fails the cook. In the editor/`-game` the saved list is reused; `DRTuningExport` rebuilds it (slow: loads all listed BPs and maps).
+- **Level-placed actors** (`Map.Map:PersistentLevel.Actor` targets) are not loaded; they are applied in `FWorldDelegates::OnWorldInitializedActors` (before BeginPlay) when that map opens. Only values that differ from the class default are listed.
+- **Timing**: CDO changes apply to new spawns; granted ability instances are synced (deferred while active); placed actors/characters keep their values until the map reloads; chip caches are rebuilt via `ADRPlayerState::RebuildUpgradeRuntime`.
+- **Multiplayer**: clients request the host's applied values (`ADRPlayerController::ServerRequestTuning`) and ignore their own file; host saves are re-broadcast.
+- **Console**: `DRTuningReload`, `DRTuningRevert`, `DRTuningStatus`, `DRTuningExport`; editor: `DRTuningBake [path] [save] [clear]` writes sheet values into the real assets (undoable).
+- **PIE**: off unless `dr.Tuning.ApplyInPIE 1`; reverted when PIE ends (a modified CDO would otherwise be saved into the BP). Not created in Shipping, with `-NoTuning`, or `bEnabled=False`.
+
 ## Important Implementation Details
 
 ### Container Health System
