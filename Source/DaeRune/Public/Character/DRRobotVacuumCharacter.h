@@ -241,11 +241,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Dash")
 	float DashImpactMinSpeed = 350.f;
 
-	// 돌진 충돌 임팩트 사운드 (기본 SC_VacuumCrash — BP에서 덮어쓸 수 있다)
+	// 돌진 충돌 임팩트 사운드 (SC_VacuumCrash — BP 기본값)
 	UPROPERTY(EditDefaultsOnly, Category = "Dash")
 	TObjectPtr<USoundBase> DashImpactSound;
 
-	// ---------- 사운드 (기본 에셋은 생성자에서 지정, BP에서 덮어쓸 수 있다) ----------
+	// ---------- 사운드 (BP_DRVacuumCleaner 기본값으로 지정) ----------
 
 	UPROPERTY(EditDefaultsOnly, Category = "Sound")
 	TObjectPtr<USoundBase> AttackSound;            // 공기탄 0~2단계
@@ -280,6 +280,11 @@ protected:
 	// 이보다 느리면 걷기 소리를 끈다 (수평 속도)
 	UPROPERTY(EditDefaultsOnly, Category = "Sound", meta = (ClampMin = "0.0"))
 	float WalkSoundMinSpeed = 50.f;
+
+#if WITH_EDITOR
+	// 에셋 기본값(예전 생성자 하드코딩 경로 → BP 기본값)이 비었는지 저장 · 데이터 검증 때 알린다
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+#endif
 
 	// 일반 점프 — 소유 클라 · 서버에서 불린다 (시뮬 프록시는 서버 멀티캐스트로 듣는다)
 	virtual void OnJumped_Implementation() override;

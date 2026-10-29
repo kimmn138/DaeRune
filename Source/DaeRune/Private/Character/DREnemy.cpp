@@ -27,7 +27,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
-#include "UObject/ConstructorHelpers.h"
+#include "Misc/DataValidation.h"
 
 ADREnemy::ADREnemy()
 {
@@ -46,14 +46,6 @@ ADREnemy::ADREnemy()
 	AbilitySystemComponent = CreateDefaultSubobject<UDRAbilitySystemComponent>("AbilitySystemComponent");
 	AbilitySystemComponent->SetIsReplicated(true);
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
-
-	// 도발 표시 이펙트 — 모든 적 공통이라 BP 마다 넣지 않고 여기서 기본값을 준다
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> TauntedVFXFinder(
-		TEXT("/Game/Basic_VFX/Niagara/Taunt/Enemy_Effect/TauntEnemy_NS.TauntEnemy_NS"));
-	if (TauntedVFXFinder.Succeeded())
-	{
-		TauntedVFX = TauntedVFXFinder.Object;
-	}
 
 	// AI 회전 설정 - 직접 회전 제어 (CharacterMovement 회전 비활성화)
 	bUseControllerRotationPitch = false;
@@ -849,3 +841,14 @@ void ADREnemy::GrantWaterToPlayers()
 	}
 }
 
+#if WITH_EDITOR
+EDataValidationResult ADREnemy::IsDataValid(FDataValidationContext& Context) const
+{
+	const EDataValidationResult Result = Super::IsDataValid(Context);
+	if (!TauntedVFX)
+	{
+		Context.AddWarning(FText::FromString(TEXT("TauntedVFX 가 비어 있다 — 도발당해도 머리 위 표시가 안 나온다 (TauntEnemy_NS 지정)")));
+	}
+	return Result;
+}
+#endif

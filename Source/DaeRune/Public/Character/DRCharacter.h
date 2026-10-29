@@ -340,6 +340,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "VFX|Buff")
 	TObjectPtr<UNiagaraSystem> AttackSpeedBuffVFX;
 
+#if WITH_EDITOR
+	// 에셋 기본값(예전 생성자 하드코딩 경로 → BP 기본값)이 비었는지 저장 · 데이터 검증 때 알린다
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+#endif
+
 	/** 이펙트를 붙일 3인칭 메시 소켓. 비우면 메시 원점(발밑) */
 	UPROPERTY(EditDefaultsOnly, Category = "VFX|Buff")
 	FName AttackSpeedBuffVFXSocket = NAME_None;

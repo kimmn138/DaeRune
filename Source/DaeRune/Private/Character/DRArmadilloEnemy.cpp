@@ -1,6 +1,7 @@
 // Copyright DaeRune
 
 #include "Character/DRArmadilloEnemy.h"
+#include "Misc/DataValidation.h"
 #include "Character/DRCharacter.h"
 #include "Game/DRGameStateBase.h"
 #include "DRAssetManager.h"
@@ -27,22 +28,7 @@ ADRArmadilloEnemy::ADRArmadilloEnemy()
 	BallFormMesh->SetVisibility(false); // BasicForm is default
 	BallFormMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	// 폼 체인지 전환 몽타주 기본값 (BP에서 오버라이드 가능)
-	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBallBasicFinder(
-		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/BasicForm/AM_Armadillo_FormChangeBtoD"));
-	if (ToBallBasicFinder.Succeeded()) FormChangeToBallMontage_Basic = ToBallBasicFinder.Object;
-
-	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBallBallFinder(
-		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/RollForm/AM_Armadillo_Ball_FormChangeBtoD"));
-	if (ToBallBallFinder.Succeeded()) FormChangeToBallMontage_Ball = ToBallBallFinder.Object;
-
-	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBasicBasicFinder(
-		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/BasicForm/AM_Armadillo_FormChangeDtoB"));
-	if (ToBasicBasicFinder.Succeeded()) FormChangeToBasicMontage_Basic = ToBasicBasicFinder.Object;
-
-	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBasicBallFinder(
-		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/RollForm/AM_Armadillo_Ball_FormChangeDtoB"));
-	if (ToBasicBallFinder.Succeeded()) FormChangeToBasicMontage_Ball = ToBasicBallFinder.Object;
+	// 폼 체인지 전환 몽타주는 BP 기본값으로 넣는다 (BP_DRArmadillo · BP_DRArmadillo_Phase1)
 }
 
 void ADRArmadilloEnemy::BeginPlay()
@@ -494,3 +480,15 @@ void ADRArmadilloEnemy::MulticastPlayRollImpactSound_Implementation(FVector_NetQ
 
 	UDRSoundDataAsset::PlayAtLocation(this, &UDRSoundDataAsset::ArmadilloImpactSound, Location);
 }
+
+#if WITH_EDITOR
+EDataValidationResult ADRArmadilloEnemy::IsDataValid(FDataValidationContext& Context) const
+{
+	const EDataValidationResult Result = Super::IsDataValid(Context);
+	if (!FormChangeToBallMontage_Basic || !FormChangeToBallMontage_Ball || !FormChangeToBasicMontage_Basic || !FormChangeToBasicMontage_Ball)
+	{
+		Context.AddWarning(FText::FromString(TEXT("폼 체인지 몽타주 4개 중 빈 것이 있다 — 원격 클라에서 변신 동작이 안 나온다")));
+	}
+	return Result;
+}
+#endif

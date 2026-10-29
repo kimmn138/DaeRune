@@ -150,22 +150,20 @@ void UDRSettingsManager::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	auto LoadIfMissing = [](auto& Member, const TCHAR* Path)
+	// 경로는 DefaultGame.ini [/Script/DaeRune.DRSettingsManager] (UCLASS Config = Game)
+	auto LoadConfigured = [](auto& Member, const auto& SoftAsset, const TCHAR* Key)
 	{
-		using FAsset = std::remove_pointer_t<decltype(Member.Get())>;
+		Member = SoftAsset.LoadSynchronous();
 		if (!Member)
 		{
-			Member = LoadObject<FAsset>(nullptr, Path);
-		}
-		if (!Member)
-		{
-			UE_LOG(LogDR, Warning, TEXT("[Settings] 오디오 에셋을 불러오지 못했습니다: %s"), Path);
+			UE_LOG(LogDR, Warning, TEXT("[Settings] 오디오 에셋을 불러오지 못했습니다: %s=%s (DefaultGame.ini [/Script/DaeRune.DRSettingsManager])"),
+				Key, *SoftAsset.ToString());
 		}
 	};
-	LoadIfMissing(GameSoundMix, TEXT("/Game/Blueprints/Audio/SoundMix/SM_GameMix.SM_GameMix"));
-	LoadIfMissing(MasterSoundClass, TEXT("/Game/Blueprints/Audio/SoundClasses/SC_Master.SC_Master"));
-	LoadIfMissing(BGMSoundClass, TEXT("/Game/Blueprints/Audio/SoundClasses/SC_BGM.SC_BGM"));
-	LoadIfMissing(SFXSoundClass, TEXT("/Game/Blueprints/Audio/SoundClasses/SC_SFX.SC_SFX"));
+	LoadConfigured(GameSoundMix, GameSoundMixAsset, TEXT("GameSoundMixAsset"));
+	LoadConfigured(MasterSoundClass, MasterSoundClassAsset, TEXT("MasterSoundClassAsset"));
+	LoadConfigured(BGMSoundClass, BGMSoundClassAsset, TEXT("BGMSoundClassAsset"));
+	LoadConfigured(SFXSoundClass, SFXSoundClassAsset, TEXT("SFXSoundClassAsset"));
 
 	if (UDRGameUserSettings* Settings = GetSettings())
 	{

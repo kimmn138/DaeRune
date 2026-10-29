@@ -51,8 +51,9 @@ struct FDRLanguageInfo
 
 /**
  * 설정 관리 매니저 - 기존 오디오/그래픽 적용 로직 유지 + 데이터 주도 관리 레이어
+ * 오디오 에셋 경로는 Config/DefaultGame.ini 의 [/Script/DaeRune.DRSettingsManager] 에 둔다.
  */
-UCLASS()
+UCLASS(Config = Game)
 class DAERUNE_API UDRSettingsManager : public UGameInstanceSubsystem
 {
 	GENERATED_BODY()
@@ -221,7 +222,20 @@ private:
     // 내부 헬퍼: Pending 변경 상태 갱신
     void UpdateHasPendingChanges();
 
-    // 오디오 리소스
+    // 오디오 에셋 경로 (DefaultGame.ini — 에셋을 옮기면 코드가 아니라 ini 를 고친다)
+    UPROPERTY(Config)
+    TSoftObjectPtr<USoundMix> GameSoundMixAsset;
+
+    UPROPERTY(Config)
+    TSoftObjectPtr<USoundClass> MasterSoundClassAsset;
+
+    UPROPERTY(Config)
+    TSoftObjectPtr<USoundClass> BGMSoundClassAsset;
+
+    UPROPERTY(Config)
+    TSoftObjectPtr<USoundClass> SFXSoundClassAsset;
+
+    // 오디오 리소스 (Initialize 에서 위 경로로 불러 둔다)
     UPROPERTY()
     TObjectPtr<USoundMix> GameSoundMix;
 

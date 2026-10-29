@@ -163,6 +163,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "VFX|Taunt")
 	TObjectPtr<UNiagaraSystem> TauntedVFX;
 
+#if WITH_EDITOR
+	// 에셋 기본값(예전 생성자 하드코딩 경로 → BP 기본값)이 비었는지 저장 · 데이터 검증 때 알린다
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+#endif
+
 	/** 붙일 메시 소켓. 비우면 캡슐 꼭대기(+TauntedVFXHeightOffset) */
 	UPROPERTY(EditDefaultsOnly, Category = "VFX|Taunt")
 	FName TauntedVFXSocket = NAME_None;

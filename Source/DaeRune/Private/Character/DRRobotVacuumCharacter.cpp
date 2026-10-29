@@ -16,7 +16,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
-#include "UObject/ConstructorHelpers.h"
+#include "Misc/DataValidation.h"
 #include "Net/UnrealNetwork.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRInteractionComponent.h"
@@ -60,35 +60,8 @@ ADRRobotVacuumCharacter::ADRRobotVacuumCharacter()
 	DashVFXMesh->SetOwnerNoSee(true);
 	DashVFXMesh->SetHiddenInGame(true);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> DashSphereFinder(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-	if (DashSphereFinder.Succeeded())
-	{
-		DashVFXMesh->SetStaticMesh(DashSphereFinder.Object);
-	}
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DashFlamesFinder(
-		TEXT("/Game/Basic_VFX/Niagara/Dash/Mesh/Flames_Mat.Flames_Mat"));
-	if (DashFlamesFinder.Succeeded())
-	{
-		DashVFXMesh->SetMaterial(0, DashFlamesFinder.Object);
-	}
-
-	// 사운드 기본 에셋 — 큐가 감쇠(SA_Short) · 사운드 클래스(SC_SFX) · 루프 여부를 들고 있다
-	auto FindCue = [](const TCHAR* Path) -> USoundBase*
-	{
-		ConstructorHelpers::FObjectFinder<USoundBase> Finder(Path);
-		return Finder.Succeeded() ? Finder.Object : nullptr;
-	};
-	AttackSound         = FindCue(TEXT("/Game/Blueprints/Sound/SoundCue/VacuumCleaner/SC_VacuumAttack.SC_VacuumAttack"));
-	AttackEnhancedSound = FindCue(TEXT("/Game/Blueprints/Sound/SoundCue/VacuumCleaner/SC_VacuumAttackEnhanced.SC_VacuumAttackEnhanced"));
-	AttackChargingSound = FindCue(TEXT("/Game/Blueprints/Sound/SoundCue/VacuumCleaner/SC_VacuumAttackCharging.SC_VacuumAttackCharging"));
-	DashChargingSound   = FindCue(TEXT("/Game/Blueprints/Sound/SoundCue/VacuumCleaner/SC_VacuumDashCharging.SC_VacuumDashCharging"));
-	DashStartSound      = FindCue(TEXT("/Game/Blueprints/Sound/SoundCue/VacuumCleaner/SC_VacuumDashStart.SC_VacuumDashStart"));
-	DashLoopSound       = FindCue(TEXT("/Game/Blueprints/Sound/SoundCue/VacuumCleaner/SC_VacuumDashLoop.SC_VacuumDashLoop"));
-	DashBrakeSound      = FindCue(TEXT("/Game/Blueprints/Sound/SoundCue/VacuumCleaner/SC_VacuumDashBrake.SC_VacuumDashBrake"));
-	DashImpactSound     = FindCue(TEXT("/Game/Blueprints/Sound/SoundCue/VacuumCleaner/SC_VacuumCrash.SC_VacuumCrash"));
-	JumpSound           = FindCue(TEXT("/Game/Blueprints/Sound/SoundCue/VacuumCleaner/SC_VacuumJump.SC_VacuumJump"));
-	JetJumpSound        = FindCue(TEXT("/Game/Blueprints/Sound/SoundCue/VacuumCleaner/SC_VacuumJetJump.SC_VacuumJetJump"));
-	WalkSound           = FindCue(TEXT("/Game/Blueprints/Sound/SoundCue/VacuumCleaner/SC_VacuumWalk.SC_VacuumWalk"));
+	// 껍질 메시(구체) · 재질(Flames_Mat)과 사운드 큐는 BP_DRVacuumCleaner 기본값으로 넣는다
+	// (큐가 감쇠(SA_Short) · 사운드 클래스(SC_SFX) · 루프 여부를 들고 있다)
 }
 
 void ADRRobotVacuumCharacter::BeginPlay()
@@ -823,3 +796,32 @@ void ADRRobotVacuumCharacter::StopAllLoopSounds()
 		}
 	}
 }
+
+#if WITH_EDITOR
+EDataValidationResult ADRRobotVacuumCharacter::IsDataValid(FDataValidationContext& Context) const
+{
+	const EDataValidationResult Result = Super::IsDataValid(Context);
+
+	const TPair<const TCHAR*, const USoundBase*> Sounds[] =
+	{
+		{ TEXT("AttackSound"), AttackSound }, { TEXT("AttackEnhancedSound"), AttackEnhancedSound },
+		{ TEXT("AttackChargingSound"), AttackChargingSound }, { TEXT("DashChargingSound"), DashChargingSound },
+		{ TEXT("DashStartSound"), DashStartSound }, { TEXT("DashLoopSound"), DashLoopSound },
+		{ TEXT("DashBrakeSound"), DashBrakeSound }, { TEXT("DashImpactSound"), DashImpactSound },
+		{ TEXT("JumpSound"), JumpSound }, { TEXT("JetJumpSound"), JetJumpSound }, { TEXT("WalkSound"), WalkSound },
+	};
+	for (const TPair<const TCHAR*, const USoundBase*>& Sound : Sounds)
+	{
+		if (!Sound.Value)
+		{
+			Context.AddWarning(FText::FromString(FString::Printf(TEXT("%s 가 비어 있다 — 그 소리가 안 난다"), Sound.Key)));
+		}
+	}
+
+	if (!DashVFXMesh || !DashVFXMesh->GetStaticMesh())
+	{
+		Context.AddWarning(FText::FromString(TEXT("DashVFXMesh 에 메시가 없다 — 돌진 불꽃 껍질이 안 보인다 (구체 + Flames_Mat)")));
+	}
+	return Result;
+}
+#endif

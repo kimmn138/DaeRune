@@ -47,7 +47,7 @@
 #include "DaeRune/DRLogChannels.h"
 #include "Misc/ScopeExit.h"
 #include "NiagaraSystem.h"
-#include "UObject/ConstructorHelpers.h"
+#include "Misc/DataValidation.h"
 
 namespace
 {
@@ -61,14 +61,6 @@ ADRCharacter::ADRCharacter()
 	// 아군 판정용 액터 태그 — UDRAbilitySystemLibrary::IsNotFriend가 "Player" 태그 쌍으로 아군을 판정한다.
 	// BP마다 수동 추가에 의존하면 새 클래스(BP_DRVacuumCleaner 등)에서 누락 시 아군 오사(誤射)가 발생 (Plan3 §15.4)
 	Tags.AddUnique(FName("Player"));
-
-	// 공속 버프 몸 이펙트 — 모든 로봇 공통이라 BP 마다 넣지 않고 여기서 기본값을 준다
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> AttackSpeedBuffVFXFinder(
-		TEXT("/Game/Basic_VFX/Niagara/Buff/NE_Buff.NE_Buff"));
-	if (AttackSpeedBuffVFXFinder.Succeeded())
-	{
-		AttackSpeedBuffVFX = AttackSpeedBuffVFXFinder.Object;
-	}
 
 	// 이동 방향으로 회전 설정
 	GetCharacterMovement()->bOrientRotationToMovement = false;
@@ -1761,3 +1753,15 @@ void ADRCharacter::SyncCosmeticVisibility()
 	Sync(CosmeticAttachTP, GetMesh());
 	Sync(CosmeticAttachFP, FirstPersonMesh);
 }
+
+#if WITH_EDITOR
+EDataValidationResult ADRCharacter::IsDataValid(FDataValidationContext& Context) const
+{
+	const EDataValidationResult Result = Super::IsDataValid(Context);
+	if (!AttackSpeedBuffVFX)
+	{
+		Context.AddWarning(FText::FromString(TEXT("AttackSpeedBuffVFX 가 비어 있다 — 공속 버프 몸 이펙트가 안 나온다 (NE_Buff 지정)")));
+	}
+	return Result;
+}
+#endif
