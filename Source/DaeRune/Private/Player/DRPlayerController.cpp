@@ -2,7 +2,10 @@
 
 
 #include "Player/DRPlayerController.h"
+#include "Player/DRInteractionComponent.h"
+#include "Player/DRCheatManager.h"
 #include "UI/Widget/DRWardrobeScreenWidget.h"
+#include "UI/Widget/DRUpgradeScreenWidget.h"
 #include "UI/Widget/DRStageSelectScreenWidget.h"
 #include "Game/DRProgressionConfig.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -54,11 +57,12 @@ ADRPlayerController::ADRPlayerController()
 {
 	// 멀티플레이 리플리케이션 활성화
 	bReplicates = true;
-	
-	// 부품 시스템 초기화
-	bPartDetectionEnabled = false;
-	CurrentDetectedPart = nullptr;
-	LineTraceTimer = 0.f;
+
+	// 상호작용 대상 감지 (부품 · 사이트 · 청소기 · 프롭 · 열차 칸)
+	InteractionComponent = CreateDefaultSubobject<UDRInteractionComponent>(TEXT("InteractionComponent"));
+
+	// 콘솔 치트(DR*) — 개발 빌드에서만 만들어진다 (ReceivedPlayer 참고)
+	CheatClass = UDRCheatManager::StaticClass();
 }
 
 void ADRPlayerController::ShowDamageNumber_Implementation(float DamageAmount, ACharacter* TargetCharacter)
@@ -102,176 +106,9 @@ void ADRPlayerController::ShowDamageNumber_Implementation(float DamageAmount, AC
 	}
 }
 
-void ADRPlayerController::SetPartDetectionEnabled(bool bEnabled, ADRCleanserPart* Part)
-{
-	if (!Part) return;
-
-	if (bEnabled)
-	{
-		LineTraceTimer = 0.f;
-	}
-	SetInteractableDetectionEnabled(bEnabled, Part, OverlappedParts, bPartDetectionEnabled, CurrentDetectedPart);
-}
-
-void ADRPlayerController::SetInteractableDetectionEnabled(bool bEnabled, AActor* Interactable,
-	TSet<TWeakObjectPtr<AActor>>& OverlapSet, bool& bDetectionFlag, TObjectPtr<AActor>& CurrentDetected)
-{
-	if (!Interactable) return;
-
-	if (bEnabled)
-	{
-		OverlapSet.Add(Interactable);
-		bDetectionFlag = true;
-	}
-	else
-	{
-		OverlapSet.Remove(Interactable);
-
-		// 파괴된 대상의 잔여 엔트리 정리
-		for (auto It = OverlapSet.CreateIterator(); It; ++It)
-		{
-			if (!It->IsValid())
-			{
-				It.RemoveCurrent();
-			}
-		}
-
-		// 오버랩 중인 대상이 하나도 없을 때만 감지 비활성화
-		if (OverlapSet.IsEmpty())
-		{
-			bDetectionFlag = false;
-		}
-
-		// 이탈한 대상을 감지 중이었거나 감지가 꺼졌으면 UI 제거
-		if (CurrentDetected == Interactable || !bDetectionFlag)
-		{
-			SetCurrentDetectedInteractable(nullptr, CurrentDetected);
-		}
-	}
-}
-
-void ADRPlayerController::SetCurrentDetectedInteractable(AActor* NewDetected, TObjectPtr<AActor>& CurrentDetected)
-{
-	if (CurrentDetected == NewDetected) return;
-
-	if (IDRInteractable* OldInteractable = Cast<IDRInteractable>(CurrentDetected))
-	{
-		OldInteractable->SetInteractionUIVisible(false);
-	}
-
-	CurrentDetected = NewDetected;
-
-	if (IDRInteractable* NewInteractable = Cast<IDRInteractable>(CurrentDetected))
-	{
-		NewInteractable->SetInteractionUIVisible(true);
-	}
-
-	// 사이트 감지 슬롯의 변화면 조준선 상태 갱신 (설치 가능 조준선 표시/해제)
-	// 라인트레이스 갱신/오버랩 이탈 등 모든 감지 변경 경로가 이 함수를 지나므로 여기서 일괄 처리
-	if (&CurrentDetected == &CurrentOverlappedSite)
-	{
-		NotifyCrosshairSiteDetected(CurrentDetected != nullptr);
-	}
-}
-
-void ADRPlayerController::NotifyCrosshairSiteDetected(bool bDetected)
-{
-	if (!IsLocalController()) return;
-
-	if (ADRHUD* DRHUD = GetHUD<ADRHUD>())
-	{
-		if (UOverlayWidgetController* OverlayWC = DRHUD->GetOverlayWidgetControllerCached())
-		{
-			OverlayWC->SetCrosshairSiteDetected(bDetected);
-		}
-	}
-}
-
-ADRCleanserPart* ADRPlayerController::FindPartByLineTrace()
-{
-	// 캐릭터가 이미 부품을 들고 있으면 감지하지 않음
-	const ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
-	if (!DRCharacter || DRCharacter->IsCarryingPart()) return nullptr;
-
-	// 사이트 메시 등에 가려져도 부품을 찾을 수 있도록 겹침 히트까지 모두 본다
-	for (const FHitResult& Hit : InteractionViewHits)
-	{
-		ADRCleanserPart* HitPart = Cast<ADRCleanserPart>(Hit.GetActor());
-		if (HitPart && HitPart->CanBePickedUp())
-		{
-			return HitPart;
-		}
-	}
-
-	return nullptr;
-}
-
 void ADRPlayerController::ClientShowPartPickupUI_Implementation()
 {
 	OnPartPickedUp();
-}
-
-void ADRPlayerController::SetSiteDetectionEnabled(bool bEnabled, ADRCleanserSite* Site)
-{
-	SetInteractableDetectionEnabled(bEnabled, Site, OverlappedSites, bSiteDetectionEnabled, CurrentOverlappedSite);
-}
-
-void ADRPlayerController::SetMountDetectionEnabled(bool bEnabled, ADRRobotVacuumCharacter* Mount)
-{
-	if (!Mount) return;
-
-	if (bEnabled)
-	{
-		LineTraceTimer = 0.f;
-	}
-	SetInteractableDetectionEnabled(bEnabled, Mount, OverlappedMounts, bMountDetectionEnabled, CurrentDetectedMount);
-}
-
-ADRRobotVacuumCharacter* ADRPlayerController::FindMountByLineTrace()
-{
-	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
-	if (!DRCharacter) return nullptr;
-
-	// 부품 소지 중에는 탑승 불가(F키 의미 충돌), 이미 탑승 중이면 감지 불필요
-	if (DRCharacter->IsCarryingPart() || DRCharacter->IsMounted()) return nullptr;
-
-	FVector Start, End;
-	if (!GetInteractionViewRay(Start, End)) return nullptr;
-
-	// 멀티 라인트레이스: 다른 액터에 일부 가려져도 청소기를 찾을 수 있도록 모든 히트 검사.
-	// 채널(Visibility) 트레이스는 캐릭터를 못 맞춘다 — 캡슐(Pawn 프리셋)은 Visibility를 Ignore하고,
-	// 스켈레탈 메시 히트는 피직스 에셋 유무에 좌우된다. Pawn "오브젝트 타입" 쿼리는 응답 설정과
-	// 무관하게 캡슐을 맞추므로 청소기 감지가 메시 콜리전 세팅에 의존하지 않는다.
-	TArray<FHitResult> HitResults;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(DRCharacter);
-
-	FCollisionObjectQueryParams ObjectParams;
-	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
-
-	GetWorld()->LineTraceMultiByObjectType(
-		HitResults,
-		Start,
-		End,
-		ObjectParams,
-		QueryParams
-	);
-
-	for (const FHitResult& Hit : HitResults)
-	{
-		ADRRobotVacuumCharacter* HitVacuum = Cast<ADRRobotVacuumCharacter>(Hit.GetActor());
-		if (HitVacuum &&
-			OverlappedMounts.Contains(HitVacuum) &&
-			!HitVacuum->bDead &&
-			HitVacuum->RiderOnTop == nullptr && // 이미 라이더가 있으면 프롬프트도 안 띄움 (서버가 최종 검증)
-			// ★Plan5(탑승칩)★ ③ 이 청소기에서 비상 탈출한 뒤 20초는 프롬프트도 안 띄운다 (서버도 같은 함수로 거부 — D-90)
-			!UDRAbilitySystemLibrary::IsRideBannedFrom(DRCharacter, HitVacuum))
-		{
-			return HitVacuum;
-		}
-	}
-
-	return nullptr;
 }
 
 void ADRPlayerController::ServerRequestDismount_Implementation()
@@ -303,18 +140,6 @@ void ADRPlayerController::ServerRequestDashBrake_Implementation()
 	EventData.Target = Vacuum;
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 		Vacuum, FDRGameplayTags::Get().Event_Dash_Brake, EventData);
-}
-
-ADRCleanserSite* ADRPlayerController::FindSiteByLineTrace()
-{
-	// 부품을 들고 있어야만 사이트 감지
-	const ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
-	if (!DRCharacter || !DRCharacter->IsCarryingPart()) return nullptr;
-
-	// 박스 오버랩 중인 사이트인지 확인 (다른 사이트가 시점에 잡히는 케이스 차단)
-	const FHitResult* Hit = GetInteractionViewBlockingHit();
-	ADRCleanserSite* HitSite = Hit ? Cast<ADRCleanserSite>(Hit->GetActor()) : nullptr;
-	return (HitSite && OverlappedSites.Contains(HitSite)) ? HitSite : nullptr;
 }
 
 void ADRPlayerController::ServerReportTutorialCharacterInfoOpened_Implementation()
@@ -690,87 +515,8 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 		}
 	}
 
-	// ★여기서 조기 리턴하면 안 된다.
-	//   부품/사이트/청소기 감지는 오버랩으로 켜지는 방식이라 평소 전부 false 인데,
-	//   스테이지2 프롭(레버·버튼·단말)과 열차 칸은 오버랩 게이트 없이 트레이스로만 판정한다.
-	//   과거 이 자리에 있던 "전부 비활성화면 스킵" 가드가 그 둘까지 막아
-	//   방2 레버에 다가가도 F 프롬프트가 뜨지 않았다.
-
-	LineTraceTimer += DeltaTime;
-	if (LineTraceTimer >= LineTraceUpdateInterval)
-	{
-		LineTraceTimer = 0.f;
-
-		// 시점 광선 히트를 한 번 구해 아래 감지들이 나눠 쓴다
-		RefreshInteractionViewHits();
-
-		// 부품 라인트레이스
-		if (bPartDetectionEnabled)
-		{
-			SetCurrentDetectedInteractable(FindPartByLineTrace(), CurrentDetectedPart);
-		}
-
-		// 사이트 라인트레이스
-		if (bSiteDetectionEnabled)
-		{
-			SetCurrentDetectedInteractable(FindSiteByLineTrace(), CurrentOverlappedSite);
-		}
-
-		// 청소기 탑승 라인트레이스
-		if (bMountDetectionEnabled)
-		{
-			SetCurrentDetectedInteractable(FindMountByLineTrace(), CurrentDetectedMount);
-		}
-
-		// 스테이지2 상호작용 프롭 라인트레이스 (Plan6 §5.5-b)
-		// 레버/버튼/단말을 하나의 슬롯으로 처리한다. 오버랩 집합 없이 트레이스 거리로만 판정한다.
-		SetCurrentDetectedInteractable(FindPropByLineTrace(), CurrentDetectedProp);
-
-		// 열차 좌석 라인트레이스 (Plan6 §5.5)
-		SetCurrentDetectedInteractable(FindTrainCarByLineTrace(), CurrentDetectedCar);
-	}
-}
-
-ADRS2TrainCar* ADRPlayerController::FindTrainCarByLineTrace()
-{
-	// 이미 앉아 있거나 부품을 들고 있으면 감지하지 않는다
-	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
-	if (!DRCharacter || DRCharacter->IsSeatedOnTrain() || DRCharacter->IsCarryingPart()) return nullptr;
-
-	const FHitResult* Hit = GetInteractionViewBlockingHit();
-	ADRS2TrainCar* HitCar = Hit ? Cast<ADRS2TrainCar>(Hit->GetActor()) : nullptr;
-	return (HitCar && HitCar->CanBeBoardedBy(DRCharacter)) ? HitCar : nullptr;
-}
-
-bool ADRPlayerController::GetInteractionViewRay(FVector& OutStart, FVector& OutEnd) const
-{
-	const ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
-	const UCameraComponent* Camera = DRCharacter ? DRCharacter->GetFollowCamera() : nullptr;
-	if (!Camera) return false;
-
-	OutStart = Camera->GetComponentLocation();
-	OutEnd = OutStart + Camera->GetForwardVector() * LineTraceDistance;
-	return true;
-}
-
-void ADRPlayerController::RefreshInteractionViewHits()
-{
-	InteractionViewHits.Reset();
-
-	FVector Start, End;
-	if (!GetInteractionViewRay(Start, End)) return;
-
-	// 부품 · 사이트 · 프롭 · 열차 칸이 같은 시점 광선을 쓴다 — Visibility 멀티 트레이스 한 번으로
-	// 겹침 히트(부품)와 첫 막힘 히트(나머지)를 함께 얻는다 (예전에는 같은 광선을 최대 4번 쐈다)
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(GetPawn());
-	GetWorld()->LineTraceMultiByChannel(InteractionViewHits, Start, End, ECC_Visibility, QueryParams);
-}
-
-const FHitResult* ADRPlayerController::GetInteractionViewBlockingHit() const
-{
-	// 멀티 트레이스는 첫 막힘 히트를 마지막에 둔다 (없으면 겹침만 있다)
-	return (InteractionViewHits.Num() > 0 && InteractionViewHits.Last().bBlockingHit) ? &InteractionViewHits.Last() : nullptr;
+	// 상호작용 대상 감지 (주기마다 시점 광선 1회 — 부품 · 사이트 · 청소기 · 프롭 · 열차 칸)
+	InteractionComponent->TickDetection(DeltaTime);
 }
 
 void ADRPlayerController::ServerRequestTrainDeboard_Implementation()
@@ -790,101 +536,9 @@ void ADRPlayerController::ServerRequestTrainDeboard_Implementation()
 	Car->Deboard();
 }
 
-ADRS2InteractProp* ADRPlayerController::FindPropByLineTrace()
-{
-	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
-	if (!DRCharacter) return nullptr;
-
-	// ★프롭 메시에 **심플 콜리전**이 있어야 한다. 라인트레이스는 bTraceComplex=false 라
-	//   콜리전 프리미티브가 없는 메시는 그대로 통과해 감지되지 않는다.
-	const FHitResult* Hit = GetInteractionViewBlockingHit();
-	ADRS2InteractProp* HitProp = Hit ? Cast<ADRS2InteractProp>(Hit->GetActor()) : nullptr;
-	return (HitProp && HitProp->CanInteract(DRCharacter)) ? HitProp : nullptr;
-}
-
 void ADRPlayerController::Client_OpenSlidePuzzleUI_Implementation(ADRS2SlidePuzzle* Puzzle)
 {
 	OpenSlidePuzzleScreen(Puzzle);
-}
-
-void ADRPlayerController::OpenSlidePuzzleScreen(ADRS2SlidePuzzle* Puzzle)
-{
-	if (!IsLocalController() || !IsValid(Puzzle))
-	{
-		UE_LOG(LogDR, Warning, TEXT("[S2Puzzle] 창 열기 무시 (로컬 컨트롤러=%d, 퍼즐=%s)"),
-			IsLocalController() ? 1 : 0, *GetNameSafe(Puzzle));
-		return;
-	}
-
-	// 다른 전체화면 UI 와 입력 모드가 겹치지 않게 먼저 닫는다 (OpenUpgradeScreen 과 같은 가드)
-	if (bIsSettingsMenuOpen)
-	{
-		CloseSettingsMenu();
-	}
-
-	// 이미 열려 있으면 아무것도 하지 않는다 (같은 단말을 두 번 눌렀을 때).
-	if (bIsSlidePuzzleOpen)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[S2Puzzle] 창이 이미 열린 상태로 기록돼 있다 - 열기를 건너뛴다"));
-		return;
-	}
-
-	if (!SlidePuzzleWidgetClass)
-	{
-		UE_LOG(LogDR, Error,
-			TEXT("[S2Puzzle] SlidePuzzleWidgetClass 미지정 - BP_DRPlayerController 의 UI|Stage2 에 WBP_S2SlidePuzzle 을 넣을 것"));
-		return;
-	}
-
-	// ★창은 재사용한다★ 판 상태는 서버에 있으므로 새로 만들어도 동작하지만,
-	// 재사용하면 등장 연출이 매번 다시 돌지 않고 조각 8개를 다시 만들 일도 줄어든다.
-	if (!IsValid(SlidePuzzleWidget))
-	{
-		SlidePuzzleWidget = CreateWidget<UDRS2SlidePuzzleWidget>(this, SlidePuzzleWidgetClass);
-		if (!SlidePuzzleWidget)
-		{
-			UE_LOG(LogDR, Error, TEXT("[S2Puzzle] 8퍼즐 창 생성 실패 (SlidePuzzleWidgetClass 확인)"));
-			return;
-		}
-	}
-
-	bIsSlidePuzzleOpen = true;
-
-	// ★입력 모드는 여기서만 바꾼다★ (대기실 UI · 업그레이드 · 옷장과 같은 위치)
-	//  포커스 위젯을 지정하지 않는 이유: 위젯이 NativeConstruct(=아래 AddToViewport) 에서
-	//  SetKeyboardFocus 를 부르므로, 순서상 위젯이 마지막에 포커스를 가져간다.
-	SetInputMode(FInputModeUIOnly());
-	SetShowMouseCursor(true);
-
-	// ★BindToPuzzle 이 AddToViewport 보다 먼저다★
-	// 그래야 NativeConstruct 가 조각을 만든 직후 서버 보드를 그대로 그릴 수 있다.
-	SlidePuzzleWidget->BindToPuzzle(Puzzle);
-	SlidePuzzleWidget->AddToViewport(10);
-
-	UE_LOG(LogDR, Log, TEXT("[S2Puzzle] 8퍼즐 창을 열었다 (%s)"), *GetNameSafe(SlidePuzzleWidget));
-
-	OnSlidePuzzleScreenOpened(Puzzle);   // BP 연출 훅 (선택)
-}
-
-void ADRPlayerController::CloseSlidePuzzleScreen()
-{
-	if (!IsLocalController()) return;
-	if (!bIsSlidePuzzleOpen) return;
-
-	// ★플래그를 먼저 내린다★
-	// 아래 RemoveFromParent 가 위젯의 NativeDestruct 를 부르고, 거기서 이 함수가 한 번 더 들어온다.
-	bIsSlidePuzzleOpen = false;
-
-	if (IsValid(SlidePuzzleWidget))
-	{
-		// 파괴하지 않는다. 다음에 열 때 같은 인스턴스를 다시 쓴다.
-		SlidePuzzleWidget->RemoveFromParent();
-	}
-
-	OnSlidePuzzleScreenClosed();   // BP 연출 훅 (선택)
-
-	// 레벨 컨텍스트(메인메뉴/튜토리얼/대기실/스테이지)에 맞는 모드로 되돌린다.
-	RestoreDefaultInputMode();
 }
 
 void ADRPlayerController::Client_SlidePuzzleBusy_Implementation(ADRS2SlidePuzzle* Puzzle, APlayerState* Occupant)
@@ -956,6 +610,14 @@ void ADRPlayerController::ReceivedPlayer()
 {
 	Super::ReceivedPlayer();
 
+#if UE_WITH_CHEAT_MANAGER
+	// 엔진은 단독 플레이 · 에디터에서만 치트 매니저를 만든다 — 개발 빌드는 멀티플레이에서도 DR* 콘솔 치트를 바로 쓰게 한다
+	if (IsLocalController())
+	{
+		AddCheats(true);
+	}
+#endif
+
 	// 로컬 컨트롤러만 처리
 	if (!IsLocalController()) return;
 // 레벨 진입 시 공통 초기화 수행
@@ -991,43 +653,9 @@ void ADRPlayerController::OnLevelEntered()
 	// 대기실 위젯 정리 (레벨 이동 시 무효화된 포인터 정리)
 	DestroyWaitingRoomUI();
 
-	// 설정 메뉴 상태 초기화 (레벨 이동 시)
-	if (bIsSettingsMenuOpen)
-	{
-		CloseSettingsMenu();
-	}
-	bIsSettingsMenuOpen = false;
-
-	// 업그레이드 화면 상태 초기화 (레벨 이동 시 위젯이 남지 않게)
-	if (bIsUpgradeScreenOpen)
-	{
-		OnUpgradeScreenClosed();
-		bIsUpgradeScreenOpen = false;
-	}
-
-	// 옷장 화면도 같은 처리 (위젯은 C++ 이 만들었으므로 C++ 이 지운다)
-	if (bIsWardrobeScreenOpen)
-	{
-		OnWardrobeScreenClosed();
-		if (WardrobeScreenWidget)
-		{
-			WardrobeScreenWidget->RemoveFromParent();
-			WardrobeScreenWidget = nullptr;
-		}
-		bIsWardrobeScreenOpen = false;
-	}
-
-	// 스테이지 선택 화면 — ★출발할 때 열린 채로 이동하므로 도착한 레벨에서 반드시 여기서 정리된다★
-	if (bIsStageSelectScreenOpen)
-	{
-		OnStageSelectScreenClosed();
-		if (StageSelectScreenWidget)
-		{
-			StageSelectScreenWidget->RemoveFromParent();
-			StageSelectScreenWidget = nullptr;
-		}
-		bIsStageSelectScreenOpen = false;
-	}
+	// 열려 있던 전체 화면 정리 (레벨 이동 시 위젯이 남지 않게).
+	// ★스테이지 선택은 열린 채로 출발하므로 도착한 레벨에서 반드시 여기서 닫힌다★
+	CloseScreen(ActiveScreen, /*bLevelTransition*/ true);
 
 	// 관전 상태 초기화 (델리게이트 정리 포함)
 	if (CurrentSpectatedCharacter.IsValid())
@@ -1100,22 +728,11 @@ void ADRPlayerController::OnLevelEntered()
 
 void ADRPlayerController::HandleToggleSettings()
 {
-	// 스테이지 선택 화면은 위젯이 ESC 를 받는다(선택 취소 → 닫기). 포커스를 잃었을 때만 여기로 온다.
-	if (bIsStageSelectScreenOpen)
+	// 설정이 아닌 화면이 열려 있으면 ESC 로 그 화면을 먼저 닫는다.
+	// (각 화면 위젯도 NativeOnKeyDown 으로 ESC 를 받는다 — 포커스를 잃었을 때만 여기로 온다)
+	if (ActiveScreen != EDRScreen::None && ActiveScreen != EDRScreen::Settings)
 	{
-		CloseStageSelectScreen();
-		return;
-	}
-	// 옷장/업그레이드 화면이 열려 있으면 ESC 로 그 화면을 먼저 닫는다.
-	// (옷장은 위젯의 NativeOnKeyDown 도 ESC 를 받지만, 포커스를 잃은 상태를 대비해 여기도 둔다)
-	if (bIsWardrobeScreenOpen)
-	{
-		CloseWardrobeScreen();
-		return;
-	}
-	if (bIsUpgradeScreenOpen)
-	{
-		CloseUpgradeScreen();
+		CloseScreen(ActiveScreen);
 		return;
 	}
 
@@ -1131,7 +748,7 @@ bool ADRPlayerController::CanShowCharacterInfo() const
 	if (!IsInGameLevel() && !IsInTutorial() && !IsInLobby()) return false;
 
 	// 설정창 열려있으면 차단
-	if (bIsSettingsMenuOpen) return false;
+	if (IsSettingsMenuOpen()) return false;
 
 	return true;
 }
@@ -1440,9 +1057,9 @@ void ADRPlayerController::HandleInteract()
 	if (DRCharacter->IsMounted()) return;
 
 	// 부품을 들고 있지 않을 때만 부품 획득 시도
-	if (!DRCharacter->IsCarryingPart() && CurrentDetectedPart)
+	if (!DRCharacter->IsCarryingPart() && InteractionComponent->GetDetectedPart())
 	{
-		ServerRequestInteract(CurrentDetectedPart);
+		ServerRequestInteract(InteractionComponent->GetDetectedPart());
 		return;
 	}
 
@@ -1450,9 +1067,9 @@ void ADRPlayerController::HandleInteract()
 	if (DRCharacter->IsCarryingPart())
 	{
 		// 클렌저 사이트 범위 안이면 설치
-		if (CurrentOverlappedSite)
+		if (InteractionComponent->GetDetectedSite())
 		{
-			ServerRequestInteract(CurrentOverlappedSite);
+			ServerRequestInteract(InteractionComponent->GetDetectedSite());
 			return;
 		}
 		// 클렌저 사이트 범위 밖이면 떨어트리기
@@ -1464,25 +1081,25 @@ void ADRPlayerController::HandleInteract()
 	}
 
 	// 부품 미소지 && 탑승 후보 감지 → 탑승 요청 (Plan3 §5.1)
-	if (!DRCharacter->IsCarryingPart() && CurrentDetectedMount)
+	if (!DRCharacter->IsCarryingPart() && InteractionComponent->GetDetectedMount())
 	{
-		ServerRequestInteract(CurrentDetectedMount);
+		ServerRequestInteract(InteractionComponent->GetDetectedMount());
 		return;
 	}
 
 	// 열차 좌석 탑승 (Plan6 §5.5)
-	if (CurrentDetectedCar)
+	if (InteractionComponent->GetDetectedTrainCar())
 	{
-		ServerRequestInteract(CurrentDetectedCar);
+		ServerRequestInteract(InteractionComponent->GetDetectedTrainCar());
 		return;
 	}
 
 	// 스테이지2 상호작용 프롭 (레버/버튼/단말) — Plan6 §5.5-b
-	if (CurrentDetectedProp)
+	if (InteractionComponent->GetDetectedProp())
 	{
-		UE_LOG(LogDR, Log, TEXT("[S2Prop] F -> %s 조작 요청 (클라)"), *CurrentDetectedProp->GetName());
+		UE_LOG(LogDR, Log, TEXT("[S2Prop] F -> %s 조작 요청 (클라)"), *InteractionComponent->GetDetectedProp()->GetName());
 
-		ServerRequestInteract(CurrentDetectedProp);
+		ServerRequestInteract(InteractionComponent->GetDetectedProp());
 		return;
 	}
 
@@ -1491,7 +1108,7 @@ void ADRPlayerController::HandleInteract()
 
 void ADRPlayerController::ToggleSettingsMenu()
 {
-	if (bIsSettingsMenuOpen)
+	if (IsSettingsMenuOpen())
 	{
 		CloseSettingsMenu();
 	}
@@ -1501,37 +1118,239 @@ void ADRPlayerController::ToggleSettingsMenu()
 	}
 }
 
-void ADRPlayerController::OpenSettingsMenu()
+// ========================= 전체 화면 (설정 · 업그레이드 · 옷장 · 스테이지 선택 · 8퍼즐) =========================
+
+bool ADRPlayerController::OpenScreen(EDRScreen Screen, ADRS2SlidePuzzle* Puzzle)
 {
-	// 로컬 컨트롤러에서만 실행
-	if (!IsLocalController()) return;
+	if (!IsLocalController() || Screen == EDRScreen::None) return false;
 
-	// 이미 열려있으면 무시
-	if (bIsSettingsMenuOpen) return;
+	// 이미 열려 있으면 아무것도 하지 않는다 (같은 장치 · 단말을 두 번 눌렀을 때)
+	if (ActiveScreen == Screen) return true;
 
-	bIsSettingsMenuOpen = true;
+	if (!CanOpenScreen(Screen, Puzzle)) return false;
 
-	// 입력 모드 변경
+	// 한 번에 한 화면 — 열려 있던 화면을 먼저 닫는다 (입력 모드가 겹치지 않게)
+	if (ActiveScreen != EDRScreen::None)
+	{
+		CloseScreen(ActiveScreen);
+	}
+
+	// ★상태를 위젯보다 먼저 올린다★ — 위젯 NativeConstruct 가 열림 상태를 볼 수 있게
+	ActiveScreen = Screen;
+
+	// ★입력 모드는 여기서만 바꾼다★ (복귀는 CloseScreen → RestoreDefaultInputMode)
+	//  포커스 위젯을 지정하지 않는 이유: 각 화면 위젯이 NativeConstruct(= AddToViewport) 에서
+	//  SetKeyboardFocus 를 부르므로, 순서상 위젯이 마지막에 포커스를 가져간다.
 	SetInputMode(FInputModeUIOnly());
 	SetShowMouseCursor(true);
 
-	// Blueprint에서 위젯 생성
-	OnSettingsMenuOpened();
+	if (!ShowScreenWidget(Screen, Puzzle))
+	{
+		// 위젯을 못 만들었다 — UI 입력에 갇히지 않게 되돌린다
+		ActiveScreen = EDRScreen::None;
+		RestoreDefaultInputMode();
+		return false;
+	}
+
+	OnScreenOpened(Screen);   // BP 연출 훅 (선택)
+	return true;
 }
 
-void ADRPlayerController::CloseSettingsMenu()
+void ADRPlayerController::CloseScreen(EDRScreen Screen, bool bLevelTransition)
 {
-	// 로컬 컨트롤러에서만 실행
-	if (!IsLocalController()) return;
+	if (!IsLocalController() || Screen == EDRScreen::None || ActiveScreen != Screen) return;
 
-	// 이미 닫혀있으면 무시
-	if (!bIsSettingsMenuOpen) return;
+	// ★상태를 먼저 내린다★ — 위젯 제거(NativeDestruct)가 이 함수를 한 번 더 부른다 (8퍼즐)
+	ActiveScreen = EDRScreen::None;
 
-	// Blueprint에서 위젯 제거
-	OnSettingsMenuClosed();
+	HideScreenWidget(Screen);
+	OnScreenClosed(Screen);   // BP 연출 훅 (선택)
 
-	bIsSettingsMenuOpen = false;
+	// 레벨 이동 정리 — 입력 모드 · 장착 보고는 OnLevelEntered 가 이어서 한다
+	if (bLevelTransition) return;
+
+	// 레벨 컨텍스트(메인메뉴/튜토리얼/대기실/스테이지)에 맞는 모드로 되돌린다
 	RestoreDefaultInputMode();
+
+	// 화면이 열린 동안의 변경은 프리뷰에만 보이고, 닫는 순간 서버에 한 번에 반영된다
+	// (PlayerState 복제 → 내 캐릭터와 남의 화면에 적용 — Plan2.md 7.1 / Plan(옷장) M3)
+	if (Screen == EDRScreen::Upgrade)
+	{
+		ReportUpgradeLoadout();
+	}
+	else if (Screen == EDRScreen::Wardrobe)
+	{
+		ReportCosmeticLoadout();
+	}
+}
+
+bool ADRPlayerController::CanOpenScreen(EDRScreen Screen, const ADRS2SlidePuzzle* Puzzle) const
+{
+	switch (Screen)
+	{
+	case EDRScreen::Upgrade:
+		// 로비에서만 슬롯 해금/칩 교체가 가능하다. 화면을 닫을 때 서버로 재보고되고 그 즉시 스탯 GE 가
+		// 재적용되므로, 이 가드가 없으면 스테이지 도중 칩 교체가 실제로 반영돼 버린다.
+		if (!IsInLobby())
+		{
+			UE_LOG(LogDR, Warning, TEXT("[Upgrade] 로비가 아닌 곳에서 업그레이드 화면 열기를 시도했습니다 — 무시합니다."));
+			return false;
+		}
+		break;
+
+	case EDRScreen::Wardrobe:
+		// 옷장도 로비 전용이다. 스테이지 도중 외형을 바꿔 끼우는 경로를 만들지 않는다.
+		if (!IsInLobby())
+		{
+			UE_LOG(LogDR, Warning, TEXT("[Cosmetic] 로비가 아닌 곳에서 옷장 열기를 시도했습니다 — 무시합니다."));
+			return false;
+		}
+		break;
+
+	case EDRScreen::StageSelect:
+		// 리슨 서버의 호스트만 — 클라이언트는 스테이지를 고를 수 없다
+		if (!HasAuthority())
+		{
+			UE_LOG(LogDR, Warning, TEXT("[StageSelect] 호스트가 아닌 플레이어가 스테이지 선택을 열려고 했습니다 — 무시합니다."));
+			return false;
+		}
+		if (!IsInLobby())
+		{
+			UE_LOG(LogDR, Warning, TEXT("[StageSelect] 로비가 아닌 곳에서 스테이지 선택 열기를 시도했습니다 — 무시합니다."));
+			return false;
+		}
+		break;
+
+	case EDRScreen::SlidePuzzle:
+		if (!IsValid(Puzzle))
+		{
+			UE_LOG(LogDR, Warning, TEXT("[S2Puzzle] 창 열기 무시 — 퍼즐이 없다"));
+			return false;
+		}
+		break;
+
+	default:
+		break;
+	}
+
+	// 위젯 클래스는 BP_DRPlayerController 의 UI 카테고리에서 지정한다
+	if (!GetScreenWidgetClass(Screen))
+	{
+		UE_LOG(LogDR, Error, TEXT("[Screen] %s 화면의 위젯 클래스가 비어 있다 — BP_DRPlayerController 의 UI 카테고리에서 지정할 것"),
+			*StaticEnum<EDRScreen>()->GetNameStringByValue(static_cast<int64>(Screen)));
+		return false;
+	}
+	return true;
+}
+
+TSubclassOf<UUserWidget> ADRPlayerController::GetScreenWidgetClass(EDRScreen Screen) const
+{
+	switch (Screen)
+	{
+	case EDRScreen::Settings:    return SettingsScreenWidgetClass;
+	case EDRScreen::Upgrade:     return UpgradeScreenWidgetClass;
+	case EDRScreen::Wardrobe:    return WardrobeScreenWidgetClass;
+	case EDRScreen::StageSelect: return StageSelectScreenWidgetClass;
+	case EDRScreen::SlidePuzzle: return SlidePuzzleWidgetClass;
+	default:                     return nullptr;
+	}
+}
+
+bool ADRPlayerController::ShowScreenWidget(EDRScreen Screen, ADRS2SlidePuzzle* Puzzle)
+{
+	switch (Screen)
+	{
+	case EDRScreen::Settings:
+		if (!IsValid(SettingsScreenWidget))
+		{
+			SettingsScreenWidget = CreateWidget<UUserWidget>(this, SettingsScreenWidgetClass);
+		}
+		if (!SettingsScreenWidget) return false;
+		SettingsScreenWidget->AddToViewport();
+		return true;
+
+	case EDRScreen::Upgrade:
+		UpgradeScreenWidget = CreateWidget<UDRUpgradeScreenWidget>(this, UpgradeScreenWidgetClass);
+		if (!UpgradeScreenWidget) return false;
+		UpgradeScreenWidget->AddToViewport();
+		return true;
+
+	case EDRScreen::Wardrobe:
+		// 키보드 포커스는 화면의 NativeConstruct 가 직접 잡는다 (ESC / C 키)
+		WardrobeScreenWidget = CreateWidget<UDRWardrobeScreenWidget>(this, WardrobeScreenWidgetClass);
+		if (!WardrobeScreenWidget) return false;
+		WardrobeScreenWidget->AddToViewport();
+		return true;
+
+	case EDRScreen::StageSelect:
+		StageSelectScreenWidget = CreateWidget<UDRStageSelectScreenWidget>(this, StageSelectScreenWidgetClass);
+		if (!StageSelectScreenWidget) return false;
+		// 전체화면 모달이라 HUD(0) · 퍼즐(10) 위, 결과창/캐릭터 정보(100) · 로딩(10000) 아래.
+		// 0 이면 화면을 연 ★뒤에★ 만들어지는 HUD 위젯(대기실 → 자유이동 전환 직후의 크로스헤어 등)이 위에 덮인다.
+		StageSelectScreenWidget->AddToViewport(50);
+		return true;
+
+	case EDRScreen::SlidePuzzle:
+		// ★창은 재사용한다★ 판 상태는 서버에 있으므로 새로 만들어도 동작하지만,
+		// 재사용하면 등장 연출이 매번 다시 돌지 않고 조각 8개를 다시 만들 일도 줄어든다.
+		if (!IsValid(SlidePuzzleWidget))
+		{
+			SlidePuzzleWidget = CreateWidget<UDRS2SlidePuzzleWidget>(this, SlidePuzzleWidgetClass);
+		}
+		if (!SlidePuzzleWidget) return false;
+		// ★BindToPuzzle 이 AddToViewport 보다 먼저다★
+		// 그래야 NativeConstruct 가 조각을 만든 직후 서버 보드를 그대로 그릴 수 있다.
+		SlidePuzzleWidget->BindToPuzzle(Puzzle);
+		SlidePuzzleWidget->AddToViewport(10);
+		return true;
+
+	default:
+		return false;
+	}
+}
+
+void ADRPlayerController::HideScreenWidget(EDRScreen Screen)
+{
+	auto RemoveAndForget = [](auto& Widget)
+	{
+		if (IsValid(Widget))
+		{
+			Widget->RemoveFromParent();
+		}
+		Widget = nullptr;
+	};
+
+	switch (Screen)
+	{
+	case EDRScreen::Settings:
+		if (IsValid(SettingsScreenWidget))
+		{
+			// 설정 화면이 따로 띄운 드롭다운 팝업부터 닫는다 (WBP_SettingsScreen 의 BP 함수 — 안 닫으면 화면 위에 남는다)
+			static const FName HideDropdownPopupName(TEXT("HideDropdownPopup"));
+			UFunction* HideDropdownPopup = SettingsScreenWidget->FindFunction(HideDropdownPopupName);
+			if (HideDropdownPopup && HideDropdownPopup->NumParms == 0)
+			{
+				SettingsScreenWidget->ProcessEvent(HideDropdownPopup, nullptr);
+			}
+		}
+		RemoveAndForget(SettingsScreenWidget);
+		break;
+
+	case EDRScreen::Upgrade:     RemoveAndForget(UpgradeScreenWidget); break;
+	case EDRScreen::Wardrobe:    RemoveAndForget(WardrobeScreenWidget); break;
+	case EDRScreen::StageSelect: RemoveAndForget(StageSelectScreenWidget); break;
+
+	case EDRScreen::SlidePuzzle:
+		// 파괴하지 않는다 — 다음에 열 때 같은 인스턴스를 다시 쓴다 (점유 반납은 위젯 NativeDestruct 가 한다)
+		if (IsValid(SlidePuzzleWidget))
+		{
+			SlidePuzzleWidget->RemoveFromParent();
+		}
+		break;
+
+	default:
+		break;
+	}
 }
 
 void ADRPlayerController::ClientCloseSettingsMenu_Implementation()
@@ -1646,243 +1465,7 @@ void ADRPlayerController::Client_GrantStageReward_Implementation(const FDRStageR
 
 // ========================= 로비 업그레이드 화면 =========================
 
-void ADRPlayerController::OpenUpgradeScreen()
-{
-	if (!IsLocalController()) return;
-	if (bIsUpgradeScreenOpen) return;
-
-	// 로비에서만 슬롯 해금/칩 교체가 가능하다.
-	// 화면을 닫을 때 서버로 재보고되고 그 즉시 스탯 GE 가 재적용되므로,
-	// 이 가드가 없으면 스테이지 도중 칩 교체가 실제로 반영돼 버린다.
-	if (!IsInLobby())
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Upgrade] 로비가 아닌 곳에서 업그레이드 화면 열기를 시도했습니다 — 무시합니다."));
-		return;
-	}
-
-	// 설정창이 열려 있으면 먼저 닫는다 (입력 모드 충돌 방지)
-	if (bIsSettingsMenuOpen)
-	{
-		CloseSettingsMenu();
-	}
-
-	bIsUpgradeScreenOpen = true;
-
-	SetInputMode(FInputModeUIOnly());
-	SetShowMouseCursor(true);
-
-	// 블루프린트에서 위젯 생성 (설정 메뉴와 같은 구조 — OpenSettingsMenu 참조)
-	OnUpgradeScreenOpened();
-}
-
-void ADRPlayerController::DRUnlockUpgrade()
-{
-#if !UE_BUILD_SHIPPING   // 로컬 세이브를 바꾸는 치트 — 쉬핑에서는 아무 일도 하지 않는다
-	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
-	if (!GI)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
-		return;
-	}
-
-	GI->UnlockUpgradeSystem();
-	UE_LOG(LogDR, Warning, TEXT("[Cheat] 업그레이드 시스템 해금됨 (현재 재화 %d)"), GI->GetCurrency());
-#endif
-}
-
-void ADRPlayerController::DRLockUpgrade()
-{
-#if !UE_BUILD_SHIPPING   // 로컬 세이브를 바꾸는 치트 — 쉬핑에서는 아무 일도 하지 않는다
-	if (UDRGameInstance* GI = GetGameInstance<UDRGameInstance>())
-	{
-		GI->DebugSetUpgradeSystemUnlocked(false);
-	}
-#endif
-}
-
-void ADRPlayerController::DRUnlockSlot(int32 Count)
-{
-#if !UE_BUILD_SHIPPING   // 로컬 세이브를 바꾸는 치트 — 쉬핑에서는 아무 일도 하지 않는다
-	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
-	if (!GI)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
-		return;
-	}
-
-	// 시스템이 잠겨 있으면 CanUnlockSlot 이 SystemLocked 로 막는다 — 먼저 열어 준다
-	GI->UnlockUpgradeSystem();
-
-	const EPlayerCharacterClass Class = GetViewedUpgradeClass();
-
-	for (int32 Index = 0; Index < FMath::Max(1, Count); ++Index)
-	{
-		// 비용이 모자라면 그만큼 채워 넣고 다시 시도한다 (치트니까 지갑은 신경 쓰지 않는다)
-		if (GI->CanUnlockSlot(Class) == EDRUpgradeResult::NotEnoughCurrency)
-		{
-			GI->AddCurrency(FMath::Max(1000, GI->GetNextSlotUnlockCost(Class)));
-		}
-
-		const EDRUpgradeResult Result = GI->UnlockSlot(Class);
-		if (Result != EDRUpgradeResult::Success)
-		{
-			UE_LOG(LogDR, Warning, TEXT("[Cheat] 슬롯 해금 중단 (%d번째): %s"),
-				Index + 1, *UDRUpgradeUILibrary::GetUpgradeResultText(Result).ToString());
-			break;
-		}
-	}
-
-	DRDumpUpgrade();
-#endif
-}
-
-void ADRPlayerController::DRDumpUpgrade()
-{
-	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
-	if (!GI)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
-		return;
-	}
-
-	const EPlayerCharacterClass Class = GetViewedUpgradeClass();
-
-	UE_LOG(LogDR, Warning,
-		TEXT("[Cheat] 진행도: 시스템=%s / 재화=%d / 클래스=%d / 해금슬롯=%d/%d / 빈칸=%d"),
-		GI->IsUpgradeSystemUnlocked() ? TEXT("해금") : TEXT("잠김"),
-		GI->GetCurrency(), static_cast<int32>(Class),
-		GI->GetUnlockedSlotCount(Class), GI->GetMaxSlotCount(),
-		GI->GetFreeSlotCount(Class));
-}
-
-EPlayerCharacterClass ADRPlayerController::GetViewedUpgradeClass() const
-{
-	// 업그레이드 화면과 같은 기준으로 클래스를 고른다(UDRUpgradeScreenWidget::GetViewedClass 와 동일)
-	if (const ADRPlayerState* PS = GetPlayerState<ADRPlayerState>())
-	{
-		return PS->GetSelectedPlayerClass();
-	}
-	return EPlayerCharacterClass::Gardener;
-}
-
-void ADRPlayerController::DRAddCurrency(int32 Amount)
-{
-#if !UE_BUILD_SHIPPING   // 로컬 세이브를 바꾸는 치트 — 쉬핑에서는 아무 일도 하지 않는다
-	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
-	if (!GI)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
-		return;
-	}
-
-	GI->AddCurrency(Amount);
-	UE_LOG(LogDR, Warning, TEXT("[Cheat] 재화 %d 지급 → 현재 %d"), Amount, GI->GetCurrency());
-#endif
-}
-
-void ADRPlayerController::DRResetDefaultChips()
-{
-#if !UE_BUILD_SHIPPING   // 로컬 세이브를 바꾸는 치트 — 쉬핑에서는 아무 일도 하지 않는다
-	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
-	if (!GI)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
-		return;
-	}
-
-	GI->DebugResetDefaultLoadout();
-
-	// 세이브만 바꿔서는 이미 스폰된 캐릭터에 반영되지 않는다 — 서버에 다시 보고해야
-	// PlayerState 의 EquippedChips 가 갱신되고 HUD/스탯이 따라온다.
-	ReportUpgradeLoadout();
-
-	UE_LOG(LogDR, Warning, TEXT("[Cheat] 기본 장착 칩을 다시 적용하고 서버에 재보고했습니다."));
-#endif
-}
-
-void ADRPlayerController::CloseUpgradeScreen()
-{
-	if (!IsLocalController()) return;
-	if (!bIsUpgradeScreenOpen) return;
-
-	// 블루프린트에서 위젯 제거 (설정 메뉴와 같은 구조 — CloseSettingsMenu 참조)
-	OnUpgradeScreenClosed();
-
-	bIsUpgradeScreenOpen = false;
-	RestoreDefaultInputMode();
-
-	// 변경된 장착 상태를 서버에 반영
-	ReportUpgradeLoadout();
-}
-
 // ========================= 로비 옷장 화면 (Plan(옷장)) =========================
-
-void ADRPlayerController::OpenWardrobeScreen()
-{
-	if (!IsLocalController()) return;
-	if (bIsWardrobeScreenOpen) return;
-
-	// 옷장은 로비 전용이다. 스테이지 도중 외형을 바꿔 끼우는 경로를 만들지 않는다.
-	// (OpenUpgradeScreen 과 같은 가드)
-	if (!IsInLobby())
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cosmetic] 로비가 아닌 곳에서 옷장 열기를 시도했습니다 — 무시합니다."));
-		return;
-	}
-
-	// 다른 전체화면 UI 와 입력 모드가 겹치지 않게 먼저 닫는다
-	if (bIsSettingsMenuOpen)
-	{
-		CloseSettingsMenu();
-	}
-	if (bIsUpgradeScreenOpen)
-	{
-		CloseUpgradeScreen();
-	}
-
-	bIsWardrobeScreenOpen = true;
-
-	SetInputMode(FInputModeUIOnly());
-	SetShowMouseCursor(true);
-
-	// ★위젯은 C++ 이 만든다★ — BP 의 OnWardrobeScreenOpened 는 연출용이다 (거기서 또 만들면 두 장이 뜬다)
-	if (!WardrobeScreenWidget && WardrobeScreenWidgetClass)
-	{
-		WardrobeScreenWidget = CreateWidget<UDRWardrobeScreenWidget>(this, WardrobeScreenWidgetClass);
-		if (WardrobeScreenWidget)
-		{
-			// 키보드 포커스는 화면의 NativeConstruct 가 직접 잡는다 (ESC / C 키)
-			WardrobeScreenWidget->AddToViewport();
-		}
-	}
-	else if (!WardrobeScreenWidgetClass)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cosmetic] WardrobeScreenWidgetClass 가 지정되지 않았습니다 (BP_DRPlayerController)."));
-	}
-
-	OnWardrobeScreenOpened();
-}
-
-void ADRPlayerController::CloseWardrobeScreen()
-{
-	if (!IsLocalController()) return;
-	if (!bIsWardrobeScreenOpen) return;
-
-	OnWardrobeScreenClosed();
-
-	if (WardrobeScreenWidget)
-	{
-		WardrobeScreenWidget->RemoveFromParent();
-		WardrobeScreenWidget = nullptr;
-	}
-
-	bIsWardrobeScreenOpen = false;
-	RestoreDefaultInputMode();
-
-	// 고른 옷을 서버에 보고 → PlayerState 복제 → 내 캐릭터와 남의 화면에 입혀진다 (Plan(옷장) M3).
-	// 화면이 열려 있는 동안의 변경은 프리뷰에만 보이고, 닫는 순간 한 번에 반영된다.
-	ReportCosmeticLoadout();
-}
 
 // ========================= 스테이지 선택 화면 =========================
 
@@ -1892,78 +1475,6 @@ bool ADRPlayerController::CanUseStageSelectScreen() const
 
 	const UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
 	return GI && GI->ProgressionConfig && GI->ProgressionConfig->StageSelectList.Num() > 0;
-}
-
-void ADRPlayerController::OpenStageSelectScreen()
-{
-	if (!IsLocalController()) return;
-	if (bIsStageSelectScreenOpen) return;
-
-	// 리슨 서버의 호스트만 — 클라이언트는 스테이지를 고를 수 없다
-	if (!HasAuthority())
-	{
-		UE_LOG(LogDR, Warning, TEXT("[StageSelect] 호스트가 아닌 플레이어가 스테이지 선택을 열려고 했습니다 — 무시합니다."));
-		return;
-	}
-
-	if (!IsInLobby())
-	{
-		UE_LOG(LogDR, Warning, TEXT("[StageSelect] 로비가 아닌 곳에서 스테이지 선택 열기를 시도했습니다 — 무시합니다."));
-		return;
-	}
-
-	if (!StageSelectScreenWidgetClass)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[StageSelect] StageSelectScreenWidgetClass 가 지정되지 않았습니다 (BP_DRPlayerController)."));
-		return;
-	}
-
-	// 다른 전체화면 UI 와 입력 모드가 겹치지 않게 먼저 닫는다
-	if (bIsSettingsMenuOpen)
-	{
-		CloseSettingsMenu();
-	}
-	if (bIsUpgradeScreenOpen)
-	{
-		CloseUpgradeScreen();
-	}
-	if (bIsWardrobeScreenOpen)
-	{
-		CloseWardrobeScreen();
-	}
-
-	bIsStageSelectScreenOpen = true;
-
-	SetInputMode(FInputModeUIOnly());
-	SetShowMouseCursor(true);
-
-	// ★위젯은 C++ 이 만든다★ — 키보드 포커스는 화면의 NativeConstruct 가 직접 잡는다
-	StageSelectScreenWidget = CreateWidget<UDRStageSelectScreenWidget>(this, StageSelectScreenWidgetClass);
-	if (StageSelectScreenWidget)
-	{
-		// 전체화면 모달이라 HUD(0) · 퍼즐(10) 위, 결과창/캐릭터 정보(100) · 로딩(10000) 아래.
-		// 0 이면 화면을 연 ★뒤에★ 만들어지는 HUD 위젯(대기실 → 자유이동 전환 직후의 크로스헤어 등)이 위에 덮인다.
-		StageSelectScreenWidget->AddToViewport(50);
-	}
-
-	OnStageSelectScreenOpened();
-}
-
-void ADRPlayerController::CloseStageSelectScreen()
-{
-	if (!IsLocalController()) return;
-	if (!bIsStageSelectScreenOpen) return;
-
-	OnStageSelectScreenClosed();
-
-	if (StageSelectScreenWidget)
-	{
-		StageSelectScreenWidget->RemoveFromParent();
-		StageSelectScreenWidget = nullptr;
-	}
-
-	bIsStageSelectScreenOpen = false;
-	RestoreDefaultInputMode();
 }
 
 bool ADRPlayerController::RequestStageTravel(FName StageId)
@@ -2000,105 +1511,6 @@ bool ADRPlayerController::RequestStageTravel(FName StageId)
 	// "/Game/Maps/Stage1" 형태. ExecuteTravel 이 "?listen" 을 붙여 ServerTravel 한다.
 	LobbyGameMode->TravelToStage(Def->Map.GetLongPackageName(), this);
 	return true;
-}
-
-void ADRPlayerController::DROpenStageSelect()
-{
-	OpenStageSelectScreen();
-}
-
-void ADRPlayerController::DRStageState(const FString& StageId, const FString& State)
-{
-#if !UE_BUILD_SHIPPING   // 로컬 세이브를 바꾸는 치트 — 쉬핑에서는 아무 일도 하지 않는다
-	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
-	if (!GI) return;
-
-	const FName Id = StageId.Equals(TEXT("all"), ESearchCase::IgnoreCase) ? NAME_None : FName(*StageId);
-
-	if (State.Equals(TEXT("reset"), ESearchCase::IgnoreCase) || State.IsEmpty())
-	{
-		GI->DebugClearStageStateOverride(Id);
-	}
-	else if (Id.IsNone())
-	{
-		UE_LOG(LogDR, Warning, TEXT("[StageSelect] 'all' 은 reset 과만 쓸 수 있습니다."));
-		return;
-	}
-	else if (State.Equals(TEXT("locked"), ESearchCase::IgnoreCase))
-	{
-		GI->DebugSetStageStateOverride(Id, EDRStageSelectState::Locked);
-	}
-	else if (State.Equals(TEXT("normal"), ESearchCase::IgnoreCase) || State.Equals(TEXT("available"), ESearchCase::IgnoreCase))
-	{
-		GI->DebugSetStageStateOverride(Id, EDRStageSelectState::Available);
-	}
-	else if (State.Equals(TEXT("cleared"), ESearchCase::IgnoreCase) || State.Equals(TEXT("clear"), ESearchCase::IgnoreCase))
-	{
-		GI->DebugSetStageStateOverride(Id, EDRStageSelectState::Cleared);
-	}
-	else
-	{
-		UE_LOG(LogDR, Warning, TEXT("[StageSelect] 사용법: DRStageState <StageId|all> <locked|normal|cleared|reset>"));
-		return;
-	}
-
-	UE_LOG(LogDR, Log, TEXT("[StageSelect] %s → %s (디버그 덮어쓰기, 저장 안 함)"), *StageId, *State);
-#endif
-}
-
-void ADRPlayerController::DRUnlockSkins()
-{
-#if !UE_BUILD_SHIPPING   // 로컬 세이브를 바꾸는 치트 — 쉬핑에서는 아무 일도 하지 않는다
-	if (UDRGameInstance* GI = GetGameInstance<UDRGameInstance>())
-	{
-		GI->DebugUnlockAllSkins();
-	}
-#endif
-}
-
-void ADRPlayerController::DROpenWardrobe()
-{
-	OpenWardrobeScreen();
-}
-
-void ADRPlayerController::DRDumpCosmetic()
-{
-	const UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
-	if (!GI)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
-		return;
-	}
-
-	const EPlayerCharacterClass Class = GetViewedUpgradeClass();
-	const TArray<FName> Equipped = GI->GetEquippedSkins(Class);
-
-	FString Line;
-	for (int32 Index = 0; Index < Equipped.Num(); ++Index)
-	{
-		Line += FString::Printf(TEXT("%s=%s "),
-			*StaticEnum<EDRCosmeticCategory>()->GetNameStringByValue(Index),
-			*Equipped[Index].ToString());
-	}
-
-	UE_LOG(LogDR, Warning, TEXT("[Cheat] 코스메틱: 클래스=%d / 카탈로그=%s / %s"),
-		static_cast<int32>(Class),
-		GI->GetCosmeticCatalog() ? TEXT("지정됨") : TEXT("★미지정★"),
-		*Line);
-}
-
-void ADRPlayerController::DRDie()
-{
-#if !UE_BUILD_SHIPPING
-	ServerCheatDie();
-#endif
-}
-
-void ADRPlayerController::DRRevive()
-{
-#if !UE_BUILD_SHIPPING
-	ServerCheatRevive();
-#endif
 }
 
 void ADRPlayerController::ServerCheatDie_Implementation()

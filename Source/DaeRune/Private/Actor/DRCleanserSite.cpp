@@ -11,6 +11,7 @@
 #include "Components/WidgetComponent.h"
 #include "UI/Widget/DRBillboardWidgetComponent.h"
 #include "Player/DRPlayerController.h"
+#include "Player/DRInteractionComponent.h"
 #include "Character/DRCharacter.h"
 #include "Actor/DRCleanserPart.h"
 #include "Components/AudioComponent.h"
@@ -404,7 +405,7 @@ void ADRCleanserSite::RefreshOverlapStateFor(ADRCharacter* Character)
 		Character->IsCarryingPart();
 
 	// 사이트 감지를 토글; 실제 위젯 표시 여부는 PlayerController의 라인트레이스가 결정
-	PC->SetSiteDetectionEnabled(bShouldDetect, this);
+	PC->GetInteractionComponent()->SetSiteDetectionEnabled(bShouldDetect, this);
 }
 
 void ADRCleanserSite::SetInteractionUIVisible(bool bShow)

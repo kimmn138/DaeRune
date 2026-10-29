@@ -6,6 +6,7 @@
 #include "Net/UnrealNetwork.h"
 #include "Components/SphereComponent.h"
 #include "Player/DRPlayerController.h"
+#include "Player/DRInteractionComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/DRSoundDataAsset.h"
@@ -214,7 +215,7 @@ void ADRCleanserPart::RefreshOverlapStateFor(ADRCharacter* Character)
 		!bIsCarried &&
 		!Character->IsCarryingPart();
 
-	PC->SetPartDetectionEnabled(bShouldDetect, this);
+	PC->GetInteractionComponent()->SetPartDetectionEnabled(bShouldDetect, this);
 }
 void ADRCleanserPart::OnRep_bIsCarried()
 {

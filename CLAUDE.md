@@ -84,6 +84,8 @@ ADRHUD
 
 **Important**: Widget controllers are cached singletons. Always use `ADRHUD::GetOverlayWidgetController()` to access.
 
+**Full-screen UI** (Settings, Upgrade, Wardrobe, StageSelect, SlidePuzzle) is owned by `ADRPlayerController`, not the HUD. All five go through `OpenScreen()` / `CloseScreen()` (`EDRScreen`): only one screen is open at a time, input mode switches to UIOnly on open and back via `RestoreDefaultInputMode()` on close, and the widgets are created in C++ from the widget classes set on `BP_DRPlayerController`.
+
 ### Multiplayer Architecture
 
 **Authority Distribution**:
@@ -129,7 +131,7 @@ Tags are centrally managed in `FDRGameplayTags` singleton. Initialize via `Initi
 `ADRCleanserPart` lifecycle:
 1. Attached to enemy as PartMeshComponent
 2. On enemy death, spawned at a ground point found by downward line trace +80uu (`ADREnemy::DropPart()`, no physics impulse)
-3. Player detection via line trace (`PlayerController::FindPartByLineTrace()`)
+3. Player detection via line trace (`UDRInteractionComponent` on the PlayerController — one view ray per tick interval)
 4. Server-authoritative pickup via `ServerRequestPickupPart()`
 5. Attached to player hand socket, disables move speed
 6. Installation at CleanserSite via overlap + interact key
@@ -280,6 +282,10 @@ Enhanced Input System with GAS integration:
 - HUD: `Source/DaeRune/Public/UI/HUD/`
 - Widget Controllers: `Source/DaeRune/Public/UI/WidgetController/`
 - Widgets (Blueprint): `Content/Blueprints/UI/`
+
+### Editor Tools
+- Editor-only module `DaeRuneEditor`: `Source/DaeRuneEditor/` (WBP generators, texture/VFX tools, `UDRBlueprintMaintenanceTools` for BP graph cleanup — called from editor Python)
+- Console cheats (`DR*` commands): `UDRCheatManager` (`Source/DaeRune/Public/Player/DRCheatManager.h`), development builds only
 
 ### Actors
 - CleanserSite: `Source/DaeRune/Public/Actor/DRCleanserSite.h`

@@ -19,6 +19,7 @@
 #include "UObject/ConstructorHelpers.h"
 #include "Net/UnrealNetwork.h"
 #include "Player/DRPlayerController.h"
+#include "Player/DRInteractionComponent.h"
 #include "Sound/SoundBase.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Game/DRProgressionConfig.h"
@@ -151,10 +152,10 @@ void ADRRobotVacuumCharacter::RefreshMountOverlapStateFor(ADRCharacter* Characte
 	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
 	if (!PC || !PC->IsLocalController()) return;
 
-	// 부품 소지/탑승 여부 같은 동적 조건은 FindMountByLineTrace가 매 주기 재검사하므로
+	// 부품 소지/탑승 여부 같은 동적 조건은 상호작용 컴포넌트의 FindMount 가 감지 주기마다 재검사하므로
 	// 여기서는 순수 오버랩 여부만으로 후보 등록/해제한다
 	const bool bShouldDetect = MountDetectionSphere->IsOverlappingActor(Character) && !bDead;
-	PC->SetMountDetectionEnabled(bShouldDetect, this);
+	PC->GetInteractionComponent()->SetMountDetectionEnabled(bShouldDetect, this);
 }
 
 void ADRRobotVacuumCharacter::Tick(float DeltaTime)

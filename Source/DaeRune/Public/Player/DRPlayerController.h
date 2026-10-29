@@ -31,6 +31,8 @@ class ADRS2InteractProp;
 class ADRS2SlidePuzzle;
 class APlayerState;
 class UDRS2SlidePuzzleWidget;
+class UDRInteractionComponent;
+class UUserWidget;
 enum class ELobbyState : uint8;
 
 // 현재 레벨 컨텍스트 (레벨 진입 시 1회 판별해 캐시 - 매 프레임 맵 이름 문자열 연산 방지)
@@ -41,6 +43,18 @@ enum class EDRLevelContext : uint8
 	Lobby,
 	Tutorial,
 	GameLevel
+};
+
+// 전체 화면 UI — 한 번에 하나만 열린다 (하나를 열면 열려 있던 화면은 닫힌다)
+UENUM(BlueprintType)
+enum class EDRScreen : uint8
+{
+	None,
+	Settings,		// 설정 (어디서든)
+	Upgrade,		// 업그레이드 칩 (로비)
+	Wardrobe,		// 옷장 (로비)
+	StageSelect,	// 스테이지 선택 (로비 · 호스트)
+	SlidePuzzle		// 스테이지2 8퍼즐
 };
 
 /**
@@ -71,25 +85,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Input")
 	FOnInteractPressed OnInteractPressed;
 
-	// ========== 부품 시스템 ==========
+	// ========== 상호작용 (부품 · 사이트 · 청소기 · 프롭 · 열차) ==========
 
-	// 부품 감지 활성화/비활성화
-	UFUNCTION(BlueprintCallable, Category = "Part System")
-	void SetPartDetectionEnabled(bool bEnabled, class ADRCleanserPart* Part);
-
-	// 시점 광선 히트(RefreshInteractionViewHits)에서 부품 찾기
-	ADRCleanserPart* FindPartByLineTrace();
-
-	// 현재 감지(라인트레이스) 중인 사이트 (IDRInteractable 구현 액터)
-	UPROPERTY()
-	TObjectPtr<AActor> CurrentOverlappedSite;
-
-	// 사이트 감지 활성화/비활성화 (사이트 박스 오버랩에서 호출)
-	UFUNCTION(BlueprintCallable, Category = "Part System")
-	void SetSiteDetectionEnabled(bool bEnabled, ADRCleanserSite* Site);
-
-	// 시점 광선 히트에서 사이트 찾기
-	ADRCleanserSite* FindSiteByLineTrace();
+	// 상호작용 대상 감지 (로컬). 부품 · 사이트 · 청소기의 감지 범위 오버랩이 감지를 켜고 끈다
+	UDRInteractionComponent* GetInteractionComponent() const { return InteractionComponent; }
 
 	// 상호작용 요청 통합 RPC (부품 획득 / 사이트 설치)
 	// 서버는 클라이언트가 보낸 포인터를 신뢰하지 않고 거리/상태를 검증한다
@@ -102,13 +101,6 @@ public:
 	float MaxInteractDistance = 800.f;
 
 	// ========== 탑승 시스템 (Plan3 Phase B) ==========
-
-	// 청소기 감지 활성화/비활성화 (청소기 MountDetectionSphere 오버랩에서 호출)
-	UFUNCTION(BlueprintCallable, Category = "Mount System")
-	void SetMountDetectionEnabled(bool bEnabled, ADRRobotVacuumCharacter* Mount);
-
-	// 시점 라인트레이스로 탑승 가능한 청소기 찾기 (캡슐을 맞히려고 Pawn 오브젝트 타입 쿼리를 따로 쓴다)
-	ADRRobotVacuumCharacter* FindMountByLineTrace();
 
 	// 하차 요청 (점프키 → 서버 검증 후 DismountRider)
 	UFUNCTION(Server, Reliable)
@@ -163,29 +155,53 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Spectating")
 	void SpectatePreviousPlayer();
 
-	// ========== 설정 메뉴 ========== 
+	// ========== 전체 화면 (설정 · 업그레이드 · 옷장 · 스테이지 선택 · 8퍼즐) ==========
+	//
+	// ★화면 UI 는 HUD 가 아니라 PlayerController 가 소유한다★ — 입력 모드 · 커서 · 위젯 생성/제거가 한 곳에 모여 있어야
+	// 복귀 규칙이 갈라지지 않는다. 다섯 화면 모두 OpenScreen / CloseScreen 한 곳을 지난다.
+	//  - 한 번에 한 화면만 열린다 (열면 열려 있던 화면은 닫힌다)
+	//  - 열 때 UIOnly + 커서, 닫을 때 RestoreDefaultInputMode (메인메뉴/튜토리얼/대기실/스테이지 분기)
+	//  - 위젯은 C++ 이 만든다 (위젯 클래스는 BP_DRPlayerController 에서 지정). BP 훅은 연출용이다
+	// 아래 화면별 함수는 BP · 위젯 · 장치가 부르는 입구다.
+
+	// 지금 열린 화면 (None = 없음)
+	UFUNCTION(BlueprintPure, Category = "UI")
+	EDRScreen GetActiveScreen() const { return ActiveScreen; }
+
+	UFUNCTION(BlueprintPure, Category = "UI")
+	bool IsScreenOpen(EDRScreen Screen) const { return Screen != EDRScreen::None && ActiveScreen == Screen; }
+
+	// 열린 화면이 있으면 닫는다
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void CloseActiveScreen() { CloseScreen(ActiveScreen); }
+
+	// 화면이 열린/닫힌 직후 (BP: 사운드 등 연출용 — ★여기서 CreateWidget 하지 말 것★, 두 장이 뜬다)
+	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
+	void OnScreenOpened(EDRScreen Screen);
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
+	void OnScreenClosed(EDRScreen Screen);
+
+	// ===== 설정 =====
 
 	UFUNCTION(BlueprintCallable, Category = "Settings")
 	void ToggleSettingsMenu();
 
 	UFUNCTION(BlueprintCallable, Category = "Settings")
-	void OpenSettingsMenu();
+	void OpenSettingsMenu() { OpenScreen(EDRScreen::Settings); }
 
 	UFUNCTION(BlueprintCallable, Category = "Settings")
-	void CloseSettingsMenu();
+	void CloseSettingsMenu() { CloseScreen(EDRScreen::Settings); }
 
 	UFUNCTION(BlueprintCallable, Category = "Settings")
-	bool IsSettingsMenuOpen() const { return bIsSettingsMenuOpen; }
+	bool IsSettingsMenuOpen() const { return IsScreenOpen(EDRScreen::Settings); }
+
+	// 설정 화면 위젯 클래스 (BP_DRPlayerController 에서 WBP_SettingsScreen 지정)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<UUserWidget> SettingsScreenWidgetClass;
 
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void ToggleFirstPersonMeshAndHUDVisibility();
-
-	// Blueprint에서 위젯 생성/제거를 구현
-	UFUNCTION(BlueprintImplementableEvent, Category = "Settings")
-	void OnSettingsMenuOpened();
-
-	UFUNCTION(BlueprintImplementableEvent, Category = "Settings")
-	void OnSettingsMenuClosed();
 
 	// ========== 입력 모드 관리 ==========
 
@@ -330,31 +346,22 @@ public:
 
 	// ========== 로비 업그레이드 화면 ==========
 
-	// 업그레이드 장치 상호작용으로 호출 (로컬 UI — RPC 없음)
+	// 업그레이드 장치 상호작용으로 호출 (로컬 UI — RPC 없음). 로비에서만 열린다
 	UFUNCTION(BlueprintCallable, Category = "Upgrade")
-	void OpenUpgradeScreen();
+	void OpenUpgradeScreen() { OpenScreen(EDRScreen::Upgrade); }
 
+	// 닫는 순간 바뀐 장착 상태를 서버에 다시 보고한다
 	UFUNCTION(BlueprintCallable, Category = "Upgrade")
-	void CloseUpgradeScreen();
+	void CloseUpgradeScreen() { CloseScreen(EDRScreen::Upgrade); }
 
 	UFUNCTION(BlueprintPure, Category = "Upgrade")
-	bool IsUpgradeScreenOpen() const { return bIsUpgradeScreenOpen; }
-
-	// ★블루프린트가 위젯을 생성/제거한다★ (설정 메뉴의 OnSettingsMenuOpened/Closed 와 같은 구조)
-	//  - Opened : CreateWidget → AddToViewport → SetKeyboardFocus
-	//  - Closed : RemoveFromParent
-	UFUNCTION(BlueprintImplementableEvent, Category = "Upgrade")
-	void OnUpgradeScreenOpened();
-
-	UFUNCTION(BlueprintImplementableEvent, Category = "Upgrade")
-	void OnUpgradeScreenClosed();
+	bool IsUpgradeScreenOpen() const { return IsScreenOpen(EDRScreen::Upgrade); }
 
 	// 업그레이드 화면 위젯 클래스 (BP_DRPlayerController 에서 WBP_UpgradeScreen 지정).
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TSubclassOf<class UDRUpgradeScreenWidget> UpgradeScreenWidgetClass;
 
-	// BP 가 만든 화면 위젯을 여기 보관해 둔다 (디버그/치트에서 접근하기 위함).
-	// 소유권은 BP 에 있고, 여기서는 약한 참조처럼 쓴다.
+	// C++ 이 만든 화면 위젯 (열 때 생성, 닫을 때 제거)
 	UPROPERTY(BlueprintReadWrite, Transient, Category = "UI")
 	TObjectPtr<UDRUpgradeScreenWidget> UpgradeScreenWidget;
 
@@ -362,23 +369,16 @@ public:
 	//
 	// 업그레이드 화면과 ★완전히 같은 구조★ 다. 옷장도 로컬 세이브만 다루므로 RPC 가 없다.
 
-	// 옷장 상호작용으로 호출 (로컬 UI — RPC 없음)
+	// 옷장 상호작용으로 호출 (로컬 UI — RPC 없음). 로비에서만 열린다
 	UFUNCTION(BlueprintCallable, Category = "Cosmetic")
-	void OpenWardrobeScreen();
+	void OpenWardrobeScreen() { OpenScreen(EDRScreen::Wardrobe); }
 
+	// 닫는 순간 고른 옷을 서버에 보고한다 (열려 있는 동안의 변경은 프리뷰에만 보인다)
 	UFUNCTION(BlueprintCallable, Category = "Cosmetic")
-	void CloseWardrobeScreen();
+	void CloseWardrobeScreen() { CloseScreen(EDRScreen::Wardrobe); }
 
 	UFUNCTION(BlueprintPure, Category = "Cosmetic")
-	bool IsWardrobeScreenOpen() const { return bIsWardrobeScreenOpen; }
-
-	// 화면이 열린/닫힌 직후 (BP: 사운드 등 연출용).
-	// ★위젯 생성/제거는 C++ 이 한다★ — 여기서 CreateWidget 을 또 하면 화면이 두 장 뜬다.
-	UFUNCTION(BlueprintImplementableEvent, Category = "Cosmetic")
-	void OnWardrobeScreenOpened();
-
-	UFUNCTION(BlueprintImplementableEvent, Category = "Cosmetic")
-	void OnWardrobeScreenClosed();
+	bool IsWardrobeScreenOpen() const { return IsScreenOpen(EDRScreen::Wardrobe); }
 
 	// 옷장 화면 위젯 클래스 (BP_DRPlayerController 에서 WBP_Wardrobe 지정).
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
@@ -395,13 +395,13 @@ public:
 
 	// 스테이지 선택 포털(ADRStageSelectActor) 상호작용으로 호출. 호스트가 아니거나 로비가 아니면 무시한다.
 	UFUNCTION(BlueprintCallable, Category = "StageSelect")
-	void OpenStageSelectScreen();
+	void OpenStageSelectScreen() { OpenScreen(EDRScreen::StageSelect); }
 
 	UFUNCTION(BlueprintCallable, Category = "StageSelect")
-	void CloseStageSelectScreen();
+	void CloseStageSelectScreen() { CloseScreen(EDRScreen::StageSelect); }
 
 	UFUNCTION(BlueprintPure, Category = "StageSelect")
-	bool IsStageSelectScreenOpen() const { return bIsStageSelectScreenOpen; }
+	bool IsStageSelectScreenOpen() const { return IsScreenOpen(EDRScreen::StageSelect); }
 
 	// 화면을 열 수 있는 상태인가 (위젯 클래스 지정 + 목록이 비어 있지 않음). 아니면 포털이 예전처럼 바로 이동한다.
 	UFUNCTION(BlueprintPure, Category = "StageSelect")
@@ -415,13 +415,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "StageSelect")
 	bool RequestStageTravel(FName StageId);
 
-	// 화면이 열린/닫힌 직후 (BP: 사운드 등 연출용). ★여기서 CreateWidget 하지 말 것★ — 두 장이 뜬다.
-	UFUNCTION(BlueprintImplementableEvent, Category = "StageSelect")
-	void OnStageSelectScreenOpened();
-
-	UFUNCTION(BlueprintImplementableEvent, Category = "StageSelect")
-	void OnStageSelectScreenClosed();
-
 	// 스테이지 선택 화면 위젯 클래스 (BP_DRPlayerController 에서 WBP_StageSelect 지정).
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TSubclassOf<class UDRStageSelectScreenWidget> StageSelectScreenWidgetClass;
@@ -430,95 +423,12 @@ public:
 	UPROPERTY(BlueprintReadOnly, Transient, Category = "UI")
 	TObjectPtr<UDRStageSelectScreenWidget> StageSelectScreenWidget;
 
-	// ========== 치트/디버그 모드 ==========
+	// ========== 치트/디버그 ==========
+	// 콘솔 치트(DR*)는 UDRCheatManager 에 있다. 이 함수는 BP 의 0 키와 DRSkipPhase 가 부른다.
 
-    // 테스트용 페이즈 스킵 (블루프린트에서 호출)
-    UFUNCTION(BlueprintCallable, Category = "Cheat|Phase")
-    void CheatSkipToNextPhase();
-
-	/**
-	 * 치트: 업그레이드 시스템 해금 + 재화 지급. (Plan2.md 5.1 — 정식 경로는 스테이지1 최초 클리어)
-	 *
-	 * 콘솔(`~`)에서 `DRUnlockUpgrade` / `DRAddCurrency 5000` 으로 부른다.
-	 * 세이브에 즉시 기록되므로 재시작해도 유지된다 — 되돌리려면 DRLockUpgrade 를 쓴다.
-	 */
-	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Upgrade")
-	void DRUnlockUpgrade();
-
-	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Upgrade")
-	void DRAddCurrency(int32 Amount = 5000);
-
-	// 해금 전 상태(잠김 프롬프트/차단 문구)를 다시 확인하고 싶을 때
-	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Upgrade")
-	void DRLockUpgrade();
-
-	/**
-	 * 치트: 슬롯을 Count 개 해금한다(재화는 자동으로 채워 준다).
-	 *
-	 * ★칩은 슬롯을 1칸 이상 해금해야 열린다★ — IsChipUnlocked() 가
-	 * UnlockedSlots >= RequiredSlotTier 로 판정하기 때문이다(DRGameInstance.cpp:651).
-	 * 시스템 해금(DRUnlockUpgrade)만으로는 칩이 잠긴 채로 남는다.
-	 */
-	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Upgrade")
-	void DRUnlockSlot(int32 Count = 1);
-
-	// 현재 진행도를 로그로 덤프 (해금 수 / 재화 / 칩 상태)
-	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Upgrade")
-	void DRDumpUpgrade();
-
-	/**
-	 * 치트: 기본 장착 칩(DefaultEquippedChips)을 다시 꽂는다. (Plan3(공용칩) §6.6)
-	 *
-	 * ★HUD 표시 칩을 뺀 상태에서 빠져나오기 위한 안전망이다.★
-	 * 그 칩을 빼면 체력/물/스킬 아이콘이 전부 사라지는데, 업그레이드 화면 자체는
-	 * 계속 열리므로 원래는 화면에서 되돌릴 수 있다. 다만 로비까지 못 가는 상황
-	 * (스테이지 도중 등)에서는 이 명령이 유일한 복구 수단이다.
-	 * 빈 칸이 없으면 꽂히지 않는다.
-	 */
-	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Upgrade")
-	void DRResetDefaultChips();
-
-	/**
-	 * 치트: 코스메틱 카탈로그의 모든 해금 조건을 달성 처리한다.
-	 * 옷장 UI 를 만들 때 잠긴/해금 상태를 번갈아 확인하기 위한 것이다.
-	 */
-	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Cosmetic")
-	void DRUnlockSkins();
-
-	// 치트: 옷장 화면을 강제로 연다 (로비에서 옷장 액터 없이 UI 를 확인할 때)
-	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Cosmetic")
-	void DROpenWardrobe();
-
-	// 치트: 현재 로봇의 장착 코스메틱을 로그로 덤프
-	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Cosmetic")
-	void DRDumpCosmetic();
-
-	// 치트: 스테이지 선택 화면을 강제로 연다 (포털 없이 UI 확인)
-	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|StageSelect")
-	void DROpenStageSelect();
-
-	/**
-	 * 치트: 카드 상태를 덮어쓴다 — 시안의 "미리보기 상태" 패널. ★세이브에 쓰지 않는다★
-	 *   DRStageState Stage2 locked | normal | cleared | reset
-	 *   DRStageState all reset   (전부 해제)
-	 * 화면이 열려 있으면 바로 다시 그려진다.
-	 */
-	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|StageSelect")
-	void DRStageState(const FString& StageId, const FString& State);
-
-	/**
-	 * 치트: 내 캐릭터를 바로 죽이고 / 되살린다 — 사망 중 옷(부착물) 숨김 확인용 (Plan(옷장) T-3).
-	 * 정식 사망은 오염(Corrupt) 상태에서만 일어나서 확인하기 번거롭다. 개발 빌드에서만 동작한다.
-	 */
-	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Cosmetic")
-	void DRDie();
-
-	UFUNCTION(Exec, BlueprintCallable, Category = "Cheat|Cosmetic")
-	void DRRevive();
-
-private:
-	// 치트가 조작할 대상 로봇 (업그레이드 화면의 GetViewedClass 와 같은 기준)
-	EPlayerCharacterClass GetViewedUpgradeClass() const;
+	// 테스트용 페이즈 스킵 (개발 빌드 전용 — 서버가 다음 페이즈/웨이브로 넘긴다)
+	UFUNCTION(BlueprintCallable, Category = "Cheat|Phase")
+	void CheatSkipToNextPhase();
 
 public:
 
@@ -559,14 +469,12 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Progression|Reward")
 	FDRStageRewardResult LastStageRewardResult;
 
-	// 업그레이드 화면 표시 여부
-	bool bIsUpgradeScreenOpen = false;
+	// 지금 열린 전체 화면 (OpenScreen / CloseScreen 만 바꾼다)
+	EDRScreen ActiveScreen = EDRScreen::None;
 
-	// 옷장 화면 표시 여부
-	bool bIsWardrobeScreenOpen = false;
-
-	// 스테이지 선택 화면 표시 여부
-	bool bIsStageSelectScreenOpen = false;
+	// 설정 화면 위젯 (C++ 이 열 때 만들고 닫을 때 지운다)
+	UPROPERTY(Transient)
+	TObjectPtr<UUserWidget> SettingsScreenWidget;
 
 	// ========== 대기실 UI ==========
 
@@ -620,15 +528,9 @@ protected:
 	UFUNCTION()
 	void OnLobbyStateChangedForUI(ELobbyState NewState);
 
-	// ========== 부품 시스템 설정 ==========
-
-	// 라인트레이싱 거리
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Part System|Config")
-	float LineTraceDistance = 250.f;
-
-	// 라인트레이싱 업데이트 간격 (초)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Part System|Config")
-	float LineTraceUpdateInterval = 0.1f;
+	// 상호작용 대상 감지 (부품 · 사이트 · 청소기 · 프롭 · 열차 칸 — 광선 거리 · 간격도 여기 있다)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction")
+	TObjectPtr<UDRInteractionComponent> InteractionComponent;
 
 private:
 	FGenericTeamId TeamId;
@@ -685,12 +587,6 @@ private:
 	// 관전 입력 처리
 	void HandleSpectateNext();
 	void HandleSpectatePrevious();
-
-	// 설정 메뉴 열림 상태
-	bool bIsSettingsMenuOpen = false;
-
-	// 8퍼즐 화면 열림 여부 (설정 메뉴와 같은 역할)
-	bool bIsSlidePuzzleOpen = false;
 
 	// 관전 대상 설정
 	void SetSpectateTarget(ACharacter* NewTarget);
@@ -783,75 +679,12 @@ private:
 	// Seamless Travel 시 캐릭터 클래스 보존 (PlayerController는 Travel에서 생존)
 	EPlayerCharacterClass CachedSelectedClass = EPlayerCharacterClass::Gardener;
 
-	// 라인트레이싱 활성화 여부
-	bool bPartDetectionEnabled = false;
-
-	// 사이트 라인트레이스 감지 활성화 여부 (사이트 박스 오버랩 중일 때 true)
-	bool bSiteDetectionEnabled = false;
-
-	// 박스 오버랩 중인 사이트 집합 (감지 후보, 여러 사이트 동시 오버랩 대응)
-	TSet<TWeakObjectPtr<AActor>> OverlappedSites;
-
-	// 청소기 탑승 감지 활성화 여부 (MountDetectionSphere 오버랩 중일 때 true)
-	bool bMountDetectionEnabled = false;
-
-	// 오버랩 중인 청소기 집합 (탑승 감지 후보)
-	TSet<TWeakObjectPtr<AActor>> OverlappedMounts;
-
-	// 현재 감지(라인트레이스) 중인 청소기 (IDRInteractable 구현 액터)
-	UPROPERTY()
-	TObjectPtr<AActor> CurrentDetectedMount;
-
-	// ========== 상호작용 감지 공통 처리 (Part/Site 공용) ==========
-
-	// 오버랩 집합 등록/해제 + 감지 플래그 갱신 + 이탈 시 UI 정리
-	void SetInteractableDetectionEnabled(bool bEnabled, AActor* Interactable,
-		TSet<TWeakObjectPtr<AActor>>& OverlapSet, bool& bDetectionFlag, TObjectPtr<AActor>& CurrentDetected);
-
-	// 현재 감지 대상 전환 + 상호작용 UI 위젯 토글 (IDRInteractable)
-	void SetCurrentDetectedInteractable(AActor* NewDetected, TObjectPtr<AActor>& CurrentDetected);
-
-	// 사이트 감지 변화를 조준선 UI(OverlayWidgetController)에 전달 (로컬 전용)
-	void NotifyCrosshairSiteDetected(bool bDetected);
-
-
-	// 라인트레이싱 타이머
-	float LineTraceTimer = 0.f;
-
 	// 탑승 요 동기화 전송 간격 타이머 / 마지막 전송 값 (클라 전용)
 	float MountedYawSyncTimer = 0.f;
 	float LastSentMountedYaw = 0.f;
 
-	// 현재 근처에 있는 부품
-	TSet<TWeakObjectPtr<AActor>> OverlappedParts;
-
-	// 현재 감지(라인트레이스) 중인 부품 (IDRInteractable 구현 액터)
-	UPROPERTY()
-	TObjectPtr<AActor> CurrentDetectedPart;
-
-	// ========== 스테이지2 상호작용 프롭 (Plan6 §5.5-b) ==========
-	// 레버/버튼/단말 등 조작 대상을 하나의 슬롯 + 하나의 분기로 처리한다.
-
-	UPROPERTY()
-	TObjectPtr<AActor> CurrentDetectedProp;
-
-	ADRS2InteractProp* FindPropByLineTrace();
-
-	// ========== 열차 좌석 (Plan6 §5.5) ==========
-
-	UPROPERTY()
-	TObjectPtr<AActor> CurrentDetectedCar;
-
-	class ADRS2TrainCar* FindTrainCarByLineTrace();
-
 	// 결과 화면(게임 오버 · 클리어 · 튜토리얼 클리어) 공통 표시 — 이미 떠 있으면 무시
 	void ShowResultWidget(TSubclassOf<UUserWidget> WidgetClass);
-
-	// ===== 시점 상호작용 트레이스 (감지 주기마다 1회) =====
-	bool GetInteractionViewRay(FVector& OutStart, FVector& OutEnd) const;
-	void RefreshInteractionViewHits();
-	const FHitResult* GetInteractionViewBlockingHit() const;
-	TArray<FHitResult> InteractionViewHits;
 
 	// 점프 키로 하차 요청 (마운트 하차와 동일 관례)
 	UFUNCTION(Server, Reliable)
@@ -870,20 +703,20 @@ public:
 	 * 떴다 사라지는 '창'은 전부 여기서 만든다 (CreateWaitingRoomUI / 게임오버 / 업그레이드 / 옷장).
 	 * 입력 모드·커서·위젯 생성/제거가 한 곳에 모여 있어야 복귀 규칙이 갈라지지 않는다.
 	 *
-	 * ★입력 모드는 이 두 함수에서만 바꾼다★
+	 * ★입력 모드는 OpenScreen / CloseScreen 에서만 바꾼다★ (다섯 화면 공통)
 	 * 복귀는 RestoreDefaultInputMode() 가 메인메뉴/튜토리얼/대기실/스테이지를 갈라서 처리한다.
 	 * 위젯이나 BP 가 각자 SetInputMode 를 부르면 그 규칙이 두 곳으로 갈라진다.
 	 *
 	 * BP 가 할 일은 없다. 위젯 클래스만 SlidePuzzleWidgetClass 에 지정하면 된다.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "S2|Puzzle")
-	void OpenSlidePuzzleScreen(ADRS2SlidePuzzle* Puzzle);
+	void OpenSlidePuzzleScreen(ADRS2SlidePuzzle* Puzzle) { OpenScreen(EDRScreen::SlidePuzzle, Puzzle); }
 
 	UFUNCTION(BlueprintCallable, Category = "S2|Puzzle")
-	void CloseSlidePuzzleScreen();
+	void CloseSlidePuzzleScreen() { CloseScreen(EDRScreen::SlidePuzzle); }
 
 	UFUNCTION(BlueprintPure, Category = "S2|Puzzle")
-	bool IsSlidePuzzleScreenOpen() const { return bIsSlidePuzzleOpen; }
+	bool IsSlidePuzzleScreenOpen() const { return IsScreenOpen(EDRScreen::SlidePuzzle); }
 
 	UFUNCTION(BlueprintPure, Category = "S2|Puzzle")
 	UDRS2SlidePuzzleWidget* GetSlidePuzzleWidget() const { return SlidePuzzleWidget; }
@@ -892,16 +725,7 @@ public:
 	UFUNCTION(Client, Reliable)
 	void Client_SlidePuzzleBusy(ADRS2SlidePuzzle* Puzzle, APlayerState* Occupant);
 
-	// ===== BP 훅 (전부 선택 - 사운드/안내 연출용) =====
-	// 위젯 생성/제거는 C++ 이 한다. 여기서는 연출만 얹는다.
-
-	UFUNCTION(BlueprintImplementableEvent, Category = "S2|Puzzle")
-	void OnSlidePuzzleScreenOpened(ADRS2SlidePuzzle* Puzzle);
-
-	UFUNCTION(BlueprintImplementableEvent, Category = "S2|Puzzle")
-	void OnSlidePuzzleScreenClosed();
-
-	/** 다른 사람이 조작 중이라 열리지 않았다. "OOO 님이 사용 중" 안내를 띄운다. */
+	/** 다른 사람이 조작 중이라 열리지 않았다 (BP 연출 훅 — 선택). "OOO 님이 사용 중" 안내를 띄운다. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "S2|Puzzle")
 	void OnSlidePuzzleScreenBusy(APlayerState* Occupant);
 
@@ -948,4 +772,22 @@ private:
 
 	UFUNCTION(Server, Reliable)
 	void ServerCheatRevive();
+
+	// 콘솔 치트가 위 서버 RPC 를 부른다 (치트 매니저는 복제되지 않아 RPC 를 직접 가질 수 없다)
+	friend class UDRCheatManager;
+
+	// ===== 전체 화면 공통 처리 =====
+
+	// 화면을 연다. 열 수 없으면(로비 전용 · 호스트 전용 · 위젯 클래스 미지정) false. 다른 화면이 열려 있으면 먼저 닫는다
+	bool OpenScreen(EDRScreen Screen, ADRS2SlidePuzzle* Puzzle = nullptr);
+
+	// 그 화면이 열려 있으면 닫는다. bLevelTransition = 레벨 이동 정리 (입력 모드 복구 · 서버 재보고는 OnLevelEntered 가 한다)
+	void CloseScreen(EDRScreen Screen, bool bLevelTransition = false);
+
+	bool CanOpenScreen(EDRScreen Screen, const ADRS2SlidePuzzle* Puzzle) const;
+	TSubclassOf<UUserWidget> GetScreenWidgetClass(EDRScreen Screen) const;
+
+	// 화면 위젯 생성 · 표시 (실패하면 false) / 제거
+	bool ShowScreenWidget(EDRScreen Screen, ADRS2SlidePuzzle* Puzzle);
+	void HideScreenWidget(EDRScreen Screen);
 };
