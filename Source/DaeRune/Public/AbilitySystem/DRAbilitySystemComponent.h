@@ -48,7 +48,6 @@ public:
 	bool IsAbilityTagBlocked(const FGameplayTag& AbilityTag) const;
 
 	void AddCharacterAbilities(const TArray<TSubclassOf<UGameplayAbility>>& StartupAbilities);
-	void AddCharacterPassiveAbilities(const TArray<TSubclassOf<UGameplayAbility>>& StartupPassiveAbilities);
 	bool bStartupAbilitiesGiven = false;
 
 	void AbilityInputTagPressed(const FGameplayTag& InputTag);

@@ -126,12 +126,6 @@ void ADRFlyingEnemy::MaintainFixedAltitude()
 	}
 }
 
-void ADRFlyingEnemy::OnMoveSpeedChanged(const FOnAttributeChangeData& Data)
-{
-	// Flying 모드에서는 MaxFlySpeed를 사용 (부모는 MaxWalkSpeed만 설정)
-	GetCharacterMovement()->MaxFlySpeed = Data.NewValue;
-}
-
 void ADRFlyingEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);

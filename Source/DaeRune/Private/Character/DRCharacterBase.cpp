@@ -486,16 +486,6 @@ void ADRCharacterBase::InitializeDefaultAttributes() const
 	ApplyEffectToSelf(DefaultVitalAttributes);
 }
 
-void ADRCharacterBase::AddCharacterAbilities()
-{
-	UDRAbilitySystemComponent* DRASC = CastChecked<UDRAbilitySystemComponent>(AbilitySystemComponent);
-	if (!HasAuthority()) return;
-
-	// 액티브 어빌리티와 패시브 어빌리티 추가
-	DRASC->AddCharacterAbilities(StartupAbilities);
-	DRASC->AddCharacterPassiveAbilities(StartupPassiveAbilities);
-}
-
 void ADRCharacterBase::OnMoveSpeedChanged(const FOnAttributeChangeData& Data)
 {
 	GetCharacterMovement()->MaxWalkSpeed = Data.NewValue;

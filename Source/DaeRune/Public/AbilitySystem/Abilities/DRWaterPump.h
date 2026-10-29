@@ -78,9 +78,6 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category = "Water Pump")
     void OnBeamEndPointUpdated(const FVector& EndPoint);
 
-    UFUNCTION(BlueprintCallable, Category = "Water Pump")
-    FGameplayAbilityTargetDataHandle MakeTargetDataHandleFromActors(AActor* TargetActor);
-
     /**
      * ★Plan5(물대포칩)★ 아군 1명에게 물을 지급한다. ★서버에서만 유효★
      *

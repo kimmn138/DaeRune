@@ -593,20 +593,6 @@ void UDRWaterPump::PerformWaterPumpTick()
     }
 }
 
-FGameplayAbilityTargetDataHandle UDRWaterPump::MakeTargetDataHandleFromActors(AActor* TargetActor)
-{
-    FGameplayAbilityTargetDataHandle TargetDataHandle;
-
-    if (!TargetActor) return TargetDataHandle;
-
-    FGameplayAbilityTargetData_ActorArray* TargetData = new FGameplayAbilityTargetData_ActorArray();
-    TargetData->TargetActorArray.Add(TargetActor);
-
-    TargetDataHandle.Add(TargetData);
-
-    return TargetDataHandle;
-}
-
 void UDRWaterPump::StartBeamEffect()
 {
 if (!WaterCannonEffect)

@@ -169,8 +169,6 @@ protected:
 	void ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass) const;
 	virtual void InitializeDefaultAttributes() const;
 
-	void AddCharacterAbilities();
-
 	virtual void OnMoveSpeedChanged(const FOnAttributeChangeData& Data);
 
 	virtual float GetMoveSpeed();
@@ -207,13 +205,6 @@ protected:
 	TObjectPtr<UDebuffNiagaraComponent> StunDebuffComponent;
 
 private:
-	// 시작 시 부여할 어빌리티들
-	UPROPERTY(EditAnywhere, Category = "Abilities")
-	TArray<TSubclassOf<UGameplayAbility>> StartupAbilities;
-
-	UPROPERTY(EditAnywhere, Category = "Abilities")
-	TArray<TSubclassOf<UGameplayAbility>> StartupPassiveAbilities;
-
 	// 피격 몽타주
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	TArray<TObjectPtr<UAnimMontage>> HitReactMontages;
