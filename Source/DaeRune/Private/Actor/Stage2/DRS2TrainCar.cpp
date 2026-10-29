@@ -56,10 +56,18 @@ void ADRS2TrainCar::BeginPlay()
 		OwningTrain = Cast<ADRS2Train>(GetAttachParentActor());
 	}
 
+	// 열차가 자기 BeginPlay(InitializeCars)에서 칸을 배선하므로, 칸이 먼저 시작하면 아직 비어 있다 —
+	// 모든 액터의 BeginPlay 가 끝난 다음 틱에 다시 본다 (바로 검사하면 정상 배치에서도 거짓 오류가 났다)
 	if (HasAuthority() && !OwningTrain)
 	{
-		UE_LOG(LogDR, Error,
-			TEXT("[S2TrainCar] %s: 소유 열차를 찾지 못했습니다. 열차의 Cars 배열에 배선하세요."), *GetName());
+		GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			if (!OwningTrain)
+			{
+				UE_LOG(LogDR, Error,
+					TEXT("[S2TrainCar] %s: 소유 열차를 찾지 못했습니다. 열차의 Cars 배열에 배선하세요."), *GetName());
+			}
+		}));
 	}
 }
 
