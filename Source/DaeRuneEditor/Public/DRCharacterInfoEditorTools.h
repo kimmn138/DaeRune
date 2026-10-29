@@ -29,7 +29,7 @@
  * 컴파일까지 하고, 저장은 부른 쪽(Python)이 한다.
  */
 UCLASS()
-class DAERUNE_API UDRCharacterInfoEditorTools : public UBlueprintFunctionLibrary
+class DAERUNEEDITOR_API UDRCharacterInfoEditorTools : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 

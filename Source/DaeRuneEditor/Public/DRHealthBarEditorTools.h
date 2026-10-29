@@ -22,7 +22,7 @@
  *   log = unreal.DRHealthBarEditorTools.fix_health_water_bar_widget()
  */
 UCLASS()
-class DAERUNE_API UDRHealthBarEditorTools : public UBlueprintFunctionLibrary
+class DAERUNEEDITOR_API UDRHealthBarEditorTools : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 

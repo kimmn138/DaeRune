@@ -24,7 +24,7 @@ class USkeletalMesh;
  * 몇 번을 다시 돌려도 같은 결과가 나오게(멱등) 짰다.
  */
 UCLASS()
-class DAERUNE_API UDRWardrobeEditorTools : public UBlueprintFunctionLibrary
+class DAERUNEEDITOR_API UDRWardrobeEditorTools : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 

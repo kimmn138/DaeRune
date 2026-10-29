@@ -16,7 +16,7 @@ class UWidgetBlueprint;
  *   unreal.DRTextureEditorTools.dump_widget_images(wbp)
  */
 UCLASS()
-class DAERUNE_API UDRTextureEditorTools : public UBlueprintFunctionLibrary
+class DAERUNEEDITOR_API UDRTextureEditorTools : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 

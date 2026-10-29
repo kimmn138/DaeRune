@@ -1,7 +1,7 @@
 // Copyright DaeRune
 
 
-#include "Editor/DRCharacterInfoEditorTools.h"
+#include "DRCharacterInfoEditorTools.h"
 
 #if WITH_EDITOR
 #include "WidgetBlueprint.h"

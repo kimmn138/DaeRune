@@ -16,7 +16,7 @@ class UNiagaraSystem;
  *   n = unreal.DRVFXEditorTools.set_niagara_emitters_local_space(sys, True)
  */
 UCLASS()
-class DAERUNE_API UDRVFXEditorTools : public UBlueprintFunctionLibrary
+class DAERUNEEDITOR_API UDRVFXEditorTools : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 

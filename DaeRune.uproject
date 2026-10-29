@@ -17,6 +17,16 @@
 				"AIModule",
 				"Niagara"
 			]
+		},
+		{
+			"Name": "DaeRuneEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"Engine",
+				"CoreUObject",
+				"UnrealEd"
+			]
 		}
 	],
 	"Plugins": [

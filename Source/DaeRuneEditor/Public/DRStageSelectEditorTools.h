@@ -20,7 +20,7 @@
  * 저장은 하지 않는다 — 부른 쪽(Python)이 저장한다.
  */
 UCLASS()
-class DAERUNE_API UDRStageSelectEditorTools : public UBlueprintFunctionLibrary
+class DAERUNEEDITOR_API UDRStageSelectEditorTools : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 
