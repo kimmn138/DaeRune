@@ -34,8 +34,6 @@ protected:
 	void OnCreateSession(bool bWasSuccessful);
 	void OnFindSessions(const TArray<FOnlineSessionSearchResult>& SessionResults, bool bWasSuccessful);
 	void OnJoinSession(EOnJoinSessionCompleteResult::Type Result);
-	UFUNCTION()
-	void OnDestroySession(bool bWasSuccessful);
 
 private:
 	UPROPERTY(meta = (BindWidget))
@@ -69,6 +67,12 @@ private:
 
 	void MenuTearDown();
 
+	// 서브시스템은 GameInstance 수명이라 메뉴보다 오래 산다 — 메뉴가 사라질 때 바인딩을 풀어야 쌓이지 않는다
+	void UnbindSubsystemDelegates();
+
+	FDelegateHandle FindSessionsHandle;
+	FDelegateHandle JoinSessionHandle;
+
 	// The subsystem designed to handle all online session functionality
 	UPROPERTY()
 	UMultiplayerSessionsSubsystem* MultiplayerSessionsSubsystem;
@@ -76,6 +80,6 @@ private:
 	int32 NumPublicConnections{4};
 	FString PathToLobby{TEXT("")};
 
-	// �����Ϸ��� �� �ڵ� ����
+	// 참가를 요청한 룸 코드 (검색 결과에서 같은 코드의 방을 고른다)
 	FString PendingJoinRoomCode;
 };

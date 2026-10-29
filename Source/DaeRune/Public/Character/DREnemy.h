@@ -5,7 +5,8 @@
 #include "CoreMinimal.h"
 #include "Character/DRCharacterBase.h"
 #include "Interaction/EnemyInterface.h"
-#include "UI/WidgetController/OverlayWidgetController.h"
+#include "UI/WidgetController/DRAttributeChangedDelegate.h"
+#include "AI/DRBlackboardKeys.h"
 #include "DREnemy.generated.h"
 
 class UBlackboardComponent;
@@ -17,36 +18,6 @@ class UNiagaraSystem;
 class UNiagaraComponent;
 
 // Blackboard 키 상수 (하드코딩 방지)
-namespace DRBlackboardKeys
-{
-	// AI 상태
-	inline const FName HitReacting = TEXT("HitReacting");
-	inline const FName RangedAttacker = TEXT("RangedAttacker");
-	inline const FName HomeLocation = TEXT("HomeLocation");
-	inline const FName Dead = TEXT("Dead");
-	inline const FName Stunned = TEXT("Stunned");
-
-	// 부품 시스템
-	inline const FName HasPart = TEXT("HasPart");
-
-	// 광폭화 시스템
-	inline const FName IsEnraged = TEXT("bIsEnraged");
-	inline const FName AttackSpeed = TEXT("AttackSpeed");
-	inline const FName EliteAttackSpeed = TEXT("EliteAttackSpeed");
-
-	// 타겟팅
-	inline const FName FirstAttacker = TEXT("FirstAttacker");
-	inline const FName HasFirstAttacker = TEXT("HasFirstAttacker");
-	inline const FName TargetToFollow = TEXT("TargetToFollow");
-	// ★Plan8(시선집중)★ 타깃 서비스들이 쓰는 거리 키 (Plan8 D-16)
-	inline const FName DistanceToTarget = TEXT("DistanceToTarget");
-	// ★Plan8(시선집중)★ BTS_CheckValidTarget 의 "벽에 가림" 타이머 — 도발 동안 0 으로 되돌린다 (Plan8 D-16)
-	inline const FName UnreachableSince = TEXT("UnreachableSince");
-
-	// DragonFly 전용
-	inline const FName IsLockedDown = TEXT("IsLockedDown");
-	inline const FName BasicAttackCount = TEXT("BasicAttackCount");
-}
 
 /**
  * 적 캐릭터 기본 클래스
@@ -109,6 +80,9 @@ public:
 	// 넉백 상태 설정/해제
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	void SetKnockbackState(bool bInKnockback);
+
+	// 넉백 시작 — MaxDuration 뒤 자동 해제 (다시 맞으면 타이머를 새로 건다)
+	void BeginKnockback(float MaxDuration);
 
 	// ===== 튜토리얼 더미 시스템 =====
 
@@ -189,6 +163,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "VFX|Taunt")
 	TObjectPtr<UNiagaraSystem> TauntedVFX;
 
+#if WITH_EDITOR
+	// 에셋 기본값(예전 생성자 하드코딩 경로 → BP 기본값)이 비었는지 저장 · 데이터 검증 때 알린다
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+#endif
+
 	/** 붙일 메시 소켓. 비우면 캡슐 꼭대기(+TauntedVFXHeightOffset) */
 	UPROPERTY(EditDefaultsOnly, Category = "VFX|Taunt")
 	FName TauntedVFXSocket = NAME_None;
@@ -199,8 +178,6 @@ protected:
 
 	void TauntedTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 	virtual void RefreshTagDrivenVFX() override;
-
-	virtual float GetMoveSpeed() override;
 
 	// 액터 회전이 ControlRotation 을 따라잡는 보간 속도 (Tick 의 RInterpTo).
 	// 기본값 10.0 은 기존 하드코딩 값과 동일하므로 기존 적의 동작은 변하지 않는다.
@@ -216,9 +193,12 @@ protected:
 	UPROPERTY()
 	TObjectPtr<ADRAIController> DRAIController;
 
-	// 공격당 물 보상 감소량 (음수값)
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water System", meta = (ClampMin = "0.0"))
+	// 공격당 물 보상 감소량 (음수값 — 밸런스 설정이 덮어쓴다). ClampMin 0 이면 에디터에서 만지는 순간 0 으로 잘렸다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water System", meta = (ClampMax = "0.0"))
 	float WaterReductionPerAttack = -10.f;
+
+	// 공격당 물 보상 감소 사용 여부 (밸런스 설정 WaterSystem.bReduceWaterRewardOnAttack)
+	bool bReduceWaterRewardOnAttack = false;
 
 	// 물 폭발 반경 (일반 적)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Water System", meta = (ClampMin = "100.0"))
@@ -236,31 +216,31 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Water System")
 	TSubclassOf<UGameplayEffect> WaterGrantEffectClass;
 
-	// ========== 占쏙옙 占썸돌 占쏙옙占쏙옙 占시쏙옙占쏙옙 占쌩곤옙 ==========
+	// ========== 벽 충돌 기절 시스템 추가 ==========
 
-	// Hit 占싱븝옙트 占쌘들러
+	// Hit 이벤트 핸들러
 	UFUNCTION()
 	void OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit);
 
-	// 占쏙옙 占쏙옙占쏙옙 占쏙옙占쏙옙 占쌉쇽옙
+	// 벽 스턴 적용 함수
 	void ApplyWallStun();
 
-	// 占쏙옙占쏙옙 占썽역 占쏙옙占쏙옙
+	// 스턴 면역 종료
 	void EndStunImmunity();
 
 	// 넉백 상태 플래그
 	UPROPERTY(BlueprintReadOnly, Category = "Combat|Wall Stun")
 	bool bIsBeingKnockedBack = false;
 
-	// 占썸돌 占쏙옙占쏙옙 占쌈계값
+	// 충돌 강도 임계값
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "100.0", ClampMax = "2000.0"))
 	float MinSpeedForStun = 50.f;
 
-	// 占쏙옙占쏙옙 占쏙옙占쏙옙 占시곤옙
+	// 스턴 지속 시간
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "0.5", ClampMax = "5.0"))
 	float WallStunDuration = 5.0f;
 
-	// 占쏙옙占쏙옙 占썽역 占시곤옙 (占쏙옙占쏙옙 占쏙옙占쏙옙 占쏙옙)
+	// 스턴 면역 시간 (스턴 종료 후)
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Wall Stun", meta = (ClampMin = "0.0", ClampMax = "10.0"))
 	float StunImmunityDuration = 5.0f;
 
@@ -297,11 +277,14 @@ private:
 	UPROPERTY()
 	int32 AttackCount = 0;
 
-	// 占쏙옙占쏙옙 占썽역 占쏙옙占쏙옙
+	// 스턴 면역 상태
 	bool bIsStunImmune = false;
 
-	// 占쏙옙占쏙옙 占썽역 타占싱몌옙
+	// 스턴 면역 타이머
 	FTimerHandle StunImmunityTimerHandle;
+
+	// 넉백 안전 해제 타이머
+	FTimerHandle KnockbackEndTimerHandle;
 
 	bool bPartDropped = false;
 

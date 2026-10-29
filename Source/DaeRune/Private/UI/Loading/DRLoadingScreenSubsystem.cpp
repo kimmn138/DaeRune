@@ -199,20 +199,38 @@ void UDRLoadingScreenSubsystem::HandlePostLoadMap(UWorld* LoadedWorld)
 		return;
 	}
 
+	PlayOutroAndRemove(Widget);
+}
+
+void UDRLoadingScreenSubsystem::PlayOutroAndRemove(UDRLoadingScreenWidget* Widget)
+{
+	if (!Widget) return;
+
 	TWeakObjectPtr<UDRLoadingScreenSubsystem> WeakThis(this);
 	TWeakObjectPtr<UDRLoadingScreenWidget> WeakWidget(Widget);
 
-	Widget->OnOutroFinished.AddLambda([WeakThis, WeakWidget]()
+	auto RemoveWidget = [WeakThis, WeakWidget]()
 	{
 		if (WeakWidget.IsValid())
 		{
 			WeakWidget->RemoveFromParent();
 		}
-		if (WeakThis.IsValid() && WeakThis->ActiveWidget == WeakWidget.Get())
+		if (WeakThis.IsValid() && WeakWidget.IsValid() && WeakThis->ActiveWidget == WeakWidget.Get())
 		{
 			WeakThis->ActiveWidget = nullptr;
 		}
-	});
+	};
+
+	// 퇴장 애니 종료 시 제거
+	Widget->OnOutroFinished.AddLambda(RemoveWidget);
+
+	// ★안전장치★: WBP 가 NotifyOutroFinished 를 부르지 않아도 일정 시간 뒤 강제 제거 —
+	// 없으면 로딩 화면이 게임을 영구히 덮는다 (일반 OpenLevel · 심리스 두 경로 공통)
+	if (UWorld* World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr)
+	{
+		FTimerHandle SafetyHandle;
+		World->GetTimerManager().SetTimer(SafetyHandle, FTimerDelegate::CreateLambda(RemoveWidget), MaxIntroWaitTime, false);
+	}
 
 	Widget->PlayOutro();
 }
@@ -327,34 +345,7 @@ void UDRLoadingScreenSubsystem::PlaySeamlessOutro()
 		Outro->SetLoadingMessage(SeamlessLoadingMessage);
 	}
 
-	TWeakObjectPtr<UDRLoadingScreenWidget> WeakWidget(Outro);
-
-	// 퇴장 애니 종료 시 제거.
-	Outro->OnOutroFinished.AddLambda([WeakWidget]()
-	{
-		if (WeakWidget.IsValid())
-		{
-			WeakWidget->RemoveFromParent();
-		}
-	});
-
-	// 안전장치: WBP가 NotifyOutroFinished를 호출하지 않아도 일정 시간 뒤 강제 제거.
-	if (UGameInstance* GI = GetGameInstance())
-	{
-		if (UWorld* World = GI->GetWorld())
-		{
-			FTimerHandle SafetyHandle;
-			World->GetTimerManager().SetTimer(SafetyHandle, FTimerDelegate::CreateLambda([WeakWidget]()
-			{
-				if (WeakWidget.IsValid())
-				{
-					WeakWidget->RemoveFromParent();
-				}
-			}), MaxIntroWaitTime, false);
-		}
-	}
-
-	Outro->PlayOutro();
+	PlayOutroAndRemove(Outro);
 }
 
 #undef LOCTEXT_NAMESPACE

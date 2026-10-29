@@ -27,7 +27,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
-#include "UObject/ConstructorHelpers.h"
+#include "Misc/DataValidation.h"
 
 ADREnemy::ADREnemy()
 {
@@ -39,21 +39,13 @@ ADREnemy::ADREnemy()
 
 	// 폰 기본값(3.0)이면 적 100마리가 플레이어와 동순위로 경쟁 - 낮춰서 대역폭 포화 시 플레이어 갱신 보호
 	NetPriority = 2.0f;
-	NetUpdateFrequency = 30.0f;
-	MinNetUpdateFrequency = 15.0f;
+	SetNetUpdateFrequency(30.0f);
+	SetMinNetUpdateFrequency(15.0f);
 
 	// GAS 컴포넌트 초기화 - 리슨서버용 최소 리플리케이션
 	AbilitySystemComponent = CreateDefaultSubobject<UDRAbilitySystemComponent>("AbilitySystemComponent");
 	AbilitySystemComponent->SetIsReplicated(true);
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
-
-	// 도발 표시 이펙트 — 모든 적 공통이라 BP 마다 넣지 않고 여기서 기본값을 준다
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> TauntedVFXFinder(
-		TEXT("/Game/Basic_VFX/Niagara/Taunt/Enemy_Effect/TauntEnemy_NS.TauntEnemy_NS"));
-	if (TauntedVFXFinder.Succeeded())
-	{
-		TauntedVFX = TauntedVFXFinder.Object;
-	}
 
 	// AI 회전 설정 - 직접 회전 제어 (CharacterMovement 회전 비활성화)
 	bUseControllerRotationPitch = false;
@@ -220,7 +212,11 @@ void ADREnemy::Die(const FVector& DeathImpulse)
 	// AI 상태 업데이트
 	if (DRAIController)
 	{
-		DRAIController->GetBlackboardComponent()->SetValueAsBool(DRBlackboardKeys::Dead, true);
+		// 튜토리얼 더미 등 BT 를 돌리지 않는 적은 블랙보드가 없다
+		if (UBlackboardComponent* BB = DRAIController->GetBlackboardComponent())
+		{
+			BB->SetValueAsBool(DRBlackboardKeys::Dead, true);
+		}
 		// AI Focus 해제 - 사망 후 플레이어 방향 추적 중지
 		DRAIController->ClearFocus(EAIFocusPriority::Gameplay);
 	}
@@ -301,38 +297,40 @@ void ADREnemy::ActivateDeathAbilities()
 	FGameplayTagContainer DeathTags;
 	DeathTags.AddTag(GameplayTags.Abilities_Death);
 
-	// 발동 시도
-	bool bActivated = AbilitySystemComponent->TryActivateAbilitiesByTag(DeathTags);
+	AbilitySystemComponent->TryActivateAbilitiesByTag(DeathTags);
 }
 
 void ADREnemy::ReduceWaterReward()
 {
-	//if (!HasAuthority() || !WaterReductionEffectClass) return;
+	// 꺼져 있으면(기본) 아무 일도 하지 않는다 — 밸런스 설정에서 켠다
+	if (!bReduceWaterRewardOnAttack || !HasAuthority() || !WaterReductionEffectClass) return;
 
-	//// 현재 물이 없으면 감소시키지 않음
-	//const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets);
-	//if (!DRAS || DRAS->GetWater() <= 0.f) return;
+	// 현재 물이 없으면 감소시키지 않음
+	const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets);
+	if (!DRAS || DRAS->GetWater() <= 0.f) return;
 
-	//// TEMP: 공격당 물 감소 비활성화 (테스트용, 되돌릴 때 이 라인 제거)
-	//return;
-
-	//// 헬퍼 함수로 간소화된 GE 생성 및 적용
-	//FGameplayEffectSpecHandle SpecHandle = UDRAbilitySystemLibrary::CreateEffectSpec(
-	//	AbilitySystemComponent, WaterReductionEffectClass, this);
-
-	//if (SpecHandle.IsValid())
-	//{
-	//	UDRAbilitySystemLibrary::ApplyEffectSpecWithSetByCaller(
-	//		AbilitySystemComponent,
-	//		SpecHandle,
-	//		FDRGameplayTags::Get().Water_SetByCaller_Reduction,
-	//		WaterReductionPerAttack);
-	//}
+	FGameplayEffectSpecHandle SpecHandle = UDRAbilitySystemLibrary::CreateEffectSpec(
+		AbilitySystemComponent, WaterReductionEffectClass, this);
+	if (SpecHandle.IsValid())
+	{
+		UDRAbilitySystemLibrary::ApplyEffectSpecWithSetByCaller(
+			AbilitySystemComponent, SpecHandle, FDRGameplayTags::Get().Water_SetByCaller_Reduction, WaterReductionPerAttack);
+	}
 }
 
 void ADREnemy::SetKnockbackState(bool bInKnockback)
 {
 	bIsBeingKnockedBack = bInKnockback;
+}
+
+void ADREnemy::BeginKnockback(float MaxDuration)
+{
+	SetKnockbackState(true);
+
+	// ★멤버 타이머★ — 지역 핸들이면 연속 넉백 때 첫 타이머가 두 번째 넉백을 일찍 풀었고,
+	// 원시 포인터 람다는 적이 파괴된 뒤 불릴 수 있었다 (멤버 함수 바인딩은 파괴 시 함께 정리된다)
+	GetWorldTimerManager().SetTimer(KnockbackEndTimerHandle,
+		FTimerDelegate::CreateUObject(this, &ADREnemy::SetKnockbackState, false), MaxDuration, false);
 }
 
 bool ADREnemy::DropPart()
@@ -436,6 +434,13 @@ void ADREnemy::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// Tick 은 서버의 바라보기 회전만 한다 — 클라는 복제된 회전을 따라가므로 적 수(최대 100)만큼의 빈 Tick 을 끈다.
+	// (적 BP 들에는 Event Tick 로직이 없다. 타임라인 · 이동 · 메시 등 컴포넌트 Tick 은 영향 없음)
+	if (!HasAuthority())
+	{
+		SetActorTickEnabled(false);
+	}
+
 	// 커스텀 히트박스 자동 수집 및 콜리전 설정
 	SetupHitboxComponents();
 
@@ -464,6 +469,7 @@ void ADREnemy::BeginPlay()
 
 			// 물 시스템 설정
 			WaterReductionPerAttack = BalanceConfig->GetWaterReductionAmount();
+			bReduceWaterRewardOnAttack = BalanceConfig->WaterSystem.bReduceWaterRewardOnAttack;
 			WaterExplosionRadius = BalanceConfig->WaterSystem.WaterExplosionRadius;
 		}
 	}
@@ -478,7 +484,7 @@ void ADREnemy::BeginPlay()
 		// CharacterClassInfo에서 DeathAbilities 정보 가져오기
 		if (UCharacterClassInfo* CharacterClassInfo = UDRAbilitySystemLibrary::GetCharacterClassInfo(this))
 		{
-			FCharacterClassDefaultInfo ClassInfo = CharacterClassInfo->GetClassDefaultInfo(CharacterClass);
+			const FCharacterClassDefaultInfo& ClassInfo = CharacterClassInfo->GetClassDefaultInfo(CharacterClass);
 			DeathAbilities = ClassInfo.DeathAbilities;
 		}
 	}
@@ -543,7 +549,7 @@ void ADREnemy::InitAbilityActorInfo()
 {
 	// GAS 초기화
 	AbilitySystemComponent->InitAbilityActorInfo(this, this);
-	Cast<UDRAbilitySystemComponent>(AbilitySystemComponent)->AbilityActorInfoSet();
+	// AbilityActorInfoSet(플레이어 HUD 용 콜백)은 묶지 않는다 — 적 ASC 에는 듣는 UI 가 없다
 	// 스턴 태그 이벤트 바인딩
 	AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Debuff_Stun, EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ADREnemy::StunTagChanged);
 	// 도발 표시 — 태그가 Minimal 복제로 클라에도 오므로 모든 머신에서 바인딩한다
@@ -620,15 +626,6 @@ void ADREnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 			BB->ClearValue(DRBlackboardKeys::TargetToFollow);
 		}
 	}
-}
-
-float ADREnemy::GetMoveSpeed()
-{
-	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets))
-	{
-		return DRAS->GetMoveSpeed();
-	}
-	return Super::GetMoveSpeed();
 }
 
 void ADREnemy::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit)
@@ -844,3 +841,14 @@ void ADREnemy::GrantWaterToPlayers()
 	}
 }
 
+#if WITH_EDITOR
+EDataValidationResult ADREnemy::IsDataValid(FDataValidationContext& Context) const
+{
+	const EDataValidationResult Result = Super::IsDataValid(Context);
+	if (!TauntedVFX)
+	{
+		Context.AddWarning(FText::FromString(TEXT("TauntedVFX 가 비어 있다 — 도발당해도 머리 위 표시가 안 나온다 (TauntEnemy_NS 지정)")));
+	}
+	return Result;
+}
+#endif

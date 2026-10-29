@@ -19,16 +19,16 @@ namespace
 
 UDRGameUserSettings* UDRGameUserSettings::GetDRGameUserSettings()
 {
-    return Cast<UDRGameUserSettings>(GEngine->GetGameUserSettings());
+    return GEngine ? Cast<UDRGameUserSettings>(GEngine->GetGameUserSettings()) : nullptr;
 }
 
 void UDRGameUserSettings::ApplyCustomSettings()
 {
-    // ���⼱ ������ ��ȿ�� ����
+    // 여기선 데이터 유효성 검증
     MasterVolume = FMath::Clamp(MasterVolume, 0.0f, 1.0f);
     BGMVolume = FMath::Clamp(BGMVolume, 0.0f, 1.0f);
     SFXVolume = FMath::Clamp(SFXVolume, 0.0f, 1.0f);
-    MouseSensitivity = FMath::Clamp(MouseSensitivity, 0.1f, 5.0f);
+    MouseSensitivity = FMath::Clamp(MouseSensitivity, DRSettingsDefaults::MinMouseSensitivity, DRSettingsDefaults::MaxMouseSensitivity);
     Gamma = FMath::Clamp(Gamma, 0.0f, 100.0f);
 
     if (GEngine)
@@ -41,10 +41,16 @@ void UDRGameUserSettings::SetToDefaults()
 {
     Super::SetToDefaults();
 
-    MasterVolume = 1.0f;
-    BGMVolume = 1.0f;
-    SFXVolume = 1.0f;
-    MouseSensitivity = 1.0f;
-    Gamma = 80.0f;
+    // 설정 화면의 기본값과 같은 출처 (DRSettingsDefaults)
+    MasterVolume = DRSettingsDefaults::VolumeFromPercent(DRSettingsDefaults::MasterVolumePercent);
+    BGMVolume = DRSettingsDefaults::VolumeFromPercent(DRSettingsDefaults::MusicVolumePercent);
+    SFXVolume = DRSettingsDefaults::VolumeFromPercent(DRSettingsDefaults::SFXVolumePercent);
+    MouseSensitivity = DRSettingsDefaults::SensitivityFromPercent(DRSettingsDefaults::CameraSensitivityPercent);
+    Gamma = DRSettingsDefaults::GammaPercent;
     PreferredCulture = TEXT("ko");
+
+    // 그래픽도 설정 화면 기본값으로 (엔진 기본은 프레임 무제한 · VSync 꺼짐)
+    FrameRateLimit = static_cast<float>(DRSettingsDefaults::FrameRateLimit);
+    bUseVSync = DRSettingsDefaults::bVSyncEnabled;
+    ScalabilityQuality.SetFromSingleQualityLevel(DRSettingsDefaults::ScalabilityLevel);
 }

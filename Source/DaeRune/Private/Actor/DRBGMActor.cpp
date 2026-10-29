@@ -1,6 +1,7 @@
 // Copyright DaeRune
 
 #include "Actor/DRBGMActor.h"
+#include "Misc/DataValidation.h"
 #include "Components/AudioComponent.h"
 #include "Sound/SoundBase.h"
 #include "Sound/SoundClass.h"
@@ -8,6 +9,7 @@
 #include "Engine/AssetManager.h"
 #include "DRAssetManager.h"
 #include "Sound/DRSoundDataAsset.h"
+#include "EngineUtils.h"
 
 ADRBGMActor::ADRBGMActor()
 {
@@ -33,15 +35,6 @@ ADRBGMActor::ADRBGMActor()
 	BossAudioComponent->bIsUISound = true;
 	BossAudioComponent->bAllowSpatialization = false;
 	BossAudioComponent->SetVolumeMultiplier(1.0f);
-
-	// BGM Sound Class (설정창 볼륨 슬라이더 연동)
-	static ConstructorHelpers::FObjectFinder<USoundClass> BGMSoundClassFinder(
-		TEXT("/Game/Blueprints/Audio/SoundClasses/SC_BGM.SC_BGM"));
-	if (BGMSoundClassFinder.Succeeded())
-	{
-		AudioComponent->SoundClassOverride = BGMSoundClassFinder.Object;
-		BossAudioComponent->SoundClassOverride = BGMSoundClassFinder.Object;
-	}
 }
 
 void ADRBGMActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -55,6 +48,13 @@ void ADRBGMActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 void ADRBGMActor::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// BGM 사운드 클래스 (설정창 음악 볼륨 슬라이더가 이 클래스를 조절한다 — BP_DRBGMActor 기본값 SC_BGM)
+	if (BGMSoundClass)
+	{
+		AudioComponent->SoundClassOverride = BGMSoundClass;
+		BossAudioComponent->SoundClassOverride = BGMSoundClass;
+	}
 
 	LoadSoundsFromDataAsset();
 
@@ -172,6 +172,17 @@ void ADRBGMActor::PlayPlaylistTrackLocal(int32 Index, float FadeIn)
 	AudioComponent->FadeIn(FadeIn);
 }
 
+void ADRBGMActor::StopAllBGM(const UObject* WorldContext, float FadeOutDuration)
+{
+	UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContext, EGetWorldErrorMode::ReturnNull) : nullptr;
+	if (!World) return;
+
+	for (TActorIterator<ADRBGMActor> It(World); It; ++It)
+	{
+		It->StopBGM(FadeOutDuration);
+	}
+}
+
 void ADRBGMActor::StopBGM(float FadeOutDuration)
 {
 	// FadeOut 완료 시 OnAudioFinished가 발화되어 다음 트랙으로 넘어가는 것을 막기 위한 플래그
@@ -287,3 +298,15 @@ void ADRBGMActor::OnRep_BossBGMActive()
 		StopBossBGMLocal();
 	}
 }
+
+#if WITH_EDITOR
+EDataValidationResult ADRBGMActor::IsDataValid(FDataValidationContext& Context) const
+{
+	const EDataValidationResult Result = Super::IsDataValid(Context);
+	if (!BGMSoundClass)
+	{
+		Context.AddWarning(FText::FromString(TEXT("BGMSoundClass 가 비어 있다 — 설정창 음악 볼륨이 BGM 에 안 먹는다 (SC_BGM 지정)")));
+	}
+	return Result;
+}
+#endif

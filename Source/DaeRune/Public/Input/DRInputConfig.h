@@ -7,7 +7,7 @@
 #include "GameplayTagContainer.h"
 #include "DRInputConfig.generated.h"
 
-// Enhanced Input Action°ú GameplayTag¸¦ ¿¬°áÇÏ´Â ±¸Á¶Ã¼
+// Enhanced Input Actionê³¼ GameplayTagë¥¼ ì—°ê²°í•˜ëŠ” êµ¬ì¡°ì²´
 USTRUCT(BlueprintType)
 struct FDRInputAction
 {
@@ -21,7 +21,7 @@ struct FDRInputAction
 };
 
 /**
- * ¾îºô¸®Æ¼ ÀÔ·Â ¼³Á¤À» °ü¸®ÇÏ´Â µ¥ÀÌÅÍ ¿¡¼Â
+ * ì–´ë¹Œë¦¬í‹° ì…ë ¥ ì„¤ì •ì„ ê´€ë¦¬í•˜ëŠ” ë°ì´í„° ì—ì…‹
  */
 UCLASS()
 class DAERUNE_API UDRInputConfig : public UDataAsset
@@ -29,10 +29,10 @@ class DAERUNE_API UDRInputConfig : public UDataAsset
 	GENERATED_BODY()
 	
 public:
-	// Æ¯Á¤ GameplayTag¿¡ ´ëÀÀÇÏ´Â InputAction °Ë»ö
+	// íŠ¹ì • GameplayTagì— ëŒ€ì‘í•˜ëŠ” InputAction ê²€ìƒ‰
 	const UInputAction* FindAbilityInputActionForTag(const FGameplayTag& InputTag, bool bLogNotFound = false) const;
 
-	// ¾îºô¸®Æ¼ ÀÔ·Â ¾×¼Ç ¹è¿­
+	// ì–´ë¹Œë¦¬í‹° ì…ë ¥ ì•¡ì…˜ ë°°ì—´
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TArray<FDRInputAction> AbilityInputActions;
 };

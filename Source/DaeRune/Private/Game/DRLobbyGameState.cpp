@@ -11,24 +11,22 @@
 
 ADRLobbyGameState::ADRLobbyGameState()
 {
-	// �ʱⰪ ����
-	MinPlayersToStart = 1;  // �׽�Ʈ�� 1��, ������ 2~4�� ����
 }
 
 void ADRLobbyGameState::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// ���������� ����
+	// 서버에서만 실행
 	if (HasAuthority())
 	{
-		// �� �ڵ� �ʱ�ȭ
-		// ���� ����ý����� �̺�Ʈ ����
+		// 방 코드 초기화
+		// 세션 서브시스템의 이벤트 구독
 		if (UGameInstance* GameInstance = GetGameInstance())
 		{
 			if (UMultiplayerSessionsSubsystem* Subsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>())
 			{
-				// �̹� �� �ڵ尡 ������ ��� ����
+				// 이미 방 코드가 있으면 즉시 설정
 				FString ExistingCode = Subsystem->GetCurrentRoomCode();
 				if (!ExistingCode.IsEmpty())
 				{
@@ -36,8 +34,8 @@ void ADRLobbyGameState::BeginPlay()
 				}
 				else
 				{
-					// ������ �̺�Ʈ ���
-					Subsystem->MultiplayerOnRoomCodeGenerated.AddDynamic(
+					// 없으면 이벤트 대기
+					Subsystem->MultiplayerOnRoomCodeGenerated.AddUniqueDynamic(
 						this,
 						&ADRLobbyGameState::InitializeRoomCode
 					);
@@ -45,6 +43,20 @@ void ADRLobbyGameState::BeginPlay()
 			}
 		}
 	}
+}
+
+void ADRLobbyGameState::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// 세션 서브시스템(GameInstance 소속)이 이 GameState 보다 오래 산다 — 방 코드 대기 바인딩을 푼다
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (UMultiplayerSessionsSubsystem* Subsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>())
+		{
+			Subsystem->MultiplayerOnRoomCodeGenerated.RemoveDynamic(this, &ADRLobbyGameState::InitializeRoomCode);
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void ADRLobbyGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

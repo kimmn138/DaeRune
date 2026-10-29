@@ -13,6 +13,7 @@
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "Character/DREnemy.h"
 #include "Character/Stage2/DRS2MoleBoss.h"
+#include "DRGameplayTags.h"
 #include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
 #include "DaeRune/DRLogChannels.h"
@@ -89,6 +90,37 @@ void UDRS2TrainPhase::HandleBoardingChanged(int32 SeatedCount, int32 AliveTotal)
 	{
 		DepartToNextTarget(Director);
 	}
+}
+
+void UDRS2TrainPhase::NotifyPlayerDied(APlayerState* DeadPlayerState)
+{
+	RequestBoardingReevaluation();
+}
+
+void UDRS2TrainPhase::NotifyPlayerLeft(APlayerState* LeftPlayerState)
+{
+	RequestBoardingReevaluation();
+}
+
+void UDRS2TrainPhase::RequestBoardingReevaluation()
+{
+	UWorld* World = GetPhaseWorld();
+	if (!World || !bIsPhaseActive) return;
+
+	// 이탈하는 플레이어의 PlayerState 는 이 시점에 아직 PlayerArray 에 남아 있다 — 정리가 끝난 다음 틱에 본다
+	World->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
+	{
+		if (!bIsPhaseActive) return;
+
+		if (ADRS2StageDirector* Director = GetDirector())
+		{
+			if (Director->Train)
+			{
+				// OnBoardingChanged → HandleBoardingChanged 가 출발 조건을 판단한다
+				Director->Train->NotifySeatOccupancyChanged();
+			}
+		}
+	}));
 }
 
 void UDRS2TrainPhase::DepartToNextTarget(ADRS2StageDirector* Director)
@@ -313,6 +345,14 @@ void UDRS2TrainPhase::StashBoss()
 	Boss->SetActorEnableCollision(false);
 	Boss->SetActorTickEnabled(false);
 
+	// ★숨긴 동안에도 걸려 있던 화상 등 지속 피해는 계속 들어온다★ — 보관 중 그걸로 죽으면
+	// 다음 구간에서 만피 새 보스가 나온다. 무적 태그로 보관 중 피해를 모두 막는다 (ReappearBoss 에서 해제).
+	// 개수를 직접 지정해 보관 · 재등장이 몇 번 겹쳐 불려도 태그가 쌓이거나 남지 않게 한다.
+	if (UAbilitySystemComponent* ASC = Boss->GetAbilitySystemComponent())
+	{
+		ASC->SetLooseGameplayTagCount(FDRGameplayTags::Get().State_Invulnerable, 1);
+	}
+
 	if (AAIController* AIController = Cast<AAIController>(Boss->GetController()))
 	{
 		if (UBrainComponent* Brain = AIController->GetBrainComponent())
@@ -337,6 +377,11 @@ void UDRS2TrainPhase::ReappearBoss(const FTransform& SpawnTransform)
 	Boss->SetActorHiddenInGame(false);
 	Boss->SetActorEnableCollision(true);
 	Boss->SetActorTickEnabled(true);
+
+	if (UAbilitySystemComponent* ASC = Boss->GetAbilitySystemComponent())
+	{
+		ASC->SetLooseGameplayTagCount(FDRGameplayTags::Get().State_Invulnerable, 0);
+	}
 
 	if (AAIController* AIController = Cast<AAIController>(Boss->GetController()))
 	{

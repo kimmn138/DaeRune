@@ -8,7 +8,7 @@
 #include "DRInputComponent.generated.h"
 
 /**
- * Enhanced Input SystemÀ» È®ÀåÇÑ DaeRune Àü¿ë ÀÔ·Â ÄÄÆ÷³ÍÆ®
+ * Enhanced Input Systemì„ í™•ì¥í•œ DaeRune ì „ìš© ì…ë ¥ ì»´í¬ë„ŒíŠ¸
  */
 UCLASS()
 class DAERUNE_API UDRInputComponent : public UEnhancedInputComponent
@@ -16,7 +16,7 @@ class DAERUNE_API UDRInputComponent : public UEnhancedInputComponent
 	GENERATED_BODY()
 	
 public:
-	// ¾îºô¸®Æ¼ ¾×¼Ç ¹ÙÀÎµù ÅÛÇÃ¸´ ÇÔ¼ö
+	// ì–´ë¹Œë¦¬í‹° ì•¡ì…˜ ë°”ì¸ë”© í…œí”Œë¦¿ í•¨ìˆ˜
 	template<class UserClass, typename PressedFuncType, typename ReleasedFuncType, typename HeldFuncType>
 	void BindAbilityActions(const UDRInputConfig* InputConfig, UserClass* Object, PressedFuncType PressedFunc, ReleasedFuncType ReleasedFunc, HeldFuncType HeldFunc);
 };
@@ -24,28 +24,28 @@ public:
 template <class UserClass, typename PressedFuncType, typename ReleasedFuncType, typename HeldFuncType>
 void UDRInputComponent::BindAbilityActions(const UDRInputConfig* InputConfig, UserClass* Object, PressedFuncType PressedFunc, ReleasedFuncType ReleasedFunc, HeldFuncType HeldFunc)
 {
-	// InputConfig À¯È¿¼º °ËÁõ
+	// InputConfig ìœ íš¨ì„± ê²€ì¦
 	check(InputConfig);
 
-	// ¼³Á¤µÈ ¸ğµç ¾îºô¸®Æ¼ ÀÔ·Â ¾×¼Ç ¼øÈ¸
+	// ì„¤ì •ëœ ëª¨ë“  ì–´ë¹Œë¦¬í‹° ì…ë ¥ ì•¡ì…˜ ìˆœíšŒ
 	for (const FDRInputAction& Action : InputConfig->AbilityInputActions)
 	{
-		// InputAction°ú GameplayTag°¡ ¸ğµÎ À¯È¿ÇÑÁö È®ÀÎ
+		// InputActionê³¼ GameplayTagê°€ ëª¨ë‘ ìœ íš¨í•œì§€ í™•ì¸
 		if (Action.InputAction && Action.InputTag.IsValid())
 		{
-			// ÀÔ·Â ½ÃÀÛ ÀÌº¥Æ® ¹ÙÀÎµù (Å°¸¦ ´©¸£´Â ¼ø°£)
+			// ì…ë ¥ ì‹œì‘ ì´ë²¤íŠ¸ ë°”ì¸ë”© (í‚¤ë¥¼ ëˆ„ë¥´ëŠ” ìˆœê°„)
 			if (PressedFunc)
 			{
 				BindAction(Action.InputAction, ETriggerEvent::Started, Object, PressedFunc, Action.InputTag);
 			}
 
-			// ÀÔ·Â ÇØÁ¦ ÀÌº¥Æ® ¹ÙÀÎµù (Å°¸¦ ¶¼´Â ¼ø°£)
+			// ì…ë ¥ í•´ì œ ì´ë²¤íŠ¸ ë°”ì¸ë”© (í‚¤ë¥¼ ë–¼ëŠ” ìˆœê°„)
 			if (ReleasedFunc)
 			{
 				BindAction(Action.InputAction, ETriggerEvent::Completed, Object, ReleasedFunc, Action.InputTag);
 			}
 
-			// ÀÔ·Â Áö¼Ó ÀÌº¥Æ® ¹ÙÀÎµù (Å°¸¦ ´©¸£°í ÀÖ´Â µ¿¾È ¸Å ÇÁ·¹ÀÓ)
+			// ì…ë ¥ ì§€ì† ì´ë²¤íŠ¸ ë°”ì¸ë”© (í‚¤ë¥¼ ëˆ„ë¥´ê³  ìˆëŠ” ë™ì•ˆ ë§¤ í”„ë ˆì„)
 			if (HeldFunc)
 			{
 				BindAction(Action.InputAction, ETriggerEvent::Triggered, Object, HeldFunc, Action.InputTag);

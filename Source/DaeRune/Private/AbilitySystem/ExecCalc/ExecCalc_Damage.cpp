@@ -9,19 +9,16 @@
 #include "AbilitySystem/DRCleanserSiteAttributeSet.h"
 #include "AbilitySystem/DRPlayerAttributeSet.h"
 #include "Game/DRProgressionConfig.h"
-
-UExecCalc_Damage::UExecCalc_Damage()
-{
-}
+#include "DRAbilityTypes.h"
+#include "AbilitySystem/Data/GameBalanceConfig.h"
 
 void UExecCalc_Damage::DetermineDebuff(const FGameplayEffectCustomExecutionParameters& ExecutionParams, const FGameplayEffectSpec& Spec) const
 {
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 
-	for (TTuple<FGameplayTag, FGameplayTag> Pair : GameplayTags.DamageTypesToDebuffs)
+	for (const TPair<FGameplayTag, FGameplayTag>& Pair : GameplayTags.DamageTypesToDebuffs)
 	{
 		const FGameplayTag& DamageType = Pair.Key;
-		const FGameplayTag& DebuffType = Pair.Value;
 		const float TypeDamage = Spec.GetSetByCallerMagnitude(DamageType, false, -1.f);
 		if (TypeDamage > -.5f) // .5 padding for floating point [im]precision
 		{
@@ -50,13 +47,7 @@ void UExecCalc_Damage::Execute_Implementation(const FGameplayEffectCustomExecuti
 {
 	const FGameplayEffectSpec& Spec = ExecutionParams.GetOwningSpec();
 
-	const FGameplayTagContainer* SourceTags = Spec.CapturedSourceTags.GetAggregatedTags();
-	const FGameplayTagContainer* TargetTags = Spec.CapturedTargetTags.GetAggregatedTags();
-	FAggregatorEvaluateParameters EvaluationParameters;
-	EvaluationParameters.SourceTags = SourceTags;
-	EvaluationParameters.TargetTags = TargetTags;
-
-	// DebuffMore actions
+	// 디버프 판정
 	DetermineDebuff(ExecutionParams, Spec);
 
 	// Get Damage Set by Caller Magnitude
@@ -67,11 +58,16 @@ void UExecCalc_Damage::Execute_Implementation(const FGameplayEffectCustomExecuti
 		Damage += DamageTypeValue;
 	}
 
-	// Elite Roar Aura: enemies with Buff.Elite.Roar deal 20% more damage
+	// 적 공통 배율 (밸런스 설정 — 없으면 기본값)
 	const UAbilitySystemComponent* SourceASC = ExecutionParams.GetSourceAbilitySystemComponent();
+	static const FEnemyCombatConfig DefaultEnemyCombat;
+	const UGameBalanceConfig* BalanceConfig = SourceASC ? UDRAbilitySystemLibrary::GetGameBalanceConfig(SourceASC->GetAvatarActor()) : nullptr;
+	const FEnemyCombatConfig& EnemyCombat = BalanceConfig ? BalanceConfig->EnemyCombat : DefaultEnemyCombat;
+
+	// 엘리트 포효 오라를 받은 적은 더 세게 때린다
 	if (SourceASC && SourceASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Buff_Elite_Roar))
 	{
-		Damage *= 1.2f;
+		Damage *= EnemyCombat.EliteRoarDamageMultiplier;
 	}
 
 	// ===== 업그레이드 칩: 주는 피해 배율 (Plan3(공용칩) §17.6.1) =====
@@ -87,8 +83,9 @@ void UExecCalc_Damage::Execute_Implementation(const FGameplayEffectCustomExecuti
 	// "주는 피해" 배율((a) DamageDealt · (b) 광폭화 · (c) 시너지 · (d) 탑승)을 전부 건너뛴다 (D-82 · T-77).
 	// 넘어오는 양은 그 사람이 받은 최종 피해(받는 쪽 배율 · 데미지 디버프 반영)라 여기서 더 곱할 것이 없다.
 	// (SourceAbilityTags 는 서버 전용 필드지만 ExecCalc 는 서버에서만 돈다)
-	const bool bMountShared = UDRAbilitySystemLibrary::GetSourceAbilityTags(Spec.GetContext())
-		.HasTagExact(FDRGameplayTags::Get().Damage_MountShared);
+	// (태그 컨테이너를 복사하지 않고 컨텍스트에서 바로 본다 — 피해마다 불린다)
+	const FDRGameplayEffectContext* DRContext = FDRGameplayEffectContext::FromHandle(Spec.GetContext());
+	const bool bMountShared = DRContext && DRContext->GetSourceAbilityTags().HasTagExact(FDRGameplayTags::Get().Damage_MountShared);
 
 	if (SourceASC && !bMountShared)
 	{
@@ -161,7 +158,7 @@ void UExecCalc_Damage::Execute_Implementation(const FGameplayEffectCustomExecuti
 			&& SourceASC
 			&& SourceASC->HasMatchingGameplayTag(FDRGameplayTags::Get().State_Enemy_Phase1))
 		{
-			Damage *= 0.7f;
+			Damage *= EnemyCombat.Phase1DamageMultiplier;
 		}
 
 		// ★Plan5(씨앗칩)★ 음수 피해는 곧 회복이다(적 체력이 차오른다).

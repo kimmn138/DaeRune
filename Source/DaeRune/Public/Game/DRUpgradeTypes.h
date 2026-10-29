@@ -280,62 +280,97 @@ enum class EDRSlotState : uint8
 };
 
 /**
- * 스탯이 "스킬 단위"인지 판정.
- * Plan3(공용칩) 의 MaxHealth / HealthRegenDelay 는 둘 다 캐릭터 단위라 여기에 넣지 않는다.
+ * 스탯 메타 — 스탯마다 "스킬 단위인가 / 낮을수록 좋은가 / 단위가 초인가" 를 한 줄로 둔다.
+ * ★EDRUpgradeStat 에 값을 추가하면 여기에도 같은 순서로 1줄 추가★ — 빠뜨리면 아래 static_assert 가 컴파일 에러로 알린다.
+ * (예전 || 체인은 새 스탯을 빠뜨려도 조용히 false 였다 — T-145. UI 이름은 UDRUpgradeUILibrary::GetStatDisplayName 에 따로 추가)
+ *  - bSkill       : 스킬 단위 스탯 (FDRUpgradeModifier::TargetAbilityTag 와 함께 쓴다). 캐릭터 단위면 false
+ *  - bLowerBetter : 값이 낮을수록 좋다 — 미리보기(FDRStatPreviewLine::bIsWorse) · 단점 색상 판정
+ *                   예: 받는 피해 +40% 는 나쁜 변화지만 이동 속도 +40% 는 좋은 변화다
+ *  - bTime        : 단위가 초 — 표기에 "초"를 붙인다. 없으면 회복 시작 시간 -0.5 가 비율인지 시간인지 구분이 안 된다
+ *                   (배율 스탯은 넣지 않는다 — "+200초" 로 보인다) (Plan3(공용칩) §8.3)
  */
+struct FDRUpgradeStatMeta
+{
+	EDRUpgradeStat Stat;
+	bool bSkill;
+	bool bLowerBetter;
+	bool bTime;
+};
+
+inline constexpr FDRUpgradeStatMeta GDRUpgradeStatMeta[] =
+{
+	// 스탯                                    스킬    낮을수록  초
+	{ EDRUpgradeStat::ContainerHealth,        false, false, false },
+	{ EDRUpgradeStat::MaxWater,               false, false, false },
+	{ EDRUpgradeStat::MoveSpeed,              false, false, false },
+	{ EDRUpgradeStat::DamageTaken,            false, true , false },
+	{ EDRUpgradeStat::WaterGain,              false, false, false },
+	{ EDRUpgradeStat::SkillDamage,            true , false, false },
+	{ EDRUpgradeStat::SkillWaterCost,         true , true , false },
+	{ EDRUpgradeStat::SkillCooldown,          true , true , true  },
+	{ EDRUpgradeStat::SkillProjectileCount,   true , false, false },
+	{ EDRUpgradeStat::MaxHealth,              false, false, false },	// 캐릭터 단위 (Plan3(공용칩))
+	{ EDRUpgradeStat::HealthRegenDelay,       false, true , true  },	// 캐릭터 단위 (Plan3(공용칩))
+	{ EDRUpgradeStat::DamageDealt,            false, false, false },
+	{ EDRUpgradeStat::SkillHealing,           true , false, false },
+	{ EDRUpgradeStat::SkillAreaRadius,        true , false, false },
+	{ EDRUpgradeStat::SkillWaterGrant,        true , false, false },
+	{ EDRUpgradeStat::SkillWindup,            true , true , false },	// 배율이라 초 아님 (T-25)
+	{ EDRUpgradeStat::SkillFireInterval,      true , true , true  },	// 발사 간격 — 초
+	{ EDRUpgradeStat::SkillProjectileScale,   true , false, false },
+	{ EDRUpgradeStat::SkillChargeGrowth,      true , false, false },	// 배율 (Plan5 D-100 · T-103)
+	{ EDRUpgradeStat::SkillOuterDamage,       true , false, false },
+	{ EDRUpgradeStat::SkillLaunchHeight,      true , false, false },	// 배율 (Plan5 D-105 · T-109)
+	{ EDRUpgradeStat::SkillAirUseCount,       true , false, false },
+	{ EDRUpgradeStat::SkillSelfDamage,        true , true , false },
+	{ EDRUpgradeStat::SkillSpeedBonus,        true , false, false },
+	{ EDRUpgradeStat::SkillComboWindup,       true , true , false },	// 배율이라 초 아님
+	{ EDRUpgradeStat::SkillComboRecovery,     true , true , false },	// 배율이라 초 아님
+	{ EDRUpgradeStat::SkillDuration,          true , false, true  },	// 스킬 단위가 아니면 도발 −2초가 바닥 모자에도 걸린다 (T-145) · 길수록 좋다 (T-146)
+};
+
+inline constexpr int32 GDRUpgradeStatMetaNum = UE_ARRAY_COUNT(GDRUpgradeStatMeta);
+
+namespace DRUpgradeStatMetaCheck
+{
+	constexpr bool IsInEnumOrder()
+	{
+		for (int32 Index = 0; Index < GDRUpgradeStatMetaNum; ++Index)
+		{
+			if (static_cast<int32>(GDRUpgradeStatMeta[Index].Stat) != Index) return false;
+		}
+		return true;
+	}
+}
+static_assert(GDRUpgradeStatMetaNum == static_cast<int32>(EDRUpgradeStat::Count),
+	"EDRUpgradeStat 에 값을 추가했으면 GDRUpgradeStatMeta 에도 1줄 추가할 것");
+static_assert(DRUpgradeStatMetaCheck::IsInEnumOrder(), "GDRUpgradeStatMeta 는 EDRUpgradeStat 순서와 같아야 한다");
+
+FORCEINLINE const FDRUpgradeStatMeta* DRFindStatMeta(EDRUpgradeStat Stat)
+{
+	const int32 Index = static_cast<int32>(Stat);
+	return (Index >= 0 && Index < GDRUpgradeStatMetaNum) ? &GDRUpgradeStatMeta[Index] : nullptr;
+}
+
+// 스탯이 "스킬 단위"인지
 FORCEINLINE bool DRIsSkillStat(EDRUpgradeStat Stat)
 {
-	return Stat == EDRUpgradeStat::SkillDamage
-		|| Stat == EDRUpgradeStat::SkillWaterCost
-		|| Stat == EDRUpgradeStat::SkillCooldown
-		|| Stat == EDRUpgradeStat::SkillProjectileCount
-		|| Stat == EDRUpgradeStat::SkillHealing			// Plan5(씨앗칩)
-		|| Stat == EDRUpgradeStat::SkillAreaRadius		// 〃
-		|| Stat == EDRUpgradeStat::SkillWaterGrant		// Plan5(물대포칩)
-		|| Stat == EDRUpgradeStat::SkillWindup			// Plan5(발톱칩)
-		|| Stat == EDRUpgradeStat::SkillFireInterval	// Plan5(동전칩)
-		|| Stat == EDRUpgradeStat::SkillProjectileScale	// 〃
-		|| Stat == EDRUpgradeStat::SkillChargeGrowth	// Plan5(공기탄칩)
-		|| Stat == EDRUpgradeStat::SkillOuterDamage		// Plan5(물점프칩)
-		|| Stat == EDRUpgradeStat::SkillLaunchHeight	// 〃
-		|| Stat == EDRUpgradeStat::SkillAirUseCount		// 〃
-		|| Stat == EDRUpgradeStat::SkillSelfDamage		// Plan5(돌진칩)
-		|| Stat == EDRUpgradeStat::SkillSpeedBonus		// 〃
-		|| Stat == EDRUpgradeStat::SkillComboWindup		// Plan5(가방칩)
-		|| Stat == EDRUpgradeStat::SkillComboRecovery	// 〃
-		|| Stat == EDRUpgradeStat::SkillDuration;		// Plan5(도발칩 · 모자칩) — 빠뜨리면 도발 −2초가 바닥 모자에도 걸린다 (T-145)
+	const FDRUpgradeStatMeta* Meta = DRFindStatMeta(Stat);
+	return Meta && Meta->bSkill;
 }
 
-/**
- * 값이 "낮을수록 좋은" 스탯인가.
- * 미리보기(FDRStatPreviewLine::bIsWorse)와 단점 표기 색상을 판정하는 데 쓴다.
- * 예: 받는 피해 +40% 는 나쁜 변화지만, 이동 속도 +40% 는 좋은 변화다.
- */
+// 값이 "낮을수록 좋은" 스탯인가
 FORCEINLINE bool DRIsLowerBetter(EDRUpgradeStat Stat)
 {
-	return Stat == EDRUpgradeStat::DamageTaken
-		|| Stat == EDRUpgradeStat::SkillWaterCost
-		|| Stat == EDRUpgradeStat::SkillCooldown
-		|| Stat == EDRUpgradeStat::HealthRegenDelay
-		|| Stat == EDRUpgradeStat::SkillWindup		// Plan5(발톱칩) 선딜은 짧을수록 좋다
-		|| Stat == EDRUpgradeStat::SkillFireInterval	// Plan5(동전칩) 발사 간격도 짧을수록 좋다
-		|| Stat == EDRUpgradeStat::SkillSelfDamage	// Plan5(돌진칩) 자해는 적을수록 좋다
-		|| Stat == EDRUpgradeStat::SkillComboWindup	// Plan5(가방칩) 연속 선딜 · 후딜도 짧을수록 좋다 (지속 시간은 길수록 좋아 제외 — T-146)
-		|| Stat == EDRUpgradeStat::SkillComboRecovery;
+	const FDRUpgradeStatMeta* Meta = DRFindStatMeta(Stat);
+	return Meta && Meta->bLowerBetter;
 }
 
-/**
- * 값의 단위가 "초"인가. 표기에 단위를 붙이는 데만 쓴다.
- *
- * 이게 없으면 회복 시작 시간 -0.5 가 화면에 "-0.5" 로만 나와서
- * 비율(-0.5%)인지 시간(-0.5초)인지 구분이 안 된다. (Plan3(공용칩) §8.3)
- */
+// 값의 단위가 "초"인가 (표기에 단위를 붙이는 데만 쓴다)
 FORCEINLINE bool DRIsTimeStat(EDRUpgradeStat Stat)
 {
-	return Stat == EDRUpgradeStat::SkillCooldown
-		|| Stat == EDRUpgradeStat::HealthRegenDelay
-		|| Stat == EDRUpgradeStat::SkillFireInterval	// Plan5(동전칩) 단위가 초다 (배율인 SkillWindup 은 제외 — T-25)
-		|| Stat == EDRUpgradeStat::SkillDuration;		// Plan5(도발칩) 단위가 초다 — Flat −2 가 "−2초"로 표기 (배율인 연속 선딜 · 후딜은 제외)
+	const FDRUpgradeStatMeta* Meta = DRFindStatMeta(Stat);
+	return Meta && Meta->bTime;
 }
 
 /**

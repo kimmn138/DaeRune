@@ -40,7 +40,7 @@ public:
     UPROPERTY(ReplicatedUsing = OnRep_bIsAvailable, BlueprintReadWrite, Category = "Water Source")
     bool bIsAvailable = true;
 
-    // �� ä��� GameplayEffect
+    // 물 채우기 GameplayEffect
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water Source")
     TSubclassOf<UGameplayEffect> WaterFillEffectClass;
 
@@ -52,11 +52,11 @@ public:
     FOnWaterSourceUsedSignature OnWaterSourceUsedDelegate;
 
 protected:
-    // DREffectActor�� OnOverlap/OnEndOverlap �������̵�
+    // DREffectActor의 OnOverlap/OnEndOverlap 오버라이드
     virtual void OnOverlap(AActor* TargetActor) override;
     virtual void OnEndOverlap(AActor* TargetActor) override;
 
-    // ��������Ʈ���� ȣ���� �� �ִ� �Լ���
+    // 블루프린트에서 호출할 수 있는 함수들
     UFUNCTION(BlueprintCallable, Category = "Water Source")
     void FillPlayerWater(AActor* TargetActor);
 
@@ -66,14 +66,14 @@ protected:
     UFUNCTION(BlueprintCallable, Category = "Water Source")
     void StartRechargeTimer();
 
-    // ������ ������ �Ϸ�
+    // 수원지 재충전 완료
     UFUNCTION()
     void OnSourceRecharged();
 
     UFUNCTION()
     void OnRep_bIsAvailable();
 
-    // ��������Ʈ���� ������ �̺�Ʈ
+    // 블루프린트에서 구현할 이벤트
     UFUNCTION(BlueprintImplementableEvent, Category = "Water Source")
     void OnWaterSourceUsed(AActor* User);
 

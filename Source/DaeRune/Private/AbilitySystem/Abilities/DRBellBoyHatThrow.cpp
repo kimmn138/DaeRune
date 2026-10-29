@@ -43,12 +43,8 @@ void UDRBellBoyHatThrow::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	MontageTask->ReadyForActivation();
 
 	// Plan8(FP) FP 릴리스 프레임이 TP 릴리스(=모자 스폰)와 같은 순간에 오도록 (D-35). 아래 FPRate 는 TP 속도 1 기준
-	float FPRate = 1.f;
-	const float TPEventTime = UDRAbilitySystemLibrary::FindMontageEventTime(ThrowMontage, ReleaseEventTag);
-	if (FirstPersonThrowMontage && TPEventTime > 0.f)
-	{
-		FPRate = UDRAbilitySystemLibrary::GetFirstPersonSyncTime(FirstPersonThrowMontage, FirstPersonSyncTag, ThrowMontage, TPEventTime) / TPEventTime;
-	}
+	const float FPRate = UDRAbilitySystemLibrary::GetFirstPersonSyncRate(
+		FirstPersonThrowMontage, FirstPersonSyncTag, ThrowMontage, ReleaseEventTag);
 	// ★Plan5(공속칩)★ TP 가 M 배속이므로 FP 도 같은 M 을 곱해야 릴리스 프레임이 계속 맞는다 (Plan5 D-124 · T-137)
 	ActiveFirstPersonMontage = UDRAbilitySystemLibrary::PlayFirstPersonMontage(GetAvatarActorFromActorInfo(), FirstPersonThrowMontage, FPRate * SpeedMult);
 }

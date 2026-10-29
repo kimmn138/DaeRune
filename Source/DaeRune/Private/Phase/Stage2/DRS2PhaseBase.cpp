@@ -6,13 +6,13 @@
 #include "Actor/Stage2/DRS2PassageBlocker.h"
 #include "Actor/Stage2/DRS2TeleportGate.h"
 #include "Actor/Stage2/DRS2EnemySpawnPoint.h"
+#include "Actor/Stage2/DRS2RoomTrigger.h"
 #include "Character/DRCharacter.h"
 #include "Character/DREnemy.h"
 #include "EngineUtils.h"
 #include "Game/DRGameStateBase.h"
 #include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
-#include "Interaction/CombatInterface.h"
 #include "Misc/ScopeExit.h"
 #include "TimerManager.h"
 #include "DaeRune/DRLogChannels.h"
@@ -119,7 +119,6 @@ int32 UDRS2PhaseBase::CountTotalSpawns(const FS2WaveSet& WaveSet)
 void UDRS2PhaseBase::InitSpawnPoints(FName RoomID, const TArray<TObjectPtr<AActor>>& DirectorOverride)
 {
 	SpawnPoints.Reset();
-	RemainingSpawnPointIndices.Reset();
 
 	// Director에 명시 배선이 있으면 그것을 우선한다.
 	if (DirectorOverride.Num() > 0)
@@ -145,6 +144,8 @@ void UDRS2PhaseBase::InitSpawnPoints(FName RoomID, const TArray<TObjectPtr<AActo
 		}
 	}
 
+	SpawnPointPool.Reset(SpawnPoints.Num());
+
 	if (SpawnPoints.Num() == 0)
 	{
 		UE_LOG(LogDR, Error,
@@ -158,21 +159,7 @@ void UDRS2PhaseBase::InitSpawnPoints(FName RoomID, const TArray<TObjectPtr<AActo
 
 AActor* UDRS2PhaseBase::SelectNextSpawnPoint()
 {
-	if (SpawnPoints.Num() == 0) return nullptr;
-
-	// 풀이 비면 전체 인덱스로 다시 채운다 (모든 지점을 한 번씩 사용한 뒤 반복).
-	if (RemainingSpawnPointIndices.Num() == 0)
-	{
-		for (int32 Index = 0; Index < SpawnPoints.Num(); ++Index)
-		{
-			RemainingSpawnPointIndices.Add(Index);
-		}
-	}
-
-	const int32 PickedSlot = FMath::RandRange(0, RemainingSpawnPointIndices.Num() - 1);
-	const int32 SpawnPointIndex = RemainingSpawnPointIndices[PickedSlot];
-	RemainingSpawnPointIndices.RemoveAt(PickedSlot);
-
+	const int32 SpawnPointIndex = SpawnPointPool.Pick();
 	return SpawnPoints.IsValidIndex(SpawnPointIndex) ? SpawnPoints[SpawnPointIndex].Get() : nullptr;
 }
 
@@ -266,45 +253,51 @@ void UDRS2PhaseBase::SpawnOneEnemy(TSubclassOf<ADREnemy> EnemyClass)
 
 AActor* UDRS2PhaseBase::SpawnEnemyAt(TSubclassOf<ADREnemy> EnemyClass, const FTransform& SpawnTransform, int32 EnemyLevel)
 {
-	UWorld* World = GetPhaseWorld();
-	if (!World || !EnemyClass) return nullptr;
-
-	AActor* SpawnedEnemy = nullptr;
-
-	if (EnemyLevel > 0)
+	// ★레벨은 반드시 BeginPlay 전에 넣어야 한다 (헤더 주석 참고).
+	//   ADREnemy::BeginPlay → InitAbilityActorInfo → InitializeDefaultAttributes(Level) 로
+	//   커브 테이블(CT_EnemyAttributes)이 조회되고, 이어서 GiveStartupAbilities 가
+	//   같은 Level 로 어빌리티 스펙을 부여한다. 스폰이 끝난 뒤 SetLevel 을 부르면 둘 다 놓친다.
+	ADREnemy* SpawnedEnemy = SpawnEnemyDeferred(EnemyClass, SpawnTransform, [EnemyLevel](ADREnemy& Enemy)
 	{
-		// ★레벨은 반드시 BeginPlay 전에 넣어야 한다 (헤더 주석 참고).
-		//   ADREnemy::BeginPlay → InitAbilityActorInfo → InitializeDefaultAttributes(Level) 로
-		//   커브 테이블(CT_EnemyAttributes)이 조회되고, 이어서 GiveStartupAbilities 가
-		//   같은 Level 로 어빌리티 스펙을 부여한다. 스폰이 끝난 뒤 SetLevel 을 부르면 둘 다 놓친다.
-		ADREnemy* DeferredEnemy = World->SpawnActorDeferred<ADREnemy>(
-			EnemyClass, SpawnTransform, nullptr, nullptr,
-			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
-
-		if (DeferredEnemy)
+		if (EnemyLevel > 0)
 		{
-			DeferredEnemy->SetLevel(EnemyLevel);
-			DeferredEnemy->FinishSpawning(SpawnTransform);   // 여기서 BeginPlay 가 돈다
-			SpawnedEnemy = DeferredEnemy;
+			Enemy.SetLevel(EnemyLevel);
 		}
-	}
-	else
-	{
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-		SpawnedEnemy = World->SpawnActor<AActor>(EnemyClass, SpawnTransform, SpawnParams);
-	}
+	});
 
-	if (!SpawnedEnemy) return nullptr;
-
-	// 사망 델리게이트 바인딩 (DRPhase1::SpawnEnemy 관례)
-	if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(SpawnedEnemy))
-	{
-		CombatInterface->GetOnDeathDelegate().AddDynamic(this, &UDRPhaseBase::OnEnemyDeath);
-	}
-
-	SpawnedEnemies.Add(SpawnedEnemy);
+	TrackSpawnedEnemy(SpawnedEnemy);
 	return SpawnedEnemy;
+}
+
+void UDRS2PhaseBase::ArmRoomTrigger(ADRS2RoomTrigger* Trigger)
+{
+	if (!Trigger) return;
+
+	Trigger->OnAllInside.AddUniqueDynamic(this, &UDRS2PhaseBase::HandleRoomTriggerAllInside);
+	Trigger->OnCountChanged.AddUniqueDynamic(this, &UDRS2PhaseBase::HandleRoomTriggerCountChanged);
+	Trigger->Arm();
+}
+
+void UDRS2PhaseBase::DisarmRoomTrigger(ADRS2RoomTrigger* Trigger)
+{
+	if (!Trigger) return;
+
+	Trigger->OnAllInside.RemoveDynamic(this, &UDRS2PhaseBase::HandleRoomTriggerAllInside);
+	Trigger->OnCountChanged.RemoveDynamic(this, &UDRS2PhaseBase::HandleRoomTriggerCountChanged);
+	Trigger->Disarm();
+}
+
+void UDRS2PhaseBase::HandleRoomTriggerAllInside()
+{
+	OnRoomAllInside();
+}
+
+void UDRS2PhaseBase::HandleRoomTriggerCountChanged(int32 InsideCount, int32 /*AliveTotal*/)
+{
+	// 방이 시작된 뒤에는 진행도가 처치 수 · 웨이브 번호 등이므로 입장 인원으로 덮어쓰지 않는다
+	if (HasRoomStarted() || !GameState) return;
+
+	GameState->UpdatePhaseObjectiveProgress(InsideCount);
 }
 
 void UDRS2PhaseBase::SetBlockerBlocked(ADRS2PassageBlocker* Blocker, bool bBlocked)

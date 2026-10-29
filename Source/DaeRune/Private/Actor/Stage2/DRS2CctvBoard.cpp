@@ -11,6 +11,7 @@
 ADRS2CctvBoard::ADRS2CctvBoard()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;   // 동작 중에만 켠다
 
 	bReplicates = true;
 
@@ -201,8 +202,9 @@ void ADRS2CctvBoard::BuildSequence()
 
 void ADRS2CctvBoard::OnRep_Sequence()
 {
-	// 시퀀스가 도착하면 재생을 시작한다 (서버/클라 공통)
+	// 시퀀스가 도착하면 재생을 시작한다 (서버/클라 공통). 시퀀스가 있는 동안만 Tick 한다
 	LastAppliedStep = INDEX_NONE;
+	SetActorTickEnabled(Sequence.Num() > 0);
 }
 
 void ADRS2CctvBoard::Tick(float DeltaSeconds)

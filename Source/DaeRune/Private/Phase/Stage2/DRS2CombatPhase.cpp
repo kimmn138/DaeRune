@@ -19,27 +19,14 @@ void UDRS2CombatPhase::OnPhaseStart()
 
 	SetupPhaseObjectiveByRow(TEXT("S2P1_Enter"));
 
-	if (ADRS2RoomTrigger* Trigger = Director->Trigger_Room1)
-	{
-		Trigger->OnAllInside.AddDynamic(this, &UDRS2CombatPhase::HandleAllInsideRoom1);
-		Trigger->OnCountChanged.AddDynamic(this, &UDRS2CombatPhase::HandleInsideCountChanged);
-		Trigger->Arm();
-	}
-	else
+	if (!Director->Trigger_Room1)
 	{
 		UE_LOG(LogDR, Error, TEXT("[S2P1] Trigger_Room1 미배선 - 방1 진행 불가"));
 	}
+	ArmRoomTrigger(Director->Trigger_Room1);
 }
 
-void UDRS2CombatPhase::HandleInsideCountChanged(int32 InsideCount, int32 /*AliveTotal*/)
-{
-	// 전투가 시작된 뒤에는 진행도가 "처치 수"이므로 입장 인원으로 덮어쓰지 않는다.
-	if (bCombatStarted || !GameState) return;
-
-	GameState->UpdatePhaseObjectiveProgress(InsideCount);
-}
-
-void UDRS2CombatPhase::HandleAllInsideRoom1()
+void UDRS2CombatPhase::OnRoomAllInside()
 {
 	if (bCombatStarted) return;
 
@@ -118,12 +105,7 @@ void UDRS2CombatPhase::OnPhaseEnd()
 {
 	if (ADRS2StageDirector* Director = GetDirector())
 	{
-		if (ADRS2RoomTrigger* Trigger = Director->Trigger_Room1)
-		{
-			Trigger->OnAllInside.RemoveDynamic(this, &UDRS2CombatPhase::HandleAllInsideRoom1);
-			Trigger->OnCountChanged.RemoveDynamic(this, &UDRS2CombatPhase::HandleInsideCountChanged);
-			Trigger->Disarm();
-		}
+		DisarmRoomTrigger(Director->Trigger_Room1);
 	}
 
 	// D1 게이트 발광은 여기서 하지 않는다.

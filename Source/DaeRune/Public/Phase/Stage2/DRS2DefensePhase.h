@@ -75,13 +75,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Room4")
 	TSubclassOf<ADRCleanserPart> PartClass;
 
+	// ========== 방 트리거 ==========
+
+	// 전원 방3 입장 → (부품 동반 확인 후) 봉쇄 + 방4 문 개방
+	virtual void OnRoomAllInside() override;
+	virtual bool HasRoomStarted() const override { return bRoomStarted; }
+
 	// ========== 콜백 ==========
-
-	UFUNCTION()
-	void HandleAllInsideRoom3();
-
-	UFUNCTION()
-	void HandleInsideCountChanged(int32 InsideCount, int32 AliveTotal);
 
 	UFUNCTION()
 	void HandleRoom4Entered(ADRCharacter* Who);
@@ -125,14 +125,14 @@ private:
 	// 스폰된 적 전부 사망 처리 (사망 연출/물 보상 발생)
 	void KillAllSpawnedEnemies();
 
-	// 스폰된 적 전부 조용히 제거 (연출/보상 없음)
-	void DestroyAllSpawnedEnemies();
-
 	// 사망자 전원 부활
 	void ReviveAllDeadPlayers(ADRS2StageDirector* Director);
 
 	// 방4 재시도 준비 (예외 A/B 공통 처리)
 	void PrepareRoom4Retry(ADRS2StageDirector* Director, bool bEjectPartInsideRoom4);
+
+	// 두더지 목표 처치 수 (두더지 게임 미배선 시 폴백 20)
+	int32 GetMoleGoalKills(const ADRS2StageDirector* Director) const;
 
 	FTimerHandle WaveLoopTimer;
 };

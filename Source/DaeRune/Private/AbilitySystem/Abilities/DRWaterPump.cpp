@@ -20,6 +20,13 @@
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Game/DRProgressionConfig.h"
 
+namespace
+{
+	// 빔 나이아가라 파라미터 (빔 갱신이 초당 30회라 FName 을 매번 만들지 않는다)
+	const FName WaterCannonScaleParam(TEXT("WaterCannonScale"));
+	const FName HitEffectPositionParam(TEXT("HitEffectPosition"));
+}
+
 FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLocation, bool& bHitObstacle, FHitResult& OutHitResult)
 {
     FVector AimStart, AimDirection;
@@ -29,10 +36,10 @@ FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLoca
         return WeaponSocketLocation + FVector::ForwardVector * WeaponRange;
     }
 
-    // ī�޶󿡼� �ִ� �����Ÿ������� ��ǥ ����
+    // 카메라에서 최대 사정거리까지의 목표 지점
     FVector CameraTargetPoint = AimStart + (AimDirection * WeaponRange);
 
-    // ���� ���Ͽ��� ��ǥ �������� LineTrace
+    // 무기 소켓에서 목표 지점으로 LineTrace
     ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
     
     FCollisionQueryParams QueryParams;
@@ -60,7 +67,7 @@ FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLoca
         }
     }
 
-    // LineTrace ���� (관통이면 캐릭터를 건너뛴다 — 지형지물은 그대로 막는다)
+    // LineTrace 실행 (장애물 감지)
     bHitObstacle = TraceBeamBlocker(
         WeaponSocketLocation, CameraTargetPoint, Resolved.bPierce, QueryParams, OutHitResult);
 
@@ -69,9 +76,16 @@ FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLoca
     //   **아무 대상도 맞히지 못한다.** 이 경우는 히트가 아닌 것으로 취급한다. (2026-08-27)
     if (bHitObstacle && (OutHitResult.bStartPenetrating || OutHitResult.Distance < 1.f))
     {
-        UE_LOG(LogDR, Warning,
-            TEXT("[WaterPump] 무기 소켓이 막힌 형상(%s) 안에 있어 히트를 무시하고 최대 사거리를 사용한다."),
-            *GetNameSafe(OutHitResult.GetActor()));
+        // 빔 갱신 경로(초당 30회)라 벽에 붙어 있는 동안 로그가 도배되지 않게 5초에 한 번만
+        static double LastBlockedSocketLogTime = -1000.0;
+        const double Now = FPlatformTime::Seconds();
+        if (Now - LastBlockedSocketLogTime > 5.0)
+        {
+            LastBlockedSocketLogTime = Now;
+            UE_LOG(LogDR, Warning,
+                TEXT("[WaterPump] 무기 소켓이 막힌 형상(%s) 안에 있어 히트를 무시하고 최대 사거리를 사용한다."),
+                *GetNameSafe(OutHitResult.GetActor()));
+        }
 
         bHitObstacle = false;
         OutHitResult = FHitResult();
@@ -80,16 +94,16 @@ FVector UDRWaterPump::CalculateWaterBeamEndPoint(const FVector& WeaponSocketLoca
     FVector BeamEndPoint;
     if (bHitObstacle)
     {
-        // �߰��� ��ֹ� ������ �� ����������
+        // 중간에 장애물 있으면 그 지점까지만
         BeamEndPoint = OutHitResult.ImpactPoint;
     }
     else
     {
-        // ��ֹ� ������ �ִ� �Ÿ�����
+        // 장애물 없으면 최대 거리까지
         BeamEndPoint = CameraTargetPoint;
     }
 
-    // ����� �ð�ȭ
+    // 디버그 시각화
 #if ENABLE_DRAW_DEBUG
     if (bShowDebugVisualization)
     {
@@ -182,7 +196,7 @@ void UDRWaterPump::CollectTargetsInBeam(const FVector& WeaponSocketLocation, con
     ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
     if (!OwnerCharacter) return;
 
-    // ������ ����� ���� ���
+    // 물대포 방향과 길이 계산
     FVector BeamDirection = (BeamEndPoint - WeaponSocketLocation).GetSafeNormal();
     float BeamLength = FVector::Distance(WeaponSocketLocation, BeamEndPoint);
 
@@ -199,19 +213,19 @@ void UDRWaterPump::CollectTargetsInBeam(const FVector& WeaponSocketLocation, con
     FVector BoxCenter = WeaponSocketLocation + (BeamDirection * BeamLength * 0.5f);
     FVector BoxHalfExtent(BeamLength * 0.5f, BeamWidth * 0.5f, BeamHeight * 0.5f);
 
-    // ȸ�� ��� (������ ��������)
+    // 회전 계산 (물대포 방향으로)
     FRotator BoxRotation = BeamDirection.Rotation();
     FQuat BoxQuat = BoxRotation.Quaternion();
 
-    // Overlap ��� ����
+    // Overlap 결과 저장
     TArray<FOverlapResult> OverlapResults;
 
-    // �浹 ���� �Ķ����
+    // 충돌 쿼리 파라미터
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(OwnerCharacter);
     QueryParams.bTraceComplex = false;
 
-    // BoxOverlapMulti ����
+    // BoxOverlapMulti 실행
     bool bHasOverlaps = GetWorld()->OverlapMultiByChannel(
         OverlapResults,
         BoxCenter,
@@ -221,7 +235,7 @@ void UDRWaterPump::CollectTargetsInBeam(const FVector& WeaponSocketLocation, con
         QueryParams
     );
 
-    // ����� �ð�ȭ
+    // 디버그 시각화
 
 #if ENABLE_DRAW_DEBUG
     if (bShowDebugVisualization)
@@ -251,7 +265,7 @@ void UDRWaterPump::CollectTargetsInBeam(const FVector& WeaponSocketLocation, con
         // CombatInterface üũ
         if (!OverlappedActor->Implements<UCombatInterface>()) continue;
 
-        // ���� �� ����
+        // 죽은 적 제외
         if (ICombatInterface::Execute_IsDead(OverlappedActor)) continue;
 
         // ★같은 액터의 히트박스가 여러 개면 오버랩도 여러 번 잡힌다★ — 중복을 제거한다.
@@ -519,10 +533,10 @@ void UDRWaterPump::PerformWaterPumpTick()
 
     AActor* NewTarget = HitTargets.Num() > 0 ? HitTargets[0] : nullptr;
 
-    // Ÿ�� ���� üũ
+    // 타겟 변경 체크
     if (NewTarget)
     {
-        // ���ο� Ÿ������ Ȯ��
+        // 새로운 타겟인지 확인
         if (CurrentTarget != NewTarget)
         {
             PreviousTarget = CurrentTarget;
@@ -532,13 +546,13 @@ void UDRWaterPump::PerformWaterPumpTick()
             OnTargetChanged(PreviousTarget.Get(), CurrentTarget.Get());
         }
 
-        // ƽ ī���� ����
+        // 틱 카운터 증가
         DamageTickCounter++;
 
-        // ������ ���� ���� üũ (1�ʸ���)
+        // 데미지 적용 시점 체크 (1초마다)
         if (DamageTickCounter >= DamageApplicationInterval)
         {
-            DamageTickCounter = 0; // ī���� ����
+            DamageTickCounter = 0; // 카운터 리셋
 
             // ★이번 틱에 적을 맞혔는지는 ★피해를 넣기 전에★ 판정한다.★
             // 피해로 적이 죽으면 IsValidDamageTarget 이 false 가 되어
@@ -567,7 +581,7 @@ void UDRWaterPump::PerformWaterPumpTick()
     }
     else
     {
-        // Ÿ���� ����
+        // 타겟을 잃음
         if (CurrentTarget.IsValid())
         {
             PreviousTarget = CurrentTarget;
@@ -579,42 +593,28 @@ void UDRWaterPump::PerformWaterPumpTick()
     }
 }
 
-FGameplayAbilityTargetDataHandle UDRWaterPump::MakeTargetDataHandleFromActors(AActor* TargetActor)
-{
-    FGameplayAbilityTargetDataHandle TargetDataHandle;
-
-    if (!TargetActor) return TargetDataHandle;
-
-    FGameplayAbilityTargetData_ActorArray* TargetData = new FGameplayAbilityTargetData_ActorArray();
-    TargetData->TargetActorArray.Add(TargetActor);
-
-    TargetDataHandle.Add(TargetData);
-
-    return TargetDataHandle;
-}
-
 void UDRWaterPump::StartBeamEffect()
 {
 if (!WaterCannonEffect)
     {
-return;
+        return;
     }
 
     ADRCharacter* Character = Cast<ADRCharacter>(GetAvatarActorFromActorInfo());
     if (!Character)
     {
-return;
+        return;
     }
 
     USkeletalMeshComponent* FPMesh = Character->FirstPersonMesh;
     if (!FPMesh)
     {
-return;
+        return;
     }
 
     if (!FPMesh->DoesSocketExist(MuzzleSocketName))
     {
-return;
+        return;
     }
 
     // 직전 스폰이 정리되지 않은 경우(빠른 토글로 Stop 누락) 누수 방지
@@ -638,11 +638,8 @@ return;
     if (FirstPersonBeam)
     {
         FirstPersonBeam->SetOnlyOwnerSee(true);
-        FirstPersonBeam->SetVectorParameter(FName("HitEffectPosition"), CachedBeamEndPoint);
-}
-    else
-    {
-}
+        FirstPersonBeam->SetVectorParameter(HitEffectPositionParam, CachedBeamEndPoint);
+    }
 }
 
 void UDRWaterPump::UpdateBeamEndpoint()
@@ -688,15 +685,8 @@ void UDRWaterPump::UpdateBeamEndpoint()
     {
         FirstPersonBeam->SetWorldLocation(WeaponSocketLocation);
         FirstPersonBeam->SetWorldRotation(BeamRotation);
-        FirstPersonBeam->SetVectorParameter(
-            FName("WaterCannonScale"),
-            FVector(0.2f, 0.2f, ZScale)
-
-        );
-        FirstPersonBeam->SetVectorParameter(
-            FName("HitEffectPosition"),
-            FVector(XValue, 0.0f, 0.0f)
-        );
+        FirstPersonBeam->SetVectorParameter(WaterCannonScaleParam, FVector(0.2f, 0.2f, ZScale));
+        FirstPersonBeam->SetVectorParameter(HitEffectPositionParam, FVector(XValue, 0.0f, 0.0f));
     }
 
     OnBeamEndPointUpdated(CachedBeamEndPoint);
@@ -895,7 +885,7 @@ bool UDRWaterPump::GetAimDirection(FVector& OutAimStart, FVector& OutAimDirectio
     APlayerController* PC = Cast<APlayerController>(OwnerCharacter->GetController());
     if (!PC) return false;
 
-    // ī�޶� ��ġ�� ���� ���ϱ�
+    // 카메라 위치와 방향 구하기
     FVector CameraLocation;
     FRotator CameraRotation;
     PC->GetPlayerViewPoint(CameraLocation, CameraRotation);

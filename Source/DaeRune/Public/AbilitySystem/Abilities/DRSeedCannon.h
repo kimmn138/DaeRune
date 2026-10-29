@@ -35,15 +35,15 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon", meta = (ClampMin = "0.01"))
     float BaseMontagePlayRate = 1.f;
 
-    // SeedCannon ���� �߻�ü Ŭ����
+    // SeedCannon 전용 발사체 클래스
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon")
     TSubclassOf<ADRSeedProjectile> SeedProjectileClass;
 
-    // �߻� �ӵ�
+    // 발사 속도
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon")
     float LaunchSpeed = 500.f;
 
-    // �߻� ���� (���� ���� ����)
+    // 발사 각도 (수평 기준 위로)
     UPROPERTY(EditDefaultsOnly, Category = "SeedCannon")
     float LaunchAngle = 35.f;
 };

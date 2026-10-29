@@ -19,18 +19,20 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	FGameplayTag StartupInputTag;
 
-    // Water Cost ���� (��������Ʈ���� ���� ����)
+    // Water Cost 설정 (블루프린트에서 설정 가능)
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cost")
     float WaterCost = 0.f;
 
-    // Cost üũ �������̵�
+    // Cost 체크 오버라이드
     virtual bool CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, FGameplayTagContainer* OptionalRelevantTags) const override;
 
-    // Cost ���� �������̵�
+    // Cost 적용 오버라이드  
     virtual void ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const override;
 
-    // 스킬 차단 UI 트리거를 위해 AbilityTags 를 ActivationOwnedTags 에 자동 머지
-    virtual void OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) override;
+    // 스킬 차단 UI 트리거를 위해 어빌리티 태그를 ActivationOwnedTags 에 자동 머지
+    // (네이티브 기본값은 PostInitProperties, BP 기본값은 PostLoad 시점에 들어온다)
+    virtual void PostInitProperties() override;
+    virtual void PostLoad() override;
 
     // ========== 업그레이드 칩 반영 (Plan2.md 8.5) ==========
 
@@ -80,6 +82,14 @@ public:
     // 계산은 UDRAbilitySystemLibrary::GetAttackSpeedMultiplier 한 곳 (Plan5 D-62).
     UFUNCTION(BlueprintPure, Category = "Upgrade")
     float GetAttackSpeedMultiplier() const;
+
+private:
+    // ActivationOwnedTags 에 어빌리티 태그를 모두 넣는다 (CDO 로드 시 1회)
+    void SyncActivationOwnedTags();
+
+protected:
+    // 커브 기반 FScalableFloat 설정 실수를 부여 시점에 알린다 (커브는 있는데 Value 0 → 결과 항상 0 / 커브 없음 → 상수 동작)
+    static void WarnIfScalableFloatMisconfigured(const FScalableFloat& Field, const TCHAR* OwnerLabel, const TCHAR* FieldLabel, const TCHAR* ScaleAxis);
 
 protected:
     // 쿨다운 적용 오버라이드 — CooldownDuration > 0 일 때 업그레이드 보정값을 SetByCaller 로 주입

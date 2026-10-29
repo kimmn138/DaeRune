@@ -7,18 +7,6 @@
 
 namespace
 {
-	// 수치 표기 공통 포맷 (소수점은 필요할 때만 최대 2자리).
-	// 1자리로 두면 0.05 단위 칩이 0.1 로 반올림돼 오표기가 된다.
-	// MinimumFractionalDigits 가 0이라 기존 표기(+20 / +0.5 / 12%)는 전혀 변하지 않는다.
-	// (Plan3(공용칩) §8.3 — FDRUpgradeModifier::GetDetailText 의 같은 포맷과 ★쌍으로★ 유지할 것)
-	FNumberFormattingOptions MakeValueFormat()
-	{
-		FNumberFormattingOptions Options;
-		Options.SetMinimumFractionalDigits(0);
-		Options.SetMaximumFractionalDigits(2);
-		return Options;
-	}
-
 	// 칩 카드 윗줄 한계 — 텍스트 폭 100px · Pretendard 15(한글 1자 ≈ 20px) → 공백 빼고 5자 (Plan2.md §22 STEP 5-5)
 	constexpr int32 MaxCardTopChars = 5;
 
@@ -135,6 +123,9 @@ FText UDRUpgradeUILibrary::GetStatDisplayName(EDRUpgradeStat Stat)
 		break;
 	}
 
+	// switch 에 빠진 스탯 — UMETA DisplayName 은 에디터 전용 · 현지화 불가라 화면 글자로 쓰면 안 된다
+	// (패키징하면 열거자 이름이 그대로 보인다). 새 스탯을 추가했으면 위 switch 에 LOCTEXT 를 넣는다.
+	ensureMsgf(false, TEXT("GetStatDisplayName: 스탯 %d 의 표시 이름이 없다 — switch 에 LOCTEXT 를 추가할 것"), static_cast<int32>(Stat));
 	return UEnum::GetDisplayValueAsText(Stat);
 }
 
@@ -238,9 +229,19 @@ FText UDRUpgradeUILibrary::FormatCurrency(int32 Amount)
 	return FText::AsNumber(Amount);
 }
 
+FNumberFormattingOptions UDRUpgradeUILibrary::MakeValueFormatOptions()
+{
+	// 소수점은 필요할 때만 최대 2자리. 1자리로 두면 0.05 단위 칩이 0.1 로 반올림돼 오표기가 된다.
+	// MinimumFractionalDigits 가 0이라 기존 표기(+20 / +0.5 / 12%)는 전혀 변하지 않는다. (Plan3(공용칩) §8.3)
+	FNumberFormattingOptions Options;
+	Options.SetMinimumFractionalDigits(0);
+	Options.SetMaximumFractionalDigits(2);
+	return Options;
+}
+
 FText UDRUpgradeUILibrary::FormatValue(float Value, EDRUpgradeOp Op)
 {
-	const FNumberFormattingOptions Options = MakeValueFormat();
+	const FNumberFormattingOptions Options = MakeValueFormatOptions();
 	const FText Sign = Value < 0.f
 		? LOCTEXT("ValueSignMinus", "-")
 		: LOCTEXT("ValueSignPlus", "+");

@@ -40,6 +40,10 @@ public:
 	virtual bool IsCompleted() const override;
 	virtual void OnEnemyDeath(AActor* DeadEnemy) override;
 
+	// 좌석에 앉지 않은 마지막 생존자가 죽거나 나가면 "전원 착석"이 성립할 수 있다 — 출발 조건을 다시 본다
+	virtual void NotifyPlayerDied(APlayerState* DeadPlayerState) override;
+	virtual void NotifyPlayerLeft(APlayerState* LeftPlayerState) override;
+
 protected:
 	// ========== 설정 (BP) ==========
 
@@ -90,6 +94,9 @@ protected:
 private:
 	// 전원 착석 시 다음 목표로 출발
 	void DepartToNextTarget(ADRS2StageDirector* Director);
+
+	// 다음 틱에 탑승 인원을 다시 방송해 출발 조건을 재평가한다 (사망 · 이탈 처리가 끝난 뒤 보도록)
+	void RequestBoardingReevaluation();
 
 	// 구간 해제 (보스 도망 + 전방 개방 + 재탑승 목표)
 	void ResolveSegment(int32 ObstacleIndex);

@@ -8,8 +8,6 @@
 #include "Game/DRStageGameState.h"
 #include "Materials/MaterialInterface.h"
 
-TMap<TWeakObjectPtr<AActor>, int32> ADRPoisonGasActor::OverlapCountMap;
-
 ADRPoisonGasActor::ADRPoisonGasActor()
 {
 	InfiniteEffectApplicationPolicy = EEffectApplicationPolicy::ApplyOnOverlap;
@@ -77,31 +75,36 @@ void ADRPoisonGasActor::BeginPlay()
 	);
 }
 
-void ADRPoisonGasActor::ApplySlowEffectToTarget(AActor* TargetActor)
+bool ADRPoisonGasActor::CanAffect(const AActor* TargetActor) const
 {
-	if (TargetActor->ActorHasTag(FName("Enemy")) && !bApplyEffectsToEnemies) return;
+	if (!TargetActor) return false;
+	if (TargetActor->ActorHasTag(FName("Enemy")) && !bApplyEffectsToEnemies) return false;
+	return !TargetActor->IsA<ADRCleanserSite>();
+}
 
-	// 클렌저사이트 필터링
-	if (Cast<ADRCleanserSite>(TargetActor)) return;
-	
-	if (!SlowGameplayEffectClass) return;
-
-	UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
-	if (!TargetASC) return;
+TArray<FActiveGameplayEffectHandle> ADRPoisonGasActor::ApplyPoisonEffects(UAbilitySystemComponent* TargetASC)
+{
+	TArray<FActiveGameplayEffectHandle> Handles;
+	if (!TargetASC) return Handles;
 
 	FGameplayEffectContextHandle EffectContextHandle = TargetASC->MakeEffectContext();
 	EffectContextHandle.AddSourceObject(this);
 	EffectContextHandle.AddInstigator(this, this);
-	
-	const FGameplayEffectSpecHandle EffectSpecHandle = TargetASC->MakeOutgoingSpec(SlowGameplayEffectClass, ActorLevel, EffectContextHandle);
-	const FActiveGameplayEffectHandle ActiveEffectHandle = TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpecHandle.Data.Get());
 
-	// Infinite인 경우에만 핸들 저장
-	const bool bIsInfinite = EffectSpecHandle.Data.Get()->Def.Get()->DurationPolicy == EGameplayEffectDurationType::Infinite;
-	if (bIsInfinite && SlowEffectRemovalPolicy == EEffectRemovalPolicy::RemoveOnEndOverlap)
+	for (const TSubclassOf<UGameplayEffect>& EffectClass : { InfiniteGameplayEffectClass, SlowGameplayEffectClass })
 	{
-		SlowEffectHandles.Add(ActiveEffectHandle, TargetASC);
+		if (!EffectClass) continue;
+
+		const FGameplayEffectSpecHandle SpecHandle = TargetASC->MakeOutgoingSpec(EffectClass, ActorLevel, EffectContextHandle);
+		if (!SpecHandle.IsValid()) continue;
+
+		const FActiveGameplayEffectHandle ActiveHandle = TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+		if (ActiveHandle.IsValid())
+		{
+			Handles.Add(ActiveHandle);
+		}
 	}
+	return Handles;
 }
 
 void ADRPoisonGasActor::TransitionToActive()
@@ -137,94 +140,34 @@ void ADRPoisonGasActor::TransitionToActive()
 
 void ADRPoisonGasActor::OnPoisonGasOverlap(AActor* TargetActor)
 {
-	// 서버에서만 GE 적용
-	if (!HasAuthority()) return;
+	// 서버에서만, 활성 페이즈에서만
+	if (!HasAuthority() || CurrentPhase != EPoisonGasPhase::Active || !CanAffect(TargetActor)) return;
 
-	// 적 필터링
-	if (TargetActor->ActorHasTag(FName("Enemy")) && !bApplyEffectsToEnemies) return;
-
-	// 클렌저사이트 필터링
-	if (Cast<ADRCleanserSite>(TargetActor)) return;
-
-	// 경고 페이즈면 효과 미적용
-	if (CurrentPhase != EPoisonGasPhase::Active) return;
-
-	// 이미 이 액터에서 효과 적용 중이면 스킵
-	if (ActiveEffectTargets.Contains(TargetActor)) return;
-
-	int32& Count = OverlapCountMap.FindOrAdd(TargetActor);
-	Count++;
-
-	// 처음 진입할 때만 GE 적용
-	if (Count == 1)
+	if (UDRPoisonGasSubsystem* Registry = GetWorld()->GetSubsystem<UDRPoisonGasSubsystem>())
 	{
-		OnOverlap(TargetActor);
-		ApplySlowEffectToTarget(TargetActor);
+		Registry->Enter(this, TargetActor);
 	}
-
-	// 추적
-	ActiveEffectTargets.Add(TargetActor);
 }
 
 void ADRPoisonGasActor::OnPoisonGasEndOverlap(AActor* TargetActor)
 {
-	// 서버에서만 GE 제거
-	if (!HasAuthority()) return;
+	if (!HasAuthority() || !TargetActor) return;
 
-	// 적 필터링
-	if (TargetActor->ActorHasTag(FName("Enemy")) && !bApplyEffectsToEnemies) return;
-
-	// 클렌저사이트 필터링
-	if (Cast<ADRCleanserSite>(TargetActor)) return;
-
-	// 추적 제거
-	ActiveEffectTargets.Remove(TargetActor);
-
-	int32* CountPtr = OverlapCountMap.Find(TargetActor);
-	if (!CountPtr) return;
-
-	(*CountPtr)--;
-
-	// 모든 가스 영역에서 나갔을 때만 GE 제거
-	if (*CountPtr <= 0)
+	if (UDRPoisonGasSubsystem* Registry = GetWorld()->GetSubsystem<UDRPoisonGasSubsystem>())
 	{
-		OnEndOverlap(TargetActor);
-
-		// 슬로우 Effect 제거
-		if (SlowEffectRemovalPolicy == EEffectRemovalPolicy::RemoveOnEndOverlap)
-		{
-			UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
-			if (!IsValid(TargetASC)) return;
-
-			TArray<FActiveGameplayEffectHandle> HandlesToRemove;
-			for (const TTuple<FActiveGameplayEffectHandle, UAbilitySystemComponent*>& HandlePair : SlowEffectHandles)
-			{
-				if (TargetASC == HandlePair.Value)
-				{
-					TargetASC->RemoveActiveGameplayEffect(HandlePair.Key, 1);
-					HandlesToRemove.Add(HandlePair.Key);
-				}
-			}
-
-			for (const FActiveGameplayEffectHandle& Handle : HandlesToRemove)
-			{
-				SlowEffectHandles.FindAndRemoveChecked(Handle);
-			}
-		}
-
-		// EndOverlap 시 슬로우 적용하는 케이스 (일반적이진 않지만)
-		if (SlowEffectApplicationPolicy == EEffectApplicationPolicy::ApplyOnEndOverlap)
-		{
-			ApplySlowEffectToTarget(TargetActor);
-		}
-
-		OverlapCountMap.Remove(TargetActor);
+		Registry->Leave(this, TargetActor);
 	}
 }
 
 void ADRPoisonGasActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	RemoveAllPoisonEffects();
+	if (HasAuthority())
+	{
+		if (UDRPoisonGasSubsystem* Registry = GetWorld() ? GetWorld()->GetSubsystem<UDRPoisonGasSubsystem>() : nullptr)
+		{
+			Registry->LeaveAll(this);
+		}
+	}
 	GetWorldTimerManager().ClearTimer(PhaseTransitionTimerHandle);
 
 	if (ActiveNiagaraComponent)
@@ -246,23 +189,6 @@ void ADRPoisonGasActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 
 	Super::EndPlay(EndPlayReason);
-}
-
-void ADRPoisonGasActor::RemoveAllPoisonEffects()
-{
-	TArray<TWeakObjectPtr<AActor>> TargetsToRemove;
-	for (const TWeakObjectPtr<AActor>& ActorPtr : ActiveEffectTargets)
-	{
-		TargetsToRemove.Add(ActorPtr);
-	}
-	for (const TWeakObjectPtr<AActor>& ActorPtr : TargetsToRemove)
-	{
-		if (AActor* Actor = ActorPtr.Get())
-		{
-			OnPoisonGasEndOverlap(Actor);
-		}
-	}
-	ActiveEffectTargets.Empty();
 }
 
 void ADRPoisonGasActor::OnEffectSphereBeginOverlap(
@@ -301,4 +227,82 @@ FVector ADRPoisonGasActor::FindGroundLocation() const
 	}
 
 	return Start;
+}
+
+// ========================= UDRPoisonGasSubsystem =========================
+
+void UDRPoisonGasSubsystem::Enter(ADRPoisonGasActor* Gas, AActor* Target)
+{
+	if (!Gas || !Target) return;
+
+	FTargetState& State = Targets.FindOrAdd(Target);
+	const bool bWasOutside = State.Gases.Num() == 0;
+	State.Gases.Add(Gas);
+
+	// 첫 구역에 들어설 때만 GE 를 건다
+	if (bWasOutside)
+	{
+		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
+		State.ASC = TargetASC;
+		State.Handles = Gas->ApplyPoisonEffects(TargetASC);
+	}
+}
+
+void UDRPoisonGasSubsystem::Leave(ADRPoisonGasActor* Gas, AActor* Target)
+{
+	FTargetState* State = Targets.Find(Target);
+	if (!State) return;
+
+	State->Gases.Remove(Gas);
+
+	// 사라진 가스가 남긴 항목도 함께 정리한다
+	for (auto It = State->Gases.CreateIterator(); It; ++It)
+	{
+		if (!It->IsValid()) It.RemoveCurrent();
+	}
+
+	// 마지막 구역을 벗어났을 때만 뗀다
+	if (State->Gases.Num() == 0)
+	{
+		RemoveEffects(*State);
+		Targets.Remove(Target);
+	}
+}
+
+void UDRPoisonGasSubsystem::LeaveAll(ADRPoisonGasActor* Gas)
+{
+	TArray<TWeakObjectPtr<AActor>> Inside;
+	for (const TPair<TWeakObjectPtr<AActor>, FTargetState>& Pair : Targets)
+	{
+		if (Pair.Value.Gases.Contains(Gas))
+		{
+			Inside.Add(Pair.Key);
+		}
+	}
+
+	for (const TWeakObjectPtr<AActor>& Target : Inside)
+	{
+		FTargetState* State = Targets.Find(Target);
+		if (!State) continue;
+
+		State->Gases.Remove(Gas);
+		if (State->Gases.Num() == 0)
+		{
+			RemoveEffects(*State);
+			Targets.Remove(Target);
+		}
+	}
+}
+
+void UDRPoisonGasSubsystem::RemoveEffects(FTargetState& State)
+{
+	// 폰이 파괴돼도 ASC 는 PlayerState 에 남아 있다 — 대상 액터가 아니라 ASC 로 뗀다
+	if (UAbilitySystemComponent* ASC = State.ASC.Get())
+	{
+		for (const FActiveGameplayEffectHandle& Handle : State.Handles)
+		{
+			ASC->RemoveActiveGameplayEffect(Handle, 1);
+		}
+	}
+	State.Handles.Reset();
 }

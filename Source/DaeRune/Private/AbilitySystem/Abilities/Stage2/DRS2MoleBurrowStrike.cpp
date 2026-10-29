@@ -32,25 +32,9 @@ void UDRS2MoleBurrowStrike::OnGiveAbility(const FGameplayAbilityActorInfo* Actor
 	Super::OnGiveAbility(ActorInfo, Spec);
 
 	// 커브를 걸어 놓고 Value 를 0으로 둔 상태를 부여 시점에 1회 잡아낸다
-	auto Validate = [](const FScalableFloat& Field, const TCHAR* Label, const TCHAR* Axis)
-	{
-		if (!Field.Curve.RowName.IsNone() && FMath::IsNearlyZero(Field.Value))
-		{
-			UE_LOG(LogDR, Error,
-				TEXT("[MoleBoss] BurrowStrike %s: 커브 행(%s)이 지정됐지만 Value 가 0입니다 — 결과가 항상 0이 됩니다. Value 를 1 로 설정하세요."),
-				Label, *Field.Curve.RowName.ToString());
-		}
-		else if (Field.Curve.RowName.IsNone())
-		{
-			UE_LOG(LogDR, Warning,
-				TEXT("[MoleBoss] BurrowStrike %s 에 커브가 없어 상수 %.1f 로 동작합니다 (%s 스케일 없음)."),
-				Label, Field.Value, Axis);
-		}
-	};
-
-	Validate(BurrowCooldown, TEXT("BurrowCooldown"), TEXT("구간"));
+	WarnIfScalableFloatMisconfigured(BurrowCooldown, TEXT("[MoleBoss] BurrowStrike"), TEXT("BurrowCooldown"), TEXT("구간"));
 	// 융기 데미지는 상속받은 Damage 를 어빌리티 레벨(= 인원수)로 조회한다
-	Validate(Damage, TEXT("Damage(융기)"), TEXT("인원수"));
+	WarnIfScalableFloatMisconfigured(Damage, TEXT("[MoleBoss] BurrowStrike"), TEXT("Damage(융기)"), TEXT("인원수"));
 }
 
 ADRS2MoleBoss* UDRS2MoleBurrowStrike::GetMoleBoss() const

@@ -10,6 +10,7 @@
 class ADRS2StageDirector;
 class ADRS2PassageBlocker;
 class ADRS2TeleportGate;
+class ADRS2RoomTrigger;
 class ADREnemy;
 
 /**
@@ -63,7 +64,7 @@ protected:
 	// 방 전투 시작 시 1회 호출한다.
 	void InitSpawnPoints(FName RoomID, const TArray<TObjectPtr<AActor>>& DirectorOverride);
 
-	// 비반복 랜덤 선택: 모든 지점을 한 번씩 사용한 뒤 풀을 다시 채운다 (UDRPhase3::SelectNextSpawnPoint 관례).
+	// 비반복 랜덤 선택: 모든 지점을 한 번씩 사용한 뒤 풀을 다시 채운다.
 	AActor* SelectNextSpawnPoint();
 
 	int32 GetSpawnPointCount() const { return SpawnPoints.Num(); }
@@ -76,17 +77,30 @@ protected:
 	// 웨이브 1개를 스폰한다 (마리 단위 셔플 후 PerEnemySpawnInterval 간격으로 순차 스폰).
 	void SpawnComposition(FS2WaveComposition Composition);
 
-	// 스폰 + 사망 델리게이트 바인딩 + SpawnedEnemies 추적
 	/**
-	 * 스폰 + 사망 델리게이트 바인딩 + SpawnedEnemies 추적
+	 * 스폰 + 사망 · 소멸 추적 (UDRPhaseBase::TrackSpawnedEnemy)
 	 *
 	 * @param EnemyLevel  INDEX_NONE 이면 BP 기본 레벨을 그대로 쓴다(기존 동작).
-	 *                    1 이상이면 ★BeginPlay 전에 SetLevel 을 넣기 위해 지연 스폰 경로를 탄다.
+	 *                    1 이상이면 ★BeginPlay 전에 SetLevel 을 넣는다.
 	 *                    ADREnemy::BeginPlay 안에서 InitializeDefaultAttributes(Level) 와
 	 *                    GiveStartupAbilities(Level) 가 모두 끝나므로, 스폰이 끝난 뒤에
 	 *                    SetLevel 을 불러도 어트리뷰트와 어빌리티 스펙 레벨에는 반영되지 않는다.
 	 */
 	AActor* SpawnEnemyAt(TSubclassOf<ADREnemy> EnemyClass, const FTransform& SpawnTransform, int32 EnemyLevel = INDEX_NONE);
+
+	// ========== 방 트리거 ==========
+
+	// 방 트리거의 "전원 입장"을 OnRoomAllInside 로, 입장 인원 변화를 목표 진행도로 연결하고 감시를 시작한다
+	void ArmRoomTrigger(ADRS2RoomTrigger* Trigger);
+
+	// 바인딩을 풀고 감시를 멈춘다
+	void DisarmRoomTrigger(ADRS2RoomTrigger* Trigger);
+
+	// 방 트리거가 생존자 전원 입장을 알렸을 때 (파생 페이즈가 방 전투를 시작한다)
+	virtual void OnRoomAllInside() {}
+
+	// 방 전투가 시작됐으면 true — 그 뒤로는 진행도가 처치 수 등이라 입장 인원으로 덮어쓰지 않는다
+	virtual bool HasRoomStarted() const { return false; }
 
 	// ========== 통로 제어 (널 가드 포함) ==========
 
@@ -101,7 +115,7 @@ protected:
 	// 이 페이즈가 예약한 모든 타이머 해제
 	void ClearAllManagedTimers();
 
-	// GameMode의 World 접근 헬퍼 (페이즈는 UObject라 GetWorld가 없다)
+	// GameMode 의 월드 (페이즈의 Outer 가 GameMode 라 GetWorld() 와 같다 — 널 가드용 헬퍼)
 	UWorld* GetPhaseWorld() const;
 
 	// ========== 상태 ==========
@@ -118,6 +132,12 @@ protected:
 	TObjectPtr<ADRS2StageDirector> CachedDirector;
 
 private:
+	UFUNCTION()
+	void HandleRoomTriggerAllInside();
+
+	UFUNCTION()
+	void HandleRoomTriggerCountChanged(int32 InsideCount, int32 AliveTotal);
+
 	// 마리 1기 스폰 (지연 스폰 타이머 콜백)
 	void SpawnOneEnemy(TSubclassOf<ADREnemy> EnemyClass);
 
@@ -127,8 +147,8 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<AActor>> SpawnPoints;
 
-	// 아직 사용하지 않은 스폰 지점 인덱스 풀 (비면 전체로 다시 채운다)
-	TArray<int32> RemainingSpawnPointIndices;
+	// 아직 사용하지 않은 스폰 지점 (비면 전체로 다시 채운다)
+	FDRShuffledIndexPool SpawnPointPool;
 
 	// Director 탐색 실패 로그를 1회만 남기기 위한 플래그
 	bool bDirectorLookupFailed = false;

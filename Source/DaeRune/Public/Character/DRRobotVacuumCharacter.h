@@ -47,7 +47,7 @@ public:
 	FName RideSocketName = FName("RideSocket");
 
 	// 내 위에 탄 캐릭터 (nullptr = 빈자리)
-	UPROPERTY(ReplicatedUsing = OnRep_RiderOnTop, BlueprintReadOnly, Category = "Mount")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Mount")
 	TObjectPtr<ADRCharacter> RiderOnTop;
 
 	// 탑승 가능 검증 (서버) — 라이더 유무/중복 탑승/순환/사망/부품/스턴 검사 (Plan3 §5.2)
@@ -58,9 +58,6 @@ public:
 
 	// 하차 실행 (서버 전용). bLaunchOff = 폴짝 뛰어내리는 임펄스 적용 여부
 	void DismountRider(bool bLaunchOff);
-
-	UFUNCTION()
-	void OnRep_RiderOnTop();
 
 	// IDRInteractable — 탑승 프롬프트 UI (로컬 코스메틱)
 	virtual void SetInteractionUIVisible(bool bShow) override;
@@ -91,7 +88,7 @@ public:
 	FOnDashImpact OnDashImpact;
 
 	// 지속 돌진 중 (RepNotify: 루프 사운드/VFX — Phase F)
-	UPROPERTY(ReplicatedUsing = OnRep_SustainedDash, BlueprintReadOnly, Category = "Dash")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Dash")
 	bool bSustainedDash = false;
 
 	// GA가 버프 적용/해제 시 호출 (서버) — 활성 중에만 충돌 판정
@@ -116,9 +113,6 @@ public:
 
 	// GA가 지속 돌진 시작/종료 시 호출 (서버) — 복제 플래그 + State.RobotVacuum.SustainedDash 태그 동기화
 	void SetSustainedDash(bool bEnabled);
-
-	UFUNCTION()
-	void OnRep_SustainedDash();
 
 	// ★Plan5(돌진칩)★ ② 돌진 중 아군 통과. GA 가 서버에서 켜고 끈다 → 모든 머신의 OnRep 이 이동 무시 목록을 맞춘다 (Plan5 D-115)
 	UPROPERTY(ReplicatedUsing = OnRep_DashPassThroughAllies, BlueprintReadOnly, Category = "Dash")
@@ -247,11 +241,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Dash")
 	float DashImpactMinSpeed = 350.f;
 
-	// 돌진 충돌 임팩트 사운드 (기본 SC_VacuumCrash — BP에서 덮어쓸 수 있다)
+	// 돌진 충돌 임팩트 사운드 (SC_VacuumCrash — BP 기본값)
 	UPROPERTY(EditDefaultsOnly, Category = "Dash")
 	TObjectPtr<USoundBase> DashImpactSound;
 
-	// ---------- 사운드 (기본 에셋은 생성자에서 지정, BP에서 덮어쓸 수 있다) ----------
+	// ---------- 사운드 (BP_DRVacuumCleaner 기본값으로 지정) ----------
 
 	UPROPERTY(EditDefaultsOnly, Category = "Sound")
 	TObjectPtr<USoundBase> AttackSound;            // 공기탄 0~2단계
@@ -286,6 +280,11 @@ protected:
 	// 이보다 느리면 걷기 소리를 끈다 (수평 속도)
 	UPROPERTY(EditDefaultsOnly, Category = "Sound", meta = (ClampMin = "0.0"))
 	float WalkSoundMinSpeed = 50.f;
+
+#if WITH_EDITOR
+	// 에셋 기본값(예전 생성자 하드코딩 경로 → BP 기본값)이 비었는지 저장 · 데이터 검증 때 알린다
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+#endif
 
 	// 일반 점프 — 소유 클라 · 서버에서 불린다 (시뮬 프록시는 서버 멀티캐스트로 듣는다)
 	virtual void OnJumped_Implementation() override;

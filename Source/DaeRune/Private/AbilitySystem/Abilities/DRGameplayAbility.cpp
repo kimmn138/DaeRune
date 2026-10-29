@@ -13,20 +13,20 @@
 
 bool UDRGameplayAbility::CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, FGameplayTagContainer* OptionalRelevantTags) const
 {
-    // �⺻ Cost üũ
+    // 기본 Cost 체크
     if (!Super::CheckCost(Handle, ActorInfo, OptionalRelevantTags))
     {
         return false;
     }
 
-    // Water Cost�� ������ ���
+    // Water Cost가 없으면 통과
     const float EffectiveWaterCost = GetEffectiveWaterCostFor(ActorInfo);
     if (EffectiveWaterCost <= 0.f)
     {
         return true;
     }
 
-    // AttributeSet ��������
+    // AttributeSet 가져오기
     UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
     if (!ASC)
     {
@@ -40,64 +40,38 @@ bool UDRGameplayAbility::CheckCost(const FGameplayAbilitySpecHandle Handle, cons
         return false;
     }
 
-    float CurrentWater = AttributeSet->GetWater();
-    float CurrentHealth = AttributeSet->GetHealth();
-
-    // ★Plan3(공용칩) §17.8.2★ 피의 계약 칩: 물을 보지 않고 체력만 본다.
-    // ★UExecCalc_WaterCost 의 분기와 반드시 같은 수식(FloorToFloat 포함)이어야 한다.★
-    // 한쪽만 내림하면 경계값에서 "쓸 수 있다고 했는데 체력이 0 이 되는" 사고가 난다.
-    if (UDRAbilitySystemLibrary::HasUpgradeFeature(
-            ASC, FDRGameplayTags::Get().Upgrade_Feature_Combat_BloodCost))
-    {
-        const float Ratio = UDRAbilitySystemLibrary::GetChipTuning(
-            ActorInfo->AvatarActor.Get()).BloodCostHealthRatio;
-        const float RequiredHealth = FMath::FloorToFloat(EffectiveWaterCost * Ratio);
-
-        // 자살 방지: 체력이 소모량을 ★초과★ 해야 시전할 수 있다 (최소 1 은 남는다)
-        return CurrentHealth > RequiredHealth;
-    }
-
-    // Water�� ����� ���
-    if (CurrentWater >= EffectiveWaterCost)
-    {
-        return true;
-    }
-
-    // Water�� ������ ���, Health�� ���� �������� Ȯ��
-    float WaterShortage = EffectiveWaterCost - CurrentWater;
-    float RequiredHealth = FMath::FloorToFloat(WaterShortage * 0.5f);
-
-    // Health�� �ּ� 1 �̻� ���� �� �ִ��� Ȯ��
-    return CurrentHealth > RequiredHealth;
+    // 물 · 체력 분배 규칙은 ExecCalc_WaterCost 와 같은 헬퍼를 쓴다 (경계값 불일치 방지)
+    return UDRAbilitySystemLibrary::CanPayWaterCost(
+        ASC, EffectiveWaterCost, AttributeSet->GetWater(), AttributeSet->GetHealth());
 }
 
 void UDRGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
 {
-    // �⺻ Cost ����
-    Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
-
     const float EffectiveWaterCost = GetEffectiveWaterCostFor(ActorInfo);
-    if (EffectiveWaterCost <= 0.f || !HasAuthority(&ActivationInfo))
+
+    // 물 비용이 없으면 엔진 기본 처리. 있으면 아래에서 SetByCaller 로 ★한 번만★ 적용한다
+    // (예전에는 Super 가 같은 Cost GE 를 값 없이 한 번 더 적용해 스킬마다 GE · 효과 RPC 가 2번 나갔다)
+    if (EffectiveWaterCost <= 0.f)
+    {
+        Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
+        return;
+    }
+
+    if (!HasAuthority(&ActivationInfo))
     {
         return;
     }
 
-    // Cost GE�� �����Ǿ� ������ SetByCaller�� WaterCost ����
     if (GetCostGameplayEffect())
     {
-        UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
-        if (ASC)
+        // ★ActorInfo 를 직접 넘기는 오버로드★ — 인자 없는 판은 CurrentActorInfo 를 check 하는데 CDO 에서 불리면 비어 있다
+        FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(
+            Handle, ActorInfo, ActivationInfo, GetCostGameplayEffect()->GetClass(), GetAbilityLevel(Handle, ActorInfo));
+
+        if (SpecHandle.IsValid())
         {
-            FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(
-                GetCostGameplayEffect()->GetClass(), GetAbilityLevel());
-
-            if (SpecHandle.IsValid())
-            {
-                const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
-                SpecHandle.Data.Get()->SetSetByCallerMagnitude(GameplayTags.Cost_Water, EffectiveWaterCost);
-
-                ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-            }
+            SpecHandle.Data->SetSetByCallerMagnitude(FDRGameplayTags::Get().Cost_Water, EffectiveWaterCost);
+            ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, SpecHandle);
         }
     }
     else
@@ -116,14 +90,28 @@ void UDRGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, cons
     }
 }
 
-void UDRGameplayAbility::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+void UDRGameplayAbility::PostInitProperties()
 {
-    Super::OnGiveAbility(ActorInfo, Spec);
+    Super::PostInitProperties();
+    SyncActivationOwnedTags();
+}
 
-    // ActivationOwnedTags 가 AbilityTags 를 전부 포함하도록 보장.
+void UDRGameplayAbility::PostLoad()
+{
+    Super::PostLoad();
+
+    // ★BP 기본값이 들어온 CDO 에서 한 번★ 맞춘다 — 인스턴스는 CDO 에서 복사되므로 따로 할 필요가 없다.
+    // (예전에는 OnGiveAbility 에서 했는데, 클라는 인스턴스가 복제되기 전이면 엔진이 CDO 로 OnGiveAbility 를 불러
+    //  런타임에 CDO 를 고치는 셈이었다)
+    SyncActivationOwnedTags();
+}
+
+void UDRGameplayAbility::SyncActivationOwnedTags()
+{
+    // ActivationOwnedTags 가 어빌리티 태그를 전부 포함하도록 보장.
     // 이렇게 해야 owner ASC 의 태그 카운트 이벤트가 곧 BlockAbilitiesWithTag 변화의 트리거가 되어
     // 스킬아이콘 차단 UI 가 즉시 갱신된다.
-    for (const FGameplayTag& Tag : AbilityTags)
+    for (const FGameplayTag& Tag : GetAssetTags())
     {
         if (!ActivationOwnedTags.HasTagExact(Tag))
         {
@@ -221,7 +209,8 @@ void UDRGameplayAbility::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, 
         return;
     }
 
-    FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(CooldownGE->GetClass(), GetAbilityLevel());
+    FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(
+        Handle, ActorInfo, ActivationInfo, CooldownGE->GetClass(), GetAbilityLevel(Handle, ActorInfo));
     if (!SpecHandle.IsValid()) return;
 
     const float UpgradedCooldown = GetUpgradeRuntimeFor(ActorInfo)
@@ -231,4 +220,20 @@ void UDRGameplayAbility::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, 
     SpecHandle.Data->SetSetByCallerMagnitude(FDRGameplayTags::Get().Data_Cooldown, EffectiveCooldown);
 
     ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, SpecHandle);
+}
+
+void UDRGameplayAbility::WarnIfScalableFloatMisconfigured(const FScalableFloat& Field, const TCHAR* OwnerLabel, const TCHAR* FieldLabel, const TCHAR* ScaleAxis)
+{
+    if (!Field.Curve.RowName.IsNone() && FMath::IsNearlyZero(Field.Value))
+    {
+        UE_LOG(LogDR, Error,
+            TEXT("%s %s: 커브 행(%s)이 지정됐지만 Value 가 0입니다 — 결과가 항상 0이 됩니다. Value 를 1 로 설정하세요."),
+            OwnerLabel, FieldLabel, *Field.Curve.RowName.ToString());
+    }
+    else if (Field.Curve.RowName.IsNone())
+    {
+        UE_LOG(LogDR, Warning,
+            TEXT("%s %s 에 커브가 없어 상수 %.1f 로 동작합니다 (%s 스케일 없음)."),
+            OwnerLabel, FieldLabel, Field.Value, ScaleAxis);
+    }
 }

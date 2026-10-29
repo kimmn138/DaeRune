@@ -12,6 +12,7 @@
 #include "DRAbilitySystemLibrary.generated.h"
 
 class AAIController;
+class ADRHUD;
 class UAbilityInfo;
 class UAnimMontage;
 class UAbilitySystemComponent;
@@ -31,7 +32,7 @@ class DAERUNE_API UDRAbilitySystemLibrary : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 	
 public:
-	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|WidgetController", meta = (DefaultToSelf = "WorldContextObject"))
+	// 위젯 컨트롤러 파라미터 구성 (아래 게터 내부용)
 	static bool MakeWidgetControllerParams(const UObject* WorldContextObject, FWidgetControllerParams& OutWCParams, ADRHUD*& OutDRHUD);
 
 	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|WidgetController", meta = (DefaultToSelf = "WorldContextObject"))
@@ -58,9 +59,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|CharacterClassDefaults")
 	static void GivePlayerStartupAbilities(const UObject* WorldContextObject, UAbilitySystemComponent* ASC, EPlayerCharacterClass PlayerClass);
-
-	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|CharacterClassDefaults")
-	static UAbilityInfo* GetAbilityInfo(const UObject* WorldContextObject);
 
 	// 게임 밸런스 설정 DataAsset 반환
 	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|GameBalance")
@@ -317,13 +315,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayMechanics")
 	static TArray<FRotator> EvenlySpacedRotators(const FVector& Forward, const FVector& Axis, float Spread, int32 NumRotators);
 
-	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|GameplayMechanics")
-	static TArray<FVector> EvenlyRotatedVectors(const FVector& Forward, const FVector& Axis, float Spread, int32 NumVectors);
-
-	// 벽 충돌 체크 유틸리티 함수
-	UFUNCTION(BlueprintCallable, Category = "DRAbilitySystemLibrary|Combat")
-	static bool CheckActorWallCollision(AActor* Target, float CheckDistance = 50.f);
-
 	// ========== GameplayEffect 생성 헬퍼 함수 ==========
 
 	/**
@@ -371,10 +362,6 @@ public:
 		float Magnitude);
 
 	// ========== ★Plan8(모자)★ 모자 보호막 ==========
-
-	/** 대상이 모자를 쓰고 있나 (Single/Double 무관 — 부모 태그 Buff.BellBoy.Hat) */
-	UFUNCTION(BlueprintPure, Category = "DRAbilitySystemLibrary|BellBoy")
-	static bool HasBellBoyHat(AActor* Target);
 
 	/**
 	 * 대상에게 모자를 씌운다. ★서버 전용★
@@ -485,6 +472,13 @@ public:
 	static float GetFirstPersonSyncTime(const UAnimMontage* FPMontage, const FGameplayTag& SyncTag,
 		const UAnimMontage* TPMontage, float TPEventTime);
 
+	/**
+	 * TP 를 속도 1 로 틀 때, FP 의 SyncTag 순간이 TP 의 TPEventTag 순간과 겹치게 하는 FP 재생 속도.
+	 * TP 이벤트 노티파이가 없거나 FP 몽타주가 비면 1 (벨보이 도발 · 모자 던지기 공용, Plan8 D-35)
+	 */
+	static float GetFirstPersonSyncRate(const UAnimMontage* FPMontage, const FGameplayTag& SyncTag,
+		const UAnimMontage* TPMontage, const FGameplayTag& TPEventTag);
+
 	// ========== 로봇 청소기 탑승 칩 (Plan5(탑승칩)) ==========
 
 	/**
@@ -533,4 +527,28 @@ public:
 
 	/** ★Plan5(물점프칩)★ 대상이 무적(State.Invulnerable)인가. 기본 피해 관문이 ★모든 피해마다★ 부른다 — 태그 조회 한 번 */
 	static bool IsInvulnerable(const UAbilitySystemComponent* ASC);
+
+	// ========== 물 비용 ==========
+
+	/**
+	 * 물 비용 RequiredWater 를 물 · 체력으로 나눈다 — CheckCost · ExecCalc_WaterCost · 청소기 돌진 충전이 같은 규칙을 쓴다.
+	 * - 피의 계약 칩: 물 0, 체력 = 내림(비용 × 칩 비율)
+	 * - 물이 충분: 물만
+	 * - 물 부족: 남은 물 전부 + 체력 = 내림(부족분 × 0.5)
+	 */
+	static void SplitWaterCost(const UAbilitySystemComponent* ASC, float RequiredWater, float CurrentWater,
+		float& OutWaterCost, float& OutHealthCost);
+
+	// 위 규칙으로 지금 낼 수 있는지 — 체력으로 낼 때는 최소 1 이 남아야 한다(자살 방지)
+	static bool CanPayWaterCost(const UAbilitySystemComponent* ASC, float RequiredWater, float CurrentWater, float CurrentHealth);
+
+	// ========== 벽 판정 ==========
+
+	/**
+	 * 지형 · 벽만 보는 라인 트레이스 (WorldStatic 오브젝트만).
+	 * ★Visibility 채널을 쓰면 안 된다★ — 스테이지의 벽인 BlockingVolume(InvisibleWall 프로필)은 Visibility 를 무시해 관통하고,
+	 * 반대로 적 메시 · 히트박스는 Visibility 를 막아 다른 적 뒤의 대상이 가려진다.
+	 */
+	static bool LineTraceWorldGeometry(const UWorld* World, FHitResult& OutHit, const FVector& Start, const FVector& End,
+		const FCollisionQueryParams& Params);
 };

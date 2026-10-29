@@ -43,7 +43,6 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	virtual void OnMoveSpeedChanged(const FOnAttributeChangeData& Data) override;
 
 	// ===== 비행 루프 사운드 (Plan2.md §5.2 방안 A) =====
 

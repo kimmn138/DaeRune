@@ -51,8 +51,9 @@ struct FDRLanguageInfo
 
 /**
  * 설정 관리 매니저 - 기존 오디오/그래픽 적용 로직 유지 + 데이터 주도 관리 레이어
+ * 오디오 에셋 경로는 Config/DefaultGame.ini 의 [/Script/DaeRune.DRSettingsManager] 에 둔다.
  */
-UCLASS()
+UCLASS(Config = Game)
 class DAERUNE_API UDRSettingsManager : public UGameInstanceSubsystem
 {
 	GENERATED_BODY()
@@ -60,26 +61,11 @@ class DAERUNE_API UDRSettingsManager : public UGameInstanceSubsystem
 
 public:
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
-    virtual void Deinitialize() override;
 
     UFUNCTION(BlueprintPure, Category = "Settings")
     UDRGameUserSettings* GetSettings() const;
 
-    // ========== 기존 함수 (유지) ==========
-
-    // 모든 설정 적용 및 저장
-    UFUNCTION(BlueprintCallable, Category = "Settings")
-    void ApplyAndSaveAllSettings();
-
-    // 해상도/창모드 적용
-    UFUNCTION(BlueprintCallable, Category = "Settings|Graphics")
-    void ApplyResolutionSettings();
-
-    // 해상도 외 설정 적용
-    UFUNCTION(BlueprintCallable, Category = "Settings|Graphics")
-    void ApplyNonResolutionSettings();
-
-    // 오디오 볼륨 적용
+    // 오디오 볼륨 적용 (사운드 믹스 — 맵 진입 시 PlayerController 가 부른다)
     UFUNCTION(BlueprintCallable, Category = "Settings|Audio")
     void ApplyAudioSettings();
 
@@ -95,21 +81,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Settings|Gameplay")
     void SetMouseSensitivity(float NewSensitivity);
 
-    UFUNCTION(BlueprintCallable, Category = "Settings|Graphics")
-    void SetScreenResolution(FIntPoint NewResolution);
-
-    UFUNCTION(BlueprintCallable, Category = "Settings|Graphics")
-    void SetWindowMode(EWindowMode::Type NewMode);
-
     // Scalability 설정 (0: Low, 1: Medium, 2: High, 3: Epic, 4: Cinematic)
     UFUNCTION(BlueprintCallable, Category = "Settings|Graphics")
     void SetGraphicsQuality(int32 QualityLevel);
-
-    UFUNCTION(BlueprintCallable, Category = "Settings|Graphics")
-    void ApplyGraphicsQualitySettings();
-
-    UFUNCTION(BlueprintCallable, Category = "Settings")
-    void ResetToDefaults();
 
     UFUNCTION(BlueprintPure, Category = "Settings")
     TArray<FIntPoint> GetSupportedResolutions() const;
@@ -168,13 +142,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Settings|DataDriven")
     void DiscardPendingChanges();
 
-    /** 특정 설정이 Dirty 상태인지 확인 */
-    UFUNCTION(BlueprintPure, Category = "Settings|DataDriven")
-    bool IsSettingDirty(FName SettingId) const;
-
-    /** ID로 설정 정의 가져오기 */
+    /** ID로 설정 정의 가져오기 (BP 용 — 복사본) */
     UFUNCTION(BlueprintCallable, Category = "Settings|DataDriven")
     bool GetDefinitionById(FName SettingId, FDRSettingDefinition& OutDefinition) const;
+
+    /** ID로 설정 정의 찾기 (C++ 용 — 복사 없음, 없으면 null) */
+    const FDRSettingDefinition* FindDefinition(FName SettingId) const;
 
     // ========== 이벤트 디스패처 ==========
 
@@ -235,10 +208,34 @@ private:
     // SoundMix 볼륨 적용 함수
     void ApplySoundMixToWorld(UWorld* World);
 
+    // 해상도 · 창모드 · 해상도 외 설정(VSync · 프레임 · 품질)을 한 번에 적용
+    void ApplyVideoSettings();
+
+    // 설정 값 하나를 GameUserSettings 필드에 쓴다 (부작용 없음) — 저장과 단일 적용이 같은 매핑을 쓴다
+    void WriteSettingToUserSettings(FName SettingId, const FDRSettingsValue& Value);
+
+    // BuildDefinitions 헬퍼
+    FDRSettingDefinition& AddDefinition(FName SettingId, EDRSettingsTab Tab, int32 Order, const FText& Label,
+        EDRSettingsControlType ControlType, EDRSettingsValueType ValueType, EDRSettingsApplyMode ApplyMode);
+    void AddPercentSlider(FName SettingId, EDRSettingsTab Tab, int32 Order, const FText& Label, float DefaultPercent);
+
     // 내부 헬퍼: Pending 변경 상태 갱신
     void UpdateHasPendingChanges();
 
-    // 오디오 리소스
+    // 오디오 에셋 경로 (DefaultGame.ini — 에셋을 옮기면 코드가 아니라 ini 를 고친다)
+    UPROPERTY(Config)
+    TSoftObjectPtr<USoundMix> GameSoundMixAsset;
+
+    UPROPERTY(Config)
+    TSoftObjectPtr<USoundClass> MasterSoundClassAsset;
+
+    UPROPERTY(Config)
+    TSoftObjectPtr<USoundClass> BGMSoundClassAsset;
+
+    UPROPERTY(Config)
+    TSoftObjectPtr<USoundClass> SFXSoundClassAsset;
+
+    // 오디오 리소스 (Initialize 에서 위 경로로 불러 둔다)
     UPROPERTY()
     TObjectPtr<USoundMix> GameSoundMix;
 

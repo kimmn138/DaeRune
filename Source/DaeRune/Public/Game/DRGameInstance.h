@@ -40,6 +40,7 @@ class DAERUNE_API UDRGameInstance : public UGameInstance
 	GENERATED_BODY()
 
 public:
+	virtual void Shutdown() override;
 	virtual void Init() override;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sound")
@@ -63,9 +64,10 @@ public:
 
 	// ========== 맵 전환 시 캐릭터 선택 보존 ==========
 
-	void SavePlayerClassSelection(const FString& PlayerName, EPlayerCharacterClass SelectedClass);
-	EPlayerCharacterClass LoadPlayerClassSelection(const FString& PlayerName) const;
+	// 키는 플레이어 고유 ID(UniqueNetId) — 이름은 겹치거나(같은 스팀 닉네임) 바뀔 수 있다. ID 가 없으면(오프라인) 이름.
+	EPlayerCharacterClass LoadPlayerClassSelection(const APlayerState* PlayerState) const;
 	void SaveAllPlayerSelections(UWorld* World);
+	static FString GetPlayerSelectionKey(const APlayerState* PlayerState);
 	void ClearPlayerClassSelections();
 
 	// ========== 진행도 저장/로드 ==========
@@ -476,6 +478,19 @@ private:
 
 	// 맵 전환 시 캐릭터 선택 보존용 (GameInstance는 맵 전환에서 절대 파괴되지 않음)
 	TMap<FString, EPlayerCharacterClass> PlayerClassSelections;
+
+	// 전 로봇 클래스에 옷 목록 변경을 알린다 (치트 해금 공용)
+	void BroadcastCosmeticsChangedForAllClasses();
+
+	// 저장 요청 합치기 (SaveProgress → 다음 틱 1회)
+	void FlushPendingSave();
+	bool bSavePending = false;
+
+	// 진행 설정(칩 튜닝)의 소프트 참조 GE 를 시작 시 미리 로드해 GC 되지 않게 붙잡아 둔다
+	void PreloadProgressionEffects();
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UClass>> PreloadedProgressionClasses;
 
 	// 스테이지 선택 디버그 덮어쓰기 (저장 안 함 — DebugSetStageStateOverride)
 	TMap<FName, EDRStageSelectState> DebugStageStateOverrides;

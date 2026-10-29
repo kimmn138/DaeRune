@@ -15,23 +15,26 @@ class DAERUNE_API UDRPlayerAttributeSet : public UDRAttributeSet
 	GENERATED_BODY()
 
 	public:
-	// �����̳� ���� ���� (���� ���� �� �� ����)
+	// 컨테이너 정보 설정 (게임 시작 시 한 번만)
 	// 칸 크기는 최대 체력 / 칸 수 로 정해진다. InContainerHealth 는 최대 체력이 아직 없거나 오염 중일 때만 쓴다.
 	void SetContainerInfo(int32 InNumContainers, float InContainerHealth);
 
 	// 모든 모디파이어(칩 GE 등)를 뺀 평상시 최대 체력(클래스 기본값). 오염 중에도 오염 전 기준으로 돌려준다.
 	float GetBaseMaxHealthWithoutModifiers() const;
 
-	// �����̳� ���� ������
+	// 컨테이너 정보 접근자
 	int32 GetNumContainers() const { return NumContainers; }
 	float GetContainerHealth() const { return ContainerHealth; }
 	float GetCorruptMaxHealth() const { return CorruptMaxHealth; }
 
-	// ���� �����̳� �ε��� ���
+	// 현재 컨테이너 인덱스 계산
 	int32 GetCurrentContainerIndex() const;
 
 	void EnterCorruptedState(const FEffectProperties& Props);
-	void ExitCorruptedState(const FEffectProperties& Props);
+
+	// 오염 해제 (서버): 최대 체력을 오염 전 값으로 되돌리고 첫 칸만 채운 뒤 PlayerState 에 알린다.
+	// 오염 중 회복(정화)과 부활이 같이 쓴다. 오염 중이 아니면 아무것도 하지 않는다.
+	void ExitCorruptedState();
 
 	bool IsCorrupted() const { return bCorrupted; }
 
@@ -52,8 +55,10 @@ private:
 	void ProcessCorruptedDamage(const FEffectProperties& Props, float Damage);
 	void ProcessNormalDamage(const FEffectProperties& Props, float Damage);
 	float CalculateContainerDamage(float CurrentHealth, float Damage) const;
+
+	// 체력값 → 0-based 컨테이너 인덱스 (인덱스 0 = 마지막 칸, 칸 경계에 정확히 서 있으면 아래 칸, 체력 0 이하면 -1)
+	int32 ContainerIndexForHealth(float HealthValue) const;
 	void ApplyHitReactAndKnockback(const FEffectProperties& Props);
-	void HandleCorruptionPurification(const FEffectProperties& Props, float HealAmount);
 
 	// ★Plan5(탑승칩)★ MaxHealth 의 ★현재값★을 Desired 로 맞춘다 (Plan5 D-87).
 	// SetMaxHealth 는 BaseValue 를 바꿔 칩 GE(AddBase)의 가산이 그 위에 다시 붙는다 — 그 몫을 빼고 넣는다
@@ -62,7 +67,7 @@ private:
 	// 로비/튜토리얼 등 사망 방지가 필요한 모드인지 확인
 	bool ShouldPreventDeath() const;
 
-	// ĳ���ͺ� �����̳� ���� (Replicate ���ʿ� - �� Ŭ���̾�Ʈ�� ��ü ���)
+	// 캐릭터별 컨테이너 설정 (Replicate 불필요 - 각 클라이언트가 자체 계산)
 	UPROPERTY()
 	int32 NumContainers = 4;
 
@@ -72,8 +77,9 @@ private:
 	UPROPERTY()
 	float CorruptMaxHealth = 100.f;
 
+	// 서버 전용(복제 안 함) — 클라 UI 는 복제되는 ADRPlayerState::IsPlayerCorrupted 를 본다 (UDRHealthUILibrary)
 	bool bCorrupted = false;
 
-	// �����÷ο� �Ӱ谪
+	// 오버플로우 임계값
 	static constexpr float OVERFLOW_THRESHOLD = 0.1f;
 };

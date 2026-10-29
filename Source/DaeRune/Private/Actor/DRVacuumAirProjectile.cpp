@@ -19,7 +19,6 @@ ADRVacuumAirProjectile::ADRVacuumAirProjectile()
 	WideCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("WideCollision"));
 	WideCollision->SetupAttachment(GetRootComponent());   // 루트 = Sphere
 	WideCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	WideCollision->OnComponentBeginOverlap.AddDynamic(this, &ADRVacuumAirProjectile::OnSphereOverlap);
 }
 
 void ADRVacuumAirProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -37,6 +36,10 @@ void ADRVacuumAirProjectile::BeginPlay()
 
 	// 부모의 LifeSpan 자동 소멸을 취소하고 자체 페이드 타이머 사용 (Plan3 §6.2)
 	SetLifeSpan(0.f);
+
+	// 가로형 판정 박스 오버랩 — 부모(Sphere)처럼 BeginPlay 에서 묶는다.
+	// 예전 생성자 바인딩이 BP_VacuumAirProjectile 에 직렬화돼 남아 있어 AddUnique 로 이중 바인딩을 막는다.
+	WideCollision->OnComponentBeginOverlap.AddUniqueDynamic(this, &ADRVacuumAirProjectile::OnSphereOverlap);
 
 	if (HasAuthority())
 	{

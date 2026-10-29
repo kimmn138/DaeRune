@@ -10,6 +10,6 @@ public class DaeRuneEditorTarget : TargetRules
 		Type = TargetType.Editor;
 		DefaultBuildSettings = BuildSettingsVersion.V5;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_5;
-		ExtraModuleNames.Add("DaeRune");
+		ExtraModuleNames.AddRange(new string[] { "DaeRune", "DaeRuneEditor" });
 	}
 }

@@ -80,9 +80,6 @@ private:
 	// Digits 를 자리별 텍스처로 반영한다
 	void ApplyDigitTextures();
 
-	// 자릿값 -> 텍스처 (음수/범위 밖이면 EmptySlotTexture)
-	UTexture2D* DigitToTexture(int32 Digit) const;
-
 	UPROPERTY()
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> DisplayMIDs;
 };

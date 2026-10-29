@@ -24,27 +24,14 @@ void UDRS2WavePhase::OnPhaseStart()
 
 	SetupPhaseObjectiveByRow(TEXT("S2P4_Enter"));
 
-	if (ADRS2RoomTrigger* Trigger = Director->Trigger_Room5)
-	{
-		Trigger->OnAllInside.AddDynamic(this, &UDRS2WavePhase::HandleAllInsideRoom5);
-		Trigger->OnCountChanged.AddDynamic(this, &UDRS2WavePhase::HandleInsideCountChanged);
-		Trigger->Arm();
-	}
-	else
+	if (!Director->Trigger_Room5)
 	{
 		UE_LOG(LogDR, Error, TEXT("[S2P4] Trigger_Room5 미배선 - 방5 진행 불가"));
 	}
+	ArmRoomTrigger(Director->Trigger_Room5);
 }
 
-void UDRS2WavePhase::HandleInsideCountChanged(int32 InsideCount, int32 /*AliveTotal*/)
-{
-	// 웨이브가 시작된 뒤에는 진행도가 "현재 웨이브 번호"이므로 입장 인원으로 덮어쓰지 않는다.
-	if (bWavesStarted || !GameState) return;
-
-	GameState->UpdatePhaseObjectiveProgress(InsideCount);
-}
-
-void UDRS2WavePhase::HandleAllInsideRoom5()
+void UDRS2WavePhase::OnRoomAllInside()
 {
 	if (bWavesStarted) return;
 
@@ -171,12 +158,7 @@ void UDRS2WavePhase::OnPhaseEnd()
 
 	if (ADRS2StageDirector* Director = GetDirector())
 	{
-		if (ADRS2RoomTrigger* Trigger = Director->Trigger_Room5)
-		{
-			Trigger->OnAllInside.RemoveDynamic(this, &UDRS2WavePhase::HandleAllInsideRoom5);
-			Trigger->OnCountChanged.RemoveDynamic(this, &UDRS2WavePhase::HandleInsideCountChanged);
-			Trigger->Disarm();
-		}
+		DisarmRoomTrigger(Director->Trigger_Room5);
 	}
 
 	// D5(방5->방6) 하강 개방은 방6 페이즈의 OnPhaseStart 담당이다.

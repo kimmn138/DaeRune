@@ -14,36 +14,46 @@
 #include "Game/DRGameModeBase.h" 
 #include "Player/DRPlayerController.h"
 #include "Character/DRCharacter.h"
-#include "Components/AudioComponent.h"
 #include "Character/DRFacialExpressionComponent.h"
 #include "AbilitySystem/DRAttributeSet.h"
 #include "Animation/AnimInstance.h"
+#include "DaeRune/DRLogChannels.h"
+
+namespace
+{
+	// 플레이어 사망 → 시체 정리 · 관전 시작까지의 시간 (사망 연출이 끝날 즈음)
+	constexpr float PlayerBodyCleanupDelay = 2.2f;
+	constexpr float PlayerSpectateDelay = 2.5f;
+
+	// 무기가 붙는 3인칭 메시 소켓 (사망 시 서버에서 떼고, 부활 시 다시 붙인다)
+	const FName WeaponAttachSocketName(TEXT("WeaponHandSocket"));
+}
 
 ADRCharacterBase::ADRCharacterBase()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get(); 
 
-	// ȭ�� ����� ���̾ư��� ������Ʈ ����
+	// 화상 디버프 나이아가라 컴포넌트 생성
 	BurnDebuffComponent = CreateDefaultSubobject<UDebuffNiagaraComponent>("BurnDebuffComponent");
 	BurnDebuffComponent->SetupAttachment(GetRootComponent());
 	BurnDebuffComponent->DebuffTag = GameplayTags.Debuff_Burn;
 
-	// ���� ����� ���̾ư��� ������Ʈ ����
+	// 스턴 디버프 나이아가라 컴포넌트 생성
 	StunDebuffComponent = CreateDefaultSubobject<UDebuffNiagaraComponent>("StunDebuffComponent");
 	StunDebuffComponent->SetupAttachment(GetRootComponent());
 	StunDebuffComponent->DebuffTag = GameplayTags.Debuff_Stun;
 
-	// ī�޶� �浹 ���� ����
+	// 카메라 충돌 무시 설정
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	GetCapsuleComponent()->SetGenerateOverlapEvents(false);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Projectile, ECR_Overlap);
 	GetMesh()->SetGenerateOverlapEvents(false);
 
-	// ���� ������Ʈ ���� �� ���� ����
+	// 무기 컴포넌트 생성 및 소켓 부착
 	Weapon = CreateDefaultSubobject<USkeletalMeshComponent>("Weapon");
-	Weapon->SetupAttachment(GetMesh(), FName("WeaponHandSocket"));
+	Weapon->SetupAttachment(GetMesh(), WeaponAttachSocketName);
 	Weapon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Weapon->SetOwnerNoSee(true);
 }
@@ -68,19 +78,19 @@ UAbilitySystemComponent* ADRCharacterBase::GetAbilitySystemComponent() const
 
 UAnimMontage* ADRCharacterBase::GetHitReactMontage_Implementation()
 {
-	// �迭�� ��������� nullptr ��ȯ
+	// 배열이 비어있으면 nullptr 반환
 	if (HitReactMontages.Num() == 0)
 	{
 		return nullptr;
 	}
 
-	// �迭�� �ϳ��� ������ �װ��� ��ȯ
+	// 배열에 하나만 있으면 그것을 반환
 	if (HitReactMontages.Num() == 1)
 	{
 		return HitReactMontages[0];
 	}
 
-	// ���� �� ������ �������� ����
+	// 여러 개 있으면 랜덤으로 선택
 	const int32 RandomIndex = FMath::RandRange(0, HitReactMontages.Num() - 1);
 	return HitReactMontages[RandomIndex];
 }
@@ -123,37 +133,27 @@ void ADRCharacterBase::Die(const FVector& DeathImpulse)
 			}
 		}
 
-		// 관전 시작
+		// 관전 시작 예약 — 그 전에 부활하면 취소된다 (예약은 PC 가 들고 있다: 폰은 곧 정리된다)
 		if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(PC))
 		{
-			// 딜레이 후 관전 모드 전환
-			FTimerHandle SpectatorTimerHandle;
-			GetWorld()->GetTimerManager().SetTimer(
-				SpectatorTimerHandle,
-				FTimerDelegate::CreateWeakLambda(DRPC, [DRPC]()
-				{
-					DRPC->ClientStartSpectating();
-				}),
-				2.5f,
-				false
-			);
+			DRPC->ScheduleSpectating(PlayerSpectateDelay);
 		}
 
-		// 캐릭터 액터 파괴
-		FTimerHandle DestroyTimerHandle;
-		GetWorld()->GetTimerManager().SetTimer(
-		   DestroyTimerHandle,
-		   FTimerDelegate::CreateWeakLambda(this, [this]()
-		   {
-			  Destroy();
-		   }),
-		   2.2f,
-		   false
+		// 시체 정리 — 그 전에 부활하면 Revive 가 취소한다.
+		// 정리된 뒤의 부활은 게임모드가 새 폰을 만들어 처리한다 (ADRGameModeBase::RevivePlayer)
+		GetWorldTimerManager().SetTimer(
+			DeathCleanupTimerHandle,
+			FTimerDelegate::CreateWeakLambda(this, [this]()
+			{
+				Destroy();
+			}),
+			PlayerBodyCleanupDelay,
+			false
 		);
 	}
 	else
 	{
-		// AI�� �ٸ� ĳ���ʹ� ���������� ��� ó��
+		// AI나 다른 캐릭터는 정상적으로 사망 처리
 		Weapon->DetachFromComponent(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
 		MulticastHandleDeath(DeathImpulse);
 	}
@@ -171,7 +171,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 
 	bDead = true;
 
-	// ���� ī�޶� ����
+	// 죽음 카메라 연출
 	if (ADRCharacter* PlayerCharacter = Cast<ADRCharacter>(this))
 	{
 		PlayerCharacter->PlayDeathCameraAnimation();
@@ -187,7 +187,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 			);
 		}
 
-		// 1��Ī �޽� ����� 3��Ī �޽� ���̰�
+		// 1인칭 메쉬 숨기고 3인칭 메쉬 보이게
 		if (PlayerCharacter->IsLocallyControlled())
 		{
 			if (PlayerCharacter->FirstPersonMesh)
@@ -205,7 +205,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 		}
 	}
 
-	// ĸ�� �浹 ��Ȱ��ȭ
+	// 캡슐 충돌 비활성화
 	if (GetCapsuleComponent())
 	{
 		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -222,7 +222,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 		// MovementMode가 MOVE_None이고 StopMovementImmediately가 호출됐으므로 CMC가 계속 tick해도 부하 미미.
 	}
 
-	// �޽ø� ���� ��ġ�� ����
+	// 메시를 현재 위치에 고정
 	if (USkeletalMeshComponent* MeshComp = GetMesh())
 	{
 		MeshComp->SetSimulatePhysics(false);
@@ -238,10 +238,10 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 		}
 	}
 
-	// Dissolve ȿ�� ����
+	// Dissolve 효과 시작
 	Dissolve();
 
-	// ����� ������Ʈ ��Ȱ��ȭ
+	// 디버프 컴포넌트 비활성화
 	if (BurnDebuffComponent)
 	{
 		BurnDebuffComponent->Deactivate();
@@ -258,7 +258,7 @@ void ADRCharacterBase::MulticastHandleDeath_Implementation(const FVector& DeathI
 	// virtual이므로 ADRCharacter 인스턴스에서는 override가 호출되어 사망 몽타주 재생.
 	OnRep_Dead();
 
-	// ��� �̺�Ʈ ��ε�ĳ��Ʈ
+	// 사망 이벤트 브로드캐스트
 	OnDeathDelegate.Broadcast(this);
 }
 
@@ -266,27 +266,40 @@ void ADRCharacterBase::Revive(const FVector& ReviveLocation, float HealthRatio, 
 {
 	if (!HasAuthority() || !bDead) return;
 
+	// 사망 처리가 예약해 둔 시체 정리를 취소한다 — 이 폰을 그대로 되살린다
+	GetWorldTimerManager().ClearTimer(DeathCleanupTimerHandle);
+
 	// 부활 지점으로 이동 (물리 텔레포트 - 스윕 없이)
 	SetActorLocation(ReviveLocation, false, nullptr, ETeleportType::TeleportPhysics);
 
-	// 어트리뷰트 복원. 어트리뷰트 세트 종류에 무관하게 태그 기반으로 처리하지 않고
-	// 기본 Health/MaxHealth 만 다루므로 UDRAttributeSet 공통 경로를 사용한다.
-	if (AbilitySystemComponent)
-	{
-		if (const UDRAttributeSet* DRAttributes = Cast<UDRAttributeSet>(
-			AbilitySystemComponent->GetAttributeSet(UDRAttributeSet::StaticClass())))
-		{
-			const float TargetHealth = FMath::Max(1.f, DRAttributes->GetMaxHealth() * HealthRatio);
-			AbilitySystemComponent->SetNumericAttributeBase(DRAttributes->GetHealthAttribute(), TargetHealth);
-
-			const float TargetWater = DRAttributes->GetMaxWater() * WaterRatio;
-			AbilitySystemComponent->SetNumericAttributeBase(DRAttributes->GetWaterAttribute(), TargetWater);
-		}
-	}
+	PrepareRevive();
+	SetReviveAttributes(HealthRatio, WaterRatio);
 
 	// 사망 상태 해제 -> 전 클라에서 상태/연출 복원
 	bDead = false;
 	MulticastHandleRevive();
+
+	// 관전 예약 취소 + 관전 중이었으면 내 시점 · HUD 로 복귀
+	if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(GetController()))
+	{
+		DRPC->CancelPendingSpectate();
+		DRPC->ClientStopSpectating();
+	}
+}
+
+void ADRCharacterBase::SetReviveAttributes(float HealthRatio, float WaterRatio)
+{
+	if (!HasAuthority() || !AbilitySystemComponent) return;
+
+	// 어트리뷰트 세트 종류(플레이어 · 적)와 무관하게 공통 Health / Water 만 다룬다
+	const UDRAttributeSet* DRAttributes = AbilitySystemComponent->GetSet<UDRAttributeSet>();
+	if (!DRAttributes) return;
+
+	const float TargetHealth = FMath::Max(1.f, DRAttributes->GetMaxHealth() * HealthRatio);
+	AbilitySystemComponent->SetNumericAttributeBase(DRAttributes->GetHealthAttribute(), TargetHealth);
+
+	const float TargetWater = DRAttributes->GetMaxWater() * WaterRatio;
+	AbilitySystemComponent->SetNumericAttributeBase(DRAttributes->GetWaterAttribute(), TargetWater);
 }
 
 void ADRCharacterBase::MulticastHandleRevive_Implementation()
@@ -316,6 +329,12 @@ void ADRCharacterBase::MulticastHandleRevive_Implementation()
 		{
 			AnimInstance->StopAllMontages(0.1f);
 		}
+
+		// 사망 시(서버) 떼어 둔 무기를 다시 손에 붙인다 — 클라에서는 떼지 않았으므로 그대로다
+		if (Weapon && Weapon->GetAttachParent() != MeshComp)
+		{
+			Weapon->AttachToComponent(MeshComp, FAttachmentTransformRules::SnapToTargetNotIncludingScale, WeaponAttachSocketName);
+		}
 	}
 
 	// 디버프 VFX 컴포넌트는 사망 시 비활성화되었으나, 부활 시엔 디버프가 없는 상태이므로
@@ -329,12 +348,16 @@ void ADRCharacterBase::MulticastHandleRevive_Implementation()
 
 void ADRCharacterBase::StunTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 {
-	bIsStunned = NewCount > 0;
-	GetCharacterMovement()->MaxWalkSpeed = bIsStunned ? StunnedMoveSpeed : GetMoveSpeed();
+	// 이동 속도는 태그를 받은 머신마다 바로 맞춘다
+	const bool bStunnedNow = NewCount > 0;
+	GetCharacterMovement()->MaxWalkSpeed = bStunnedNow ? StunnedMoveSpeed : GetMoveSpeed();
 
+	// ★복제 변수는 서버만 쓴다★ — 클라가 먼저 도착한 태그로 값을 바꿔 두면 이후 복제가 같은 값이라
+	// OnRep_Stunned 가 불리지 않아 입력 차단 · 스턴 VFX 가 빠진다.
 	// 서버(Listen Server 호스트)에서는 RepNotify가 자동 호출되지 않으므로 수동 호출
 	if (HasAuthority())
 	{
+		bIsStunned = bStunnedNow;
 		OnRep_Stunned();
 	}
 }
@@ -352,32 +375,9 @@ void ADRCharacterBase::OnRep_Dead()
 	// 기본 구현은 비어있음. 파생 클래스(ADRCharacter)에서 사망 애니메이션 재생.
 }
 
-void ADRCharacterBase::BeginPlay()
-{
-	Super::BeginPlay();
-}
-
-void ADRCharacterBase::Destroyed()
-{
-	// ��� AudioComponent �����ϰ� ����
-	TArray<UAudioComponent*> AudioComps;
-	GetComponents<UAudioComponent>(AudioComps);
-
-	for (UAudioComponent* AudioComp : AudioComps)
-	{
-		if (AudioComp && AudioComp->IsPlaying())
-		{
-			// ���̵� �ƿ����� �ε巴�� ����
-			AudioComp->FadeOut(0.1f, 0.0f);
-		}
-	}
-
-	Super::Destroyed();
-}
-
 FVector ADRCharacterBase::GetCombatSocketLocation_Implementation(const FGameplayTag& MontageTag)
 {
-	// ���� ���� ��ġ ��ȯ
+	// 전투 소켓 위치 반환
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
 	if (MontageTag.MatchesTagExact(GameplayTags.CombatSocket_Weapon) && IsValid(Weapon))
 	{
@@ -435,11 +435,6 @@ int32 ADRCharacterBase::GetMinionCount_Implementation()
 	return MinionCount;
 }
 
-void ADRCharacterBase::IncremenetMinionCount_Implementation(int32 Amount)
-{
-	MinionCount += Amount;
-}
-
 ECharacterClass ADRCharacterBase::GetCharacterClass_Implementation()
 {
 	return CharacterClass;
@@ -471,12 +466,16 @@ void ADRCharacterBase::InitAbilityActorInfo()
 
 void ADRCharacterBase::ApplyEffectToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass) const
 {
-	check(IsValid(GetAbilitySystemComponent()));
-	check(GameplayEffectClass);
-	// ���ؽ�Ʈ ���� �� �ҽ� ����
+	// BP 에서 기본 속성 GE 를 비워 두면 크래시 대신 경고
+	if (!IsValid(GetAbilitySystemComponent()) || !GameplayEffectClass)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Character] %s: ASC 또는 GE 클래스가 없어 속성 효과를 적용하지 못했습니다."), *GetName());
+		return;
+	}
+	// 컨텍스트 생성 및 소스 설정
 	FGameplayEffectContextHandle ContextHandle = GetAbilitySystemComponent()->MakeEffectContext();
 	ContextHandle.AddSourceObject(this);
-	// ���� ���� �� ����
+	// 스펙 생성 및 적용
 	const FGameplayEffectSpecHandle SpecHandle = GetAbilitySystemComponent()->MakeOutgoingSpec(GameplayEffectClass, Level, ContextHandle);
 	GetAbilitySystemComponent()->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), GetAbilitySystemComponent());
 }
@@ -487,16 +486,6 @@ void ADRCharacterBase::InitializeDefaultAttributes() const
 	ApplyEffectToSelf(DefaultVitalAttributes);
 }
 
-void ADRCharacterBase::AddCharacterAbilities()
-{
-	UDRAbilitySystemComponent* DRASC = CastChecked<UDRAbilitySystemComponent>(AbilitySystemComponent);
-	if (!HasAuthority()) return;
-
-	// ��Ƽ�� �����Ƽ�� �нú� �����Ƽ �߰�
-	DRASC->AddCharacterAbilities(StartupAbilities);
-	DRASC->AddCharacterPassiveAbilities(StartupPassiveAbilities);
-}
-
 void ADRCharacterBase::OnMoveSpeedChanged(const FOnAttributeChangeData& Data)
 {
 	GetCharacterMovement()->MaxWalkSpeed = Data.NewValue;
@@ -504,19 +493,24 @@ void ADRCharacterBase::OnMoveSpeedChanged(const FOnAttributeChangeData& Data)
 
 float ADRCharacterBase::GetMoveSpeed()
 {
+	// MoveSpeed 어트리뷰트 (플레이어 · 적 공통). 어트리뷰트 셋이 아직 없으면 기본 걷기 속도
+	if (const UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets))
+	{
+		return DRAS->GetMoveSpeed();
+	}
 	return BaseWalkSpeed;
 }
 
 void ADRCharacterBase::Dissolve()
 {
-	// ĳ���� �޽� Dissolve
+	// 캐릭터 메시 Dissolve
 	if (IsValid(DissolveMaterialInstance))
 	{
 		UMaterialInstanceDynamic* DynamicMatInst = UMaterialInstanceDynamic::Create(DissolveMaterialInstance, this);
 		GetMesh()->SetMaterial(0, DynamicMatInst);
 		StartDissolveTimeline(DynamicMatInst);
 	}
-	// ���� Dissolve
+	// 무기 Dissolve
 	if (IsValid(WeaponDissolveMaterialInstance))
 	{
 		UMaterialInstanceDynamic* DynamicMatInst = UMaterialInstanceDynamic::Create(WeaponDissolveMaterialInstance, this);

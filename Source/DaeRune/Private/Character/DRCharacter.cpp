@@ -21,7 +21,6 @@
 #include "Actor/DRCleanserPart.h"
 #include "Actor/DRCleanserSite.h"
 #include "Net/UnrealNetwork.h"
-#include "Components/PointLightComponent.h"
 #include "Game/DRGameUserSettings.h"
 #include "UObject/UObjectIterator.h"
 #include "Components/WidgetComponent.h"
@@ -48,7 +47,14 @@
 #include "DaeRune/DRLogChannels.h"
 #include "Misc/ScopeExit.h"
 #include "NiagaraSystem.h"
-#include "UObject/ConstructorHelpers.h"
+#include "Misc/DataValidation.h"
+
+namespace
+{
+	// 3P 물대포 빔 나이아가라 파라미터 (빔 갱신이 초당 30회라 FName 을 매번 만들지 않는다)
+	const FName ThirdPersonBeamScaleParam(TEXT("WaterCannonScale"));
+	const FName ThirdPersonBeamHitParam(TEXT("HitEffectPosition"));
+}
 
 ADRCharacter::ADRCharacter()
 {
@@ -56,15 +62,7 @@ ADRCharacter::ADRCharacter()
 	// BP마다 수동 추가에 의존하면 새 클래스(BP_DRVacuumCleaner 등)에서 누락 시 아군 오사(誤射)가 발생 (Plan3 §15.4)
 	Tags.AddUnique(FName("Player"));
 
-	// 공속 버프 몸 이펙트 — 모든 로봇 공통이라 BP 마다 넣지 않고 여기서 기본값을 준다
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> AttackSpeedBuffVFXFinder(
-		TEXT("/Game/Basic_VFX/Niagara/Buff/NE_Buff.NE_Buff"));
-	if (AttackSpeedBuffVFXFinder.Succeeded())
-	{
-		AttackSpeedBuffVFX = AttackSpeedBuffVFXFinder.Object;
-	}
-
-	// �̵� �������� ȸ�� ����
+	// 이동 방향으로 회전 설정
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 400.f, 0.f);
 	GetCharacterMovement()->bConstrainToPlane = true;
@@ -73,7 +71,7 @@ ADRCharacter::ADRCharacter()
 	// Pawn 간 겹침 시 밀어내기 속도 제한 (튕김 방지)
 	GetCharacterMovement()->MaxDepenetrationWithPawn = 10.f;
 
-	// ī�޶� �� ����
+	// 카메라 붐 설정
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(GetCapsuleComponent());
 	CameraBoom->SetRelativeLocation(FVector(30.f, 0.f, 50.f));
@@ -81,12 +79,12 @@ ADRCharacter::ADRCharacter()
 	CameraBoom->bUsePawnControlRotation = true;
 	CameraBoom->bDoCollisionTest = false;
 
-	// ����ٴϴ� ī�޶� ����
+	// 따라다니는 카메라 설정
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
-	// 1��Ī �޽� ����
+	// 1인칭 메쉬 설정
 	FirstPersonMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonMesh"));
 	FirstPersonMesh->SetupAttachment(FollowCamera); 
 	FirstPersonMesh->SetOnlyOwnerSee(true);
@@ -206,7 +204,7 @@ void ADRCharacter::AttachToMountSocket(ADRRobotVacuumCharacter* Mount)
 
 	if (!Mount->GetMesh()->DoesSocketExist(Mount->RideSocketName))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ADRCharacter::AttachToMountSocket: 마운트 메시에 '%s' 소켓이 없습니다 — 메시 루트에 부착됩니다."),
+		UE_LOG(LogDR, Warning, TEXT("ADRCharacter::AttachToMountSocket: 마운트 메시에 '%s' 소켓이 없습니다 — 메시 루트에 부착됩니다."),
 			*Mount->RideSocketName.ToString());
 	}
 
@@ -270,7 +268,7 @@ bool ADRCharacter::ApplyMountSharedDamageTo(ADRCharacter* Target, float Damage)
 
 	if (!MountSharedDamageEffectClass)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("PropagateSharedDamage: MountSharedDamageEffectClass 미설정 (%s BP에서 GE_Damage 지정 필요)"), *GetName());
+		UE_LOG(LogDR, Warning, TEXT("PropagateSharedDamage: MountSharedDamageEffectClass 미설정 (%s BP에서 GE_Damage 지정 필요)"), *GetName());
 		return false;
 	}
 
@@ -365,20 +363,20 @@ void ADRCharacter::OnRep_Stunned()
 	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(AbilitySystemComponent))
 	{
 		const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
-		// �Է� ���� �±׵� ����
+		// 입력 차단 태그들 설정
 		FGameplayTagContainer BlockedTags;
 		BlockedTags.AddTag(GameplayTags.Player_Block_InputHeld);
 		BlockedTags.AddTag(GameplayTags.Player_Block_InputPressed);
 		BlockedTags.AddTag(GameplayTags.Player_Block_InputReleased);
 		if (bIsStunned)
 		{
-			// ���� ����: �Է� ���� + ���� ����Ʈ Ȱ��ȭ
+			// 스턴 시작: 입력 차단 + 스턴 이펙트 활성화
 			DRASC->AddLooseGameplayTags(BlockedTags);
 			StunDebuffComponent->Activate();
 		}
 		else
 		{
-			// ���� ����: �Է� ���� + ���� ����Ʈ ��Ȱ��ȭ
+			// 스턴 종료: 입력 복구 + 스턴 이펙트 비활성화
 			DRASC->RemoveLooseGameplayTags(BlockedTags);
 			StunDebuffComponent->Deactivate();
 		}
@@ -428,15 +426,15 @@ bool ADRCharacter::PickupPart(ADRCleanserPart* Part)
 {
 	if (!HasAuthority() || !Part || bIsCarryingPart) return false;
 
-	// ��ǰ ȹ�� ó��
+	// 부품 획득 처리
 	Part->PickupPart(this);
 
 	SetCarryingState(true, Part);
 
-	// ȹ�� �ð� ���
+	// 획득 시간 기록
 	LastPartPickupTime = GetWorld()->GetTimeSeconds();
 
-	// PlayerController���� UI ǥ�� ��û
+	// PlayerController에게 UI 표시 요청
 	if (ADRPlayerController* PC = Cast<ADRPlayerController>(GetController()))
 	{
 		PC->ClientShowPartPickupUI();
@@ -449,7 +447,7 @@ void ADRCharacter::InstallCarriedPart()
 {
 	if (!HasAuthority() || !bIsCarryingPart || !CarriedPart) return;
 
-	// ��ǰ ��ġ ó��
+	// 부품 설치 처리
 	CarriedPart->InstallPart();
 
 	SetCarryingState(false);
@@ -457,13 +455,13 @@ void ADRCharacter::InstallCarriedPart()
 
 void ADRCharacter::DropCarriedPart()
 {
-	// ���������� ����
+	// 서버에서만 실행
 	if (!HasAuthority()) return;
 
-	// ��ǰ�� ��� ���� ������ ����
+	// 부품을 들고 있지 않으면 무시
 	if (!bIsCarryingPart || !CarriedPart) return;
 
-	// ��ٿ� üũ
+	// 쿨다운 체크
 	const float CurrentTime = GetWorld()->GetTimeSeconds();
 	const float TimeSincePickup = CurrentTime - LastPartPickupTime;
 	if (TimeSincePickup < PartDropCooldown) return;
@@ -485,7 +483,7 @@ void ADRCharacter::ForceDropCarriedPart()
 
 void ADRCharacter::DoDropCarriedPart()
 {
-	// ��ǰ���� ��������� ��û
+	// 부품에게 떨어지라고 요청
 	CarriedPart->DropFromCarrier();
 
 	SetCarryingState(false);
@@ -522,12 +520,12 @@ void ADRCharacter::SetCarryingState(bool bNewCarrying, ADRCleanserPart* Part)
 
 void ADRCharacter::UpdateMeshVisibility()
 {
-	// ���� �÷��̾����� Ȯ��
+	// 로컬 플레이어인지 확인
 	const bool bIsLocalPlayer = IsLocallyControlled();
 
 	if (bIsLocalPlayer)
 	{
-		// ���� �÷��̾�: 1��Ī �޽� ����, 3��Ī �޽� ����
+		// 로컬 플레이어: 1인칭 메쉬 보임, 3인칭 메쉬 숨김
 		if (FirstPersonMesh)
 		{
 			FirstPersonMesh->SetVisibility(true);
@@ -540,7 +538,7 @@ void ADRCharacter::UpdateMeshVisibility()
 	}
 	else
 	{
-		// �ٸ� �÷��̾�: 3��Ī �޽� ����, 1��Ī �޽� ����
+		// 다른 플레이어: 3인칭 메쉬 보임, 1인칭 메쉬 숨김
 		if (FirstPersonMesh)
 		{
 			FirstPersonMesh->SetVisibility(false);
@@ -694,21 +692,12 @@ void ADRCharacter::MulticastTeleportToSlot_Implementation(FVector Location, FRot
 
 void ADRCharacter::MulticastPlayVendingCoinShot_Implementation(FVector_NetQuantize Location)
 {
-	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
-	if (!AssetManager) return;
-
-	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
-	if (!SoundData || !SoundData->VendingCoinShotSound) return;
-
-	UGameplayStatics::PlaySoundAtLocation(this, SoundData->VendingCoinShotSound, Location);
+	UDRSoundDataAsset::PlayAtLocation(this, &UDRSoundDataAsset::VendingCoinShotSound, Location);
 }
 
 void ADRCharacter::MulticastPlayVendingCapsuleShot_Implementation(uint8 CapsuleTier, FVector_NetQuantize Location)
 {
-	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
-	if (!AssetManager) return;
-
-	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
+	const UDRSoundDataAsset* SoundData = UDRSoundDataAsset::Get();
 	if (!SoundData) return;
 
 	// 1) Pop 사운드: 모든 Tier 공통
@@ -739,17 +728,14 @@ void ADRCharacter::MulticastPlayVendingSkillUse_Implementation(uint8 NewStacks)
 		FacialExpressionComponent->SetExpression(EFacialExpression::IncreasedAttackSpeed, 2.f);
 	}
 
-	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
-	if (!AssetManager) return;
-
-	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
-	if (!SoundData || !SoundData->VendingSkillUseSound) return;
+	USoundBase* SkillUseSound = UDRSoundDataAsset::Find(&UDRSoundDataAsset::VendingSkillUseSound);
+	if (!SkillUseSound) return;
 
 	// 1.0(1스택) → 1.6(7스택) 정도가 자연스러움.
 	const float Pitch = 1.0f + 0.1f * FMath::Max(0, static_cast<int32>(NewStacks) - 1);
 
 	UAudioComponent* Comp = UGameplayStatics::SpawnSoundAttached(
-		SoundData->VendingSkillUseSound,
+		SkillUseSound,
 		GetRootComponent(),
 		NAME_None,
 		FVector::ZeroVector,
@@ -776,21 +762,8 @@ void ADRCharacter::BeginPlay()
 		}
 	}
 
-	// �޽� ���ü� ������Ʈ
+	// 메쉬 가시성 업데이트
 	UpdateMeshVisibility();
-
-	// 1��Ī ���� ��� �ϴ� ����Ʈ �߰�
-	//if (IsLocallyControlled())
-	//{
-	//	UPointLightComponent* Light = NewObject<UPointLightComponent>(this);
-	//	Light->SetupAttachment(FollowCamera);
-	//	Light->SetRelativeLocation(FVector(-14.2f, 0.f, 23.5f));
-	//	Light->SetIntensity(1500.f);
-	//	Light->SetAttenuationRadius(300.f);
-	//	Light->SetCastShadows(false);
-	//	Light->SetMobility(EComponentMobility::Movable);
-	//	Light->RegisterComponent();
-	//}
 
 	// 표정 시스템 초기화 (3P 메시에 적용)
 	if (FacialExpressionComponent)
@@ -818,19 +791,7 @@ void ADRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		MountedOn->DismountRider(false);
 	}
 
-	// 타이머 정리 (메모리 누수 방지)
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(WaterPumpBeamUpdateTimer);
-	}
-
-	// 3P 빔 정리
-	if (WaterPumpThirdPersonBeam)
-	{
-		WaterPumpThirdPersonBeam->DeactivateImmediate();
-		WaterPumpThirdPersonBeam->DestroyComponent();
-		WaterPumpThirdPersonBeam = nullptr;
-	}
+	StopWaterPumpThirdPersonBeam();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -844,13 +805,7 @@ void ADRCharacter::OnRep_WaterPumpActive()
 	if (bWaterPumpActive)
 	{
 		// 빠른 토글로 OnRep이 false 분기를 건너뛰고 들어온 경우 이전 빔 누수 방지
-		if (WaterPumpThirdPersonBeam)
-		{
-			WaterPumpThirdPersonBeam->DeactivateImmediate();
-			WaterPumpThirdPersonBeam->DestroyComponent();
-			WaterPumpThirdPersonBeam = nullptr;
-		}
-		GetWorldTimerManager().ClearTimer(WaterPumpBeamUpdateTimer);
+		StopWaterPumpThirdPersonBeam();
 
 		// 3P Niagara 빔 생성
 		USkeletalMeshComponent* ThirdPersonMesh = GetMesh();
@@ -870,8 +825,7 @@ void ADRCharacter::OnRep_WaterPumpActive()
 			if (WaterPumpThirdPersonBeam)
 			{
 				WaterPumpThirdPersonBeam->SetOwnerNoSee(true);
-				WaterPumpThirdPersonBeam->SetVectorParameter(
-					FName("HitEffectPosition"), WaterPumpBeamEndPoint);
+				WaterPumpThirdPersonBeam->SetVectorParameter(ThirdPersonBeamHitParam, WaterPumpBeamEndPoint);
 			}
 		}
 
@@ -893,16 +847,23 @@ void ADRCharacter::OnRep_WaterPumpActive()
 	else
 	{
 		// 3P Niagara 빔 파괴
-		GetWorldTimerManager().ClearTimer(WaterPumpBeamUpdateTimer);
-
-		if (WaterPumpThirdPersonBeam)
-		{
-			WaterPumpThirdPersonBeam->DeactivateImmediate();
-			WaterPumpThirdPersonBeam->DestroyComponent();
-			WaterPumpThirdPersonBeam = nullptr;
-		}
-
+		StopWaterPumpThirdPersonBeam();
 		WaterPumpBeamDisplayEndPoint = FVector::ZeroVector;
+	}
+}
+
+void ADRCharacter::StopWaterPumpThirdPersonBeam()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(WaterPumpBeamUpdateTimer);
+	}
+
+	if (WaterPumpThirdPersonBeam)
+	{
+		WaterPumpThirdPersonBeam->DeactivateImmediate();
+		WaterPumpThirdPersonBeam->DestroyComponent();
+		WaterPumpThirdPersonBeam = nullptr;
 	}
 }
 
@@ -945,16 +906,10 @@ void ADRCharacter::UpdateWaterPumpThirdPersonBeam()
 	WaterPumpThirdPersonBeam->SetWorldRotation(BeamRotation);
 
 	// 빔 길이 반영
-	WaterPumpThirdPersonBeam->SetVectorParameter(
-		FName("WaterCannonScale"),
-		FVector(0.2f, 0.2f, ZScale)
-	);
+	WaterPumpThirdPersonBeam->SetVectorParameter(ThirdPersonBeamScaleParam, FVector(0.2f, 0.2f, ZScale));
 
 	// 우선 기존 3인칭 방식 유지
-	WaterPumpThirdPersonBeam->SetVectorParameter(
-		FName("HitEffectPosition"),
-		FVector(XValue, 0.0f, 0.0f)
-	);
+	WaterPumpThirdPersonBeam->SetVectorParameter(ThirdPersonBeamHitParam, FVector(XValue, 0.0f, 0.0f));
 }
 
 void ADRCharacter::OnRep_bIsCarryingPart()
@@ -1146,19 +1101,9 @@ void ADRCharacter::InitializeMoveSpeedBinding()
 	}
 }
 
-float ADRCharacter::GetMoveSpeed()
-{
-	if (UDRAttributeSet* DRAS = Cast<UDRAttributeSet>(AttributeSets))
-	{
-		return DRAS->GetMoveSpeed();
-	}
-
-	return Super::GetMoveSpeed();
-}
-
 void ADRCharacter::InitAbilityActorInfo()
 {
-	// PlayerState ��ȿ�� �˻�
+	// PlayerState 유효성 검사
 	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
 	if (!DRPlayerState) return;
 
@@ -1166,9 +1111,12 @@ void ADRCharacter::InitAbilityActorInfo()
 	UAbilitySystemComponent* ASC = DRPlayerState->GetAbilitySystemComponent();
 	if (!ASC) return;
 
-	// GAS ������Ʈ���� PlayerState���� ������ �ʱ�ȭ
+	// GAS 컴포넌트들을 PlayerState에서 가져와 초기화
 	ASC->InitAbilityActorInfo(DRPlayerState, this);
-	Cast<UDRAbilitySystemComponent>(ASC)->AbilityActorInfoSet();
+	if (UDRAbilitySystemComponent* DRASC = Cast<UDRAbilitySystemComponent>(ASC))
+	{
+		DRASC->AbilityActorInfoSet();   // 재빙의마다 불려도 1회만 묶는다
+	}
 
 	AbilitySystemComponent = ASC;
 	AttributeSets = DRPlayerState->GetAttributeSet();
@@ -1187,16 +1135,16 @@ void ADRCharacter::InitAbilityActorInfo()
 		}
 	}
 
-	// �÷��̾� AttributeSet�� �����̳� ���� ����
+	// 플레이어 AttributeSet에 컨테이너 정보 설정
 	if (UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSets))
 	{
 		PlayerAS->SetContainerInfo(NumContainers, ContainerHealth);
 	}
 
-	// ASC ��� �Ϸ� �̺�Ʈ ��ε�ĳ��Ʈ
+	// ASC 등록 완료 이벤트 브로드캐스트
 	OnAscRegistered.Broadcast(AbilitySystemComponent);
 
-	// GAS �±� ���ε�
+	// GAS 태그 바인딩
 	AbilitySystemComponent->RegisterGameplayTagEvent(
 		FDRGameplayTags::Get().Debuff_Stun,
 		EGameplayTagEventType::NewOrRemoved
@@ -1227,7 +1175,7 @@ void ADRCharacter::InitAbilityActorInfo()
 	// 표정 시스템은 명시적 멀티캐스트(MulticastPlayHitReactFacial /
 	// MulticastPlayVendingSkillUse)에서 트리거하므로 태그 바인딩 불필요.
 
-	// �÷��̾� ��Ʈ�ѷ��� HUD �ʱ�ȭ ��û
+	// 플레이어 컨트롤러에 HUD 초기화 요청
 	if (ADRPlayerController* DRPlayerController = Cast<ADRPlayerController>(GetController()))
 	{
 		// 대기실이면 HUD 오버레이 초기화 스킵 (FreeRoam 진입 시 별도 호출)
@@ -1384,10 +1332,21 @@ void ADRCharacter::OnRep_SeatedOn()
 	}
 }
 
+void ADRCharacter::PrepareRevive()
+{
+	if (UDRPlayerAttributeSet* PlayerAS = Cast<UDRPlayerAttributeSet>(AttributeSets))
+	{
+		PlayerAS->ExitCorruptedState();
+	}
+}
+
 void ADRCharacter::MulticastHandleRevive_Implementation()
 {
 	// 베이스: 콜리전/이동/메시/몽타주 복원 + BP 훅
 	Super::MulticastHandleRevive_Implementation();
+
+	// 다음 사망 때 사망 몽타주가 다시 재생되도록 (1회 재생 가드 해제)
+	bDeathMontagePlayed = false;
 
 	// 사망 시 1인칭 메시를 숨기고 3인칭 메시를 소유자에게도 보이게 바꿨으므로 원복한다
 	// (MulticastHandleDeath 의 IsLocallyControlled 분기 역연산)
@@ -1409,10 +1368,10 @@ void ADRCharacter::MulticastHandleRevive_Implementation()
 		}
 	}
 
-	// 표정 리셋 (사망 표정 해제)
+	// 표정 리셋 (사망 표정 해제 + 깜빡임 재개)
 	if (FacialExpressionComponent)
 	{
-		FacialExpressionComponent->RevertToDefault();
+		FacialExpressionComponent->OnRevive();
 	}
 
 	// ★코스메틱 재적용 — 반드시 필요하다★
@@ -1580,6 +1539,15 @@ void ADRCharacter::RefreshSkinVisuals()
 
 void ADRCharacter::BuildCosmeticVisuals()
 {
+	// ★아래 머티리얼 초기화가 얼굴 슬롯의 표정 MID 까지 걷어 낸다★ — 끝나면 어느 경로로 나가든 다시 꽂는다
+	ON_SCOPE_EXIT
+	{
+		if (FacialExpressionComponent)
+		{
+			FacialExpressionComponent->RefreshFaceMaterial();
+		}
+	};
+
 	ClearCosmeticAttachments();
 
 	// 1) 본체 머티리얼을 BP 기본값으로 되돌린다.
@@ -1785,3 +1753,15 @@ void ADRCharacter::SyncCosmeticVisibility()
 	Sync(CosmeticAttachTP, GetMesh());
 	Sync(CosmeticAttachFP, FirstPersonMesh);
 }
+
+#if WITH_EDITOR
+EDataValidationResult ADRCharacter::IsDataValid(FDataValidationContext& Context) const
+{
+	const EDataValidationResult Result = Super::IsDataValid(Context);
+	if (!AttackSpeedBuffVFX)
+	{
+		Context.AddWarning(FText::FromString(TEXT("AttackSpeedBuffVFX 가 비어 있다 — 공속 버프 몸 이펙트가 안 나온다 (NE_Buff 지정)")));
+	}
+	return Result;
+}
+#endif

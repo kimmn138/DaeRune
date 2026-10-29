@@ -61,15 +61,6 @@ struct FPhase3Config
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Game Over", meta = (ClampMin = "10", ClampMax = "500"))
 	int32 MaxMonsterCount = 100;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Duration", meta = (ClampMin = "60.0", ClampMax = "600.0"))
-	float DefenseDuration = 300.0f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spawn", meta = (ClampMin = "100.0", ClampMax = "1000.0"))
-	float SpawnDistanceMin = 500.0f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spawn", meta = (ClampMin = "500.0", ClampMax = "5000.0"))
-	float SpawnDistanceMax = 2000.0f;
-
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hazards", meta = (ClampMin = "1.0", ClampMax = "60.0"))
 	float PoisonGasSpawnInterval = 4.0f;
 

@@ -93,8 +93,6 @@ void UDRS2PuzzlePhase::OnPhaseStart()
 		ExitGate->OnTeamRecalled.AddDynamic(this, &UDRS2PuzzlePhase::HandleTeamRecalled);
 	}
 
-	UE_LOG(LogDR, Log, TEXT("[S2P2] 금고 코드 생성: %d%d%d"), SecretCode[0], SecretCode[1], SecretCode[2]);
-
 	// 진행도 분모 2 = 스크린에 숫자가 뜨는 퍼즐 수 (8퍼즐 + 스위치). CCTV는 제외한다.
 	SetupPhaseObjectiveByRow(TEXT("S2P2_Puzzle"), 2);
 	GameState->UpdatePhaseObjectiveProgress(0);
@@ -121,7 +119,8 @@ void UDRS2PuzzlePhase::HandleSafeOpened(AActor* SpawnedPart)
 	// 금고에서 나온 부품의 획득을 감지한다 (Plan6 §5.6)
 	if (ADRCleanserPart* Part = Cast<ADRCleanserPart>(SpawnedPart))
 	{
-		Part->OnPartPickedUp.AddDynamic(this, &UDRS2PuzzlePhase::HandlePartPickedUp);
+		Part->OnPartPickedUp.AddUniqueDynamic(this, &UDRS2PuzzlePhase::HandlePartPickedUp);
+		SafePart = Part;
 	}
 
 	UE_LOG(LogDR, Log, TEXT("[S2P2] 금고 개방 - 부품 획득 대기"));
@@ -188,6 +187,13 @@ void UDRS2PuzzlePhase::OnPhaseEnd()
 			ExitGate->OnTeamRecalled.RemoveDynamic(this, &UDRS2PuzzlePhase::HandleTeamRecalled);
 		}
 	}
+
+	// 부품은 방3~방4 에서 계속 쓰이므로 이 페이즈의 획득 감지만 푼다
+	if (ADRCleanserPart* Part = SafePart.Get())
+	{
+		Part->OnPartPickedUp.RemoveDynamic(this, &UDRS2PuzzlePhase::HandlePartPickedUp);
+	}
+	SafePart.Reset();
 
 	// 주의: 금고에서 스폰한 부품은 SpawnedEnemies 가 아니므로 Super 의 정리 대상이 아니다.
 	// 방3~방4에서 계속 사용하므로 파괴해서는 안 된다.

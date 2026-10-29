@@ -2,11 +2,11 @@
 
 #include "AbilitySystem/Abilities/DREliteRoar.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Character/DREnemy.h"
 #include "Kismet/GameplayStatics.h"
 #include "Interaction/CombatInterface.h"
 #include "TimerManager.h"
-#include "Engine/OverlapResult.h"
 
 void UDREliteRoar::StartRoarAura()
 {
@@ -51,36 +51,19 @@ void UDREliteRoar::TickRoarAura()
 
 	const FVector Origin = AvatarActor->GetActorLocation();
 
-	// --- Step 1: 반경 내 아군 적 수집 (월드 전체 액터 순회 대신 스피어 오버랩) ---
+	// --- Step 1: 반경 내 아군 적 수집 (살아 있는 적 탐색은 라이브러리 공용) ---
+	// 판정 자체는 아래 XY 거리로 하므로, 탐색 반경에는 Z 차이 대비 여유를 둔다
+	TArray<AActor*> Candidates;
+	UDRAbilitySystemLibrary::GetAliveEnemiesWithinRadius(AvatarActor, Origin, RoarRadius + 500.f, Candidates);
+
 	TSet<AActor*> EnemiesInRange;
-
-	// 판정 자체는 아래 XY 거리로 하므로, 오버랩 반경에는 Z 차이 대비 여유를 둔다
-	TArray<FOverlapResult> OverlapResults;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(AvatarActor);
-
-	AvatarActor->GetWorld()->OverlapMultiByChannel(
-		OverlapResults,
-		Origin,
-		FQuat::Identity,
-		ECC_Pawn,
-		FCollisionShape::MakeSphere(RoarRadius + 500.f),
-		QueryParams
-	);
-
-	for (const FOverlapResult& Result : OverlapResults)
+	const float RoarRadiusSq = FMath::Square(RoarRadius);
+	for (AActor* EnemyActor : Candidates)
 	{
-		AActor* EnemyActor = Cast<ADREnemy>(Result.GetActor());
-		if (!EnemyActor || EnemyActor == AvatarActor) continue;
-
-		if (ICombatInterface::Execute_IsDead(EnemyActor)) continue;
+		if (EnemyActor == AvatarActor) continue;
 
 		// XY plane distance (ignore Z)
-		FVector ToEnemy = EnemyActor->GetActorLocation() - Origin;
-		ToEnemy.Z = 0.f;
-		const float DistanceXY = ToEnemy.Size();
-
-		if (DistanceXY <= RoarRadius)
+		if (FVector::DistSquaredXY(EnemyActor->GetActorLocation(), Origin) <= RoarRadiusSq)
 		{
 			EnemiesInRange.Add(EnemyActor);
 		}

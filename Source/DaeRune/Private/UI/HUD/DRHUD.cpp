@@ -9,10 +9,10 @@
 
 UOverlayWidgetController* ADRHUD::GetOverlayWidgetController(const FWidgetControllerParams& WCParams)
 {
-	// �̱��� ����: �� ���� �����ϰ� ����
+	// 싱글톤 패턴: 한 번만 생성하고 재사용
 	if (OverlayWidgetController == nullptr)
 	{
-		// ��Ʈ�ѷ� ���� �� �ʱ�ȭ
+		// 컨트롤러 생성 및 초기화
 		OverlayWidgetController = NewObject<UOverlayWidgetController>(this, OverlayWidgetControllerClass);
 		OverlayWidgetController->SetWidgetControllerParams(WCParams);
 		OverlayWidgetController->BindCallbacksToDependencies();
@@ -28,21 +28,21 @@ void ADRHUD::InitOverlay(APlayerController* PC, APlayerState* PS, UAbilitySystem
 		return;
 	}
 
-	// ��������Ʈ Ŭ���� ���� Ȯ��
+	// 블루프린트 클래스 설정 확인
 	checkf(OverlayWidgetClass, TEXT("Overlay Widget Class uninitialized, please fill out BP_DRHUD"));
 	checkf(OverlayWidgetControllerClass, TEXT("Overlay Widget Controller Class uninitialized, please fill out BP_DRHUD"));
 
-	// ���� ����
+	// 위젯 생성
 	UUserWidget* Widget = CreateWidget<UUserWidget>(GetWorld(), OverlayWidgetClass);
 	OverlayWidget = Cast<UDRUserWidget>(Widget);
 
-	// WidgetController �Ķ���� ����
+	// WidgetController 파라미터 구성
 	const FWidgetControllerParams WidgetControllerParams(PC, PS, ASC, AS);
 	UOverlayWidgetController* WidgetController = GetOverlayWidgetController(WidgetControllerParams);
 
-	// ������ ��Ʈ�ѷ� ����
+	// 위젯과 컨트롤러 연결
 	OverlayWidget->SetWidgetController(WidgetController);
-	// �ʱ� ������ UI�� ��ε�ĳ��Ʈ
+	// 초기 값들을 UI에 브로드캐스트
 	WidgetController->BroadcastInitialValues();
 	// 캐릭터 클래스에 맞는 스킬아이콘 위젯 브로드캐스트
 	WidgetController->BroadcastSkillIconWidgetClass();
@@ -50,26 +50,28 @@ void ADRHUD::InitOverlay(APlayerController* PC, APlayerState* PS, UAbilitySystem
 	WidgetController->BroadcastCrosshairImages();
 	// 어빌리티 아이콘 갱신 (위젯 컨트롤러 할당 후 호출하여 소실 방지)
 	WidgetController->BroadcastAbilityInfo();
-	// ȭ�鿡 ���� �߰�
+	// 화면에 위젯 추가
 	Widget->AddToViewport();
 }
 
-void ADRHUD::UpdateOverlayForSpectating(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS)
+void ADRHUD::ReleaseOverlayWidgetController()
 {
-	// ���� WidgetController �ı�
 	if (OverlayWidgetController)
 	{
 		OverlayWidgetController->UnbindAllDelegates();
-
-		OverlayWidgetController->ConditionalBeginDestroy();
 		OverlayWidgetController = nullptr;
 	}
+}
 
-	// ���ο� �Ķ���ͷ� WidgetController ����
+void ADRHUD::RebindOverlay(APlayerController* PC, APlayerState* PS, UAbilitySystemComponent* ASC, UAttributeSet* AS)
+{
+	ReleaseOverlayWidgetController();
+
+	// 새로운 파라미터로 WidgetController 생성
 	const FWidgetControllerParams WidgetControllerParams(PC, PS, ASC, AS);
 	UOverlayWidgetController* WidgetController = GetOverlayWidgetController(WidgetControllerParams);
 
-	// ���� ������ �� ��Ʈ�ѷ� ����
+	// 기존 위젯에 새 컨트롤러 연결
 	if (OverlayWidget)
 	{
 		OverlayWidget->SetWidgetController(WidgetController);
@@ -88,12 +90,7 @@ void ADRHUD::RemoveOverlay()
 		OverlayWidget = nullptr;
 	}
 
-	if (OverlayWidgetController)
-	{
-		OverlayWidgetController->UnbindAllDelegates();
-		OverlayWidgetController->ConditionalBeginDestroy();
-		OverlayWidgetController = nullptr;
-	}
+	ReleaseOverlayWidgetController();
 
 	if (CharacterInfoWidget)
 	{

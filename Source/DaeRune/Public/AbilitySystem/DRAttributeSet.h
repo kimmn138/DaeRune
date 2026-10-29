@@ -5,13 +5,9 @@
 #include "CoreMinimal.h"
 #include "AttributeSet.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystem/DRAttributeAccessors.h"
 #include "DRAttributeSet.generated.h"
 
-#define ATTRIBUTE_ACCESSORS(ClassName, PropertyName) \
-	GAMEPLAYATTRIBUTE_PROPERTY_GETTER(ClassName, PropertyName) \
-	GAMEPLAYATTRIBUTE_VALUE_GETTER(PropertyName) \
-	GAMEPLAYATTRIBUTE_VALUE_SETTER(PropertyName) \
-	GAMEPLAYATTRIBUTE_VALUE_INITTER(PropertyName)
 
 USTRUCT()
 struct FEffectProperties
@@ -69,7 +65,9 @@ public:
 	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 	virtual void PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue) override;
 
-	TMap<FGameplayTag, TStaticFuncPtr<FGameplayAttribute()>> TagsToAttributes;
+	// Health / Water / MoveSpeed ë²”ìœ„ ì œí•œ (Base Â· Current ê°’ ë³€ê²½ ê³µìš©)
+	void ClampAttributeValue(const FGameplayAttribute& Attribute, float& NewValue) const;
+
 
 	/*
 	 * Primary Attributes
@@ -128,7 +126,7 @@ public:
 
 	void Debuff(const FEffectProperties& Props);
 
-	// µğ¹öÇÁ GE ¸Ê
+	// ë””ë²„í”„ GE ë§µ
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Debuff")
 	TMap<FGameplayTag, TSubclassOf<UGameplayEffect>> DebuffEffectMap;
 
@@ -137,7 +135,7 @@ protected:
 	virtual void HandleIncomingHealing(const FEffectProperties& Props);
 	void ShowFloatingText(const FEffectProperties& Props, float Damage) const;
 
-	// ÀüÅõ »óÅÂ ÁøÀÔÀ» ¾Ë¸®´Â ÇÔ¼ö
+	// ì „íˆ¬ ìƒíƒœ ì§„ì…ì„ ì•Œë¦¬ëŠ” í•¨ìˆ˜
 	void NotifyEnterCombat(const FEffectProperties& Props) const;
 
 private:

@@ -10,8 +10,11 @@
 ADRDoorManager::ADRDoorManager()
 {
 	PrimaryActorTick.bCanEverTick = false;
+
+	// ë³µì œí•  ìƒíƒœëŠ” ì—†ë‹¤. bReplicates ëŠ” í´ë¼ì—ì„œ ì—­í• ì„ SimulatedProxy ë¡œ ë°”ê¿” HasAuthority() ì„œë²„ íŒì •ì„ ì§€í‚¤ë ¤ê³ ë§Œ ì¼œ ë‘ê³ 
+	// (ë³µì œ ì•ˆ í•˜ëŠ” ë ˆë²¨ ë°°ì¹˜ ì•¡í„°ëŠ” í´ë¼ì—ì„œë„ Authority ë‹¤), ì²˜ìŒë¶€í„° íœ´ë©´(DORM_Initial)ìœ¼ë¡œ ë‘ì–´ ì•¡í„° ì±„ë„ì„ ì—´ì§€ ì•ŠëŠ”ë‹¤.
 	bReplicates = true;
-	bAlwaysRelevant = true;
+	NetDormancy = DORM_Initial;
 
 	// Root Component
 	RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootSceneComponent"));
@@ -22,10 +25,10 @@ void ADRDoorManager::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// ¼­¹ö¿¡¼­¸¸ ÀÌº¥Æ® ¹ÙÀÎµù
+	// ì„œë²„ì—ì„œë§Œ ì´ë²¤íŠ¸ ë°”ì¸ë”©
 	if (HasAuthority())
 	{
-		// GameState¿¡ ÀÚ½ÅÀ» µî·Ï
+		// GameStateì— ìì‹ ì„ ë“±ë¡
 		if (ADRStageGameState* StageGameState = GetWorld()->GetGameState<ADRStageGameState>())
 		{
 			StageGameState->RegisterDoorManager(this);
@@ -37,7 +40,7 @@ void ADRDoorManager::BeginPlay()
 
 void ADRDoorManager::BindDoorEvents()
 {
-	// ÀÚµ¿¹® ´İÈû ÀÌº¥Æ® ¹ÙÀÎµù
+	// ìë™ë¬¸ ë‹«í˜ ì´ë²¤íŠ¸ ë°”ì¸ë”©
 	if (AutoDoor_Room1ToRoom6)
 	{
 		AutoDoor_Room1ToRoom6->OnDoorClosed.AddDynamic(this, &ADRDoorManager::OnAutoDoorClosed);
@@ -46,13 +49,13 @@ void ADRDoorManager::BindDoorEvents()
 
 void ADRDoorManager::BindSpawnGroupEvents()
 {
-	// ¹æ4 ½ºÆù ±×·ì Àü¸ê ÀÌº¥Æ®
+	// ë°©4 ìŠ¤í° ê·¸ë£¹ ì „ë©¸ ì´ë²¤íŠ¸
 	if (SpawnGroup_Room4)
 	{
 		SpawnGroup_Room4->OnAllEnemiesDead.AddDynamic(this, &ADRDoorManager::OnRoom4Cleared);
 	}
 
-	// ¹æ5 ½ºÆù ±×·ì Àü¸ê ÀÌº¥Æ®
+	// ë°©5 ìŠ¤í° ê·¸ë£¹ ì „ë©¸ ì´ë²¤íŠ¸
 	if (SpawnGroup_Room5)
 	{
 		SpawnGroup_Room5->OnAllEnemiesDead.AddDynamic(this, &ADRDoorManager::OnRoom5Cleared);
@@ -61,11 +64,11 @@ void ADRDoorManager::BindSpawnGroupEvents()
 
 void ADRDoorManager::OnAutoDoorClosed()
 {
-	// ÀÌ¹Ì Æ®¸®°ÅµÆÀ¸¸é ¹«½Ã
+	// ì´ë¯¸ íŠ¸ë¦¬ê±°ëìœ¼ë©´ ë¬´ì‹œ
 	if (bInitialDoorsTriggered) return;
 	bInitialDoorsTriggered = true;
 
-	// µô·¹ÀÌ ÈÄ ¹® ÆÄ±«
+	// ë”œë ˆì´ í›„ ë¬¸ íŒŒê´´
 	if (DelayAfterAutoDoorClosed > 0.0f)
 	{
 		GetWorld()->GetTimerManager().SetTimer(
@@ -84,13 +87,13 @@ void ADRDoorManager::OnAutoDoorClosed()
 
 void ADRDoorManager::BreakInitialDoors()
 {
-	// ¹æ1-¹æ2 ¹® ÆÄ±«
+	// ë°©1-ë°©2 ë¬¸ íŒŒê´´
 	if (BreakableDoor_Room1ToRoom2)
 	{
 		BreakableDoor_Room1ToRoom2->Break();
 	}
 
-	// ¹æ1-¹æ3 ¹® ÆÄ±«
+	// ë°©1-ë°©3 ë¬¸ íŒŒê´´
 	if (BreakableDoor_Room1ToRoom3)
 	{
 		BreakableDoor_Room1ToRoom3->Break();
@@ -99,7 +102,7 @@ void ADRDoorManager::BreakInitialDoors()
 
 void ADRDoorManager::OnRoom4Cleared()
 {
-	// ¹æ4-¹æ6 ¹® ÆÄ±«
+	// ë°©4-ë°©6 ë¬¸ íŒŒê´´
 	if (BreakableDoor_Room4ToRoom6 && !BreakableDoor_Room4ToRoom6->IsBroken())
 	{
 		BreakableDoor_Room4ToRoom6->Break();
@@ -108,7 +111,7 @@ void ADRDoorManager::OnRoom4Cleared()
 
 void ADRDoorManager::OnRoom5Cleared()
 {
-	// ¹æ5-¹æ6 ¹® ÆÄ±«
+	// ë°©5-ë°©6 ë¬¸ íŒŒê´´
 	if (BreakableDoor_Room5ToRoom6 && !BreakableDoor_Room5ToRoom6->IsBroken())
 	{
 		BreakableDoor_Room5ToRoom6->Break();
@@ -119,25 +122,25 @@ void ADRDoorManager::OnPhase1Ended()
 {
 	if (!HasAuthority()) return;
 
-	// ÀÚµ¿¹® ¿­±â
+	// ìë™ë¬¸ ì—´ê¸°
 	if (AutoDoor_Room1ToRoom6)
 	{
 		AutoDoor_Room1ToRoom6->OpenDoor();
 	}
 
-	// ¾ÆÁ÷ ¾È ºÎ¼­Áø ¹®µé ÆÄ±«
+	// ì•„ì§ ì•ˆ ë¶€ì„œì§„ ë¬¸ë“¤ íŒŒê´´
 	BreakRemainingDoors();
 }
 
 void ADRDoorManager::BreakRemainingDoors()
 {
-	// ¹æ4-¹æ6 ¹®
+	// ë°©4-ë°©6 ë¬¸
 	if (BreakableDoor_Room4ToRoom6 && !BreakableDoor_Room4ToRoom6->IsBroken())
 	{
 		BreakableDoor_Room4ToRoom6->BreakWithoutEnemies();
 	}
 
-	// ¹æ5-¹æ6 ¹®
+	// ë°©5-ë°©6 ë¬¸
 	if (BreakableDoor_Room5ToRoom6 && !BreakableDoor_Room5ToRoom6->IsBroken())
 	{
 		BreakableDoor_Room5ToRoom6->BreakWithoutEnemies();

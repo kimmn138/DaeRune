@@ -22,7 +22,7 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// ¿ÜºÎ¿¡¼­ È£ÃâÇÒ ÇÔ¼ö
+	// ì™¸ë¶€ì—ì„œ í˜¸ì¶œí•  í•¨ìˆ˜
 	UFUNCTION(BlueprintCallable, Category = "Door")
 	void Break();
 
@@ -42,11 +42,11 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USceneComponent> RootSceneComponent;
 
-	// ¹®ÀÌ NavMesh¸¦ ¸·´Â ÄÄÆ÷³ÍÆ®
+	// ë¬¸ì´ NavMeshë¥¼ ë§‰ëŠ” ì»´í¬ë„ŒíŠ¸
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UNavModifierComponent> NavModifierComponent;
 
-	// ¹°¸® ¼³Á¤
+	// ë¬¼ë¦¬ ì„¤ì •
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Physics")
 	FVector BreakDirection = FVector(1.0f, 0.0f, 0.0f);
 
@@ -65,7 +65,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Physics", meta = (ClampMin = "0.1", ClampMax = "30.0"))
 	float PieceLifetime = 5.0f;
 
-	// »ç¿îµå & ÀÌÆåÆ®
+	// ì‚¬ìš´ë“œ & ì´í™íŠ¸
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Effects")
 	TObjectPtr<USoundBase> BreakSound;
 
@@ -75,7 +75,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Effects")
 	TObjectPtr<UNiagaraSystem> BreakNiagara;
 
-	// ¸ó½ºÅÍ ½ºÆù ¼³Á¤
+	// ëª¬ìŠ¤í„° ìŠ¤í° ì„¤ì •
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Enemies")
 	bool bSpawnEnemiesOnBreak = false;
 
@@ -101,15 +101,14 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMeshComponent>> DoorPieces;
 
-	struct FPieceInitialTransform
-	{
-		FVector Location;
-		FRotator Rotation;
-	};
-	TArray<FPieceInitialTransform> InitialTransforms;
-
 	FTimerHandle CleanupTimerHandle;
 	bool bShouldSpawnEnemies = true;
+
+	// ì´ ë¨¸ì‹ ì—ì„œ íŒŒí¸ ì—°ì¶œ(ë¬¼ë¦¬ Â· ì´í™íŠ¸)ì„ ì´ë¯¸ ì¬ìƒí–ˆëŠ”ì§€ â€” ëŠ¦ê²Œ ë“¤ì–´ì˜¨ í´ë¼ë§Œ OnRep ì—ì„œ ìˆ¨ê¹€ ì²˜ë¦¬
+	bool bBreakEffectPlayed = false;
+
+	// íŒŒí¸ì„ ë‚ ë¦¬ê³  ì´í™íŠ¸ë¥¼ ì¬ìƒí•œë‹¤ (ë¨¸ì‹ ë‹¹ 1íšŒ)
+	void PlayBreakSequence();
 
 	UFUNCTION()
 	void OnRep_IsBroken();

@@ -53,17 +53,27 @@ protected:
 
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+
+	// 편집 때 로그로 내는 검사를 데이터 검증(저장 · "데이터 검증" 메뉴)에도 건다
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+
+	// 카탈로그 · 해금 조건 · 로봇별 소켓 검사를 한 번에 (PostEditChangeProperty · IsDataValid 공용)
+	void CollectEditorValidationErrors(TArray<FString>& OutErrors) const;
 #endif
 
 private:
 	// SkinId → Skins 인덱스 캐시 (선형 탐색 제거). UDRChipCatalog 와 같은 방식.
 	mutable TMap<FName, int32> IdToIndex;
 
+	// 색인을 만들 때의 항목 수. ★IdToIndex.Num() 과 비교하면 안 된다★ — 빈 Id · 중복 Id 가 하나라도 있으면
+	// 두 수가 영영 달라져 조회마다 색인을 통째로 다시 만들었다.
+	mutable int32 IndexedEntryCount = INDEX_NONE;
+
 	void BuildIndex() const;
 
 	FORCEINLINE void EnsureIndex() const
 	{
-		if (IdToIndex.Num() != Skins.Num())
+		if (IndexedEntryCount != Skins.Num())
 		{
 			BuildIndex();
 		}

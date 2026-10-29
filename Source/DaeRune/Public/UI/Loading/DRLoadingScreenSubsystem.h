@@ -74,6 +74,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Loading")
 	float MaxIntroWaitTime = 4.0f;
 
+	// 퇴장 애니를 재생하고 끝나면(또는 안전 시간 뒤) 위젯을 제거한다
+	void PlayOutroAndRemove(class UDRLoadingScreenWidget* Widget);
+
 	// 심리스 로딩 화면이 최소한 표시될 시간(초). 로드가 더 빨라도 이 시간 동안은 유지(깜빡임 방지).
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Loading")
 	float MinimumSeamlessDisplayTime = 1.5f;

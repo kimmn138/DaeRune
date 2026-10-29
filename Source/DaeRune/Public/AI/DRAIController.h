@@ -12,7 +12,7 @@ class UAIPerceptionComponent;
 class UAISenseConfig_Sight;
 
 /**
- * DREnemy ���� AI ��Ʈ�ѷ�
+ * DREnemy 전용 AI 컨트롤러
  */
 UCLASS()
 class DAERUNE_API ADRAIController : public AAIController
@@ -27,24 +27,24 @@ public:
 	virtual void SetGenericTeamId(const FGenericTeamId& NewTeamId) override { TeamId = NewTeamId; }
 	virtual ETeamAttitude::Type GetTeamAttitudeTowards(const AActor& Other) const override;
 
-	// Ư�� �Ÿ� �� �÷��̾�� ��������
+	// 특정 거리 내 플레이어들 가져오기
 	UFUNCTION(BlueprintCallable, Category = "AI|Perception")
 	TArray<AActor*> GetPlayers() const { return PerceivedPlayers; }
 
-	// ������ �÷��̾� ��
+	// 감지된 플레이어 수
 	UFUNCTION(BlueprintCallable, Category = "AI|Perception")
 	int32 GetPerceivedPlayerCount() const { return PerceivedPlayers.Num(); }
 	
-	// ���� �ð� ������Ʈ
+	// 전투 시간 업데이트
     UFUNCTION(BlueprintCallable, Category = "AI|Combat")
     void UpdateCombatTime();
         
-    // ���� ��Ż ���� Ȯ��
+    // 전투 이탈 여부 확인
     UFUNCTION(BlueprintCallable, Category = "AI|Combat")
     bool HasCombatTimedOut(float TimeoutSeconds = 3.0f) const;
 
 protected:
-	// �����̺�� Ʈ�� ���� ������Ʈ
+	// 비헤이비어 트리 실행 컴포넌트
 	UPROPERTY()
 	TObjectPtr<UBehaviorTreeComponent> BehaviorTreeComponent;
 
@@ -56,20 +56,20 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI|Perception")
 	TObjectPtr<UAISenseConfig_Sight> SightConfig;
 
-	// Perception ������Ʈ �ݹ�
+	// Perception 업데이트 콜백
 	UFUNCTION()
 	void OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus);
 
 private:
 	FGenericTeamId TeamId;
 
-	// �Ÿ����� ���ĵ� �÷��̾� �迭
+	// 거리별로 정렬된 플레이어 배열
 	UPROPERTY(VisibleAnywhere, Category = "AI|Perception", meta = (AllowPrivateAccess = "true"))
 	TArray<AActor*> PerceivedPlayers;
 
-	// �Ÿ� ������Ʈ
+	// 거리 업데이트
 	void UpdatePlayer(AActor* Player);
 
-	// �÷��̾� ����
+	// 플레이어 제거
 	void RemovePlayer(AActor* Player);
 };

@@ -14,7 +14,7 @@ class UEnemyInterface : public UInterface
 };
 
 /**
- * ÀûÀÇ ÀüÅõ Çàµ¿À» Á¤ÀÇÇÏ´Â ÀÎÅÍÆäÀÌ½º
+ * ì ì˜ ì „íˆ¬ í–‰ë™ì„ ì •ì˜í•˜ëŠ” ì¸í„°í˜ì´ìŠ¤
  */
 class DAERUNE_API IEnemyInterface
 {
@@ -22,11 +22,11 @@ class DAERUNE_API IEnemyInterface
 
 	// Add interface functions to this class. This is the class that will be inherited to implement this interface.
 public:
-	// ÀüÅõ Å¸°Ù ¼³Á¤ 
+	// ì „íˆ¬ íƒ€ê²Ÿ ì„¤ì • 
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent)
 	void SetCombatTarget(AActor* InCombatTarget);
 
-	// ÇöÀç ÀüÅõ Å¸°Ù ¹İÈ¯
+	// í˜„ì¬ ì „íˆ¬ íƒ€ê²Ÿ ë°˜í™˜
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent)
 	AActor* GetCombatTarget() const;
 };

@@ -8,11 +8,7 @@
 #include "Interaction/CombatInterface.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
-
-void UDRProjectileSpell::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
-{
-	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
-}
+#include "DaeRune/DRLogChannels.h"
 
 ADRProjectile* UDRProjectileSpell::SpawnProjectile(const FVector& ProjectileTargetLocation, const FGameplayTag& SocketTag, bool bOverridePitch, float PitchOverride)
 {
@@ -27,23 +23,32 @@ ADRProjectile* UDRProjectileSpell::SpawnProjectile(const FVector& ProjectileTarg
 
 ADRProjectile* UDRProjectileSpell::SpawnProjectileAt(const FVector& SpawnLocation, const FVector& ProjectileTargetLocation, bool bOverridePitch, float PitchOverride)
 {
-	const bool bIsServer = GetAvatarActorFromActorInfo()->HasAuthority();
-	if (!bIsServer) return nullptr;
-
 	FRotator Rotation = (ProjectileTargetLocation - SpawnLocation).Rotation();
-
 	if (bOverridePitch)
-	{ 
+	{
 		Rotation.Pitch = PitchOverride;
 	}
 
-	FTransform SpawnTransform;
-	SpawnTransform.SetLocation(SpawnLocation);
-	SpawnTransform.SetRotation(Rotation.Quaternion());
+	return SpawnProjectileWithRotation(SpawnLocation, Rotation, [](ADRProjectile&) {});
+}
+
+ADRProjectile* UDRProjectileSpell::SpawnProjectileWithRotation(const FVector& SpawnLocation, const FRotator& Rotation,
+	TFunctionRef<void(ADRProjectile&)> Configure)
+{
+	const AActor* Avatar = GetAvatarActorFromActorInfo();
+	if (!Avatar || !Avatar->HasAuthority()) return nullptr;
+
+	// 투사체 클래스를 BP 에서 비워 두면 크래시 대신 경고
+	if (!ProjectileClass)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Projectile] %s: ProjectileClass 가 비어 있어 발사하지 않습니다."), *GetName());
+		return nullptr;
+	}
+
 	// ★Plan5(동전칩)★ 투사체 크기 칩(SkillProjectileScale). 칩이 없으면 1.0 이라 기존과 완전히 같다 —
 	// 이 함수를 쓰는 적 GA(원거리·잠자리)는 칩 캐시가 비어 있어 항상 1.0 이다.
-	// SpawnActorDeferred 와 FinishSpawning 에 ★같은 트랜스폼★ 이 넘어가야 한다(아래 코드 그대로).
-	SpawnTransform.SetScale3D(FVector(GetUpgradedProjectileScale()));
+	// SpawnActorDeferred 와 FinishSpawning 에 ★같은 트랜스폼★ 이 넘어가야 한다.
+	const FTransform SpawnTransform(Rotation, SpawnLocation, FVector(GetUpgradedProjectileScale()));
 
 	ADRProjectile* Projectile = GetWorld()->SpawnActorDeferred<ADRProjectile>(
 		ProjectileClass,
@@ -51,11 +56,12 @@ ADRProjectile* UDRProjectileSpell::SpawnProjectileAt(const FVector& SpawnLocatio
 		GetOwningActorFromActorInfo(),
 		Cast<APawn>(GetOwningActorFromActorInfo()),
 		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (!Projectile) return nullptr;
 
 	Projectile->DamageEffectParams = MakeDamageEffectParamsFromClassDefaults();
+	Configure(*Projectile);   // 유도 등 파생 GA 별 설정 (BeginPlay 전)
 
 	Projectile->FinishSpawning(SpawnTransform);
-
 	return Projectile;
 }
 

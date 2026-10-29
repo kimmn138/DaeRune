@@ -4,7 +4,7 @@
 bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
 {
 	uint32 RepBits = 0;
-	// ����ȭ�� ������ ��Ʈ ����ŷ
+	// 직렬화할 데이터 비트 마스킹
 	if (Ar.IsSaving())
 	{
 		if (bReplicateInstigator && Instigator.IsValid())
@@ -59,10 +59,14 @@ bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool
 		{
 			RepBits |= 1 << 12;
 		}
+		if (!SourceAbilityTags.IsEmpty())
+		{
+			RepBits |= 1 << 13;
+		}
 	}
 
-	// ��Ʈ ����ũ ����ȭ
-	Ar.SerializeBits(&RepBits, 13);
+	// 비트 마스크 직렬화
+	Ar.SerializeBits(&RepBits, 14);
 
 	if (RepBits & (1 << 0))
 	{
@@ -104,10 +108,8 @@ bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool
 	{
 		bHasWorldOrigin = false;
 	}
-	if (RepBits & (1 << 7))
-	{
-		Ar << bIsSuccessfulDebuff;
-	}
+	// 디버프 성공 여부는 비트 자체가 값이다
+	bIsSuccessfulDebuff = (RepBits & (1 << 7)) != 0;
 	if (RepBits & (1 << 8))
 	{
 		Ar << DebuffDamage;
@@ -118,14 +120,7 @@ bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool
 	}
 	if (RepBits & (1 << 10))
 	{
-		if (Ar.IsLoading())
-		{
-			if (!DamageType.IsValid())
-			{
-				DamageType = TSharedPtr<FGameplayTag>(new FGameplayTag());
-			}
-		}
-		DamageType->NetSerialize(Ar, Map, bOutSuccess);
+		DamageType.NetSerialize(Ar, Map, bOutSuccess);
 	}
 	if (RepBits & (1 << 11))
 	{
@@ -135,8 +130,13 @@ bool FDRGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, bool
 	{
 		KnockbackForce.NetSerialize(Ar, Map, bOutSuccess);
 	}
+	// 소스 어빌리티 태그 — 예전에는 빠져 있어 클라 쪽 컨텍스트에서는 늘 비어 있었다
+	if (RepBits & (1 << 13))
+	{
+		SourceAbilityTags.NetSerialize(Ar, Map, bOutSuccess);
+	}
 
-	// �ε� �� InstigatorAbilitySystemComponent �ʱ�ȭ
+	// 로딩 시 InstigatorAbilitySystemComponent 초기화
 	if (Ar.IsLoading())
 	{
 		AddInstigator(Instigator.Get(), EffectCauser.Get()); // Just to initialize InstigatorAbilitySystemComponent
