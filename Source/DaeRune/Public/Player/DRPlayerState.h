@@ -121,6 +121,10 @@ public:
 	// 서버 전용: 정화된 장착 목록을 싣고 캐시를 재구축한다.
 	void SetEquippedChips(const TArray<FName>& InChips);
 
+	// 복제된 EquippedChips + 선택 클래스로 수치 캐시를 다시 만들고, 폰에 갱신을 통지한다.
+	// 장착이 그대로여도 칩 수치(카탈로그)가 바뀌면 다시 불러야 한다 — 튜닝 파일(UDRTuningSubsystem)이 그렇게 쓴다.
+	void RebuildUpgradeRuntime();
+
 	/**
 	 * ★Plan3(공용칩)★ 장착 칩이 부여한 기능 스위치 조회.
 	 * UI 가 FDRUpgradeRuntime 내부를 직접 뒤지지 않게 하는 단일 경로다.
@@ -224,9 +228,6 @@ protected:
 
 	// 로컬 플레이어의 대기실 UI 갱신 (대기실 관련 OnRep 공용 헬퍼)
 	void RefreshLocalWaitingRoomUI() const;
-
-	// 복제된 EquippedChips + 선택 클래스로 수치 캐시를 다시 만들고, 폰에 갱신을 통지한다.
-	void RebuildUpgradeRuntime();
 
 	// 소유 클라이언트에서만: 현재 선택 클래스의 장착 목록을 서버에 보고
 	void ReportUpgradeLoadoutIfLocal();

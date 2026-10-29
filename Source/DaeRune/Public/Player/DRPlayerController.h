@@ -9,6 +9,7 @@
 #include "GenericTeamAgentInterface.h"
 #include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "Game/DRProgressionTypes.h"
+#include "Tuning/DRTuningTypes.h"
 #include "DRPlayerController.generated.h"
 
 // 상호작용 델리게이트
@@ -120,6 +121,16 @@ public:
 
 	UFUNCTION(Client, Reliable)
 	void ClientShowPartPickupUI();
+
+	// ========== 튜닝 파일 동기화 (UDRTuningSubsystem) ==========
+
+	// 참가자 → 서버: 방장이 적용 중인 튜닝 값을 보내 달라 (ReceivedPlayer 에서 1회)
+	UFUNCTION(Server, Reliable)
+	void ServerRequestTuning();
+
+	// 서버 → 참가자: 방장 튜닝 값 조각. 다 모이면 참가자는 자기 파일 대신 이 값을 쓴다 (방장이 다시 읽을 때도 온다)
+	UFUNCTION(Client, Reliable)
+	void ClientReceiveTuningChunk(int32 Revision, int32 ChunkIndex, int32 ChunkCount, const TArray<FDRTuningOverride>& Chunk);
 
 	// ========== 관전 시스템 ==========
 
