@@ -53,6 +53,12 @@ protected:
 
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+
+	// 편집 때 로그로 내는 검사를 데이터 검증(저장 · "데이터 검증" 메뉴)에도 건다
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+
+	// 카탈로그 · 해금 조건 · 로봇별 소켓 검사를 한 번에 (PostEditChangeProperty · IsDataValid 공용)
+	void CollectEditorValidationErrors(TArray<FString>& OutErrors) const;
 #endif
 
 private:

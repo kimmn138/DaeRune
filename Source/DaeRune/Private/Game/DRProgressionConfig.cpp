@@ -2,6 +2,7 @@
 
 
 #include "Game/DRProgressionConfig.h"
+#include "Misc/DataValidation.h"
 #include "Game/DRChipCatalog.h"
 #include "Game/DRCosmeticCatalog.h"
 #include "DaeRune/DRLogChannels.h"
@@ -321,7 +322,7 @@ bool UDRProgressionConfig::ValidateCurrencyBudget(TArray<FString>& OutErrors) co
 
 	if (OutErrors.Num() > 0)
 	{
-		UE_LOG(LogDR, Warning, TEXT("[ProgressionConfig] %s: 검증 오류 %d건 (첫 항목: %s)"),
+		UE_LOG(LogDR, Log, TEXT("[ProgressionConfig] %s: 검증 오류 %d건 (첫 항목: %s)"),
 			*GetName(), OutErrors.Num(), *OutErrors[0]);
 	}
 	else
@@ -652,22 +653,40 @@ void UDRProgressionConfig::PostEditChangeProperty(FPropertyChangedEvent& Propert
 
 	// 편집 즉시 검증 — 재화 예산 미달/칩 정합성 오류를 로그로 알린다.
 	TArray<FString> Errors;
-	ValidateCurrencyBudget(Errors);
-
-	// 칩 튜닝 (잭팟 확률표 · 칩 GE · 벨보이 칩 수치)
-	ValidateChipTuning(Errors);
-
-	// 업적 · 스팀 키 · 옷 해금 조건 (Plan(옷장) D-29)
-	TArray<FString> AchievementErrors;
-	ValidateAchievements(AchievementErrors);
-	Errors.Append(AchievementErrors);
-
-	// 스테이지 선택 목록
-	ValidateStageSelect(Errors);
+	CollectEditorValidationErrors(Errors);
 
 	for (const FString& Error : Errors)
 	{
 		UE_LOG(LogDR, Warning, TEXT("[ProgressionConfig] %s"), *Error);
 	}
+}
+
+EDataValidationResult UDRProgressionConfig::IsDataValid(FDataValidationContext& Context) const
+{
+	const EDataValidationResult Result = Super::IsDataValid(Context);
+
+	TArray<FString> Errors;
+	CollectEditorValidationErrors(Errors);
+	for (const FString& Error : Errors)
+	{
+		Context.AddWarning(FText::FromString(Error));
+	}
+	return CombineDataValidationResults(Result, EDataValidationResult::Valid);
+}
+
+void UDRProgressionConfig::CollectEditorValidationErrors(TArray<FString>& OutErrors) const
+{
+	ValidateCurrencyBudget(OutErrors);
+
+	// 칩 튜닝 (잭팟 확률표 · 칩 GE · 벨보이 칩 수치)
+	ValidateChipTuning(OutErrors);
+
+	// 업적 · 스팀 키 · 옷 해금 조건 (Plan(옷장) D-29)
+	TArray<FString> AchievementErrors;
+	ValidateAchievements(AchievementErrors);
+	OutErrors.Append(AchievementErrors);
+
+	// 스테이지 선택 목록
+	ValidateStageSelect(OutErrors);
 }
 #endif

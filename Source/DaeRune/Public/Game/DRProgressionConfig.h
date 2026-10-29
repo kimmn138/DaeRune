@@ -939,5 +939,12 @@ public:
 	// 에셋을 편집할 때마다 예산/카탈로그 정합성을 자동 검사해 로그로 알린다.
 	// (수동 호출을 잊어 재화가 모자란 채 빌드되는 것을 막기 위함)
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+
+	// 같은 검사를 데이터 검증(저장 · "데이터 검증" 메뉴 · 메시지 로그)에도 건다
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+
+private:
+	// 예산 · 칩 튜닝 · 업적 · 스테이지 선택 검사를 한 번에 (PostEditChangeProperty · IsDataValid 공용)
+	void CollectEditorValidationErrors(TArray<FString>& OutErrors) const;
 #endif
 };
