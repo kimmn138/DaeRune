@@ -320,13 +320,13 @@ namespace
 		KeyProperty->ExportText_Direct(Text, KeyPtr, KeyPtr, nullptr, PPF_None);
 		return Text;
 	}
+}
 
-	FString FormatNumber(double Value)
-	{
-		// float 에서 온 값이라 유효숫자 7자리면 충분하다 (0.2f → "0.2", 25 → "25")
-		if (Value == 0.0) return TEXT("0");
-		return FString::Printf(TEXT("%.7g"), Value);
-	}
+// 익명 네임스페이스에 두지 않는다 — 같은 함수가 DRTuningCatalog.cpp 에도 있었고, 유니티 빌드가 두 파일을 한 덩어리로 묶으면 C2084 가 났다
+FString DRTuning::FormatNumber(double Value)
+{
+	if (Value == 0.0) return TEXT("0");
+	return FString::Printf(TEXT("%.7g"), Value);
 }
 
 bool DRTuning::FTypedValue::operator==(const FTypedValue& Other) const

@@ -135,12 +135,6 @@ namespace
 		Target.GroupOrder = Settings.GroupRules.Num() + static_cast<int32>(Target.Kind);
 	}
 
-	FString FormatNumber(double Value)
-	{
-		if (Value == 0.0) return TEXT("0");
-		return FString::Printf(TEXT("%.7g"), Value);
-	}
-
 	// 시트에 싣지 않는 구조체 — 숫자가 들어 있어도 튜닝 값이 아니다 (좌표 · 색 · 태그 · 경로 · 커브 편집 데이터)
 	bool IsSkippedStruct(const UScriptStruct* Struct)
 	{
@@ -246,7 +240,7 @@ namespace
 		}
 		if (Min.IsEmpty() && Max.IsEmpty()) return FString();
 
-		auto Normalize = [](const FString& Text) { return Text.IsNumeric() ? FormatNumber(FCString::Atod(*Text)) : Text; };
+		auto Normalize = [](const FString& Text) { return Text.IsNumeric() ? DRTuning::FormatNumber(FCString::Atod(*Text)) : Text; };
 		return FString::Printf(TEXT("%s ~ %s"), *Normalize(Min), *Normalize(Max)).TrimStartAndEnd();
 #else
 		return FString();
@@ -667,7 +661,7 @@ namespace
 				const void* KeyPtr = Helper.GetRawPtr(Index);
 				const float Time = *TimeProp->ContainerPtrToValuePtr<float>(KeyPtr);
 				AddRow(Context, FString::Printf(TEXT("[%s].Keys[%d].Value"), *RowName, Index), ValueProp, ValueProp->ContainerPtrToValuePtr<void>(KeyPtr),
-					FString::Printf(TEXT("[%s]"), *RowName), FString::Printf(TEXT("레벨 %s 의 값"), *FormatNumber(Time)), FString());
+					FString::Printf(TEXT("[%s]"), *RowName), FString::Printf(TEXT("레벨 %s 의 값"), *DRTuning::FormatNumber(Time)), FString());
 			}
 		}
 	}

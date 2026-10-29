@@ -55,6 +55,9 @@ namespace DRTuning
 	/** 값 → 시트 글자 (0.2 / 25 / true / Percent) */
 	DAERUNE_API FString ValueToText(const FResolvedValue& Value);
 
+	/** 숫자 → 시트 글자. float 에서 온 값이라 유효숫자 7자리면 충분하다 (0.2f → "0.2", 25 → "25") */
+	DAERUNE_API FString FormatNumber(double Value);
+
 	/**
 	 * 시트 글자 → 값. 숫자 · 참거짓 · 열거형은 직접 해석하고(10% → 0.1, 1,200 → 1200, TRUE/참),
 	 * 그 밖의 타입은 엔진 ImportText 로 넘긴다. 실패하면 값은 그대로이고 false + OutError.
