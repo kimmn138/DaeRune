@@ -93,9 +93,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Character")
 	FName TutorialCharacterSpawnTag = TEXT("TutorialCharacterSpawnPoint");
 
-	// 카메라 블렌드 시간
-	UPROPERTY(EditDefaultsOnly, Category = "Camera")
-	float CameraBlendTime = 2.0f;
+	// 로비(대기실) 맵 경로 · 최대 인원 — 방 만들기 · 참가 메뉴에 넘긴다
+	UPROPERTY(EditDefaultsOnly, Category = "Level")
+	FString LobbyMapPath = TEXT("/Game/Maps/LobbyMap");
+
+	UPROPERTY(EditDefaultsOnly, Category = "Level", meta = (ClampMin = "1", ClampMax = "4"))
+	int32 MaxPublicConnections = 4;
 
 	// 튜토리얼 맵 이름
 	UPROPERTY(EditDefaultsOnly, Category = "Level")
@@ -117,5 +120,6 @@ private:
 	// 현재 모드
 	bool bIsTutorialMode = false;
 
-	FTimerHandle TutorialTransitionTimerHandle;
+	// 메뉴 위젯을 닫고 현재 메인 메뉴 맵을 다시 연다 → BeginPlay 가 튜토리얼/로비 분기를 다시 평가
+	void ReloadMenu();
 };

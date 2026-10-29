@@ -9,6 +9,7 @@
 class ADRStageGameMode;
 class ADRStageGameState;
 class ADRCleanserSite;
+class ADREnemy;
 
 USTRUCT(BlueprintType)
 struct FPhaseObjectiveData : public FTableRowBase
@@ -18,11 +19,13 @@ struct FPhaseObjectiveData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 PhaseNumber = 1;
 
+	// 목표 문구 (예: "클렌저를 확보하세요")
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FText ObjectiveTitle; // "Ŭ������ Ȯ���ϼ���"
+	FText ObjectiveTitle;
 
+	// 진행도 단위 (예: "확보한 클렌저")
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FText ProgressFormat; // "Ȯ���� Ŭ����"
+	FText ProgressFormat;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 RequiredCount = 0;
@@ -35,26 +38,43 @@ struct FPhaseObjectiveData : public FTableRowBase
 };
 
 /**
- * ��� �������� �⺻ Ŭ����
- * �� �������� ���� ������ ���
+ * 모든 지점을 한 번씩 쓴 뒤 다시 채우는 비반복 랜덤 인덱스 풀.
+ * 적 스폰 지점을 고르는 페이즈들이 같은 규칙을 쓴다.
+ */
+struct FDRShuffledIndexPool
+{
+	// 0 .. InNum-1 로 풀을 다시 만든다
+	void Reset(int32 InNum);
+
+	// 남은 인덱스 하나를 무작위로 꺼낸다. 풀이 비면 전체로 다시 채운다. 크기가 0 이면 INDEX_NONE.
+	int32 Pick();
+
+private:
+	int32 Num = 0;
+	TArray<int32> Remaining;
+};
+
+/**
+ * 모든 페이즈의 기본 클래스.
+ * GameMode 가 만들고 OnPhaseStart / OnPhaseEnd 로 수명을 관리한다.
  */
 UCLASS(Blueprintable, Abstract)
 class DAERUNE_API UDRPhaseBase : public UObject
 {
 	GENERATED_BODY()
-	
-public:
-	// ========== ������ �����ֱ� ==========
 
-	// ������ �ʱ�ȭ (GameMode�� ���� �� ȣ��)
+public:
+	// ========== 수명 ==========
+
+	// GameMode 가 생성 직후 호출
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	virtual void Initialize(ADRStageGameMode* InGameMode, ADRStageGameState* InGameState);
 
-	// ������ ���� (GameMode�� ȣ��)
+	// 페이즈 시작 (GameMode 가 호출)
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	virtual void OnPhaseStart();
 
-	// ������ ���� (���� �۾�)
+	// 페이즈 종료 (정리 작업). GameMode 는 진행 중인 페이즈에만 한 번 호출한다.
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	virtual void OnPhaseEnd();
 
@@ -62,24 +82,24 @@ public:
 	// GameMode의 인덱스 switch 대신 각 페이즈가 스스로 완료를 판정한다
 	virtual bool IsCompleted() const { return false; }
 
-	// ========== Ŭ���� ����Ʈ ���� ==========
+	// OnPhaseStart 이후 OnPhaseEnd 전까지 true
+	bool IsPhaseActive() const { return bIsPhaseActive; }
 
-	// ��ü Ŭ���� ����Ʈ ���� (GameMode�� �ʱ�ȭ �� ȣ��)
+	// ========== 클렌저 사이트 ==========
+
+	// 맵의 전체 클렌저 사이트 설정 (GameMode가 초기화 시 호출)
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	void SetCleanserSites(const TArray<ADRCleanserSite*>& InCleanserSites);
 
-	// ��ü Ŭ���� ����Ʈ ��������
 	const TArray<TObjectPtr<ADRCleanserSite>>& GetCleanserSites() const { return CleanserSites; }
 
-	// Phase1���� ���õ� Ȱ�� Ŭ���� ����Ʈ ���� (2��)
+	// 앞 페이즈에서 고른 활성 사이트를 다음 페이즈로 넘길 때 사용
 	void SetActiveCleanserSites(const TArray<TObjectPtr<ADRCleanserSite>>& InActiveSites);
-
-	// Phase1���� ���õ� Ȱ�� Ŭ���� ����Ʈ �������� (Phase2, 3���� ���)
 	const TArray<TObjectPtr<ADRCleanserSite>>& GetActiveCleanserSites() const { return ActiveCleanserSites; }
 
-	// ========== �� ���� ==========
+	// ========== 적 추적 ==========
 
-	// ���� �׾��� �� ��������Ʈ�� ȣ���
+	// 추적 중인 적이 죽었을 때 (사망 델리게이트)
 	UFUNCTION()
 	virtual void OnEnemyDeath(AActor* DeadEnemy);
 
@@ -94,51 +114,75 @@ public:
 	virtual void NotifyPlayerLeft(APlayerState* LeftPlayerState) {}
 
 protected:
-	// ========== ���� �Լ� ==========
+	// ========== 적 스폰 / 추적 헬퍼 ==========
 
-	// ����ִ� �� �� üũ
+	/**
+	 * 적을 지연 스폰한다. Configure 는 BeginPlay 전에 호출된다 (레벨 · 페이즈 플래그 주입용).
+	 * 추적 목록에는 넣지 않는다 — 일반 적은 TrackSpawnedEnemy 로 따로 등록한다.
+	 */
+	ADREnemy* SpawnEnemyDeferred(TSubclassOf<ADREnemy> EnemyClass, const FTransform& SpawnTransform,
+		TFunctionRef<void(ADREnemy&)> Configure);
+	ADREnemy* SpawnEnemyDeferred(TSubclassOf<ADREnemy> EnemyClass, const FTransform& SpawnTransform);
+
+	/**
+	 * 적을 추적 목록에 넣고 사망 · 소멸 델리게이트를 묶는다.
+	 * ★소멸(OnDestroyed)도 본다★ — 맵 밖으로 떨어져 KillZ 로 사라지는 적은 사망 신호 없이 Destroy 되므로,
+	 * 그대로 두면 영원히 "살아 있는 적"으로 남아 웨이브·방이 끝나지 않는다.
+	 */
+	void TrackSpawnedEnemy(AActor* Enemy);
+
+	// 추적 중인 적을 조용히 제거한다 (연출 · 보상 없음, 사망 처리로 세지 않는다)
+	void DestroyTrackedEnemies();
+
+	// 살아 있는(파괴되지 않은) 추적 중인 적 수
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	int32 GetAliveEnemyCount() const;
 
-	// ========== ���� ==========
+	// ========== 상태 ==========
 
-	// ����� ���۵Ǿ����� ����
+	// 페이즈가 진행 중인지
 	UPROPERTY(BlueprintReadOnly, Category = "Phase")
-	bool bIsPhaseActive;
+	bool bIsPhaseActive = false;
 
-	// ������ ����
+	// 이 페이즈가 스폰해 추적 중인 적
 	UPROPERTY()
 	TArray<TWeakObjectPtr<AActor>> SpawnedEnemies;
 
-	// GameMode ����
 	UPROPERTY()
 	TObjectPtr<ADRStageGameMode> GameMode;
 
-	// GameState ����
 	UPROPERTY()
 	TObjectPtr<ADRStageGameState> GameState;
 
-	// ������ ��ġ�� ��ü Ŭ���� ����Ʈ 3�� (��� ����� ����)
+	// 맵에 배치된 전체 클렌저 사이트
 	UPROPERTY(BlueprintReadOnly, Category = "Phase")
 	TArray<TObjectPtr<ADRCleanserSite>> CleanserSites;
 
-	// Phase1���� ���õ� Ȱ�� Ŭ���� ����Ʈ 2��
-	// Phase2, 3������ �� ����Ʈ���� ���
+	// 이 페이즈가 쓰는 활성 클렌저 사이트 (앞 페이즈에서 넘어온다)
 	UPROPERTY(BlueprintReadOnly, Category = "Phase")
 	TArray<TObjectPtr<ADRCleanserSite>> ActiveCleanserSites;
 
-	// ========== ������ ��ǥ UI ==========
-	
+	// ========== 페이즈 목표 UI ==========
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Phase|Config")
-	UDataTable* PhaseObjectiveDataTable;
-	
+	TObjectPtr<UDataTable> PhaseObjectiveDataTable;
+
+	// "Phase%d" 행으로 목표를 설정한다
 	void SetupPhaseObjective(int32 PhaseNumber);
 
-	// 행 이름을 직접 지정해 목표를 설정한다 (Plan6 §5.2).
-	// 한 페이즈 안에서 목표를 여러 번 교체하는 스테이지2 페이즈들이 사용한다.
-	void SetupPhaseObjectiveByRow(FName RowName);
+	/**
+	 * 행 이름을 직접 지정해 목표를 설정한다 (Plan6 §5.2).
+	 * 한 페이즈 안에서 목표를 여러 번 교체하는 스테이지2 페이즈들이 사용한다.
+	 * OverrideRequiredCount 가 0 이상이면 진행도 분모를 런타임 값으로 덮어쓴다
+	 * (인원별 스폰 수, 두더지 목표 수처럼 실행 중에 분모가 정해지는 목표).
+	 */
+	void SetupPhaseObjectiveByRow(FName RowName, int32 OverrideRequiredCount = INDEX_NONE);
 
-	// 위와 동일하되 RequiredCount(진행도 분모)를 런타임 값으로 덮어쓴다.
-	// 인원별 스폰 수, 두더지 목표 수처럼 실행 중에 분모가 정해지는 목표에 사용한다.
-	void SetupPhaseObjectiveByRow(FName RowName, int32 OverrideRequiredCount);
+private:
+	// 추적 중인 적이 사망 신호 없이 사라졌을 때 (KillZ 낙하 등)
+	UFUNCTION()
+	void HandleTrackedEnemyDestroyed(AActor* DestroyedActor);
+
+	// 사망 · 소멸 델리게이트 해제
+	void UnbindTrackedEnemy(AActor* Enemy);
 };

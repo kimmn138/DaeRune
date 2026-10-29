@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "Game/DRUpgradeTypes.h"
+#include "Game/DRStageSelectTypes.h"
 #include "DRProgressionConfig.generated.h"
 
 class UDRChipCatalog;
@@ -861,6 +862,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Reward", meta = (TitleProperty = "AchievementId"))
 	TArray<FDRAchievementDef> Achievements;
 
+	// ========== 스테이지 선택 화면 ==========
+
+	// 로비 스테이지 선택 화면에 나오는 스테이지 목록. ★배열 순서 = 카드 순서 = 스테이지 번호★
+	// 비어 있으면 포털은 화면 없이 예전처럼 ADRStageSelectActor::DestinationMapName 으로 바로 이동한다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage Select", meta = (TitleProperty = "StageId"))
+	TArray<FDRStageSelectDef> StageSelectList;
+
 	// ========== 조회 헬퍼 ==========
 
 	// 로봇 1대의 통합 슬롯 총 칸 수
@@ -876,6 +884,9 @@ public:
 
 	// 업적 정의. 없으면 nullptr.
 	const FDRAchievementDef* FindAchievement(FName AchievementId) const;
+
+	// 스테이지 선택 정의. 없으면 nullptr. OutIndex 는 StageSelectList 안의 위치.
+	const FDRStageSelectDef* FindStageSelectDef(FName StageId, int32* OutIndex = nullptr) const;
 
 	// 스테이지 최초 클리어 원장 키 ("StageClear.<StageId>")
 	UFUNCTION(BlueprintPure, Category = "Progression")
@@ -895,9 +906,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Progression|Budget")
 	int32 GetSlotUnlockCostForClass() const;
 
-	// 총 획득 >= 총 필요 인지 검사. 콘텐츠 작업 후 1회 실행할 것. (Plan2.md 5.4)
+	// 총 획득 >= 총 필요 인지 검사 (+ 보상 Id 중복 · 해금 스테이지 · 카탈로그 · 기본 장착). 콘텐츠 작업 후 1회 실행할 것. (Plan2.md 5.4)
 	UFUNCTION(BlueprintCallable, Category = "Progression|Budget")
 	bool ValidateCurrencyBudget(TArray<FString>& OutErrors) const;
+
+	/**
+	 * 칩 튜닝 정합성 — 잭팟 확률표 · 공속/청소기 칩 GE · 벨보이 칩 수치 (Plan5). 문제가 없으면 true.
+	 * 비우거나 틀리면 칩이 ★에러 없이★ 기본 동작처럼 굴어서 따로 검사한다. OutErrors 에 덧붙인다.
+	 */
+	bool ValidateChipTuning(TArray<FString>& OutErrors) const;
 
 	/**
 	 * 업적 · 스팀 키 · 옷 해금 조건의 정합성 (Plan(옷장) D-29). 문제가 없으면 true.
@@ -909,9 +926,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Progression|Validation")
 	bool ValidateAchievements(TArray<FString>& OutErrors) const;
 
+	/**
+	 * 스테이지 선택 목록의 정합성. 문제가 없으면 true.
+	 *  - StageId 비어 있음 / 중복 / Map 미지정
+	 *  - StageRewards 에 없는 StageId (클리어가 원장에 안 남아 ★다음 스테이지가 영원히 잠긴다★)
+	 *  - RequiredStageId 가 목록에 없거나 자기 자신
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Progression|Validation")
+	bool ValidateStageSelect(TArray<FString>& OutErrors) const;
+
 #if WITH_EDITOR
 	// 에셋을 편집할 때마다 예산/카탈로그 정합성을 자동 검사해 로그로 알린다.
 	// (수동 호출을 잊어 재화가 모자란 채 빌드되는 것을 막기 위함)
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+
+	// 같은 검사를 데이터 검증(저장 · "데이터 검증" 메뉴 · 메시지 로그)에도 건다
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+
+private:
+	// 예산 · 칩 튜닝 · 업적 · 스테이지 선택 검사를 한 번에 (PostEditChangeProperty · IsDataValid 공용)
+	void CollectEditorValidationErrors(TArray<FString>& OutErrors) const;
 #endif
 };

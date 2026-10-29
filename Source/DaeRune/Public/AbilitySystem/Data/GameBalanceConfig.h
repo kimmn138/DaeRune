@@ -41,6 +41,14 @@ struct FPlayerCombatConfig
 	// 파트 드롭 쿨다운 (초)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Part System", meta = (ClampMin = "0.0", ClampMax = "5.0"))
 	float PartDropCooldown = 2.0f;
+
+	// 비전투 자동 회복량 (회복 GE 의 주기 1회당, MMC_HealthRegen)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "0.0", ClampMax = "100.0"))
+	float HealthRegenPerTick = 10.f;
+
+	// 물이 모자랄 때 부족분을 체력으로 낼 비율 (부족분 × 이 값, 내림)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water", meta = (ClampMin = "0.0", ClampMax = "5.0"))
+	float WaterShortageHealthRatio = 0.5f;
 };
 
 /**
@@ -62,6 +70,14 @@ struct FEnemyCombatConfig
 	// 파트 드롭 힘
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Part System", meta = (ClampMin = "0.0", ClampMax = "1000.0"))
 	float PartDropForce = 300.f;
+
+	// 엘리트 포효 오라(Buff.Elite.Roar)를 받은 적이 주는 피해 배율
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "1.0", ClampMax = "5.0"))
+	float EliteRoarDamageMultiplier = 1.2f;
+
+	// 확보 페이즈(Phase1) 적이 플레이어 · 적에게 주는 피해 배율 (클렌저 사이트 제외)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	float Phase1DamageMultiplier = 0.7f;
 };
 
 /**
@@ -109,6 +125,10 @@ USTRUCT(BlueprintType)
 struct FWaterSystemConfig
 {
 	GENERATED_BODY()
+
+	// 같은 적을 계속 때려 물을 모으는 것을 막는 "공격당 물 보상 감소"를 쓸지 (현재 꺼 둠 — 테스트 중 비활성화했던 상태 그대로)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water")
+	bool bReduceWaterRewardOnAttack = false;
 
 	// 공격당 물 보상 감소량 (양수로 입력, 내부에서 음수 처리)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Water", meta = (ClampMin = "0.0", ClampMax = "50.0"))

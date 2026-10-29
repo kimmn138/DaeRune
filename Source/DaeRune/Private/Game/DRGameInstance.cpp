@@ -42,6 +42,27 @@ void UDRGameInstance::Init()
 	}
 
 	LoadProgress();
+	PreloadProgressionEffects();
+}
+
+void UDRGameInstance::PreloadProgressionEffects()
+{
+	if (!ProgressionConfig) return;
+
+	// 칩 튜닝의 GE 들은 소프트 참조라 첫 적중 순간 동기 로드(히치)가 났다 — 시작할 때 모두 불러와 붙잡아 둔다.
+	// 설정 에셋의 모든 TSoftClassPtr 를 반사로 훑으므로 새 칩 GE 를 추가해도 여기를 고칠 필요가 없다.
+	PreloadedProgressionClasses.Reset();
+	for (TPropertyValueIterator<FSoftClassProperty> It(ProgressionConfig->GetClass(), ProgressionConfig); It; ++It)
+	{
+		const FSoftObjectPtr* SoftPtr = static_cast<const FSoftObjectPtr*>(It.Value());
+		if (SoftPtr && !SoftPtr->IsNull())
+		{
+			if (UClass* Loaded = Cast<UClass>(SoftPtr->LoadSynchronous()))
+			{
+				PreloadedProgressionClasses.AddUnique(Loaded);
+			}
+		}
+	}
 }
 
 bool UDRGameInstance::HasCompletedTutorial() const
@@ -87,10 +108,30 @@ void UDRGameInstance::LoadProgress()
 
 void UDRGameInstance::SaveProgress()
 {
+	if (!CurrentSaveGame) return;
+
+	// 칩 장착 · 스왑 · 옷 장착처럼 클릭마다 저장이 불린다 — 같은 프레임의 요청은 다음 틱에 한 번만 디스크에 쓴다
+	if (bSavePending) return;
+	bSavePending = true;
+	GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateUObject(this, &UDRGameInstance::FlushPendingSave));
+}
+
+void UDRGameInstance::FlushPendingSave()
+{
+	if (!bSavePending) return;
+	bSavePending = false;
+
 	if (CurrentSaveGame)
 	{
 		UGameplayStatics::SaveGameToSlot(CurrentSaveGame, UDRSaveGame::SaveSlotName, UDRSaveGame::UserIndex);
 	}
+}
+
+void UDRGameInstance::Shutdown()
+{
+	// 다음 틱을 기다리던 저장이 있으면 종료 전에 쓴다
+	FlushPendingSave();
+	Super::Shutdown();
 }
 
 UDRSaveGame* UDRGameInstance::GetOrLoadSaveGame()
@@ -105,6 +146,9 @@ UDRSaveGame* UDRGameInstance::GetOrLoadSaveGame()
 void UDRGameInstance::EnsureProgressInitialized()
 {
 	if (!CurrentSaveGame) return;
+
+	// 아래 단계 중 하나라도 세이브를 바꾸면 끝에서 한 번만 저장한다 (버전만 올라간 경우도 포함)
+	bool bNeedsSave = false;
 
 	// ===== 세이브 포맷 마이그레이션 =====
 	// v0 = 방금 생성된 새 세이브, v1 = 경험치/레벨(폐기), v2 = 랭크 구매형 업그레이드(폐기),
@@ -132,6 +176,7 @@ void UDRGameInstance::EnsureProgressInitialized()
 		CurrentSaveGame->PendingSteamAchievements.Reset();
 
 		CurrentSaveGame->SaveVersion = UDRSaveGame::CurrentSaveVersion;
+		bNeedsSave = true;
 	}
 
 	// 누락된 로봇 키를 빈 상태로 lazy 초기화 (enum 추가 시 자동 대응)
@@ -162,10 +207,7 @@ void UDRGameInstance::EnsureProgressInitialized()
 				static_cast<int32>(Pair.Key));
 		}
 
-		if (bCosmeticChanged)
-		{
-			SaveProgress();
-		}
+		bNeedsSave |= bCosmeticChanged;
 	}
 
 	// ★Plan3(공용칩)★ 기본 장착 — 반드시 SanitizeClassState 보다 ★먼저★ 돌아야 한다.
@@ -207,10 +249,12 @@ void UDRGameInstance::EnsureProgressInitialized()
 			CurrentSaveGame->Currency += TotalReclaimed;
 		}
 
-		if (bAnyChanged || bDefaultsChanged)
-		{
-			SaveProgress();
-		}
+		bNeedsSave |= bAnyChanged || bDefaultsChanged;
+	}
+
+	if (bNeedsSave)
+	{
+		SaveProgress();
 	}
 }
 
@@ -1467,6 +1511,119 @@ bool UDRGameInstance::IsRewardClaimed(FName RewardId) const
 	return CurrentSaveGame->ClaimedRewards.Contains(RewardId);
 }
 
+// ========================= 스테이지 선택 =========================
+
+bool UDRGameInstance::IsStageCleared(FName StageId) const
+{
+	return IsRewardClaimed(UDRProgressionConfig::MakeStageClearRewardId(StageId));
+}
+
+bool UDRGameInstance::IsStageClearedForSelect(FName StageId) const
+{
+	if (const EDRStageSelectState* Override = DebugStageStateOverrides.Find(StageId))
+	{
+		return *Override == EDRStageSelectState::Cleared;
+	}
+	return IsStageCleared(StageId);
+}
+
+EDRStageSelectState UDRGameInstance::GetStageSelectState(FName StageId) const
+{
+	if (const EDRStageSelectState* Override = DebugStageStateOverrides.Find(StageId))
+	{
+		return *Override;
+	}
+
+	if (IsStageCleared(StageId))
+	{
+		return EDRStageSelectState::Cleared;
+	}
+
+	const FDRStageSelectDef* Def = ProgressionConfig ? ProgressionConfig->FindStageSelectDef(StageId) : nullptr;
+	if (!Def)
+	{
+		// 목록에 없는 스테이지는 고를 수 없다
+		return EDRStageSelectState::Locked;
+	}
+
+	// 선행 조건은 한 단계만 본다 — 선행 스테이지가 "클리어" 면 그 앞 단계도 이미 통과한 것이다
+	if (Def->RequiredStageId.IsNone() || IsStageClearedForSelect(Def->RequiredStageId))
+	{
+		return EDRStageSelectState::Available;
+	}
+
+	return EDRStageSelectState::Locked;
+}
+
+void UDRGameInstance::GetStageSelectViewModels(TArray<FDRStageSelectViewModel>& OutViewModels) const
+{
+	OutViewModels.Reset();
+	if (!ProgressionConfig) return;
+
+	const TArray<FDRStageSelectDef>& List = ProgressionConfig->StageSelectList;
+	OutViewModels.Reserve(List.Num());
+
+	for (int32 Index = 0; Index < List.Num(); ++Index)
+	{
+		const FDRStageSelectDef& Def = List[Index];
+
+		FDRStageSelectViewModel& ViewModel = OutViewModels.AddDefaulted_GetRef();
+		ViewModel.Index = Index;
+		ViewModel.StageNumber = Index + 1;
+		ViewModel.StageId = Def.StageId;
+		ViewModel.MissionText = Def.MissionText;
+		ViewModel.State = GetStageSelectState(Def.StageId);
+		ViewModel.Thumbnail = Def.Thumbnail.IsNull() ? nullptr : Def.Thumbnail.LoadSynchronous();
+		ViewModel.CardArt = Def.CardArt;
+
+		// 이름 폴백: 선택 정의 → 보상 정의 → Id
+		ViewModel.DisplayName = Def.DisplayName;
+		if (ViewModel.DisplayName.IsEmpty())
+		{
+			const FDRStageRewardDef* RewardDef = ProgressionConfig->FindStageReward(Def.StageId);
+			ViewModel.DisplayName = (RewardDef && !RewardDef->DisplayName.IsEmpty())
+				? RewardDef->DisplayName
+				: FText::FromName(Def.StageId);
+		}
+
+		if (ViewModel.State == EDRStageSelectState::Locked)
+		{
+			int32 RequiredIndex = INDEX_NONE;
+			if (ProgressionConfig->FindStageSelectDef(Def.RequiredStageId, &RequiredIndex))
+			{
+				ViewModel.LockHint = FText::Format(
+					NSLOCTEXT("DRStageSelect", "LockHintFmt", "스테이지 {0} 클리어 후 열립니다."),
+					FText::AsNumber(RequiredIndex + 1));
+			}
+			else
+			{
+				ViewModel.LockHint = NSLOCTEXT("DRStageSelect", "LockHintUnknown", "아직 열리지 않은 스테이지입니다.");
+			}
+		}
+	}
+}
+
+void UDRGameInstance::DebugSetStageStateOverride(FName StageId, EDRStageSelectState State)
+{
+	if (StageId.IsNone()) return;
+
+	DebugStageStateOverrides.Add(StageId, State);
+	OnStageSelectStatesChanged.Broadcast();
+}
+
+void UDRGameInstance::DebugClearStageStateOverride(FName StageId)
+{
+	if (StageId.IsNone())
+	{
+		DebugStageStateOverrides.Reset();
+	}
+	else
+	{
+		DebugStageStateOverrides.Remove(StageId);
+	}
+	OnStageSelectStatesChanged.Broadcast();
+}
+
 FDRStageRewardResult UDRGameInstance::ApplyStageReward(const FDRStageRewardReport& Report)
 {
 	FDRStageRewardResult Result;
@@ -1499,14 +1656,18 @@ FDRStageRewardResult UDRGameInstance::ApplyStageReward(const FDRStageRewardRepor
 			Save->ClaimedRewards.Add(RewardId);
 			Result.FirstClearCurrency = FMath::Max(0, StageDef->FirstClearCurrency);
 
-			FDRRewardLineItem Line;
-			Line.RewardId = RewardId;
-			Line.Kind = EDRRewardKind::StageFirstClear;
-			Line.DisplayName = StageDef->DisplayName.IsEmpty()
-				? FText::FromName(Report.StageId)
-				: StageDef->DisplayName;
-			Line.Currency = Result.FirstClearCurrency;
-			Result.Lines.Add(MoveTemp(Line));
+			// 재화 0 짜리 정의는 "클리어 기록만 남기는" 용도다 (스테이지 선택 화면의 CLEAR 표시) — 결과창에 "+0" 줄을 띄우지 않는다
+			if (Result.FirstClearCurrency > 0)
+			{
+				FDRRewardLineItem Line;
+				Line.RewardId = RewardId;
+				Line.Kind = EDRRewardKind::StageFirstClear;
+				Line.DisplayName = StageDef->DisplayName.IsEmpty()
+					? FText::FromName(Report.StageId)
+					: StageDef->DisplayName;
+				Line.Currency = Result.FirstClearCurrency;
+				Result.Lines.Add(MoveTemp(Line));
+			}
 		}
 
 		// 해금은 재화 지급과 별개로 판정한다 (원장은 있는데 해금이 안 된 이상 상태 복구)
@@ -1585,14 +1746,18 @@ FDRStageRewardResult UDRGameInstance::ApplyStageReward(const FDRStageRewardRepor
 
 // ========================= 캐릭터 선택 보존 =========================
 
-void UDRGameInstance::SavePlayerClassSelection(const FString& PlayerName, EPlayerCharacterClass SelectedClass)
+FString UDRGameInstance::GetPlayerSelectionKey(const APlayerState* PlayerState)
 {
-	PlayerClassSelections.Add(PlayerName, SelectedClass);
+	if (!PlayerState) return FString();
+
+	// (FUniqueNetIdRepl::ToString 은 CoreOnline 모듈 링크가 필요해 내부 ID 의 가상 함수를 쓴다)
+	const FUniqueNetIdPtr UniqueId = PlayerState->GetUniqueId().GetUniqueNetId();
+	return UniqueId.IsValid() ? UniqueId->ToString() : PlayerState->GetPlayerName();
 }
 
-EPlayerCharacterClass UDRGameInstance::LoadPlayerClassSelection(const FString& PlayerName) const
+EPlayerCharacterClass UDRGameInstance::LoadPlayerClassSelection(const APlayerState* PlayerState) const
 {
-	const EPlayerCharacterClass* Found = PlayerClassSelections.Find(PlayerName);
+	const EPlayerCharacterClass* Found = PlayerClassSelections.Find(GetPlayerSelectionKey(PlayerState));
 	return Found ? *Found : EPlayerCharacterClass::Gardener;
 }
 
@@ -1608,7 +1773,7 @@ void UDRGameInstance::SaveAllPlayerSelections(UWorld* World)
 	{
 		if (ADRPlayerState* DRPS = Cast<ADRPlayerState>(PS))
 		{
-			PlayerClassSelections.Add(DRPS->GetPlayerName(), DRPS->GetSelectedPlayerClass());
+			PlayerClassSelections.Add(GetPlayerSelectionKey(DRPS), DRPS->GetSelectedPlayerClass());
 		}
 	}
 }
@@ -1938,7 +2103,11 @@ void UDRGameInstance::DebugGrantAchievement(FName AchievementId)
 	UE_LOG(LogDR, Warning, TEXT("[Cheat] 업적 '%s' 달성 처리."), *AchievementId.ToString());
 
 	BroadcastNewlyUnlockedSkins(Before);
+	BroadcastCosmeticsChangedForAllClasses();
+}
 
+void UDRGameInstance::BroadcastCosmeticsChangedForAllClasses()
+{
 	// 해금은 로봇을 가리지 않으므로 전 클래스에 갱신을 알린다 (옷장 화면이 자기 클래스만 걸러 쓴다)
 	const int32 ClassCount = static_cast<int32>(EPlayerCharacterClass::Count);
 	for (int32 Index = 0; Index < ClassCount; ++Index)
@@ -1973,10 +2142,5 @@ void UDRGameInstance::DebugUnlockAllSkins()
 		Save->EarnedAchievements.Num());
 
 	BroadcastNewlyUnlockedSkins(Before);
-
-	const int32 ClassCount = static_cast<int32>(EPlayerCharacterClass::Count);
-	for (int32 Index = 0; Index < ClassCount; ++Index)
-	{
-		OnCosmeticsChanged.Broadcast(static_cast<EPlayerCharacterClass>(Index));
-	}
+	BroadcastCosmeticsChangedForAllClasses();
 }

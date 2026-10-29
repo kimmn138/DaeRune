@@ -14,10 +14,10 @@ FDRAbilityInfo UAbilityInfo::FindAbilityInfoForTag(const FGameplayTag& AbilityTa
 		}
 	}
 
-		if (bLogNotFound)
-		{
-			UE_LOG(LogDR, Error, TEXT("Can't find info for AbilityTag [%s] on AbilityInfo [%s]"), *AbilityTag.ToString(), *GetNameSafe(this));
-		}
+	if (bLogNotFound)
+	{
+		UE_LOG(LogDR, Error, TEXT("Can't find info for AbilityTag [%s] on AbilityInfo [%s]"), *AbilityTag.ToString(), *GetNameSafe(this));
+	}
 
 	return FDRAbilityInfo();
 }

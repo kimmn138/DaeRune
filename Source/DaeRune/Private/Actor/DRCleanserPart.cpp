@@ -6,8 +6,8 @@
 #include "Net/UnrealNetwork.h"
 #include "Components/SphereComponent.h"
 #include "Player/DRPlayerController.h"
+#include "Player/DRInteractionComponent.h"
 #include "Components/WidgetComponent.h"
-#include "Sound/DRSoundManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/DRSoundDataAsset.h"
 #include "DRAssetManager.h"
@@ -17,16 +17,16 @@ ADRCleanserPart::ADRCleanserPart()
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
 
-	// ��Ʈ ������Ʈ�� ��ǰ �޽� ����
+	// 루트 컴포넌트로 부품 메시 생성
 	PartMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PartMesh"));
 	RootComponent = PartMesh;
 
-	// �ݸ��� ����
+	// 콜리전 설정
 	PartMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	PartMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
-	PartMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block); // ����Ʈ���̽̿�
+	PartMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block); // 라인트레이싱용
 
-	// ���� ���� Sphere ����
+	// 감지 범위 Sphere 생성
 	DetectionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("DetectionSphere"));
 	DetectionSphere->SetupAttachment(RootComponent);
 	DetectionSphere->SetSphereRadius(DetectionRadius);
@@ -35,7 +35,7 @@ ADRCleanserPart::ADRCleanserPart()
 	DetectionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	DetectionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-	// UI ���� ����
+	// UI 위젯 생성
 	InteractionWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidget"));
 	InteractionWidget->SetupAttachment(RootComponent);
 	InteractionWidget->SetRelativeLocation(FVector(0.0f, 0.0f, 100.0f));
@@ -44,7 +44,7 @@ ADRCleanserPart::ADRCleanserPart()
 	InteractionWidget->SetVisibility(false);
 	InteractionWidget->SetOwnerNoSee(false);
 
-	// �ʱ� ����
+	// 초기 상태
 	bIsCarried = false;
 	CarryingCharacter = nullptr;
 }
@@ -58,34 +58,15 @@ void ADRCleanserPart::PickupPart(ADRCharacter* Character)
 {
 	if (!HasAuthority() || !Character) return;
 
-	// �̹� ��������� ����
+	// 이미 들려있으면 무시
 	if (bIsCarried) return;
 
-	// ���� ������Ʈ
+	// 상태 업데이트
 	bIsCarried = true;
 	CarryingCharacter = Character;
-
-	// ĳ���� �޽� ��������
-	USkeletalMeshComponent* CharacterMesh = Character->GetMesh();
-	if (!CharacterMesh) return;
-
-	// �ݸ��� ��Ȱ��ȭ (��� �ִ� ���� �浹 ����)
-	PartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	DetectionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
-	// UI ����
-	InteractionWidget->SetVisibility(false);
-
-	// ĳ���� ���Ͽ� ����
-	AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
-
-	// 3P 부품은 다른 플레이어에게만 보이도록 설정
-	PartMesh->SetVisibility(false);
-	PartMesh->SetHiddenInGame(true);
-	PartMesh->SetOwnerNoSee(false);
 	SetOwner(Character);
 
-	// 캐릭터의 1인칭 부품 메시 활성화
+	// 손 소켓에 붙이고 바닥용 메시 · 콜리전 · UI 를 끈다 (클라는 OnRep 이 같은 함수를 부른다)
 	RefreshCarriedState();
 
 	MulticastPlayPickupSound();
@@ -98,7 +79,18 @@ void ADRCleanserPart::PickupPart(ADRCharacter* Character)
 
 void ADRCleanserPart::OnRep_CarryingCharacter()
 {
+	// bIsCarried 가 먼저 와서 들고 있는 사람을 몰랐던 경우 여기서 마저 맞춘다
 	RefreshCarriedState();
+	RefreshFirstPersonPart();
+}
+
+void ADRCleanserPart::RefreshFirstPersonPart() const
+{
+	// 들고 있는 사람 화면의 1인칭 부품
+	if (bIsCarried && CarryingCharacter)
+	{
+		CarryingCharacter->ShowFirstPersonPart(PartMesh->GetStaticMesh());
+	}
 }
 
 void ADRCleanserPart::RefreshCarriedState()
@@ -151,13 +143,13 @@ void ADRCleanserPart::InstallPart()
 
 	// State.Carrying 태그 해제는 ADRCharacter::SetCarryingState 에서 일괄 처리
 
-	// ���� �ı�
+	// 액터 파괴
 	Destroy();
 }
 
 void ADRCleanserPart::DropFromCarrier()
 {
-	// ���������� ����
+	// 서버에서만 실행
 	if (!HasAuthority()) return;
 
 	// 1인칭 부품 메시 숨기기 (드롭 전에 캐릭터 참조가 유효한 시점)
@@ -167,44 +159,16 @@ void ADRCleanserPart::DropFromCarrier()
 		CarryingCharacter->HideThirdPersonPart();
 	}
 
-	// ĳ���Ϳ��� �и�
-	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-
-	// ���� ���� �ʱ�ȭ
+	// 내부 상태 초기화 → 분리 · 바닥 메시 · 콜리전 · 감지 범위 복원 (클라는 OnRep 이 같은 함수를 부른다)
 	bIsCarried = false;
 	CarryingCharacter = nullptr;
-
-	SetActorRotation(FRotator::ZeroRotator);
-
-	// 바닥에 떨어진 부품은 모두에게 보이도록 OwnerNoSee 복원
-	PartMesh->SetOwnerNoSee(false);
 	SetOwner(nullptr);
 	RefreshCarriedState();
-
-	// �޽� �ݸ��� ��Ȱ��ȭ
-	PartMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-	PartMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
-	PartMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-
-	// ���� ���� ��Ȱ��ȭ
-	DetectionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	DetectionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
-	DetectionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 }
 
 void ADRCleanserPart::MulticastPlayPickupSound_Implementation()
 {
-	// Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
-	if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
-	{
-		if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
-		{
-			if (SoundData->PartPickupSound)
-			{
-				UGameplayStatics::PlaySoundAtLocation(this, SoundData->PartPickupSound, GetActorLocation());
-			}
-		}
-	}
+	UDRSoundDataAsset::PlayAtLocation(this, &UDRSoundDataAsset::PartPickupSound, GetActorLocation());
 }
 
 void ADRCleanserPart::SetInteractionUIVisible(bool bShow)
@@ -251,54 +215,10 @@ void ADRCleanserPart::RefreshOverlapStateFor(ADRCharacter* Character)
 		!bIsCarried &&
 		!Character->IsCarryingPart();
 
-	PC->SetPartDetectionEnabled(bShouldDetect, this);
+	PC->GetInteractionComponent()->SetPartDetectionEnabled(bShouldDetect, this);
 }
 void ADRCleanserPart::OnRep_bIsCarried()
 {
 	RefreshCarriedState();
-
-	// ��ǰ�� �ֿ� �� Ŭ���̾�Ʈ���� �ð��� ������Ʈ
-	if (bIsCarried && CarryingCharacter)
-	{
-		// ĳ���� �޽� ��������
-		USkeletalMeshComponent* CharacterMesh = CarryingCharacter->GetMesh();
-		if (!CharacterMesh) return;
-
-		// �ݸ��� ��Ȱ��ȭ
-		PartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		DetectionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
-		// UI ����
-		InteractionWidget->SetVisibility(false);
-
-		// ĳ���� ���Ͽ� ����
-		AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
-
-		// 3P 부품은 주인에게 안 보이게
-		PartMesh->SetOwnerNoSee(true);
-
-		// 1인칭 부품 메시 표시
-		CarryingCharacter->ShowFirstPersonPart(PartMesh->GetStaticMesh());
-	}
-	// ��ǰ�� ����Ʈ�� ��
-	else if (!bIsCarried)
-	{
-		// ĳ���Ϳ��� �и�
-		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-
-		SetActorRotation(FRotator::ZeroRotator);
-
-		// 바닥에 떨어진 부품은 모두에게 보이도록 복원
-		PartMesh->SetOwnerNoSee(false);
-
-		// �޽� �ݸ��� ��Ȱ��ȭ
-		PartMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		PartMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
-		PartMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-
-		// ���� ���� ��Ȱ��ȭ
-		DetectionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-		DetectionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
-		DetectionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-	}
+	RefreshFirstPersonPart();
 }

@@ -15,26 +15,15 @@ ADRTutorialGameMode::ADRTutorialGameMode()
 	WipeoutDelayTime = 2.0f;
 }
 
-void ADRTutorialGameMode::BeginPlay()
-{
-	Super::BeginPlay();
-}
-
 UClass* ADRTutorialGameMode::GetDefaultPawnClassForController_Implementation(AController* InController)
 {
 	if (APlayerController* PC = Cast<APlayerController>(InController))
 	{
 		if (ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>())
 		{
-			EPlayerCharacterClass SelectedClass = PS->GetSelectedPlayerClass();
-
-			if (UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(this))
+			if (UClass* PawnClass = FindPlayerCharacterClass(PS->GetSelectedPlayerClass()))
 			{
-				TSubclassOf<ADRCharacter>* BPClassPtr = ClassInfo->CharacterBPClasses.Find(SelectedClass);
-				if (BPClassPtr && *BPClassPtr)
-				{
-					return *BPClassPtr;
-				}
+				return PawnClass;
 			}
 		}
 	}
@@ -96,11 +85,8 @@ void ADRTutorialGameMode::NotifyAllPlayersTutorialComplete()
 {
 	if (!HasAuthority()) return;
 
-	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	ForEachDRPlayerController([&](ADRPlayerController* PC)
 	{
-		if (ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get()))
-		{
-			PC->Client_ShowTutorialClearUI();
-		}
-	}
+		PC->Client_ShowTutorialClearUI();
+	});
 }

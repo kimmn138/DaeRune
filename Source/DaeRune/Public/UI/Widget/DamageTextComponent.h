@@ -7,7 +7,7 @@
 #include "DamageTextComponent.generated.h"
 
 /**
- * µ¥¹ÌÁö ¼öÄ¡¸¦ Ç¥½ÃÇÏ´Â 3D ¿ùµå À§Á¬ ÄÄÆ÷³ÍÆ®
+ * ë°ë¯¸ì§€ ìˆ˜ì¹˜ë¥¼ í‘œì‹œí•˜ëŠ” 3D ì›”ë“œ ìœ„ì ¯ ì»´í¬ë„ŒíŠ¸
  */
 UCLASS()
 class DAERUNE_API UDamageTextComponent : public UWidgetComponent
@@ -15,7 +15,7 @@ class DAERUNE_API UDamageTextComponent : public UWidgetComponent
 	GENERATED_BODY()
 	
 public:
-	// µ¥¹ÌÁö ¼öÄ¡ ¼³Á¤ ¹× ¾Ö´Ï¸ŞÀÌ¼Ç ½ÃÀÛ
+	// ë°ë¯¸ì§€ ìˆ˜ì¹˜ ì„¤ì • ë° ì• ë‹ˆë©”ì´ì…˜ ì‹œì‘
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable)
 	void SetDamageText(float Damage);
 };

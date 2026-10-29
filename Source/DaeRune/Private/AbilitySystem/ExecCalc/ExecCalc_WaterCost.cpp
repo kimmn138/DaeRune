@@ -8,7 +8,7 @@
 #include "DRGameplayTags.h"
 #include "Game/DRProgressionConfig.h"
 
-// Capture�� �Ӽ��� ����
+// Capture할 속성들 정의
 struct FWaterCostStatics
 {
     DECLARE_ATTRIBUTE_CAPTUREDEF(Water);
@@ -16,7 +16,7 @@ struct FWaterCostStatics
 
     FWaterCostStatics()
     {
-        // Source(������)�� Water�� Health�� Capture
+        // Source(시전자)의 Water와 Health를 Capture
         DEFINE_ATTRIBUTE_CAPTUREDEF(UDRAttributeSet, Water, Source, false);
         DEFINE_ATTRIBUTE_CAPTUREDEF(UDRAttributeSet, Health, Source, false);
     }
@@ -30,7 +30,7 @@ static const FWaterCostStatics& WaterCostStatics()
 
 UExecCalc_WaterCost::UExecCalc_WaterCost()
 {
-    // Capture�� �Ӽ��� ���
+    // Capture할 속성들 등록
     RelevantAttributesToCapture.Add(WaterCostStatics().WaterDef);
     RelevantAttributesToCapture.Add(WaterCostStatics().HealthDef);
 }
@@ -39,7 +39,7 @@ void UExecCalc_WaterCost::Execute_Implementation(const FGameplayEffectCustomExec
 {
     const FGameplayEffectSpec& Spec = ExecutionParams.GetOwningSpec();
 
-    // SetByCaller�� ���޵� �ʿ� Water �� ��������
+    // SetByCaller로 전달된 필요 Water 양 가져오기
     const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
     float RequiredWater = Spec.GetSetByCallerMagnitude(GameplayTags.Cost_Water, false, 0.f);
 
@@ -48,7 +48,7 @@ void UExecCalc_WaterCost::Execute_Implementation(const FGameplayEffectCustomExec
         return;
     }
 
-    // Evaluation Parameters ����
+    // Evaluation Parameters 설정
     const FGameplayTagContainer* SourceTags = Spec.CapturedSourceTags.GetAggregatedTags();
     const FGameplayTagContainer* TargetTags = Spec.CapturedTargetTags.GetAggregatedTags();
 
@@ -56,7 +56,7 @@ void UExecCalc_WaterCost::Execute_Implementation(const FGameplayEffectCustomExec
     EvaluationParameters.SourceTags = SourceTags;
     EvaluationParameters.TargetTags = TargetTags;
 
-    // ���� Water�� Health �� ��������
+    // 현재 Water와 Health 값 가져오기
     float CurrentWater = 0.f;
     ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(
         WaterCostStatics().WaterDef,
@@ -69,37 +69,13 @@ void UExecCalc_WaterCost::Execute_Implementation(const FGameplayEffectCustomExec
         EvaluationParameters,
         CurrentHealth);
 
-    // Cost ���
+    // Cost 계산 — CheckCost · 청소기 돌진 충전과 같은 규칙 (피의 계약 칩 포함)
     float ActualWaterCost = 0.f;
     float HealthCost = 0.f;
+    UDRAbilitySystemLibrary::SplitWaterCost(
+        ExecutionParams.GetSourceAbilitySystemComponent(), RequiredWater, CurrentWater, ActualWaterCost, HealthCost);
 
-    // ★Plan3(공용칩) §17.8.2★ 피의 계약 칩: 물을 전혀 쓰지 않고 전액을 체력으로 낸다.
-    // ★UDRGameplayAbility::CheckCost 의 분기와 반드시 같은 수식(FloorToFloat 포함)이어야 한다.★
-    const UAbilitySystemComponent* SourceASC = ExecutionParams.GetSourceAbilitySystemComponent();
-    if (UDRAbilitySystemLibrary::HasUpgradeFeature(
-            SourceASC, GameplayTags.Upgrade_Feature_Combat_BloodCost))
-    {
-        const AActor* TuningContext = SourceASC ? SourceASC->GetAvatarActor() : nullptr;
-        const float Ratio = UDRAbilitySystemLibrary::GetChipTuning(TuningContext).BloodCostHealthRatio;
-
-        ActualWaterCost = 0.f;
-        HealthCost = FMath::FloorToFloat(RequiredWater * Ratio);
-    }
-    else if (CurrentWater >= RequiredWater)
-    {
-        // Water�� ����� ���: Water�� ����
-        ActualWaterCost = RequiredWater;
-        HealthCost = 0.f;
-    }
-    else
-    {
-        // Water�� ������ ���: Water ���� + Health �߰� ����
-        ActualWaterCost = CurrentWater;
-        float WaterShortage = RequiredWater - CurrentWater;
-        HealthCost = FMath::FloorToFloat(WaterShortage * 0.5f);
-    }
-
-    // Water ���� ����
+    // Water 차감 적용
     if (ActualWaterCost > 0.f)
     {
         FGameplayModifierEvaluatedData WaterData(
@@ -109,7 +85,7 @@ void UExecCalc_WaterCost::Execute_Implementation(const FGameplayEffectCustomExec
         OutExecutionOutput.AddOutputModifier(WaterData);
     }
 
-    // Health ���� ���� (�ʿ��� ��츸)
+    // Health 차감 적용 (필요한 경우만)
     if (HealthCost > 0.f)
     {
         FGameplayModifierEvaluatedData HealthData(

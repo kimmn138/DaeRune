@@ -4,9 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "UI/WidgetController/DRWidgetController.h"
+#include "UI/WidgetController/DRAttributeChangedDelegate.h"
 #include "OverlayWidgetController.generated.h"
 
-// UI �޽��� ǥ�ø� ���� ������ ���̺� ����ü
+// UI 메시지 표시를 위한 데이터 테이블 구조체
 struct FDRAbilityInfo;
 USTRUCT(BlueprintType)
 struct FUIWidgetRow : public FTableRowBase
@@ -30,24 +31,20 @@ class UDRUserWidget;
 class UAbilityInfo;
 class UDRAbilitySystemComponent;
 class UStatusEffectInfo;
-class ADRCleanserSite;
-class UDRCleanserSiteAttributeSet;
 
-// ��Ʈ����Ʈ ���� �� UI ������Ʈ�� ��������Ʈ
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAttributeChangedSignature, float, NewValue);
-// ��ǥ UI ������Ʈ�� ��������Ʈ
+// 목표 UI 업데이트용 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveTextChangedSignature, const FText&, ObjectiveTitle, const FText&, ProgressText);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnObjectiveProgressChangedSignature, int32, Current, int32, Max);
 // 목표 진행도(숫자) UI 표시/숨김 델리게이트 (Max==0이면 false로 브로드캐스트)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnObjectiveProgressVisibilityChangedSignature, bool, bShouldShow);
 // 목표 클리어 연출 델리게이트 (클리어 애니메이션 → 시작 애니메이션 시퀀스 트리거)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnObjectiveCompletedSignature);
-// ����� ����� ��������Ʈ
+// 디버프 변경시 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FStatusEffectWidgetSignature, const FEffectInfo&, EffectInfo);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FEffectTagRemovedSignature, FGameplayTag, EffectTag, bool, IsDebuff);
-// ���̺� Ÿ�̸� ��������Ʈ
+// 웨이브 타이머 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWaveTimerChangedSignature, int32, WaveNumber, float, RemainingTime, bool, bIsRestTime);
-// ���̺� �˸� ��������Ʈ
+// 웨이브 알림 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPhaseAlarmSignature, const FText&, PhaseText);
 // Phase3 타이머 UI 표시/숨김 델리게이트 (Phase 3 진입 시 true, 그 외 false)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPhase3TimerVisibilitySignature, bool, bShouldShow);
@@ -87,9 +84,11 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCrosshairHitConfirmedSignature);
 // 업그레이드 칩에 따른 HUD 모듈 표시/숨김 (Plan3(공용칩) §7.2).
 // 체력/물은 WBP_HealthWaterBar 한 위젯이라 하나의 플래그로 묶인다.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnHudFeatureVisibilityChangedSignature, bool, bShowVitals, bool, bShowSkillIcons);
+// 장착 칩이 최대 물을 늘렸는지 (물 HUD 테두리 교체용 — UDRHealthWaterBarWidget)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWaterTankExpandedChangedSignature, bool, bExpanded);
 
 /**
- * ���� ���� UI �������̸� �����ϴ� ��Ʈ�ѷ�
+ * 메인 게임 UI 오버레이를 관리하는 컨트롤러
  */
 UCLASS(BlueprintType, Blueprintable)
 class DAERUNE_API UOverlayWidgetController : public UDRWidgetController
@@ -97,42 +96,28 @@ class DAERUNE_API UOverlayWidgetController : public UDRWidgetController
 	GENERATED_BODY()
 	
 public:
-	// �θ� Ŭ���� ���� �Լ� �������̵�
+	// 부모 클래스 가상 함수 오버라이드
 	virtual void BroadcastInitialValues() override;
 	virtual void BindCallbacksToDependencies() override;
-	void BindCallbacksCleanserSiteToDependencies();
 
-	// ��������Ʈ ����ε� �Լ�
+	// 델리게이트 언바인딩 함수
 	void UnbindAllDelegates();
 
-	// ü�� ���� UI ������Ʈ ��������Ʈ
+	// 체력 관련 UI 업데이트 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnHealthChanged;
 
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnMaxHealthChanged;
 
-	// �� ���� UI ������Ʈ ��������Ʈ
+	// 물 관련 UI 업데이트 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnWaterChanged;
 
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
 	FOnAttributeChangedSignature  OnMaxWaterChanged;
 
-	// Ŭ��������Ʈ ü�� ���� UI ������Ʈ ��������Ʈ
-	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
-	FOnAttributeChangedSignature  OnFirstCleanserHealthChanged;
-
-	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
-	FOnAttributeChangedSignature  OnFirstCleanserMaxHealthChanged;
-
-	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
-	FOnAttributeChangedSignature  OnSecondCleanserHealthChanged;
-
-	UPROPERTY(BlueprintAssignable, Category = "GAS|Attributes")
-	FOnAttributeChangedSignature  OnSecondCleanserMaxHealthChanged;
-
-	// ��ǥ UI ������Ʈ ��������Ʈ
+	// 목표 UI 업데이트 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Objective")
 	FOnObjectiveTextChangedSignature OnObjectiveTextChanged;
 
@@ -147,7 +132,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Objective")
 	FOnObjectiveCompletedSignature OnObjectiveCompleted;
 
-	// ����� ���� ��ε�ĳ��Ʈ ��������Ʈ
+	// 디버프 변경 브로드캐스트 델리게이트
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Debuff")
 	TObjectPtr<UStatusEffectInfo> StatusEffectData;
 	
@@ -157,11 +142,11 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Debuff")
 	FEffectTagRemovedSignature EffectTagRemovedDelegate;
 
-	// ���̺� Ÿ�̸� ������Ʈ ��������Ʈ
+	// 웨이브 타이머 업데이트 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Wave")
 	FOnWaveTimerChangedSignature OnWaveTimerChanged;
 
-	// ���̺� �˶� ��������Ʈ
+	// 웨이브 알람 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "Phase|Alarm")
 	FOnPhaseAlarmSignature OnPhaseAlarm;
 
@@ -266,6 +251,25 @@ public:
 	UFUNCTION()
 	void RefreshHudFeatureVisibility();
 
+	/**
+	 * 물 HUD 테두리 교체 신호. 장착 칩이 최대 물을 늘리면(지금은 CM.Stat.MaxWater "확장 물탱크") true.
+	 * 칩 Id 가 아니라 수치(MaxWater 의 Flat > 0 또는 Mult > 1)로 판정해 칩 이름·수치가 바뀌어도 따라간다.
+	 * RefreshHudFeatureVisibility 와 같은 시점(최초 1회 + 장착 칩 변경)에 방송된다.
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "GAS|Upgrade")
+	FOnWaterTankExpandedChangedSignature OnWaterTankExpandedChanged;
+
+	UFUNCTION(BlueprintPure, Category = "GAS|Upgrade")
+	bool IsWaterTankExpanded();
+
+	/**
+	 * 오염 상태가 바뀌면 체력·최대 체력을 다시 보낸다.
+	 * 체력 HUD 는 최대 체력이 바뀔 때만 오염 색을 다시 칠하는데, 기본 최대 체력이 100 인 청소기는
+	 * 오염(최대 체력 100)에 들어가고 나와도 최대 체력이 그대로라 이벤트가 오지 않는다.
+	 */
+	UFUNCTION()
+	void HandleCorruptedStateChanged(bool bIsCorrupted);
+
 private:
 	// State.Carrying 태그 변화 콜백 (부품 픽업/드롭/설치 시 조준선 상태 재계산)
 	void HandleCarryingTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
@@ -307,36 +311,27 @@ private:
 	UFUNCTION()
 	void HandleWaveDefenseUIActiveChanged(bool bIsActive);
 
-	// 목표 데이터에 PhaseAlarmText가 없을 때 사용하는 레거시 문구 (스테이지1 호환)
-	FText GetLegacyPhaseAlarmText(int32 PhaseIndex) const;
+	// 목표 데이터에 PhaseAlarmText 가 없을 때의 폴백 문구 (스테이지1 — 2페이즈 기준)
+	FText GetFallbackPhaseAlarmText(int32 PhaseIndex) const;
 	
-	// Ŭ���� ����Ʈ ASC/AttributeSet ���ε� �Լ�
-	UFUNCTION()
-	void BindCleanserSite(ADRCleanserSite* FirstCleanserSite, ADRCleanserSite* SecondCleanserSite);
 
-	FTimerHandle PhaseBindingDelayTimer;
-	FTimerHandle WaveTimerBindingDelayTimer;
-	FTimerHandle PhaseAlarmBindingDelayTimer;
-	FTimerHandle ToxicGasWarningBindingDelayTimer;
+	// GameState 델리게이트 묶기 (목표 · 페이즈 알람 · 독가스 경고). GameState 가 아직 없으면 재시도한다.
+	void TryBindGameStateDelegates();
+	FTimerHandle GameStateBindRetryTimer;
+	bool bGameStateDelegatesBound = false;
+	static constexpr float GameStateBindRetryInterval = 0.1f;
 
-	// ��������Ʈ �ڵ� ����� ����
-	FDelegateHandle PhaseObjectiveDelegateHandle;
-	FDelegateHandle ObjectiveCompletedDelegateHandle;
-	FDelegateHandle WaveTimerDelegateHandle;
+	// Buff.* / Debuff.* 상태 아이콘 태그인지 (디버프면 bOutIsDebuff = true)
+	static bool IsStatusEffectTag(const FGameplayTag& Tag, bool& bOutIsDebuff);
 
-	// ASC 델리게이트 핸들 (안전한 정리를 위해)
-	TArray<FDelegateHandle> ASCDelegateHandles;
-	TArray<TPair<TWeakObjectPtr<UAbilitySystemComponent>, FDelegateHandle>> CleanserSiteDelegateHandles;
+	// 값 변화 델리게이트를 묶은 어트리뷰트 (해제용)
+	TArray<FGameplayAttribute> BoundAttributes;
 	
 	// Phase 알람용 캐시 (Phase 변경 시 알람 표시 여부 판단)
 	int32 CachedPhaseNumber = -1;
 
 	// 웨이브 타이머용 캐시 (Phase 3 웨이브 타이머 바인딩 여부 판단)
 	int32 CachedWavePhaseNumber = -1;
-
-	int32 CachedProgress = -1;
-	int32 CachedRequiredCount = -1;
-	FText CachedObjectiveTitle;
 
 	// 페이즈 알람 중복 방지용 플래그
 	bool bPhaseAlarmShown = false;

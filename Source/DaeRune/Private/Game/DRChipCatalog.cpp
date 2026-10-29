@@ -7,39 +7,6 @@
 
 #define LOCTEXT_NAMESPACE "DRUpgrade"
 
-// ========================= FDRUpgradeModifier =========================
-
-FText FDRUpgradeModifier::GetDetailText() const
-{
-	if (!DetailOverride.IsEmpty())
-	{
-		return DetailOverride;
-	}
-
-	const FText StatName = UEnum::GetDisplayValueAsText(Stat);
-	const FText Sign = Value < 0.f ? LOCTEXT("ModifierSignMinus", "-") : LOCTEXT("ModifierSignPlus", "+");
-
-	FNumberFormattingOptions Options;
-	Options.SetMinimumFractionalDigits(0);
-	// 0.05 단위 칩이 생기면 1자리로는 0.1 로 반올림된다. 2자리로 둬도 MinimumFractionalDigits 가 0이라
-	// 기존 표기(+20 / +0.5 / 12%)는 전혀 변하지 않는다. (Plan3(공용칩) §8.3)
-	Options.SetMaximumFractionalDigits(2);
-
-	if (Op == EDRUpgradeOp::Percent)
-	{
-		return FText::Format(
-			LOCTEXT("ModifierPercentFmt", "{0} {1}{2}%"),
-			StatName, Sign, FText::AsNumber(FMath::Abs(Value) * 100.f, &Options));
-	}
-
-	// 시간 단위 스탯은 "초"를 붙인다 — 안 붙이면 "-0.5" 가 비율인지 시간인지 구분이 안 된다.
-	return FText::Format(
-		DRIsTimeStat(Stat)
-			? LOCTEXT("ModifierFlatSecFmt", "{0} {1}{2}초")
-			: LOCTEXT("ModifierFlatFmt", "{0} {1}{2}"),
-		StatName, Sign, FText::AsNumber(FMath::Abs(Value), &Options));
-}
-
 // ========================= UDRChipCatalog =========================
 
 void UDRChipCatalog::PostLoad()
@@ -60,6 +27,7 @@ void UDRChipCatalog::BuildIndex() const
 {
 	IdToIndex.Reset();
 	IdToIndex.Reserve(Chips.Num());
+	IndexedEntryCount = Chips.Num();
 	for (int32 Index = 0; Index < Chips.Num(); ++Index)
 	{
 		const FName Id = Chips[Index].ChipId;
@@ -133,11 +101,11 @@ FText UDRChipCatalog::GetSkillDisplayName(const FGameplayTag& AbilityTag) const
 	}
 
 	// 폴백: 태그의 마지막 조각 (Abilities.GardenRobot.SeedCannon → SeedCannon)
-	FString TagString = AbilityTag.ToString();
-	FString Left, Right;
-	while (TagString.Split(TEXT("."), &Left, &Right))
+	const FString TagString = AbilityTag.ToString();
+	FString LastPart;
+	if (TagString.Split(TEXT("."), nullptr, &LastPart, ESearchCase::CaseSensitive, ESearchDir::FromEnd))
 	{
-		TagString = Right;
+		return FText::FromString(LastPart);
 	}
 	return FText::FromString(TagString);
 }

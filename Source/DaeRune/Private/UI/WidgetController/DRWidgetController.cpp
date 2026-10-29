@@ -10,7 +10,7 @@
 
 void UDRWidgetController::SetWidgetControllerParams(const FWidgetControllerParams& WCParams)
 {
-	// �Ķ���� ����ü���� �� ������Ʈ �Ҵ�
+	// 파라미터 구조체에서 각 컴포넌트 할당
 	PlayerController = WCParams.PlayerController;
 	PlayerState = WCParams.PlayerState;
 	AbilitySystemComponent = WCParams.AbilitySystemComponent;
@@ -27,20 +27,20 @@ void UDRWidgetController::BindCallbacksToDependencies()
 
 void UDRWidgetController::BroadcastAbilityInfo()
 {
-	// ���� �����Ƽ�� ���� �ο����� �ʾ����� ���
-	if (!GetDRASC()->bStartupAbilitiesGiven) return;
+	// 시작 어빌리티가 아직 부여되지 않았으면 대기. AbilityInfo 는 BP 에서 지정 — 비어 있으면 아이콘 없이 넘어간다
+	if (!GetDRASC() || !GetDRASC()->bStartupAbilitiesGiven || !AbilityInfo) return;
 
-	// �� �����Ƽ ������ ��ȸ�ϸ� UI�� ����
+	// 각 어빌리티 정보를 순회하며 UI에 전달
 	FForEachAbility BroadcastDelegate;
 	BroadcastDelegate.BindLambda([this](const FGameplayAbilitySpec& AbilitySpec)
 	{
-		// AbilitySpec���� �±� ���� ����
+		// AbilitySpec에서 태그 정보 추출
 		FDRAbilityInfo Info = AbilityInfo->FindAbilityInfoForTag(DRAbilitySystemComponent->GetAbilityTagFromSpec(AbilitySpec));
 		Info.InputTag = DRAbilitySystemComponent->GetInputTagFromSpec(AbilitySpec);
-		// UI�� �����Ƽ ���� ��ε�ĳ��Ʈ
+		// UI에 어빌리티 정보 브로드캐스트
 		AbilityInfoDelegate.Broadcast(Info);
 	});
-	// ASC�� ��� �����Ƽ�� ���� ���� �Լ� ����
+	// ASC의 모든 어빌리티에 대해 람다 함수 실행
 	GetDRASC()->ForEachAbility(BroadcastDelegate);
 }
 

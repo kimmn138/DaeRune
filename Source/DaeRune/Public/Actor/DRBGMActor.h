@@ -43,6 +43,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "BGM")
 	void StopBGM(float FadeOutDuration = 2.0f);
 
+	// 월드의 모든 BGM 액터 정지 (게임 클리어 · 게임 오버 · 스테이지 종료 공용)
+	static void StopAllBGM(const UObject* WorldContext, float FadeOutDuration);
+
 	// 보스 BGM으로 전환 (서버에서 호출)
 	UFUNCTION(BlueprintCallable, Category = "BGM|Boss")
 	void StartBossBGM();
@@ -53,6 +56,11 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+
+#if WITH_EDITOR
+	// 에셋 기본값(예전 생성자 하드코딩 경로 → BP 기본값)이 비었는지 저장 · 데이터 검증 때 알린다
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+#endif
 
 	// DataAsset의 어떤 BGM을 재생할지 선택
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BGM")
@@ -103,6 +111,10 @@ private:
 	// 보스 BGM 전용 오디오 컴포넌트 (크로스페이드용 분리)
 	UPROPERTY()
 	TObjectPtr<UAudioComponent> BossAudioComponent;
+
+	// 두 오디오 컴포넌트의 사운드 클래스 (설정창 음악 볼륨 슬라이더가 조절 — SC_BGM). BeginPlay 에서 적용한다
+	UPROPERTY(EditDefaultsOnly, Category = "BGM")
+	TObjectPtr<USoundClass> BGMSoundClass;
 
 	// DataAsset에서 로드한 단일 BGM (Stage가 아닌 슬롯용)
 	UPROPERTY()

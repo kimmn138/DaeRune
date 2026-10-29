@@ -6,7 +6,7 @@
 #include "AbilitySystemComponent.h"
 #include "DRWidgetController.generated.h"
 
-// ´É·Â Á¤º¸ µ¨¸®°ÔÀÌÆ®
+// ëŠ¥ë ¥ ì •ë³´ ë¸ë¦¬ê²Œì´íŠ¸
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAbilityInfoSignature, const FDRAbilityInfo&, Info);
 
 class UAttributeSet;
@@ -17,7 +17,7 @@ class UDRAbilitySystemComponent;
 class UDRAttributeSet;
 class UAbilityInfo;
 
-// WidgetController ÃÊ±âÈ­¿¡ ÇÊ¿äÇÑ ±¸Á¶Ã¼
+// WidgetController ì´ˆê¸°í™”ì— í•„ìš”í•œ êµ¬ì¡°ì²´
 USTRUCT(BlueprintType)
 struct FWidgetControllerParams
 {
@@ -41,7 +41,7 @@ struct FWidgetControllerParams
 };
 
 /**
- * UI¿Í °ÔÀÓ ·ÎÁ÷ »çÀÌÀÇ Áß°£ °èÃş
+ * UIì™€ ê²Œì„ ë¡œì§ ì‚¬ì´ì˜ ì¤‘ê°„ ê³„ì¸µ
  */
 UCLASS()
 class DAERUNE_API UDRWidgetController : public UObject
@@ -49,24 +49,24 @@ class DAERUNE_API UDRWidgetController : public UObject
 	GENERATED_BODY()
 	
 public:
-	// ÃÊ±âÈ­ ÇÔ¼ö
+	// ì´ˆê¸°í™” í•¨ìˆ˜
 	UFUNCTION(BlueprintCallable)
 	void SetWidgetControllerParams(const FWidgetControllerParams& WCParams);
 
-	// ÆÄ»ı Å¬·¡½º¿¡¼­ ¿À¹ö¶óÀÌµåÇÒ °¡»ó ÇÔ¼öµé
+	// íŒŒìƒ í´ë˜ìŠ¤ì—ì„œ ì˜¤ë²„ë¼ì´ë“œí•  ê°€ìƒ í•¨ìˆ˜ë“¤
 	UFUNCTION(BlueprintCallable)
 	virtual void BroadcastInitialValues();
 	virtual void BindCallbacksToDependencies();
 
-	// ¾îºô¸®Æ¼ Á¤º¸ ºê·ÎµåÄ³½ºÆ® µ¨¸®°ÔÀÌÆ®
+	// ì–´ë¹Œë¦¬í‹° ì •ë³´ ë¸Œë¡œë“œìºìŠ¤íŠ¸ ë¸ë¦¬ê²Œì´íŠ¸
 	UPROPERTY(BlueprintAssignable, Category = "GAS|Messages")
 	FAbilityInfoSignature AbilityInfoDelegate;
 
-	// ¾îºô¸®Æ¼ Á¤º¸¸¦ UI¿¡ Àü´Ş
+	// ì–´ë¹Œë¦¬í‹° ì •ë³´ë¥¼ UIì— ì „ë‹¬
 	void BroadcastAbilityInfo();
 	
 protected:
-	// ¾îºô¸®Æ¼ µ¥ÀÌÅÍ ¿¡¼Â
+	// ì–´ë¹Œë¦¬í‹° ë°ì´í„° ì—ì…‹
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Widget Data")
 	TObjectPtr<UAbilityInfo> AbilityInfo;
 

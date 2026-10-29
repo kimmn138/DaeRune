@@ -43,11 +43,24 @@ void UMenu::MenuSetup(int32 NumberOfPublicConnections, const FString& LobbyPath)
 
 	if (MultiplayerSessionsSubsystem)
 	{
-		MultiplayerSessionsSubsystem->MultiplayerOnCreateSessionComplete.AddDynamic(this, &ThisClass::OnCreateSession);
-		MultiplayerSessionsSubsystem->MultiplayerOnFindSessionsComplete.AddUObject(this, &ThisClass::OnFindSessions);
-		MultiplayerSessionsSubsystem->MultiplayerOnJoinSessionComplete.AddUObject(this, &ThisClass::OnJoinSession);
-		MultiplayerSessionsSubsystem->MultiplayerOnDestroySessionComplete.AddDynamic(this, &ThisClass::OnDestroySession);
+		// MenuSetup 을 다시 불러도 겹치지 않게 먼저 푼다
+		UnbindSubsystemDelegates();
+
+		MultiplayerSessionsSubsystem->MultiplayerOnCreateSessionComplete.AddUniqueDynamic(this, &ThisClass::OnCreateSession);
+		FindSessionsHandle = MultiplayerSessionsSubsystem->MultiplayerOnFindSessionsComplete.AddUObject(this, &ThisClass::OnFindSessions);
+		JoinSessionHandle = MultiplayerSessionsSubsystem->MultiplayerOnJoinSessionComplete.AddUObject(this, &ThisClass::OnJoinSession);
 	}
+}
+
+void UMenu::UnbindSubsystemDelegates()
+{
+	if (!MultiplayerSessionsSubsystem) return;
+
+	MultiplayerSessionsSubsystem->MultiplayerOnCreateSessionComplete.RemoveDynamic(this, &ThisClass::OnCreateSession);
+	MultiplayerSessionsSubsystem->MultiplayerOnFindSessionsComplete.Remove(FindSessionsHandle);
+	MultiplayerSessionsSubsystem->MultiplayerOnJoinSessionComplete.Remove(JoinSessionHandle);
+	FindSessionsHandle.Reset();
+	JoinSessionHandle.Reset();
 }
 
 bool UMenu::Initialize()
@@ -59,11 +72,11 @@ bool UMenu::Initialize()
 
 	if (HostButton)
 	{
-		HostButton->OnClicked.AddDynamic(this, &ThisClass::HostButtonClicked);
+		HostButton->OnClicked.AddUniqueDynamic(this, &ThisClass::HostButtonClicked);
 	}
 	if (JoinButton)
 	{
-		JoinButton->OnClicked.AddDynamic(this, &ThisClass::JoinButtonClicked);
+		JoinButton->OnClicked.AddUniqueDynamic(this, &ThisClass::JoinButtonClicked);
 	}
 
 	return true;
@@ -199,16 +212,12 @@ void UMenu::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
 	}
 }
 
-void UMenu::OnDestroySession(bool bWasSuccessful)
-{
-}
-
 void UMenu::HostButtonClicked()
 {
 	HostButton->SetIsEnabled(false);
 	if (MultiplayerSessionsSubsystem)
 	{
-		MultiplayerSessionsSubsystem->CreateSessionWithRoomCode(NumPublicConnections, FString("RoomCodeOnly"));
+		MultiplayerSessionsSubsystem->CreateSessionWithRoomCode(NumPublicConnections);
 	}
 }
 
@@ -268,6 +277,7 @@ void UMenu::ClearError()
 
 void UMenu::MenuTearDown()
 {
+	UnbindSubsystemDelegates();
 	RemoveFromParent();
 }
 

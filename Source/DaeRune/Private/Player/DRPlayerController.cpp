@@ -2,7 +2,12 @@
 
 
 #include "Player/DRPlayerController.h"
+#include "Player/DRInteractionComponent.h"
+#include "Player/DRCheatManager.h"
 #include "UI/Widget/DRWardrobeScreenWidget.h"
+#include "UI/Widget/DRUpgradeScreenWidget.h"
+#include "UI/Widget/DRStageSelectScreenWidget.h"
+#include "Game/DRProgressionConfig.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "DRGameplayTags.h"
 #include "EnhancedInputSubsystems.h"
@@ -37,7 +42,6 @@
 #include "UI/WidgetController/OverlayWidgetController.h"
 #include "Game/DRSettingsManager.h"
 #include "Game/DRGameUserSettings.h"
-#include "Sound/DRSoundManager.h"
 #include "Actor/DRBGMActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "UI/Widget/DRWaitingRoomWidget.h"
@@ -48,21 +52,18 @@
 #include "Game/DRChipCatalog.h"
 #include "DaeRune/DRLogChannels.h"
 #include "MultiplayerSessionsSubsystem.h"
+#include "Tuning/DRTuningSubsystem.h"
 
 ADRPlayerController::ADRPlayerController()
 {
-	// 占쏙옙티占시뤄옙占쏙옙 占쏙옙占시몌옙占쏙옙占싱쇽옙 활占쏙옙화
+	// 멀티플레이 리플리케이션 활성화
 	bReplicates = true;
-	
-	// 占쏙옙품 占시쏙옙占쏙옙 占십깍옙화
-	bPartDetectionEnabled = false;
-	CurrentDetectedPart = nullptr;
-	LineTraceTimer = 0.f;
-}
 
-void ADRPlayerController::CorruptedStateChanged(bool bIsStateChanged)
-{
-	bIsCorrupted = bIsStateChanged;
+	// 상호작용 대상 감지 (부품 · 사이트 · 청소기 · 프롭 · 열차 칸)
+	InteractionComponent = CreateDefaultSubobject<UDRInteractionComponent>(TEXT("InteractionComponent"));
+
+	// 콘솔 치트(DR*) — 개발 빌드에서만 만들어진다 (ReceivedPlayer 참고)
+	CheatClass = UDRCheatManager::StaticClass();
 }
 
 void ADRPlayerController::ShowDamageNumber_Implementation(float DamageAmount, ACharacter* TargetCharacter)
@@ -106,201 +107,9 @@ void ADRPlayerController::ShowDamageNumber_Implementation(float DamageAmount, AC
 	}
 }
 
-void ADRPlayerController::SetPartDetectionEnabled(bool bEnabled, ADRCleanserPart* Part)
-{
-	if (!Part) return;
-
-	if (bEnabled)
-	{
-		LineTraceTimer = 0.f;
-	}
-	SetInteractableDetectionEnabled(bEnabled, Part, OverlappedParts, bPartDetectionEnabled, CurrentDetectedPart);
-}
-
-void ADRPlayerController::SetInteractableDetectionEnabled(bool bEnabled, AActor* Interactable,
-	TSet<TWeakObjectPtr<AActor>>& OverlapSet, bool& bDetectionFlag, TObjectPtr<AActor>& CurrentDetected)
-{
-	if (!Interactable) return;
-
-	if (bEnabled)
-	{
-		OverlapSet.Add(Interactable);
-		bDetectionFlag = true;
-	}
-	else
-	{
-		OverlapSet.Remove(Interactable);
-
-		// 파괴된 대상의 잔여 엔트리 정리
-		for (auto It = OverlapSet.CreateIterator(); It; ++It)
-		{
-			if (!It->IsValid())
-			{
-				It.RemoveCurrent();
-			}
-		}
-
-		// 오버랩 중인 대상이 하나도 없을 때만 감지 비활성화
-		if (OverlapSet.IsEmpty())
-		{
-			bDetectionFlag = false;
-		}
-
-		// 이탈한 대상을 감지 중이었거나 감지가 꺼졌으면 UI 제거
-		if (CurrentDetected == Interactable || !bDetectionFlag)
-		{
-			SetCurrentDetectedInteractable(nullptr, CurrentDetected);
-		}
-	}
-}
-
-void ADRPlayerController::SetCurrentDetectedInteractable(AActor* NewDetected, TObjectPtr<AActor>& CurrentDetected)
-{
-	if (CurrentDetected == NewDetected) return;
-
-	if (IDRInteractable* OldInteractable = Cast<IDRInteractable>(CurrentDetected))
-	{
-		OldInteractable->SetInteractionUIVisible(false);
-	}
-
-	CurrentDetected = NewDetected;
-
-	if (IDRInteractable* NewInteractable = Cast<IDRInteractable>(CurrentDetected))
-	{
-		NewInteractable->SetInteractionUIVisible(true);
-	}
-
-	// 사이트 감지 슬롯의 변화면 조준선 상태 갱신 (설치 가능 조준선 표시/해제)
-	// 라인트레이스 갱신/오버랩 이탈 등 모든 감지 변경 경로가 이 함수를 지나므로 여기서 일괄 처리
-	if (&CurrentDetected == &CurrentOverlappedSite)
-	{
-		NotifyCrosshairSiteDetected(CurrentDetected != nullptr);
-	}
-}
-
-void ADRPlayerController::NotifyCrosshairSiteDetected(bool bDetected)
-{
-	if (!IsLocalController()) return;
-
-	if (ADRHUD* DRHUD = GetHUD<ADRHUD>())
-	{
-		if (UOverlayWidgetController* OverlayWC = DRHUD->GetOverlayWidgetControllerCached())
-		{
-			OverlayWC->SetCrosshairSiteDetected(bDetected);
-		}
-	}
-}
-
-ADRCleanserPart* ADRPlayerController::FindPartByLineTrace()
-{
-	// 캐占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙占쏙옙
-	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
-	if (!DRCharacter) return nullptr;
-
-	// 캐占쏙옙占싶곤옙 占싱뱄옙 占쏙옙품占쏙옙 占쏙옙占?占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙占쏙옙占쏙옙 占쏙옙占쏙옙
-	if (DRCharacter->IsCarryingPart()) return nullptr;
-
-	// 카占쌨띰옙 占쏙옙占쏙옙占쏙옙트 占쏙옙占쏙옙占쏙옙占쏙옙
-	UCameraComponent* Camera = DRCharacter->GetFollowCamera();
-	if (!Camera) return nullptr;
-
-	FVector Start = Camera->GetComponentLocation();
-	FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
-
-	// 멀티 라인트레이스: 사이트 메시 등에 가려져도 부품을 찾을 수 있도록 모든 히트를 검사
-	TArray<FHitResult> HitResults;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(DRCharacter);
-
-	GetWorld()->LineTraceMultiByChannel(
-		HitResults,
-		Start,
-		End,
-		ECC_Visibility,
-		QueryParams
-	);
-
-	for (const FHitResult& Hit : HitResults)
-	{
-		ADRCleanserPart* HitPart = Cast<ADRCleanserPart>(Hit.GetActor());
-		if (HitPart && HitPart->CanBePickedUp())
-		{
-			return HitPart;
-		}
-	}
-
-	return nullptr;
-}
-
 void ADRPlayerController::ClientShowPartPickupUI_Implementation()
 {
 	OnPartPickedUp();
-}
-
-void ADRPlayerController::SetSiteDetectionEnabled(bool bEnabled, ADRCleanserSite* Site)
-{
-	SetInteractableDetectionEnabled(bEnabled, Site, OverlappedSites, bSiteDetectionEnabled, CurrentOverlappedSite);
-}
-
-void ADRPlayerController::SetMountDetectionEnabled(bool bEnabled, ADRRobotVacuumCharacter* Mount)
-{
-	if (!Mount) return;
-
-	if (bEnabled)
-	{
-		LineTraceTimer = 0.f;
-	}
-	SetInteractableDetectionEnabled(bEnabled, Mount, OverlappedMounts, bMountDetectionEnabled, CurrentDetectedMount);
-}
-
-ADRRobotVacuumCharacter* ADRPlayerController::FindMountByLineTrace()
-{
-	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
-	if (!DRCharacter) return nullptr;
-
-	// 부품 소지 중에는 탑승 불가(F키 의미 충돌), 이미 탑승 중이면 감지 불필요
-	if (DRCharacter->IsCarryingPart() || DRCharacter->IsMounted()) return nullptr;
-
-	UCameraComponent* Camera = DRCharacter->GetFollowCamera();
-	if (!Camera) return nullptr;
-
-	const FVector Start = Camera->GetComponentLocation();
-	const FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
-
-	// 멀티 라인트레이스: 다른 액터에 일부 가려져도 청소기를 찾을 수 있도록 모든 히트 검사.
-	// 채널(Visibility) 트레이스는 캐릭터를 못 맞춘다 — 캡슐(Pawn 프리셋)은 Visibility를 Ignore하고,
-	// 스켈레탈 메시 히트는 피직스 에셋 유무에 좌우된다. Pawn "오브젝트 타입" 쿼리는 응답 설정과
-	// 무관하게 캡슐을 맞추므로 청소기 감지가 메시 콜리전 세팅에 의존하지 않는다.
-	TArray<FHitResult> HitResults;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(DRCharacter);
-
-	FCollisionObjectQueryParams ObjectParams;
-	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
-
-	GetWorld()->LineTraceMultiByObjectType(
-		HitResults,
-		Start,
-		End,
-		ObjectParams,
-		QueryParams
-	);
-
-	for (const FHitResult& Hit : HitResults)
-	{
-		ADRRobotVacuumCharacter* HitVacuum = Cast<ADRRobotVacuumCharacter>(Hit.GetActor());
-		if (HitVacuum &&
-			OverlappedMounts.Contains(HitVacuum) &&
-			!HitVacuum->bDead &&
-			HitVacuum->RiderOnTop == nullptr && // 이미 라이더가 있으면 프롬프트도 안 띄움 (서버가 최종 검증)
-			// ★Plan5(탑승칩)★ ③ 이 청소기에서 비상 탈출한 뒤 20초는 프롬프트도 안 띄운다 (서버도 같은 함수로 거부 — D-90)
-			!UDRAbilitySystemLibrary::IsRideBannedFrom(DRCharacter, HitVacuum))
-		{
-			return HitVacuum;
-		}
-	}
-
-	return nullptr;
 }
 
 void ADRPlayerController::ServerRequestDismount_Implementation()
@@ -332,45 +141,6 @@ void ADRPlayerController::ServerRequestDashBrake_Implementation()
 	EventData.Target = Vacuum;
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
 		Vacuum, FDRGameplayTags::Get().Event_Dash_Brake, EventData);
-}
-
-ADRCleanserSite* ADRPlayerController::FindSiteByLineTrace()
-{
-	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
-	if (!DRCharacter) return nullptr;
-
-	// 부품을 들고 있어야만 사이트 감지
-	if (!DRCharacter->IsCarryingPart()) return nullptr;
-
-	UCameraComponent* Camera = DRCharacter->GetFollowCamera();
-	if (!Camera) return nullptr;
-
-	const FVector Start = Camera->GetComponentLocation();
-	const FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
-
-	FHitResult HitResult;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(DRCharacter);
-
-	const bool bHit = GetWorld()->LineTraceSingleByChannel(
-		HitResult,
-		Start,
-		End,
-		ECC_Visibility,
-		QueryParams
-	);
-
-	if (bHit)
-	{
-		ADRCleanserSite* HitSite = Cast<ADRCleanserSite>(HitResult.GetActor());
-		// 박스 오버랩 중인 사이트인지 확인 (다른 사이트가 시점에 잡히는 케이스 차단)
-		if (HitSite && OverlappedSites.Contains(HitSite))
-		{
-			return HitSite;
-		}
-	}
-
-	return nullptr;
 }
 
 void ADRPlayerController::ServerReportTutorialCharacterInfoOpened_Implementation()
@@ -499,29 +269,25 @@ void ADRPlayerController::ClientStartSpectating_Implementation()
 void ADRPlayerController::ClientStopSpectating_Implementation()
 {
 	if (!IsLocalController()) return;
-	// 愿???곹깭 媛뺤젣 珥덇린??(bIsSpectating ?щ?? ?곴??놁씠)
+	// 관전 상태 강제 초기화 (bIsSpectating 여부와 상관없이)
 	bIsSpectating = false;
 	CurrentSpectatedPlayerIndex = 0;
 
-	// ?몃━寃뚯씠???댁젣
-	if (CurrentSpectatedCharacter.IsValid())
-	{
-		if (ADRCharacterBase* OldTarget = Cast<ADRCharacterBase>(CurrentSpectatedCharacter.Get()))
-		{
-			OldTarget->OnDeathDelegate.RemoveDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
-		}
-	}
+	UnbindSpectatedDeath();
 	CurrentSpectatedCharacter.Reset();
 
-	// ?湲곗떎?대㈃ ViewTarget 蹂듭썝 ?ㅽ궢 (ClientSetWaitingRoomView媛 ?대떦)
+	// 관전 중 HUD 가 다른 플레이어에게 묶여 있었다면 내 상태로 되돌린다 (부활)
+	RestoreOwnOverlay();
+
+	// 대기실이면 ViewTarget 복원 스킵 (ClientSetWaitingRoomView가 담당)
 	if (bIsInWaitingRoom)
 	{
-		// FreeRoam?먯꽌 ClientStopSpectating???몄텧??寃쎌슦 ?湲곗떎 ?뚮옒洹?援먯젙
+		// FreeRoam에서 ClientStopSpectating이 호출된 경우 대기실 플래그 교정
 		ADRLobbyGameState* LGS = GetWorld() ? GetWorld()->GetGameState<ADRLobbyGameState>() : nullptr;
 		if (LGS && LGS->GetLobbyState() == ELobbyState::FreeRoam)
 		{
 			bIsInWaitingRoom = false;
-			// ?꾨옒濡?怨꾩냽 吏꾪뻾?섏뿬 ViewTarget 蹂듭썝
+			// 아래로 계속 진행하여 ViewTarget 복원
 		}
 		else
 		{
@@ -529,7 +295,7 @@ void ADRPlayerController::ClientStopSpectating_Implementation()
 		}
 	}
 
-	// ViewTarget 蹂듭썝
+	// ViewTarget 복원
 	if (APawn* MyPawn = GetPawn())
 	{
 		SetViewTarget(MyPawn);
@@ -542,6 +308,55 @@ void ADRPlayerController::ClientStopSpectating_Implementation()
 	}
 }
 
+void ADRPlayerController::ScheduleSpectating(float Delay)
+{
+	if (!HasAuthority()) return;
+
+	GetWorldTimerManager().SetTimer(PendingSpectateTimerHandle,
+		FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			// 예약과 실행 사이에 다른 경로로 새 폰을 받았으면(부활) 관전으로 넘어가지 않는다
+			const APawn* MyPawn = GetPawn();
+			if (MyPawn && !(MyPawn->Implements<UCombatInterface>() && ICombatInterface::Execute_IsDead(MyPawn)))
+			{
+				return;
+			}
+			ClientStartSpectating();
+		}),
+		Delay, false);
+}
+
+void ADRPlayerController::CancelPendingSpectate()
+{
+	GetWorldTimerManager().ClearTimer(PendingSpectateTimerHandle);
+}
+
+void ADRPlayerController::RestoreOwnOverlay()
+{
+	ADRHUD* DRHUD = GetHUD<ADRHUD>();
+	ADRPlayerState* DRPS = GetPlayerState<ADRPlayerState>();
+	if (!DRHUD || !DRHUD->GetOverlayWidget() || !DRPS) return;
+
+	UAbilitySystemComponent* ASC = DRPS->GetAbilitySystemComponent();
+	UAttributeSet* AS = DRPS->GetAttributeSet();
+	if (!ASC || !AS) return;
+
+	DRHUD->RebindOverlay(this, DRPS, ASC, AS);
+}
+
+bool ADRPlayerController::SpectateOnlySurvivor(const TArray<ADRCharacter*>& AliveCharacters)
+{
+	if (AliveCharacters.Num() != 1) return false;
+
+	// 생존자가 한 명뿐이면 그 사람으로 고정한다 — 보던 대상이 막 죽어 마지막 생존자로 넘어가야 하는 경우 포함
+	if (CurrentSpectatedCharacter.Get() != AliveCharacters[0])
+	{
+		CurrentSpectatedPlayerIndex = 0;
+		SetSpectateTarget(AliveCharacters[0]);
+	}
+	return true;
+}
+
 void ADRPlayerController::SpectateNextPlayer()
 {
 	if (!bIsSpectating || !IsLocalController()) return;
@@ -552,17 +367,17 @@ void ADRPlayerController::SpectateNextPlayer()
 	TArray<ADRCharacter*> AliveCharacters = GameStateBase->GetAlivePlayers();
 	if (AliveCharacters.Num() == 0)
 	{
-		// 紐⑤몢 ?щ쭩 - 愿??????놁쓬
+		// 모두 사망 - 관전 대상 없음
 		CurrentSpectatedCharacter.Reset();
 		return;
 	}
-	
-	if(AliveCharacters.Num() == 1) return;
 
-	// ?ㅼ쓬 ?몃뜳??怨꾩궛
+	if (SpectateOnlySurvivor(AliveCharacters)) return;
+
+	// 다음 인덱스 계산
 	CurrentSpectatedPlayerIndex = (CurrentSpectatedPlayerIndex + 1) % AliveCharacters.Num();
     
-	// ??愿??????ㅼ젙
+	// 새 관전 대상 설정
 	SetSpectateTarget(AliveCharacters[CurrentSpectatedPlayerIndex]);
 }
 
@@ -580,37 +395,27 @@ void ADRPlayerController::SpectatePreviousPlayer()
 		return;
 	}
 
-	if(AliveCharacters.Num() == 1) return;
+	if (SpectateOnlySurvivor(AliveCharacters)) return;
 
-	// ?댁쟾 ?몃뜳??怨꾩궛
+	// 이전 인덱스 계산
 	CurrentSpectatedPlayerIndex--;
 	if (CurrentSpectatedPlayerIndex < 0)
 	{
 		CurrentSpectatedPlayerIndex = AliveCharacters.Num() - 1;
 	}
 
-	// ??愿??????ㅼ젙
+	// 새 관전 대상 설정
 	SetSpectateTarget(AliveCharacters[CurrentSpectatedPlayerIndex]);
 }
 
 void ADRPlayerController::ClientStopAllAudio_Implementation()
 {
-	// BGM ?뺤?
-	TArray<AActor*> BGMActors;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ADRBGMActor::StaticClass(), BGMActors);
-	for (AActor* Actor : BGMActors)
-	{
-		if (ADRBGMActor* BGMActor = Cast<ADRBGMActor>(Actor))
-		{
-			BGMActor->StopBGM(0.0f);
-		}
-	}
-
+	ADRBGMActor::StopAllBGM(this, 0.0f);
 }
 
 void ADRPlayerController::CheatSkipToNextPhase()
 {
-// 媛쒕컻 鍮뚮뱶?먯꽌留??숈옉?섎룄濡?泥댄겕
+// 개발 빌드에서만 동작하도록 체크
 #if !UE_BUILD_SHIPPING
 	ServerCheatSkipToNextPhase();
 #endif
@@ -623,34 +428,34 @@ void ADRPlayerController::BeginPlay()
 	// Pawn 복제 도착 이벤트 바인딩 (타이머 재시도 대체)
 	OnPossessedPawnChanged.AddDynamic(this, &ADRPlayerController::HandlePossessedPawnChanged);
 
-	// Enhanced Input Context占쏙옙 占쏙옙占쏙옙占실억옙 占쌍댐옙占쏙옙 확占쏙옙
+	// Enhanced Input Context가 설정되어 있는지 확인
 	check(DRContext);
 
-	// Enhanced Input 占쏙옙占쏙옙첵占쏙옙謗占?占쏙옙占쏙옙 占쏙옙占쌔쏙옙트 占쌩곤옙
+	// Enhanced Input 서브시스템에 매핑 컨텍스트 추가
 	UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer());
 	if (Subsystem)
 	{
 		Subsystem->AddMappingContext(DRContext, 0);
 	}
 
-	// UI 占쏙옙占쏙옙
+	// UI 설정
 	bShowMouseCursor = false;
 	SetInputMode(FInputModeGameOnly());
 
-	// 占시뤄옙占싱억옙占?TeamId 0
+	// 플레이어는 TeamId 0
 	SetGenericTeamId(FGenericTeamId(0));
 
-	// 移대찓???쇱튂 ?쒗븳 ?ㅼ젙
+	// 카메라 피치 제한 설정
 	if (PlayerCameraManager)
 	{
-		PlayerCameraManager->ViewPitchMin = -ViewPitchMin;  // ?꾨옒 (?뚯닔)
-		PlayerCameraManager->ViewPitchMax = ViewPitchMax;   // ??(?묒닔)
+		PlayerCameraManager->ViewPitchMin = -ViewPitchMin;  // 아래 (음수)
+		PlayerCameraManager->ViewPitchMax = ViewPitchMax;   // 위 (양수)
 	}
 
-	// 濡쒖뺄 ?뚮젅?댁뼱留??ㅻ뵒???ㅼ젙 ?곸슜
+	// 로컬 플레이어만 오디오 설정 적용
 	if (IsLocalController())
 	{
-		// Manager ?듯빐???ㅻ뵒???ㅼ젙 ?곸슜
+		// Manager 통해서 오디오 설정 적용
 		if (UGameInstance* GI = GetGameInstance())
 		{
 			if (UDRSettingsManager* Manager = GI->GetSubsystem<UDRSettingsManager>())
@@ -711,72 +516,8 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 		}
 	}
 
-	// ★여기서 조기 리턴하면 안 된다.
-	//   부품/사이트/청소기 감지는 오버랩으로 켜지는 방식이라 평소 전부 false 인데,
-	//   스테이지2 프롭(레버·버튼·단말)과 열차 칸은 오버랩 게이트 없이 트레이스로만 판정한다.
-	//   과거 이 자리에 있던 "전부 비활성화면 스킵" 가드가 그 둘까지 막아
-	//   방2 레버에 다가가도 F 프롬프트가 뜨지 않았다.
-
-	LineTraceTimer += DeltaTime;
-	if (LineTraceTimer >= LineTraceUpdateInterval)
-	{
-		LineTraceTimer = 0.f;
-
-		// 부품 라인트레이스
-		if (bPartDetectionEnabled)
-		{
-			SetCurrentDetectedInteractable(FindPartByLineTrace(), CurrentDetectedPart);
-		}
-
-		// 사이트 라인트레이스
-		if (bSiteDetectionEnabled)
-		{
-			SetCurrentDetectedInteractable(FindSiteByLineTrace(), CurrentOverlappedSite);
-		}
-
-		// 청소기 탑승 라인트레이스
-		if (bMountDetectionEnabled)
-		{
-			SetCurrentDetectedInteractable(FindMountByLineTrace(), CurrentDetectedMount);
-		}
-
-		// 스테이지2 상호작용 프롭 라인트레이스 (Plan6 §5.5-b)
-		// 레버/버튼/단말을 하나의 슬롯으로 처리한다. 오버랩 집합 없이 트레이스 거리로만 판정한다.
-		SetCurrentDetectedInteractable(FindPropByLineTrace(), CurrentDetectedProp);
-
-		// 열차 좌석 라인트레이스 (Plan6 §5.5)
-		SetCurrentDetectedInteractable(FindTrainCarByLineTrace(), CurrentDetectedCar);
-	}
-}
-
-ADRS2TrainCar* ADRPlayerController::FindTrainCarByLineTrace()
-{
-	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
-	if (!DRCharacter) return nullptr;
-
-	// 이미 앉아 있거나 부품을 들고 있으면 감지하지 않는다
-	if (DRCharacter->IsSeatedOnTrain() || DRCharacter->IsCarryingPart()) return nullptr;
-
-	UCameraComponent* Camera = DRCharacter->GetFollowCamera();
-	if (!Camera) return nullptr;
-
-	const FVector Start = Camera->GetComponentLocation();
-	const FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
-
-	FHitResult HitResult;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(DRCharacter);
-
-	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams))
-	{
-		ADRS2TrainCar* HitCar = Cast<ADRS2TrainCar>(HitResult.GetActor());
-		if (HitCar && HitCar->CanBeBoardedBy(DRCharacter))
-		{
-			return HitCar;
-		}
-	}
-
-	return nullptr;
+	// 상호작용 대상 감지 (주기마다 시점 광선 1회 — 부품 · 사이트 · 청소기 · 프롭 · 열차 칸)
+	InteractionComponent->TickDetection(DeltaTime);
 }
 
 void ADRPlayerController::ServerRequestTrainDeboard_Implementation()
@@ -796,118 +537,9 @@ void ADRPlayerController::ServerRequestTrainDeboard_Implementation()
 	Car->Deboard();
 }
 
-ADRS2InteractProp* ADRPlayerController::FindPropByLineTrace()
-{
-	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
-	if (!DRCharacter) return nullptr;
-
-	UCameraComponent* Camera = DRCharacter->GetFollowCamera();
-	if (!Camera) return nullptr;
-
-	const FVector Start = Camera->GetComponentLocation();
-	const FVector End = Start + Camera->GetForwardVector() * LineTraceDistance;
-
-	FHitResult HitResult;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(DRCharacter);
-
-	// ★프롭 메시에 **심플 콜리전**이 있어야 한다. 라인트레이스는 bTraceComplex=false 라
-	//   콜리전 프리미티브가 없는 메시는 그대로 통과해 감지되지 않는다.
-	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams))
-	{
-		ADRS2InteractProp* HitProp = Cast<ADRS2InteractProp>(HitResult.GetActor());
-		if (HitProp && HitProp->CanInteract(DRCharacter))
-		{
-			return HitProp;
-		}
-	}
-
-	return nullptr;
-}
-
 void ADRPlayerController::Client_OpenSlidePuzzleUI_Implementation(ADRS2SlidePuzzle* Puzzle)
 {
 	OpenSlidePuzzleScreen(Puzzle);
-}
-
-void ADRPlayerController::OpenSlidePuzzleScreen(ADRS2SlidePuzzle* Puzzle)
-{
-	if (!IsLocalController() || !IsValid(Puzzle))
-	{
-		UE_LOG(LogDR, Warning, TEXT("[S2Puzzle] 창 열기 무시 (로컬 컨트롤러=%d, 퍼즐=%s)"),
-			IsLocalController() ? 1 : 0, *GetNameSafe(Puzzle));
-		return;
-	}
-
-	// 다른 전체화면 UI 와 입력 모드가 겹치지 않게 먼저 닫는다 (OpenUpgradeScreen 과 같은 가드)
-	if (bIsSettingsMenuOpen)
-	{
-		CloseSettingsMenu();
-	}
-
-	// 이미 열려 있으면 아무것도 하지 않는다 (같은 단말을 두 번 눌렀을 때).
-	if (bIsSlidePuzzleOpen)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[S2Puzzle] 창이 이미 열린 상태로 기록돼 있다 - 열기를 건너뛴다"));
-		return;
-	}
-
-	if (!SlidePuzzleWidgetClass)
-	{
-		UE_LOG(LogDR, Error,
-			TEXT("[S2Puzzle] SlidePuzzleWidgetClass 미지정 - BP_DRPlayerController 의 UI|Stage2 에 WBP_S2SlidePuzzle 을 넣을 것"));
-		return;
-	}
-
-	// ★창은 재사용한다★ 판 상태는 서버에 있으므로 새로 만들어도 동작하지만,
-	// 재사용하면 등장 연출이 매번 다시 돌지 않고 조각 8개를 다시 만들 일도 줄어든다.
-	if (!IsValid(SlidePuzzleWidget))
-	{
-		SlidePuzzleWidget = CreateWidget<UDRS2SlidePuzzleWidget>(this, SlidePuzzleWidgetClass);
-		if (!SlidePuzzleWidget)
-		{
-			UE_LOG(LogDR, Error, TEXT("[S2Puzzle] 8퍼즐 창 생성 실패 (SlidePuzzleWidgetClass 확인)"));
-			return;
-		}
-	}
-
-	bIsSlidePuzzleOpen = true;
-
-	// ★입력 모드는 여기서만 바꾼다★ (대기실 UI · 업그레이드 · 옷장과 같은 위치)
-	//  포커스 위젯을 지정하지 않는 이유: 위젯이 NativeConstruct(=아래 AddToViewport) 에서
-	//  SetKeyboardFocus 를 부르므로, 순서상 위젯이 마지막에 포커스를 가져간다.
-	SetInputMode(FInputModeUIOnly());
-	SetShowMouseCursor(true);
-
-	// ★BindToPuzzle 이 AddToViewport 보다 먼저다★
-	// 그래야 NativeConstruct 가 조각을 만든 직후 서버 보드를 그대로 그릴 수 있다.
-	SlidePuzzleWidget->BindToPuzzle(Puzzle);
-	SlidePuzzleWidget->AddToViewport(10);
-
-	UE_LOG(LogDR, Log, TEXT("[S2Puzzle] 8퍼즐 창을 열었다 (%s)"), *GetNameSafe(SlidePuzzleWidget));
-
-	OnSlidePuzzleScreenOpened(Puzzle);   // BP 연출 훅 (선택)
-}
-
-void ADRPlayerController::CloseSlidePuzzleScreen()
-{
-	if (!IsLocalController()) return;
-	if (!bIsSlidePuzzleOpen) return;
-
-	// ★플래그를 먼저 내린다★
-	// 아래 RemoveFromParent 가 위젯의 NativeDestruct 를 부르고, 거기서 이 함수가 한 번 더 들어온다.
-	bIsSlidePuzzleOpen = false;
-
-	if (IsValid(SlidePuzzleWidget))
-	{
-		// 파괴하지 않는다. 다음에 열 때 같은 인스턴스를 다시 쓴다.
-		SlidePuzzleWidget->RemoveFromParent();
-	}
-
-	OnSlidePuzzleScreenClosed();   // BP 연출 훅 (선택)
-
-	// 레벨 컨텍스트(메인메뉴/튜토리얼/대기실/스테이지)에 맞는 모드로 되돌린다.
-	RestoreDefaultInputMode();
 }
 
 void ADRPlayerController::Client_SlidePuzzleBusy_Implementation(ADRS2SlidePuzzle* Puzzle, APlayerState* Occupant)
@@ -954,9 +586,9 @@ void ADRPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 
-	// DRInputComponent占쏙옙 캐占쏙옙占쏙옙
+	// DRInputComponent로 캐스팅
 	UDRInputComponent* DRInputComponent = CastChecked<UDRInputComponent>(InputComponent);
-	// 占썩본 占쌉뤄옙 占쌓쇽옙 占쏙옙占싸듸옙
+	// 기본 입력 액션 바인딩
 	DRInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Move);
 	DRInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ADRPlayerController::Look);
 	DRInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ADRPlayerController::StartJump);
@@ -971,7 +603,7 @@ void ADRPlayerController::SetupInputComponent()
 	// Tab Hold: 누름/뗌 두 이벤트 모두 바인딩. Hold Trigger 없이 Started/Completed로 Hold 동작 구현.
 	DRInputComponent->BindAction(CharacterInfoAction, ETriggerEvent::Started,   this, &ADRPlayerController::HandleCharacterInfoPressed);
 	DRInputComponent->BindAction(CharacterInfoAction, ETriggerEvent::Completed, this, &ADRPlayerController::HandleCharacterInfoReleased);
-	// 占쏙옙占쏙옙占싣?占쌉뤄옙 占쏙옙占싸듸옙 (InputConfig 占쏙옙占?
+	// 어빌리티 입력 바인딩 (InputConfig 사용)
 	DRInputComponent->BindAbilityActions(InputConfig, this, &ThisClass::AbilityInputTagPressed, &ThisClass::AbilityInputTagReleased, &ThisClass::AbilityInputTagHeld);
 }
 
@@ -979,19 +611,51 @@ void ADRPlayerController::ReceivedPlayer()
 {
 	Super::ReceivedPlayer();
 
-	// 濡쒖뺄 而⑦듃濡ㅻ윭留?泥섎━
+#if UE_WITH_CHEAT_MANAGER
+	// 엔진은 단독 플레이 · 에디터에서만 치트 매니저를 만든다 — 개발 빌드는 멀티플레이에서도 DR* 콘솔 치트를 바로 쓰게 한다
+	if (IsLocalController())
+	{
+		AddCheats(true);
+	}
+#endif
+
+#if !UE_BUILD_SHIPPING
+	// 참가자는 방장의 튜닝 값을 받아 쓴다 — 방장(리슨 서버)은 자기 파일을 쓰므로 묻지 않는다
+	if (IsLocalController() && GetNetMode() == NM_Client)
+	{
+		ServerRequestTuning();
+	}
+#endif
+
+	// 로컬 컨트롤러만 처리
 	if (!IsLocalController()) return;
-// ?덈꺼 吏꾩엯 ??怨듯넻 珥덇린???섑뻾
+// 레벨 진입 시 공통 초기화 수행
 	OnLevelEntered();
+}
+
+void ADRPlayerController::ServerRequestTuning_Implementation()
+{
+	if (const UDRTuningSubsystem* Tuning = UDRTuningSubsystem::Get(this))
+	{
+		Tuning->SendTuningToClient(this);
+	}
+}
+
+void ADRPlayerController::ClientReceiveTuningChunk_Implementation(int32 Revision, int32 ChunkIndex, int32 ChunkCount, const TArray<FDRTuningOverride>& Chunk)
+{
+	if (UDRTuningSubsystem* Tuning = UDRTuningSubsystem::Get(this))
+	{
+		Tuning->ReceiveHostChunk(Revision, ChunkIndex, ChunkCount, Chunk);
+	}
 }
 
 void ADRPlayerController::PostSeamlessTravel()
 {
 	Super::PostSeamlessTravel();
 
-	// 濡쒖뺄 而⑦듃濡ㅻ윭留?泥섎━
+	// 로컬 컨트롤러만 처리
 	if (!IsLocalController()) return;
-// SeamlessTravel ???덈꺼 吏꾩엯 ??怨듯넻 珥덇린???섑뻾
+// SeamlessTravel 후 레벨 진입 시 공통 초기화 수행
 	OnLevelEntered();
 }
 
@@ -1000,47 +664,25 @@ void ADRPlayerController::OnLevelEntered()
 	// 레벨 컨텍스트 캐시 재판별 (ReceivedPlayer/PostSeamlessTravel에서 호출되므로 레벨 이동마다 갱신됨)
 	CachedLevelContext = DetermineLevelContext();
 
-	// ?꾩옱 ?덈꺼 ?뺤씤
+	// 현재 레벨 확인
 	UWorld* World = GetWorld();
 	if (!World) return;
 
-	// 寃뚯엫?ㅻ쾭 UI媛 ?⑥븘?덉쑝硫??쒓굅
+	// 게임오버 UI가 남아있으면 제거
 	if (CurrentResultWidget)
 	{
 		CurrentResultWidget->RemoveFromParent();
 		CurrentResultWidget = nullptr;
 	}
 
-	// ?湲곗떎 ?꾩젽 ?뺣━ (?덈꺼 ?대룞 ??臾댄슚?붾맂 ?ъ씤???뺣━)
+	// 대기실 위젯 정리 (레벨 이동 시 무효화된 포인터 정리)
 	DestroyWaitingRoomUI();
 
-	// ?ㅼ젙 硫붾돱 ?곹깭 珥덇린??(?덈꺼 ?대룞 ??
-	if (bIsSettingsMenuOpen)
-	{
-		CloseSettingsMenu();
-	}
-	bIsSettingsMenuOpen = false;
+	// 열려 있던 전체 화면 정리 (레벨 이동 시 위젯이 남지 않게).
+	// ★스테이지 선택은 열린 채로 출발하므로 도착한 레벨에서 반드시 여기서 닫힌다★
+	CloseScreen(ActiveScreen, /*bLevelTransition*/ true);
 
-	// 업그레이드 화면 상태 초기화 (레벨 이동 시 위젯이 남지 않게)
-	if (bIsUpgradeScreenOpen)
-	{
-		OnUpgradeScreenClosed();
-		bIsUpgradeScreenOpen = false;
-	}
-
-	// 옷장 화면도 같은 처리 (위젯은 C++ 이 만들었으므로 C++ 이 지운다)
-	if (bIsWardrobeScreenOpen)
-	{
-		OnWardrobeScreenClosed();
-		if (WardrobeScreenWidget)
-		{
-			WardrobeScreenWidget->RemoveFromParent();
-			WardrobeScreenWidget = nullptr;
-		}
-		bIsWardrobeScreenOpen = false;
-	}
-
-	// 愿???곹깭 珥덇린??(?몃━寃뚯씠???뺣━ ?ы븿)
+	// 관전 상태 초기화 (델리게이트 정리 포함)
 	if (CurrentSpectatedCharacter.IsValid())
 	{
 		if (ADRCharacterBase* OldTarget = Cast<ADRCharacterBase>(CurrentSpectatedCharacter.Get()))
@@ -1057,18 +699,24 @@ void ADRPlayerController::OnLevelEntered()
 	// (클라이언트는 OnRep_PlayerState 에서도 보고한다. 대기실 디스플레이 캐릭터도 이 목록을 입는다)
 	ReportCosmeticLoadout();
 
-	// ?湲곗떎 媛먯? ??ViewTarget 蹂듭썝 李⑤떒
+	// 장착 칩 보고도 같은 이유로 ★로비 분기보다 앞★ 에서 한다.
+	// 대기실이면 아래에서 일찍 return 하는데, 리슨 서버 호스트는 OnRep_PlayerState 가 안 불리고,
+	// 저장된 클래스가 기본값(정원로봇)과 같으면 SetSelectedPlayerClass 도 일찍 return 해 재보고가 없다.
+	// 그러면 정원로봇만 칩 기기를 열고 닫기 전까지 칩이 0개(HUD 모듈 칩 미적용 → HUD 숨김)였다.
+	ReportUpgradeLoadout();
+
+	// 대기실 감지 → ViewTarget 복원 차단
 	ADRLobbyGameState* LGS = World->GetGameState<ADRLobbyGameState>();
 
 	if (IsInLobby())
 	{
 		if (!LGS)
 		{
-			// GameState ?꾩쭅 蹂듭젣 ?덈맖 ???湲곗떎濡?媛??(?쒕쾭 RPC媛 ?댄썑 援먯젙)
+			// GameState 아직 복제 안됨 → 대기실로 가정 (서버 RPC가 이후 교정)
 			bIsInWaitingRoom = true;
-			bAutoManageActiveCameraTarget = false; // Pawn ?섏떊 ??ViewTarget ?먮룞 ?ㅼ젙 李⑤떒
+			bAutoManageActiveCameraTarget = false; // Pawn 수신 시 ViewTarget 자동 설정 차단
 			RestoreDefaultInputMode();
-			// WaitingRoom UI??ClientSetWaitingRoomView RPC?먯꽌 ?앹꽦
+			// WaitingRoom UI는 ClientSetWaitingRoomView RPC에서 생성
 			return;
 		}
 
@@ -1076,16 +724,16 @@ void ADRPlayerController::OnLevelEntered()
 			|| LGS->GetLobbyState() == ELobbyState::Transitioning)
 		{
 			bIsInWaitingRoom = true;
-			bAutoManageActiveCameraTarget = false; // Pawn ?섏떊 ??ViewTarget ?먮룞 ?ㅼ젙 李⑤떒
+			bAutoManageActiveCameraTarget = false; // Pawn 수신 시 ViewTarget 자동 설정 차단
 			RestoreDefaultInputMode();
 			CreateWaitingRoomUI();
-			return;  // ViewTarget? ClientSetWaitingRoomView RPC媛 ?ㅼ젙
+			return;  // ViewTarget은 ClientSetWaitingRoomView RPC가 설정
 		}
 	}
 
 	bIsInWaitingRoom = false;
 
-	// ViewTarget 利됱떆 蹂듭썝 (?섎せ???寃?李몄“ 諛⑹?)
+	// ViewTarget 즉시 복원 (잘못된 타겟 참조 방지)
 	if (APawn* MyPawn = GetPawn())
 	{
 		SetViewTarget(MyPawn);
@@ -1097,27 +745,19 @@ void ADRPlayerController::OnLevelEntered()
 		bPendingViewTargetRestore = true;
 	}
 
-	// ?덈꺼??留욌뒗 湲곕낯 ?낅젰 紐⑤뱶濡?蹂듭썝
+	// 레벨에 맞는 기본 입력 모드로 복원
 	RestoreDefaultInputMode();
 
-	// 레벨 진입 시 장착 칩 보고 (호스트/이미 PlayerState 가 준비된 경로)
-	ReportUpgradeLoadout();
-
-	// BGM? ?덈꺼??諛곗튂??DRBGMActor媛 ?대떦
+	// BGM은 레벨에 배치된 DRBGMActor가 담당
 }
 
 void ADRPlayerController::HandleToggleSettings()
 {
-	// 옷장/업그레이드 화면이 열려 있으면 ESC 로 그 화면을 먼저 닫는다.
-	// (옷장은 위젯의 NativeOnKeyDown 도 ESC 를 받지만, 포커스를 잃은 상태를 대비해 여기도 둔다)
-	if (bIsWardrobeScreenOpen)
+	// 설정이 아닌 화면이 열려 있으면 ESC 로 그 화면을 먼저 닫는다.
+	// (각 화면 위젯도 NativeOnKeyDown 으로 ESC 를 받는다 — 포커스를 잃었을 때만 여기로 온다)
+	if (ActiveScreen != EDRScreen::None && ActiveScreen != EDRScreen::Settings)
 	{
-		CloseWardrobeScreen();
-		return;
-	}
-	if (bIsUpgradeScreenOpen)
-	{
-		CloseUpgradeScreen();
+		CloseScreen(ActiveScreen);
 		return;
 	}
 
@@ -1133,7 +773,7 @@ bool ADRPlayerController::CanShowCharacterInfo() const
 	if (!IsInGameLevel() && !IsInTutorial() && !IsInLobby()) return false;
 
 	// 설정창 열려있으면 차단
-	if (bIsSettingsMenuOpen) return false;
+	if (IsSettingsMenuOpen()) return false;
 
 	return true;
 }
@@ -1228,13 +868,19 @@ void ADRPlayerController::HandleSpectatePrevious()
 
 void ADRPlayerController::SetSpectateTarget(ACharacter* NewTarget)
 {
-	// ?대씪?댁뼵?? ?쒕쾭???붿껌 + 濡쒖뺄?먯꽌 ViewTarget ?ㅼ젙
+	// ★사망 델리게이트는 로컬 컨트롤러에서 묶는다★ — 관전 여부(bIsSpectating)는 로컬에만 있고,
+	// 사망 멀티캐스트가 모든 머신에서 OnDeathDelegate 를 방송하므로 원격 클라도 직접 받는다.
+	// (서버 쪽 PC 객체에 묶으면 bIsSpectating 이 늘 false 라 원격 클라는 다음 대상으로 넘어가지 못했다)
+	if (IsLocalController())
+	{
+		BindSpectatedDeath(NewTarget);
+	}
+	CurrentSpectatedCharacter = NewTarget;
+
+	// 클라이언트: 서버에도 알려 서버 쪽 ViewTarget(관련성 판정 기준)을 맞추고, 로컬 ViewTarget 은 바로 바꾼다
 	if (!HasAuthority())
 	{
 		ServerSetSpectateTarget(NewTarget);
-
-		// ?대씪?댁뼵?몄뿉?쒕룄 ViewTarget怨?罹먮┃??罹먯떆 ?ㅼ젙
-		CurrentSpectatedCharacter = NewTarget;
 		if (NewTarget)
 		{
 			SetViewTarget(NewTarget);
@@ -1242,44 +888,42 @@ void ADRPlayerController::SetSpectateTarget(ACharacter* NewTarget)
 		return;
 	}
 
-	// ?쒕쾭: ?꾩껜 濡쒖쭅 ?ㅽ뻾
-
-	// ?댁쟾 ??곸쓽 ?щ쭩 ?몃━寃뚯씠???댁젣
-	if (CurrentSpectatedCharacter.IsValid())
-	{
-		if (ADRCharacterBase* OldTarget = Cast<ADRCharacterBase>(CurrentSpectatedCharacter.Get()))
-		{
-			OldTarget->OnDeathDelegate.RemoveDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
-		}
-	}
-
-	CurrentSpectatedCharacter = NewTarget;
-
 	if (NewTarget)
 	{
-		// ViewTarget ?ㅼ젙
 		SetViewTarget(NewTarget);
 
-		// UI ?낅뜲?댄듃
+		// HUD 를 관전 대상에게 묶는다
 		ClientUpdateSpectatorUI(NewTarget);
+	}
+}
 
-		// ????곸쓽 ?щ쭩 ?몃━寃뚯씠??諛붿씤??
-		if (ADRCharacterBase* DRTarget = Cast<ADRCharacterBase>(NewTarget))
-		{
-			DRTarget->OnDeathDelegate.AddDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
-		}
+void ADRPlayerController::BindSpectatedDeath(ACharacter* NewTarget)
+{
+	UnbindSpectatedDeath();
+
+	if (ADRCharacterBase* DRTarget = Cast<ADRCharacterBase>(NewTarget))
+	{
+		DRTarget->OnDeathDelegate.AddUniqueDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
+	}
+}
+
+void ADRPlayerController::UnbindSpectatedDeath()
+{
+	if (ADRCharacterBase* OldTarget = Cast<ADRCharacterBase>(CurrentSpectatedCharacter.Get()))
+	{
+		OldTarget->OnDeathDelegate.RemoveDynamic(this, &ADRPlayerController::OnSpectatedPlayerDied);
 	}
 }
 
 void ADRPlayerController::ServerSetSpectateTarget_Implementation(ACharacter* NewTarget)
 {
-	// ?쒕쾭?먯꽌 SetSpectateTarget ?ㅽ뻾
+	// 서버에서 SetSpectateTarget 실행
 	SetSpectateTarget(NewTarget);
 }
 
 void ADRPlayerController::ClientUpdateSpectatorUI_Implementation(ACharacter* SpectatedTarget)
 {
-	// ?대씪?댁뼵?몄뿉?쒕쭔 ?ㅽ뻾
+	// 클라이언트에서만 실행
 	if (!IsLocalController()) return;
 
 	UpdateSpectatorUI(SpectatedTarget);
@@ -1289,29 +933,29 @@ void ADRPlayerController::UpdateSpectatorUI(ACharacter* SpectatedTarget)
 {
 	if (!SpectatedTarget) return;
 
-	// HUD 媛?몄삤湲?
+	// HUD 가져오기
 	ADRHUD* DRHUD = Cast<ADRHUD>(GetHUD());
 	if (!DRHUD) return;
 
-	// 愿????곸쓽 PlayerState 媛?몄삤湲?
+	// 관전 대상의 PlayerState 가져오기
 	ADRPlayerState* SpectatedPS = SpectatedTarget->GetPlayerState<ADRPlayerState>();
 	if (!SpectatedPS) return;
 
-	// 愿????곸쓽 GAS 而댄룷?뚰듃??媛?몄삤湲?
+	// 관전 대상의 GAS 컴포넌트들 가져오기
 	UAbilitySystemComponent* SpectatedASC = SpectatedPS->GetAbilitySystemComponent();
 	UAttributeSet* SpectatedAS = SpectatedPS->GetAttributeSet();
 
 	if (!SpectatedASC || !SpectatedAS) return;
 
-	// 湲곗〈 WidgetController瑜??뚭눼?섍퀬 ?덈줈 留뚮뱾?댁쨲
-	DRHUD->UpdateOverlayForSpectating(this, SpectatedPS, SpectatedASC, SpectatedAS);
+	// HUD 를 관전 대상의 PlayerState 에 다시 묶는다
+	DRHUD->RebindOverlay(this, SpectatedPS, SpectatedASC, SpectatedAS);
 }
 
 void ADRPlayerController::OnSpectatedPlayerDied(AActor* DeadActor)
 {
 	if (!bIsSpectating) return;
 
-	// ?쎄컙???쒕젅?????ㅼ쓬 ?뚮젅?댁뼱濡??꾪솚
+	// 약간의 딜레이 후 다음 플레이어로 전환
 	FTimerHandle SwitchTimerHandle;
 	GetWorld()->GetTimerManager().SetTimer(
 		SwitchTimerHandle,
@@ -1331,10 +975,10 @@ void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 {
 	if (bIsSpectating) return;
 	
-	// 占쌉뤄옙 占쏙옙占?占쏙옙占쏙옙 확占쏙옙
+	// 입력 블록 상태 확인
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
 
-	// 2D 占쌉뤄옙占쏙옙 占쏙옙占쏙옙 占쏙옙표占쏙옙占?占쏙옙환
+	// 2D 입력을 월드 좌표계로 변환
 	const FVector2D InputAxisVector = InputActionValue.Get<FVector2D>();
 	const FRotator Rotation = GetControlRotation();
 	const FRotator YawRotation(0.f, Rotation.Yaw, 0.f);
@@ -1342,7 +986,7 @@ void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-	// 占쏙옙占쏙옙 占싱듸옙 占쌉뤄옙 占쏙옙占쏙옙
+	// 폰에 이동 입력 전달
 	if (APawn* ControlledPawn = GetPawn<APawn>())
 	{
 		// 탑승 중 이동 차단 (시점 회전은 Look에서 계속 허용, Plan3 §5.2)
@@ -1354,9 +998,16 @@ void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 		// 지속 돌진 중 후진 입력 = 브레이크 요청 (Plan3 §8.2 — 서버가 재검증 후 GA에 이벤트 전달)
 		if (ADRRobotVacuumCharacter* Vacuum = Cast<ADRRobotVacuumCharacter>(ControlledPawn))
 		{
+			// ★Reliable RPC 를 매 프레임 보내지 않는다★ — 서버가 돌진을 끝내 복제될 때까지 S 를 누르고 있으면
+			// 프레임마다 쌓였다. 짧은 간격으로 한 번만 보낸다 (응답이 늦어 유실되어도 다음 간격에 다시 간다)
 			if (Vacuum->bSustainedDash && InputAxisVector.Y < -0.5f)
 			{
-				ServerRequestDashBrake();
+				const double Now = GetWorld()->GetTimeSeconds();
+				if (Now - LastDashBrakeRequestTime >= DashBrakeRequestInterval)
+				{
+					LastDashBrakeRequestTime = Now;
+					ServerRequestDashBrake();
+				}
 			}
 		}
 
@@ -1369,14 +1020,14 @@ void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 {
 	if (bIsSpectating) return;
 	
-	// 占쏙옙占쎌스 占시쇽옙 처占쏙옙
+	// 마우스 시선 처리
 	const FVector2D Axis = InputActionValue.Get<FVector2D>();
 
-	// Manager?먯꽌 媛먮룄 媛?몄삤湲?
+	// Manager에서 감도 가져오기
 	// 감도는 캐시 사용 (설정 변경 시 OnMouseSensitivityChanged 델리게이트로 갱신)
 	const float Sensitivity = CachedMouseSensitivity;
 
-	// 媛먮룄 ?곸슜
+	// 감도 적용
 	AddYawInput(Axis.X * Sensitivity);
 	AddPitchInput(Axis.Y * Sensitivity);
 }
@@ -1402,7 +1053,7 @@ void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
 		}
 	}
 
-	// 占쏙옙占쏙옙 占쏙옙占쏙옙
+	// 점프 시작
 	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>()))
 	{
 		ControlledCharacter->Jump();
@@ -1413,7 +1064,7 @@ void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 {
 	if (bIsSpectating) return;
 	
-	// 占쏙옙占쏙옙 占쏙옙占쏙옙
+	// 점프 종료
 	if (ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn<APawn>()))
 	{
 		ControlledCharacter->StopJumping();
@@ -1430,23 +1081,23 @@ void ADRPlayerController::HandleInteract()
 	// 이미 탑승 중이면 F키 무시 (하차는 점프키, Plan3 §5.1)
 	if (DRCharacter->IsMounted()) return;
 
-	// 遺?덉쓣 ?ㅺ퀬 ?덉? ?딆쓣 ?뚮쭔 遺???띾뱷 ?쒕룄
-	if (!DRCharacter->IsCarryingPart() && CurrentDetectedPart)
+	// 부품을 들고 있지 않을 때만 부품 획득 시도
+	if (!DRCharacter->IsCarryingPart() && InteractionComponent->GetDetectedPart())
 	{
-		ServerRequestInteract(CurrentDetectedPart);
+		ServerRequestInteract(InteractionComponent->GetDetectedPart());
 		return;
 	}
 
-	// 遺?덉쓣 ?ㅺ퀬 ?덇퀬 ?대젋? ?ъ씠???ㅻ쾭??以묒씠硫??ㅼ튂
+	// 부품을 들고 있고 클렌저 사이트 오버랩 중이면 설치
 	if (DRCharacter->IsCarryingPart())
 	{
-		// ?대젋? ?ъ씠??踰붿쐞 ?덉씠硫??ㅼ튂
-		if (CurrentOverlappedSite)
+		// 클렌저 사이트 범위 안이면 설치
+		if (InteractionComponent->GetDetectedSite())
 		{
-			ServerRequestInteract(CurrentOverlappedSite);
+			ServerRequestInteract(InteractionComponent->GetDetectedSite());
 			return;
 		}
-		// ?대젋? ?ъ씠??踰붿쐞 諛뽰씠硫??⑥뼱?몃━湲?
+		// 클렌저 사이트 범위 밖이면 떨어트리기
 		else
 		{
 			ServerRequestDropPart();
@@ -1455,25 +1106,25 @@ void ADRPlayerController::HandleInteract()
 	}
 
 	// 부품 미소지 && 탑승 후보 감지 → 탑승 요청 (Plan3 §5.1)
-	if (!DRCharacter->IsCarryingPart() && CurrentDetectedMount)
+	if (!DRCharacter->IsCarryingPart() && InteractionComponent->GetDetectedMount())
 	{
-		ServerRequestInteract(CurrentDetectedMount);
+		ServerRequestInteract(InteractionComponent->GetDetectedMount());
 		return;
 	}
 
 	// 열차 좌석 탑승 (Plan6 §5.5)
-	if (CurrentDetectedCar)
+	if (InteractionComponent->GetDetectedTrainCar())
 	{
-		ServerRequestInteract(CurrentDetectedCar);
+		ServerRequestInteract(InteractionComponent->GetDetectedTrainCar());
 		return;
 	}
 
 	// 스테이지2 상호작용 프롭 (레버/버튼/단말) — Plan6 §5.5-b
-	if (CurrentDetectedProp)
+	if (InteractionComponent->GetDetectedProp())
 	{
-		UE_LOG(LogDR, Log, TEXT("[S2Prop] F -> %s 조작 요청 (클라)"), *CurrentDetectedProp->GetName());
+		UE_LOG(LogDR, Log, TEXT("[S2Prop] F -> %s 조작 요청 (클라)"), *InteractionComponent->GetDetectedProp()->GetName());
 
-		ServerRequestInteract(CurrentDetectedProp);
+		ServerRequestInteract(InteractionComponent->GetDetectedProp());
 		return;
 	}
 
@@ -1482,7 +1133,7 @@ void ADRPlayerController::HandleInteract()
 
 void ADRPlayerController::ToggleSettingsMenu()
 {
-	if (bIsSettingsMenuOpen)
+	if (IsSettingsMenuOpen())
 	{
 		CloseSettingsMenu();
 	}
@@ -1492,37 +1143,239 @@ void ADRPlayerController::ToggleSettingsMenu()
 	}
 }
 
-void ADRPlayerController::OpenSettingsMenu()
+// ========================= 전체 화면 (설정 · 업그레이드 · 옷장 · 스테이지 선택 · 8퍼즐) =========================
+
+bool ADRPlayerController::OpenScreen(EDRScreen Screen, ADRS2SlidePuzzle* Puzzle)
 {
-	// 濡쒖뺄 而⑦듃濡ㅻ윭?먯꽌留??ㅽ뻾
-	if (!IsLocalController()) return;
+	if (!IsLocalController() || Screen == EDRScreen::None) return false;
 
-	// ?대? ?대젮?덉쑝硫?臾댁떆
-	if (bIsSettingsMenuOpen) return;
+	// 이미 열려 있으면 아무것도 하지 않는다 (같은 장치 · 단말을 두 번 눌렀을 때)
+	if (ActiveScreen == Screen) return true;
 
-	bIsSettingsMenuOpen = true;
+	if (!CanOpenScreen(Screen, Puzzle)) return false;
 
-	// ?낅젰 紐⑤뱶 蹂寃?
+	// 한 번에 한 화면 — 열려 있던 화면을 먼저 닫는다 (입력 모드가 겹치지 않게)
+	if (ActiveScreen != EDRScreen::None)
+	{
+		CloseScreen(ActiveScreen);
+	}
+
+	// ★상태를 위젯보다 먼저 올린다★ — 위젯 NativeConstruct 가 열림 상태를 볼 수 있게
+	ActiveScreen = Screen;
+
+	// ★입력 모드는 여기서만 바꾼다★ (복귀는 CloseScreen → RestoreDefaultInputMode)
+	//  포커스 위젯을 지정하지 않는 이유: 각 화면 위젯이 NativeConstruct(= AddToViewport) 에서
+	//  SetKeyboardFocus 를 부르므로, 순서상 위젯이 마지막에 포커스를 가져간다.
 	SetInputMode(FInputModeUIOnly());
 	SetShowMouseCursor(true);
 
-	// Blueprint?먯꽌 ?꾩젽 ?앹꽦
-	OnSettingsMenuOpened();
+	if (!ShowScreenWidget(Screen, Puzzle))
+	{
+		// 위젯을 못 만들었다 — UI 입력에 갇히지 않게 되돌린다
+		ActiveScreen = EDRScreen::None;
+		RestoreDefaultInputMode();
+		return false;
+	}
+
+	OnScreenOpened(Screen);   // BP 연출 훅 (선택)
+	return true;
 }
 
-void ADRPlayerController::CloseSettingsMenu()
+void ADRPlayerController::CloseScreen(EDRScreen Screen, bool bLevelTransition)
 {
-	// 濡쒖뺄 而⑦듃濡ㅻ윭?먯꽌留??ㅽ뻾
-	if (!IsLocalController()) return;
+	if (!IsLocalController() || Screen == EDRScreen::None || ActiveScreen != Screen) return;
 
-	// ?대? ?ロ??덉쑝硫?臾댁떆
-	if (!bIsSettingsMenuOpen) return;
+	// ★상태를 먼저 내린다★ — 위젯 제거(NativeDestruct)가 이 함수를 한 번 더 부른다 (8퍼즐)
+	ActiveScreen = EDRScreen::None;
 
-	// Blueprint?먯꽌 ?꾩젽 ?쒓굅
-	OnSettingsMenuClosed();
+	HideScreenWidget(Screen);
+	OnScreenClosed(Screen);   // BP 연출 훅 (선택)
 
-	bIsSettingsMenuOpen = false;
+	// 레벨 이동 정리 — 입력 모드 · 장착 보고는 OnLevelEntered 가 이어서 한다
+	if (bLevelTransition) return;
+
+	// 레벨 컨텍스트(메인메뉴/튜토리얼/대기실/스테이지)에 맞는 모드로 되돌린다
 	RestoreDefaultInputMode();
+
+	// 화면이 열린 동안의 변경은 프리뷰에만 보이고, 닫는 순간 서버에 한 번에 반영된다
+	// (PlayerState 복제 → 내 캐릭터와 남의 화면에 적용 — Plan2.md 7.1 / Plan(옷장) M3)
+	if (Screen == EDRScreen::Upgrade)
+	{
+		ReportUpgradeLoadout();
+	}
+	else if (Screen == EDRScreen::Wardrobe)
+	{
+		ReportCosmeticLoadout();
+	}
+}
+
+bool ADRPlayerController::CanOpenScreen(EDRScreen Screen, const ADRS2SlidePuzzle* Puzzle) const
+{
+	switch (Screen)
+	{
+	case EDRScreen::Upgrade:
+		// 로비에서만 슬롯 해금/칩 교체가 가능하다. 화면을 닫을 때 서버로 재보고되고 그 즉시 스탯 GE 가
+		// 재적용되므로, 이 가드가 없으면 스테이지 도중 칩 교체가 실제로 반영돼 버린다.
+		if (!IsInLobby())
+		{
+			UE_LOG(LogDR, Warning, TEXT("[Upgrade] 로비가 아닌 곳에서 업그레이드 화면 열기를 시도했습니다 — 무시합니다."));
+			return false;
+		}
+		break;
+
+	case EDRScreen::Wardrobe:
+		// 옷장도 로비 전용이다. 스테이지 도중 외형을 바꿔 끼우는 경로를 만들지 않는다.
+		if (!IsInLobby())
+		{
+			UE_LOG(LogDR, Warning, TEXT("[Cosmetic] 로비가 아닌 곳에서 옷장 열기를 시도했습니다 — 무시합니다."));
+			return false;
+		}
+		break;
+
+	case EDRScreen::StageSelect:
+		// 리슨 서버의 호스트만 — 클라이언트는 스테이지를 고를 수 없다
+		if (!HasAuthority())
+		{
+			UE_LOG(LogDR, Warning, TEXT("[StageSelect] 호스트가 아닌 플레이어가 스테이지 선택을 열려고 했습니다 — 무시합니다."));
+			return false;
+		}
+		if (!IsInLobby())
+		{
+			UE_LOG(LogDR, Warning, TEXT("[StageSelect] 로비가 아닌 곳에서 스테이지 선택 열기를 시도했습니다 — 무시합니다."));
+			return false;
+		}
+		break;
+
+	case EDRScreen::SlidePuzzle:
+		if (!IsValid(Puzzle))
+		{
+			UE_LOG(LogDR, Warning, TEXT("[S2Puzzle] 창 열기 무시 — 퍼즐이 없다"));
+			return false;
+		}
+		break;
+
+	default:
+		break;
+	}
+
+	// 위젯 클래스는 BP_DRPlayerController 의 UI 카테고리에서 지정한다
+	if (!GetScreenWidgetClass(Screen))
+	{
+		UE_LOG(LogDR, Error, TEXT("[Screen] %s 화면의 위젯 클래스가 비어 있다 — BP_DRPlayerController 의 UI 카테고리에서 지정할 것"),
+			*StaticEnum<EDRScreen>()->GetNameStringByValue(static_cast<int64>(Screen)));
+		return false;
+	}
+	return true;
+}
+
+TSubclassOf<UUserWidget> ADRPlayerController::GetScreenWidgetClass(EDRScreen Screen) const
+{
+	switch (Screen)
+	{
+	case EDRScreen::Settings:    return SettingsScreenWidgetClass;
+	case EDRScreen::Upgrade:     return UpgradeScreenWidgetClass;
+	case EDRScreen::Wardrobe:    return WardrobeScreenWidgetClass;
+	case EDRScreen::StageSelect: return StageSelectScreenWidgetClass;
+	case EDRScreen::SlidePuzzle: return SlidePuzzleWidgetClass;
+	default:                     return nullptr;
+	}
+}
+
+bool ADRPlayerController::ShowScreenWidget(EDRScreen Screen, ADRS2SlidePuzzle* Puzzle)
+{
+	switch (Screen)
+	{
+	case EDRScreen::Settings:
+		if (!IsValid(SettingsScreenWidget))
+		{
+			SettingsScreenWidget = CreateWidget<UUserWidget>(this, SettingsScreenWidgetClass);
+		}
+		if (!SettingsScreenWidget) return false;
+		SettingsScreenWidget->AddToViewport();
+		return true;
+
+	case EDRScreen::Upgrade:
+		UpgradeScreenWidget = CreateWidget<UDRUpgradeScreenWidget>(this, UpgradeScreenWidgetClass);
+		if (!UpgradeScreenWidget) return false;
+		UpgradeScreenWidget->AddToViewport();
+		return true;
+
+	case EDRScreen::Wardrobe:
+		// 키보드 포커스는 화면의 NativeConstruct 가 직접 잡는다 (ESC / C 키)
+		WardrobeScreenWidget = CreateWidget<UDRWardrobeScreenWidget>(this, WardrobeScreenWidgetClass);
+		if (!WardrobeScreenWidget) return false;
+		WardrobeScreenWidget->AddToViewport();
+		return true;
+
+	case EDRScreen::StageSelect:
+		StageSelectScreenWidget = CreateWidget<UDRStageSelectScreenWidget>(this, StageSelectScreenWidgetClass);
+		if (!StageSelectScreenWidget) return false;
+		// 전체화면 모달이라 HUD(0) · 퍼즐(10) 위, 결과창/캐릭터 정보(100) · 로딩(10000) 아래.
+		// 0 이면 화면을 연 ★뒤에★ 만들어지는 HUD 위젯(대기실 → 자유이동 전환 직후의 크로스헤어 등)이 위에 덮인다.
+		StageSelectScreenWidget->AddToViewport(50);
+		return true;
+
+	case EDRScreen::SlidePuzzle:
+		// ★창은 재사용한다★ 판 상태는 서버에 있으므로 새로 만들어도 동작하지만,
+		// 재사용하면 등장 연출이 매번 다시 돌지 않고 조각 8개를 다시 만들 일도 줄어든다.
+		if (!IsValid(SlidePuzzleWidget))
+		{
+			SlidePuzzleWidget = CreateWidget<UDRS2SlidePuzzleWidget>(this, SlidePuzzleWidgetClass);
+		}
+		if (!SlidePuzzleWidget) return false;
+		// ★BindToPuzzle 이 AddToViewport 보다 먼저다★
+		// 그래야 NativeConstruct 가 조각을 만든 직후 서버 보드를 그대로 그릴 수 있다.
+		SlidePuzzleWidget->BindToPuzzle(Puzzle);
+		SlidePuzzleWidget->AddToViewport(10);
+		return true;
+
+	default:
+		return false;
+	}
+}
+
+void ADRPlayerController::HideScreenWidget(EDRScreen Screen)
+{
+	auto RemoveAndForget = [](auto& Widget)
+	{
+		if (IsValid(Widget))
+		{
+			Widget->RemoveFromParent();
+		}
+		Widget = nullptr;
+	};
+
+	switch (Screen)
+	{
+	case EDRScreen::Settings:
+		if (IsValid(SettingsScreenWidget))
+		{
+			// 설정 화면이 따로 띄운 드롭다운 팝업부터 닫는다 (WBP_SettingsScreen 의 BP 함수 — 안 닫으면 화면 위에 남는다)
+			static const FName HideDropdownPopupName(TEXT("HideDropdownPopup"));
+			UFunction* HideDropdownPopup = SettingsScreenWidget->FindFunction(HideDropdownPopupName);
+			if (HideDropdownPopup && HideDropdownPopup->NumParms == 0)
+			{
+				SettingsScreenWidget->ProcessEvent(HideDropdownPopup, nullptr);
+			}
+		}
+		RemoveAndForget(SettingsScreenWidget);
+		break;
+
+	case EDRScreen::Upgrade:     RemoveAndForget(UpgradeScreenWidget); break;
+	case EDRScreen::Wardrobe:    RemoveAndForget(WardrobeScreenWidget); break;
+	case EDRScreen::StageSelect: RemoveAndForget(StageSelectScreenWidget); break;
+
+	case EDRScreen::SlidePuzzle:
+		// 파괴하지 않는다 — 다음에 열 때 같은 인스턴스를 다시 쓴다 (점유 반납은 위젯 NativeDestruct 가 한다)
+		if (IsValid(SlidePuzzleWidget))
+		{
+			SlidePuzzleWidget->RemoveFromParent();
+		}
+		break;
+
+	default:
+		break;
+	}
 }
 
 void ADRPlayerController::ClientCloseSettingsMenu_Implementation()
@@ -1637,285 +1490,52 @@ void ADRPlayerController::Client_GrantStageReward_Implementation(const FDRStageR
 
 // ========================= 로비 업그레이드 화면 =========================
 
-void ADRPlayerController::OpenUpgradeScreen()
-{
-	if (!IsLocalController()) return;
-	if (bIsUpgradeScreenOpen) return;
-
-	// 로비에서만 슬롯 해금/칩 교체가 가능하다.
-	// 화면을 닫을 때 서버로 재보고되고 그 즉시 스탯 GE 가 재적용되므로,
-	// 이 가드가 없으면 스테이지 도중 칩 교체가 실제로 반영돼 버린다.
-	if (!IsInLobby())
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Upgrade] 로비가 아닌 곳에서 업그레이드 화면 열기를 시도했습니다 — 무시합니다."));
-		return;
-	}
-
-	// 설정창이 열려 있으면 먼저 닫는다 (입력 모드 충돌 방지)
-	if (bIsSettingsMenuOpen)
-	{
-		CloseSettingsMenu();
-	}
-
-	bIsUpgradeScreenOpen = true;
-
-	SetInputMode(FInputModeUIOnly());
-	SetShowMouseCursor(true);
-
-	// 블루프린트에서 위젯 생성 (설정 메뉴와 같은 구조 — OpenSettingsMenu 참조)
-	OnUpgradeScreenOpened();
-}
-
-void ADRPlayerController::DRUnlockUpgrade()
-{
-	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
-	if (!GI)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
-		return;
-	}
-
-	GI->UnlockUpgradeSystem();
-	UE_LOG(LogDR, Warning, TEXT("[Cheat] 업그레이드 시스템 해금됨 (현재 재화 %d)"), GI->GetCurrency());
-}
-
-void ADRPlayerController::DRLockUpgrade()
-{
-	if (UDRGameInstance* GI = GetGameInstance<UDRGameInstance>())
-	{
-		GI->DebugSetUpgradeSystemUnlocked(false);
-	}
-}
-
-void ADRPlayerController::DRUnlockSlot(int32 Count)
-{
-	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
-	if (!GI)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
-		return;
-	}
-
-	// 시스템이 잠겨 있으면 CanUnlockSlot 이 SystemLocked 로 막는다 — 먼저 열어 준다
-	GI->UnlockUpgradeSystem();
-
-	const EPlayerCharacterClass Class = GetViewedUpgradeClass();
-
-	for (int32 Index = 0; Index < FMath::Max(1, Count); ++Index)
-	{
-		// 비용이 모자라면 그만큼 채워 넣고 다시 시도한다 (치트니까 지갑은 신경 쓰지 않는다)
-		if (GI->CanUnlockSlot(Class) == EDRUpgradeResult::NotEnoughCurrency)
-		{
-			GI->AddCurrency(FMath::Max(1000, GI->GetNextSlotUnlockCost(Class)));
-		}
-
-		const EDRUpgradeResult Result = GI->UnlockSlot(Class);
-		if (Result != EDRUpgradeResult::Success)
-		{
-			UE_LOG(LogDR, Warning, TEXT("[Cheat] 슬롯 해금 중단 (%d번째): %s"),
-				Index + 1, *UDRUpgradeUILibrary::GetUpgradeResultText(Result).ToString());
-			break;
-		}
-	}
-
-	DRDumpUpgrade();
-}
-
-void ADRPlayerController::DRDumpUpgrade()
-{
-	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
-	if (!GI)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
-		return;
-	}
-
-	const EPlayerCharacterClass Class = GetViewedUpgradeClass();
-
-	UE_LOG(LogDR, Warning,
-		TEXT("[Cheat] 진행도: 시스템=%s / 재화=%d / 클래스=%d / 해금슬롯=%d/%d / 빈칸=%d"),
-		GI->IsUpgradeSystemUnlocked() ? TEXT("해금") : TEXT("잠김"),
-		GI->GetCurrency(), static_cast<int32>(Class),
-		GI->GetUnlockedSlotCount(Class), GI->GetMaxSlotCount(),
-		GI->GetFreeSlotCount(Class));
-}
-
-EPlayerCharacterClass ADRPlayerController::GetViewedUpgradeClass() const
-{
-	// 업그레이드 화면과 같은 기준으로 클래스를 고른다(UDRUpgradeScreenWidget::GetViewedClass 와 동일)
-	if (const ADRPlayerState* PS = GetPlayerState<ADRPlayerState>())
-	{
-		return PS->GetSelectedPlayerClass();
-	}
-	return EPlayerCharacterClass::Gardener;
-}
-
-void ADRPlayerController::DRAddCurrency(int32 Amount)
-{
-	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
-	if (!GI)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
-		return;
-	}
-
-	GI->AddCurrency(Amount);
-	UE_LOG(LogDR, Warning, TEXT("[Cheat] 재화 %d 지급 → 현재 %d"), Amount, GI->GetCurrency());
-}
-
-void ADRPlayerController::DRResetDefaultChips()
-{
-	UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
-	if (!GI)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
-		return;
-	}
-
-	GI->DebugResetDefaultLoadout();
-
-	// 세이브만 바꿔서는 이미 스폰된 캐릭터에 반영되지 않는다 — 서버에 다시 보고해야
-	// PlayerState 의 EquippedChips 가 갱신되고 HUD/스탯이 따라온다.
-	ReportUpgradeLoadout();
-
-	UE_LOG(LogDR, Warning, TEXT("[Cheat] 기본 장착 칩을 다시 적용하고 서버에 재보고했습니다."));
-}
-
-void ADRPlayerController::CloseUpgradeScreen()
-{
-	if (!IsLocalController()) return;
-	if (!bIsUpgradeScreenOpen) return;
-
-	// 블루프린트에서 위젯 제거 (설정 메뉴와 같은 구조 — CloseSettingsMenu 참조)
-	OnUpgradeScreenClosed();
-
-	bIsUpgradeScreenOpen = false;
-	RestoreDefaultInputMode();
-
-	// 변경된 장착 상태를 서버에 반영
-	ReportUpgradeLoadout();
-}
-
 // ========================= 로비 옷장 화면 (Plan(옷장)) =========================
 
-void ADRPlayerController::OpenWardrobeScreen()
+// ========================= 스테이지 선택 화면 =========================
+
+bool ADRPlayerController::CanUseStageSelectScreen() const
 {
-	if (!IsLocalController()) return;
-	if (bIsWardrobeScreenOpen) return;
+	if (!StageSelectScreenWidgetClass) return false;
 
-	// 옷장은 로비 전용이다. 스테이지 도중 외형을 바꿔 끼우는 경로를 만들지 않는다.
-	// (OpenUpgradeScreen 과 같은 가드)
-	if (!IsInLobby())
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cosmetic] 로비가 아닌 곳에서 옷장 열기를 시도했습니다 — 무시합니다."));
-		return;
-	}
-
-	// 다른 전체화면 UI 와 입력 모드가 겹치지 않게 먼저 닫는다
-	if (bIsSettingsMenuOpen)
-	{
-		CloseSettingsMenu();
-	}
-	if (bIsUpgradeScreenOpen)
-	{
-		CloseUpgradeScreen();
-	}
-
-	bIsWardrobeScreenOpen = true;
-
-	SetInputMode(FInputModeUIOnly());
-	SetShowMouseCursor(true);
-
-	// ★위젯은 C++ 이 만든다★ — BP 의 OnWardrobeScreenOpened 는 연출용이다 (거기서 또 만들면 두 장이 뜬다)
-	if (!WardrobeScreenWidget && WardrobeScreenWidgetClass)
-	{
-		WardrobeScreenWidget = CreateWidget<UDRWardrobeScreenWidget>(this, WardrobeScreenWidgetClass);
-		if (WardrobeScreenWidget)
-		{
-			// 키보드 포커스는 화면의 NativeConstruct 가 직접 잡는다 (ESC / C 키)
-			WardrobeScreenWidget->AddToViewport();
-		}
-	}
-	else if (!WardrobeScreenWidgetClass)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cosmetic] WardrobeScreenWidgetClass 가 지정되지 않았습니다 (BP_DRPlayerController)."));
-	}
-
-	OnWardrobeScreenOpened();
-}
-
-void ADRPlayerController::CloseWardrobeScreen()
-{
-	if (!IsLocalController()) return;
-	if (!bIsWardrobeScreenOpen) return;
-
-	OnWardrobeScreenClosed();
-
-	if (WardrobeScreenWidget)
-	{
-		WardrobeScreenWidget->RemoveFromParent();
-		WardrobeScreenWidget = nullptr;
-	}
-
-	bIsWardrobeScreenOpen = false;
-	RestoreDefaultInputMode();
-
-	// 고른 옷을 서버에 보고 → PlayerState 복제 → 내 캐릭터와 남의 화면에 입혀진다 (Plan(옷장) M3).
-	// 화면이 열려 있는 동안의 변경은 프리뷰에만 보이고, 닫는 순간 한 번에 반영된다.
-	ReportCosmeticLoadout();
-}
-
-void ADRPlayerController::DRUnlockSkins()
-{
-	if (UDRGameInstance* GI = GetGameInstance<UDRGameInstance>())
-	{
-		GI->DebugUnlockAllSkins();
-	}
-}
-
-void ADRPlayerController::DROpenWardrobe()
-{
-	OpenWardrobeScreen();
-}
-
-void ADRPlayerController::DRDumpCosmetic()
-{
 	const UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
-	if (!GI)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[Cheat] UDRGameInstance 를 찾지 못했습니다."));
-		return;
-	}
-
-	const EPlayerCharacterClass Class = GetViewedUpgradeClass();
-	const TArray<FName> Equipped = GI->GetEquippedSkins(Class);
-
-	FString Line;
-	for (int32 Index = 0; Index < Equipped.Num(); ++Index)
-	{
-		Line += FString::Printf(TEXT("%s=%s "),
-			*StaticEnum<EDRCosmeticCategory>()->GetNameStringByValue(Index),
-			*Equipped[Index].ToString());
-	}
-
-	UE_LOG(LogDR, Warning, TEXT("[Cheat] 코스메틱: 클래스=%d / 카탈로그=%s / %s"),
-		static_cast<int32>(Class),
-		GI->GetCosmeticCatalog() ? TEXT("지정됨") : TEXT("★미지정★"),
-		*Line);
+	return GI && GI->ProgressionConfig && GI->ProgressionConfig->StageSelectList.Num() > 0;
 }
 
-void ADRPlayerController::DRDie()
+bool ADRPlayerController::RequestStageTravel(FName StageId)
 {
-#if !UE_BUILD_SHIPPING
-	ServerCheatDie();
-#endif
-}
+	if (!IsLocalController() || !HasAuthority())
+	{
+		UE_LOG(LogDR, Warning, TEXT("[StageSelect] 스테이지 이동은 호스트만 요청할 수 있습니다."));
+		return false;
+	}
 
-void ADRPlayerController::DRRevive()
-{
-#if !UE_BUILD_SHIPPING
-	ServerCheatRevive();
-#endif
+	const UDRGameInstance* GI = GetGameInstance<UDRGameInstance>();
+	const FDRStageSelectDef* Def = (GI && GI->ProgressionConfig) ? GI->ProgressionConfig->FindStageSelectDef(StageId) : nullptr;
+	if (!Def || Def->Map.IsNull())
+	{
+		UE_LOG(LogDR, Warning, TEXT("[StageSelect] '%s' 의 정의 또는 Map 이 없습니다 (DA_ProgressionConfig > StageSelectList)."),
+			*StageId.ToString());
+		return false;
+	}
+
+	// 화면을 거치지 않는 호출(BP · 치트)도 같은 규칙을 따른다
+	if (GI->GetStageSelectState(StageId) == EDRStageSelectState::Locked)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[StageSelect] '%s' 는 잠긴 스테이지입니다 — 이동하지 않습니다."), *StageId.ToString());
+		return false;
+	}
+
+	ADRLobbyGameMode* LobbyGameMode = GetWorld() ? GetWorld()->GetAuthGameMode<ADRLobbyGameMode>() : nullptr;
+	if (!LobbyGameMode)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[StageSelect] 로비 게임모드가 아닙니다 — 이동하지 않습니다."));
+		return false;
+	}
+
+	// "/Game/Maps/Stage1" 형태. ExecuteTravel 이 "?listen" 을 붙여 ServerTravel 한다.
+	LobbyGameMode->TravelToStage(Def->Map.GetLongPackageName(), this);
+	return true;
 }
 
 void ADRPlayerController::ServerCheatDie_Implementation()
@@ -1933,11 +1553,23 @@ void ADRPlayerController::ServerCheatDie_Implementation()
 void ADRPlayerController::ServerCheatRevive_Implementation()
 {
 #if !UE_BUILD_SHIPPING
-	ADRCharacterBase* CheatTarget = Cast<ADRCharacterBase>(GetPawn());
-	if (!CheatTarget || !ICombatInterface::Execute_IsDead(CheatTarget)) return;
+	ADRGameModeBase* GM = GetWorld()->GetAuthGameMode<ADRGameModeBase>();
+	if (!GM) return;
 
-	CheatTarget->Revive(CheatTarget->GetActorLocation(), 1.0f, 1.0f);
-	UE_LOG(LogDR, Warning, TEXT("[Cheat] %s 부활"), *CheatTarget->GetName());
+	// 시체가 남아 있으면 그 자리, 이미 정리됐으면 시작 지점에서 되살린다
+	FTransform At = GetPawn() ? GetPawn()->GetActorTransform() : FTransform::Identity;
+	if (!GetPawn())
+	{
+		if (const AActor* Start = GM->FindPlayerStart(this))
+		{
+			At = Start->GetActorTransform();
+		}
+	}
+
+	if (GM->RevivePlayer(this, At, 1.0f, 1.0f))
+	{
+		UE_LOG(LogDR, Warning, TEXT("[Cheat] %s 부활"), *GetName());
+	}
 #endif
 }
 
@@ -1947,24 +1579,24 @@ void ADRPlayerController::RestoreDefaultInputMode()
 
 	if (IsInMainMenu())
 	{
-		// 硫붿씤硫붾돱: UI 紐⑤뱶
+		// 메인메뉴: UI 모드
 		SetInputMode(FInputModeUIOnly());
 		SetShowMouseCursor(true);
 	}
 	else if (IsInTutorial())
 	{
-		// ?쒗넗由ъ뼹: 寃뚯엫 紐⑤뱶
+		// 튜토리얼: 게임 모드
 		SetInputMode(FInputModeGameOnly());
 		SetShowMouseCursor(false);
 	}
 	else if (IsInLobby())
 	{
-		// 濡쒕퉬 ?곹깭???곕씪 遺꾧린
+		// 로비 상태에 따라 분기
 		ADRLobbyGameState* LGS = GetWorld()->GetGameState<ADRLobbyGameState>();
 		if (LGS && (LGS->GetLobbyState() == ELobbyState::WaitingRoom
 				  || LGS->GetLobbyState() == ELobbyState::Transitioning))
 		{
-			// TEST: 대기실은 GameAndUI로 통일 (ClientSetWaitingRoomView와 일치)
+			// 대기실은 GameAndUI 로 통일 (ClientSetWaitingRoomView 와 일치)
 			FInputModeGameAndUI InputMode;
 			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 			InputMode.SetHideCursorDuringCapture(false);
@@ -1979,7 +1611,7 @@ void ADRPlayerController::RestoreDefaultInputMode()
 	}
 	else
 	{
-		// ?ㅽ뀒?댁?: 寃뚯엫 紐⑤뱶
+		// 스테이지: 게임 모드
 		SetInputMode(FInputModeGameOnly());
 		SetShowMouseCursor(false);
 	}
@@ -2033,51 +1665,31 @@ bool ADRPlayerController::IsInTutorial() const
 	return GetLevelContext() == EDRLevelContext::Tutorial;
 }
 
-void ADRPlayerController::Client_ShowGameOverUI_Implementation()
+void ADRPlayerController::ShowResultWidget(TSubclassOf<UUserWidget> WidgetClass)
 {
-	// ?대? UI媛 ?쒖떆 以묒씠硫?臾댁떆
-	if (CurrentResultWidget) return;
+	// 이미 결과 UI 가 떠 있거나 위젯 클래스가 없으면 무시
+	if (CurrentResultWidget || !WidgetClass) return;
 
-	// ?꾩젽 ?대옒?ㅺ? ?ㅼ젙?섏? ?딆븯?쇰㈃ 由ы꽩
-	if (!GameOverWidgetClass) return;
-
-	// 寃뚯엫 ?ㅻ쾭 ?꾩젽 ?앹꽦
-	CurrentResultWidget = CreateWidget<UUserWidget>(this, GameOverWidgetClass);
+	CurrentResultWidget = CreateWidget<UUserWidget>(this, WidgetClass);
 	if (CurrentResultWidget)
 	{
-		// 酉고룷?몄뿉 異붽?
 		CurrentResultWidget->AddToViewport(100);
 	}
+}
+
+void ADRPlayerController::Client_ShowGameOverUI_Implementation()
+{
+	ShowResultWidget(GameOverWidgetClass);
 }
 
 void ADRPlayerController::Client_ShowGameClearUI_Implementation()
 {
-	// ?대? UI媛 ?쒖떆 以묒씠硫?臾댁떆
-	if (CurrentResultWidget) return;
-
-	// ?꾩젽 ?대옒?ㅺ? ?ㅼ젙?섏? ?딆븯?쇰㈃ 由ы꽩
-	if (!GameClearWidgetClass) return;
-
-	// 寃뚯엫 ?대━???꾩젽 ?앹꽦
-	CurrentResultWidget = CreateWidget<UUserWidget>(this, GameClearWidgetClass);
-	if (CurrentResultWidget)
-	{
-		// 酉고룷?몄뿉 異붽?
-		CurrentResultWidget->AddToViewport(100);
-	}
+	ShowResultWidget(GameClearWidgetClass);
 }
 
 void ADRPlayerController::Client_ShowTutorialClearUI_Implementation()
 {
-	if (CurrentResultWidget) return;
-
-	if (!TutorialGameClearWidgetClass) return;
-
-	CurrentResultWidget = CreateWidget<UUserWidget>(this, TutorialGameClearWidgetClass);
-	if (CurrentResultWidget)
-	{
-		CurrentResultWidget->AddToViewport(100);
-	}
+	ShowResultWidget(TutorialGameClearWidgetClass);
 }
 
 void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
@@ -2091,13 +1703,11 @@ void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 
 	if (bIsSpectating) return;
 
-	// 占쌉뤄옙 占쏙옙占?확占쏙옙 占쏙옙 占쏙옙占쏙옙占싣?占쌉뤄옙 처占쏙옙
-	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
+	// 입력 블록 확인 후 어빌리티 입력 처리 (블록 중이면 아래 UI 피드백도 내지 않는다 — 그래서 ASC 가 아니라 여기서 본다)
+	UDRAbilitySystemComponent* ASC = GetASC();
+	if (!ASC || ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
 
-	if (GetASC())
-	{
-		GetASC()->AbilityInputTagPressed(InputTag);
-	}
+	ASC->AbilityInputTagPressed(InputTag);
 
 	// 스킬 아이콘 UI 피드백 브로드캐스트 (로컬 컨트롤러만, 차단 중이면 발화 안 함)
 	if (IsLocalController() && !IsAbilityInputBlocked(InputTag))
@@ -2120,11 +1730,11 @@ void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 
 	if (bIsSpectating) return;
 
-	// 占쌉뤄옙 占쏙옙占쏙옙 占쏙옙占?확占쏙옙
-	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputReleased)) return;
+	// 입력 해제 블록 확인
+	UDRAbilitySystemComponent* ASC = GetASC();
+	if (!ASC || ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputReleased)) return;
 
-	if (GetASC() == nullptr) return;
-	GetASC()->AbilityInputTagReleased(InputTag);
+	ASC->AbilityInputTagReleased(InputTag);
 
 	// 스킬 아이콘 UI 피드백 브로드캐스트 (로컬 컨트롤러만, 차단 중이면 발화 안 함)
 	if (IsLocalController() && !IsAbilityInputBlocked(InputTag))
@@ -2142,12 +1752,12 @@ void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 void ADRPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
 {
 	if (bIsSpectating) return;
-		
-	// 占쌉뤄옙 홀占쏙옙 占쏙옙占?확占쏙옙
-	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputHeld)) return;
 
-	if (GetASC() == nullptr) return;
-	GetASC()->AbilityInputTagHeld(InputTag);
+	// 입력 홀드 블록 확인
+	UDRAbilitySystemComponent* ASC = GetASC();
+	if (!ASC || ASC->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputHeld)) return;
+
+	ASC->AbilityInputTagHeld(InputTag);
 }
 
 UDRAbilitySystemComponent* ADRPlayerController::GetASC() const
@@ -2182,11 +1792,11 @@ bool ADRPlayerController::IsAbilityInputBlocked(const FGameplayTag& InputTag) co
 void ADRPlayerController::ServerCheatSkipToNextPhase_Implementation()
 {
 #if !UE_BUILD_SHIPPING
-	// GameMode 媛?몄삤湲?
+	// GameMode 가져오기
 	ADRStageGameMode* StageGameMode = GetWorld()->GetAuthGameMode<ADRStageGameMode>();
 	if (!StageGameMode) return;
 
-	// ?섏씠利??꾪솚
+	// 페이즈 전환
 	if (UDRPhase3* Phase3 = Cast<UDRPhase3>(StageGameMode->GetCurrentPhase()))
 	{
 		Phase3->SkipToNextWave();
@@ -2199,11 +1809,11 @@ void ADRPlayerController::ServerCheatSkipToNextPhase_Implementation()
 
 void ADRPlayerController::ServerRequestDropPart_Implementation()
 {
-	// 罹먮┃??媛?몄삤湲?
+	// 캐릭터 가져오기
 	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
 	if (!DRCharacter) return;
 
-	// 遺???⑥뼱?몃━湲?
+	// 부품 떨어트리기
 	DRCharacter->DropCarriedPart();
 }
 
@@ -2214,18 +1824,18 @@ void ADRPlayerController::RequestChangeClass(bool bNext)
 
 void ADRPlayerController::ServerRequestChangeClass_Implementation(bool bNext)
 {
-	// ?湲곗떎 ?곹깭?먯꽌留?媛??
+	// 대기실 상태에서만 가능
 	ADRLobbyGameState* LGS = GetWorld()->GetGameState<ADRLobbyGameState>();
 	if (!LGS || LGS->GetLobbyState() != ELobbyState::WaitingRoom) return;
 
 	ADRPlayerState* PS = GetPlayerState<ADRPlayerState>();
 	if (!PS) return;
 
-	// ?꾩옱 ?대옒??媛?몄삤湲?
+	// 현재 클래스 가져오기
 	int32 CurrentIndex = static_cast<int32>(PS->GetSelectedPlayerClass());
 	constexpr int32 ClassCount = static_cast<int32>(EPlayerCharacterClass::Count);
 
-	// ?쒗솚
+	// 순환
 	int32 NewIndex;
 	if (bNext)
 		NewIndex = (CurrentIndex + 1) % ClassCount;
@@ -2235,7 +1845,7 @@ void ADRPlayerController::ServerRequestChangeClass_Implementation(bool bNext)
 	EPlayerCharacterClass NewClass = static_cast<EPlayerCharacterClass>(NewIndex);
 	PS->SetSelectedPlayerClass(NewClass);
 
-	// PlayerController??罹먯떛 (Seamless Travel ??PlayerState 媛??좎떎 諛⑹?)
+	// PlayerController 에도 캐싱 (Seamless Travel 시 PlayerState 값 유실 방지)
 	CachedSelectedClass = NewClass;
 }
 
@@ -2259,24 +1869,22 @@ void ADRPlayerController::ClientSetWaitingRoomView_Implementation(
 {
 	if (!CameraActor) return;
 
-	// 移대찓??罹먯떆 ???(ClientRestart?먯꽌 ?ш퀬?뺤뿉 ?ъ슜)
+	// 카메라 캐시 저장 (ClientRestart에서 재고정에 사용)
 	CachedWaitingRoomCamera = CameraActor;
 
 	bIsInWaitingRoom = true;
-	bAutoManageActiveCameraTarget = false; // Pawn 蹂寃????먮룞 ViewTarget ?꾪솚 李⑤떒
+	bAutoManageActiveCameraTarget = false; // Pawn 변경 시 자동 ViewTarget 전환 차단
 
-	// ?섎せ ?앹꽦??LobbyOverlay媛 ?덉쑝硫??쒓굅
+	// 잘못 생성된 LobbyOverlay가 있으면 제거
 	if (ADRHUD* DRHUD = Cast<ADRHUD>(GetHUD()))
 	{
 		DRHUD->RemoveOverlay();
 	}
 
-	// 利됱떆 怨좎젙 移대찓?쇰줈 ?꾪솚
+	// 즉시 고정 카메라로 전환
 	SetViewTargetWithBlend(CameraActor, 0.f);
 
-	// UI Only 紐⑤뱶 (留덉슦??而ㅼ꽌 ON)
-	// TEST: GameAndUI mode for waiting room (Tab/ESC focus issue test)
-	// Revert: change block back to SetInputMode(FInputModeUIOnly());
+	// 대기실 입력: GameAndUI + 커서 (UIOnly 는 Tab/ESC 가 위젯 포커스에 막혀 GameAndUI 로 바꿨다)
 	{
 		FInputModeGameAndUI InputMode;
 		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
@@ -2285,13 +1893,13 @@ void ADRPlayerController::ClientSetWaitingRoomView_Implementation(
 	}
 	SetShowMouseCursor(true);
 
-	// ?뚯쑀 Pawn??硫붿떆 媛?쒖꽦 ?꾪솚 (1P ?④린湲? 3P 蹂댁씠湲?
+	// 소유 Pawn의 메시 가시성 전환 (1P 숨기기, 3P 보이기)
 	if (ADRCharacter* DRCharacter = Cast<ADRCharacter>(GetPawn()))
 	{
 		DRCharacter->SetWaitingRoomVisibility(true);
 	}
 
-	// ?湲곗떎 UI ?앹꽦 (?꾩쭅 ?놁쑝硫?
+	// 대기실 UI 생성 (아직 없으면)
 	CreateWaitingRoomUI();
 }
 
@@ -2323,7 +1931,7 @@ void ADRPlayerController::ClientStartCameraTransitionToCharacter_Implementation(
 		return;
 	}
 
-	// Pawn???대? ?덉쑝硫?利됱떆 ?ㅽ뻾 (?몄뒪???먮뒗 鍮좊Ⅸ 由ы뵆由ъ??댁뀡)
+	// Pawn이 이미 있으면 즉시 실행 (호스트 또는 빠른 리플리케이션)
 	ExecuteCameraTransitionToCharacter();
 }
 
@@ -2332,39 +1940,39 @@ void ADRPlayerController::ExecuteCameraTransitionToCharacter()
 	APawn* MyPawn = GetPawn();
 	if (!MyPawn) return;
 
-	// 硫붿떆 媛?쒖꽦 蹂듭썝 (3P ?④린湲? 1P 蹂댁씠湲????쇰컲 FPS 紐⑤뱶)
+	// 메시 가시성 복원 (3P 숨기기, 1P 보이기 — 일반 FPS 모드)
 	if (ADRCharacter* DRCharacter = Cast<ADRCharacter>(MyPawn))
 	{
 		DRCharacter->SetWaitingRoomVisibility(false);
 	}
 
-	// 怨좎젙 移대찓????罹먮┃??移대찓?쇰줈 1.5珥덇컙 遺?쒕읇寃?釉붾젋??
+	// 고정 카메라 → 캐릭터 카메라로 1.5초간 부드럽게 블렌드
 	SetViewTargetWithBlend(MyPawn, 1.5f, EViewTargetBlendFunction::VTBlend_EaseInOut);
 
-	// ?꾪솚 ?꾨즺 ???명뭼 紐⑤뱶 蹂寃?+ HUD ?ㅻ쾭?덉씠 珥덇린??
+	// 전환 완료 후 인풋 모드 변경 + HUD 오버레이 초기화
 	FTimerHandle InputTimerHandle;
 	GetWorldTimerManager().SetTimer(
 		InputTimerHandle,
 		FTimerDelegate::CreateWeakLambda(this, [this]()
 		{
 
-			// (1) 釉붾젋???꾨즺 ?꾩뿉???먮룞 移대찓??愿由??쒖꽦??
+			// (1) 블렌드 완료 후에야 자동 카메라 관리 활성화
 			bAutoManageActiveCameraTarget = true;
 
-			// (2) ViewTarget??Pawn?쇰줈 ?뺤젙 (釉붾젋???붿뿬 ?곹깭 ?뺣━)
+			// (2) ViewTarget을 Pawn으로 확정 (블렌드 잔여 상태 정리)
 			if (APawn* FinalPawn = GetPawn())
 			{
 				SetViewTarget(FinalPawn);
 
-				// (3) ControlRotation??Pawn???꾩옱 ?뚯쟾?쇰줈 ?숆린??
+				// (3) ControlRotation을 Pawn의 현재 회전으로 동기화
 				SetControlRotation(FinalPawn->GetActorRotation());
 			}
 
-			// (4) ?낅젰 紐⑤뱶 ?꾪솚
+			// (4) 입력 모드 전환
 			SetInputMode(FInputModeGameOnly());
 			SetShowMouseCursor(false);
 
-			// (5) HUD ?ㅻ쾭?덉씠 珥덇린??(?湲곗떎?먯꽌 ?ㅽ궢?덉쑝誘濡?
+			// (5) HUD 오버레이 초기화 (대기실에서 스킵했으므로)
 			InitOverlayForFreeRoam();
 		}),
 		1.5f,
@@ -2420,10 +2028,10 @@ void ADRPlayerController::HandlePossessedPawnChanged(APawn* PreviousPawn, APawn*
 
 void ADRPlayerController::OnRep_Pawn()
 {
-	// ?붿쭊 湲곕낯 泥섎━ (AcknowledgePossession ??
+	// 엔진 기본 처리 (AcknowledgePossession 등)
 	Super::OnRep_Pawn();
 
-	// ?湲곗떎?먯꽌???붿쭊??蹂寃쏀븳 ViewTarget??利됱떆 蹂듭썝
+	// 대기실에서는 엔진이 변경한 ViewTarget을 즉시 복원
 	if (bIsInWaitingRoom && CachedWaitingRoomCamera.IsValid())
 	{
 		bAutoManageActiveCameraTarget = false;
@@ -2443,17 +2051,17 @@ void ADRPlayerController::OnRep_PlayerState()
 
 void ADRPlayerController::ClientRestart_Implementation(APawn* NewPawn)
 {
-	// ?湲곗떎?먯꽌??ViewTarget ?먮룞 ?꾪솚留?李⑤떒?섍퀬, ?섎㉧吏 ?붿쭊 珥덇린?붾뒗 ?뺤긽 ?섑뻾
+	// 대기실에서는 ViewTarget 자동 전환만 차단하고, 나머지 엔진 초기화는 정상 수행
 	if (bIsInWaitingRoom)
 	{
-		// bAutoManageActiveCameraTarget = false濡?Super ?대???ViewTarget ?먮룞 ?꾪솚 李⑤떒
+		// bAutoManageActiveCameraTarget = false로 Super 내부의 ViewTarget 자동 전환 차단
 		bAutoManageActiveCameraTarget = false;
 
-		// Super ?몄텧: ResetIgnoreInputFlags, AcknowledgePossession, PawnClientRestart ??
-		// ?붿쭊 珥덇린?붾? ?뺤긽 ?섑뻾 (?몄뒪?몄뿉??Look/Move ?낅젰??臾댁떆?섎뒗 踰꾧렇 諛⑹?)
+		// Super 호출: ResetIgnoreInputFlags, AcknowledgePossession, PawnClientRestart 등
+		// 엔진 초기화를 정상 수행 (호스트에서 Look/Move 입력이 무시되는 버그 방지)
 		Super::ClientRestart_Implementation(NewPawn);
 
-		// ???곗뿉 ?湲곗떎 媛?쒖꽦 ?곸슜
+		// 새 폰에 대기실 가시성 적용
 		if (NewPawn)
 		{
 			if (ADRCharacter* DRChar = Cast<ADRCharacter>(NewPawn))
@@ -2462,7 +2070,7 @@ void ADRPlayerController::ClientRestart_Implementation(APawn* NewPawn)
 			}
 		}
 
-		// Super媛 ViewTarget??蹂寃쏀뻽?????덉쑝誘濡?罹먯떆??移대찓?쇰줈 利됱떆 蹂듭썝
+		// Super가 ViewTarget을 변경했을 수 있으므로 캐시된 카메라로 즉시 복원
 		if (CachedWaitingRoomCamera.IsValid())
 		{
 			SetViewTargetWithBlend(CachedWaitingRoomCamera.Get(), 0.f);
@@ -2476,10 +2084,10 @@ void ADRPlayerController::ClientRestart_Implementation(APawn* NewPawn)
 
 void ADRPlayerController::ClientKicked_Implementation(const FString& Reason)
 {
-	// ?湲곗떎 UI ?쒓굅
+	// 대기실 UI 제거
 	DestroyWaitingRoomUI();
 
-	// ?몄뀡 ?좊굹湲???硫붿씤 硫붾돱濡??대룞
+	// 세션 떠나기 → 메인 메뉴로 이동
 	if (UGameInstance* GI = GetGameInstance())
 	{
 		if (UMultiplayerSessionsSubsystem* Subsystem = GI->GetSubsystem<UMultiplayerSessionsSubsystem>())
@@ -2489,12 +2097,12 @@ void ADRPlayerController::ClientKicked_Implementation(const FString& Reason)
 	}
 }
 
-// ========== ?湲곗떎 UI ==========
+// ========== 대기실 UI ==========
 
 void ADRPlayerController::CreateWaitingRoomUI()
 {
 	if (!IsLocalController()) return;
-	if (WaitingRoomWidget) return; // ?대? 議댁옱
+	if (WaitingRoomWidget) return; // 이미 존재
 	if (!WaitingRoomWidgetClass) return;
 
 	WaitingRoomWidget = CreateWidget<UDRWaitingRoomWidget>(this, WaitingRoomWidgetClass);
@@ -2502,11 +2110,11 @@ void ADRPlayerController::CreateWaitingRoomUI()
 	{
 		WaitingRoomWidget->AddToViewport();
 
-		// ?몄뒪???щ? ?ㅼ젙 (Listen Server??濡쒖뺄 而⑦듃濡ㅻ윭 = ?몄뒪??
+		// 호스트 여부 설정 (Listen Server의 로컬 컨트롤러 = 호스트)
 		bool bIsHost = HasAuthority();
 		WaitingRoomWidget->SetIsHost(bIsHost);
 
-		// LobbyState 蹂寃?援щ룆
+		// LobbyState 변경 구독
 		if (ADRLobbyGameState* LGS = GetWorld()->GetGameState<ADRLobbyGameState>())
 		{
 			LGS->OnLobbyStateChanged.AddDynamic(this, &ADRPlayerController::OnLobbyStateChangedForUI);
@@ -2518,7 +2126,7 @@ void ADRPlayerController::CreateWaitingRoomUI()
 
 void ADRPlayerController::DestroyWaitingRoomUI()
 {
-	// ?몃━寃뚯씠???댁젣
+	// 델리게이트 해제
 	if (UWorld* World = GetWorld())
 	{
 		if (ADRLobbyGameState* LGS = World->GetGameState<ADRLobbyGameState>())
@@ -2547,7 +2155,7 @@ void ADRPlayerController::RefreshWaitingRoomUI()
 	ADRGameStateBase* GS = GetWorld()->GetGameState<ADRGameStateBase>();
 	if (!LGS || !GS) return;
 
-	// 濡쒖뺄 PlayerState ?좏슚??寃??+ ?ъ떆??
+	// 로컬 PlayerState 유효성 검사 + 재시도
 	APlayerState* MyPS = GetPlayerState<APlayerState>();
 	if (!MyPS)
 	{
@@ -2580,16 +2188,16 @@ void ADRPlayerController::RefreshWaitingRoomUI()
 		Info.bIsReady = Info.bIsHost ? true : DRPS->IsReady(); // 호스트는 항상 준비 상태로 표시
 		Info.OwningPlayerState = PS;
 
-		// ?쒕쾭 沅뚯쐞 ?щ’ ?몃뜳???ъ슜
+		// 서버 권위 슬롯 인덱스 사용
 		Info.SlotIndex = DRPS->GetWaitingRoomSlotIndex();
 
-		// bIsLocalPlayer ?먯젙 (PlayerId 鍮꾧탳)
+		// bIsLocalPlayer 판정 (PlayerId 비교)
 		Info.bIsLocalPlayer = (PS->GetPlayerId() == MyPS->GetPlayerId());
 
 		Infos.Add(Info);
 	}
 
-	// SlotIndex 湲곗??쇰줈 ?뺣젹?섏뿬 UI???꾨떖
+	// SlotIndex 기준으로 정렬하여 UI에 전달
 	Infos.Sort([](const FWaitingRoomPlayerInfo& A, const FWaitingRoomPlayerInfo& B)
 	{
 		return A.SlotIndex < B.SlotIndex;
@@ -2620,7 +2228,7 @@ void ADRPlayerController::InitOverlayForFreeRoam()
 
 	DRHUD->InitOverlay(this, PS, ASC, AS);
 
-	// ?꾩젽 ?몃━ ?꾩쟾 珥덇린?????대퉴由ы떚 ?꾩씠肄?媛뺤젣 媛깆떊
+	// 위젯 트리 완전 초기화 후 어빌리티 아이콘 강제 갱신
 	// 위젯 트리 구성이 끝난 다음 틱에 갱신 (매직 딜레이 대신 프레임 확정 타이밍)
 	GetWorldTimerManager().SetTimerForNextTick(
 		[WeakThis = TWeakObjectPtr<ADRPlayerController>(this)]()
@@ -2649,8 +2257,8 @@ void ADRPlayerController::InitOverlayForFreeRoam()
 
 void ADRPlayerController::ServerRequestPowerOn_Implementation()
 {
-	// ?몄뒪??寃利? Server RPC?대?濡??쒕쾭?먯꽌 ?ㅽ뻾??
-	// IsLocalController()濡??몄뒪??Listen Server) ?뺤씤
+	// 호스트 검증: Server RPC이므로 서버에서 실행됨
+	// IsLocalController()로 호스트(Listen Server) 확인
 	if (!IsLocalController() || !HasAuthority()) return;
 
 	ADRLobbyGameMode* LobbyGM = GetWorld()->GetAuthGameMode<ADRLobbyGameMode>();
@@ -2690,11 +2298,11 @@ void ADRPlayerController::ServerToggleReady_Implementation()
 
 void ADRPlayerController::ServerRequestKickPlayer_Implementation(APlayerState* TargetPlayerState)
 {
-	// ?몄뒪??寃利?
+	// 호스트 검증
 	if (!IsLocalController() || !HasAuthority()) return;
 	if (!TargetPlayerState) return;
 
-	// TargetPlayerState ??PlayerController 李얘린
+	// TargetPlayerState → PlayerController 찾기
 	APlayerController* TargetPC = Cast<APlayerController>(TargetPlayerState->GetOwner());
 	ADRPlayerController* TargetDRPC = Cast<ADRPlayerController>(TargetPC);
 

@@ -11,6 +11,7 @@
 #include "Character/DRRobotVacuumCharacter.h"
 #include "DRGameplayTags.h"
 #include "TimerManager.h"
+#include "DaeRune/DRLogChannels.h"
 
 void UDRVacuumDash::StartChargingGauge()
 {
@@ -57,16 +58,11 @@ void UDRVacuumDash::TickCharge()
 		: nullptr;
 	if (!AttributeSet) return;
 
-	// 물 부족분은 체력으로 대납 (부족분 ×0.5, ExecCalc_WaterCost와 동일 규칙) —
-	// 체력마저 부족하면(CheckCost와 동일하게 지불 후 0 이하가 되면) 충전 일시 정지 (게이지 유지, 다음 틱 재시도)
-	const float CurrentWater = AttributeSet->GetWater();
-	if (CurrentWater < WaterPerGauge)
+	// 낼 수 없으면(물 부족분을 체력으로 내면 0 이하 · 피의 계약 칩이면 체력만으로 판정) 충전 일시 정지 —
+	// 게이지는 유지하고 다음 틱에 다시 본다. 판정 규칙은 CheckCost · ExecCalc_WaterCost 와 같은 헬퍼다
+	if (!UDRAbilitySystemLibrary::CanPayWaterCost(ASC, WaterPerGauge, AttributeSet->GetWater(), AttributeSet->GetHealth()))
 	{
-		const float RequiredHealth = FMath::FloorToFloat((WaterPerGauge - CurrentWater) * 0.5f);
-		if (AttributeSet->GetHealth() <= RequiredHealth)
-		{
-			return;
-		}
+		return;
 	}
 
 	if (ChargeCostEffect)
@@ -78,7 +74,7 @@ void UDRVacuumDash::TickCharge()
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("UDRVacuumDash: ChargeCostEffect 미설정 — 물 소모 없이 충전됩니다."));
+		UE_LOG(LogDR, Warning, TEXT("UDRVacuumDash: ChargeCostEffect 미설정 — 물 소모 없이 충전됩니다."));
 	}
 
 	Gauge++;
@@ -115,6 +111,7 @@ void UDRVacuumDash::ReleaseGauge()
 	bDashing = true;
 	ApplyBuffStacks(Gauge);
 	Vacuum->SetDashCollisionEnabled(true);
+	Vacuum->SetDashing(true);   // 돌진 이펙트
 
 	// ★Plan5(돌진칩)★ ② 아군 통과 — 돌진하는 동안만. 실제 이동 무시는 캐릭터가 모든 머신에서 맞춘다 (D-115)
 	if (UDRAbilitySystemLibrary::HasUpgradeFeature(
@@ -162,7 +159,7 @@ void UDRVacuumDash::ApplyBuffStacks(int32 Stacks)
 
 	if (!SpeedBuffEffect)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("UDRVacuumDash: SpeedBuffEffect 미설정 — 이속 버프 없이 진행합니다."));
+		UE_LOG(LogDR, Warning, TEXT("UDRVacuumDash: SpeedBuffEffect 미설정 — 이속 버프 없이 진행합니다."));
 		return;
 	}
 
@@ -171,15 +168,18 @@ void UDRVacuumDash::ApplyBuffStacks(int32 Stacks)
 
 	// ★Plan5(돌진칩)★ ③ 칸당 이속 = SpeedBonusPerGauge × SkillSpeedBonus (0.2 → 0.14). GE 는 SetByCaller · MultiplyAdditive · by Target 5 (D-118).
 	//   ★모든 스펙에 넣는다★ — 빠지면 크기 0 → (0 − 1) × 스택 = 이속 0 이하 (T-121)
+	if (Stacks <= 0) return;
+
 	const float BonusPerGauge = FMath::Max(0.f, GetUpgradedFloat(EDRUpgradeStat::SkillSpeedBonus, SpeedBonusPerGauge));
-	for (int32 i = 0; i < Stacks; ++i)
+	const FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(SpeedBuffEffect, GetAbilityLevel(), ContextHandle);
+	if (SpecHandle.IsValid())
 	{
-		const FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(SpeedBuffEffect, GetAbilityLevel(), ContextHandle);
-		if (SpecHandle.IsValid())
-		{
-			SpecHandle.Data->SetSetByCallerMagnitude(FDRGameplayTags::Get().Data_MoveSpeed_Mult, 1.f + BonusPerGauge);
-			SpeedBuffHandle = ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-		}
+		SpecHandle.Data->SetSetByCallerMagnitude(FDRGameplayTags::Get().Data_MoveSpeed_Mult, 1.f + BonusPerGauge);
+
+		// 스펙 하나에 스택 수를 실어 한 번만 적용한다 — 칸마다 따로 적용하면 적용 · 복제 · 효과 이벤트가 칸 수만큼 났다.
+		// (스택형 GE 는 기존 스택에 이 수만큼 더해지고 상한(5)에서 잘린다 — 반복 적용과 결과가 같다)
+		SpecHandle.Data->SetStackCount(Stacks);
+		SpeedBuffHandle = ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 	}
 }
 
@@ -243,6 +243,10 @@ void UDRVacuumDash::OnBrakePressed()
 	if (!bDashing) return;
 
 	// 브레이크: 자기 데미지 없음, 게이지/버프 소멸
+	if (ADRRobotVacuumCharacter* Vacuum = GetVacuum())
+	{
+		Vacuum->MulticastPlayDashBrakeSound();
+	}
 	FinishDash(false, nullptr);
 }
 
@@ -261,6 +265,7 @@ void UDRVacuumDash::FinishDash(bool bFromImpact, AActor* HitActor)
 	{
 		Vacuum->SetSustainedDash(false);
 		Vacuum->SetDashCollisionEnabled(false);
+		Vacuum->SetDashing(false);
 		Vacuum->SetDashPassThroughAllies(false);   // ★Plan5(돌진칩)★ ② (D-115)
 
 		if (bFromImpact)
@@ -327,6 +332,7 @@ void UDRVacuumDash::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 			Vacuum->SetDashCharging(false);
 			Vacuum->SetSustainedDash(false);
 			Vacuum->SetDashCollisionEnabled(false);
+			Vacuum->SetDashing(false);
 			Vacuum->SetDashPassThroughAllies(false);   // ★Plan5(돌진칩)★ ② 사망 · 스턴 · 강제 취소 경로에서도 (T-125)
 
 			// 강제 취소 경로에서도 게이지 UI 리셋

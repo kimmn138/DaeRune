@@ -52,6 +52,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Facial Expression")
 	void RevertToDefault();
 
+	/** 부활 시 호출 - 사망 상태를 풀고 Default 표정 + Blink 타이머 재개 */
+	void OnRevive();
+
+	/**
+	 * 얼굴 슬롯에 표정 MID 를 다시 꽂는다.
+	 * 옷 적용이 모든 머티리얼 슬롯을 BP 기본값(또는 옷 머티리얼)으로 되돌리면 MID 가 메시에서 빠져
+	 * 표정을 바꿔도 화면에 보이지 않는다. 슬롯의 머티리얼이 바뀌었으면 그것으로 MID 를 새로 만든다.
+	 */
+	void RefreshFaceMaterial();
+
 	/** 런타임에 표정 텍스처를 설정/변경 (BP에서 추가 표정 등록용) */
 	UFUNCTION(BlueprintCallable, Category = "Facial Expression")
 	void SetExpressionTexture(EFacialExpression Expression, UTexture* Texture);

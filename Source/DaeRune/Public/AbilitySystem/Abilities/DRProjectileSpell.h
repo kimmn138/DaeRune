@@ -33,7 +33,6 @@ public:
 	float GetUpgradedProjectileScale() const;
 
 protected:
-	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 
 	UFUNCTION(BlueprintCallable, Category = "Projectile")
 	ADRProjectile* SpawnProjectile(const FVector& ProjectileTargetLocation, const FGameplayTag& SocketTag, bool bOverridePitch = false, float PitchOverride = 0.f);
@@ -44,6 +43,10 @@ protected:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Projectile")
 	ADRProjectile* SpawnProjectileAt(const FVector& SpawnLocation, const FVector& ProjectileTargetLocation, bool bOverridePitch = false, float PitchOverride = 0.f);
+
+	// 회전을 직접 주는 스폰 — Configure 는 FinishSpawning(BeginPlay) 전에 불린다 (유도 설정 등)
+	ADRProjectile* SpawnProjectileWithRotation(const FVector& SpawnLocation, const FRotator& Rotation,
+		TFunctionRef<void(ADRProjectile&)> Configure);
 
 	// 카메라 시점 라인트레이스로 조준점(크로스헤어 지점) 계산 — 투사체 계열 GA 공용 유틸
 	UFUNCTION(BlueprintPure, Category = "Projectile")

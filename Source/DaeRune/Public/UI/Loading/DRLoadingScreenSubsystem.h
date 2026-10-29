@@ -60,7 +60,8 @@ public:
 	/**
 	 * 심리스 트래블로 떠 있던 로딩 화면을 닫는다(퇴장 애니 후 제거).
 	 * 도착한 맵(스테이지)에서 준비가 끝난 시점에 호출 — 예: 스테이지 HUD/GameState BeginPlay.
-	 * 심리스 트래블은 PostLoadMapWithWorld가 호출되지 않으므로 도착 측에서 명시적으로 불러야 한다.
+	 * 스테이지→로비 귀환은 도착 시(PostLoadMapWithWorld) 서브시스템이 직접 호출한다.
+	 * 떠 있는 로딩 화면이 없으면 아무것도 하지 않는다.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Loading")
 	void FinishLoadingScreen();
@@ -72,6 +73,9 @@ public:
 	// WBP가 NotifyIntroFinished를 호출하지 않을 때 강제로 로드를 진행하는 최대 대기 시간(초).
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Loading")
 	float MaxIntroWaitTime = 4.0f;
+
+	// 퇴장 애니를 재생하고 끝나면(또는 안전 시간 뒤) 위젯을 제거한다
+	void PlayOutroAndRemove(class UDRLoadingScreenWidget* Widget);
 
 	// 심리스 로딩 화면이 최소한 표시될 시간(초). 로드가 더 빨라도 이 시간 동안은 유지(깜빡임 방지).
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Loading")
@@ -113,6 +117,12 @@ private:
 
 	// 유지(persistent) 위젯으로 뷰포트에 직접 붙인 Slate 인스턴스(제거 시 이 인스턴스를 사용).
 	TSharedPtr<SWidget> PersistentSlateWidget;
+
+	// 이번 심리스 트래블의 안내 문구(비어 있으면 WBP 기본 문구). 인트로·아웃트로 위젯에 같이 적용.
+	FText SeamlessLoadingMessage;
+
+	// 스테이지→로비 귀환 중이면 true — 로비에는 FinishLoadingScreen 을 부르는 곳이 없으므로 도착 시 직접 닫는다.
+	bool bFinishOnSeamlessArrival = false;
 
 	// 심리스 로딩 화면이 표시되기 시작한 실제 시각(월드 독립적, 최소 표시 시간 계산용).
 	double SeamlessShowStartTime = 0.0;

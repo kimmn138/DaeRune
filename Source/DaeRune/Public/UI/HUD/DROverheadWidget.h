@@ -22,7 +22,4 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void SetDisplayText(FString TextToDisplay);
-
-protected:
-	virtual void NativeDestruct() override;
 };

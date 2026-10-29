@@ -70,10 +70,22 @@ struct FDRGameplayEffectContext : public FGameplayEffectContext
 	GENERATED_BODY()
 
 public:
+	/**
+	 * 핸들이 담은 컨텍스트가 FDRGameplayEffectContext(또는 파생)일 때만 돌려준다.
+	 * ★static_cast 로 바로 바꾸지 않는다★ — 엔진이 부모 타입 컨텍스트를 넘기는 경로가 있으면 범위 밖 메모리를 읽고 쓴다.
+	 */
+	static FDRGameplayEffectContext* FromHandle(const FGameplayEffectContextHandle& Handle)
+	{
+		FGameplayEffectContext* Base = const_cast<FGameplayEffectContext*>(Handle.Get());
+		return (Base && Base->GetScriptStruct()->IsChildOf(StaticStruct()))
+			? static_cast<FDRGameplayEffectContext*>(Base)
+			: nullptr;
+	}
+
 	bool IsSuccessfulDebuff() const { return bIsSuccessfulDebuff; }
 	float GetDebuffDamage() const { return DebuffDamage; }
 	float GetDebuffDuration() const { return DebuffDuration; }
-	TSharedPtr<FGameplayTag> GetDamageType() const { return DamageType; }
+	const FGameplayTag& GetDamageType() const { return DamageType; }
 	FVector GetDeathImpulse() const { return DeathImpulse; }
 	FVector GetKnockbackForce() const { return KnockbackForce; }
 	const FGameplayTagContainer& GetSourceAbilityTags() const { return SourceAbilityTags; }
@@ -81,7 +93,7 @@ public:
 	void SetIsSuccessfulDebuff(bool bInIsDebuff) { bIsSuccessfulDebuff = bInIsDebuff; }
 	void SetDebuffDamage(float InDamage) { DebuffDamage = InDamage; }
 	void SetDebuffDuration(float InDuration) { DebuffDuration = InDuration; }
-	void SetDamageType(TSharedPtr<FGameplayTag> InDamageType) { DamageType = InDamageType; }
+	void SetDamageType(const FGameplayTag& InDamageType) { DamageType = InDamageType; }
 	void SetDeathImpulse(const FVector& InImpulse) { DeathImpulse = InImpulse; }
 	void SetKnockbackForce(const FVector& InForce) { KnockbackForce = InForce; }
 	void SetSourceAbilityTags(const FGameplayTagContainer& InTags) { SourceAbilityTags = InTags; }
@@ -95,9 +107,11 @@ public:
 
 	// 컨텍스트 깊은 복사
 	/** Creates a copy of this context, used to duplicate for later modifications */
-	virtual FGameplayEffectContext* Duplicate() const override
+	virtual FDRGameplayEffectContext* Duplicate() const override
 	{
-		FGameplayEffectContext* NewContext = new FGameplayEffectContext();
+		// ★반드시 자기 타입으로 만든다★ — 부모 타입으로 만들면 커스텀 필드가 잘려 나가고(슬라이싱)
+		// 이후 FDR 로 캐스팅하는 쪽이 범위 밖을 읽는다 (TargetData 로 GE 적용 · 연결 GE 경로)
+		FDRGameplayEffectContext* NewContext = new FDRGameplayEffectContext();
 		*NewContext = *this;
 		if (GetHitResult())
 		{
@@ -120,7 +134,8 @@ public:
 	UPROPERTY()
 	float DebuffDuration = 0.f;
 
-	TSharedPtr<FGameplayTag> DamageType;
+	UPROPERTY()
+	FGameplayTag DamageType;
 
 	UPROPERTY()
 	FVector DeathImpulse = FVector::ZeroVector;

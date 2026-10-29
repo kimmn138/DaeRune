@@ -8,7 +8,6 @@
 #include "Character/DRCharacter.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
-#include "Sound/DRSoundManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/DRSoundDataAsset.h"
 #include "DRAssetManager.h"
@@ -16,6 +15,9 @@
 
 ADRWaterSource::ADRWaterSource()
 {
+    // bIsAvailable 복제 · 사운드 멀티캐스트용 (BP 설정에 기대지 않는다)
+    bReplicates = true;
+
     AvailableVFXComponent1 = CreateDefaultSubobject<UNiagaraComponent>(TEXT("AvailableVFX1"));
     AvailableVFXComponent1->SetupAttachment(RootComponent);
     AvailableVFXComponent1->bAutoActivate = false;
@@ -34,17 +36,7 @@ void ADRWaterSource::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 
 void ADRWaterSource::MulticastPlayWaterGainSound_Implementation()
 {
-    // Actor의 World를 직접 사용해서 사운드 재생 (클라이언트에서 확실히 동작)
-    if (UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized()))
-    {
-        if (UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset())
-        {
-            if (SoundData->WaterGainSound)
-            {
-                UGameplayStatics::PlaySoundAtLocation(this, SoundData->WaterGainSound, GetActorLocation());
-            }
-        }
-    }
+    UDRSoundDataAsset::PlayAtLocation(this, &UDRSoundDataAsset::WaterGainSound, GetActorLocation());
 }
 
 void ADRWaterSource::OnOverlap(AActor* TargetActor)
@@ -52,7 +44,7 @@ void ADRWaterSource::OnOverlap(AActor* TargetActor)
     if (!HasAuthority()) return;
     if (!bIsAvailable) return;
 
-    // �÷��̾�� �� ä��� �õ�
+    // 플레이어면 물 채우기 시도
     if (ADRCharacter* PlayerCharacter = Cast<ADRCharacter>(TargetActor))
     {
         FillPlayerWater(PlayerCharacter);
@@ -61,7 +53,7 @@ void ADRWaterSource::OnOverlap(AActor* TargetActor)
 
 void ADRWaterSource::OnEndOverlap(AActor* TargetActor)
 {
-    // ��������Ʈ���� �ʿ�� �������̵�
+    // 블루프린트에서 필요시 오버라이드
 }
 
 void ADRWaterSource::FillPlayerWater(AActor* TargetActor)
@@ -80,13 +72,13 @@ void ADRWaterSource::FillPlayerWater(AActor* TargetActor)
     );
     if (!TargetAS) return;
 
-    // �̹� ���� ���� �������� ����
+    // 이미 물이 가득 차있으면 무시
     if (FMath::IsNearlyEqual(TargetAS->GetWater(), TargetAS->GetMaxWater()))
     {
         return;
     }
 
-    // �� ä��� ȿ�� ����
+    // 물 채우기 효과 적용
     if (WaterFillEffectClass)
     {
         FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
@@ -104,11 +96,11 @@ void ADRWaterSource::FillPlayerWater(AActor* TargetActor)
 
             MulticastPlayWaterGainSound();
 
-            // ���� �˸�
+            // 사용됨 알림
             SetWaterSourceAvailable(false);
             StartRechargeTimer();
 
-            // ��������Ʈ �̺�Ʈ ȣ��
+            // 블루프린트 이벤트 호출
             OnWaterSourceUsed(PlayerCharacter);
 
             // C++ 델리게이트 브로드캐스트 (튜토리얼 매니저 등 외부 리스너 통지)
@@ -148,7 +140,7 @@ void ADRWaterSource::OnSourceRecharged()
 
     SetWaterSourceAvailable(true);
 
-    // ��������Ʈ �̺�Ʈ ȣ��
+    // 블루프린트 이벤트 호출
     OnWaterSourceRecharged();
 }
 

@@ -15,6 +15,7 @@
 #include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
 #include "Interaction/CombatInterface.h"
+#include "DaeRune/DRLogChannels.h"
 
 void UDRPhase1::OnPhaseStart()
 {
@@ -25,8 +26,6 @@ void UDRPhase1::OnPhaseStart()
 	// 1) 페이즈 목표 / GameState 초기화
 	SetupPhaseObjective(1);
 
-	GameState->SetCleanserAreaSecured(false);
-	GameState->SetRemainingEnemiesInArea(0);
 	GameState->SetCollectedParts(0);
 	GameState->SetCleanserActivated(false);
 
@@ -36,7 +35,7 @@ void UDRPhase1::OnPhaseStart()
 	KeepSingleCleanserSite();
 	if (!ActiveSite.IsValid())
 	{
-		UE_LOG(LogTemp, Error, TEXT("[Phase1] ActiveSite is invalid after KeepSingleCleanserSite()."));
+		UE_LOG(LogDR, Error, TEXT("[Phase1] ActiveSite is invalid after KeepSingleCleanserSite()."));
 		return;
 	}
 
@@ -70,7 +69,7 @@ void UDRPhase1::OnPhaseStart()
 
 	// 5) GameState 진행률 초기화 (CleanserSite::RequiredPartsCount = 2 고정)
 	FPhaseObjectiveData PhaseObjective = GameState->GetCurrentPhaseObjective();
-	PhaseObjective.RequiredCount = RequiredPartsToComplete;
+	PhaseObjective.RequiredCount = GetRequiredParts();
 	GameState->SetPhaseObjective(PhaseObjective);
 	GameState->UpdatePhaseObjectiveProgress(0);
 }
@@ -79,7 +78,7 @@ bool UDRPhase1::IsCompleted() const
 {
 	// 부품 설치 완료 + 클렌저 활성화 시 페이즈 완료
 	if (!GameState) return false;
-	return GameState->GetCollectedParts() >= RequiredPartsToComplete && GameState->IsCleanserActivated();
+	return GameState->GetCollectedParts() >= GetRequiredParts() && GameState->IsCleanserActivated();
 }
 
 void UDRPhase1::OnPhaseEnd()
@@ -104,31 +103,17 @@ void UDRPhase1::OnPhaseEnd()
 	Super::OnPhaseEnd();
 }
 
-void UDRPhase1::OnEnemyDeath(AActor* DeadEnemy)
-{
-	Super::OnEnemyDeath(DeadEnemy);
-
-	if (!GameMode || !GameState || !bIsPhaseActive) return;
-
-	// 통계 갱신: 남은 사이트 주변 적 수
-	const int32 AliveCount = GetAliveEnemyCount();
-	GameState->SetRemainingEnemiesInArea(AliveCount);
-
-	// 페이즈 완료 조건은 부품 설치 기반이므로 적 처치만으로는 완료 처리하지 않는다.
-	// (사이트 주변 적이 모두 죽어도 부품이 모두 설치되어야 다음 페이즈로 진행)
-}
-
 void UDRPhase1::KeepSingleCleanserSite()
 {
 	if (CleanserSites.Num() == 0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[Phase1] No CleanserSite found in the level."));
+		UE_LOG(LogDR, Error, TEXT("[Phase1] No CleanserSite found in the level."));
 		return;
 	}
 
 	if (CleanserSites.Num() > 1)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Phase1] %d CleanserSites found. Keeping index 0, destroying rest."), CleanserSites.Num());
+		UE_LOG(LogDR, Warning, TEXT("[Phase1] %d CleanserSites found. Keeping index 0, destroying rest."), CleanserSites.Num());
 	}
 
 	const int32 IndexToKeep = 0;
@@ -170,45 +155,19 @@ void UDRPhase1::SpawnEnemiesAroundCleanserSite(ADRCleanserSite* Site)
 
 	if (EnemiesToSpawn.Num() != Locations.Num())
 	{
-		UE_LOG(LogTemp, Warning,
+		UE_LOG(LogDR, Warning,
 			TEXT("[Phase1] EnemiesToSpawn (%d) and CleanserSite spawn locations (%d) mismatch. Spawning %d."),
 			EnemiesToSpawn.Num(), Locations.Num(), SpawnCount);
 	}
 
 	for (int32 i = 0; i < SpawnCount; ++i)
 	{
-		TSubclassOf<ADREnemy> EnemyClass = EnemiesToSpawn[i];
-		if (!EnemyClass) continue;
+		ADREnemy* Spawned = SpawnEnemyDeferred(EnemiesToSpawn[i], FTransform(Locations[i]));
+		if (!Spawned) continue;
 
-		AActor* SpawnedActor = SpawnEnemy(EnemyClass, Locations[i]);
-		if (ADREnemy* Spawned = Cast<ADREnemy>(SpawnedActor))
-		{
-			ApplyPhase1Tag(Spawned);
-		}
+		TrackSpawnedEnemy(Spawned);
+		ApplyPhase1Tag(Spawned);
 	}
-}
-
-AActor* UDRPhase1::SpawnEnemy(TSubclassOf<AActor> EnemyClass, const FVector& Location)
-{
-	if (!GameMode || !EnemyClass) return nullptr;
-
-	UWorld* World = GameMode->GetWorld();
-	if (!World) return nullptr;
-
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
-	AActor* SpawnedEnemy = World->SpawnActor<AActor>(EnemyClass, Location, FRotator::ZeroRotator, SpawnParams);
-	if (!SpawnedEnemy) return nullptr;
-
-	// 사망 델리게이트 바인딩
-	if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(SpawnedEnemy))
-	{
-		CombatInterface->GetOnDeathDelegate().AddDynamic(this, &UDRPhase1::OnEnemyDeath);
-	}
-
-	SpawnedEnemies.Add(SpawnedEnemy);
-	return SpawnedEnemy;
 }
 
 void UDRPhase1::CollectSpawnGroups()
@@ -239,17 +198,15 @@ void UDRPhase1::AssignPartCarriersForAllGroups()
 
 	if (!ActiveSite.IsValid()) return;
 
-	// CleanserSite::RequiredPartsCount = 2 고정. 그룹은 정확히 2개를 권장.
-	constexpr int32 RequiredParts = 2;
-
-	if (SpawnGroups.Num() != RequiredParts)
+	// 그룹 하나당 부품 하나 — 그룹은 정확히 GetRequiredParts() 개를 권장한다
+	if (SpawnGroups.Num() != GetRequiredParts())
 	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("[Phase1] SpawnGroup count (%d) does not match RequiredPartsCount (%d). Will assign carriers to first %d groups."),
-			SpawnGroups.Num(), RequiredParts, FMath::Min(SpawnGroups.Num(), RequiredParts));
+		UE_LOG(LogDR, Warning,
+			TEXT("[Phase1] SpawnGroup count (%d) does not match required parts (%d). Will assign carriers to first %d groups."),
+			SpawnGroups.Num(), GetRequiredParts(), FMath::Min(SpawnGroups.Num(), GetRequiredParts()));
 	}
 
-	const int32 MaxCarrierGroups = FMath::Min(SpawnGroups.Num(), RequiredParts);
+	const int32 MaxCarrierGroups = FMath::Min(SpawnGroups.Num(), GetRequiredParts());
 	for (int32 i = 0; i < MaxCarrierGroups; ++i)
 	{
 		ADREnemySpawnGroup* Group = SpawnGroups[i];
@@ -282,7 +239,7 @@ ADREnemy* UDRPhase1::PickPartCarrierFromGroup(ADREnemySpawnGroup* Group) const
 
 	if (Candidates.Num() == 0)
 	{
-		UE_LOG(LogTemp, Warning,
+		UE_LOG(LogDR, Warning,
 			TEXT("[Phase1] SpawnGroup %s has no non-Armadillo carrier candidates. Skipping part assignment."),
 			*Group->GetName());
 		return nullptr;
@@ -307,11 +264,11 @@ void UDRPhase1::ConfigurePartCarrier(ADREnemy* Carrier) const
 
 	// 부품 운반자는 이동속도 50% 감속. MoveSpeed 어트리뷰트 베이스를 직접 조정하면
 	// UDRAttributeSet::PostAttributeChange에서 CharacterMovement::MaxWalkSpeed가 자동 동기화됨.
+	// ★현재값(일시 버프·감속 포함)이 아니라 베이스값을 절반으로 한다 — 그 순간 걸려 있던 효과가 베이스에 굳지 않게
 	if (UAbilitySystemComponent* ASC = Carrier->GetAbilitySystemComponent())
 	{
 		const FGameplayAttribute MoveSpeedAttr = UDRAttributeSet::GetMoveSpeedAttribute();
-		const float CurrentMoveSpeed = ASC->GetNumericAttribute(MoveSpeedAttr);
-		ASC->SetNumericAttributeBase(MoveSpeedAttr, CurrentMoveSpeed * 0.5f);
+		ASC->SetNumericAttributeBase(MoveSpeedAttr, ASC->GetNumericAttributeBase(MoveSpeedAttr) * CarrierMoveSpeedRatio);
 	}
 }
 
@@ -362,4 +319,25 @@ ADRDoorManager* UDRPhase1::GetDoorManager()
 	}
 
 	return CachedDoorManager;
+}
+
+int32 UDRPhase1::GetRequiredParts() const
+{
+	static constexpr int32 FallbackRequiredParts = 2;
+
+	for (const TObjectPtr<ADRCleanserSite>& Site : ActiveCleanserSites)
+	{
+		if (Site)
+		{
+			return Site->GetRequiredPartsCount();
+		}
+	}
+	for (const TObjectPtr<ADRCleanserSite>& Site : CleanserSites)
+	{
+		if (Site)
+		{
+			return Site->GetRequiredPartsCount();
+		}
+	}
+	return FallbackRequiredParts;
 }

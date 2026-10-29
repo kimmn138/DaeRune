@@ -2,19 +2,24 @@
 
 
 #include "Input/DRInputConfig.h"
+#include "DaeRune/DRLogChannels.h"
 
 const UInputAction* UDRInputConfig::FindAbilityInputActionForTag(const FGameplayTag& InputTag, bool bLogNotFound) const
 {
-	// ÀÔ·Â ¾×¼Ç ¹è¿­¿¡¼­ ÀÏÄ¡ÇÏ´Â ÅÂ±× °Ë»ö
+	// ì…ë ¥ ì•¡ì…˜ ë°°ì—´ì—ì„œ ì¼ì¹˜í•˜ëŠ” íƒœê·¸ ê²€ìƒ‰
 	for (const FDRInputAction& Action : AbilityInputActions)
 	{
-		// InputActionÀÌ À¯È¿ÇÏ°í ÅÂ±×°¡ ÀÏÄ¡ÇÏ´ÂÁö È®ÀÎ
+		// InputActionì´ ìœ íš¨í•˜ê³  íƒœê·¸ê°€ ì¼ì¹˜í•˜ëŠ”ì§€ í™•ì¸
 		if (Action.InputAction && Action.InputTag == InputTag)
 		{
 			return Action.InputAction;
 		}
 	}
 
-	// ÀÏÄ¡ÇÏ´Â ¾×¼ÇÀÌ ¾øÀ¸¸é nullptr ¹İÈ¯
+	// ì¼ì¹˜í•˜ëŠ” ì•¡ì…˜ì´ ì—†ìœ¼ë©´ nullptr ë°˜í™˜
+	if (bLogNotFound)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[InputConfig] %s ì— ì…ë ¥ íƒœê·¸ [%s] ì˜ ì•¡ì…˜ì´ ì—†ìŠµë‹ˆë‹¤."), *GetNameSafe(this), *InputTag.ToString());
+	}
 	return nullptr;
 }

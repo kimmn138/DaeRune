@@ -29,16 +29,11 @@ void UDRS2DefensePhase::OnPhaseStart()
 
 	SetupPhaseObjectiveByRow(TEXT("S2P3_Enter"));
 
-	if (ADRS2RoomTrigger* Trigger = Director->Trigger_Room3)
-	{
-		Trigger->OnAllInside.AddDynamic(this, &UDRS2DefensePhase::HandleAllInsideRoom3);
-		Trigger->OnCountChanged.AddDynamic(this, &UDRS2DefensePhase::HandleInsideCountChanged);
-		Trigger->Arm();
-	}
-	else
+	if (!Director->Trigger_Room3)
 	{
 		UE_LOG(LogDR, Error, TEXT("[S2P3] Trigger_Room3 미배선 - 방3 진행 불가"));
 	}
+	ArmRoomTrigger(Director->Trigger_Room3);
 
 	// 비정상 진입(페이즈 스킵 치트 등) 대비 안전망
 	//
@@ -84,14 +79,6 @@ void UDRS2DefensePhase::EnsurePartExists(ADRS2StageDirector* Director)
 		TEXT("[S2P3] 월드에 부품이 없어 안전망으로 방3에 부품을 생성했습니다 (페이즈 스킵 등 비정상 진입)."));
 }
 
-void UDRS2DefensePhase::HandleInsideCountChanged(int32 InsideCount, int32 /*AliveTotal*/)
-{
-	// 방이 시작된 뒤에는 진행도가 "두더지 처치 수"이므로 입장 인원으로 덮어쓰지 않는다.
-	if (bRoomStarted || !GameState) return;
-
-	GameState->UpdatePhaseObjectiveProgress(InsideCount);
-}
-
 bool UDRS2DefensePhase::IsPartPresentInRoom3(ADRS2StageDirector* Director) const
 {
 	UWorld* World = GetPhaseWorld();
@@ -112,7 +99,7 @@ bool UDRS2DefensePhase::IsPartPresentInRoom3(ADRS2StageDirector* Director) const
 	return false;
 }
 
-void UDRS2DefensePhase::HandleAllInsideRoom3()
+void UDRS2DefensePhase::OnRoomAllInside()
 {
 	if (bRoomStarted) return;
 
@@ -184,7 +171,7 @@ void UDRS2DefensePhase::HandleRoom4Entered(ADRCharacter* Who)
 	// 1명만 들어간다. 게이트는 bDeactivateOnUse 로 이미 잠겼지만 명시적으로 한 번 더 보장한다.
 	SetGateActive(Director->Gate_Room3ToRoom4, false);
 
-	SetupPhaseObjectiveByRow(TEXT("S2P3_Hold"), 20);
+	SetupPhaseObjectiveByRow(TEXT("S2P3_Hold"), GetMoleGoalKills(Director));
 
 	UE_LOG(LogDR, Log, TEXT("[S2P3] 방4 입장: %s"), Who ? *Who->GetName() : TEXT("Unknown"));
 }
@@ -203,8 +190,7 @@ void UDRS2DefensePhase::HandlePartInstalled(ADRCleanserSite* Site)
 
 	StartWaveLoop();
 
-	const int32 GoalKills = Director->Room4MoleGame ? Director->Room4MoleGame->GetGoalKills() : 20;
-	SetupPhaseObjectiveByRow(TEXT("S2P3_Hold"), GoalKills);
+	SetupPhaseObjectiveByRow(TEXT("S2P3_Hold"), GetMoleGoalKills(Director));
 	GameState->UpdatePhaseObjectiveProgress(0);
 
 	UE_LOG(LogDR, Log, TEXT("[S2P3] 부품 설치 - 두더지 + 방3 웨이브 시작"));
@@ -309,23 +295,23 @@ void UDRS2DefensePhase::ReviveAllDeadPlayers(ADRS2StageDirector* Director)
 		return;
 	}
 
+	// ★사망 2.2초 뒤 시체(폰)가 정리된다★ — 폰이 없는 사망자도 대상이다.
+	// 게임모드가 폰이 남아 있으면 되살리고, 없으면 같은 클래스로 새로 만든다 (ADRGameModeBase::RevivePlayer)
 	int32 Slot = 0;
 	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 	{
-		ADRCharacter* Character = It->IsValid() ? Cast<ADRCharacter>(It->Get()->GetPawn()) : nullptr;
-		if (!Character) continue;
-
-		// IsDead 는 ICombatInterface 의 BlueprintNativeEvent
-		if (!ICombatInterface::Execute_IsDead(Character)) continue;
+		APlayerController* PC = It->Get();
+		if (!PC) continue;
 
 		const int32 PointIndex = Director->Room3RevivePoints.IsValidIndex(Slot) ? Slot : 0;
 		const AActor* RevivePoint = Director->Room3RevivePoints[PointIndex];
 		if (!IsValid(RevivePoint)) continue;
 
-		Character->Revive(RevivePoint->GetActorLocation(), ReviveHealthRatio, ReviveWaterRatio);
+		// 살아 있는 플레이어는 false — 부활 지점 슬롯을 쓰지 않는다
+		if (!GameMode->RevivePlayer(PC, RevivePoint->GetActorTransform(), ReviveHealthRatio, ReviveWaterRatio)) continue;
 		++Slot;
 
-		UE_LOG(LogDR, Log, TEXT("[S2P3] 부활: %s"), *Character->GetName());
+		UE_LOG(LogDR, Log, TEXT("[S2P3] 부활: %s"), PC->PlayerState ? *PC->PlayerState->GetPlayerName() : *PC->GetName());
 	}
 }
 
@@ -345,22 +331,10 @@ void UDRS2DefensePhase::KillAllSpawnedEnemies()
 	}
 }
 
-void UDRS2DefensePhase::DestroyAllSpawnedEnemies()
+int32 UDRS2DefensePhase::GetMoleGoalKills(const ADRS2StageDirector* Director) const
 {
-	// 조용히 제거 (연출/보상 없음). 사망 델리게이트도 해제한다.
-	for (int32 i = SpawnedEnemies.Num() - 1; i >= 0; --i)
-	{
-		if (!SpawnedEnemies.IsValidIndex(i) || !SpawnedEnemies[i].IsValid()) continue;
-
-		AActor* Enemy = SpawnedEnemies[i].Get();
-		if (ICombatInterface* CombatInterface = Cast<ICombatInterface>(Enemy))
-		{
-			CombatInterface->GetOnDeathDelegate().RemoveDynamic(this, &UDRPhaseBase::OnEnemyDeath);
-		}
-		Enemy->Destroy();
-	}
-
-	SpawnedEnemies.Empty();
+	constexpr int32 FallbackGoalKills = 20;
+	return (Director && Director->Room4MoleGame) ? Director->Room4MoleGame->GetGoalKills() : FallbackGoalKills;
 }
 
 // ================= 예외 처리 (Plan6 §14.3.5) =================
@@ -380,7 +354,7 @@ void UDRS2DefensePhase::PrepareRoom4Retry(ADRS2StageDirector* Director, bool bEj
 	//    사망/이탈 어느 경로든 동일하게 "그냥 제거"한다 (사망 연출·물 보상 없음).
 	StopWaveLoop();
 	PendingSpawnCount = 0;
-	DestroyAllSpawnedEnemies();
+	DestroyTrackedEnemies();
 
 	// ③ 부품을 되돌린다
 	ADRCleanserPart* EjectedPart = nullptr;
@@ -463,12 +437,7 @@ void UDRS2DefensePhase::OnPhaseEnd()
 
 	if (ADRS2StageDirector* Director = GetDirector())
 	{
-		if (ADRS2RoomTrigger* Trigger = Director->Trigger_Room3)
-		{
-			Trigger->OnAllInside.RemoveDynamic(this, &UDRS2DefensePhase::HandleAllInsideRoom3);
-			Trigger->OnCountChanged.RemoveDynamic(this, &UDRS2DefensePhase::HandleInsideCountChanged);
-			Trigger->Disarm();
-		}
+		DisarmRoomTrigger(Director->Trigger_Room3);
 		if (ADRS2TeleportGate* Gate = Director->Gate_Room3ToRoom4)
 		{
 			Gate->OnGateUsed.RemoveDynamic(this, &UDRS2DefensePhase::HandleRoom4Entered);

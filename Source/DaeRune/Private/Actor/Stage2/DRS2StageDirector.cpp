@@ -91,18 +91,19 @@ void ADRS2StageDirector::ValidateWiring() const
 		++MissingCount;
 	}
 
-	// 스폰 지점 (개수 경고)
-	if (Room1SpawnPoints.Num() < 6)
+	// 스폰 지점 (개수 경고) — 비어 있으면 페이즈가 RoomID 로 레벨을 스캔하므로(UDRS2PhaseBase::InitSpawnPoints)
+	// 직접 지정했는데 모자랄 때만 경고한다. 스캔 결과가 0 이면 페이즈 쪽이 따로 알린다.
+	if (Room1SpawnPoints.Num() > 0 && Room1SpawnPoints.Num() < 6)
 	{
 		UE_LOG(LogDR, Warning,
 			TEXT("[S2Director] Room1SpawnPoints %d개 - 4인 웨이브1(9마리) 동시 스폰에 부족할 수 있습니다."),
 			Room1SpawnPoints.Num());
 	}
-	if (Room3SpawnPoints.Num() < 4)
+	if (Room3SpawnPoints.Num() > 0 && Room3SpawnPoints.Num() < 4)
 	{
 		UE_LOG(LogDR, Warning, TEXT("[S2Director] Room3SpawnPoints %d개 - 4개 이상 권장."), Room3SpawnPoints.Num());
 	}
-	if (Room5SpawnPoints.Num() < 4)
+	if (Room5SpawnPoints.Num() > 0 && Room5SpawnPoints.Num() < 4)
 	{
 		UE_LOG(LogDR, Warning, TEXT("[S2Director] Room5SpawnPoints %d개 - 4개 이상 권장."), Room5SpawnPoints.Num());
 	}

@@ -26,7 +26,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnReadyStateChangedSignature, bool,
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnUpgradeRuntimeChangedSignature);
 
 /**
- * DaeRune �÷��̾��� ���� ���� ���� Ŭ����
+ * DaeRune 플레이어의 게임 상태 관리 클래스
  */
 UCLASS()
 class DAERUNE_API ADRPlayerState : public APlayerState, public IAbilitySystemInterface
@@ -35,14 +35,14 @@ class DAERUNE_API ADRPlayerState : public APlayerState, public IAbilitySystemInt
 	
 public:
 	ADRPlayerState();
-	// GAS �������̽� ����
+	// GAS 인터페이스 구현
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	UAttributeSet* GetAttributeSet() const { return AttributeSet; }
 
-	// ��Ʈ��ũ ���ø����̼� ����
+	// 네트워크 리플리케이션 설정
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// ���� �ý���
+	// 전투 시스템
 	void EnterCombat();
 	void ExitCombat();
 	bool IsInCombat() const { return bIsInCombat; }
@@ -57,10 +57,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Combat")
 	float GetEffectiveCombatExitDelay() const;
 
-	// �����̳� �ý��� ����
+	// 컨테이너 시스템 연동
 	int32 GetCurrentContainerIndex() const;
 
-	// UI �� �����÷��� �˸� ��������Ʈ
+	// UI 및 게임플레이 알림 델리게이트
 	UPROPERTY(BlueprintAssignable)
 	FOnCombatStateChangedSignature OnCombatStateChanged;
 
@@ -121,6 +121,10 @@ public:
 	// 서버 전용: 정화된 장착 목록을 싣고 캐시를 재구축한다.
 	void SetEquippedChips(const TArray<FName>& InChips);
 
+	// 복제된 EquippedChips + 선택 클래스로 수치 캐시를 다시 만들고, 폰에 갱신을 통지한다.
+	// 장착이 그대로여도 칩 수치(카탈로그)가 바뀌면 다시 불러야 한다 — 튜닝 파일(UDRTuningSubsystem)이 그렇게 쓴다.
+	void RebuildUpgradeRuntime();
+
 	/**
 	 * ★Plan3(공용칩)★ 장착 칩이 부여한 기능 스위치 조회.
 	 * UI 가 FDRUpgradeRuntime 내부를 직접 뒤지지 않게 하는 단일 경로다.
@@ -158,14 +162,14 @@ protected:
 	// Seamless Travel 시 커스텀 프로퍼티 복사
 	virtual void CopyProperties(APlayerState* PlayerState) override;
 
-	// GAS ������Ʈ��
+	// GAS 컴포넌트들
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Abilities")
 	TObjectPtr<UAttributeSet> AttributeSet;
 
-	// ��Ʈ��ũ ����ȭ ������
+	// 네트워크 동기화 변수들
 	UPROPERTY(ReplicatedUsing = OnRep_IsInCombat)
 	bool bIsInCombat = false;
 
@@ -225,11 +229,11 @@ protected:
 	// 로컬 플레이어의 대기실 UI 갱신 (대기실 관련 OnRep 공용 헬퍼)
 	void RefreshLocalWaitingRoomUI() const;
 
-	// 복제된 EquippedChips + 선택 클래스로 수치 캐시를 다시 만들고, 폰에 갱신을 통지한다.
-	void RebuildUpgradeRuntime();
-
 	// 소유 클라이언트에서만: 현재 선택 클래스의 장착 목록을 서버에 보고
 	void ReportUpgradeLoadoutIfLocal();
+
+	// 이 머신에서 나를 PlayerState 로 가진 로컬 컨트롤러 (없으면 null)
+	class ADRPlayerController* FindLocalOwningController() const;
 
 	// 입고 있는 옷을 폰에 반영한다. 폰이 아직 없으면 아무것도 안 한다 —
 	// 폰이 나중에 오면 ADRCharacter::PossessedBy / OnRep_PlayerState 가 여기서 끌어간다 (Plan(옷장) M3)
@@ -242,10 +246,10 @@ private:
 	// 장착 칩을 펼친 수치 캐시 (복제 안 함 — 서버/각 클라가 각자 구축)
 	FDRUpgradeRuntime CachedUpgradeRuntime;
 
-	// ���� ���� Ÿ�̸� ����
+	// 전투 상태 타이머 관리
 	FTimerHandle CombatTimerHandle;
 
-	// ���� ���� ��� �ð�
+	// 전투 종료 대기 시간
 	UPROPERTY(EditDefaultsOnly, Category = "Combat")
 	float CombatExitDelay = 5.0f;
 
@@ -253,7 +257,7 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Combat", meta = (ClampMin = "0.1"))
 	float MinCombatExitDelay = 1.0f;
 
-	// ü�� ȸ�� �ý���
+	// 체력 회복 시스템
 	UPROPERTY(EditDefaultsOnly, Category = "Gameplay Effects")
 	TSubclassOf<UGameplayEffect> HealthRegenEffectClass;
 
@@ -265,10 +269,10 @@ private:
 	void CheckAndStartHealthRegen();
 	void CheckHealthRegenStatus();
 
-	// ü�� ���� ����
+	// 체력 변경 감지
 	void OnHealthChanged(const FOnAttributeChangeData& Data);
 
-	// ����ȭ�� ���� ĳ��
+	// 최적화를 위한 캐싱
 	FGameplayEffectSpecHandle CachedHealthRegenSpec;
 	void InitializeHealthRegenSpec();
 };

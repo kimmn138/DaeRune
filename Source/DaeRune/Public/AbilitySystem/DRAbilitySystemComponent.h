@@ -27,6 +27,8 @@ class DAERUNE_API UDRAbilitySystemComponent : public UAbilitySystemComponent
 	GENERATED_BODY()
 	
 public:
+	// 소유 플레이어 UI 용 콜백을 묶는다 (플레이어 전용 — 적은 리스너가 없어 부르지 않는다).
+	// ASC 는 PlayerState 에 있어 리스폰 · 클래스 변경으로 다시 빙의해도 같은 객체다 — 여러 번 불려도 1회만 묶는다.
 	void AbilityActorInfoSet();
 
 	FEffectAssetTags EffectAssetTags;
@@ -45,15 +47,8 @@ public:
 	// 외부에서 "지금 이 AbilityTag 가 차단 상태인가?" 를 묻는 헬퍼
 	bool IsAbilityTagBlocked(const FGameplayTag& AbilityTag) const;
 
-	// 동적으로 어빌리티가 부여되는 경로(예: 튜토리얼)에서 호출. 등록 누락 방지.
-	void RegisterAbilityTagEvents();
-
 	void AddCharacterAbilities(const TArray<TSubclassOf<UGameplayAbility>>& StartupAbilities);
-	void AddCharacterPassiveAbilities(const TArray<TSubclassOf<UGameplayAbility>>& StartupPassiveAbilities);
 	bool bStartupAbilitiesGiven = false;
-
-	// InputTag 캐시 초기화 (ClearAllAbilities 후 호출)
-	void ClearInputTagCache() { InputTagToAbilityMap.Empty(); }
 
 	void AbilityInputTagPressed(const FGameplayTag& InputTag);
 	void AbilityInputTagHeld(const FGameplayTag& InputTag);
@@ -63,12 +58,9 @@ public:
 	static FGameplayTag GetAbilityTagFromSpec(const FGameplayAbilitySpec& AbilitySpec);
 	static FGameplayTag GetInputTagFromSpec(const FGameplayAbilitySpec& AbilitySpec);
 
-	// 캐시된 InputTag로 AbilitySpec 조회 (O(1) lookup)
+	// InputTag 로 AbilitySpec 조회. 스펙이 몇 개뿐이라 매번 찾는다 —
+	// 캐시를 두면 서버가 어빌리티를 다시 부여할 때(로비 클래스 변경) 클라 캐시가 낡은 핸들을 가리켜 입력이 무시된다.
 	FGameplayAbilitySpec* FindAbilitySpecByInputTag(const FGameplayTag& InputTag);
-
-	// 캐시 갱신 (TutorialManager 등 외부에서 어빌리티 동적 부여 시 사용)
-	void AddToInputTagCache(const FGameplayAbilitySpec& AbilitySpec);
-	void RemoveFromInputTagCache(const FGameplayTag& InputTag);
 
 	void NotifyVendingMachineStacksChanged(int32 CurrentStacks, int32 MaxStacks);
 
@@ -81,32 +73,28 @@ public:
 	void NotifyVacuumAirShotGaugeChanged(int32 CurrentGauge, int32 MaxGauge);
 
 protected:
-	// InputTag → AbilitySpecHandle 캐시 (성능 최적화)
-	UPROPERTY()
-	TMap<FGameplayTag, FGameplayAbilitySpecHandle> InputTagToAbilityMap;
+	// AbilityActorInfoSet 이 콜백을 이미 묶었는지
+	bool bActorInfoDelegatesBound = false;
 
-	// 차단 UI 트리거용 태그 변화 콜백
-	// - LooseGameplayTag(State.Carrying 등) 변화 시 호출
-	void HandleWatchedTagChanged(const FGameplayTag Tag, int32 NewCount);
-	// - BlockedAbilityTags 카운터가 직접 바뀔 때 호출 (GAS BlockAbilitiesWithTag 의 정확한 변화 시점)
-	void HandleBlockedAbilityTagsAnyChange(const FGameplayTag Tag, int32 NewCount);
-	// - GA 활성화/종료 시 InputTag 추출해서 UI 피드백 델리게이트로 전달
+	// 스킬 슬롯 차단 UI 재평가 신호 — BlockedAbilityTags 카운터(GAS BlockAbilitiesWithTag 의 정확한 변화 시점)와
+	// State.Carrying 같은 Loose 태그 변화 둘 다에서 온다
+	void HandleAbilityBlockStateChanged(const FGameplayTag Tag, int32 NewCount);
+	// GA 활성화/종료 시 InputTag 추출해서 UI 피드백 델리게이트로 전달
 	void HandleAbilityActivated(UGameplayAbility* Ability);
 	void HandleAbilityEnded(UGameplayAbility* Ability);
 
-	// 이미 RegisterGameplayTagEvent 가 등록된 태그 (중복 등록 방지)
-	TSet<FGameplayTag> RegisteredWatchedTags;
-
-	// 전체 캐시 재구축
-	void RebuildInputTagCache();
+	// 상태 아이콘(Buff.* / Debuff.*) 효과 적용 (서버) → 소유 클라에 필요한 값만 보낸다
+	void HandleEffectAppliedToSelf(UAbilitySystemComponent* Source, const FGameplayEffectSpec& EffectSpec, FActiveGameplayEffectHandle ActiveEffectHandle);
+	// 상태 아이콘 효과 제거 — 서버와 소유 클라(복제된 제거) 각자 로컬에서 방송한다
+	void HandleEffectRemoved(const FActiveGameplayEffect& EffectRemoved);
+	// 상태 아이콘(Buff.* / Debuff.*) 태그가 있는지
+	static bool HasStatusIconTag(const FGameplayTagContainer& Tags);
 
 	virtual void OnRep_ActivateAbilities() override;
 
+	// 상태 아이콘 효과 적용을 소유 클라에 알린다 — 피해처럼 아이콘과 무관한 효과는 보내지 않는다
 	UFUNCTION(Client, Reliable)
-	void ClientEffectApplied(UAbilitySystemComponent* AbilitySystemComponent, const FGameplayEffectSpec& EffectSpec, FActiveGameplayEffectHandle ActiveEffectHandle);
-
-	UFUNCTION(Client, Reliable)
-	void OnRemoveGameplayEffectCallback(const FActiveGameplayEffect& EffectRemoved);
+	void ClientEffectApplied(const FGameplayTagContainer& GrantedTags, bool bHasDuration, float Duration, bool bDisplayStackCount, int32 StackCount);
 
 	// 자판기 잭팟 스택 변경을 클라이언트에 전달
 	UFUNCTION(Client, Reliable)

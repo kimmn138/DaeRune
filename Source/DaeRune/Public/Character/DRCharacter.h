@@ -20,7 +20,7 @@ class UAnimMontage;
 struct FGameplayEffectContextHandle;
 
 /**
- * �÷��̾� ĳ���� Ŭ����
+ * 플레이어 캐릭터 클래스
  */
 UCLASS()
 class DAERUNE_API ADRCharacter : public ADRCharacterBase
@@ -35,12 +35,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category = "Character Class Defaults")
 	EPlayerCharacterClass PlayerCharacterClass = EPlayerCharacterClass::Gardener;
 
-	// �������� ��Ʈ�ѷ��� ���ǵ� �� ȣ�� (������ GAS �ʱ�ȭ)
+	// 서버에서 컨트롤러가 빙의될 때 호출 (서버용 GAS 초기화)
 	virtual void PossessedBy(AController* NewController) override;
-	// PlayerState ���ø����̼� �� ȣ�� (Ŭ���̾�Ʈ�� GAS �ʱ�ȭ)
+	// PlayerState 리플리케이션 시 호출 (클라이언트용 GAS 초기화)
 	virtual void OnRep_PlayerState() override;
 
-	// �÷��̾� ���� ����� RepNotify �Լ���
+	// 플레이어 전용 디버프 RepNotify 함수들
 	virtual void OnRep_Stunned() override;
 	virtual void OnRep_Burned() override;
 
@@ -67,6 +67,12 @@ public:
 
 	// 부활 시 1인칭/3인칭 메시 가시성 원복 (Plan6 §5.9)
 	virtual void MulticastHandleRevive_Implementation() override;
+
+protected:
+	// 플레이어는 오염 상태에서만 죽는다 — 부활 전에 오염을 풀어 최대 체력을 원래대로 돌린다
+	virtual void PrepareRevive() override;
+
+public:
 
 	// 사망 상태 동기화 override (bDead가 true가 되면 몽타주 재생)
 	virtual void OnRep_Dead() override;
@@ -120,28 +126,28 @@ public:
 	 */
 	void SyncCosmeticVisibility();
 
-	// �����̳� �ý��� ����
+	// 컨테이너 시스템 설정
 	UPROPERTY(EditDefaultsOnly, Category = "Container System")
 	int32 NumContainers = 4;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Container System")
 	float ContainerHealth = 100.f;
 
-	// ========== ��ǰ �ý��� ==========
+	// ========== 부품 시스템 ==========
 
-	// ��ǰ ���� ���� ��ȸ
+	// 부품 보유 상태 조회
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	bool IsCarryingPart() const { return bIsCarryingPart; }
 
-	// ��ǰ ȹ�� ó��
+	// 부품 획득 처리
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	bool PickupPart(class ADRCleanserPart* Part);
 
-	// ��ǰ ��ġ ó��
+	// 부품 설치 처리
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void InstallCarriedPart();
 
-	// ��ǰ ����߸���
+	// 부품 떨어뜨리기
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void DropCarriedPart();
 
@@ -208,9 +214,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mount")
 	TSubclassOf<UGameplayEffect> MountSharedDamageEffectClass;
 
-	// ========== ī�޶� ==========
+	// ========== 카메라 ==========
 
-	// ���� ī�޶� ����
+	// 죽음 카메라 연출
 	UFUNCTION(BlueprintImplementableEvent, Category = "Death")
 	void PlayDeathCameraAnimation();
 
@@ -241,9 +247,9 @@ public:
 	UFUNCTION()
 	void OnRep_WaterPumpActive();
 
-	// ========== 1��Ī/3��Ī �޽� �ý��� ==========
+	// ========== 1인칭/3인칭 메쉬 시스템 ==========
 
-	// 1��Ī �޽�
+	// 1인칭 메쉬
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mesh")
 	TObjectPtr<USkeletalMeshComponent> FirstPersonMesh;
 
@@ -262,7 +268,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mesh|FirstPerson")
 	TObjectPtr<UAnimMontage> FirstPersonHitReactMontage;
 
-	// �޽� ���ü� ������Ʈ
+	// 메쉬 가시성 업데이트
 	void UpdateMeshVisibility();
 
 	// 1인칭 부품 메시 표시 (부품 픽업 시 호출)
@@ -323,6 +329,29 @@ protected:
 	// ★Plan8(FP)★ Effects.HitReact 태그 → FP 피격 몽타주. 로컬 제어 검사는 호출 시점에 (Plan8 T-38)
 	void FirstPersonHitReactTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 
+	// ========== 공속 버프 몸 이펙트 ==========
+
+	/**
+	 * 공속 버프를 받는 동안 몸에 붙는 이펙트 — 자기 버프(Buff.VendingMachine.AttackSpeed)든
+	 * 칩 ② 공유 버프(Buff.AttackSpeed.Shared)든 하나라도 있으면 켠다.
+	 * 태그는 GE 가 붙이고 모든 클라로 복제되므로 버프를 받은 아군의 몸에서도 다른 사람 화면에 보인다.
+	 * 본인 화면(1인칭)에서는 보이지 않는다 — 3인칭 몸과 같은 OwnerNoSee.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "VFX|Buff")
+	TObjectPtr<UNiagaraSystem> AttackSpeedBuffVFX;
+
+#if WITH_EDITOR
+	// 에셋 기본값(예전 생성자 하드코딩 경로 → BP 기본값)이 비었는지 저장 · 데이터 검증 때 알린다
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+#endif
+
+	/** 이펙트를 붙일 3인칭 메시 소켓. 비우면 메시 원점(발밑) */
+	UPROPERTY(EditDefaultsOnly, Category = "VFX|Buff")
+	FName AttackSpeedBuffVFXSocket = NAME_None;
+
+	void AttackSpeedBuffTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+	virtual void RefreshTagDrivenVFX() override;
+
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -357,34 +386,30 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Upgrade")
 	TObjectPtr<class UDRSynergyAuraComponent> SynergyAuraComponent;
 
-	// ========== ��ǰ ���� ==========
+	// ========== 부품 상태 ==========
 
-	// ��ǰ ���� ����
+	// 부품 보유 여부
 	UPROPERTY(ReplicatedUsing = OnRep_bIsCarryingPart, BlueprintReadOnly, Category = "Part System")
 	bool bIsCarryingPart;
 
-	// ��� �ִ� ��ǰ
+	// 들고 있는 부품
 	UPROPERTY(ReplicatedUsing = OnRep_CarriedPart, BlueprintReadOnly, Category = "Part System")
 	TObjectPtr<class ADRCleanserPart> CarriedPart;
 
-	// ��ǰ ȹ�� �ð� ���
+	// 부품 획득 시간 기록
 	float LastPartPickupTime = 0.f;
 
-	// ��ǰ ����Ʈ���� ��ٿ� �ð�
+	// 부품 떨어트리기 쿨다운 시간
 	UPROPERTY(EditDefaultsOnly, Category = "Part System", meta = (ClampMin = "0.0", ClampMax = "5.0"))
 	float PartDropCooldown = 2.0f;
 
-	// ========== ���ø����̼� �ݹ� ==========
+	// ========== 리플리케이션 콜백 ==========
 
 	UFUNCTION()
 	void OnRep_bIsCarryingPart();
 
 	UFUNCTION()
 	void OnRep_CarriedPart();
-
-	// ========== �̵��ӵ� ���� ==========
-
-	virtual float GetMoveSpeed() override;
 
 private:
 	// ========== 코스메틱 외형 (내부) ==========
@@ -464,11 +489,18 @@ private:
 	// 3P 빔 업데이트 타이머
 	FTimerHandle WaterPumpBeamUpdateTimer;
 
+	// 공속 버프 몸 이펙트 — 처음 켤 때 만들고 이후엔 켜고 끄기만 한다
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> AttackSpeedBuffVFXComponent;
+
 	// 3P 빔 보간용 현재 표시 위치
 	FVector WaterPumpBeamDisplayEndPoint = FVector::ZeroVector;
 
 	// 3P 빔 위치 업데이트 함수 (타이머 콜백)
 	void UpdateWaterPumpThirdPersonBeam();
+
+	// 3P 빔 컴포넌트 · 갱신 타이머 정리 (끄기 · 다시 켜기 · EndPlay 공용)
+	void StopWaterPumpThirdPersonBeam();
 
 	// GAS 초기화
 	virtual void InitAbilityActorInfo() override;
@@ -476,7 +508,7 @@ private:
 	// 이동 속도 바인딩 초기화 (PossessedBy, OnRep_PlayerState에서 공통 사용)
 	void InitializeMoveSpeedBinding();
 
-	// ī�޶� �ý���
+	// 카메라 시스템
 	UPROPERTY(VisibleAnywhere, Category = Camera)
 	TObjectPtr<class USpringArmComponent> CameraBoom;
 

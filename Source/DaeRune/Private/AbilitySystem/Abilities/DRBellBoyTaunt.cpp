@@ -30,11 +30,6 @@ void UDRBellBoyTaunt::ActivateAbility(const FGameplayAbilitySpecHandle Handle, c
 	}
 	TauntedThisCast.Reset();
 
-	// [임시 진단]
-	UE_LOG(LogDR, Warning, TEXT("[TauntDiag] 1. 발동 %s — 서버=%d 몽타주=%s 시작이벤트=%s"),
-		*GetNameSafe(GetAvatarActorFromActorInfo()), HasAuthority(&ActivationInfo) ? 1 : 0,
-		*GetNameSafe(TauntMontage), *TauntStartEventTag.ToString());
-
 	UAbilityTask_WaitGameplayEvent* StartTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
 		this, TauntStartEventTag, nullptr, /*OnlyTriggerOnce*/ true);
 	StartTask->EventReceived.AddDynamic(this, &UDRBellBoyTaunt::OnTauntStart);
@@ -49,19 +44,13 @@ void UDRBellBoyTaunt::ActivateAbility(const FGameplayAbilitySpecHandle Handle, c
 	MontageTask->ReadyForActivation();
 
 	// Plan8(FP) FP 포즈 프레임이 TP 판정 시작과 같은 순간에 오도록 (D-35). TP 는 속도 1
-	float FPRate = 1.f;
-	const float TPEventTime = UDRAbilitySystemLibrary::FindMontageEventTime(TauntMontage, TauntStartEventTag);
-	if (FirstPersonTauntMontage && TPEventTime > 0.f)
-	{
-		FPRate = UDRAbilitySystemLibrary::GetFirstPersonSyncTime(FirstPersonTauntMontage, FirstPersonSyncTag, TauntMontage, TPEventTime) / TPEventTime;
-	}
+	const float FPRate = UDRAbilitySystemLibrary::GetFirstPersonSyncRate(
+		FirstPersonTauntMontage, FirstPersonSyncTag, TauntMontage, TauntStartEventTag);
 	ActiveFirstPersonMontage = UDRAbilitySystemLibrary::PlayFirstPersonMontage(GetAvatarActorFromActorInfo(), FirstPersonTauntMontage, FPRate);
 }
 
 void UDRBellBoyTaunt::OnTauntStart(FGameplayEventData Payload)
 {
-	// [임시 진단] 서버=0 줄만 있고 서버=1 줄이 없으면 → 서버에서 노티파이가 안 불린 것
-	UE_LOG(LogDR, Warning, TEXT("[TauntDiag] 2. 판정 시작 이벤트 받음 — 서버=%d"), HasAuthority(&CurrentActivationInfo) ? 1 : 0);
 
 	if (!HasAuthority(&CurrentActivationInfo)) return;   // 판정·GE 는 서버만
 
@@ -94,17 +83,10 @@ void UDRBellBoyTaunt::OnScan(int32 ActionNumber)
 	TArray<AActor*> Enemies;
 	UDRAbilitySystemLibrary::GetAliveEnemiesWithinRadius(Avatar, Avatar->GetActorLocation(), EffectiveTauntRadius, Enemies);
 
-	// [임시 진단]
-	UE_LOG(LogDR, Warning, TEXT("[TauntDiag] 3. 스캔 #%d — 반경 %.0f 안의 살아 있는 적 %d"), ActionNumber, EffectiveTauntRadius, Enemies.Num());
-
 	for (AActor* Enemy : Enemies)
 	{
 		if (TauntedThisCast.Contains(Enemy)) continue;                     // 이번 시전에 이미 (D-15)
-		if (!UDRAbilitySystemLibrary::CanBeTaunted(Enemy))                 // 도주형 제외 (D-17)
-		{
-			UE_LOG(LogDR, Warning, TEXT("[TauntDiag] 3-x. %s 제외 — 블랙보드에 FirstAttacker/TargetToFollow 키 없음(또는 AI 컨트롤러 없음)"), *GetNameSafe(Enemy));
-			continue;
-		}
+		if (!UDRAbilitySystemLibrary::CanBeTaunted(Enemy)) continue;       // 도주형 제외 (D-17)
 		if (bRequireLineOfSight && !HasLineOfSight(Avatar, Enemy)) continue;
 
 		ApplyTauntTo(Enemy);
@@ -115,12 +97,7 @@ void UDRBellBoyTaunt::OnScan(int32 ActionNumber)
 void UDRBellBoyTaunt::ApplyTauntTo(AActor* Enemy)
 {
 	UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Enemy);
-	if (!TargetASC || !TauntedEffect)
-	{
-		UE_LOG(LogDR, Warning, TEXT("[TauntDiag] 3-x. %s 도발 실패 — ASC=%d TauntedEffect=%s"),
-			*GetNameSafe(Enemy), TargetASC ? 1 : 0, *GetNameSafe(TauntedEffect.Get()));   // [임시 진단]
-		return;
-	}
+	if (!TargetASC || !TauntedEffect) return;
 
 	const FDRGameplayTags& Tags = FDRGameplayTags::Get();
 
@@ -146,19 +123,14 @@ void UDRBellBoyTaunt::ApplyTauntTo(AActor* Enemy)
 	Spec.Data->SetSetByCallerMagnitude(Tags.Data_MoveSpeed_Mult, TauntedMoveSpeedMultiplier);                  // ×1.1
 	Spec.Data->SetSetByCallerMagnitude(Tags.Data_Taunt_DamageMult, bExpose ? 1.f : TauntedDamageMultiplier);   // ×0.8(칩① 1.0)
 	Spec.Data->SetSetByCallerMagnitude(Tags.Data_Taunt_DamageTakenMult, DamageTakenMult);                      // ×1.0(칩① 1.15)
-	const FActiveGameplayEffectHandle Applied = TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+	TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
 
 	// 지금 바로 타깃을 벨보이로 바꾸고, 도발이 끝날 때까지 0.2초마다 다시 쓴다 (D-16)
 	if (const APawn* Pawn = Cast<APawn>(Enemy))
 	{
 		AAIController* AIC = Cast<AAIController>(Pawn->GetController());
-		const bool bAggro = UDRAbilitySystemLibrary::ApplyTauntAggro(AIC);
+		UDRAbilitySystemLibrary::ApplyTauntAggro(AIC);
 		UDRAbilitySystemLibrary::StartTauntAggroRefresh(AIC);
-
-		// [임시 진단] GE=0 이면 GE 적용 실패, Taunted 태그=0 이면 GE 에 Debuff.Taunted 가 안 붙음, 어그로=0 이면 ApplyTauntAggro 가 거부
-		UE_LOG(LogDR, Warning, TEXT("[TauntDiag] 3-o. %s 도발 — GE=%d Taunted태그=%d AI=%s 어그로=%d"),
-			*GetNameSafe(Enemy), Applied.IsValid() ? 1 : 0,
-			TargetASC->HasMatchingGameplayTag(Tags.Debuff_Taunted) ? 1 : 0, *GetNameSafe(AIC), bAggro ? 1 : 0);
 	}
 }
 

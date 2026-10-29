@@ -8,15 +8,12 @@
 #include "AbilitySystem/Abilities/DRVendingMachineAttackSpeedBuff.h"
 #include "GameplayEffect.h"
 #include "AbilitySystem/DRAttributeSet.h"
-#include "AbilitySystem/DRCleanserSiteAttributeSet.h"
 #include "AbilitySystem/Data/CharacterClassInfo.h"
 #include "AbilitySystem/Data/StatusEffectInfo.h"
-#include "Actor/DRCleanserSite.h"
 #include "Game/DRChipCatalog.h"
 #include "Game/DRGameInstance.h"
-#include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
-#include "Phase/DRPhase3.h"
+#include "GameFramework/GameStateBase.h"
 #include "Phase/DRPhaseBase.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
@@ -26,7 +23,7 @@
 
 void UOverlayWidgetController::BroadcastInitialValues()
 {
-	// ���� ���� �� ���� ��Ʈ����Ʈ ������ UI�� ����
+	// 게임 시작 시 현재 어트리뷰트 값들을 UI에 전송
 	OnHealthChanged.Broadcast(GetDRAS()->GetHealth());
 	OnMaxHealthChanged.Broadcast(GetDRAS()->GetMaxHealth());
 	OnWaterChanged.Broadcast(GetDRAS()->GetWater());
@@ -52,8 +49,20 @@ void UOverlayWidgetController::BroadcastInitialValues()
 	RefreshHudFeatureVisibility();
 }
 
+bool UOverlayWidgetController::IsWaterTankExpanded()
+{
+	const ADRPlayerState* DRPS = GetDRPS();
+	if (!DRPS) return false;
+
+	// FDRResolvedStat::Mult 는 배율(기본 1.0) — Flat 은 기본 0
+	const FDRResolvedStat WaterStat = DRPS->GetUpgradeRuntime().GetGlobalStat(EDRUpgradeStat::MaxWater);
+	return WaterStat.Flat > KINDA_SMALL_NUMBER || WaterStat.Mult > 1.f + KINDA_SMALL_NUMBER;
+}
+
 void UOverlayWidgetController::RefreshHudFeatureVisibility()
 {
+	OnWaterTankExpandedChanged.Broadcast(IsWaterTankExpanded());
+
 	const ADRPlayerState* DRPS = GetDRPS();
 
 	// ★PlayerState 가 아직 없으면 "보이는" 쪽으로 간다.★
@@ -89,333 +98,243 @@ void UOverlayWidgetController::RefreshHudFeatureVisibility()
 
 void UOverlayWidgetController::BindCallbacksToDependencies()
 {
-	// 약 참조 캡처로 안전한 람다 바인딩
-	TWeakObjectPtr<UOverlayWidgetController> WeakThis(this);
+	UDRAttributeSet* DRAS = GetDRAS();
+	if (!AbilitySystemComponent || !DRAS) return;
 
-	// �ݹ� ���ε�
-	FDelegateHandle HealthHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetHealthAttribute()).AddLambda(
-		[WeakThis](const FOnAttributeChangeData& Data)
-		{
-			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-			{
-				StrongThis->OnHealthChanged.Broadcast(Data.NewValue);
-			}
-		}
-	);
-	ASCDelegateHandles.Add(HealthHandle);
+	// ★모든 바인딩은 this 를 주인으로 묶는다(AddWeakLambda · AddUObject · AddDynamic)★ —
+	// UnbindAllDelegates 가 RemoveAll(this) 로 전부 떼어 낼 수 있어야 관전 대상을 바꿀 때
+	// 옛 대상의 체력 · 물 · 버프가 HUD 에 섞여 들어오지 않는다.
 
-	FDelegateHandle MaxHealthHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetMaxHealthAttribute()).AddLambda(
-		[WeakThis](const FOnAttributeChangeData& Data)
-		{
-			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-			{
-				StrongThis->OnMaxHealthChanged.Broadcast(Data.NewValue);
-			}
-		}
-	);
-	ASCDelegateHandles.Add(MaxHealthHandle);
-
-	FDelegateHandle WaterHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetWaterAttribute()).AddLambda(
-		[WeakThis](const FOnAttributeChangeData& Data)
-		{
-			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-			{
-				StrongThis->OnWaterChanged.Broadcast(Data.NewValue);
-			}
-		}
-	);
-	ASCDelegateHandles.Add(WaterHandle);
-
-	FDelegateHandle MaxWaterHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(GetDRAS()->GetMaxWaterAttribute()).AddLambda(
-		[WeakThis](const FOnAttributeChangeData& Data)
-		{
-			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-			{
-				StrongThis->OnMaxWaterChanged.Broadcast(Data.NewValue);
-			}
-		}
-	);
-	ASCDelegateHandles.Add(MaxWaterHandle);
-	
-
-	// �����Ƽ ���� �ʱ�ȭ ó��
-	if (GetDRASC())
+	// ===== 어트리뷰트 =====
+	auto BindAttribute = [this](const FGameplayAttribute& Attribute, FOnAttributeChangedSignature& Signal)
 	{
-		// 자판기 잭팟 스택 변경 델리게이트 바인딩
-		GetDRASC()->OnVendingMachineStacksChanged.AddLambda(
-			[WeakThis](int32 CurrentStacks, int32 MaxStacks)
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Attribute).AddWeakLambda(
+			this, [&Signal](const FOnAttributeChangeData& Data) { Signal.Broadcast(Data.NewValue); });
+		BoundAttributes.Add(Attribute);
+	};
+	BindAttribute(DRAS->GetHealthAttribute(), OnHealthChanged);
+	BindAttribute(DRAS->GetMaxHealthAttribute(), OnMaxHealthChanged);
+	BindAttribute(DRAS->GetWaterAttribute(), OnWaterChanged);
+	BindAttribute(DRAS->GetMaxWaterAttribute(), OnMaxWaterChanged);
+
+	// ===== State.Carrying · 공속 버프 태그 =====
+	// State.Carrying 태그 변화 → 조준선 상태 재계산 (서버는 SetCarryingState, 클라는 OnRep 의 Loose 태그 토글로 발화)
+	AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().State_Carrying, EGameplayTagEventType::NewOrRemoved)
+		.AddUObject(this, &UOverlayWidgetController::HandleCarryingTagChanged);
+
+	// ★Plan5(공속칩)★ 자판기 공속 버프(자기 버프 + 칩 ② 공유 버프) 스택 → 스킬 아이콘 숫자.
+	// AnyCountChange 는 GE 가 붙고 떨어질 때뿐 아니라 ★스택 수만 바뀔 때도★ 서버·클라 모두에서 온다 (D-75)
+	AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed, EGameplayTagEventType::AnyCountChange)
+		.AddUObject(this, &UOverlayWidgetController::HandleAttackSpeedBuffTagChanged);
+	AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Buff_AttackSpeed_Shared, EGameplayTagEventType::AnyCountChange)
+		.AddUObject(this, &UOverlayWidgetController::HandleAttackSpeedBuffTagChanged);
+
+	if (UDRAbilitySystemComponent* DRASC = GetDRASC())
+	{
+		// 자판기 잭팟 스택 변경
+		DRASC->OnVendingMachineStacksChanged.AddWeakLambda(this, [this](int32 CurrentStacks, int32 MaxStacks)
+		{
+			OnVendingMachineStackCountChanged.Broadcast(CurrentStacks, MaxStacks);
+		});
+
+		// 로봇 청소기 일반 공격(공기탄) 충전 게이지 (3칸)
+		DRASC->OnVacuumAirShotGaugeChanged.AddWeakLambda(this, [this](int32 CurrentGauge, int32 MaxGauge)
+		{
+			OnRobotVacuumAirShotGaugeChanged.Broadcast(CurrentGauge, MaxGauge);
+		});
+
+		// 로봇 청소기 돌진 게이지 (5칸)
+		DRASC->OnVacuumDashGaugeChanged.AddWeakLambda(this, [this](int32 CurrentGauge, int32 MaxGauge)
+		{
+			OnRobotVacuumDashGaugeChanged.Broadcast(CurrentGauge, MaxGauge);
+		});
+
+		// 버프 · 디버프 아이콘 — 자판기 공격속도 버프 스택은 여기서 방송하지 않는다 (HandleAttackSpeedBuffTagChanged 담당, Plan5(공속칩) D-75)
+		DRASC->EffectAssetTags.AddWeakLambda(this,
+			[this](const FGameplayTagContainer& AssetTags, bool bHasDuration, const float Duration, bool bDisplayStackCount, const int32 StackCount)
+		{
+			if (!StatusEffectData) return;
+
+			for (const FGameplayTag& Tag : AssetTags)
 			{
-				if (UOverlayWidgetController* StrongThis = WeakThis.Get())
+				bool bIsDebuff = false;
+				if (!IsStatusEffectTag(Tag, bIsDebuff)) continue;
+
+				FEffectInfo EffectInfo = StatusEffectData->FindEffectInfoForTag(Tag);
+				if (!EffectInfo.EffectTag.IsValid()) continue;
+
+				EffectInfo.bHasDuration = bHasDuration;
+				EffectInfo.Duration = Duration;
+				EffectInfo.bDisplayStack = bDisplayStackCount;
+				EffectInfo.StackCount = StackCount;
+				EffectInfo.bIsDebuff = bIsDebuff;
+				StatusEffectWidgetDelegate.Broadcast(EffectInfo);
+			}
+		});
+
+		// 자판기 공격속도 버프 만료(0) 방송도 HandleAttackSpeedBuffTagChanged 가 맡는다 (Plan5(공속칩) D-75)
+		DRASC->EffectRemovedDelegate.AddWeakLambda(this, [this](const FGameplayTagContainer& AssetTags)
+		{
+			for (const FGameplayTag& Tag : AssetTags)
+			{
+				bool bIsDebuff = false;
+				if (IsStatusEffectTag(Tag, bIsDebuff))
 				{
-					StrongThis->OnVendingMachineStackCountChanged.Broadcast(CurrentStacks, MaxStacks);
+					EffectTagRemovedDelegate.Broadcast(Tag, bIsDebuff);
 				}
 			}
-		);
+		});
 
-		// 로봇 청소기 일반 공격(공기탄) 충전 게이지 변경 델리게이트 바인딩 (3칸)
-		GetDRASC()->OnVacuumAirShotGaugeChanged.AddLambda(
-			[WeakThis](int32 CurrentGauge, int32 MaxGauge)
-			{
-				if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-				{
-					StrongThis->OnRobotVacuumAirShotGaugeChanged.Broadcast(CurrentGauge, MaxGauge);
-				}
-			}
-		);
-
-		// 로봇 청소기 돌진 게이지 변경 델리게이트 바인딩 (5칸)
-		GetDRASC()->OnVacuumDashGaugeChanged.AddLambda(
-			[WeakThis](int32 CurrentGauge, int32 MaxGauge)
-			{
-				if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-				{
-					StrongThis->OnRobotVacuumDashGaugeChanged.Broadcast(CurrentGauge, MaxGauge);
-				}
-			}
-		);
-
-		GetDRASC()->EffectAssetTags.AddLambda(
-			[WeakThis](const FGameplayTagContainer& AssetTags, bool HasDuration, const float Duration, bool DisplayStackCount, const int32 StackCount)
-			{
-				UOverlayWidgetController* StrongThis = WeakThis.Get();
-				if (!StrongThis || !StrongThis->StatusEffectData) return;
-
-				const FGameplayTag BuffTag = FGameplayTag::RequestGameplayTag(FName("Buff"));
-				const FGameplayTag DebuffTag = FGameplayTag::RequestGameplayTag(FName("Debuff"));
-				// 자판기 공격속도 버프 스택은 여기서 방송하지 않는다 — HandleAttackSpeedBuffTagChanged 가 맡는다 (Plan5(공속칩) D-75)
-				for (const FGameplayTag& Tag : AssetTags)
-				{
-					if (Tag.MatchesTag(BuffTag))
-					{
-						FEffectInfo EffectInfo = StrongThis->StatusEffectData->FindEffectInfoForTag(Tag);
-						if (EffectInfo.EffectTag.IsValid())
-						{
-							EffectInfo.bHasDuration = HasDuration;
-							EffectInfo.Duration = Duration;
-							EffectInfo.bDisplayStack = DisplayStackCount;
-							EffectInfo.StackCount = StackCount;
-							StrongThis->StatusEffectWidgetDelegate.Broadcast(EffectInfo);
-						}
-					}
-					if (Tag.MatchesTag(DebuffTag))
-					{
-						FEffectInfo EffectInfo = StrongThis->StatusEffectData->FindEffectInfoForTag(Tag);
-						if (EffectInfo.EffectTag.IsValid())
-						{
-							EffectInfo.bHasDuration = HasDuration;
-							EffectInfo.Duration = Duration;
-							EffectInfo.bDisplayStack = DisplayStackCount;
-							EffectInfo.StackCount = StackCount;
-							EffectInfo.bIsDebuff = true;
-							StrongThis->StatusEffectWidgetDelegate.Broadcast(EffectInfo);
-						}
-					}
-				}
-			}
-		);
-
-		GetDRASC()->EffectRemovedDelegate.AddLambda(
-			[WeakThis](const FGameplayTagContainer& AssetTags)
-			{
-				UOverlayWidgetController* StrongThis = WeakThis.Get();
-				if (!StrongThis) return;
-
-				FGameplayTag BuffTag = FGameplayTag::RequestGameplayTag(FName("Buff"));
-				FGameplayTag DebuffTag = FGameplayTag::RequestGameplayTag(FName("Debuff"));
-				// 자판기 공격속도 버프 만료(0) 방송도 HandleAttackSpeedBuffTagChanged 가 맡는다 (Plan5(공속칩) D-75)
-				for (const FGameplayTag& Tag : AssetTags)
-				{
-					if (Tag.MatchesTag(BuffTag))
-					{
-						StrongThis->EffectTagRemovedDelegate.Broadcast(Tag, false);
-					}
-					if (Tag.MatchesTag(DebuffTag))
-					{
-						StrongThis->EffectTagRemovedDelegate.Broadcast(Tag, true);
-					}
-				}
-			}
-		);
-		
-		// ���� �����Ƽ�� �̹� �ο��Ǿ��ٸ� ��� ��ε�ĳ��Ʈ
-		if (GetDRASC()->bStartupAbilitiesGiven)
+		// 시작 어빌리티가 이미 부여되었다면 즉시, 아니면 부여 완료 시점에 브로드캐스트
+		if (DRASC->bStartupAbilitiesGiven)
 		{
 			BroadcastAbilityInfo();
 		}
 		else
 		{
-			// ���� �ο����� �ʾҴٸ� �ο� �Ϸ� ������ ��ε�ĳ��Ʈ�ϵ��� ��������Ʈ ���ε�
-			GetDRASC()->AbilitiesGivenDelegate.AddUObject(this, &UOverlayWidgetController::BroadcastAbilityInfo);
+			DRASC->AbilitiesGivenDelegate.AddUObject(this, &UOverlayWidgetController::BroadcastAbilityInfo);
 		}
 
 		// 스킬 차단 카운터 변화 → UI 재방송
-		GetDRASC()->OnBlockedAbilityTagsChanged.AddUObject(this, &UOverlayWidgetController::HandleBlockedTagsChanged);
-
-		// State.Carrying 태그 변화 → 조준선 상태 재계산 (서버는 SetCarryingState, 클라는 OnRep 의 Loose 태그 토글로 발화)
-		AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().State_Carrying, EGameplayTagEventType::NewOrRemoved)
-			.AddUObject(this, &UOverlayWidgetController::HandleCarryingTagChanged);
-
-		// ★Plan5(공속칩)★ 자판기 공속 버프(자기 버프 + 칩 ② 공유 버프) 스택 → 스킬 아이콘 숫자.
-		// AnyCountChange 는 GE 가 붙고 떨어질 때뿐 아니라 ★스택 수만 바뀔 때도★ 서버·클라 모두에서 온다 (D-75)
-		AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Buff_VendingMachine_AttackSpeed, EGameplayTagEventType::AnyCountChange)
-			.AddUObject(this, &UOverlayWidgetController::HandleAttackSpeedBuffTagChanged);
-		AbilitySystemComponent->RegisterGameplayTagEvent(FDRGameplayTags::Get().Buff_AttackSpeed_Shared, EGameplayTagEventType::AnyCountChange)
-			.AddUObject(this, &UOverlayWidgetController::HandleAttackSpeedBuffTagChanged);
+		DRASC->OnBlockedAbilityTagsChanged.AddUObject(this, &UOverlayWidgetController::HandleBlockedTagsChanged);
 
 		// GA 활성화/종료 시 InputTag 기반 Pressed/Released 재방송
 		// (PlayerController 직접 broadcast 는 차단 중 게이트로 막히는데, 큐잉되어 나중에 발동된 GA 의 시각 피드백을 여기서 보강)
-		GetDRASC()->OnAbilityActivatedWithInputTag.AddLambda(
-			[WeakThis](const FGameplayTag InputTag)
+		DRASC->OnAbilityActivatedWithInputTag.AddWeakLambda(this, [this](const FGameplayTag InputTag)
+		{
+			OnAbilityInputPressed.Broadcast(InputTag);
+		});
+		DRASC->OnAbilityEndedWithInputTag.AddWeakLambda(this, [this](const FGameplayTag InputTag)
+		{
+			// 키를 아직 누르고 있으면 여기서 Released 를 방송하지 않는다 —
+			// 즉발 어빌리티(GA_VacuumJetJump)는 활성화와 같은 프레임에 EndAbility 하므로
+			// 그대로 방송하면 홀드 중인데도 눌림 이미지가 즉시 풀려버린다.
+			// 이 경우 Released 는 실제 키를 뗄 때 ADRPlayerController::AbilityInputTagReleased 가 담당한다.
+			// (충전형 LMB/RMB 는 키를 뗄 때 GA 가 끝나므로 이 게이트에 걸리지 않고,
+			//  큐잉되어 늦게 발동한 GA 도 그 시점엔 키가 이미 떨어져 있어 기존대로 보강된다)
+			if (const ADRPlayerController* DRPC = GetDRPC())
 			{
-				if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-				{
-					StrongThis->OnAbilityInputPressed.Broadcast(InputTag);
-				}
+				if (DRPC->IsInputTagHeld(InputTag)) return;
 			}
-		);
-		GetDRASC()->OnAbilityEndedWithInputTag.AddLambda(
-			[WeakThis](const FGameplayTag InputTag)
-			{
-				UOverlayWidgetController* StrongThis = WeakThis.Get();
-				if (!StrongThis) return;
 
-				// 키를 아직 누르고 있으면 여기서 Released 를 방송하지 않는다 —
-				// 즉발 어빌리티(GA_VacuumJetJump)는 활성화와 같은 프레임에 EndAbility 하므로
-				// 그대로 방송하면 홀드 중인데도 눌림 이미지가 즉시 풀려버린다.
-				// 이 경우 Released 는 실제 키를 뗄 때 ADRPlayerController::AbilityInputTagReleased 가 담당한다.
-				// (충전형 LMB/RMB 는 키를 뗄 때 GA 가 끝나므로 이 게이트에 걸리지 않고,
-				//  큐잉되어 늦게 발동한 GA 도 그 시점엔 키가 이미 떨어져 있어 기존대로 보강된다)
-				if (const ADRPlayerController* DRPC = StrongThis->GetDRPC())
-				{
-					if (DRPC->IsInputTagHeld(InputTag)) return;
-				}
-
-				StrongThis->OnAbilityInputReleased.Broadcast(InputTag);
-			}
-		);
-	}
-
-	// GameState 페이즈 목표 델리게이트 바인딩
-	// 딜레이를 최소화하여 Phase 알림을 놓치지 않도록 함
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(
-			PhaseBindingDelayTimer,
-			this,
-			&UOverlayWidgetController::BindPhaseObjectiveDelegate,
-			0.1f,  // 0.1초 대기 (GameState 복제 대기)
-			false  // 한 번만 실행
-		);
-	}
-
-	// Phase 변경 델리게이트 바인딩
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(
-			PhaseAlarmBindingDelayTimer,
-			this,
-			&UOverlayWidgetController::BindPhaseAlarmDelegate,
-			0.1f,  // 0.1초 대기 (GameState 복제 대기)
-			false  // 한 번만 실행
-		);
-	}
-
-	// 독가스 경고 델리게이트 바인딩
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(
-			ToxicGasWarningBindingDelayTimer,
-			this,
-			&UOverlayWidgetController::BindToxicGasWarningDelegate,
-			0.1f,  // 0.1초 대기 (GameState 복제 대기)
-			false  // 한 번만 실행
-		);
+			OnAbilityInputReleased.Broadcast(InputTag);
+		});
 	}
 
 	// 장착 칩 변경 추종 (HUD 표시 칩) — Plan3(공용칩) §7.2
 	if (ADRPlayerState* DRPS = GetDRPS())
 	{
-		DRPS->OnUpgradeRuntimeChanged.AddDynamic(
+		DRPS->OnUpgradeRuntimeChanged.AddUniqueDynamic(
 			this, &UOverlayWidgetController::RefreshHudFeatureVisibility);
+
+		// 오염 진입/해제 시 체력 HUD 다시 칠하기 (최대 체력이 그대로인 경우 대비)
+		DRPS->OnCorruptedStateChanged.AddUniqueDynamic(
+			this, &UOverlayWidgetController::HandleCorruptedStateChanged);
 	}
+
+	// GameState 델리게이트 (목표 · 페이즈 알람 · 독가스 경고)
+	TryBindGameStateDelegates();
 }
 
-void UOverlayWidgetController::BindCallbacksCleanserSiteToDependencies()
+bool UOverlayWidgetController::IsStatusEffectTag(const FGameplayTag& Tag, bool& bOutIsDebuff)
 {
-	// 클렌저사이트 체력 델리게이트 바인딩 (서버 전용)
-	if (ADRStageGameMode* SGM = Cast<ADRStageGameMode>(GetWorld()->GetAuthGameMode()))
+	static const FGameplayTag BuffRoot = FGameplayTag::RequestGameplayTag(TEXT("Buff"));
+	static const FGameplayTag DebuffRoot = FGameplayTag::RequestGameplayTag(TEXT("Debuff"));
+
+	bOutIsDebuff = Tag.MatchesTag(DebuffRoot);
+	return bOutIsDebuff || Tag.MatchesTag(BuffRoot);
+}
+
+void UOverlayWidgetController::TryBindGameStateDelegates()
+{
+	if (bGameStateDelegatesBound) return;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// ★GameState 가 아직 복제되지 않았으면 잠시 뒤 다시 시도한다★ — 한 번만 시도하면 느린 클라에서
+	// 목표 · 알람 · 웨이브 타이머 UI 가 영영 묶이지 않는다.
+	AGameStateBase* GameStateBase = World->GetGameState();
+	if (!GameStateBase)
 	{
-		if(UDRPhase3* Phase3 = Cast<UDRPhase3>(SGM->GetCurrentPhase()))
-		{
-			Phase3->OnCleanserSiteReadyDelegate.AddDynamic(this, &UOverlayWidgetController::BindCleanserSite);
-		}
+		World->GetTimerManager().SetTimer(GameStateBindRetryTimer,
+			FTimerDelegate::CreateUObject(this, &UOverlayWidgetController::TryBindGameStateDelegates),
+			GameStateBindRetryInterval, false);
+		return;
+	}
+
+	// 스테이지가 아닌 맵(로비 · 튜토리얼)에는 묶을 것이 없다
+	if (!GameStateBase->IsA<ADRStageGameState>()) return;
+
+	bGameStateDelegatesBound = true;
+	BindPhaseObjectiveDelegate();
+	BindPhaseAlarmDelegate();
+	BindToxicGasWarningDelegate();
+}
+
+void UOverlayWidgetController::HandleCorruptedStateChanged(bool bIsCorrupted)
+{
+	if (UDRAttributeSet* DRAS = GetDRAS())
+	{
+		OnMaxHealthChanged.Broadcast(DRAS->GetMaxHealth());
+		OnHealthChanged.Broadcast(DRAS->GetHealth());
 	}
 }
 
 void UOverlayWidgetController::UnbindAllDelegates()
 {
-	UWorld* World = GetWorld();
-	if (!World) return;
-
-	// ASC 델리게이트 언바인딩
-	if (AbilitySystemComponent)
+	if (UWorld* World = GetWorld())
 	{
-		for (const FDelegateHandle& Handle : ASCDelegateHandles)
-		{
-			if (Handle.IsValid())
-			{
-				// ASC의 모든 attribute delegate에서 제거 시도
-				// Note: GetGameplayAttributeValueChangeDelegate는 specific attribute가 필요하므로
-				// 여기서는 핸들만 무효화 (람다에서 WeakThis 체크로 안전)
-			}
-		}
-		ASCDelegateHandles.Empty();
+		World->GetTimerManager().ClearTimer(GameStateBindRetryTimer);
 	}
 
-	// CleanserSite ASC 델리게이트 언바인딩
-	for (const auto& Pair : CleanserSiteDelegateHandles)
+	// ===== ASC =====
+	if (IsValid(AbilitySystemComponent))
 	{
-		if (UAbilitySystemComponent* ASC = Pair.Key.Get())
+		for (const FGameplayAttribute& Attribute : BoundAttributes)
 		{
-			// 핸들이 유효하면 언바인딩 (람다에서 WeakThis 체크로 안전)
+			AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Attribute).RemoveAll(this);
+		}
+
+		const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+		AbilitySystemComponent->RegisterGameplayTagEvent(GameplayTags.State_Carrying, EGameplayTagEventType::NewOrRemoved).RemoveAll(this);
+		AbilitySystemComponent->RegisterGameplayTagEvent(GameplayTags.Buff_VendingMachine_AttackSpeed, EGameplayTagEventType::AnyCountChange).RemoveAll(this);
+		AbilitySystemComponent->RegisterGameplayTagEvent(GameplayTags.Buff_AttackSpeed_Shared, EGameplayTagEventType::AnyCountChange).RemoveAll(this);
+
+		if (UDRAbilitySystemComponent* DRASC = GetDRASC())
+		{
+			DRASC->OnVendingMachineStacksChanged.RemoveAll(this);
+			DRASC->OnVacuumAirShotGaugeChanged.RemoveAll(this);
+			DRASC->OnVacuumDashGaugeChanged.RemoveAll(this);
+			DRASC->EffectAssetTags.RemoveAll(this);
+			DRASC->EffectRemovedDelegate.RemoveAll(this);
+			DRASC->AbilitiesGivenDelegate.RemoveAll(this);
+			DRASC->OnBlockedAbilityTagsChanged.RemoveAll(this);
+			DRASC->OnAbilityActivatedWithInputTag.RemoveAll(this);
+			DRASC->OnAbilityEndedWithInputTag.RemoveAll(this);
 		}
 	}
-	CleanserSiteDelegateHandles.Empty();
+	BoundAttributes.Reset();
 
-	// 장착 칩 변경 델리게이트 언바인딩 (Plan3(공용칩) §7.2).
-	// ★아래 GameState 조기 반환보다 먼저★ 해야 한다 — GameState 가 없을 때도 반드시 풀려야
-	// 관전 전환/오버레이 재생성 시 댕글링 바인딩이 남지 않는다.
+	// ===== PlayerState =====
 	if (ADRPlayerState* DRPS = GetDRPS())
 	{
 		DRPS->OnUpgradeRuntimeChanged.RemoveDynamic(
 			this, &UOverlayWidgetController::RefreshHudFeatureVisibility);
+		DRPS->OnCorruptedStateChanged.RemoveDynamic(
+			this, &UOverlayWidgetController::HandleCorruptedStateChanged);
 	}
 
-	ADRStageGameState* DRGameState = World->GetGameState<ADRStageGameState>();
+	// ===== GameState =====
+	bGameStateDelegatesBound = false;
+	ADRStageGameState* DRGameState = GetWorld() ? GetWorld()->GetGameState<ADRStageGameState>() : nullptr;
 	if (!DRGameState) return;
 
-	// PhaseObjective 델리게이트 언바인딩
-	if (PhaseObjectiveDelegateHandle.IsValid())
-	{
-		DRGameState->OnPhaseObjectiveChangedDelegate.Remove(PhaseObjectiveDelegateHandle);
-		PhaseObjectiveDelegateHandle.Reset();
-	}
-
-	// ObjectiveCompleted 델리게이트 언바인딩
-	if (ObjectiveCompletedDelegateHandle.IsValid())
-	{
-		DRGameState->OnObjectiveCompletedDelegate.Remove(ObjectiveCompletedDelegateHandle);
-		ObjectiveCompletedDelegateHandle.Reset();
-	}
-
-	// WaveTimer 델리게이트 언바인딩
-	if (WaveTimerDelegateHandle.IsValid())
-	{
-		DRGameState->OnWaveTimerChangedDelegate.Remove(WaveTimerDelegateHandle);
-		WaveTimerDelegateHandle.Reset();
-	}
-
+	DRGameState->OnPhaseObjectiveChangedDelegate.RemoveAll(this);
+	DRGameState->OnObjectiveCompletedDelegate.RemoveAll(this);
+	DRGameState->OnWaveTimerChangedDelegate.RemoveAll(this);
 	DRGameState->OnPhaseChangedDelegate.RemoveDynamic(this, &UOverlayWidgetController::OnPhaseChanged);
+	DRGameState->OnWaveDefenseUIActiveChangedDelegate.RemoveDynamic(this, &UOverlayWidgetController::HandleWaveDefenseUIActiveChanged);
 	DRGameState->OnToxicGasWarningDelegate.RemoveDynamic(this, &UOverlayWidgetController::OnToxicGasWarningReceived);
 }
 
@@ -443,7 +362,7 @@ void UOverlayWidgetController::HandlePhaseObjectiveChanged()
 		FText AlarmText = ObjectiveData.PhaseAlarmText;
 		if (AlarmText.IsEmpty())
 		{
-			AlarmText = GetLegacyPhaseAlarmText(CachedPhaseNumber);
+			AlarmText = GetFallbackPhaseAlarmText(CachedPhaseNumber);
 		}
 
 		if (!AlarmText.IsEmpty())
@@ -470,31 +389,17 @@ void UOverlayWidgetController::BindPhaseObjectiveDelegate()
 	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
 	if (!DRGameState) return;
 
-	// 약 참조 캡처로 안전한 람다 바인딩
-	TWeakObjectPtr<UOverlayWidgetController> WeakThis(this);
-
-	// 핸들 저장하면서 델리게이트 바인딩
-	PhaseObjectiveDelegateHandle = DRGameState->OnPhaseObjectiveChangedDelegate.AddLambda(
-		[WeakThis]()
-		{
-			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-			{
-				StrongThis->HandlePhaseObjectiveChanged();
-				StrongThis->CheckAndBindWaveTimer();
-			}
-		}
-	);
+	DRGameState->OnPhaseObjectiveChangedDelegate.AddWeakLambda(this, [this]()
+	{
+		HandlePhaseObjectiveChanged();
+		CheckAndBindWaveTimer();
+	});
 
 	// 목표 클리어 델리게이트 바인딩 (Multicast RPC → 클리어 애니메이션 트리거)
-	ObjectiveCompletedDelegateHandle = DRGameState->OnObjectiveCompletedDelegate.AddLambda(
-		[WeakThis]()
-		{
-			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-			{
-				StrongThis->OnObjectiveCompleted.Broadcast();
-			}
-		}
-	);
+	DRGameState->OnObjectiveCompletedDelegate.AddWeakLambda(this, [this]()
+	{
+		OnObjectiveCompleted.Broadcast();
+	});
 
 	// 현재 값 즉시 받아오기
 	HandlePhaseObjectiveChanged();
@@ -505,19 +410,13 @@ void UOverlayWidgetController::BindWaveTimerDelegate()
 	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
 	if (!DRGameState) return;
 
-	// 약 참조 캡처로 안전한 람다 바인딩
-	TWeakObjectPtr<UOverlayWidgetController> WeakThis(this);
-
-	// 웨이브 타이머 델리게이트 바인딩
-	WaveTimerDelegateHandle = DRGameState->OnWaveTimerChangedDelegate.AddLambda(
-		[WeakThis](int32 WaveNumber, float RemainingTime, bool bIsRestTime)
-		{
-			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-			{
-				StrongThis->OnWaveTimerChanged.Broadcast(WaveNumber, RemainingTime, bIsRestTime);
-			}
-		}
-	);
+	// 웨이브 방어 UI 가 꺼졌다 켜지면 다시 불린다 — 먼저 떼어 중복 바인딩을 막는다
+	DRGameState->OnWaveTimerChangedDelegate.RemoveAll(this);
+	DRGameState->OnWaveTimerChangedDelegate.AddWeakLambda(this,
+		[this](int32 WaveNumber, float RemainingTime, bool bIsRestTime)
+	{
+		OnWaveTimerChanged.Broadcast(WaveNumber, RemainingTime, bIsRestTime);
+	});
 
 	// 초기값 즉시 브로드캐스트
 	OnWaveTimerChanged.Broadcast(
@@ -539,10 +438,10 @@ void UOverlayWidgetController::BindPhaseAlarmDelegate()
 	bPhaseAlarmPending = false;
 	CachedAlarmText = FText::GetEmpty();
 
-	DRGameState->OnPhaseChangedDelegate.AddDynamic(this, &UOverlayWidgetController::OnPhaseChanged);
+	DRGameState->OnPhaseChangedDelegate.AddUniqueDynamic(this, &UOverlayWidgetController::OnPhaseChanged);
 
 	// 웨이브 방어 UI 표시 플래그 구독 (Plan6 §5.4)
-	DRGameState->OnWaveDefenseUIActiveChangedDelegate.AddDynamic(
+	DRGameState->OnWaveDefenseUIActiveChangedDelegate.AddUniqueDynamic(
 		this, &UOverlayWidgetController::HandleWaveDefenseUIActiveChanged);
 
 	// 현재 페이즈 즉시 표시
@@ -569,7 +468,7 @@ void UOverlayWidgetController::BindToxicGasWarningDelegate()
 	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
 	if (!DRGameState) return;
 
-	DRGameState->OnToxicGasWarningDelegate.AddDynamic(this, &UOverlayWidgetController::OnToxicGasWarningReceived);
+	DRGameState->OnToxicGasWarningDelegate.AddUniqueDynamic(this, &UOverlayWidgetController::OnToxicGasWarningReceived);
 
 	// 현재 상태 즉시 확인 (이미 독가스 웨이브 진행 중일 수 있음 - late joiner)
 	if (DRGameState->IsToxicGasWave())
@@ -616,9 +515,6 @@ void UOverlayWidgetController::HandleWaveDefenseUIActiveChanged(bool bIsActive)
 
 	if (bIsActive)
 	{
-		// 클렌저 사이트 HP UI 바인딩 (기존에는 페이즈 인덱스 == 2 조건이었음)
-		BindCallbacksCleanserSiteToDependencies();
-
 		if (CachedWavePhaseNumber != 2)
 		{
 			CachedWavePhaseNumber = 2;
@@ -647,17 +543,16 @@ void UOverlayWidgetController::OnPhaseChanged(int32 NewPhaseIndex)
 	}
 }
 
-FText UOverlayWidgetController::GetLegacyPhaseAlarmText(int32 PhaseIndex) const
+FText UOverlayWidgetController::GetFallbackPhaseAlarmText(int32 PhaseIndex) const
 {
-	// 목표 DataTable에 PhaseAlarmText가 채워지기 전까지 사용하는 폴백 (스테이지1 호환)
+	// 목표 DataTable 의 PhaseAlarmText 가 비어 있을 때의 폴백 — 스테이지1(DT_S1PhaseObjective)이 이 경로를 쓴다.
+	// 스테이지1 은 2페이즈다: 0 = 확보(부품 수집 포함), 1 = 방어. (옛 3페이즈 문구 "페이즈 2: 수집" 이 방어 페이즈에 떴다)
 	switch (PhaseIndex)
 	{
 	case 0:
 		return LOCTEXT("Phase_Alarm_1", "페이즈 1: 확보");
 	case 1:
-		return LOCTEXT("Phase_Alarm_2", "페이즈 2: 수집");
-	case 2:
-		return LOCTEXT("Phase_Alarm_3", "페이즈 3: 방어");
+		return LOCTEXT("Phase_Alarm_2", "페이즈 2: 방어");
 	default:
 		return FText::GetEmpty();
 	}
@@ -695,7 +590,7 @@ void UOverlayWidgetController::BroadcastSkillIconWidgetClass()
 	UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(GetWorld());
 	if (!ClassInfo) return;
 
-	FCharacterClassDefaultInfo DefaultInfo = ClassInfo->GetClassDefaultInfo(CharClass);
+	const FCharacterClassDefaultInfo& DefaultInfo = ClassInfo->GetClassDefaultInfo(CharClass);
 	if (DefaultInfo.SkillIconWidgetClass)
 	{
 		OnSkillIconClassChanged.Broadcast(DefaultInfo.SkillIconWidgetClass);
@@ -710,7 +605,7 @@ void UOverlayWidgetController::BroadcastCrosshairImages()
 	UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(GetWorld());
 	if (!ClassInfo) return;
 
-	const FCharacterClassDefaultInfo DefaultInfo = ClassInfo->GetClassDefaultInfo(PS->GetSelectedPlayerClass());
+	const FCharacterClassDefaultInfo& DefaultInfo = ClassInfo->GetClassDefaultInfo(PS->GetSelectedPlayerClass());
 	OnCrosshairImagesChanged.Broadcast(
 		DefaultInfo.CrosshairTexture,
 		ClassInfo->CrosshairDisabledTexture,
@@ -825,74 +720,6 @@ void UOverlayWidgetController::UpdateCrosshairState(bool bForceBroadcast)
 
 	CachedCrosshairState = NewState;
 	OnCrosshairStateChanged.Broadcast(NewState);
-}
-
-void UOverlayWidgetController::BindCleanserSite(ADRCleanserSite* FirstCleanserSite,ADRCleanserSite* SecondCleanserSite)
-{
-	if (!FirstCleanserSite || !SecondCleanserSite) return;
-
-	UAbilitySystemComponent* FirstSiteAsc = FirstCleanserSite->GetAbilitySystemComponent();
-	const UDRCleanserSiteAttributeSet* FirstSiteAs = FirstCleanserSite->GetAttributeSet();
-	if (!FirstSiteAsc || !FirstSiteAs) return;
-
-	UAbilitySystemComponent* SecondSiteAsc = SecondCleanserSite->GetAbilitySystemComponent();
-	const UDRCleanserSiteAttributeSet* SecondSiteAs = SecondCleanserSite->GetAttributeSet();
-	if (!SecondSiteAsc || !SecondSiteAs) return;
-
-	// 약 참조 캡처로 안전한 람다 바인딩
-	TWeakObjectPtr<UOverlayWidgetController> WeakThis(this);
-
-	// 첫 번째 CleanserSite 체력 변경 바인딩
-	FDelegateHandle FirstHealthHandle = FirstSiteAsc->GetGameplayAttributeValueChangeDelegate(FirstSiteAs->GetHealthAttribute()).AddLambda(
-		[WeakThis](const FOnAttributeChangeData& Data)
-		{
-			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-			{
-				StrongThis->OnFirstCleanserHealthChanged.Broadcast(Data.NewValue);
-			}
-		}
-	);
-	CleanserSiteDelegateHandles.Add(TPair<TWeakObjectPtr<UAbilitySystemComponent>, FDelegateHandle>(FirstSiteAsc, FirstHealthHandle));
-
-	FDelegateHandle FirstMaxHealthHandle = FirstSiteAsc->GetGameplayAttributeValueChangeDelegate(FirstSiteAs->GetMaxHealthAttribute()).AddLambda(
-		[WeakThis](const FOnAttributeChangeData& Data)
-		{
-			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-			{
-				StrongThis->OnFirstCleanserMaxHealthChanged.Broadcast(Data.NewValue);
-			}
-		}
-	);
-	CleanserSiteDelegateHandles.Add(TPair<TWeakObjectPtr<UAbilitySystemComponent>, FDelegateHandle>(FirstSiteAsc, FirstMaxHealthHandle));
-
-	// 두 번째 CleanserSite 체력 변경 바인딩
-	FDelegateHandle SecondHealthHandle = SecondSiteAsc->GetGameplayAttributeValueChangeDelegate(SecondSiteAs->GetHealthAttribute()).AddLambda(
-		[WeakThis](const FOnAttributeChangeData& Data)
-		{
-			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-			{
-				StrongThis->OnSecondCleanserHealthChanged.Broadcast(Data.NewValue);
-			}
-		}
-	);
-	CleanserSiteDelegateHandles.Add(TPair<TWeakObjectPtr<UAbilitySystemComponent>, FDelegateHandle>(SecondSiteAsc, SecondHealthHandle));
-
-	FDelegateHandle SecondMaxHealthHandle = SecondSiteAsc->GetGameplayAttributeValueChangeDelegate(SecondSiteAs->GetMaxHealthAttribute()).AddLambda(
-		[WeakThis](const FOnAttributeChangeData& Data)
-		{
-			if (UOverlayWidgetController* StrongThis = WeakThis.Get())
-			{
-				StrongThis->OnSecondCleanserMaxHealthChanged.Broadcast(Data.NewValue);
-			}
-		}
-	);
-	CleanserSiteDelegateHandles.Add(TPair<TWeakObjectPtr<UAbilitySystemComponent>, FDelegateHandle>(SecondSiteAsc, SecondMaxHealthHandle));
-
-	// 초기값 UI 표시
-	OnFirstCleanserHealthChanged.Broadcast(FirstSiteAs->GetHealth());
-	OnFirstCleanserMaxHealthChanged.Broadcast(FirstSiteAs->GetMaxHealth());
-	OnSecondCleanserHealthChanged.Broadcast(SecondSiteAs->GetHealth());
-	OnSecondCleanserMaxHealthChanged.Broadcast(SecondSiteAs->GetMaxHealth());
 }
 
 #undef LOCTEXT_NAMESPACE

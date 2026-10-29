@@ -5,6 +5,7 @@
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SphereComponent.h"
@@ -12,8 +13,13 @@
 #include "DRGameplayTags.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
+#include "Misc/DataValidation.h"
 #include "Net/UnrealNetwork.h"
 #include "Player/DRPlayerController.h"
+#include "Player/DRInteractionComponent.h"
 #include "Sound/SoundBase.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
 #include "Game/DRProgressionConfig.h"
@@ -41,6 +47,21 @@ ADRRobotVacuumCharacter::ADRRobotVacuumCharacter()
 	MountPromptWidget->SetWidgetSpace(EWidgetSpace::Screen);
 	MountPromptWidget->SetDrawSize(FVector2D(300.f, 100.f));
 	MountPromptWidget->SetVisibility(false);
+
+	// 돌진 불꽃 껍질 — 평소엔 숨겨 두고 bIsDashing 동안만 보인다 (RefreshTagDrivenVFX)
+	DashVFXMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DashVFXMesh"));
+	DashVFXMesh->SetupAttachment(GetMesh());
+	DashVFXMesh->SetRelativeLocation(FVector(0.f, 0.f, 45.f));     // 몸통 높이 (메시 원점 = 바닥)
+	DashVFXMesh->SetRelativeRotation(FRotator(0.f, 0.f, -90.f));   // 에디터 표기 (X=-90, 0, 0) = Roll
+	DashVFXMesh->SetRelativeScale3D(FVector(1.2f, 1.2f, 2.0f));
+	DashVFXMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	DashVFXMesh->SetGenerateOverlapEvents(false);
+	DashVFXMesh->SetCastShadow(false);
+	DashVFXMesh->SetOwnerNoSee(true);
+	DashVFXMesh->SetHiddenInGame(true);
+
+	// 껍질 메시(구체) · 재질(Flames_Mat)과 사운드 큐는 BP_DRVacuumCleaner 기본값으로 넣는다
+	// (큐가 감쇠(SA_Short) · 사운드 클래스(SC_SFX) · 루프 여부를 들고 있다)
 }
 
 void ADRRobotVacuumCharacter::BeginPlay()
@@ -79,6 +100,8 @@ void ADRRobotVacuumCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	// ★Plan5(돌진칩)★ 돌진 중 파괴 · 레벨 전환 — 아군 캡슐에 내 이동 무시 항목이 남지 않게 (T-125)
 	ApplyAllyPassThrough(false);
 
+	StopAllLoopSounds();
+
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -102,10 +125,10 @@ void ADRRobotVacuumCharacter::RefreshMountOverlapStateFor(ADRCharacter* Characte
 	ADRPlayerController* PC = Cast<ADRPlayerController>(Character->GetController());
 	if (!PC || !PC->IsLocalController()) return;
 
-	// 부품 소지/탑승 여부 같은 동적 조건은 FindMountByLineTrace가 매 주기 재검사하므로
+	// 부품 소지/탑승 여부 같은 동적 조건은 상호작용 컴포넌트의 FindMount 가 감지 주기마다 재검사하므로
 	// 여기서는 순수 오버랩 여부만으로 후보 등록/해제한다
 	const bool bShouldDetect = MountDetectionSphere->IsOverlappingActor(Character) && !bDead;
-	PC->SetMountDetectionEnabled(bShouldDetect, this);
+	PC->GetInteractionComponent()->SetMountDetectionEnabled(bShouldDetect, this);
 }
 
 void ADRRobotVacuumCharacter::Tick(float DeltaTime)
@@ -143,6 +166,8 @@ void ADRRobotVacuumCharacter::Tick(float DeltaTime)
 		RiderOnTop->SetActorLocation(
 			GetMesh()->GetSocketLocation(RideSocketName) + FVector(0.f, 0.f, RiderOnTop->GetMountZOffset()));
 	}
+
+	UpdateWalkSound();
 }
 
 void ADRRobotVacuumCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -151,12 +176,16 @@ void ADRRobotVacuumCharacter::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 
 	DOREPLIFETIME(ADRRobotVacuumCharacter, RiderOnTop);
 	DOREPLIFETIME(ADRRobotVacuumCharacter, bSustainedDash);
+	DOREPLIFETIME(ADRRobotVacuumCharacter, bIsDashing);
 	DOREPLIFETIME(ADRRobotVacuumCharacter, bDashPassThroughAllies);   // ★Plan5(돌진칩)★ 모든 머신이 이동 무시를 맞춘다 (D-115)
 
 	// 애님 전용 플래그 (ABP가 매 프레임 폴링 — RepNotify 불필요)
 	DOREPLIFETIME(ADRRobotVacuumCharacter, bIsDashCharging);
 	DOREPLIFETIME(ADRRobotVacuumCharacter, bIsJetJumping);
 	DOREPLIFETIME(ADRRobotVacuumCharacter, JetJumpCounter);
+
+	// 소유 클라는 공기탄 충전음을 직접 켜고 끈다
+	DOREPLIFETIME_CONDITION(ADRRobotVacuumCharacter, bIsAttackCharging, COND_SkipOwner);
 }
 
 void ADRRobotVacuumCharacter::Landed(const FHitResult& Hit)
@@ -188,6 +217,8 @@ void ADRRobotVacuumCharacter::MulticastHandleDeath_Implementation(const FVector&
 			MountedOn->DismountRider(false);
 		}
 	}
+
+	StopAllLoopSounds();
 
 	Super::MulticastHandleDeath_Implementation(DeathImpulse);
 }
@@ -255,9 +286,6 @@ void ADRRobotVacuumCharacter::MountRider(ADRCharacter* Rider)
 
 	// ★Plan5(탑승칩)★ ① 탑 인원이 바뀌었다 — 감속 다시 맞추기 (D-81)
 	RefreshRideLoadsAfterLinkChange(Rider);
-
-	// 리슨 서버 parity (클라는 RepNotify 경로)
-	OnRep_RiderOnTop();
 }
 
 void ADRRobotVacuumCharacter::DismountRider(bool bLaunchOff)
@@ -271,7 +299,6 @@ void ADRRobotVacuumCharacter::DismountRider(bool bLaunchOff)
 	if (!IsValid(Rider))
 	{
 		RefreshRideLoadsAfterLinkChange(nullptr);   // ★Plan5(탑승칩)★ (D-81)
-		OnRep_RiderOnTop();
 		return;
 	}
 
@@ -304,12 +331,6 @@ void ADRRobotVacuumCharacter::DismountRider(bool bLaunchOff)
 	// ★Plan5(탑승칩)★ ① 탑 인원이 바뀌었다 — 내린 청소기는 맨 아래가 됐다 (D-81)
 	RefreshRideLoadsAfterLinkChange(Rider);
 
-	OnRep_RiderOnTop();
-}
-
-void ADRRobotVacuumCharacter::OnRep_RiderOnTop()
-{
-	// TODO(Plan3 Phase B): 탑승 프롬프트 갱신 등 클라 코스메틱 처리
 }
 
 void ADRRobotVacuumCharacter::SetInteractionUIVisible(bool bShow)
@@ -434,6 +455,41 @@ void ADRRobotVacuumCharacter::SetDashCollisionEnabled(bool bEnabled)
 	bDashCollisionArmed = bEnabled;
 }
 
+void ADRRobotVacuumCharacter::SetDashing(bool bEnabled)
+{
+	if (!HasAuthority() || bIsDashing == bEnabled) return;
+	bIsDashing = bEnabled;
+	OnRep_IsDashing();   // 리슨 서버 parity (서버에서 직접 호출하는 관례)
+}
+
+void ADRRobotVacuumCharacter::OnRep_IsDashing()
+{
+	RefreshTagDrivenVFX();
+
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	// 시작음은 꺼짐 → 켜짐 엣지에서 1회. 루프는 플래그를 그대로 따른다
+	const bool bWasLooping = IsLoopSoundActive(DashLoopAudio);
+	const bool bShouldLoop = bIsDashing && !bDead;
+	if (bShouldLoop && !bWasLooping)
+	{
+		PlayAttachedSound(DashStartSound);
+	}
+	SetLoopSound(DashLoopAudio, DashLoopSound, bShouldLoop);
+}
+
+void ADRRobotVacuumCharacter::RefreshTagDrivenVFX()
+{
+	Super::RefreshTagDrivenVFX();   // 공속 버프 몸 이펙트
+
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	if (DashVFXMesh)
+	{
+		DashVFXMesh->SetHiddenInGame(!(bIsDashing && !bDead));
+	}
+}
+
 void ADRRobotVacuumCharacter::SetSustainedDash(bool bEnabled)
 {
 	if (!HasAuthority() || bSustainedDash == bEnabled) return;
@@ -455,14 +511,6 @@ void ADRRobotVacuumCharacter::SetSustainedDash(bool bEnabled)
 			ASC->RemoveReplicatedLooseGameplayTag(DashTag);
 		}
 	}
-
-	// 리슨 서버 parity (Armadillo OnRep_IsRolling 패턴)
-	OnRep_SustainedDash();
-}
-
-void ADRRobotVacuumCharacter::OnRep_SustainedDash()
-{
-	// TODO(Plan3 Phase F): 지속 돌진 루프 사운드/VFX 시작·정지
 }
 
 // ========== 돌진칩② 아군 통과 (Plan5(돌진칩)) ==========
@@ -471,7 +519,7 @@ void ADRRobotVacuumCharacter::SetDashPassThroughAllies(bool bEnabled)
 {
 	if (!HasAuthority() || bDashPassThroughAllies == bEnabled) return;
 	bDashPassThroughAllies = bEnabled;
-	OnRep_DashPassThroughAllies();   // 리슨 서버 parity (OnRep_SustainedDash 와 같은 관례)
+	OnRep_DashPassThroughAllies();   // 리슨 서버 parity (서버에서 직접 호출하는 관례)
 }
 
 void ADRRobotVacuumCharacter::OnRep_DashPassThroughAllies()
@@ -524,6 +572,14 @@ void ADRRobotVacuumCharacter::MulticastPlayDashImpactSound_Implementation(FVecto
 	UGameplayStatics::PlaySoundAtLocation(this, DashImpactSound, Location);
 }
 
+void ADRRobotVacuumCharacter::MulticastPlayDashBrakeSound_Implementation()
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	// 급정거하며 미끄러지므로 몸에 붙여 재생
+	PlayAttachedSound(DashBrakeSound);
+}
+
 void ADRRobotVacuumCharacter::OnCapsuleHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
                                            UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
@@ -557,8 +613,15 @@ void ADRRobotVacuumCharacter::OnCapsuleHit(UPrimitiveComponent* HitComponent, AA
 
 void ADRRobotVacuumCharacter::SetDashCharging(bool bNew)
 {
-	if (!HasAuthority()) return;
+	if (!HasAuthority() || bIsDashCharging == bNew) return;
 	bIsDashCharging = bNew;
+	OnRep_IsDashCharging();   // 리슨 서버 parity
+}
+
+void ADRRobotVacuumCharacter::OnRep_IsDashCharging()
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+	SetLoopSound(DashChargeAudio, DashChargingSound, bIsDashCharging && !bDead);
 }
 
 void ADRRobotVacuumCharacter::SetJetJumping(bool bNew)
@@ -599,3 +662,166 @@ FVector ADRRobotVacuumCharacter::GetCombatSocketLocation_Implementation(const FG
 	}
 	return Super::GetCombatSocketLocation_Implementation(MontageTag);
 }
+
+// ========== 사운드 ==========
+
+void ADRRobotVacuumCharacter::PlayAirShotSound(bool bEnhanced)
+{
+	PlayPredictedSound(bEnhanced ? AttackEnhancedSound.Get() : AttackSound.Get());
+}
+
+void ADRRobotVacuumCharacter::PlayJetJumpSound()
+{
+	PlayPredictedSound(JetJumpSound);
+}
+
+void ADRRobotVacuumCharacter::OnJumped_Implementation()
+{
+	Super::OnJumped_Implementation();
+
+	// 클라 이동 재실행(서버 보정 후 리플레이) 중에도 불린다 — 그때는 이미 들은 점프다
+	if (bClientUpdating) return;
+
+	PlayPredictedSound(JumpSound);
+}
+
+void ADRRobotVacuumCharacter::PlayPredictedSound(USoundBase* Sound)
+{
+	if (!Sound) return;
+
+	// 입력한 머신(소유 클라 · 리슨 호스트 본인)은 서버를 기다리지 않고 바로 듣는다
+	if (IsLocallyControlled())
+	{
+		PlayAttachedSound(Sound);
+	}
+
+	// 나머지 머신에는 서버가 알린다 — 멀티캐스트 쪽에서 소유 클라를 건너뛴다
+	if (HasAuthority())
+	{
+		MulticastPlayPredictedSound(Sound);
+	}
+}
+
+void ADRRobotVacuumCharacter::MulticastPlayPredictedSound_Implementation(USoundBase* Sound)
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+	if (IsLocallyControlled()) return;   // PlayPredictedSound 에서 이미 재생했다
+
+	PlayAttachedSound(Sound);
+}
+
+void ADRRobotVacuumCharacter::SetAttackChargingSound(bool bCharging)
+{
+	// 소유 클라 · 리슨 호스트 본인 — 즉시
+	if (IsLocallyControlled())
+	{
+		SetLoopSound(AttackChargeAudio, AttackChargingSound, bCharging && !bDead);
+	}
+
+	if (HasAuthority() && bIsAttackCharging != bCharging)
+	{
+		bIsAttackCharging = bCharging;
+		// 리슨 호스트가 남의 청소기를 볼 때 — 서버에서는 OnRep 이 불리지 않는다
+		if (!IsLocallyControlled())
+		{
+			OnRep_AttackCharging();
+		}
+	}
+}
+
+void ADRRobotVacuumCharacter::OnRep_AttackCharging()
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+	SetLoopSound(AttackChargeAudio, AttackChargingSound, bIsAttackCharging && !bDead);
+}
+
+void ADRRobotVacuumCharacter::PlayAttachedSound(USoundBase* Sound) const
+{
+	if (!Sound || GetNetMode() == NM_DedicatedServer) return;
+	UGameplayStatics::SpawnSoundAttached(Sound, GetRootComponent());
+}
+
+void ADRRobotVacuumCharacter::SetLoopSound(TObjectPtr<UAudioComponent>& Audio, USoundBase* Sound, bool bPlay)
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	if (bPlay)
+	{
+		if (!Sound) return;
+		if (IsLoopSoundActive(Audio)) return;   // 꺼지는 중(페이드 아웃)이면 다시 켠다
+
+		if (!Audio)
+		{
+			// bAutoDestroy = false — 같은 컴포넌트를 켰다 껐다 재사용한다
+			Audio = UGameplayStatics::SpawnSoundAttached(Sound, GetRootComponent(), NAME_None, FVector::ZeroVector,
+				EAttachLocation::KeepRelativeOffset, /*bStopWhenAttachedToDestroyed*/ true, 1.f, 1.f, 0.f,
+				nullptr, nullptr, /*bAutoDestroy*/ false);
+		}
+		else
+		{
+			Audio->SetSound(Sound);
+			Audio->Play();
+		}
+	}
+	else if (IsLoopSoundActive(Audio))
+	{
+		Audio->FadeOut(0.15f, 0.f);
+	}
+}
+
+bool ADRRobotVacuumCharacter::IsLoopSoundActive(const UAudioComponent* Audio)
+{
+	return Audio && Audio->IsPlaying() && Audio->GetPlayState() != EAudioComponentPlayState::FadingOut;
+}
+
+void ADRRobotVacuumCharacter::UpdateWalkSound()
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	// 돌진 중엔 돌진 루프가 대신한다. 다른 청소기 위에 타고 있으면 내 바퀴는 구르지 않는다
+	const UCharacterMovementComponent* Move = GetCharacterMovement();
+	const bool bWalking = !bDead && !bIsDashing && !IsMounted() && Move && Move->IsMovingOnGround()
+		&& GetVelocity().Size2D() >= WalkSoundMinSpeed;
+
+	SetLoopSound(WalkAudio, WalkSound, bWalking);
+}
+
+void ADRRobotVacuumCharacter::StopAllLoopSounds()
+{
+	for (UAudioComponent* Audio : { WalkAudio.Get(), DashChargeAudio.Get(), DashLoopAudio.Get(), AttackChargeAudio.Get() })
+	{
+		if (Audio)
+		{
+			Audio->Stop();
+		}
+	}
+}
+
+#if WITH_EDITOR
+EDataValidationResult ADRRobotVacuumCharacter::IsDataValid(FDataValidationContext& Context) const
+{
+	const EDataValidationResult Result = Super::IsDataValid(Context);
+
+	const TPair<const TCHAR*, const USoundBase*> Sounds[] =
+	{
+		{ TEXT("AttackSound"), AttackSound }, { TEXT("AttackEnhancedSound"), AttackEnhancedSound },
+		{ TEXT("AttackChargingSound"), AttackChargingSound }, { TEXT("DashChargingSound"), DashChargingSound },
+		{ TEXT("DashStartSound"), DashStartSound }, { TEXT("DashLoopSound"), DashLoopSound },
+		{ TEXT("DashBrakeSound"), DashBrakeSound }, { TEXT("DashImpactSound"), DashImpactSound },
+		{ TEXT("JumpSound"), JumpSound }, { TEXT("JetJumpSound"), JetJumpSound }, { TEXT("WalkSound"), WalkSound },
+	};
+	for (const TPair<const TCHAR*, const USoundBase*>& Sound : Sounds)
+	{
+		if (!Sound.Value)
+		{
+			Context.AddWarning(FText::FromString(FString::Printf(TEXT("%s 가 비어 있다 — 그 소리가 안 난다"), Sound.Key)));
+		}
+	}
+
+	if (!DashVFXMesh || !DashVFXMesh->GetStaticMesh())
+	{
+		Context.AddWarning(FText::FromString(TEXT("DashVFXMesh 에 메시가 없다 — 돌진 불꽃 껍질이 안 보인다 (구체 + Flames_Mat)")));
+	}
+	return Result;
+}
+#endif

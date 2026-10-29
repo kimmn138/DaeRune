@@ -2,6 +2,7 @@
 
 
 #include "Game/DRCosmeticCatalog.h"
+#include "Misc/DataValidation.h"
 #include "DaeRune/DRLogChannels.h"
 
 #if WITH_EDITOR
@@ -21,6 +22,7 @@ void UDRCosmeticCatalog::BuildIndex() const
 {
 	IdToIndex.Reset();
 	IdToIndex.Reserve(Skins.Num());
+	IndexedEntryCount = Skins.Num();
 
 	for (int32 Index = 0; Index < Skins.Num(); ++Index)
 	{
@@ -224,13 +226,29 @@ void UDRCosmeticCatalog::PostEditChangeProperty(FPropertyChangedEvent& PropertyC
 	// 편집할 때마다 자동 검사해 로그로 알린다.
 	// (수동 호출을 잊어 잘못된 데이터가 빌드에 들어가는 것을 막기 위함 — UDRProgressionConfig 와 같은 관례)
 	TArray<FString> Errors;
-	if (!ValidateCatalog(Errors))
+	CollectEditorValidationErrors(Errors);
+	for (const FString& Error : Errors)
 	{
-		for (const FString& Error : Errors)
-		{
-			UE_LOG(LogDR, Warning, TEXT("[Cosmetic] 카탈로그 검증: %s"), *Error);
-		}
+		UE_LOG(LogDR, Warning, TEXT("[Cosmetic] 카탈로그 검증: %s"), *Error);
 	}
+}
+
+EDataValidationResult UDRCosmeticCatalog::IsDataValid(FDataValidationContext& Context) const
+{
+	const EDataValidationResult Result = Super::IsDataValid(Context);
+
+	TArray<FString> Errors;
+	CollectEditorValidationErrors(Errors);
+	for (const FString& Error : Errors)
+	{
+		Context.AddWarning(FText::FromString(Error));
+	}
+	return CombineDataValidationResults(Result, EDataValidationResult::Valid);
+}
+
+void UDRCosmeticCatalog::CollectEditorValidationErrors(TArray<FString>& OutErrors) const
+{
+	ValidateCatalog(OutErrors);
 
 	// 해금 조건이 실재하는지는 업적 정의를 가진 ProgressionConfig 가 안다 —
 	// 프로젝트의 GameInstance 기본값에서 이 카탈로그를 쓰는 설정을 찾아 같은 검사를 돌린다 (Plan(옷장) D-29)
@@ -241,13 +259,8 @@ void UDRCosmeticCatalog::PostEditChangeProperty(FPropertyChangedEvent& PropertyC
 		if (Config && Config->CosmeticCatalog == this)
 		{
 			TArray<FString> AchievementErrors;
-			if (!Config->ValidateAchievements(AchievementErrors))
-			{
-				for (const FString& Error : AchievementErrors)
-				{
-					UE_LOG(LogDR, Warning, TEXT("[Cosmetic] 카탈로그 검증: %s"), *Error);
-				}
-			}
+			Config->ValidateAchievements(AchievementErrors);
+			OutErrors.Append(AchievementErrors);
 		}
 
 		// 옷이 쓰는 소켓이 ★입을 수 있는 로봇의 메시마다★ 있는가 — 없으면 그 로봇에서는 발밑에 붙는다 (Plan(옷장) D-32)
@@ -272,9 +285,9 @@ void UDRCosmeticCatalog::PostEditChangeProperty(FPropertyChangedEvent& PropertyC
 
 					if (!RobotMesh->FindSocket(SocketName) && RobotMesh->GetRefSkeleton().FindBoneIndex(SocketName) == INDEX_NONE)
 					{
-						UE_LOG(LogDR, Warning, TEXT("[Cosmetic] 카탈로그 검증: [%s] %s 메시(%s)에 '%s' 소켓/뼈가 없습니다 — 그 로봇에서는 발밑에 붙습니다."),
+						OutErrors.Add(FString::Printf(TEXT("[%s] %s 메시(%s)에 '%s' 소켓/뼈가 없습니다 — 그 로봇에서는 발밑에 붙습니다."),
 							*Skin.SkinId.ToString(), *StaticEnum<EPlayerCharacterClass>()->GetNameStringByValue(static_cast<int64>(Pair.Key)),
-							*RobotMesh->GetName(), *SocketName.ToString());
+							*RobotMesh->GetName(), *SocketName.ToString()));
 					}
 				}
 			}

@@ -33,24 +33,8 @@ void UDRS2MoleClawAttack::OnGiveAbility(const FGameplayAbilityActorInfo* ActorIn
 	Super::OnGiveAbility(ActorInfo, Spec);
 
 	// 커브를 걸어 놓고 Value 를 0으로 둔 상태를 부여 시점에 1회 잡아낸다
-	auto Validate = [](const FScalableFloat& Field, const TCHAR* Label)
-	{
-		if (!Field.Curve.RowName.IsNone() && FMath::IsNearlyZero(Field.Value))
-		{
-			UE_LOG(LogDR, Error,
-				TEXT("[MoleBoss] Claw %s: 커브 행(%s)이 지정됐지만 Value 가 0입니다 — 데미지가 항상 0이 됩니다. Value 를 1 로 설정하세요."),
-				Label, *Field.Curve.RowName.ToString());
-		}
-		else if (Field.Curve.RowName.IsNone())
-		{
-			UE_LOG(LogDR, Warning,
-				TEXT("[MoleBoss] Claw %s 에 커브가 없어 상수 %.1f 로 동작합니다 (구간 스케일 없음)."),
-				Label, Field.Value);
-		}
-	};
-
-	Validate(Hit1Damage, TEXT("Hit1Damage"));
-	Validate(Hit2Damage, TEXT("Hit2Damage"));
+	WarnIfScalableFloatMisconfigured(Hit1Damage, TEXT("[MoleBoss] Claw"), TEXT("Hit1Damage"), TEXT("구간"));
+	WarnIfScalableFloatMisconfigured(Hit2Damage, TEXT("[MoleBoss] Claw"), TEXT("Hit2Damage"), TEXT("구간"));
 
 	// ★검기 클래스 미지정은 "아무 공격도 안 나가는" 무증상 버그가 되므로 부여 시점에 잡는다.
 	if (!bUseMeleeSweep && !SlashWaveClass)

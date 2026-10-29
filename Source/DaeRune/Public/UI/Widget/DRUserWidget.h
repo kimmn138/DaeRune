@@ -7,7 +7,7 @@
 #include "DRUserWidget.generated.h"
 
 /**
- * DaeRune �⺻ UI ���� Ŭ����
+ * DaeRune 기본 UI 위젯 클래스
  */
 UCLASS()
 class DAERUNE_API UDRUserWidget : public UUserWidget
@@ -15,18 +15,21 @@ class DAERUNE_API UDRUserWidget : public UUserWidget
 	GENERATED_BODY()
 	
 public:
-	// WidgetController ����
+	// WidgetController 설정
 	UFUNCTION(BlueprintCallable)
 	void SetWidgetController(UObject* InWidgetController);
 
-	// ����� WidgetController ����
+	// 연결된 WidgetController 참조
 	UPROPERTY(BlueprintReadOnly)
 	TObjectPtr<UObject> WidgetController;
 
 protected:
-	// WidgetController ���� �Ϸ� �� ��������Ʈ���� ������ �̺�Ʈ
+	// WidgetController 설정 완료 시 블루프린트에서 구현할 이벤트
 	UFUNCTION(BlueprintImplementableEvent)
 	void WidgetControllerSet();
+
+	/** C++ 하위 위젯용 — BP 의 WidgetControllerSet 보다 먼저 불린다. */
+	virtual void NativeWidgetControllerSet() {}
 
 	//~ 언어(컬처) 변경 시 이 위젯의 표시 텍스트를 즉시 갱신하기 위한 훅.
 	//  SettingsManager의 OnLanguageChanged를 구독/해제한다(NativeConstruct/Destruct 쌍).

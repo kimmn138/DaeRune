@@ -12,6 +12,7 @@
 ADRS2Train::ADRS2Train()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;   // 동작 중에만 켠다
 
 	bReplicates = true;
 
@@ -206,12 +207,12 @@ void ADRS2Train::ArriveAtTarget()
 	const int32 ReachedIndex = PendingTargetIndex;
 	PendingTargetIndex = INDEX_NONE;
 
-	// 목표가 장애물이면 정지, 종점이면 도착
-	Movement.State = ES2TrainState::StoppedAtObstacle;
-	OnRep_Movement();
-
+	// 목표가 장애물이면 정지, 종점이면 도착 — 상태는 한 번만 바꾼다
+	// (예전에는 종점에서도 StoppedAtObstacle 을 거쳐 Arrived 로 두 번 바뀌어 복제 · BP 이벤트가 2회 났다)
 	if (ReachedIndex >= 0)
 	{
+		Movement.State = ES2TrainState::StoppedAtObstacle;
+		OnRep_Movement();
 		OnStoppedAtTarget.Broadcast(ReachedIndex);
 	}
 	else
@@ -224,6 +225,9 @@ void ADRS2Train::ArriveAtTarget()
 
 void ADRS2Train::OnRep_Movement()
 {
+	// 위치는 서버 시각으로 각자 계산한다 — 달리는 동안만 Tick 한다
+	SetActorTickEnabled(Movement.State == ES2TrainState::Moving);
+
 	// 정지/대기 상태로 바뀌면 위치를 목표에 스냅해 서버-클라 편차를 없앤다.
 	if (Movement.State != ES2TrainState::Moving)
 	{
@@ -238,8 +242,12 @@ void ADRS2Train::OnRep_Movement()
 
 bool ADRS2Train::IsAcceptingBoarding() const
 {
-	// 정지 중(대기/장애물/도착)에만 탑승을 받는다
-	return Movement.State != ES2TrainState::Moving;
+	// 탑승 대기 · 도착 상태에서만 탑승을 받는다.
+	// ★장애물 정지(= 보스전 중)는 제외한다. 보스 등장 시 전원을 자동 하차시키는데,
+	//   이때 다시 타서 전원 착석이 되면 전투 도중 열차가 출발해 버린다.
+	//   보스가 도망치면 페이즈가 SetWaitingForBoarding() 으로 탑승을 다시 연다.
+	return Movement.State == ES2TrainState::WaitingForBoarding
+		|| Movement.State == ES2TrainState::Arrived;
 }
 
 bool ADRS2Train::CanDeboardNow() const

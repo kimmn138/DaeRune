@@ -146,6 +146,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Armadillo|Form")
 	TObjectPtr<UAnimMontage> FormChangeToBasicMontage_Ball;
 
+#if WITH_EDITOR
+	// 에셋 기본값(예전 생성자 하드코딩 경로 → BP 기본값)이 비었는지 저장 · 데이터 검증 때 알린다
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+#endif
+
 	/** 원격 클라이언트에서 폼 체인지 전환 몽타주 재생 (서버는 GA가 직접 재생하므로 스킵) */
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastPlayFormChangeMontage(bool bToBallForm);

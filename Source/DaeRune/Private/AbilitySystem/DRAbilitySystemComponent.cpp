@@ -8,68 +8,55 @@
 
 void UDRAbilitySystemComponent::AbilityActorInfoSet()
 {
-	OnGameplayEffectAppliedDelegateToSelf.AddUObject(this, &UDRAbilitySystemComponent::ClientEffectApplied);
-	OnAnyGameplayEffectRemovedDelegate().AddUObject(this, &UDRAbilitySystemComponent::OnRemoveGameplayEffectCallback);
+	if (bActorInfoDelegatesBound) return;
+	bActorInfoDelegatesBound = true;
+
+	OnGameplayEffectAppliedDelegateToSelf.AddUObject(this, &UDRAbilitySystemComponent::HandleEffectAppliedToSelf);
+	OnAnyGameplayEffectRemovedDelegate().AddUObject(this, &UDRAbilitySystemComponent::HandleEffectRemoved);
 
 	// BlockedAbilityTags 카운터 변화를 직접 hook.
 	// (GAS PreActivate 가 AddLooseGameplayTags → ApplyAbilityBlockAndCancelTags 순서라
 	//  owned tag 이벤트를 트리거로 쓰면 BlockedAbilityTags 가 아직 반영 전이라 결과가 한 박자 늦게 잡힘)
 	BlockedAbilityTags.RegisterGenericGameplayEvent()
-		.AddUObject(this, &UDRAbilitySystemComponent::HandleBlockedAbilityTagsAnyChange);
+		.AddUObject(this, &UDRAbilitySystemComponent::HandleAbilityBlockStateChanged);
+
+	// State.Carrying 등 Loose 태그 변화도 스킬 슬롯 재평가가 필요하다
+	RegisterGameplayTagEvent(FDRGameplayTags::Get().State_Carrying, EGameplayTagEventType::NewOrRemoved)
+		.AddUObject(this, &UDRAbilitySystemComponent::HandleAbilityBlockStateChanged);
 
 	// GA 활성화/종료 hook: 큐잉되어 나중에 발동된 어빌리티의 PressedImage 시각 피드백 보강
 	AbilityActivatedCallbacks.AddUObject(this, &UDRAbilitySystemComponent::HandleAbilityActivated);
 	AbilityEndedCallbacks.AddUObject(this, &UDRAbilitySystemComponent::HandleAbilityEnded);
-
-	// 글로벌(캐릭터 무관) 감시 태그: State.Carrying 등 LooseGameplayTag 변화도 UI 재평가가 필요
-	static const TArray<FGameplayTag> GlobalWatchedTags = {
-		FDRGameplayTags::Get().State_Carrying,
-	};
-	for (const FGameplayTag& Tag : GlobalWatchedTags)
-	{
-		if (!Tag.IsValid() || RegisteredWatchedTags.Contains(Tag)) continue;
-		RegisteredWatchedTags.Add(Tag);
-		RegisterGameplayTagEvent(Tag, EGameplayTagEventType::NewOrRemoved)
-			.AddUObject(this, &UDRAbilitySystemComponent::HandleWatchedTagChanged);
-	}
 }
 
 void UDRAbilitySystemComponent::AddCharacterAbilities(const TArray<TSubclassOf<UGameplayAbility>>& StartupAbilities)
 {
-	for (const TSubclassOf<UGameplayAbility> AbilityClass : StartupAbilities)
+	for (const TSubclassOf<UGameplayAbility>& AbilityClass : StartupAbilities)
 	{
-		FGameplayAbilitySpec AbilitySpec = FGameplayAbilitySpec(AbilityClass, 1);
+		if (!AbilityClass) continue;
+
+		FGameplayAbilitySpec AbilitySpec(AbilityClass, 1);
 		if (const UDRGameplayAbility* DRAbility = Cast<UDRGameplayAbility>(AbilitySpec.Ability))
 		{
-			AbilitySpec.DynamicAbilityTags.AddTag(DRAbility->StartupInputTag);
-			FGameplayAbilitySpecHandle Handle = GiveAbility(AbilitySpec);
-
-			// InputTag 캐시에 추가
-			if (DRAbility->StartupInputTag.IsValid())
-			{
-				InputTagToAbilityMap.Add(DRAbility->StartupInputTag, Handle);
-			}
+			AbilitySpec.GetDynamicSpecSourceTags().AddTag(DRAbility->StartupInputTag);
 		}
+		else
+		{
+			// 입력 태그가 없어 키로는 발동하지 않는다 (이벤트 · 태그 트리거로만)
+			UE_LOG(LogDR, Warning, TEXT("[ASC] %s 는 UDRGameplayAbility 가 아니라 입력 태그 없이 부여합니다."),
+				*GetNameSafe(AbilityClass));
+		}
+		GiveAbility(AbilitySpec);
 	}
 	bStartupAbilitiesGiven = true;
 	AbilitiesGivenDelegate.Broadcast();
 }
 
-void UDRAbilitySystemComponent::AddCharacterPassiveAbilities(const TArray<TSubclassOf<UGameplayAbility>>& StartupPassiveAbilities)
-{
-	for (const TSubclassOf<UGameplayAbility> AbilityClass : StartupPassiveAbilities)
-	{
-		FGameplayAbilitySpec AbilitySpec = FGameplayAbilitySpec(AbilityClass, 1);
-		GiveAbilityAndActivateOnce(AbilitySpec);
-	}
-}
-
 void UDRAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& InputTag)
 {
 	if (!InputTag.IsValid()) return;
-	if (HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
+	// Block.InputPressed 는 호출자(ADRPlayerController::AbilityInputTagPressed)가 UI 피드백과 함께 이미 거른다
 
-	// 캐시를 사용한 O(1) lookup
 	FGameplayAbilitySpec* AbilitySpec = FindAbilitySpecByInputTag(InputTag);
 	if (AbilitySpec)
 	{
@@ -90,7 +77,6 @@ void UDRAbilitySystemComponent::AbilityInputTagHeld(const FGameplayTag& InputTag
 	if (!InputTag.IsValid()) return;
 	if (HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputHeld)) return;
 
-	// 캐시를 사용한 O(1) lookup
 	FGameplayAbilitySpec* AbilitySpec = FindAbilitySpecByInputTag(InputTag);
 	if (AbilitySpec)
 	{
@@ -107,7 +93,6 @@ void UDRAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& Inpu
 	if (!InputTag.IsValid()) return;
 	if (HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputReleased)) return;
 
-	// 캐시를 사용한 O(1) lookup
 	FGameplayAbilitySpec* AbilitySpec = FindAbilitySpecByInputTag(InputTag);
 	if (AbilitySpec && AbilitySpec->IsActive())
 	{
@@ -138,7 +123,7 @@ FGameplayTag UDRAbilitySystemComponent::GetAbilityTagFromSpec(const FGameplayAbi
 	{
 		// 캐시된 태그 사용 (FGameplayTag::RequestGameplayTag 호출 비용 제거)
 		static const FGameplayTag AbilitiesTag = FGameplayTag::RequestGameplayTag(FName("Abilities"));
-		for (const FGameplayTag& Tag : AbilitySpec.Ability.Get()->AbilityTags)
+		for (const FGameplayTag& Tag : AbilitySpec.Ability->GetAssetTags())
 		{
 			if (Tag.MatchesTag(AbilitiesTag))
 			{
@@ -153,7 +138,7 @@ FGameplayTag UDRAbilitySystemComponent::GetInputTagFromSpec(const FGameplayAbili
 {
 	// 캐시된 태그 사용 (FGameplayTag::RequestGameplayTag 호출 비용 제거)
 	static const FGameplayTag InputTagBase = FGameplayTag::RequestGameplayTag(FName("InputTag"));
-	for (const FGameplayTag& Tag : AbilitySpec.DynamicAbilityTags)
+	for (const FGameplayTag& Tag : AbilitySpec.GetDynamicSpecSourceTags())
 	{
 		if (Tag.MatchesTag(InputTagBase))
 		{
@@ -174,69 +159,50 @@ void UDRAbilitySystemComponent::OnRep_ActivateAbilities()
 	}
 }
 
-void UDRAbilitySystemComponent::OnRemoveGameplayEffectCallback_Implementation(const FActiveGameplayEffect& EffectRemoved)
+bool UDRAbilitySystemComponent::HasStatusIconTag(const FGameplayTagContainer& Tags)
 {
-	FGameplayTagContainer TagContainer;
-	EffectRemoved.Spec.GetAllGrantedTags(TagContainer);
-	
-	EffectRemovedDelegate.Broadcast(TagContainer);
+	static const FGameplayTag BuffRoot = FGameplayTag::RequestGameplayTag(TEXT("Buff"));
+	static const FGameplayTag DebuffRoot = FGameplayTag::RequestGameplayTag(TEXT("Debuff"));
+	return Tags.HasTag(BuffRoot) || Tags.HasTag(DebuffRoot);
 }
 
-void UDRAbilitySystemComponent::ClientEffectApplied_Implementation(UAbilitySystemComponent* AbilitySystemComponent, const FGameplayEffectSpec& EffectSpec, FActiveGameplayEffectHandle ActiveEffectHandle)
+void UDRAbilitySystemComponent::HandleEffectAppliedToSelf(UAbilitySystemComponent* Source, const FGameplayEffectSpec& EffectSpec, FActiveGameplayEffectHandle ActiveEffectHandle)
 {
-	FGameplayTagContainer TagContainer;
-	EffectSpec.GetAllGrantedTags(TagContainer);
+	FGameplayTagContainer GrantedTags;
+	EffectSpec.GetAllGrantedTags(GrantedTags);
+	if (!HasStatusIconTag(GrantedTags)) return;
 
-	const bool HasDuration = EffectSpec.Def->DurationPolicy == EGameplayEffectDurationType::HasDuration;
-	const bool DisplayStackCount = EffectSpec.Def->StackingType != EGameplayEffectStackingType::None && EffectSpec.Def->StackLimitCount > 1;
+	// 스택형이면 엔진이 넘기는 스펙이 이미 쌓인 활성 효과의 스펙이라 총 스택 수가 들어 있다
+	const bool bHasDuration = EffectSpec.Def->DurationPolicy == EGameplayEffectDurationType::HasDuration;
+	const bool bDisplayStackCount = EffectSpec.Def->StackingType != EGameplayEffectStackingType::None && EffectSpec.Def->StackLimitCount > 1;
 
-	EffectAssetTags.Broadcast(TagContainer, HasDuration, EffectSpec.Duration, DisplayStackCount, EffectSpec.GetStackCount());
+	ClientEffectApplied(GrantedTags, bHasDuration, EffectSpec.Duration, bDisplayStackCount, EffectSpec.GetStackCount());
+}
+
+void UDRAbilitySystemComponent::ClientEffectApplied_Implementation(const FGameplayTagContainer& GrantedTags, bool bHasDuration, float Duration, bool bDisplayStackCount, int32 StackCount)
+{
+	EffectAssetTags.Broadcast(GrantedTags, bHasDuration, Duration, bDisplayStackCount, StackCount);
+}
+
+void UDRAbilitySystemComponent::HandleEffectRemoved(const FActiveGameplayEffect& EffectRemoved)
+{
+	FGameplayTagContainer GrantedTags;
+	EffectRemoved.Spec.GetAllGrantedTags(GrantedTags);
+	if (!HasStatusIconTag(GrantedTags)) return;
+
+	EffectRemovedDelegate.Broadcast(GrantedTags);
 }
 
 FGameplayAbilitySpec* UDRAbilitySystemComponent::FindAbilitySpecByInputTag(const FGameplayTag& InputTag)
 {
-	// 캐시에서 Handle 조회
-	if (const FGameplayAbilitySpecHandle* HandlePtr = InputTagToAbilityMap.Find(InputTag))
-	{
-		return FindAbilitySpecFromHandle(*HandlePtr);
-	}
-
-	// 캐시 미스: 폴백으로 전체 검색 (캐시 동기화 문제 대비)
 	for (FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
 	{
 		if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
 		{
-			// 캐시에 추가
-			InputTagToAbilityMap.Add(InputTag, AbilitySpec.Handle);
 			return &AbilitySpec;
 		}
 	}
-
 	return nullptr;
-}
-
-void UDRAbilitySystemComponent::RebuildInputTagCache()
-{
-	InputTagToAbilityMap.Empty();
-
-	for (const FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
-	{
-		AddToInputTagCache(AbilitySpec);
-	}
-}
-
-void UDRAbilitySystemComponent::AddToInputTagCache(const FGameplayAbilitySpec& AbilitySpec)
-{
-	FGameplayTag InputTag = GetInputTagFromSpec(AbilitySpec);
-	if (InputTag.IsValid())
-	{
-		InputTagToAbilityMap.Add(InputTag, AbilitySpec.Handle);
-	}
-}
-
-void UDRAbilitySystemComponent::RemoveFromInputTagCache(const FGameplayTag& InputTag)
-{
-	InputTagToAbilityMap.Remove(InputTag);
 }
 
 void UDRAbilitySystemComponent::NotifyVendingMachineStacksChanged(int32 CurrentStacks, int32 MaxStacks)
@@ -273,21 +239,8 @@ bool UDRAbilitySystemComponent::IsAbilityTagBlocked(const FGameplayTag& AbilityT
 	return AreAbilityTagsBlocked(Single);
 }
 
-void UDRAbilitySystemComponent::RegisterAbilityTagEvents()
+void UDRAbilitySystemComponent::HandleAbilityBlockStateChanged(const FGameplayTag Tag, int32 NewCount)
 {
-	// BlockedAbilityTags 직접 hook 으로 충분해진 후로는 이 함수가 사실상 필요 없지만,
-	// 외부 동적 부여 경로에서 안전하게 호출해도 무해하도록 유지 (no-op).
-}
-
-void UDRAbilitySystemComponent::HandleWatchedTagChanged(const FGameplayTag Tag, int32 NewCount)
-{
-	// State.Carrying 같은 LooseGameplayTag 변화 시 UI 재평가 트리거
-	OnBlockedAbilityTagsChanged.Broadcast();
-}
-
-void UDRAbilitySystemComponent::HandleBlockedAbilityTagsAnyChange(const FGameplayTag Tag, int32 NewCount)
-{
-	// BlockedAbilityTags 카운터가 0↔양수로 바뀐 정확한 시점. UI 슬롯 재평가.
 	OnBlockedAbilityTagsChanged.Broadcast();
 }
 

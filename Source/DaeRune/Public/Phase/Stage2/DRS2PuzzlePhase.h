@@ -69,4 +69,7 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category = "S2|Room2")
 	bool bCarrierExited = false;
+
+	// 금고에서 나온 부품 (페이즈가 끝날 때 획득 감지 바인딩을 풀기 위해)
+	TWeakObjectPtr<ADRCleanserPart> SafePart;
 };

@@ -53,13 +53,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Room5")
 	FName SpawnPointRoomID = TEXT("Room5");
 
-	// ========== 콜백 ==========
+	// ========== 방 트리거 ==========
 
-	UFUNCTION()
-	void HandleAllInsideRoom5();
-
-	UFUNCTION()
-	void HandleInsideCountChanged(int32 InsideCount, int32 AliveTotal);
+	// 전원 방5 입장 → 재봉쇄 + 웨이브1
+	virtual void OnRoomAllInside() override;
+	virtual bool HasRoomStarted() const override { return bWavesStarted; }
 
 	// ========== 런타임 상태 ==========
 

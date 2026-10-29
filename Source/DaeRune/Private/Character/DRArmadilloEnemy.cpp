@@ -1,6 +1,7 @@
 // Copyright DaeRune
 
 #include "Character/DRArmadilloEnemy.h"
+#include "Misc/DataValidation.h"
 #include "Character/DRCharacter.h"
 #include "Game/DRGameStateBase.h"
 #include "DRAssetManager.h"
@@ -16,7 +17,6 @@
 #include "Net/UnrealNetwork.h"
 #include "Sound/DRSoundDataAsset.h"
 #include "Engine/OverlapResult.h"
-#include "DrawDebugHelpers.h"
 
 ADRArmadilloEnemy::ADRArmadilloEnemy()
 {
@@ -28,22 +28,7 @@ ADRArmadilloEnemy::ADRArmadilloEnemy()
 	BallFormMesh->SetVisibility(false); // BasicForm is default
 	BallFormMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	// 폼 체인지 전환 몽타주 기본값 (BP에서 오버라이드 가능)
-	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBallBasicFinder(
-		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/BasicForm/AM_Armadillo_FormChangeBtoD"));
-	if (ToBallBasicFinder.Succeeded()) FormChangeToBallMontage_Basic = ToBallBasicFinder.Object;
-
-	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBallBallFinder(
-		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/RollForm/AM_Armadillo_Ball_FormChangeBtoD"));
-	if (ToBallBallFinder.Succeeded()) FormChangeToBallMontage_Ball = ToBallBallFinder.Object;
-
-	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBasicBasicFinder(
-		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/BasicForm/AM_Armadillo_FormChangeDtoB"));
-	if (ToBasicBasicFinder.Succeeded()) FormChangeToBasicMontage_Basic = ToBasicBasicFinder.Object;
-
-	static ConstructorHelpers::FObjectFinder<UAnimMontage> ToBasicBallFinder(
-		TEXT("/Game/DaeRuneAssets/Characters/Enemy/Armadilo/RollForm/AM_Armadillo_Ball_FormChangeDtoB"));
-	if (ToBasicBallFinder.Succeeded()) FormChangeToBasicMontage_Ball = ToBasicBallFinder.Object;
+	// 폼 체인지 전환 몽타주는 BP 기본값으로 넣는다 (BP_DRArmadillo · BP_DRArmadillo_Phase1)
 }
 
 void ADRArmadilloEnemy::BeginPlay()
@@ -109,8 +94,8 @@ void ADRArmadilloEnemy::MulticastHandleDeath_Implementation(const FVector& Death
 		StopRollCharge();
 	}
 
-	// 2. Force revert to basic form (mesh swap only, no animation)
-	if (bIsBallForm)
+	// 2. Force revert to basic form (mesh swap only, no animation) — 복제 변수라 서버만 쓴다 (클라는 복제로 따라온다)
+	if (bIsBallForm && HasAuthority())
 	{
 		bIsBallForm = false;
 		OnRep_BallForm(); // 메시 가시성 + 캡슐 크기 복원
@@ -221,8 +206,8 @@ void ADRArmadilloEnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 New
 		StopRollCharge();
 	}
 
-	// If stunned while in ball form, revert to basic form (mesh swap only, no animation)
-	if (NewCount > 0 && bIsBallForm)
+	// If stunned while in ball form, revert to basic form (mesh swap only, no animation) — 서버만 (복제 변수)
+	if (NewCount > 0 && bIsBallForm && HasAuthority())
 	{
 		bIsBallForm = false;
 		bPendingBallForm = false;
@@ -237,7 +222,7 @@ void ADRArmadilloEnemy::StunTagChanged(const FGameplayTag CallbackTag, int32 New
 
 AActor* ADRArmadilloEnemy::FindRollTarget() const
 {
-	// 1. GameState의 플레이어 목록에서 생존 플레이어 수집 (월드 전체 액터 순회 방지)
+	// 1. GameState의 플레이어 목록에서 생존 플레이어 수집 (월드 전체 액터 순회 방지 · 사망자는 여기서 이미 빠진다)
 	TArray<ADRCharacter*> AllPlayers;
 	if (const ADRGameStateBase* GS = GetWorld()->GetGameState<ADRGameStateBase>())
 	{
@@ -248,29 +233,13 @@ AActor* ADRArmadilloEnemy::FindRollTarget() const
 	TArray<AActor*> ValidTargets;
 	const FVector MyLocation = GetActorLocation();
 
-#if 0 // Temporarily disabled debug draw
-	// Draw search range
-	DrawDebugSphere(GetWorld(), MyLocation, RollTargetSearchRange, 24, FColor::Cyan, false, 2.f);
-#endif
-
 	for (AActor* Player : AllPlayers)
 	{
 		if (!Player || Player->IsHidden()) continue;
 
-		// Check if player is dead
-		if (const ICombatInterface* CombatInterface = Cast<ICombatInterface>(Player))
-		{
-			if (CombatInterface->Execute_IsDead(Player)) continue;
-		}
-
 		const float Distance = FVector::Dist(MyLocation, Player->GetActorLocation());
 		if (Distance > RollTargetSearchRange)
 		{
-#if 0 // Temporarily disabled debug draw
-			// Out of range — gray line
-			DrawDebugLine(GetWorld(), MyLocation, Player->GetActorLocation(), FColor::Silver, false, 2.f);
-			DrawDebugString(GetWorld(), Player->GetActorLocation() + FVector(0, 0, 50), TEXT("OUT OF RANGE"), nullptr, FColor::Silver, 2.f);
-#endif
 			continue;
 		}
 
@@ -291,43 +260,16 @@ AActor* ADRArmadilloEnemy::FindRollTarget() const
 		if (!bBlocked)
 		{
 			ValidTargets.Add(Player);
-#if 0 // Temporarily disabled debug draw
-			// Valid target — green line
-			DrawDebugLine(GetWorld(), MyLocation, Player->GetActorLocation(), FColor::Green, false, 2.f);
-			DrawDebugSphere(GetWorld(), Player->GetActorLocation(), 40.f, 8, FColor::Green, false, 2.f);
-#endif
-		}
-		else
-		{
-#if 0 // Temporarily disabled debug draw
-			// Blocked by wall — red line to wall hit, then red dashed to player
-			DrawDebugLine(GetWorld(), MyLocation, HitResult.ImpactPoint, FColor::Red, false, 2.f);
-			DrawDebugLine(GetWorld(), HitResult.ImpactPoint, Player->GetActorLocation(), FColor::Orange, false, 2.f);
-			DrawDebugPoint(GetWorld(), HitResult.ImpactPoint, 10.f, FColor::Red, false, 2.f);
-			DrawDebugString(GetWorld(), HitResult.ImpactPoint + FVector(0, 0, 30), TEXT("WALL"), nullptr, FColor::Red, 2.f);
-#endif
 		}
 	}
 
 	// 3. Return random valid target, or nullptr
 	if (ValidTargets.Num() == 0)
 	{
-#if 0 // Temporarily disabled debug draw
-		DrawDebugString(GetWorld(), MyLocation + FVector(0, 0, 100), TEXT("NO VALID TARGET"), nullptr, FColor::Red, 2.f);
-#endif
 		return nullptr;
 	}
 
-	const int32 RandomIndex = FMath::RandRange(0, ValidTargets.Num() - 1);
-	AActor* ChosenTarget = ValidTargets[RandomIndex];
-
-#if 0 // Temporarily disabled debug draw
-	// Highlight chosen target
-	DrawDebugSphere(GetWorld(), ChosenTarget->GetActorLocation(), 60.f, 12, FColor::Magenta, false, 3.f);
-	DrawDebugString(GetWorld(), ChosenTarget->GetActorLocation() + FVector(0, 0, 80), TEXT("CHOSEN TARGET"), nullptr, FColor::Magenta, 3.f);
-#endif
-
-	return ChosenTarget;
+	return ValidTargets[FMath::RandRange(0, ValidTargets.Num() - 1)];
 }
 
 void ADRArmadilloEnemy::StartRollCharge(FVector TargetLocation)
@@ -409,25 +351,11 @@ void ADRArmadilloEnemy::TickRollCharge(float DeltaTime)
 	{
 		StopRollCharge();
 
-#if 0 // Temporarily disabled debug draw
-		// Draw impact radius sphere at collision point
-		DrawDebugSphere(GetWorld(), HitResult.ImpactPoint, RollImpactRadius, 12, FColor::Red, false, 3.f);
-#endif
 
 		// Collect collision results and notify GA -> GA handles damage/stun
 		BroadcastRollImpact(HitResult.ImpactPoint);
 	}
 
-#if 0 // Temporarily disabled debug draw
-	// Draw forward detection sphere
-	const float CapsuleRadius = GetCapsuleComponent()->GetScaledCapsuleRadius();
-	FVector TraceStart = GetActorLocation() + RollDirection * CapsuleRadius;
-	FVector TraceEnd = TraceStart + RollDirection * CurrentRollSpeed * DeltaTime;
-	DrawDebugSphere(GetWorld(), TraceStart, RollDetectionRadius, 8, FColor::Green, false, 0.f);
-	DrawDebugLine(GetWorld(), TraceStart, TraceEnd, FColor::Green, false, 0.f);
-	// Draw target location
-	DrawDebugSphere(GetWorld(), RollTargetLocation, 30.f, 8, FColor::Yellow, false, 0.f);
-#endif
 }
 
 bool ADRArmadilloEnemy::DetectRollCollision(FHitResult& OutHit) const
@@ -525,13 +453,11 @@ void ADRArmadilloEnemy::StartArmadilloRollLoop()
 	// 이미 재생 중이면 무시 (중복 spawn 방지)
 	if (IsValid(RollLoopComponent)) return;
 
-	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
-	if (!AssetManager) return;
-	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
-	if (!SoundData || !SoundData->ArmadilloRollLoopSound) return;
+	USoundBase* RollLoopSound = UDRSoundDataAsset::Find(&UDRSoundDataAsset::ArmadilloRollLoopSound);
+	if (!RollLoopSound) return;
 
 	RollLoopComponent = UGameplayStatics::SpawnSoundAttached(
-		SoundData->ArmadilloRollLoopSound,
+		RollLoopSound,
 		GetRootComponent(),
 		NAME_None,
 		FVector::ZeroVector,
@@ -552,10 +478,17 @@ void ADRArmadilloEnemy::MulticastPlayRollImpactSound_Implementation(FVector_NetQ
 {
 	if (GetNetMode() == NM_DedicatedServer) return;
 
-	UDRAssetManager* AssetManager = Cast<UDRAssetManager>(UAssetManager::GetIfInitialized());
-	if (!AssetManager) return;
-	UDRSoundDataAsset* SoundData = AssetManager->GetSoundDataAsset();
-	if (!SoundData || !SoundData->ArmadilloImpactSound) return;
-
-	UGameplayStatics::PlaySoundAtLocation(this, SoundData->ArmadilloImpactSound, Location);
+	UDRSoundDataAsset::PlayAtLocation(this, &UDRSoundDataAsset::ArmadilloImpactSound, Location);
 }
+
+#if WITH_EDITOR
+EDataValidationResult ADRArmadilloEnemy::IsDataValid(FDataValidationContext& Context) const
+{
+	const EDataValidationResult Result = Super::IsDataValid(Context);
+	if (!FormChangeToBallMontage_Basic || !FormChangeToBallMontage_Ball || !FormChangeToBasicMontage_Basic || !FormChangeToBasicMontage_Ball)
+	{
+		Context.AddWarning(FText::FromString(TEXT("폼 체인지 몽타주 4개 중 빈 것이 있다 — 원격 클라에서 변신 동작이 안 나온다")));
+	}
+	return Result;
+}
+#endif

@@ -11,10 +11,3 @@ void UDROverheadWidget::SetDisplayText(FString TextToDisplay)
 		DisplayText->SetText(FText::FromString(TextToDisplay));
 	}
 }
-
-void UDROverheadWidget::NativeDestruct()
-{
-	RemoveFromParent();
-
-	Super::NativeDestruct();
-}

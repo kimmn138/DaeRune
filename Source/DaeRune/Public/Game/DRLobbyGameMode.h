@@ -59,12 +59,6 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void HandleWipeout() override;
 
-	// 세션 참가 허용
-	void AllowJoinInProgress();
-
-	// 세션 참가 차단
-	void BlockJoinInProgress();
-
 	// 로비 재시작
 	void RestartLobby();
 
@@ -115,6 +109,10 @@ protected:
 
 	// 모든 디스플레이 캐릭터 제거
 	void DestroyAllDisplayCharacters();
+
+private:
+	// 대기실 배치: 슬롯 + 디스플레이 캐릭터 + 고정 카메라
+	void PlaceInWaitingRoom(ADRPlayerController* DRPC, EPlayerCharacterClass DisplayClass);
 
 private:
 	void ExecuteTravel(const FString& StageMapName);

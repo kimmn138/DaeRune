@@ -117,14 +117,6 @@ protected:
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|References")
 	TObjectPtr<ADREnemy> DummyEnemy_Center;
 
-	// SeedCannon 목표용 적 스폰 포인트 (4방향, 중앙에서 300 유닛 거리)
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|References")
-	TArray<TObjectPtr<AActor>> SeedCannonSpawnPoints;
-
-	// SeedCannon 목표용 샌드백 적 클래스
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config")
-	TSubclassOf<ADREnemy> DummyEnemyClass;
-
 	// 수원지 회복 목표 — 스폰될 수원지 클래스
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config")
 	TSubclassOf<ADRWaterSource> WaterSourceClass;
@@ -177,9 +169,6 @@ private:
 	float WaterPumpAccumulatedTime = 0.f;
 
 	UPROPERTY()
-	TArray<TObjectPtr<ADREnemy>> SpawnedSeedCannonDummies;
-
-	UPROPERTY()
 	TObjectPtr<ADRWaterSource> SpawnedWaterSource;
 
 	// ========== 내부 함수 ==========
@@ -188,8 +177,6 @@ private:
 	void TransitionToObjective(ECombatObjective NewObjective);
 
 	void GrantAbilityToPlayer(TSubclassOf<UGameplayAbility> AbilityClass);
-	void SpawnSeedCannonDummies();
-	void CleanupSeedCannonDummies();
 
 	void DrainPlayerWater();
 	void SpawnTutorialWaterSource();
@@ -205,5 +192,10 @@ private:
 	void UpdateObjectiveUI(const FText& Title, const FText& ProgressFormat, int32 Current, int32 Max);
 
 	UOverlayWidgetController* GetOverlayWidgetController() const;
+
+	// 첫 목표 UI — HUD 오버레이 컨트롤러가 준비될 때까지 잠시 간격으로 다시 시도한다
+	void ShowInitialObjectiveWhenReady();
+	FTimerHandle InitialObjectiveTimerHandle;
+	int32 InitialObjectiveRetries = 0;
 	UDRAbilitySystemComponent* GetPlayerASC() const;
 };
