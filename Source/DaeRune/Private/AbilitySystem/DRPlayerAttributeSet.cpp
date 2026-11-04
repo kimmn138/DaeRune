@@ -17,6 +17,7 @@
 #include "Game/DRTutorialGameMode.h"
 #include "Engine/World.h"
 #include "AbilitySystemComponent.h"
+#include "GameplayEffectExtension.h"
 
 void UDRPlayerAttributeSet::SetContainerInfo(int32 InNumContainers, float InContainerHealth)
 {
@@ -74,6 +75,28 @@ void UDRPlayerAttributeSet::PostAttributeChange(const FGameplayAttribute& Attrib
 			}
 		}
 	}
+}
+
+bool UDRPlayerAttributeSet::PreGameplayEffectExecute(FGameplayEffectModCallbackData& Data)
+{
+	if (!Super::PreGameplayEffectExecute(Data)) return false;
+
+	// 체력을 비용으로 쓰는 스킬 = 전투 중 — 비전투여도 자동 회복이 돌면 안 된다 (기획 확정 2026-11-04).
+	// 피해는 항상 IncomingDamage 로 오므로 Health 를 직접 깎는 GE 는 비용뿐이다 (Plan5 D-25):
+	// 물 부족분 · 피의 계약(ExecCalc_WaterCost), 수혈(GE_Claw_SelfCost). 초기화 GE 는 Override 라 걸리지 않는다.
+	// ★체력이 줄기 전(Pre)★ 이어야 한다 — 먼저 줄면 ADRPlayerState::OnHealthChanged 가 비전투로 보고 회복 GE 를 붙인다.
+	// 바뀌는 것은 전투 진입뿐이다 — 컨테이너 오버플로 · 히트리액트 · 부품 낙하는 여전히 없다 (Plan3 §17.8.3)
+	const FGameplayModifierEvaluatedData& Eval = Data.EvaluatedData;
+	if (Eval.Attribute == GetHealthAttribute() && Eval.Magnitude < 0.f
+		&& (Eval.ModifierOp == EGameplayModOp::AddBase || Eval.ModifierOp == EGameplayModOp::AddFinal))
+	{
+		if (ADRPlayerState* DRPS = Cast<ADRPlayerState>(GetOwningActor()))
+		{
+			DRPS->EnterCombat();
+		}
+	}
+
+	return true;
 }
 
 int32 UDRPlayerAttributeSet::GetCurrentContainerIndex() const

@@ -43,6 +43,8 @@ class DAERUNE_API UDRPlayerAttributeSet : public UDRAttributeSet
 	void ReapplyCorruptMaxHealth(float KeepHealth);
 
 protected:
+	// 체력을 비용으로 쓰는 스킬(물 부족분 · 피의 계약 · 수혈)은 전투 진입으로 본다 — 체력이 줄기 전에 처리해야 해서 Pre 다
+	virtual bool PreGameplayEffectExecute(FGameplayEffectModCallbackData& Data) override;
 	virtual void HandleIncomingDamage(const FEffectProperties& Props) override;
 	virtual void HandleIncomingHealing(const FEffectProperties& Props) override;
 	virtual void PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue) override;
