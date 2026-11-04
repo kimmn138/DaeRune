@@ -19,6 +19,8 @@
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/UniformGridPanel.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Containers/Ticker.h"
 #include "Editor.h"
 #include "Engine/Font.h"
@@ -301,6 +303,7 @@ bool UDRWardrobeEditorTools::BuildWardrobeSlotWidget(FString& OutLog)
 	UTexture2D* NormalTexture = Load<UTexture2D>(SlotNormalTexPath, Log);
 	UTexture2D* HoveredTexture = Load<UTexture2D>(SlotHoveredTexPath, Log);
 	UTexture2D* SelectedTexture = Load<UTexture2D>(SlotSelectedTexPath, Log);
+	UMaterialInterface* IconMaterial = Load<UMaterialInterface>(PreviewMaterialPath, Log);	// 찍은 아이콘 = 캐릭터 프리뷰와 같은 머티리얼 (D-33)
 	UObject* BodyFont = Load<UObject>(BodyFontPath, Log);
 	if (!Blueprint || !Blueprint->WidgetTree) return false;
 
@@ -335,15 +338,31 @@ bool UDRWardrobeEditorTools::BuildWardrobeSlotWidget(FString& OutLog)
 	StateImage->SetVisibility(ESlateVisibility::HitTestInvisible);
 	StateImage->bIsVariable = true;
 
+	// 그림 위 · 이름 아래를 한 묶음으로 세로 가운데 — 그림이 없는 칸("기본" 등)은 이름만 가운데에 온다 (D-33)
+	UVerticalBox* Content = Tree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("VerticalBox_Content"));
+	Overlay->AddChildToOverlay(Content);
+	SetOverlaySlot(Content, HAlign_Fill, VAlign_Center, FMargin(12.0f));
+	Content->SetVisibility(ESlateVisibility::HitTestInvisible);
+
 	UImage* Thumbnail = Tree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("Image_Thumbnail"));
-	Overlay->AddChildToOverlay(Thumbnail);
-	SetOverlaySlot(Thumbnail, HAlign_Fill, VAlign_Fill, FMargin(16.0f));
-	Thumbnail->SetVisibility(ESlateVisibility::Collapsed);	// 아이콘이 없으면 숨긴 채로 (D-18)
+	if (UVerticalBoxSlot* ThumbnailSlot = Content->AddChildToVerticalBox(Thumbnail))
+	{
+		ThumbnailSlot->SetHorizontalAlignment(HAlign_Center);
+	}
+	// 크기는 브러시 ImageSize 로 정한다 — 런타임은 그림만 바꾸고 크기는 그대로 둔다(SetBrushFromMaterial · bMatchSize = false).
+	// ★SetDesiredSizeOverride 는 저장되지 않는다★ (살아 있는 Slate 위젯에만 걸린다)
+	FSlateBrush ThumbnailBrush;
+	ThumbnailBrush.ImageSize = FVector2D(160.0, 160.0);
+	Thumbnail->SetBrush(ThumbnailBrush);
+	Thumbnail->SetVisibility(ESlateVisibility::Collapsed);	// 그림이 없으면 숨긴 채로 (D-18)
 	Thumbnail->bIsVariable = true;
 
 	UTextBlock* NameText = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Txt_Name"));
-	Overlay->AddChildToOverlay(NameText);
-	SetOverlaySlot(NameText, HAlign_Fill, VAlign_Center, FMargin(12.0f));
+	if (UVerticalBoxSlot* NameSlot = Content->AddChildToVerticalBox(NameText))
+	{
+		NameSlot->SetHorizontalAlignment(HAlign_Fill);
+		NameSlot->SetPadding(FMargin(0.0f, 6.0f, 0.0f, 0.0f));
+	}
 	NameText->SetText(FText::AsCultureInvariant(TEXT("Name")));
 	NameText->SetFont(MakeFont(BodyFont, 13.5f));	// 한글 → Pretendard (BrunoAce 에는 한글이 없다)
 	NameText->SetColorAndOpacity(FSlateColor(SRGB(0xDD, 0xF7, 0xFF)));
@@ -370,6 +389,7 @@ bool UDRWardrobeEditorTools::BuildWardrobeSlotWidget(FString& OutLog)
 	SetObjectProperty(CDO, TEXT("StateNormalTexture"), NormalTexture, Log);
 	SetObjectProperty(CDO, TEXT("StateHoveredTexture"), HoveredTexture, Log);
 	SetObjectProperty(CDO, TEXT("StateSelectedTexture"), SelectedTexture, Log);
+	SetObjectProperty(CDO, TEXT("IconMaterial"), IconMaterial, Log);
 	return CompileAndMark(Blueprint, Log);	// CDO 를 고쳤으면 다시 컴파일 (T-32)
 #else
 	return false;

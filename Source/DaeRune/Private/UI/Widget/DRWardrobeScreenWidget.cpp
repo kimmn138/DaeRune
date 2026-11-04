@@ -5,6 +5,7 @@
 #include "UI/Widget/DRWardrobeTabWidget.h"
 #include "UI/Widget/DRWardrobeSlotWidget.h"
 #include "UI/Widget/DRCosmeticPreviewWidget.h"
+#include "Actor/DRCosmeticPreviewStage.h"
 #include "Game/DRGameInstance.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
@@ -115,6 +116,31 @@ void UDRWardrobeScreenWidget::GetCurrentSkinViewModels(TArray<FDRSkinViewModel>&
 	{
 		GI->GetSkinViewModels(GetViewedClass(), CurrentCategory, OutViewModels);
 	}
+
+	// 그린 아이콘이 없는 옷은 스튜디오가 찍어 둔 그림을 쓴다 (Plan(옷장) D-33)
+	if (const ADRCosmeticPreviewStage* Stage = IconStage.Get())
+	{
+		for (FDRSkinViewModel& ViewModel : OutViewModels)
+		{
+			if (!ViewModel.bIsNoneSlot && !ViewModel.PreviewIcon)
+			{
+				ViewModel.RenderedIcon = Stage->FindSkinIcon(ViewModel.SkinId, GetViewedClass());
+			}
+		}
+	}
+}
+
+void UDRWardrobeScreenWidget::RequestSkinIcons()
+{
+	ADRCosmeticPreviewStage* Stage = ADRCosmeticPreviewStage::Find(this);
+	IconStage = Stage;
+	if (!Stage) return;
+
+	// 처음 열 때는 메시 로드를 기다렸다가 찍으므로 칸이 한 박자 늦게 그림으로 바뀐다
+	Stage->PrepareSkinIcons(GetViewedClass(), FSimpleDelegate::CreateWeakLambda(this, [this]()
+	{
+		RebuildSlotGrid();
+	}));
 }
 
 bool UDRWardrobeScreenWidget::TryEquip(FName SkinId)
@@ -194,6 +220,9 @@ void UDRWardrobeScreenWidget::NativeConstruct()
 	CurrentCategory = DRIsValidCosmeticCategory(DefaultCategory)
 		? DefaultCategory
 		: EDRCosmeticCategory::Head;
+
+	// 칸 아이콘 — 이미 찍어 둔 것은 아래 첫 RefreshAll 이 바로 쓴다
+	RequestSkinIcons();
 
 	if (UDRGameInstance* GI = GetProgression())
 	{

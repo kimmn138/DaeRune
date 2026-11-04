@@ -11,14 +11,16 @@ class UImage;
 class UButton;
 class UTextBlock;
 class UTexture2D;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
 
 /**
  * 옷장 화면의 칸 1개(216x252)의 C++ 베이스. (Plan(옷장) D-14)
  *
  * 뷰모델을 받아 ★그리기까지 C++ 이 한다★ — 아래 이름의 위젯이 WBP 에 있으면 자동 연결된다.
  *   Image_State      [Image]   상태 이미지 (기본 / 호버 / 선택 — StateXxxTexture)
- *   Image_Thumbnail  [Image]   썸네일. 아이콘이 없으면 숨긴다
- *   Txt_Name         [Text]    아이콘이 없을 때 대신 보이는 이름 (한글 → Pretendard)
+ *   Image_Thumbnail  [Image]   옷 그림 — 그린 아이콘(PreviewIcon) 또는 스튜디오가 찍은 그림(RenderedIcon). 둘 다 없으면 숨긴다
+ *   Txt_Name         [Text]    이름 — 그림 아래에 늘 보인다 (한글 → Pretendard, Plan(옷장) D-33)
  *   Image_Lock       [Image]   자물쇠. ★브러시가 지정돼 있을 때만★ 잠긴 칸에 보인다 (아트 미정 — D-18)
  *   Button_Slot      [Button]  투명 히트박스 (클릭 · 호버 · 툴팁)
  * OnViewModelUpdated 는 그 위에 연출을 더하고 싶을 때만 BP 에서 오버라이드한다.
@@ -44,12 +46,11 @@ public:
 	bool HandleClicked();
 
 	/**
-	 * 썸네일을 표시할 수 있는가.
-	 * 아이콘 에셋이 아직 없는 스킨이 정상 상태이므로(Plan(옷장) D-18),
-	 * 이 값이 false 면 썸네일 대신 이름 글자를 보여준다.
+	 * 썸네일을 표시할 수 있는가 — 그린 아이콘이나 찍은 그림 중 하나라도 있으면 true.
+	 * "기본" 칸 · 메시 없는 옷 · 아직 안 찍힌 옷은 false 라 이름만 보인다 (Plan(옷장) D-18 · D-33)
 	 */
 	UFUNCTION(BlueprintPure, Category = "Cosmetic")
-	bool HasThumbnail() const { return ViewModel.PreviewIcon != nullptr; }
+	bool HasThumbnail() const { return ViewModel.PreviewIcon != nullptr || (ViewModel.RenderedIcon != nullptr && IconMaterial != nullptr); }
 
 	// 잠긴 칸의 썸네일 회색조 틴트. 해금 상태면 흰색(원색). (Plan(옷장) D-14)
 	UFUNCTION(BlueprintPure, Category = "Cosmetic")
@@ -85,6 +86,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cosmetic|Style")
 	TObjectPtr<UTexture2D> StateSelectedTexture;
 
+	// 스튜디오가 찍은 그림(RenderedIcon)을 그리는 머티리얼 — 캐릭터 프리뷰와 같은 M_CosmeticPreview (Opacity = 1 − A).
+	// 비어 있으면 찍은 그림을 쓰지 않는다 (WBP 의 Class Defaults — 에디터 도우미가 넣는다)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cosmetic|Style")
+	TObjectPtr<UMaterialInterface> IconMaterial;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cosmetic|Style")
+	FName IconTextureParameter = FName("Tex");
+
 	// ===== 디자이너 위젯 (이름이 같으면 자동 연결 — 없어도 컴파일된다) =====
 
 	UPROPERTY(BlueprintReadOnly, Category = "Cosmetic|Widgets", meta = (BindWidgetOptional))
@@ -119,4 +128,7 @@ private:
 	void UpdateStateImage();
 
 	bool bHovering = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> IconMID;
 };

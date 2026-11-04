@@ -16,7 +16,7 @@
 >
 > ⚠️ **코드 주석 표기 규칙** — 이 문서는 코드에서 **`Plan(옷장)`** 접두 + **결정 번호 D-n / 함정 번호 T-n / 마일스톤 M-n** 으로 가리킨다.
 > 절 번호(§ · A6-1 같은 단계 번호)는 문서가 바뀔 때마다 조용히 틀어지므로 코드에 쓰지 않는다.
-> D/T 번호는 영구 ID 다 — 빠진 번호는 결번이며 재사용하지 않는다. **다음 번호: D-33 · T-42.**
+> D/T 번호는 영구 ID 다 — 빠진 번호는 결번이며 재사용하지 않는다. **다음 번호: D-34 · T-44.**
 
 ---
 
@@ -96,7 +96,7 @@ C  콘텐츠 (9장) — 소켓 · 위치 눈 다듬기(디자이너) · FACE 옷
 | `FDRSkinAttachSpec` | `SkeletalMesh` 또는 `StaticMesh`(Skeletal 우선) · `SocketName` · `RelativeTransform` · `bUseLeaderPose`(같은 스켈레톤 의상) · `MaterialOverrides` |
 | `FDRSkinMaterialOverride` | `MaterialSlot`(인덱스) + `Material` |
 | `FDRClassCosmeticState` | `EquippedByCategory` — 길이 4 고정, 빈 칸 `NAME_None` (칩의 `SlotChips` 와 같은 관용구) |
-| `FDRSkinViewModel` | 칸 1개를 그릴 정보 — `SkinId · Category · DisplayName · Description · PreviewIcon(없으면 null) · bUnlocked · bEquipped · UnlockHint · bIsNoneSlot` |
+| `FDRSkinViewModel` | 칸 1개를 그릴 정보 — `SkinId · Category · DisplayName · Description · PreviewIcon(없으면 null) · RenderedIcon(스튜디오가 찍은 그림 — 화면이 채운다, D-33) · bUnlocked · bEquipped · UnlockHint · bIsNoneSlot` |
 
 **세이브 (`UDRSaveGame`) 추가 필드 3개 — 버전은 4 그대로** (D-4 · T-1)
 
@@ -151,6 +151,7 @@ C  콘텐츠 (9장) — 소켓 · 위치 눈 다듬기(디자이너) · FACE 옷
 | D-30 | ~~(D-32 로 대체 — 정원로봇 값은 소켓으로 옮겼다)~~ 실제 옷(의상 GLB 에서 온 스태틱 메시)은 ★`Body` 뼈★ 에 붙이고 `RelativeTransform` = 배율 1/1.5 · 이동 (−2.49, −18, −16.43) 을 공통으로 쓴다 (부록 E). 소켓을 새로 만들지 않는다 | 의상 GLB 는 정원로봇을 인게임 크기(1.5배) · 엉덩이 높이 원점에 놓고 만든 좌표를 그대로 담고 있어 변환 하나로 전부 제자리에 온다. 머리 겸 몸통인 Body 뼈를 따라가므로 애니메이션에도 붙어 다닌다 |
 | D-31 | 옷은 ★로봇 공용★ 일 수 있다 — `bCommonSkin` 이면 `OwnerClass` 를 무시하고 `ExcludedClasses` 를 뺀 모든 로봇이 입는다. ★해금도 공용★(해금은 SkinId 하나에 매이므로 한 번 풀면 4종 모두). 소속 판정(목록 · 장착 · 정화 · 세이브 · 서버 보고)은 전부 `FDRSkinDefinition::IsUsableBy` 한 곳을 지난다. 장착은 여전히 로봇별(세이브 `Cosmetics[로봇]`). 공용 옷에는 본체/무기 리컬러 · 리더 포즈를 쓰지 않는다(검증기 경고) | 아트가 옷을 4종 공용으로 만들었다. 같은 옷을 로봇마다 4번 등록하면 해금 · 문구 · 아이콘이 4벌로 갈라진다. 판정을 한 함수로 모은 건 한 곳만 빠져도 "입혀지는데 다음 실행에 사라지는" 늦은 버그가 나기 때문(공용칩 교훈) |
 | D-32 | 공용 옷의 위치 = **로봇의 부위 소켓** × **옷마다의 상대 변환** (+ 필요한 로봇만 **덮어쓰기**). 소켓 5개 `Cosmetic_Head · Face · Chest · Back · Tail` 을 4종 TP 메시에 ★메시 전용 소켓★ 으로 단다. 소켓 배율 = (1/1.5) × 그 로봇 머리 폭 / 70 이라 옷 크기가 로봇 체형을 따라간다. 옷의 상대 변환은 "GLB 원점 → 그 옷이 붙는 점" 순수 이동(GLB 단위)이고, 같은 부위라도 옷마다 소켓을 고른다(날개는 Back, 나비넥타이는 Chest). 덮어쓰기 `ThirdPersonByClass[로봇]` 는 소켓(선택) + 변환 통째 — 붙는 점 기준으로 k 배 하려면 이동도 k 배 | "같은 몸 부위라도 등 · 앞" 이 옷마다 다르고, 체형은 로봇마다 다르다. 소켓이 체형을, 옷 변환이 옷의 생김새를 맡으면 대부분 덮어쓰기 없이 맞고, 디자이너는 스켈레톤 편집기에서 소켓만 옮기면 그 로봇의 모든 옷이 같이 움직인다 |
+| D-33 | 칸 = **그림(위) + 이름(아래)** 을 늘 함께. 그림은 `PreviewIcon`(그린 아이콘)이 우선이고, 없으면 ★옷장 스튜디오가 옷 메시를 찍은 그림★(`RenderedIcon`). 옷장을 열 때 `ADRCosmeticPreviewStage::PrepareSkinIcons` 가 그 로봇이 입는 옷의 메시를 비동기로 올려 ★입은 자리 · 방향 그대로★(참조 포즈 소켓 × 옷 변환) 메시만 따로 찍는다(256² RGBA16f + 밉맵, 칸에는 160). 시점은 옷이 있는 쪽(앞/뒤 — 중심이 캐릭터보다 `IconBehindDepth` 넘게 뒤면 뒤) 기준 `DefaultIconViewOffset`(−20, 30) · 꼬리만 (−15, −70). 로봇이 바뀔 때까지 캐시. 칸은 찍은 그림을 `M_CosmeticPreview`(`IconMaterial`) MID 로 그린다 — 버텍스 색을 안 써서 잠긴 칸은 틴트 대신 불투명도 | 사용자 요청("글자만 있으니 모델도 같이"). 아이콘 텍스처를 옷마다 따로 만들면 옷을 넣을 때마다 그림 작업이 따라붙는다 — 찍으면 새 옷도 자동이고 실제 모델과 늘 같다. 같은 스튜디오 조명 · 같은 머티리얼이라 3D 프리뷰와 색이 맞는다. 그린 아이콘이 오면 그게 이긴다 |
 
 ---
 
@@ -199,6 +200,8 @@ C  콘텐츠 (9장) — 소켓 · 위치 눈 다듬기(디자이너) · FACE 옷
 | T-39 | 옷장 화면의 `TryEquip` 은 ★지금 보고 있는 탭의 부위만★ 받는다 (다른 부위 Id 는 false) | 스크립트로 세트를 입힐 때는 `set_current_category` 로 탭을 바꾼 뒤 `try_equip` 하거나 GI `equip_skin(로봇, 부위, Id)` 를 직접 부른다 |
 | T-40 | ★PIE 중에는 `EditorAssetLibrary` 가 막힌다★ — `load_asset` 은 None, `does_asset_exist` 는 False, 저장도 안 된다 (오류 없이) | PIE 중 에셋을 만질 때는 `unreal.load_asset('/Game/…/X.X')`(객체 경로) 로 잡고, 저장은 PIE 를 끝낸 뒤. 또 옷장 프리뷰는 소켓을 고쳐도 다시 그리지 않을 수 있다 — 위치 확인은 대기실 디스플레이(실제 화면)로 |
 | T-41 | 탭 라벨 `Text_Label` 이 ★Visible★ 이면 탭 가운데(글자 위)를 눌러도 안 바뀐다 — 오버레이에서 라벨이 `Button_Tab` 위에 있어 클릭을 라벨이 받고, 형제인 버튼으로는 안 간다. 글자 밖 가장자리만 눌려 "잘 안 먹히는" 것처럼 보인다 (TextBlock 기본값이 Visible) | 버튼 위에 얹는 그림 · 글자는 전부 `HitTestInvisible`. 탭은 `ApplySelectionVisuals` 가 매번 넣고 도우미도 넣는다(칸의 `Txt_Name` 은 처음부터 그랬다) |
+| T-42 | ★에디터(PIE)에서 막 로드한 스태틱 메시는 비동기 빌드 중이라 렌더 프록시가 없다★ — 바로 `CaptureScene` 하면 빈 그림이 찍힌다. 처음엔 프리뷰 캐릭터가 이미 입고 있던 옷 3벌만 아이콘이 나왔다 | 찍기 전에 `FStaticMeshCompilingManager::Get().FinishCompilation(메시들)`(`WITH_EDITOR` 한정 — 패키지 빌드에는 이 단계가 없다) |
+| T-43 | 도우미에서 `UImage::SetDesiredSizeOverride` 로 크기를 넣으면 ★저장되지 않는다★(살아 있는 Slate 위젯에만 걸림) — 칸 그림이 브러시 기본 32px 로 나왔다 | 크기는 브러시 `ImageSize` 로 넣고, 런타임은 `SetBrushFromMaterial` · `SetBrushFromTexture(…, false)` 로 그림만 바꾼다(크기 유지) |
 
 ---
 
@@ -213,10 +216,10 @@ C  콘텐츠 (9장) — 소켓 · 위치 눈 다듬기(디자이너) · FACE 옷
 | `Game/DRGameInstance.h/.cpp` | `GetCosmeticCatalog` · `IsSkinUnlocked` · `GetEquippedSkin(s)` · `EquipSkin` · `ClearAllSkins` · `GetSkinViewModels` · `HasAnySkinAvailable` · **`GetSkinDisplayName`**(토스트용) · `DebugGrantAchievement` · `DebugUnlockAllSkins` · 델리게이트 `OnCosmeticsChanged`/`OnSkinUnlocked`. `EnsureProgressInitialized` 의 lazy 초기화 + 카탈로그 정화, `ApplyStageReward` 훅 |
 | `Character/DRCharacter.h/.cpp` | `ApplyCosmeticSkins(Ids)`(단일 진입점) · `RefreshSkinVisuals()`(재적용) · **`ResolveCosmeticClass()`**(이 몸이 어느 로봇인가 — BP 클래스를 클래스 정보에서 역조회, 못 찾으면 `PlayerCharacterClass`. 못 입는 옷은 건너뛰고 `GetThirdPersonFor` 로 붙인다, D-32) · `SyncCosmeticVisibility()` · 내부 `BuildCosmeticVisuals`/`SpawnCosmeticAttachment`/`ApplyCosmeticMaterials`/`ClearCosmeticAttachments`. 부활(`MulticastHandleRevive`)에서 재적용. **M3**: `ApplyCosmeticsFromPlayerState`(`PossessedBy` · `OnRep_PlayerState` 끝 — 폰이 늦게 와도 치유). **M5**: `DisplaySkinIds`(복제) · `SetDisplaySkinIds`(서버, 대기실 디스플레이 전용). **사망**: `bCosmeticHiddenForDeath` — 사망 멀티캐스트에서 켜고 부활에서 끄며 `OnRep_Dead` 로도 양방향으로 맞춘다 |
 | `Actor/DRWardrobe.h/.cpp` | 옷장 장치. `WardrobeMesh`(루트) · `InteractionBox`(Pawn 만 Overlap) · `InteractionWidget`(Screen, 기본 숨김). BP 이벤트 `OnLocalPlayerEnteredRange(bHasAnySkin)` · `OnLocalPlayerLeftRange` · `OnInteractBlocked` |
-| `Actor/DRCosmeticPreviewStage.h/.cpp` | 촬영 스튜디오. `SceneRoot` · `PreviewSpawnPoint` · `CaptureComponent`(생성자에서 `SCS_SceneColorHDR` · `PRM_UseShowOnlyList` · 캡처 꺼 둠). 속성 `RenderTarget` · `BackdropActors` · `BaseYaw` · **`CaptureLocationByClass`(로봇별 카메라 — D-28, `SetPreviewClass` 가 적용)**. `Find` · `SetPreviewClass` · `SetPreviewSkins` · `AddPreviewYaw` · `SetCaptureActive` |
-| `UI/Widget/DRWardrobeScreenWidget.h/.cpp` | 화면 베이스. `GetViewedClass` · `Get/SetCurrentCategory` · `RefreshAll` · `TryEquip` · `ClearAll` · `RequestClose` · `GetCurrentSkinViewModels` · `FindOwnerScreen`. **칸 목록을 C++ 이 만든다**(`RebuildSlotGrid` — `SlotWidgetClass` · `SlotColumns` 3) · `Btn_ClearAll` 연결. BindWidgetOptional `Preview_Character` · `UniformGridPanel_Slots` · `Btn_ClearAll`. BP 이벤트(연출용) `OnRefreshSkins` · `OnCategoryChanged` · `OnEquipRejected` · `OnSkinEquipped` · `OnSkinNewlyUnlocked`. 설정 `ClearAllKey`(C) · `DefaultCategory`(Head) |
+| `Actor/DRCosmeticPreviewStage.h/.cpp` | 촬영 스튜디오. `SceneRoot` · `PreviewSpawnPoint` · `CaptureComponent`(생성자에서 `SCS_SceneColorHDR` · `PRM_UseShowOnlyList` · 캡처 꺼 둠). 속성 `RenderTarget` · `BackdropActors` · `BaseYaw` · **`CaptureLocationByClass`(로봇별 카메라 — D-28, `SetPreviewClass` 가 적용)**. `Find` · `SetPreviewClass` · `SetPreviewSkins` · `AddPreviewYaw` · `SetCaptureActive`. **칸 아이콘(D-33)**: `IconMesh` · `IconCapture` 컴포넌트, `PrepareSkinIcons(로봇, 완료)` · `FindSkinIcon`, 설정 `IconResolution`(256) · `IconFOV`(30) · `IconFill`(0.85) · `DefaultIconViewOffset` · `IconViewOffsetByCategory` · `IconBehindDepth`(20) |
+| `UI/Widget/DRWardrobeScreenWidget.h/.cpp` | 화면 베이스. `GetViewedClass` · `Get/SetCurrentCategory` · `RefreshAll` · `TryEquip` · `ClearAll` · `RequestClose` · `GetCurrentSkinViewModels` · `FindOwnerScreen`. **칸 목록을 C++ 이 만든다**(`RebuildSlotGrid` — `SlotWidgetClass` · `SlotColumns` 3) · `Btn_ClearAll` 연결. BindWidgetOptional `Preview_Character` · `UniformGridPanel_Slots` · `Btn_ClearAll`. 칸 아이콘은 `RequestSkinIcons`(열 때 — 새로 찍히면 칸을 다시 그림)가 스튜디오에 맡기고 `GetCurrentSkinViewModels` 가 `RenderedIcon` 을 채운다(D-33). BP 이벤트(연출용) `OnRefreshSkins` · `OnCategoryChanged` · `OnEquipRejected` · `OnSkinEquipped` · `OnSkinNewlyUnlocked`. 설정 `ClearAllKey`(C) · `DefaultCategory`(Head) |
 | `UI/Widget/DRWardrobeTabWidget.h/.cpp` | 탭. `Category` · `LabelText`(인스턴스마다) · 라벨 색 `SelectedLabelColor`(DDF7FF) / `UnselectedLabelColor`(6676B8). BindWidgetOptional `Image_Pill` · `Button_Tab` · `Text_Label` — 클릭 → 카테고리 전환, 필 표시 · 라벨 글자/색을 C++ 이 그린다. BP 이벤트 `OnSelectionChanged`(연출용) |
-| `UI/Widget/DRWardrobeSlotWidget.h/.cpp` | 칸. `SetSkinViewModel`(★그리기까지★) · `HandleClicked`(→ bool) · `HasThumbnail` · `GetThumbnailTint` · `GetTooltipText` · 설정 `StateNormal/Hovered/SelectedTexture` · `LockedTint` · `LockedNameOpacity`(0.4). BindWidgetOptional `Image_State` · `Image_Thumbnail` · `Txt_Name` · `Image_Lock` · `Button_Slot` — 상태 이미지(선택 > 호버 > 기본) · 썸네일 또는 이름 · 자물쇠(브러시가 있을 때만) · 툴팁. BP 이벤트 `OnViewModelUpdated`(연출용) |
+| `UI/Widget/DRWardrobeSlotWidget.h/.cpp` | 칸. `SetSkinViewModel`(★그리기까지★) · `HandleClicked`(→ bool) · `HasThumbnail` · `GetThumbnailTint` · `GetTooltipText` · 설정 `StateNormal/Hovered/SelectedTexture` · `LockedTint` · `LockedNameOpacity`(0.4) · `IconMaterial`(찍은 그림용 — 도우미가 `M_CosmeticPreview` 를 넣는다) · `IconTextureParameter`(Tex). BindWidgetOptional `Image_State` · `Image_Thumbnail` · `Txt_Name` · `Image_Lock` · `Button_Slot` — 상태 이미지(선택 > 호버 > 기본) · 그림(그린 아이콘 > 찍은 그림) + 이름(늘 — D-33) · 자물쇠(브러시가 있을 때만) · 툴팁. BP 이벤트 `OnViewModelUpdated`(연출용) |
 | `UI/Widget/DRCosmeticPreviewWidget.h/.cpp` | 프리뷰 위젯. `InitializePreview`(`Img_Preview` 에 MID 를 직접 물린다) · `UpdatePreviewSkins` · 드래그 회전(마우스 캡처) · `MarkPreviewUnavailable`(접기 — D-12). BindWidgetOptional `Img_Preview`. 설정 `PreviewMaterial` · `PreviewTextureParameter`("Tex") · `YawPerPixel`(0.5). BP 이벤트 `OnPreviewReady(Material)` · `OnPreviewUnavailable` |
 | `Player/DRPlayerState.h/.cpp` | **M3**: `EquippedSkinIds`(복제, 인덱스 = 부위) · `SetEquippedSkinIds`(서버 — 폰에 바로 입히고 대기실 디스플레이에 재푸시) · `OnRep_EquippedSkinIds` · `RefreshCosmeticVisuals` · `ReportCosmeticIfLocal`. `CopyProperties` 로 스테이지에 가져간다. `SetSelectedPlayerClass` 에서 리셋 + (호스트) 즉시 보고, `OnRep_SelectedPlayerClass` 에서 보고 |
 | `Game/DRLobbyGameMode.h/.cpp` | **M5**: `SpawnDisplayCharacter` 가 그 플레이어의 옷을 싣고, `RefreshDisplayCharacterSkin`(PlayerState 가 부른다)이 보고가 늦게 와도 다시 싣는다 (T-24) |
@@ -320,7 +323,7 @@ for name in ['WBP_WardrobeTab', 'WBP_WardrobeSlot', 'WBP_CosmeticPreview', 'WBP_
 | A1 텍스처 | 11장 — Compression **UserInterface2D (RGBA)** · Texture Group **UI** · NoMipmaps · sRGB · Never Stream |
 | A2 머티리얼 | `M_UI_Additive`(UI · Additive — `Final Color = Tex.RGB × Tint`, `Opacity = Power(Tex.A × Strength, 2.2)`) · `M_UI_ScanlineModulate`(UI · Modulate — 부록 B) → MI `MI_UI_Wardrobe_BGGlow`(Strength 0.2) · `MI_UI_Wardrobe_CharBack`(0.55, Tint sRGB `00A3FF`) · `MI_UI_Wardrobe_ScreenFX`(1.0) |
 | A3 탭 | 도우미 — 필 `카테고리_선택박스` 124×44(평소 Collapsed) · 투명 버튼 · 라벨 Bruno Ace SC 14.4 대문자 `6676B8`, 위 여백 2(시안은 필 중앙보다 1px 아래). BP 잔재(`SetSelected` · `CosmeticCategory` · `Label`) 삭제 |
-| A4 칸 | 도우미 — `SizeBox_Root`(216×252) → `Overlay_Root` → `Image_State` · `Image_Thumbnail`(여백 16) · `Txt_Name`(Pretendard 13.5 · `DDF7FF` · 줄바꿈) · `Image_Lock` · `Button_Slot`(투명, 맨 위). 상태 텍스처 3장 = Class Defaults. BP 함수 `Setup` 삭제 |
+| A4 칸 | 도우미 — `SizeBox_Root`(216×252) → `Overlay_Root` → `Image_State` · **`VerticalBox_Content`**(여백 12, 세로 가운데 — 2026-11-05 D-33) [`Image_Thumbnail`(브러시 ImageSize 160×160, 가운데) · `Txt_Name`(위 여백 6 · Pretendard 13.5 · `DDF7FF` · 줄바꿈)] · `Image_Lock` · `Button_Slot`(투명, 맨 위). 그림이 없는 칸은 이름만 가운데. 상태 텍스처 3장 + `IconMaterial` = Class Defaults. BP 함수 `Setup` 삭제 |
 | A5 프리뷰 재료 | `RT_CosmeticPreview` 782×1080 RGBA16f Clamp · `M_CosmeticPreview`(UI · Translucent, `Opacity = 1 − Tex.A`, Tex 기본값 = RT) · `WBP_CosmeticPreview`(루트 `Img_Preview` Visible, `PreviewMaterial` = `M_CosmeticPreview`) |
 | A6 화면 | 도우미 — 아래 표 그대로 |
 | A7 컨트롤러 | BP 배선 대신 C++ `OpenWardrobeScreen` 이 위젯을 만든다 (D-27). `BP_DRPlayerController` 는 클래스 지정만 |
@@ -576,7 +579,9 @@ CanvasPanel_Root
 기존 소켓(옷이 안 쓴다): 4종 모두 `HatSocket` · `MountSocket` · `TestPartHand`, 정원로봇 `TestTail` · `TestLeftHand` · `TestRightHand`, 벨보이 `BagSocket` · `CapSocket`, 청소기 `RideSocket`, 자판기 `TestLeftHand`.
 
 ### C3. 아이콘
-스킨의 `Preview Icon` 에 텍스처를 넣으면 칸의 `Image_Thumbnail`(여백 16)이 켜지고 이름 글자가 사라진다. 잠긴 칸은 `LockedTint`(0.35 회색)로 어둡게.
+✅ **아이콘 없이도 칸에 옷 그림이 나온다** (2026-11-05 · D-33) — 옷장 스튜디오가 옷 메시를 찍는다. 새 옷도 자동이다.
+- 그림이 어색하면 → `BP_DRCosmeticPreviewStage` 의 `Cosmetic|Icon` 값(시점 `DefaultIconViewOffset` · 부위별 `IconViewOffsetByCategory` · 채움 `IconFill` · 앞뒤 판정 `IconBehindDepth`).
+- 그린 아이콘을 쓰려면 스킨의 `Preview Icon` 에 텍스처를 넣는다 — 찍은 그림보다 우선이고, 이름은 그 아래에 그대로 나온다. 잠긴 칸은 `LockedTint`(0.35 회색)로 어둡게.
 아이콘 텍스처도 A1 설정(UserInterface2D · UI)으로.
 
 ### C4. 자물쇠 아트
@@ -683,6 +688,7 @@ CanvasPanel_Root
 | 2026-10-19 (저녁) | **에디터 A1~A10 완료 + 배선 C++ 이전.** 그래프 배선을 전부 C++ 로(D-27 — 탭 · 칸 · 프리뷰 · 화면 · 컨트롤러), 에디터 도우미 `UDRWardrobeEditorTools` 신설(WBP 트리 생성 · `ImportPropertyText` · 고정 크기 PIE 창), 테스트 카탈로그 6벌 · 스튜디오 · 옷장 배치. 1080p PIE 로 시안 대조(부록 A), 로봇별 프리뷰 구도(D-28), 함정 T-32~36. 2부 A 의 클릭 안내서(약 440줄)를 7.1 요약으로 압축하고 콘텐츠 작업을 9장(C)으로 분리. 직전 판은 scratchpad 백업 |
 | 2026-10-20 | **M3 · M5 · 사망 · 검증기 + 실제 옷.** B1(복제 — 호스트 보고 위치 수정 T-38) · B2(사망 숨김 양방향) · B5(대기실 디스플레이 + 이름 헬퍼) · B6(D-29) 구현 · 2인 PIE 로 확인(8.0). 정원로봇 실제 옷 8벌 등록(D-30 · 9.0 · 부록 E). 확인 도구(T-37 `CallOnNextTick`, 2인 PIE 창, 치트 `DRDie`/`DRRevive`). B1 · B2 · B5 · B6 본문은 8.0 요약으로 압축. 직전 판은 scratchpad 백업 |
 | 2026-10-20 (오후) | **공용 옷.** 8벌을 4종 공용으로(`bCommonSkin` · `IsUsableBy` · 해금 공용 — D-31), 부위 소켓 5개 × 4종 + 옷마다 상대 이동 + 로봇별 덮어쓰기(D-32 — `ThirdPersonByClass` · `ResolveCosmeticClass` · `SetMeshSocket`), 검증기에 공용 규칙 · 로봇별 소켓 검사. SkinId `Skin.Shared.*` 로 변경, 테스트 고깔 전부 삭제, D-30 은 D-32 로 대체. 함정 T-40. 직전 판은 scratchpad 백업 |
+| 2026-11-05 | **칸 = 그림 + 이름.** 스튜디오가 옷 메시를 찍어 칸 아이콘으로 쓴다(D-33 — `PrepareSkinIcons` · `RenderedIcon` · `IconMaterial`), 칸 레이아웃 그림 위 · 이름 아래(A4). 함정 T-42(에디터 메시 빌드) · T-43(SetDesiredSizeOverride 저장 안 됨). 1080p PIE 로 8벌 확인 |
 
 ## 부록 E. 의상 GLB → 로봇 좌표 맞춤 (D-30 → D-32, 2026-10-20)
 

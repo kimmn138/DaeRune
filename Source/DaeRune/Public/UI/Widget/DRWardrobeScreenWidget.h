@@ -169,6 +169,12 @@ private:
 	// 3D 프리뷰에 현재 장착 목록을 밀어 넣는다 (프리뷰 위젯이 없으면 아무 것도 하지 않는다)
 	void SyncPreview();
 
+	// 스튜디오에 칸 아이콘 촬영을 맡긴다 — 새로 찍히면 칸을 다시 그린다 (Plan(옷장) D-33)
+	void RequestSkinIcons();
+
 	// 현재 선택된 탭 (런타임 상태 — 저장하지 않는다)
 	EDRCosmeticCategory CurrentCategory = EDRCosmeticCategory::Head;
+
+	// 칸 아이콘을 찍어 두는 곳. 레벨에 없으면 칸은 이름만 그린다
+	TWeakObjectPtr<class ADRCosmeticPreviewStage> IconStage;
 };

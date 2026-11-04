@@ -7,6 +7,8 @@
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Engine/Texture2D.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 void UDRWardrobeSlotWidget::SetSkinViewModel(const FDRSkinViewModel& InViewModel)
 {
@@ -100,14 +102,28 @@ void UDRWardrobeSlotWidget::ApplyViewModelVisuals()
 {
 	UpdateStateImage();
 
-	const bool bHasThumbnail = HasThumbnail();
-
 	if (Image_Thumbnail)
 	{
-		if (bHasThumbnail)
+		// 크기는 WBP 브러시의 ImageSize 가 정한다 — 그림만 바꾸고 크기는 건드리지 않는다(bMatchSize = false)
+		if (ViewModel.PreviewIcon)
 		{
 			Image_Thumbnail->SetBrushFromTexture(ViewModel.PreviewIcon, false);
 			Image_Thumbnail->SetColorAndOpacity(GetThumbnailTint());
+			Image_Thumbnail->SetRenderOpacity(1.0f);
+			Image_Thumbnail->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
+		else if (ViewModel.RenderedIcon && IconMaterial)
+		{
+			if (!IconMID)
+			{
+				IconMID = UMaterialInstanceDynamic::Create(IconMaterial, this);
+			}
+			IconMID->SetTextureParameterValue(IconTextureParameter, ViewModel.RenderedIcon);
+			Image_Thumbnail->SetBrushFromMaterial(IconMID);
+
+			// 이 머티리얼은 버텍스 색을 안 써서 틴트가 먹지 않는다 — 잠긴 칸은 이름처럼 불투명도로 흐리게
+			Image_Thumbnail->SetColorAndOpacity(FLinearColor::White);
+			Image_Thumbnail->SetRenderOpacity(ViewModel.bUnlocked ? 1.0f : LockedNameOpacity);
 			Image_Thumbnail->SetVisibility(ESlateVisibility::HitTestInvisible);
 		}
 		else
@@ -119,9 +135,9 @@ void UDRWardrobeSlotWidget::ApplyViewModelVisuals()
 
 	if (Txt_Name)
 	{
-		// 아이콘이 생기기 전까지는 이름 글자가 칸을 구분해 준다
+		// 그림이 있어도 이름은 늘 보인다 — 그림은 위, 이름은 아래 (Plan(옷장) D-33)
 		Txt_Name->SetText(ViewModel.DisplayName);
-		Txt_Name->SetVisibility(bHasThumbnail ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+		Txt_Name->SetVisibility(ESlateVisibility::HitTestInvisible);
 		Txt_Name->SetRenderOpacity(ViewModel.bUnlocked ? 1.0f : LockedNameOpacity);
 	}
 

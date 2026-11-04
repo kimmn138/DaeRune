@@ -11,6 +11,7 @@ class UMaterialInterface;
 class USkeletalMesh;
 class UStaticMesh;
 class UTexture2D;
+class UTextureRenderTarget2D;
 
 /**
  * 코스메틱 부위 분류. 옷장 화면의 탭 4개와 1:1 대응한다. (Plan(옷장) D-5)
@@ -219,7 +220,7 @@ struct FDRSkinDefinition
 
 	// ========== UI ==========
 
-	// 옷장 칸에 표시할 썸네일. 미지정이면 칸이 비어 보인다(동작에는 문제 없음).
+	// 옷장 칸에 표시할 썸네일. 미지정이면 옷장 스튜디오가 ThirdPerson 메시를 찍어 쓴다 (Plan(옷장) D-33)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skin|UI")
 	TSoftObjectPtr<UTexture2D> PreviewIcon;
 
@@ -329,6 +330,11 @@ struct FDRSkinViewModel
 	// 동기 로드된 썸네일. ★미지정이면 nullptr★ — 위젯이 이미지를 숨기는 신호로 쓴다.
 	UPROPERTY(BlueprintReadOnly, Category = "Skin")
 	TObjectPtr<UTexture2D> PreviewIcon = nullptr;
+
+	// PreviewIcon 이 없을 때 옷장 스튜디오가 옷 메시를 찍은 그림 (Plan(옷장) D-33).
+	// GI 가 아니라 ★화면이★ 채운다 — 스튜디오는 로비 맵에만 있다. 아직 안 찍었으면 nullptr
+	UPROPERTY(BlueprintReadOnly, Category = "Skin")
+	TObjectPtr<UTextureRenderTarget2D> RenderedIcon = nullptr;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Skin")
 	bool bUnlocked = false;
