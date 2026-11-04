@@ -67,6 +67,8 @@ private:
 	void OnRoom5Cleared();
 
 	void BreakInitialDoors();
+	// 방4 · 방5 중 한쪽을 깨면 중앙 방 문 둘 다 (깬 쪽만 적 스폰)
+	void BreakCenterDoors(ADRBreakableDoor* ClearedSideDoor, ADRBreakableDoor* OtherSideDoor);
 	void BreakRemainingDoors();
 	void BindDoorEvents();
 	void BindSpawnGroupEvents();

@@ -102,19 +102,26 @@ void ADRDoorManager::BreakInitialDoors()
 
 void ADRDoorManager::OnRoom4Cleared()
 {
-	// 방4-방6 문 파괴
-	if (BreakableDoor_Room4ToRoom6 && !BreakableDoor_Room4ToRoom6->IsBroken())
-	{
-		BreakableDoor_Room4ToRoom6->Break();
-	}
+	BreakCenterDoors(BreakableDoor_Room4ToRoom6, BreakableDoor_Room5ToRoom6);
 }
 
 void ADRDoorManager::OnRoom5Cleared()
 {
-	// 방5-방6 문 파괴
-	if (BreakableDoor_Room5ToRoom6 && !BreakableDoor_Room5ToRoom6->IsBroken())
+	BreakCenterDoors(BreakableDoor_Room5ToRoom6, BreakableDoor_Room4ToRoom6);
+}
+
+void ADRDoorManager::BreakCenterDoors(ADRBreakableDoor* ClearedSideDoor, ADRBreakableDoor* OtherSideDoor)
+{
+	// 한쪽 복도만 깨도 중앙 방(방6)의 양쪽 문이 다 열린다 (기획 확정 2026-11-04).
+	// 깬 쪽 문은 기존대로 적이 튀어나오고, 반대쪽은 플레이어가 없는 곳이라 문만 연다
+	if (ClearedSideDoor && !ClearedSideDoor->IsBroken())
 	{
-		BreakableDoor_Room5ToRoom6->Break();
+		ClearedSideDoor->Break();
+	}
+
+	if (OtherSideDoor && !OtherSideDoor->IsBroken())
+	{
+		OtherSideDoor->BreakWithoutEnemies();
 	}
 }
 
