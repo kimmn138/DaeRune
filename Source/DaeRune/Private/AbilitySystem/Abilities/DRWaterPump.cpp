@@ -712,9 +712,29 @@ void UDRWaterPump::EndAbility(
 {
     // BP의 EndAbility 이벤트가 실행되지 않는 캔슬 경로(다른 어빌리티의 강제 캔슬,
     // 인풋 시퀀스 꼬임 등)에서도 cleanup이 보장되도록 C++에서 직접 호출
+    // 물대포 루프 애니메이션 해제도 같은 이유 — BP 는 버튼을 뗄 때만 SetInWaterLoop(false) 를 부른다
+    AActor* Avatar = GetAvatarActorFromActorInfo();
+    if (Avatar && Avatar->Implements<UCombatInterface>())
+    {
+        ICombatInterface::Execute_SetInWaterLoop(Avatar, false);
+    }
     StopWaterPumpLoop();
 
     Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+bool UDRWaterPump::K2_CommitAbilityCost(bool BroadcastCommitEvent)
+{
+    const bool bPaid = Super::K2_CommitAbilityCost(BroadcastCommitEvent);
+
+    // 못 냈으면 끈다. CheckCost 는 체력 > 체력 비용 일 때만 통과라(체력 0 방지) 체력은 1~2 에서 멈춘다.
+    // 판정은 서버만 — 클라는 복제가 늦은 값으로 먼저 끊을 수 있다. 서버의 EndAbility 가 클라에도 복제된다
+    if (!bPaid && IsActive() && HasAuthority(&CurrentActivationInfo))
+    {
+        EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
+    }
+
+    return bPaid;
 }
 
 // ========================= Plan5(물대포칩) — 업그레이드 칩 =========================

@@ -88,6 +88,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Water Pump")
     void GrantWaterToAlly(AActor* AllyActor);
 
+    /**
+     * 채널링 비용 — GA_WaterPump 의 Cost 이벤트(DamageDeltaTime 마다)가 부른다.
+     * 비용을 못 내면(물 0 + 체력이 부족분을 못 냄) 물대포를 끈다.
+     * BP 는 반환값을 보지 않아, 예전에는 체력 1 에서 비용 없이 계속 쏠 수 있었다.
+     */
+    virtual bool K2_CommitAbilityCost(bool BroadcastCommitEvent = false) override;
+
 protected:
     // ★Plan5(물대포칩)★ 가압 스택(Buff.WaterPump.Pressure) 수에 비례한 피해 배율.
     virtual float GetRuntimeDamageMultiplier() const override;
