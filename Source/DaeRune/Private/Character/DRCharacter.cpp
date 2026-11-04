@@ -71,6 +71,10 @@ ADRCharacter::ADRCharacter()
 	// Pawn 간 겹침 시 밀어내기 속도 제한 (튕김 방지)
 	GetCharacterMovement()->MaxDepenetrationWithPawn = 10.f;
 
+	// 공중 조작 — 엔진 기본값 0.05 로는 제자리 점프 뒤 방향키를 눌러도 거의 안 움직여 착지 후에야 이동했다.
+	// 0.35 = UE 3인칭 템플릿 값. 플레이어 BP 4종은 이 값을 덮어쓰지 않는다 (튜닝 시트 AirControl 로 조절 가능)
+	GetCharacterMovement()->AirControl = 0.35f;
+
 	// 카메라 붐 설정
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(GetCapsuleComponent());
