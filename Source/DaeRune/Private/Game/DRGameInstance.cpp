@@ -984,6 +984,7 @@ EDRUpgradeResult UDRGameInstance::EquipChip(EPlayerCharacterClass CharacterClass
 
 	SaveProgress();
 	OnUpgradesChanged.Broadcast(CharacterClass);
+	OnChipPlaced.Broadcast(CharacterClass, ChipId);
 
 	return EDRUpgradeResult::Success;
 }
@@ -1127,6 +1128,7 @@ EDRUpgradeResult UDRGameInstance::SwapOrEquipChip(EPlayerCharacterClass Characte
 
 	SaveProgress();
 	OnUpgradesChanged.Broadcast(CharacterClass);
+	OnChipPlaced.Broadcast(CharacterClass, ChipId);
 
 	return EDRUpgradeResult::Success;
 }
@@ -1203,6 +1205,7 @@ EDRUpgradeResult UDRGameInstance::MoveChip(EPlayerCharacterClass CharacterClass,
 
 	SaveProgress();
 	OnUpgradesChanged.Broadcast(CharacterClass);
+	OnChipPlaced.Broadcast(CharacterClass, Moving);
 
 	return EDRUpgradeResult::Success;
 }

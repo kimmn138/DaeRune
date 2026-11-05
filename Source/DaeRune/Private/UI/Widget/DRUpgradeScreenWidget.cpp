@@ -5,6 +5,7 @@
 #include "Game/DRGameInstance.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
+#include "Sound/DRSoundDataAsset.h"
 #include "UI/Widget/DRWidgetTreeUtils.h"
 #include "DaeRune/DRLogChannels.h"
 
@@ -73,6 +74,7 @@ void UDRUpgradeScreenWidget::NativeConstruct()
 	if (UDRGameInstance* GI = GetProgression())
 	{
 		GI->OnUpgradesChanged.AddDynamic(this, &UDRUpgradeScreenWidget::HandleUpgradesChanged);
+		GI->OnChipPlaced.AddDynamic(this, &UDRUpgradeScreenWidget::HandleChipPlaced);
 		GI->OnCurrencyChanged.AddDynamic(this, &UDRUpgradeScreenWidget::HandleCurrencyChanged);
 	}
 	else
@@ -90,6 +92,7 @@ void UDRUpgradeScreenWidget::NativeDestruct()
 	if (UDRGameInstance* GI = GetProgression())
 	{
 		GI->OnUpgradesChanged.RemoveDynamic(this, &UDRUpgradeScreenWidget::HandleUpgradesChanged);
+		GI->OnChipPlaced.RemoveDynamic(this, &UDRUpgradeScreenWidget::HandleChipPlaced);
 		GI->OnCurrencyChanged.RemoveDynamic(this, &UDRUpgradeScreenWidget::HandleCurrencyChanged);
 	}
 
@@ -103,6 +106,13 @@ void UDRUpgradeScreenWidget::HandleUpgradesChanged(EPlayerCharacterClass Charact
 
 	OnRefreshSlots();
 	OnRefreshChips();
+}
+
+void UDRUpgradeScreenWidget::HandleChipPlaced(EPlayerCharacterClass CharacterClass, FName ChipId)
+{
+	if (CharacterClass != GetViewedClass()) return;
+
+	UDRSoundDataAsset::Play2D(this, &UDRSoundDataAsset::ChipEquipSound);
 }
 
 void UDRUpgradeScreenWidget::HandleCurrencyChanged(int32 NewCurrency)

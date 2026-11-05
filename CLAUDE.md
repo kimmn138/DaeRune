@@ -86,6 +86,8 @@ ADRHUD
 
 **Full-screen UI** (Settings, Upgrade, Wardrobe, StageSelect, SlidePuzzle) is owned by `ADRPlayerController`, not the HUD. All five go through `OpenScreen()` / `CloseScreen()` (`EDRScreen`): only one screen is open at a time, input mode switches to UIOnly on open and back via `RestoreDefaultInputMode()` on close, and the widgets are created in C++ from the widget classes set on `BP_DRPlayerController`.
 
+**UI sounds**: every UMG button (SButton) press in the game viewport plays `DA_SoundData.UIButtonClickSound` globally via `UDRUIClickSoundSubsystem` (a Slate input preprocessor), so do not set Pressed Sound on button styles — it would play twice. Clickables that are not buttons (stage select cards) call `UDRSoundDataAsset::Play2D(..., UIButtonClickSound)` themselves. In the upgrade screen, `ChipEquipSound` plays on `UDRGameInstance::OnChipPlaced` (equip / swap / slot move; unequip is silent).
+
 ### Multiplayer Architecture
 
 **Authority Distribution**:

@@ -22,6 +22,8 @@ class UTexture2D;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCurrencyChangedSignature, int32, NewCurrency);
 // 특정 로봇의 슬롯/장착 상태 변경 알림
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnUpgradesChangedSignature, EPlayerCharacterClass, CharacterClass);
+// 칩이 칸에 들어갔음 알림 — 장착 · 교체 · 칸 이동 (업그레이드 화면 효과음용. 해제는 해당하지 않는다)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnChipPlacedSignature, EPlayerCharacterClass, CharacterClass, FName, ChipId);
 // 업그레이드 시스템 해금 알림 (스테이지1 최초 클리어)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnUpgradeSystemUnlockedSignature);
 // 특정 로봇의 장착 코스메틱 변경 알림 (옷장 화면 갱신용)
@@ -251,6 +253,10 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "Progression|Upgrade")
 	FOnUpgradesChangedSignature OnUpgradesChanged;
+
+	// EquipChip · SwapOrEquipChip · MoveChip 이 칸을 실제로 바꿨을 때, OnUpgradesChanged 다음에 나간다
+	UPROPERTY(BlueprintAssignable, Category = "Progression|Upgrade")
+	FOnChipPlacedSignature OnChipPlaced;
 
 	// ========== 서버 보고 / 미리보기 ==========
 

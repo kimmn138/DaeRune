@@ -8,6 +8,7 @@
 #include "Components/TextBlock.h"
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Sound/DRSoundDataAsset.h"
 #if WITH_EDITOR
 #include "TextureCompiler.h"
 #endif
@@ -285,6 +286,9 @@ FReply UDRStageSelectCardWidget::NativeOnMouseButtonDown(const FGeometry& InGeom
 {
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
+		// 카드는 버튼(SButton)이 아니라 전역 클릭음(UDRUIClickSoundSubsystem)이 잡지 못한다 — 같은 소리를 직접 낸다
+		UDRSoundDataAsset::Play2D(this, &UDRSoundDataAsset::UIButtonClickSound);
+
 		if (UDRStageSelectScreenWidget* Screen = OwnerScreen.Get())
 		{
 			Screen->NotifyCardClicked(ViewModel.Index);
@@ -300,6 +304,8 @@ FReply UDRStageSelectCardWidget::NativeOnMouseButtonDoubleClick(const FGeometry&
 	// Slate 는 두 번째 클릭을 ButtonDown 대신 DoubleClick 으로 보낸다 — 첫 클릭에서 선택은 이미 됐다
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
+		UDRSoundDataAsset::Play2D(this, &UDRSoundDataAsset::UIButtonClickSound);
+
 		if (UDRStageSelectScreenWidget* Screen = OwnerScreen.Get())
 		{
 			Screen->NotifyCardDoubleClicked(ViewModel.Index);

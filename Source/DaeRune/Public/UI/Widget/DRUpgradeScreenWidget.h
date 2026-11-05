@@ -84,6 +84,10 @@ private:
 	UFUNCTION()
 	void HandleUpgradesChanged(EPlayerCharacterClass CharacterClass);
 
+	// 칩이 칸에 들어갔다 → 장착 효과음 (드롭은 BP 가 GameInstance 를 직접 부르므로 결과 대신 이 알림을 듣는다)
+	UFUNCTION()
+	void HandleChipPlaced(EPlayerCharacterClass CharacterClass, FName ChipId);
+
 	UFUNCTION()
 	void HandleCurrencyChanged(int32 NewCurrency);
 };

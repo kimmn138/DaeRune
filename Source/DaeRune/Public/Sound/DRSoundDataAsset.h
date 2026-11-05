@@ -49,9 +49,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Game")
 	TObjectPtr<USoundBase> GameOverSound;
 
-	// UI
+	// UI — 버튼 클릭음은 모든 UMG 버튼에 전역으로 붙는다 (UDRUIClickSoundSubsystem)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TObjectPtr<USoundBase> UIButtonClickSound;
+
+	// 업그레이드 화면에서 칩이 슬롯에 들어갈 때 (장착 · 교체 · 칸 이동 — 해제는 소리 없음)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TObjectPtr<USoundBase> ChipEquipSound;
 
 	// 클렌저/액터
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Actor")
