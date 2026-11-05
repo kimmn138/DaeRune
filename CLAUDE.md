@@ -192,6 +192,14 @@ Designers change gameplay numbers in a packaged Development build without a rebu
 - **Console**: `DRTuningReload`, `DRTuningRevert`, `DRTuningStatus`, `DRTuningExport`; editor: `DRTuningBake [path] [save] [clear]` writes sheet values into the real assets (undoable).
 - **PIE**: off unless `dr.Tuning.ApplyInPIE 1`; reverted when PIE ends (a modified CDO would otherwise be saved into the BP). Not created in Shipping, with `-NoTuning`, or `bEnabled=False`.
 
+### Toy Style Post Process (`UDRToyStyleSubsystem`)
+A global "toy" art style: `M_PP_ToyStyle` / `MI_PP_ToyStyle` (`Content/Blueprints/VFX/ToyStyle/`) is attached to every game view (PIE, packaged) and the level editor viewport by an engine subsystem + scene view extension (`Source/DaeRune/*/Rendering/`). No map, camera or BP is touched; scene captures (wardrobe icons/previews, reflections) and asset-editor previews are skipped.
+
+- **Look**: re-lights opaque pixels from the GBuffer (base color, normal, depth) — soft toon key light with cool shadows, halftone dots in the light-to-shadow band (world triplanar; view space for the first-person arm), convex edge highlight / crease darkening, silhouette outline, toon specular. All logic is one Custom HLSL node; every number is a parameter on `MI_PP_ToyStyle` (`Strength 0` = original, `DebugView 1-5` shows each stage).
+- **Location**: `Scene Color Before DOF`, so After-DOF translucency (almost all VFX/widgets) is composed on top untouched; Before-DOF translucent materials get re-lit.
+- **Brightness** is relative to the scene's own average lighting (16 fixed screen taps of lighting/base color, emissive trimmed), never to exposure — dividing by exposure loops with auto exposure. SceneTexture node inputs and the output are pre-exposure-free; raw `SceneTextureLookup` of `PostProcessInput0` is not (multiply by `OneOverPreExposure`).
+- **Config**: `DefaultGame.ini [/Script/DaeRune.DRToyStyleSubsystem]` (`bEnabled`, `bApplyInEditorViewports`, `Material`); the folder is in `DirectoriesToAlwaysCook` because only config references it. Console `dr.ToyStyle 0/1` for A/B. Cost ≈ 0.7 ms at ~1080p.
+
 ## Important Implementation Details
 
 ### Container Health System
