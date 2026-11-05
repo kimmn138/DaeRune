@@ -45,9 +45,13 @@ public:
 		}
 
 		UDRToyStyleSubsystem* Subsystem = Owner.Get();
-		if (UMaterialInterface* ToyMaterial = Subsystem ? Subsystem->GetMaterial() : nullptr)
+		if (!Subsystem)
 		{
-			// 맵 PPV 의 블렌더블과 같은 경로 — 뷰마다 MID 를 재사용한다. EndFinalPostprocessSettings 뒤라 그대로 렌더러로 간다
+			return;
+		}
+		// 맵 PPV 의 블렌더블과 같은 경로 — 뷰마다 MID 를 재사용한다. EndFinalPostprocessSettings 뒤라 그대로 렌더러로 간다
+		for (UMaterialInterface* ToyMaterial : Subsystem->GetMaterials())
+		{
 			ToyMaterial->OverrideBlendableSettings(InView, 1.f);
 		}
 	}
@@ -103,22 +107,32 @@ void UDRToyStyleSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void UDRToyStyleSubsystem::Deinitialize()
 {
 	ViewExtension.Reset();
-	LoadedMaterial = nullptr;
+	LoadedMaterials.Reset();
 
 	Super::Deinitialize();
 }
 
-UMaterialInterface* UDRToyStyleSubsystem::GetMaterial()
+const TArray<TObjectPtr<UMaterialInterface>>& UDRToyStyleSubsystem::GetMaterials()
 {
 	// 엔진 서브시스템은 콘텐츠보다 먼저 만들어진다 — 처음 그릴 때 읽는다
 	if (!bTriedLoad)
 	{
 		bTriedLoad = true;
-		LoadedMaterial = Material.LoadSynchronous();
-		if (!LoadedMaterial)
+
+		TArray<TSoftObjectPtr<UMaterialInterface>> Paths = LevelPassMaterials;
+		Paths.Add(Material);
+		for (const TSoftObjectPtr<UMaterialInterface>& Path : Paths)
 		{
-			UE_LOG(LogDR, Warning, TEXT("[ToyStyle] 머티리얼 '%s' 를 읽지 못해 장난감 화풍을 씌우지 않습니다."), *Material.ToString());
+			UMaterialInterface* Loaded = Path.LoadSynchronous();
+			if (!Loaded)
+			{
+				// 축소 패스가 빠지면 본 패스가 빈 텍스처를 밝기 기준으로 읽어 화면이 하얗게 된다 — 통째로 끈다
+				UE_LOG(LogDR, Warning, TEXT("[ToyStyle] 머티리얼 '%s' 를 읽지 못해 장난감 화풍을 씌우지 않습니다."), *Path.ToString());
+				LoadedMaterials.Reset();
+				break;
+			}
+			LoadedMaterials.Add(Loaded);
 		}
 	}
-	return LoadedMaterial;
+	return LoadedMaterials;
 }
