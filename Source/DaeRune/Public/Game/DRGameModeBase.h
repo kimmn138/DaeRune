@@ -73,6 +73,9 @@ protected:
 	virtual void NotifyPhasePlayerDied(APlayerState* DeadPlayerState) {}
 	virtual void NotifyPhasePlayerLeft(APlayerState* LeftPlayerState) {}
 
+	// 전멸한 순간 (게임 오버 UI 를 띄운 직후, HandleWipeout 은 WipeoutDelayTime 뒤)
+	virtual void OnTeamWipedOut() {}
+
 	// 전멸 시 처리
 	virtual void HandleWipeout();
 

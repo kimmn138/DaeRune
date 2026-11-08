@@ -272,11 +272,20 @@ void ADRStageGameMode::HandleStageIntroWaitTimeout()
 	StartStageIntro();
 }
 
+void ADRStageGameMode::OnTeamWipedOut()
+{
+	// 전멸도 게임 오버다 — Phase3 게임 오버(EndStage)처럼 스테이지 BGM 을 끄고 게임 오버 사운드를 낸다.
+	// 예전에는 게임 오버 UI 가 뜬 뒤에도 로비로 넘어갈 때(WipeoutDelayTime 5초)까지 BGM 이 계속 나왔다.
+	// EndStage 는 부르지 않는다 — 현재 페이즈를 끝내 Phase1 이면 DoorManager 가 자동문을 열고 남은 벽을 부순다
+	if (CachedGameState)
+	{
+		CachedGameState->Multicast_PlayGameOverSound();
+	}
+}
+
 void ADRStageGameMode::HandleWipeout()
 {
 	if (!HasAuthority()) return;
-
-	// TODO: 패배 UI 표시, 패배 사운드 재생 등
 
 	ReturnToLobby();
 }

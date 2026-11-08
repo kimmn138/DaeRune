@@ -56,6 +56,8 @@ void ADRGameModeBase::OnPlayerDied(APlayerState* DeadPlayer)
 			PC->Client_ShowGameOverUI();
 		});
 
+		OnTeamWipedOut();
+
 		// 일정 시간 후 전멸 처리
 		GetWorldTimerManager().SetTimer(
 			WipeoutTimerHandle,

@@ -68,6 +68,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void OnTeamWipedOut() override;
 	virtual void HandleWipeout() override;
 
 	// 로비 맵으로 이동
