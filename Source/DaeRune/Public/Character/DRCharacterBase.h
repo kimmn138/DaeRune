@@ -27,7 +27,7 @@ class DAERUNE_API ADRCharacterBase : public ACharacter, public IAbilitySystemInt
 	GENERATED_BODY()
 
 public:
-	ADRCharacterBase();
+	ADRCharacterBase(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const;
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	UAttributeSet* GetAttributeSet() const { return AttributeSets; }

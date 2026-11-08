@@ -28,7 +28,8 @@ class DAERUNE_API ADRCharacter : public ADRCharacterBase
 	GENERATED_BODY()
 	
 public:
-	ADRCharacter();
+	// 이동 컴포넌트를 UDRCharacterMovementComponent 로 바꾼다 (점프 중 공중 방향 전환)
+	ADRCharacter(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// 플레이어 캐릭터 클래스 (EPlayerCharacterClass)

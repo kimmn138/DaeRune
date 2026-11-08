@@ -2,6 +2,7 @@
 
 
 #include "Character/DRCharacter.h"
+#include "Character/DRCharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "AbilitySystemComponent.h"
 #include "DRGameplayTags.h"
@@ -56,7 +57,8 @@ namespace
 	const FName ThirdPersonBeamHitParam(TEXT("HitEffectPosition"));
 }
 
-ADRCharacter::ADRCharacter()
+ADRCharacter::ADRCharacter(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
 	// 아군 판정용 액터 태그 — UDRAbilitySystemLibrary::IsNotFriend가 "Player" 태그 쌍으로 아군을 판정한다.
 	// BP마다 수동 추가에 의존하면 새 클래스(BP_DRVacuumCleaner 등)에서 누락 시 아군 오사(誤射)가 발생 (Plan3 §15.4)
@@ -73,6 +75,7 @@ ADRCharacter::ADRCharacter()
 
 	// 공중 조작 — 엔진 기본값 0.05 로는 제자리 점프 뒤 방향키를 눌러도 거의 안 움직여 착지 후에야 이동했다.
 	// 0.35 = UE 3인칭 템플릿 값. 플레이어 BP 4종은 이 값을 덮어쓰지 않는다 (튜닝 시트 AirControl 로 조절 가능)
+	// 달리기 점프 뒤 방향 전환은 이 값이 아니라 UDRCharacterMovementComponent::bInstantAirTurnWhileJumping 이 맡는다
 	GetCharacterMovement()->AirControl = 0.35f;
 
 	// 카메라 붐 설정

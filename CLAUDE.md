@@ -71,6 +71,7 @@ ADRCharacterBase (implements IAbilitySystemInterface, ICombatInterface)
 - Multicast death handling for synchronized effects
 - Tagged animation montages for abilities
 - Move speed bound to attributes via CharacterMovement component
+- Players use `UDRCharacterMovementComponent` (set in `ADRCharacter`'s constructor): while airborne from their own jump (`JumpCurrentCount > 0`) and not above move speed, holding a direction turns the velocity to it at once (`bInstantAirTurnWhileJumping`). Launches (knockback, recoil, ledge falls) keep engine inertia. Gate on predicted move state only — a client-only flag would cause repeated server corrections
 
 ### UI System (MVC Pattern)
 ```

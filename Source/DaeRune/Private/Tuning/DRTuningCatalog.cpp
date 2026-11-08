@@ -390,7 +390,8 @@ namespace
 		const UClass* Class = SubObject->GetClass();
 		if (IsOursOrBlueprint(Class))
 		{
-			WalkFields(Context, Class, SubObject, Path + TEXT("."), Label, Depth + 1, EFieldPolicy::Ours);
+			// 우리 이동 컴포넌트(UDRCharacterMovementComponent)는 우리 속성 + 엔진 이동 값(화이트리스트) 둘 다
+			WalkFields(Context, Class, SubObject, Path + TEXT("."), Label, Depth + 1, EFieldPolicy::Ours, EngineComponentWhitelist(Class));
 		}
 		else if (const TSet<FName>* Whitelist = EngineComponentWhitelist(Class))
 		{
@@ -421,7 +422,7 @@ namespace
 			bool bInclude = true;
 			switch (Policy)
 			{
-			case EFieldPolicy::Ours:		bInclude = IsOurTopLevelProperty(Property); break;
+			case EFieldPolicy::Ours:		bInclude = IsOurTopLevelProperty(Property) || (Whitelist && Whitelist->Contains(Property->GetFName())); break;
 			case EFieldPolicy::AINode:		bInclude = IsTunableAINodeField(Context, Container, Property); break;
 			case EFieldPolicy::Whitelist:	bInclude = Whitelist && Whitelist->Contains(Property->GetFName()); break;
 			default:						break;

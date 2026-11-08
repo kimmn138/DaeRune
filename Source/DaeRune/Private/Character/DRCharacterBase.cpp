@@ -29,7 +29,8 @@ namespace
 	const FName WeaponAttachSocketName(TEXT("WeaponHandSocket"));
 }
 
-ADRCharacterBase::ADRCharacterBase()
+ADRCharacterBase::ADRCharacterBase(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
 {
 	PrimaryActorTick.bCanEverTick = false;
 	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get(); 
