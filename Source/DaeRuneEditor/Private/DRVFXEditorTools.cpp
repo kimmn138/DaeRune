@@ -86,6 +86,25 @@ int32 UDRVFXEditorTools::SetNiagaraEmittersLocalSpace(UNiagaraSystem* System, bo
 	return Changed;
 }
 
+bool UDRVFXEditorTools::SetNiagaraEmitterEnabled(UNiagaraSystem* System, const FString& EmitterName, bool bEnabled)
+{
+#if WITH_EDITOR
+	if (!System) return false;
+	for (FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
+	{
+		if (Handle.GetName().ToString() != EmitterName) continue;
+		System->Modify();
+		if (Handle.SetIsEnabled(bEnabled, *System, true))
+		{
+			System->WaitForCompilationComplete(true, false);
+			System->MarkPackageDirty();
+		}
+		return true;
+	}
+#endif
+	return false;
+}
+
 FString UDRVFXEditorTools::DumpNiagaraModuleConstants(UNiagaraSystem* System, const FString& NameFilter)
 {
 	FString Out;
@@ -139,6 +158,11 @@ int32 UDRVFXEditorTools::ScaleNiagaraModuleConstants(UNiagaraSystem* System, con
 			else if (Var.GetType() == FNiagaraTypeDefinition::GetVec3Def())
 			{
 				const FVector3f V = *(const FVector3f*)Data * Factor;
+				Store.SetParameterData((const uint8*)&V, Var.Offset, sizeof(V));
+			}
+			else if (Var.GetType() == FNiagaraTypeDefinition::GetIntDef())
+			{
+				const int32 V = FMath::RoundToInt(*(const int32*)Data * Factor);
 				Store.SetParameterData((const uint8*)&V, Var.Offset, sizeof(V));
 			}
 			else

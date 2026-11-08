@@ -32,12 +32,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DaeRune|Editor")
 	static int32 SetNiagaraEmittersLocalSpace(UNiagaraSystem* System, bool bLocalSpace);
 
+	/** 이름이 EmitterName 인 이미터를 켜거나 끄고 다시 컴파일한다 (그런 이미터가 없으면 false) */
+	UFUNCTION(BlueprintCallable, Category = "DaeRune|Editor")
+	static bool SetNiagaraEmitterEnabled(UNiagaraSystem* System, const FString& EmitterName, bool bEnabled);
+
 	/** 이미터 · 시스템 스크립트의 모듈 상수(스택에서 입력한 값)를 "스크립트 | 이름 | 값" 으로. NameFilter 가 비면 전부 */
 	UFUNCTION(BlueprintCallable, Category = "DaeRune|Editor")
 	static FString DumpNiagaraModuleConstants(UNiagaraSystem* System, const FString& NameFilter);
 
 	/**
-	 * 이름에 NameContains 가 들어간 float / Vector2 / Vector3 모듈 상수에 Factor 를 곱하고 다시 컴파일한다 (바꾼 값 수).
+	 * 이름에 NameContains 가 들어간 float / Vector2 / Vector3 / int(반올림 — 예: Spawn Count) 모듈 상수에 Factor 를 곱하고 다시 컴파일한다 (바꾼 값 수).
 	 * 예) 스프라이트 크기 줄이기 — 나이아가라 스프라이트 크기는 컴포넌트 스케일을 따르지 않아서 에셋 값을 바꿔야 한다.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "DaeRune|Editor")
