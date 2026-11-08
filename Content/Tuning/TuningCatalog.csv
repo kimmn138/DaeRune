@@ -69,7 +69,7 @@
 정원로봇,BP_GardenRobot,CharacterMovement.MaxFlySpeed,600,,0 ~,The maximum flying speed.,,/Game/Blueprints/Character/PlayerCharacter/GardenRobot/BP_GardenRobot.BP_GardenRobot_C
 정원로봇,BP_GardenRobot,CharacterMovement.MaxAcceleration,2048,,0 ~,Max Acceleration (rate of change of velocity),,/Game/Blueprints/Character/PlayerCharacter/GardenRobot/BP_GardenRobot.BP_GardenRobot_C
 정원로봇,BP_GardenRobot,CharacterMovement.BrakingDecelerationWalking,2048,,0 ~,Deceleration when walking and not applying acceleration. This is a constant opposing force that directly lowers velocity by a constant value.,,/Game/Blueprints/Character/PlayerCharacter/GardenRobot/BP_GardenRobot.BP_GardenRobot_C
-정원로봇,BP_GardenRobot,CharacterMovement.AirControl,0.05,,0 ~,"When falling, amount of lateral movement control available to the character.",,/Game/Blueprints/Character/PlayerCharacter/GardenRobot/BP_GardenRobot.BP_GardenRobot_C
+정원로봇,BP_GardenRobot,CharacterMovement.AirControl,0.35,,0 ~,"When falling, amount of lateral movement control available to the character.",,/Game/Blueprints/Character/PlayerCharacter/GardenRobot/BP_GardenRobot.BP_GardenRobot_C
 정원로봇,BP_SeedProjectile,bEnableLineOfSightCheck,true,,,시선 차단 검사 활성화 여부,,/Game/Blueprints/AbilitySystem/Player/GardenRobot/Abilities/Skill3/BP_SeedProjectile.BP_SeedProjectile_C
 정원로봇,BP_SeedProjectile,InnerRadius,150,,,내부 범위 반경 (최대 효과),,/Game/Blueprints/AbilitySystem/Player/GardenRobot/Abilities/Skill3/BP_SeedProjectile.BP_SeedProjectile_C
 정원로봇,BP_SeedProjectile,OuterRadius,420,,,외부 범위 반경 (감소된 효과),,/Game/Blueprints/AbilitySystem/Player/GardenRobot/Abilities/Skill3/BP_SeedProjectile.BP_SeedProjectile_C
@@ -174,7 +174,7 @@
 로봇 청소기,BP_DRVacuumCleaner,CharacterMovement.MaxFlySpeed,600,,0 ~,The maximum flying speed.,,/Game/Blueprints/Character/PlayerCharacter/VacuumCleaner/BP_DRVacuumCleaner.BP_DRVacuumCleaner_C
 로봇 청소기,BP_DRVacuumCleaner,CharacterMovement.MaxAcceleration,2048,,0 ~,Max Acceleration (rate of change of velocity),,/Game/Blueprints/Character/PlayerCharacter/VacuumCleaner/BP_DRVacuumCleaner.BP_DRVacuumCleaner_C
 로봇 청소기,BP_DRVacuumCleaner,CharacterMovement.BrakingDecelerationWalking,2048,,0 ~,Deceleration when walking and not applying acceleration. This is a constant opposing force that directly lowers velocity by a constant value.,,/Game/Blueprints/Character/PlayerCharacter/VacuumCleaner/BP_DRVacuumCleaner.BP_DRVacuumCleaner_C
-로봇 청소기,BP_DRVacuumCleaner,CharacterMovement.AirControl,0.05,,0 ~,"When falling, amount of lateral movement control available to the character.",,/Game/Blueprints/Character/PlayerCharacter/VacuumCleaner/BP_DRVacuumCleaner.BP_DRVacuumCleaner_C
+로봇 청소기,BP_DRVacuumCleaner,CharacterMovement.AirControl,0.35,,0 ~,"When falling, amount of lateral movement control available to the character.",,/Game/Blueprints/Character/PlayerCharacter/VacuumCleaner/BP_DRVacuumCleaner.BP_DRVacuumCleaner_C
 로봇 청소기,BP_VacuumAirProjectile,ActiveDuration,2,,,유효 비행 시간 (이후 페이드 시작),,/Game/Blueprints/AbilitySystem/Player/VacuumCleaner/Abilities/Skill1/BP_VacuumAirProjectile.BP_VacuumAirProjectile_C
 로봇 청소기,BP_VacuumAirProjectile,FadeDuration,0.5,,,페이드 연출 시간 (종료 시 Destroy),,/Game/Blueprints/AbilitySystem/Player/VacuumCleaner/Abilities/Skill1/BP_VacuumAirProjectile.BP_VacuumAirProjectile_C
 로봇 청소기,BP_VacuumAirProjectile,ProjectileMovement.InitialSpeed,550,,,"Initial speed of projectile. If greater than zero, this will override the initial Velocity value and instead treat Velocity as a direction.",,/Game/Blueprints/AbilitySystem/Player/VacuumCleaner/Abilities/Skill1/BP_VacuumAirProjectile.BP_VacuumAirProjectile_C
@@ -266,7 +266,7 @@
 자판기,BP_VendingMachine,CharacterMovement.MaxFlySpeed,600,,0 ~,The maximum flying speed.,,/Game/Blueprints/Character/PlayerCharacter/VendingMachine/BP_VendingMachine.BP_VendingMachine_C
 자판기,BP_VendingMachine,CharacterMovement.MaxAcceleration,2048,,0 ~,Max Acceleration (rate of change of velocity),,/Game/Blueprints/Character/PlayerCharacter/VendingMachine/BP_VendingMachine.BP_VendingMachine_C
 자판기,BP_VendingMachine,CharacterMovement.BrakingDecelerationWalking,2048,,0 ~,Deceleration when walking and not applying acceleration. This is a constant opposing force that directly lowers velocity by a constant value.,,/Game/Blueprints/Character/PlayerCharacter/VendingMachine/BP_VendingMachine.BP_VendingMachine_C
-자판기,BP_VendingMachine,CharacterMovement.AirControl,0.05,,0 ~,"When falling, amount of lateral movement control available to the character.",,/Game/Blueprints/Character/PlayerCharacter/VendingMachine/BP_VendingMachine.BP_VendingMachine_C
+자판기,BP_VendingMachine,CharacterMovement.AirControl,0.35,,0 ~,"When falling, amount of lateral movement control available to the character.",,/Game/Blueprints/Character/PlayerCharacter/VendingMachine/BP_VendingMachine.BP_VendingMachine_C
 자판기,GE_AttackSpeedBuff,DurationMagnitude.ScalableFloatMagnitude.Value,20,,,지속 시간(초),,/Game/Blueprints/AbilitySystem/Player/VendingMachine/Abilities/Skill2/GE_AttackSpeedBuff.GE_AttackSpeedBuff_C
 자판기,GE_AttackSpeedBuff,StackLimitCount,10,,,최대 중첩 수,,/Game/Blueprints/AbilitySystem/Player/VendingMachine/Abilities/Skill2/GE_AttackSpeedBuff.GE_AttackSpeedBuff_C
 자판기,GE_AttackSpeedBuff_Decay,DurationMagnitude.ScalableFloatMagnitude.Value,20,,,지속 시간(초),,/Game/Blueprints/AbilitySystem/Player/VendingMachine/Abilities/Skill2/GE_AttackSpeedBuff_Decay.GE_AttackSpeedBuff_Decay_C
@@ -339,7 +339,7 @@
 벨보이,BP_BellBoy,CharacterMovement.MaxFlySpeed,600,,0 ~,The maximum flying speed.,,/Game/Blueprints/Character/PlayerCharacter/BellBoy/BP_BellBoy.BP_BellBoy_C
 벨보이,BP_BellBoy,CharacterMovement.MaxAcceleration,2048,,0 ~,Max Acceleration (rate of change of velocity),,/Game/Blueprints/Character/PlayerCharacter/BellBoy/BP_BellBoy.BP_BellBoy_C
 벨보이,BP_BellBoy,CharacterMovement.BrakingDecelerationWalking,2048,,0 ~,Deceleration when walking and not applying acceleration. This is a constant opposing force that directly lowers velocity by a constant value.,,/Game/Blueprints/Character/PlayerCharacter/BellBoy/BP_BellBoy.BP_BellBoy_C
-벨보이,BP_BellBoy,CharacterMovement.AirControl,0.05,,0 ~,"When falling, amount of lateral movement control available to the character.",,/Game/Blueprints/Character/PlayerCharacter/BellBoy/BP_BellBoy.BP_BellBoy_C
+벨보이,BP_BellBoy,CharacterMovement.AirControl,0.35,,0 ~,"When falling, amount of lateral movement control available to the character.",,/Game/Blueprints/Character/PlayerCharacter/BellBoy/BP_BellBoy.BP_BellBoy_C
 벨보이,BP_BellBoyHatPickup,LifeTime,10,,0.1 ~,바닥에 남아 있는 시간(초),,/Game/Blueprints/AbilitySystem/Player/BellBoy/Abilities/Skill3/BP_BellBoyHatPickup.BP_BellBoyHatPickup_C
 벨보이,BP_BellBoyHatPickup,RecheckInterval,0.25,,0.05 ~,,,/Game/Blueprints/AbilitySystem/Player/BellBoy/Abilities/Skill3/BP_BellBoyHatPickup.BP_BellBoyHatPickup_C
 벨보이,BP_BellBoyHatPickup,ThrowerCharges,2,,1 ~,던진 벨보이 본인이 주웠을 때 막는 횟수 (Plan5(모자칩) ②면 모든 플레이어),,/Game/Blueprints/AbilitySystem/Player/BellBoy/Abilities/Skill3/BP_BellBoyHatPickup.BP_BellBoyHatPickup_C
@@ -1332,38 +1332,53 @@
 적,CT_EnemyAttributes,[Dog.MaxHealth].Keys[0].Value,150,,,[Dog.MaxHealth] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[Dog.MaxHealth].Keys[1].Value,158,,,[Dog.MaxHealth] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[Dog.MaxHealth].Keys[2].Value,173,,,[Dog.MaxHealth] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
-적,CT_EnemyAttributes,[Dog.MaxHealth].Keys[3].Value,203,,,[Dog.MaxHealth] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Dog.MaxHealth].Keys[3].Value,173,,,[Dog.MaxHealth] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Dog.MaxHealth].Keys[4].Value,203,,,[Dog.MaxHealth] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[Dog.MoveSpeed].Keys[0].Value,500,,,[Dog.MoveSpeed] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
-적,CT_EnemyAttributes,[Dog.MoveSpeed].Keys[1].Value,525,,,[Dog.MoveSpeed] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
-적,CT_EnemyAttributes,[Dog.MoveSpeed].Keys[2].Value,625,,,[Dog.MoveSpeed] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Dog.MoveSpeed].Keys[1].Value,500,,,[Dog.MoveSpeed] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Dog.MoveSpeed].Keys[2].Value,525,,,[Dog.MoveSpeed] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Dog.MoveSpeed].Keys[3].Value,525,,,[Dog.MoveSpeed] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Dog.MoveSpeed].Keys[4].Value,625,,,[Dog.MoveSpeed] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[PartEnemy.MaxHealth].Keys[0].Value,300,,,[PartEnemy.MaxHealth] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[PartEnemy.MaxHealth].Keys[1].Value,315,,,[PartEnemy.MaxHealth] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[PartEnemy.MaxHealth].Keys[2].Value,345,,,[PartEnemy.MaxHealth] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
-적,CT_EnemyAttributes,[PartEnemy.MaxHealth].Keys[3].Value,405,,,[PartEnemy.MaxHealth] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[PartEnemy.MaxHealth].Keys[3].Value,345,,,[PartEnemy.MaxHealth] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[PartEnemy.MaxHealth].Keys[4].Value,405,,,[PartEnemy.MaxHealth] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[Armadillo.MaxHealth].Keys[0].Value,150,,,[Armadillo.MaxHealth] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[Armadillo.MaxHealth].Keys[1].Value,158,,,[Armadillo.MaxHealth] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[Armadillo.MaxHealth].Keys[2].Value,173,,,[Armadillo.MaxHealth] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
-적,CT_EnemyAttributes,[Armadillo.MaxHealth].Keys[3].Value,203,,,[Armadillo.MaxHealth] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Armadillo.MaxHealth].Keys[3].Value,173,,,[Armadillo.MaxHealth] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Armadillo.MaxHealth].Keys[4].Value,203,,,[Armadillo.MaxHealth] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[Armadillo.MoveSpeed].Keys[0].Value,300,,,[Armadillo.MoveSpeed] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
-적,CT_EnemyAttributes,[Armadillo.MoveSpeed].Keys[1].Value,315,,,[Armadillo.MoveSpeed] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
-적,CT_EnemyAttributes,[Armadillo.MoveSpeed].Keys[2].Value,375,,,[Armadillo.MoveSpeed] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Armadillo.MoveSpeed].Keys[1].Value,300,,,[Armadillo.MoveSpeed] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Armadillo.MoveSpeed].Keys[2].Value,315,,,[Armadillo.MoveSpeed] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Armadillo.MoveSpeed].Keys[3].Value,315,,,[Armadillo.MoveSpeed] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Armadillo.MoveSpeed].Keys[4].Value,375,,,[Armadillo.MoveSpeed] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[DragonFly.MaxHealth].Keys[0].Value,50,,,[DragonFly.MaxHealth] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[DragonFly.MaxHealth].Keys[1].Value,53,,,[DragonFly.MaxHealth] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[DragonFly.MaxHealth].Keys[2].Value,58,,,[DragonFly.MaxHealth] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
-적,CT_EnemyAttributes,[DragonFly.MaxHealth].Keys[3].Value,68,,,[DragonFly.MaxHealth] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[DragonFly.MaxHealth].Keys[3].Value,58,,,[DragonFly.MaxHealth] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[DragonFly.MaxHealth].Keys[4].Value,68,,,[DragonFly.MaxHealth] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[DragonFly.MoveSpeed].Keys[0].Value,500,,,[DragonFly.MoveSpeed] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
-적,CT_EnemyAttributes,[DragonFly.MoveSpeed].Keys[1].Value,525,,,[DragonFly.MoveSpeed] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
-적,CT_EnemyAttributes,[DragonFly.MoveSpeed].Keys[2].Value,625,,,[DragonFly.MoveSpeed] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[DragonFly.MoveSpeed].Keys[1].Value,500,,,[DragonFly.MoveSpeed] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[DragonFly.MoveSpeed].Keys[2].Value,525,,,[DragonFly.MoveSpeed] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[DragonFly.MoveSpeed].Keys[3].Value,525,,,[DragonFly.MoveSpeed] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[DragonFly.MoveSpeed].Keys[4].Value,625,,,[DragonFly.MoveSpeed] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[PartEnemy.MoveSpeed].Keys[0].Value,400,,,[PartEnemy.MoveSpeed] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
-적,CT_EnemyAttributes,[PartEnemy.MoveSpeed].Keys[1].Value,840,,,[PartEnemy.MoveSpeed] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
-적,CT_EnemyAttributes,[PartEnemy.MoveSpeed].Keys[2].Value,1000,,,[PartEnemy.MoveSpeed] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[PartEnemy.MoveSpeed].Keys[1].Value,400,,,[PartEnemy.MoveSpeed] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[PartEnemy.MoveSpeed].Keys[2].Value,840,,,[PartEnemy.MoveSpeed] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[PartEnemy.MoveSpeed].Keys[3].Value,840,,,[PartEnemy.MoveSpeed] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[PartEnemy.MoveSpeed].Keys[4].Value,1000,,,[PartEnemy.MoveSpeed] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[Bear.MaxHealth].Keys[0].Value,700,,,[Bear.MaxHealth] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[Bear.MaxHealth].Keys[1].Value,735,,,[Bear.MaxHealth] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[Bear.MaxHealth].Keys[2].Value,805,,,[Bear.MaxHealth] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
-적,CT_EnemyAttributes,[Bear.MaxHealth].Keys[3].Value,945,,,[Bear.MaxHealth] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Bear.MaxHealth].Keys[3].Value,805,,,[Bear.MaxHealth] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Bear.MaxHealth].Keys[4].Value,945,,,[Bear.MaxHealth] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[Bear.MoveSpeed].Keys[0].Value,300,,,[Bear.MoveSpeed] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
-적,CT_EnemyAttributes,[Bear.MoveSpeed].Keys[1].Value,315,,,[Bear.MoveSpeed] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
-적,CT_EnemyAttributes,[Bear.MoveSpeed].Keys[2].Value,375,,,[Bear.MoveSpeed] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Bear.MoveSpeed].Keys[1].Value,300,,,[Bear.MoveSpeed] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Bear.MoveSpeed].Keys[2].Value,315,,,[Bear.MoveSpeed] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Bear.MoveSpeed].Keys[3].Value,315,,,[Bear.MoveSpeed] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
+적,CT_EnemyAttributes,[Bear.MoveSpeed].Keys[4].Value,375,,,[Bear.MoveSpeed] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[Mole.MaxHealth].Keys[0].Value,2100,,,[Mole.MaxHealth] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[Mole.MaxHealth].Keys[1].Value,3000,,,[Mole.MaxHealth] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
 적,CT_EnemyAttributes,[Mole.MaxHealth].Keys[2].Value,3900,,,[Mole.MaxHealth] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_EnemyAttributes.CT_EnemyAttributes
@@ -1683,31 +1698,55 @@
 적 AI,BT_EnemyBehaviorTree_Phase3_Elite,BTTask_Wait_13.WaitTime.DefaultValue,1.5,,,[Wait: Key: EliteAttackSpeed s],,/Game/Blueprints/AI/BehaviorTree/BT_EnemyBehaviorTree_Phase3_Elite.BT_EnemyBehaviorTree_Phase3_Elite
 적 AI,BT_EnemyBehaviorTree_Phase3_Elite,BTTask_Wait_13.RandomDeviation.DefaultValue,0,,,[Wait: Key: EliteAttackSpeed s],,/Game/Blueprints/AI/BehaviorTree/BT_EnemyBehaviorTree_Phase3_Elite.BT_EnemyBehaviorTree_Phase3_Elite
 피해 커브,CT_Damage,[Abilities.Dog.BasicAttack].Keys[0].Value,30,,,[Abilities.Dog.BasicAttack] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
-피해 커브,CT_Damage,[Abilities.Dog.BasicAttack].Keys[1].Value,36,,,[Abilities.Dog.BasicAttack] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Dog.BasicAttack].Keys[1].Value,30,,,[Abilities.Dog.BasicAttack] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Dog.BasicAttack].Keys[2].Value,30,,,[Abilities.Dog.BasicAttack] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Dog.BasicAttack].Keys[3].Value,30,,,[Abilities.Dog.BasicAttack] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Dog.BasicAttack].Keys[4].Value,36,,,[Abilities.Dog.BasicAttack] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Abilities.Dog.Bite].Keys[0].Value,60,,,[Abilities.Dog.Bite] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
-피해 커브,CT_Damage,[Abilities.Dog.Bite].Keys[1].Value,72,,,[Abilities.Dog.Bite] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Dog.Bite].Keys[1].Value,60,,,[Abilities.Dog.Bite] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Dog.Bite].Keys[2].Value,60,,,[Abilities.Dog.Bite] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Dog.Bite].Keys[3].Value,60,,,[Abilities.Dog.Bite] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Dog.Bite].Keys[4].Value,72,,,[Abilities.Dog.Bite] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Abilities.Armadillo.BasicAttack].Keys[0].Value,20,,,[Abilities.Armadillo.BasicAttack] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
-피해 커브,CT_Damage,[Abilities.Armadillo.BasicAttack].Keys[1].Value,24,,,[Abilities.Armadillo.BasicAttack] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Armadillo.BasicAttack].Keys[1].Value,20,,,[Abilities.Armadillo.BasicAttack] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Armadillo.BasicAttack].Keys[2].Value,20,,,[Abilities.Armadillo.BasicAttack] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Armadillo.BasicAttack].Keys[3].Value,20,,,[Abilities.Armadillo.BasicAttack] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Armadillo.BasicAttack].Keys[4].Value,24,,,[Abilities.Armadillo.BasicAttack] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Abilities.Armadillo.RollCharge].Keys[0].Value,50,,,[Abilities.Armadillo.RollCharge] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
-피해 커브,CT_Damage,[Abilities.Armadillo.RollCharge].Keys[1].Value,60,,,[Abilities.Armadillo.RollCharge] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Armadillo.RollCharge].Keys[1].Value,50,,,[Abilities.Armadillo.RollCharge] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Armadillo.RollCharge].Keys[2].Value,50,,,[Abilities.Armadillo.RollCharge] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Armadillo.RollCharge].Keys[3].Value,50,,,[Abilities.Armadillo.RollCharge] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Armadillo.RollCharge].Keys[4].Value,60,,,[Abilities.Armadillo.RollCharge] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Abilities.DragonFly.BasicAttack].Keys[0].Value,10,,,[Abilities.DragonFly.BasicAttack] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
-피해 커브,CT_Damage,[Abilities.DragonFly.BasicAttack].Keys[1].Value,12,,,[Abilities.DragonFly.BasicAttack] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.DragonFly.BasicAttack].Keys[1].Value,10,,,[Abilities.DragonFly.BasicAttack] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.DragonFly.BasicAttack].Keys[2].Value,10,,,[Abilities.DragonFly.BasicAttack] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.DragonFly.BasicAttack].Keys[3].Value,10,,,[Abilities.DragonFly.BasicAttack] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.DragonFly.BasicAttack].Keys[4].Value,12,,,[Abilities.DragonFly.BasicAttack] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Abilities.Bear.BasicAttack].Keys[0].Value,40,,,[Abilities.Bear.BasicAttack] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
-피해 커브,CT_Damage,[Abilities.Bear.BasicAttack].Keys[1].Value,48,,,[Abilities.Bear.BasicAttack] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Bear.BasicAttack].Keys[1].Value,40,,,[Abilities.Bear.BasicAttack] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Bear.BasicAttack].Keys[2].Value,40,,,[Abilities.Bear.BasicAttack] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Bear.BasicAttack].Keys[3].Value,40,,,[Abilities.Bear.BasicAttack] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Bear.BasicAttack].Keys[4].Value,48,,,[Abilities.Bear.BasicAttack] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Abilities.Bear.Sweep].Keys[0].Value,80,,,[Abilities.Bear.Sweep] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
-피해 커브,CT_Damage,[Abilities.Bear.Sweep].Keys[1].Value,96,,,[Abilities.Bear.Sweep] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Bear.Sweep].Keys[1].Value,80,,,[Abilities.Bear.Sweep] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Bear.Sweep].Keys[2].Value,80,,,[Abilities.Bear.Sweep] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Bear.Sweep].Keys[3].Value,80,,,[Abilities.Bear.Sweep] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Bear.Sweep].Keys[4].Value,96,,,[Abilities.Bear.Sweep] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Abilities.Mole.Claw.Hit1].Keys[0].Value,20,,,[Abilities.Mole.Claw.Hit1] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Abilities.Mole.Claw.Hit1].Keys[1].Value,30,,,[Abilities.Mole.Claw.Hit1] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Abilities.Mole.Claw.Hit1].Keys[2].Value,40,,,[Abilities.Mole.Claw.Hit1] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
-피해 커브,CT_Damage,[Abilities.Mole.Claw.Hit1].Keys[3].Value,40,,,[Abilities.Mole.Claw.Hit1] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Mole.Claw.Hit1].Keys[3].Value,40,,,[Abilities.Mole.Claw.Hit1] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Mole.Claw.Hit1].Keys[4].Value,40,,,[Abilities.Mole.Claw.Hit1] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Abilities.Mole.Claw.Hit2].Keys[0].Value,25,,,[Abilities.Mole.Claw.Hit2] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Abilities.Mole.Claw.Hit2].Keys[1].Value,35,,,[Abilities.Mole.Claw.Hit2] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Abilities.Mole.Claw.Hit2].Keys[2].Value,45,,,[Abilities.Mole.Claw.Hit2] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
-피해 커브,CT_Damage,[Abilities.Mole.Claw.Hit2].Keys[3].Value,45,,,[Abilities.Mole.Claw.Hit2] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Mole.Claw.Hit2].Keys[3].Value,45,,,[Abilities.Mole.Claw.Hit2] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Abilities.Mole.Claw.Hit2].Keys[4].Value,45,,,[Abilities.Mole.Claw.Hit2] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Cooldown.Mole.BurrowStrike].Keys[0].Value,20,,,[Cooldown.Mole.BurrowStrike] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Cooldown.Mole.BurrowStrike].Keys[1].Value,4,,,[Cooldown.Mole.BurrowStrike] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Cooldown.Mole.BurrowStrike].Keys[2].Value,3,,,[Cooldown.Mole.BurrowStrike] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
-피해 커브,CT_Damage,[Cooldown.Mole.BurrowStrike].Keys[3].Value,3,,,[Cooldown.Mole.BurrowStrike] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Cooldown.Mole.BurrowStrike].Keys[3].Value,3,,,[Cooldown.Mole.BurrowStrike] — 레벨 4 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
+피해 커브,CT_Damage,[Cooldown.Mole.BurrowStrike].Keys[4].Value,3,,,[Cooldown.Mole.BurrowStrike] — 레벨 5 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Abilities.Mole.BurrowStrike].Keys[0].Value,30,,,[Abilities.Mole.BurrowStrike] — 레벨 1 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Abilities.Mole.BurrowStrike].Keys[1].Value,45,,,[Abilities.Mole.BurrowStrike] — 레벨 2 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
 피해 커브,CT_Damage,[Abilities.Mole.BurrowStrike].Keys[2].Value,60,,,[Abilities.Mole.BurrowStrike] — 레벨 3 의 값,,/Game/Blueprints/AbilitySystem/Data/CT_Damage.CT_Damage
@@ -2245,6 +2284,9 @@
 튜토리얼,BP_DRTutorialManager,RequiredWaterPumpSeconds,3,,,,,/Game/Blueprints/Tutorial/BP_DRTutorialManager.BP_DRTutorialManager_C
 튜토리얼,BP_DRTutorialManager,RequiredSimultaneousHits,1,,,,,/Game/Blueprints/Tutorial/BP_DRTutorialManager.BP_DRTutorialManager_C
 게임 모드,BP_DRLobbyGameMode,WipeoutDelayTime,2,,,전멸 후 처리 시작까지 대기 시간,,/Game/Blueprints/Game/BP_DRLobbyGameMode.BP_DRLobbyGameMode_C
+게임 모드,BP_DRMainMenuGameMode,RevealFadeInTime,0.5,,0 ~,첫 화면이 검은 화면에서 밝아지는 시간(초),,/Game/Blueprints/Game/BP_DRMainMenuGameMode.BP_DRMainMenuGameMode_C
+게임 모드,BP_DRMainMenuGameMode,RevealHoldTime,0.3,,0 ~,메시가 모두 준비된 뒤 페이드 인 전에 더 기다리는 시간(초) — 다시 만들어진 프록시의 첫 그리기와 조명(GI)이 자리 잡을 시간,,/Game/Blueprints/Game/BP_DRMainMenuGameMode.BP_DRMainMenuGameMode_C
+게임 모드,BP_DRMainMenuGameMode,MaxRevealWaitTime,5,,0 ~,메시가 준비되지 않아도 이 시간(초)이 지나면 화면을 연다(PSO 컴파일이 끝나지 않는 경우의 안전장치),,/Game/Blueprints/Game/BP_DRMainMenuGameMode.BP_DRMainMenuGameMode_C
 게임 모드,BP_DRMainMenuGameMode,MaxPublicConnections,4,,1 ~ 4,,,/Game/Blueprints/Game/BP_DRMainMenuGameMode.BP_DRMainMenuGameMode_C
 게임 모드,BP_DRStageGameMode,WipeoutDelayTime,5,,,전멸 후 처리 시작까지 대기 시간,,/Game/Blueprints/Game/BP_DRStageGameMode.BP_DRStageGameMode_C
 게임 모드,BP_DRTutorialGameMode,TutorialCompleteDelay,3,,,튜토리얼 완료 후 복귀 딜레이,,/Game/Blueprints/Game/BP_DRTutorialGameMode.BP_DRTutorialGameMode_C
