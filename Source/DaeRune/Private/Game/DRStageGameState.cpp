@@ -67,6 +67,7 @@ void ADRStageGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     // UI 업데이트
     DOREPLIFETIME(ADRStageGameState, CurrentPhaseObjective);
     DOREPLIFETIME(ADRStageGameState, CurrentObjectiveProgress);
+    DOREPLIFETIME(ADRStageGameState, PlayerObjectiveOverride);
 }
 
 void ADRStageGameState::RegisterDoorManager(ADRDoorManager* InDoorManager)
@@ -176,7 +177,27 @@ void ADRStageGameState::SetPhaseObjective(const FPhaseObjectiveData& ObjectiveDa
     
     CurrentPhaseObjective = ObjectiveData;
     CurrentObjectiveProgress = 0;
+    // 한 사람용 목표는 바뀌기 전 목표에 딸린 것이다
+    PlayerObjectiveOverride = FDRPlayerObjectiveOverride();
     OnPhaseObjectiveChangedDelegate.Broadcast();
+}
+
+void ADRStageGameState::SetPlayerObjectiveOverride(APlayerState* Player, const FPhaseObjectiveData& ObjectiveData)
+{
+    if (!HasAuthority() || !Player) return;
+
+    PlayerObjectiveOverride.Player = Player;
+    PlayerObjectiveOverride.Objective = ObjectiveData;
+    OnPhaseObjectiveChangedDelegate.Broadcast();
+}
+
+FPhaseObjectiveData ADRStageGameState::GetPhaseObjectiveFor(const APlayerState* Player) const
+{
+    if (Player && PlayerObjectiveOverride.Player == Player)
+    {
+        return PlayerObjectiveOverride.Objective;
+    }
+    return CurrentPhaseObjective;
 }
 
 void ADRStageGameState::UpdatePhaseObjectiveProgress(int32 NewCount)
@@ -203,6 +224,11 @@ void ADRStageGameState::OnRep_CurrentPhaseObjective()
 }
 
 void ADRStageGameState::OnRep_CurrentObjectiveProgress()
+{
+    OnPhaseObjectiveChangedDelegate.Broadcast();
+}
+
+void ADRStageGameState::OnRep_PlayerObjectiveOverride()
 {
     OnPhaseObjectiveChangedDelegate.Broadcast();
 }

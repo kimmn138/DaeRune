@@ -343,16 +343,31 @@ void UOverlayWidgetController::HandlePhaseObjectiveChanged()
 	const ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
     if (!DRGameState) return;
 
-    const FPhaseObjectiveData ObjectiveData = DRGameState->GetCurrentPhaseObjective();
+    // 한 사람에게만 다른 목표가 걸려 있으면(스테이지2 방4 두더지 담당) 그 사람 화면엔 그 목표를 보인다
+    const FPhaseObjectiveData ObjectiveData = DRGameState->GetPhaseObjectiveFor(PlayerState);
     int32 CurrentProgress = DRGameState->GetCurrentObjectiveProgress();
 
 	// PhaseNumber 0 = 실제 목표가 설정되기 전 준비 상태 (생성자 기본값 "Preparing...")
 	// 위젯이 placeholder를 첫 목표로 오인해 진짜 첫 목표를 Pending으로 잡아버리는 것을 방지
 	if (ObjectiveData.PhaseNumber == 0) return;
 
+	// 같은 페이즈 안에서 목표 제목이 바뀌었는가 (스테이지2 서브 목표 · 방4 담당 목표).
+	// 위젯은 제목이 이미 떠 있으면 새 목표를 대기에 두고 "목표 완료" 연출이 끝날 때 띄운다. 그 연출은 페이즈가 끝날 때만
+	// 오므로(GameMode 의 Multicast_ObjectiveCompleted) 페이즈 안의 교체는 화면에 나오지 않았다 → 여기서 완료 연출을 직접 튼다.
+	// 페이즈가 바뀐 것(PhaseNumber 가 다름)은 GameMode 쪽 연출이 맡으므로 건드리지 않는다.
+	const bool bSubObjectiveChanged = ObjectiveData.PhaseNumber == LastObjectivePhaseNumber
+		&& !ObjectiveData.ObjectiveTitle.EqualTo(LastObjectiveTitle);
+	LastObjectivePhaseNumber = ObjectiveData.PhaseNumber;
+	LastObjectiveTitle = ObjectiveData.ObjectiveTitle;
+
 	OnObjectiveTextChanged.Broadcast(ObjectiveData.ObjectiveTitle,ObjectiveData.ProgressFormat);
 	OnObjectiveProgressChanged.Broadcast(CurrentProgress,ObjectiveData.RequiredCount);
 	OnObjectiveProgressVisibilityChanged.Broadcast(ObjectiveData.RequiredCount > 0);
+
+	if (bSubObjectiveChanged)
+	{
+		OnObjectiveCompleted.Broadcast();
+	}
 
 	// ===== 페이즈 알람 배너 (Plan6 §5.4) =====
 	// 목표 데이터의 PhaseAlarmText를 우선 사용하고, 비어 있으면 레거시 문구로 폴백한다.
@@ -388,6 +403,10 @@ void UOverlayWidgetController::BindPhaseObjectiveDelegate()
 {
 	ADRStageGameState* DRGameState = GetWorld()->GetGameState<ADRStageGameState>();
 	if (!DRGameState) return;
+
+	// 싱글톤 WidgetController이므로 이전 게임의 목표를 잊는다
+	LastObjectivePhaseNumber = INDEX_NONE;
+	LastObjectiveTitle = FText::GetEmpty();
 
 	DRGameState->OnPhaseObjectiveChangedDelegate.AddWeakLambda(this, [this]()
 	{

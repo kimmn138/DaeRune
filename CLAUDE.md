@@ -87,6 +87,8 @@ ADRHUD
 
 **Important**: Widget controllers are cached singletons. Always use `ADRHUD::GetOverlayWidgetController()` to access.
 
+**Phase objective** (`WBP_PhaseObjective`): once a title is shown, a new objective is only held as pending and appears when the "complete" animation finishes (`OnObjectiveCompleted`). Phase ends trigger it via `Multicast_ObjectiveCompleted`; for a title change inside the same `PhaseNumber` (Stage2 sub-objectives) `UOverlayWidgetController::HandlePhaseObjectiveChanged` triggers it itself. One player can see a different objective than the rest (`UDRPhaseBase::SetupPlayerObjectiveByRow` → `ADRStageGameState::SetPlayerObjectiveOverride`, shared progress, cleared by the next `SetPhaseObjective`) — used for the Stage2 room 4 (mole) player. Stage2 zone banners follow phase numbers (rooms 3+4 = zone 3, room 5 = 4, room 6 = 5). `DRSkipPhase` does not send the complete animation, so the objective title stays stale after a skip.
+
 **Full-screen UI** (Settings, Upgrade, Wardrobe, StageSelect, SlidePuzzle) is owned by `ADRPlayerController`, not the HUD. All five go through `OpenScreen()` / `CloseScreen()` (`EDRScreen`): only one screen is open at a time, input mode switches to UIOnly on open and back via `RestoreDefaultInputMode()` on close, and the widgets are created in C++ from the widget classes set on `BP_DRPlayerController`.
 
 **Interaction prompt** ("[F] 부품 줍기" under the crosshair, plus the carried-part icon below it while carrying) is one screen widget owned by `UDRInteractionComponent` on the PlayerController — interactables no longer have world-space `WidgetComponent`s. See "Interaction Prompt UI" under Key Subsystems.

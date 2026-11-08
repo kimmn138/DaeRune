@@ -9,6 +9,7 @@
 #include "DRStageGameState.generated.h"
 
 class ADRDoorManager;
+class APlayerState;
 class UAudioComponent;
 class UNiagaraComponent;
 class UNiagaraSystem;
@@ -42,6 +43,22 @@ enum class EDRStageStartState : uint8
 
 // 스테이지 시작 진행 변경 (서버는 바꿀 때, 클라는 복제가 도착할 때 발화)
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnStageStartStateChanged, EDRStageStartState /*NewState*/);
+
+/**
+ * 한 플레이어에게만 보이는 목표 (2026-11-09) — 스테이지2 방3+4 처럼 같은 페이즈에서 한 사람만 다른 일을 할 때.
+ * 대상과 목표를 한 구조체로 복제해 둘이 따로 도착하지 않게 한다. Player 가 null 이면 덮어쓰기 없음.
+ */
+USTRUCT()
+struct FDRPlayerObjectiveOverride
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TObjectPtr<APlayerState> Player = nullptr;
+
+	UPROPERTY()
+	FPhaseObjectiveData Objective;
+};
 
 /**
  * 
@@ -168,6 +185,15 @@ public:
     UPROPERTY(ReplicatedUsing = OnRep_CurrentPhaseObjective)
     FPhaseObjectiveData CurrentPhaseObjective;
 
+    /**
+     * Player 화면에만 공용 목표 대신 ObjectiveData 를 보인다 (서버 전용). 진행도(CurrentObjectiveProgress)는 공용 목표와 같이 쓴다.
+     * 덮어쓰기는 지금 목표에 딸린 것이라 SetPhaseObjective 가 지운다 — 공용 목표를 바꾼 뒤에 다시 건다.
+     */
+    void SetPlayerObjectiveOverride(APlayerState* Player, const FPhaseObjectiveData& ObjectiveData);
+
+    // Player 화면에 보일 목표 (덮어쓰기 대상이면 그 목표, 아니면 공용 목표)
+    FPhaseObjectiveData GetPhaseObjectiveFor(const APlayerState* Player) const;
+
     // ========== 웨이브 방어 UI 표시 플래그 (Plan6 §5.4) ==========
     // 웨이브 타이머 UI + 클렌저 사이트 HP UI 를 띄울지 여부.
     // 기존에는 OverlayWidgetController가 "페이즈 인덱스 == 2"로 판단했으나,
@@ -236,6 +262,9 @@ protected:
     
     UFUNCTION()
     void OnRep_CurrentObjectiveProgress();
+
+    UFUNCTION()
+    void OnRep_PlayerObjectiveOverride();
 
     UFUNCTION()
     void OnRep_WaveDefenseUIActive();
@@ -328,6 +357,10 @@ private:
     // ========== UI 업데이트 ==========
     UPROPERTY(ReplicatedUsing = OnRep_CurrentObjectiveProgress)
     int32 CurrentObjectiveProgress = 0;
+
+    // 한 플레이어에게만 보이는 목표 (SetPlayerObjectiveOverride)
+    UPROPERTY(ReplicatedUsing = OnRep_PlayerObjectiveOverride)
+    FDRPlayerObjectiveOverride PlayerObjectiveOverride;
 
     // 웨이브 방어 UI(타이머 + 클렌저 HP) 표시 여부 (Plan6 §5.4)
     UPROPERTY(ReplicatedUsing = OnRep_WaveDefenseUIActive)

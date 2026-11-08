@@ -343,4 +343,8 @@ private:
 
 	// 같은 문구를 연속으로 다시 띄우지 않기 위한 캐시
 	FText CachedAlarmText;
+
+	// 마지막으로 위젯에 보낸 목표 — 같은 페이즈 안의 목표 교체를 알아보는 데 쓴다 (HandlePhaseObjectiveChanged)
+	int32 LastObjectivePhaseNumber = INDEX_NONE;
+	FText LastObjectiveTitle;
 };

@@ -192,6 +192,8 @@ void UDRS2DefensePhase::HandleRoom4Entered(ADRCharacter* Who)
 	SetGateGuideHighlight(Director->Gate_Room3ToRoom4, false);
 
 	SetupPhaseObjectiveByRow(TEXT("S2P3_Hold"), GetMoleGoalKills(Director));
+	// 방4에 들어간 사람만 자기 할 일(부품 설치 → 두더지)을 본다. 방3 인원은 "버텨라" 그대로
+	SetupPlayerObjectiveByRow(Room4PlayerState.Get(), TEXT("S2P3_Room4Install"));
 
 	UE_LOG(LogDR, Log, TEXT("[S2P3] 방4 입장: %s"), Who ? *Who->GetName() : TEXT("Unknown"));
 }
@@ -211,6 +213,7 @@ void UDRS2DefensePhase::HandlePartInstalled(ADRCleanserSite* Site)
 	StartWaveLoop();
 
 	SetupPhaseObjectiveByRow(TEXT("S2P3_Hold"), GetMoleGoalKills(Director));
+	SetupPlayerObjectiveByRow(Room4PlayerState.Get(), TEXT("S2P3_Room4Mole"), GetMoleGoalKills(Director));
 	GameState->UpdatePhaseObjectiveProgress(0);
 
 	UE_LOG(LogDR, Log, TEXT("[S2P3] 부품 설치 - 두더지 + 방3 웨이브 시작"));

@@ -191,24 +191,44 @@ void UDRPhaseBase::SetupPhaseObjective(int32 PhaseNumber)
 
 void UDRPhaseBase::SetupPhaseObjectiveByRow(FName RowName, int32 OverrideRequiredCount)
 {
-	if (!PhaseObjectiveDataTable || !GameState || RowName.IsNone()) return;
+	if (!GameState) return;
+
+	FPhaseObjectiveData Objective;
+	if (BuildObjectiveFromRow(RowName, OverrideRequiredCount, Objective))
+	{
+		GameState->SetPhaseObjective(Objective);
+	}
+}
+
+void UDRPhaseBase::SetupPlayerObjectiveByRow(APlayerState* Player, FName RowName, int32 OverrideRequiredCount)
+{
+	if (!GameState || !Player) return;
+
+	FPhaseObjectiveData Objective;
+	if (BuildObjectiveFromRow(RowName, OverrideRequiredCount, Objective))
+	{
+		GameState->SetPlayerObjectiveOverride(Player, Objective);
+	}
+}
+
+bool UDRPhaseBase::BuildObjectiveFromRow(FName RowName, int32 OverrideRequiredCount, FPhaseObjectiveData& OutObjective) const
+{
+	if (!PhaseObjectiveDataTable || RowName.IsNone()) return false;
 
 	const FPhaseObjectiveData* ObjectiveData =
-		PhaseObjectiveDataTable->FindRow<FPhaseObjectiveData>(RowName, TEXT("SetupPhaseObjectiveByRow"));
+		PhaseObjectiveDataTable->FindRow<FPhaseObjectiveData>(RowName, TEXT("BuildObjectiveFromRow"));
 	if (!ObjectiveData)
 	{
 		UE_LOG(LogDR, Error, TEXT("[Phase] 목표 DataTable 에 행이 없습니다: %s"), *RowName.ToString());
-		return;
+		return false;
 	}
 
-	if (OverrideRequiredCount < 0)
+	OutObjective = *ObjectiveData;
+
+	// 진행도 분모만 런타임 값으로 교체
+	if (OverrideRequiredCount >= 0)
 	{
-		GameState->SetPhaseObjective(*ObjectiveData);
-		return;
+		OutObjective.RequiredCount = OverrideRequiredCount;
 	}
-
-	// 값 복사 후 진행도 분모만 런타임 값으로 교체
-	FPhaseObjectiveData Overridden = *ObjectiveData;
-	Overridden.RequiredCount = OverrideRequiredCount;
-	GameState->SetPhaseObjective(Overridden);
+	return true;
 }

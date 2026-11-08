@@ -178,7 +178,16 @@ protected:
 	 */
 	void SetupPhaseObjectiveByRow(FName RowName, int32 OverrideRequiredCount = INDEX_NONE);
 
+	/**
+	 * Player 한 사람에게만 RowName 목표를 보인다 (스테이지2 방4 두더지 담당처럼 혼자 다른 일을 할 때).
+	 * 진행도는 공용 목표와 같이 쓴다. 공용 목표를 다시 설정하면 지워지므로 SetupPhaseObjectiveByRow 뒤에 부른다.
+	 */
+	void SetupPlayerObjectiveByRow(APlayerState* Player, FName RowName, int32 OverrideRequiredCount = INDEX_NONE);
+
 private:
+	// RowName 행을 읽고 OverrideRequiredCount 가 0 이상이면 진행도 분모를 그 값으로 바꾼다. 행이 없으면 false
+	bool BuildObjectiveFromRow(FName RowName, int32 OverrideRequiredCount, FPhaseObjectiveData& OutObjective) const;
+
 	// 추적 중인 적이 사망 신호 없이 사라졌을 때 (KillZ 낙하 등)
 	UFUNCTION()
 	void HandleTrackedEnemyDestroyed(AActor* DestroyedActor);
