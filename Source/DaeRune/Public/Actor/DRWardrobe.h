@@ -22,7 +22,7 @@ public:
 	ADRWardrobe();
 
 	// 이 로봇에 (잠긴 것 포함) 정의된 옷이 하나라도 있는지.
-	// 프롬프트 위젯이 "준비 중" 표시를 하는 데 쓴다.
+	// 화면 안내가 "준비 중" 문구를 띄우는 데 쓴다.
 	UFUNCTION(BlueprintPure, Category = "Cosmetic")
 	bool HasAnySkinAvailable() const;
 

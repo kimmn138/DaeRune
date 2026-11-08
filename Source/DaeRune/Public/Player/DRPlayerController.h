@@ -90,8 +90,12 @@ public:
 
 	// ========== 상호작용 (부품 · 사이트 · 청소기 · 프롭 · 열차) ==========
 
-	// 상호작용 대상 감지 (로컬). 부품 · 사이트 · 청소기의 감지 범위 오버랩이 감지를 켜고 끈다
+	// 상호작용 대상 감지 + 화면 안내 (로컬). 부품 · 사이트 · 청소기의 감지 범위 오버랩이 감지를 켜고 끈다
 	UDRInteractionComponent* GetInteractionComponent() const { return InteractionComponent; }
+
+	// 화면 상호작용 안내에 그릴 키 — 입력 매핑(DRContext)에서 찾는다 (못 찾으면 F / Space)
+	FKey GetInteractKey() const;
+	FKey GetJumpKey() const;
 
 	// 상호작용 요청 통합 RPC (부품 획득 / 사이트 설치)
 	// 서버는 클라이언트가 보낸 포인터를 신뢰하지 않고 거리/상태를 검증한다
@@ -714,8 +718,11 @@ private:
 	void Look(const FInputActionValue& InputActionValue);
 	void StartJump(const FInputActionValue& InputActionValue);
 	void StopJump(const FInputActionValue& InputActionValue);
-	// 상호작용 키를 눌렀을 때
+	// 상호작용 키를 눌렀을 때 — ★분기 순서를 바꾸면 UDRInteractionComponent::BuildPrompt(화면 안내)도 같이 바꾼다★
 	void HandleInteract();
+
+	// 이 입력 액션에 매핑된 첫 키보드 키 (DRContext 기준, 없으면 Fallback)
+	FKey GetMappedKey(const UInputAction* Action, const FKey& Fallback) const;
 
 	// GAS 어빌리티 입력 처리
 	void AbilityInputTagPressed(FGameplayTag InputTag);

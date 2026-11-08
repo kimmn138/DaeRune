@@ -9,7 +9,6 @@
 
 class ADRCharacter;
 class USphereComponent;
-class UWidgetComponent;
 class ADRPlayerController;
 
 // 부품 획득 알림 (Plan6 §5.6 - 스테이지2 방2에서 금고 내부 부품 획득을 감지)
@@ -62,10 +61,15 @@ public:
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayPickupSound();
 
-	// ========== 라인트레이싱 콜백 ========== 
+	// ========== 화면 상호작용 안내 ==========
 
-	// 상호작용 UI 표시/숨김 (IDRInteractable - 로컬에서 직접 호출)
-	virtual void SetInteractionUIVisible(bool bShow) override;
+	// IDRInteractable — 바닥의 부품을 볼 때 ("부품 줍기")
+	virtual FText GetInteractionPromptText(const ADRCharacter* Interactor, bool& bOutUsable) const override;
+
+	// 이 부품을 들고 있을 때 ("부품 떨어뜨리기") — 감지 컴포넌트가 사이트를 안 보고 있을 때 띄운다
+	const FText& GetDropPromptText() const { return DropPromptText; }
+
+	// ========== 라인트레이싱 콜백 ==========
 
 	// 캐릭터의 현재 오버랩 + 부품 보유 상태를 재평가하여 라인트레이스 감지를 갱신
 	// (오버랩 도중 부품을 집어들거나 내려놓을 때 호출)
@@ -85,11 +89,15 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USphereComponent> DetectionSphere;
 
-	// 획득 UI 위젯 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<UWidgetComponent> InteractionWidget;
-
 	// ========== 설정 ==========
+
+	// 화면 상호작용 안내 — 바닥의 부품을 볼 때
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "CleanserPart|Config")
+	FText PickupPromptText;
+
+	// 화면 상호작용 안내 — 들고 있을 때 (F = 떨어뜨리기)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "CleanserPart|Config")
+	FText DropPromptText;
 
 	// 캐릭터에 부착할 소켓 이름
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "CleanserPart|Config")

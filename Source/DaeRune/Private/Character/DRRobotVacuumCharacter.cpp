@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "Character/DRRobotVacuumCharacter.h"
@@ -9,7 +9,6 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SphereComponent.h"
-#include "Components/WidgetComponent.h"
 #include "DRGameplayTags.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -26,6 +25,8 @@
 #include "DaeRune/DRLogChannels.h"
 #include "EngineUtils.h"
 
+#define LOCTEXT_NAMESPACE "DRInteraction"
+
 ADRRobotVacuumCharacter::ADRRobotVacuumCharacter()
 {
 	// 지속 돌진 자동 전진(Tick) 필요
@@ -40,13 +41,9 @@ ADRRobotVacuumCharacter::ADRRobotVacuumCharacter()
 	MountDetectionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	MountDetectionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-	// 탑승 프롬프트 위젯 (부품 InteractionWidget 패턴 — 로컬 코스메틱)
-	MountPromptWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("MountPromptWidget"));
-	MountPromptWidget->SetupAttachment(GetCapsuleComponent());
-	MountPromptWidget->SetRelativeLocation(FVector(0.f, 0.f, 120.f));
-	MountPromptWidget->SetWidgetSpace(EWidgetSpace::Screen);
-	MountPromptWidget->SetDrawSize(FVector2D(300.f, 100.f));
-	MountPromptWidget->SetVisibility(false);
+	// 화면 상호작용 안내 문구 (UDRInteractionComponent 가 띄운다)
+	MountPromptText = LOCTEXT("VacuumMount", "탑승하기");
+	DismountPromptText = LOCTEXT("VacuumDismount", "내리기");
 
 	// 돌진 불꽃 껍질 — 평소엔 숨겨 두고 bIsDashing 동안만 보인다 (RefreshTagDrivenVFX)
 	DashVFXMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DashVFXMesh"));
@@ -333,12 +330,9 @@ void ADRRobotVacuumCharacter::DismountRider(bool bLaunchOff)
 
 }
 
-void ADRRobotVacuumCharacter::SetInteractionUIVisible(bool bShow)
+FText ADRRobotVacuumCharacter::GetInteractionPromptText(const ADRCharacter* Interactor, bool& bOutUsable) const
 {
-	if (MountPromptWidget)
-	{
-		MountPromptWidget->SetVisibility(bShow);
-	}
+	return MountPromptText;
 }
 
 // ========== 탑승 칩 (Plan5(탑승칩)) ==========
@@ -825,3 +819,5 @@ EDataValidationResult ADRRobotVacuumCharacter::IsDataValid(FDataValidationContex
 	return Result;
 }
 #endif
+
+#undef LOCTEXT_NAMESPACE

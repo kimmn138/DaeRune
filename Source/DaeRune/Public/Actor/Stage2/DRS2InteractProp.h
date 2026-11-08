@@ -7,7 +7,6 @@
 #include "Interaction/DRInteractable.h"
 #include "DRS2InteractProp.generated.h"
 
-class UWidgetComponent;
 class ADRCharacter;
 
 /**
@@ -43,8 +42,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "S2|Prop")
 	void SetPropEnabled(bool bNewEnabled);
 
-	// IDRInteractable
-	virtual void SetInteractionUIVisible(bool bShow) override;
+	// IDRInteractable — 화면 안내 문구 (PromptText)
+	virtual FText GetInteractionPromptText(const ADRCharacter* Interactor, bool& bOutUsable) const override;
 
 	int32 GetPropIndex() const { return PropIndex; }
 
@@ -71,9 +70,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Prop")
 	TObjectPtr<UStaticMeshComponent> PropMesh;
 
-	// "F" 상호작용 프롬프트 (로컬 코스메틱)
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Prop")
-	TObjectPtr<UWidgetComponent> InteractionWidget;
+	// 화면 상호작용 안내 문구 ("레버 당기기"). 자식이 기본값을 넣고, 배치한 인스턴스마다 바꿀 수도 있다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "S2|Prop")
+	FText PromptText;
 
 	// 소속 퍼즐/금고 액터. 레벨에서 배선한다.
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "S2|Prop")
@@ -208,6 +207,9 @@ public:
 	// 금고 문에 붙어 함께 회전할지 (금고가 등록 시 확인한다)
 	bool ShouldAttachToDoor() const { return bAttachToDoor; }
 
+	// 화면 안내 — 버튼 종류대로 ("3 누르기" · "한 자리 지우기" …). PromptText 를 채우면 그것을 쓴다
+	virtual FText GetInteractionPromptText(const ADRCharacter* Interactor, bool& bOutUsable) const override;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void ExecuteInteract(ADRCharacter* Character) override;
@@ -230,7 +232,9 @@ protected:
 	float PressOutDuration = 0.15f;
 
 	// 버튼 종류. Digit 이면 PropIndex 가 입력 숫자가 된다.
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "S2|Prop")
+	// ★BP 기본값에서 정한다★ (BP_S2SafeButton_Delete / Enter / Reset). 예전엔 레벨 인스턴스마다 정했는데
+	//   2026-10-02 Stage2 맵 저장(c92d3874)에서 세 버튼의 값이 빠져 전부 "0 입력"이 됐다 — Enter 가 없어 금고를 못 열었다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "S2|Prop")
 	ES2SafeButtonType ButtonType = ES2SafeButtonType::Digit;
 
 	// ★true 면 BeginPlay 에서 금고의 DoorMesh 에 부착되어 문이 열릴 때 함께 움직인다.
@@ -257,6 +261,9 @@ UCLASS()
 class DAERUNE_API ADRS2PuzzleTerminal : public ADRS2InteractProp
 {
 	GENERATED_BODY()
+
+public:
+	ADRS2PuzzleTerminal();
 
 protected:
 	// 배선 검증 (OwnerPuzzle 이 8퍼즐 액터를 가리키는지). 다른 Stage2 액터와 같은 관례다.

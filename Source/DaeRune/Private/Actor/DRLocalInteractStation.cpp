@@ -4,9 +4,9 @@
 #include "Actor/DRLocalInteractStation.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Components/WidgetComponent.h"
 #include "GameFramework/Character.h"
 #include "Player/DRPlayerController.h"
+#include "Player/DRInteractionComponent.h"
 
 ADRLocalInteractStation::ADRLocalInteractStation()
 {
@@ -21,12 +21,6 @@ ADRLocalInteractStation::ADRLocalInteractStation()
 	InteractionBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	InteractionBox->SetCollisionResponseToAllChannels(ECR_Ignore);
 	InteractionBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-
-	InteractionWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidget"));
-	InteractionWidget->SetRelativeLocation(FVector(0.0f, 0.0f, 150.0f));
-	InteractionWidget->SetWidgetSpace(EWidgetSpace::Screen);
-	InteractionWidget->SetDrawSize(FVector2D(300.0f, 100.0f));
-	InteractionWidget->SetVisibility(false);
 }
 
 UStaticMeshComponent* ADRLocalInteractStation::CreateStationRootMesh(FName MeshName)
@@ -36,8 +30,13 @@ UStaticMeshComponent* ADRLocalInteractStation::CreateStationRootMesh(FName MeshN
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	InteractionBox->SetupAttachment(RootComponent);
-	InteractionWidget->SetupAttachment(RootComponent);
 	return Mesh;
+}
+
+FText ADRLocalInteractStation::GetInteractionPromptText(const ADRCharacter* Interactor, bool& bOutUsable) const
+{
+	bOutUsable = CanUseStation();
+	return bOutUsable ? PromptText : UnavailablePromptText;
 }
 
 void ADRLocalInteractStation::BeginPlay()
@@ -71,7 +70,8 @@ void ADRLocalInteractStation::OnBoxBeginOverlap(UPrimitiveComponent* OverlappedC
 	OverlappingLocalController = DRPC;
 	OverlappingLocalController->OnInteractPressed.AddDynamic(this, &ADRLocalInteractStation::OnLocalInteract);
 
-	InteractionWidget->SetVisibility(true);
+	// 화면 안내 — 범위 안에 있는 동안 (쓸 수 없으면 이유만)
+	OverlappingLocalController->GetInteractionComponent()->SetStationInRange(this, true);
 	OnLocalPlayerEnteredRange(CanUseStation());
 }
 
@@ -105,11 +105,7 @@ void ADRLocalInteractStation::ClearLocalController()
 	if (OverlappingLocalController)
 	{
 		OverlappingLocalController->OnInteractPressed.RemoveDynamic(this, &ADRLocalInteractStation::OnLocalInteract);
+		OverlappingLocalController->GetInteractionComponent()->SetStationInRange(this, false);
 		OverlappingLocalController = nullptr;
-	}
-
-	if (InteractionWidget)
-	{
-		InteractionWidget->SetVisibility(false);
 	}
 }

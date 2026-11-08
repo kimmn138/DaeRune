@@ -14,7 +14,6 @@ class UAbilitySystemComponent;
 class UDRCleanserSiteAttributeSet;
 class UStaticMeshComponent;
 class UBoxComponent;
-class UWidgetComponent;
 class UDRBillboardWidgetComponent;
 class ADRPlayerController;
 struct FOnAttributeChangeData;
@@ -70,8 +69,8 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastShowInstalledPart(int32 SlotIndex);
 
-	// 상호작용 UI 표시/숨김 (IDRInteractable - 로컬에서 직접 호출)
-	virtual void SetInteractionUIVisible(bool bShow) override;
+	// IDRInteractable — 부품을 든 채 이 사이트를 볼 때의 화면 안내 ("부품 설치하기")
+	virtual FText GetInteractionPromptText(const ADRCharacter* Interactor, bool& bOutUsable) const override;
 
 	// Phase3 클린저 작동 사운드 (루프 - 시작/종료 시 한 번씩만 호출)
 	UFUNCTION(NetMulticast, Reliable)
@@ -112,6 +111,9 @@ public:
 	// 부품 설치 완료 여부
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite|Phase2")
 	bool IsPartInstallationComplete() const { return InstalledPartsCount >= RequiredPartsCount; }
+
+	// 지금 부품을 더 받을 수 있나 (설치 단계 + 빈 슬롯) — 감지 켜기 · 시점 감지 · 서버 설치가 같은 조건을 쓴다
+	bool CanAcceptPart() const { return CurrentState == ECleanserSiteState::Active && InstalledPartsCount < RequiredPartsCount; }
 
 	// 현재 상태 가져오기
 	UFUNCTION(BlueprintCallable, Category = "CleanserSite")
@@ -159,9 +161,6 @@ protected:
 	UFUNCTION()
 	void OnBoxEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
-	// UI 업데이트
-	void UpdateInteractionUI() const;
-
 	// 클렌저 사이트 고유 식별자
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cleanser Site")
 	FName CleanserID = NAME_None;
@@ -196,9 +195,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UBoxComponent> InteractionBox;
 
-	// 상호작용 UI 위젯
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<UWidgetComponent> InteractionWidget;
+	// 화면 상호작용 안내 — 부품을 든 채 이 사이트를 볼 때
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cleanser Site")
+	FText InstallPromptText;
 
 	// ========== 설치된 부품 메시 슬롯 ==========
 

@@ -139,6 +139,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	bool IsCarryingPart() const { return bIsCarryingPart; }
 
+	// 들고 있는 부품 (없으면 null)
+	class ADRCleanserPart* GetCarriedPart() const { return CarriedPart; }
+
+	// 지금 떨어뜨릴 수 있나 — 주운 직후 PartDropCooldown 동안은 서버(DropCarriedPart)가 거절한다.
+	// 화면 상호작용 안내용이다 (클라는 들게 된 순간을 OnRep_bIsCarryingPart 에서 잰다)
+	bool CanDropCarriedPartNow() const;
+
 	// 부품 획득 처리
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	bool PickupPart(class ADRCleanserPart* Part);
@@ -154,8 +161,9 @@ public:
 	// 피격 등으로 인한 강제 드롭 (드롭 쿨다운을 무시하고 즉시 부품을 내려놓음)
 	void ForceDropCarriedPart();
 
-	// 부품 보유 상태가 바뀐 직후 현재 오버랩 중인 CleanserSite/CleanserPart 들의 UI/감지를 재평가
-	// (오버랩 영역 안에서 집어들기/내려놓기 시 UI가 갱신되지 않는 문제 해결)
+	// 지금 겹쳐 있는 CleanserSite · CleanserPart · 청소기의 상호작용 감지를 재평가 (로컬 조종 캐릭터만)
+	// - 부품 보유 상태가 바뀐 직후 (오버랩 영역 안에서 집어들기/내려놓기 시 감지가 갱신되지 않는 문제)
+	// - 조종이 붙은 직후 (UDRInteractionComponent) — 컨트롤러 없이 스폰 중에 시작된 오버랩은 감지를 켜지 못했다
 	void RefreshNearbyInteractions();
 
 	// ========== 탑승 시스템 (라이더 측) ==========

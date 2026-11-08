@@ -424,6 +424,18 @@ void ADRCharacter::RefreshNearbyInteractions()
 			Part->RefreshOverlapStateFor(this);
 		}
 	}
+
+	// 청소기 탑승 감지 — 로비 슬롯 · 시작 지점에서 청소기 옆(300 안)에 나란히 스폰되면
+	// 오버랩 시작 때 아직 컨트롤러가 없어 감지가 안 켜졌다 (범위를 나갔다 와야 F 가 먹혔다)
+	Overlapping.Reset();
+	GetOverlappingActors(Overlapping, ADRRobotVacuumCharacter::StaticClass());
+	for (AActor* Actor : Overlapping)
+	{
+		if (ADRRobotVacuumCharacter* Mount = Cast<ADRRobotVacuumCharacter>(Actor); IsValid(Mount) && Mount != this)
+		{
+			Mount->RefreshMountOverlapStateFor(this);
+		}
+	}
 }
 
 bool ADRCharacter::PickupPart(ADRCleanserPart* Part)
@@ -471,6 +483,12 @@ void ADRCharacter::DropCarriedPart()
 	if (TimeSincePickup < PartDropCooldown) return;
 
 	DoDropCarriedPart();
+}
+
+bool ADRCharacter::CanDropCarriedPartNow() const
+{
+	const UWorld* World = GetWorld();
+	return bIsCarryingPart && World && World->GetTimeSeconds() - LastPartPickupTime >= PartDropCooldown;
 }
 
 void ADRCharacter::ForceDropCarriedPart()
@@ -918,6 +936,12 @@ void ADRCharacter::UpdateWaterPumpThirdPersonBeam()
 
 void ADRCharacter::OnRep_bIsCarryingPart()
 {
+	// 주운 시각 — 서버는 PickupPart 에서 잰다. 클라는 화면 안내의 떨어뜨리기 쿨다운(CanDropCarriedPartNow)용으로 여기서 잰다
+	if (bIsCarryingPart && !HasAuthority())
+	{
+		LastPartPickupTime = GetWorld()->GetTimeSeconds();
+	}
+
 	// 클라이언트(소유 컨트롤러)에서 부품 보유 상태가 바뀐 직후 주변 상호작용 UI 재평가
 	RefreshNearbyInteractions();
 

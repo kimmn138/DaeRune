@@ -1,14 +1,15 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 #include "Actor/Stage2/DRS2TrainCar.h"
 
 #include "Actor/Stage2/DRS2Train.h"
 #include "Actor/Stage2/DRS2TrainTrack.h"
 #include "Character/DRCharacter.h"
-#include "Components/WidgetComponent.h"
 #include "Interaction/CombatInterface.h"
 #include "Net/UnrealNetwork.h"
 #include "DaeRune/DRLogChannels.h"
+
+#define LOCTEXT_NAMESPACE "DRInteraction"
 
 ADRS2TrainCar::ADRS2TrainCar()
 {
@@ -33,10 +34,9 @@ ADRS2TrainCar::ADRS2TrainCar()
 	ExitPoint = CreateDefaultSubobject<USceneComponent>(TEXT("ExitPoint"));
 	ExitPoint->SetupAttachment(CarMesh);
 
-	InteractionWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidget"));
-	InteractionWidget->SetupAttachment(CarMesh);
-	InteractionWidget->SetWidgetSpace(EWidgetSpace::Screen);
-	InteractionWidget->SetVisibility(false);
+	// 화면 상호작용 안내 문구 (UDRInteractionComponent 가 띄운다)
+	BoardPromptText = LOCTEXT("TrainBoard", "열차 타기");
+	DeboardPromptText = LOCTEXT("TrainDeboard", "내리기");
 }
 
 void ADRS2TrainCar::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -200,16 +200,13 @@ void ADRS2TrainCar::HandleRiderDeath(AActor* /*DeadActor*/)
 
 void ADRS2TrainCar::OnRep_Rider()
 {
-	if (Rider)
-	{
-		InteractionWidget->SetVisibility(false);
-	}
-
+	// 누가 앉으면 감지(CanBeBoardedBy)에서 빠지므로 다른 사람의 화면 안내도 다음 감지 주기에 내려간다
 	OnRiderChanged(Rider);
 }
 
-void ADRS2TrainCar::SetInteractionUIVisible(bool bShow)
+FText ADRS2TrainCar::GetInteractionPromptText(const ADRCharacter* Interactor, bool& bOutUsable) const
 {
-	// 로컬 코스메틱. 이미 탑승자가 있으면 프롬프트를 띄우지 않는다.
-	InteractionWidget->SetVisibility(bShow && Rider == nullptr);
+	return BoardPromptText;
 }
+
+#undef LOCTEXT_NAMESPACE

@@ -7,7 +7,6 @@
 #include "Interaction/DRInteractable.h"
 #include "DRS2TrainCar.generated.h"
 
-class UWidgetComponent;
 class ADRCharacter;
 class ADRS2Train;
 class ADRS2TrainTrack;
@@ -70,8 +69,11 @@ public:
 	void SetOwningTrain(ADRS2Train* InTrain) { OwningTrain = InTrain; }
 	ADRS2Train* GetOwningTrain() const { return OwningTrain; }
 
-	// IDRInteractable
-	virtual void SetInteractionUIVisible(bool bShow) override;
+	// IDRInteractable — 빈 칸을 볼 때의 화면 안내 ("열차 타기")
+	virtual FText GetInteractionPromptText(const ADRCharacter* Interactor, bool& bOutUsable) const override;
+
+	// 이 칸에 앉아 있는 사람의 화면 안내 ("내리기" — 점프키, 열차가 서 있을 때만)
+	const FText& GetDeboardPromptText() const { return DeboardPromptText; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -88,9 +90,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|TrainCar")
 	TObjectPtr<USceneComponent> ExitPoint;
 
-	// "F 탑승" 프롬프트
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|TrainCar")
-	TObjectPtr<UWidgetComponent> InteractionWidget;
+	// 화면 상호작용 안내 — 빈 칸을 볼 때 (F = 탑승)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|TrainCar")
+	FText BoardPromptText;
+
+	// 화면 상호작용 안내 — 앉아 있을 때 (점프키 = 하차)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|TrainCar")
+	FText DeboardPromptText;
 
 	// 칸 번호. 열차의 Cars 배열 순서로 자동 지정되므로 수동 입력은 불필요하다(디버그 표시용).
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "S2|TrainCar")

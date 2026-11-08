@@ -86,6 +86,8 @@ ADRHUD
 
 **Full-screen UI** (Settings, Upgrade, Wardrobe, StageSelect, SlidePuzzle) is owned by `ADRPlayerController`, not the HUD. All five go through `OpenScreen()` / `CloseScreen()` (`EDRScreen`): only one screen is open at a time, input mode switches to UIOnly on open and back via `RestoreDefaultInputMode()` on close, and the widgets are created in C++ from the widget classes set on `BP_DRPlayerController`.
 
+**Interaction prompt** ("[F] 부품 줍기" under the crosshair, plus the carried-part icon below it while carrying) is one screen widget owned by `UDRInteractionComponent` on the PlayerController — interactables no longer have world-space `WidgetComponent`s. See "Interaction Prompt UI" under Key Subsystems.
+
 **UI sounds**: every UMG button (SButton) press in the game viewport plays `DA_SoundData.UIButtonClickSound` globally via `UDRUIClickSoundSubsystem` (a Slate input preprocessor), so do not set Pressed Sound on button styles — it would play twice. Clickables that are not buttons (stage select cards) call `UDRSoundDataAsset::Play2D(..., UIButtonClickSound)` themselves. In the upgrade screen, `ChipEquipSound` plays on `UDRGameInstance::OnChipPlaced` (equip / swap / slot move; unequip is silent).
 
 ### Multiplayer Architecture
@@ -138,9 +140,18 @@ Tags are centrally managed in `FDRGameplayTags` singleton. Initialize via `Initi
 5. Attached to player hand socket, disables move speed
 6. Installation at CleanserSite via overlap + interact key
 
-Carrying state (`bIsCarryingPart` + `State.Carrying` tag + visuals) is toggled server-side only through `ADRCharacter::SetCarryingState()`; clients sync the tag in `OnRep_bIsCarryingPart`. Part/Site interaction UI is local-only via the `IDRInteractable` interface (no RPCs).
+Carrying state (`bIsCarryingPart` + `State.Carrying` tag + visuals) is toggled server-side only through `ADRCharacter::SetCarryingState()`; clients sync the tag in `OnRep_bIsCarryingPart`. Part/Site prompts are local-only (no RPCs) — see "Interaction Prompt UI".
 
 **Important**: Detection uses line trace, not collision, for precision.
+
+### Interaction Prompt UI (`UDRInteractionComponent` + `WBP_InteractionPrompt`)
+One screen widget per local player: `[key cap] text` centered under the crosshair, and the carried-part icon below it while carrying a part (mockup 2026-11-08).
+
+- **What to show** is decided by `UDRInteractionComponent::BuildPrompt()` on every detection tick (0.1s), in the **same order as `ADRPlayerController::HandleInteract()`** — change both together: mounted → `[Space] 내리기` · carrying → site `부품 설치하기` / else `부품 떨어뜨리기` (hidden during `PartDropCooldown`, part icon always) · part · vacuum · train car · Stage2 prop · station in range · seated on train → `[Space] 내리기` (only while the train is stopped). Hidden while a full screen is open, the HUD is hidden (`bShowHUD`), spectating, or during the lobby intro.
+- **Texts** live on the targets: `IDRInteractable::GetInteractionPromptText(Interactor, bOutUsable)` returns `FText` UPROPERTYs set with `LOCTEXT` (namespace `DRInteraction`) in each constructor (`PickupPromptText`, `InstallPromptText`, `MountPromptText`, `PromptText`…). `bOutUsable=false` draws the text without a key (upgrade locked, wardrobe without skins, non-host at the stage select portal). Safe buttons build theirs from `ButtonType` (now set in the BP defaults of `BP_S2SafeButton_Delete/Enter/Reset`).
+- **Stations** (upgrade · wardrobe · stage select portal) are not line-traced; they call `SetStationInRange()` from their box overlap (the portal handles overlaps on every machine so clients get the host-only text).
+- **Widget**: `UDRInteractionPromptWidget` (C++) ← `WBP_InteractionPrompt` (`Content/Blueprints/UI/Interaction/`), class set on `BP_DRPlayerController > InteractionComponent > PromptWidgetClass`. The tree is rebuilt by `unreal.DRInteractionPromptEditorTools.build_interaction_prompt_widget()` (do not hand-edit). **Icons go in the WBP class defaults**: `KeyIcons` (key → texture, e.g. F) and `CarriedPartIcon`; without them a text key cap / placeholder frame is drawn. Keys are read from `IMC_DRContext` (`GetInteractKey` / `GetJumpKey`).
+- The view trace ignores `ABlockingVolume` (invisible movement blockers also block Visibility and hid the Stage2 safe keypad). Pawns that spawn already inside a vacuum's mount sphere are re-checked on the first detection tick (`ADRCharacter::RefreshNearbyInteractions`).
 
 ### Wave System (defense phase, `UDRPhase3`)
 The phase completes when all waves (`TotalWaves`) are cleared — there is no fixed defense timer. Wave levels (1-5) exist for difficulty scaling, but the escalation trigger (CleanserSite health below 50%) is currently commented out/disabled in `DRPhase3.cpp`.
@@ -314,7 +325,7 @@ Enhanced Input System with GAS integration:
 - Widgets (Blueprint): `Content/Blueprints/UI/`
 
 ### Editor Tools
-- Editor-only module `DaeRuneEditor`: `Source/DaeRuneEditor/` (WBP generators, texture/VFX tools, `UDRBlueprintMaintenanceTools` for BP graph cleanup — called from editor Python)
+- Editor-only module `DaeRuneEditor`: `Source/DaeRuneEditor/` (WBP generators incl. `UDRInteractionPromptEditorTools`, texture/VFX tools, `UDRBlueprintMaintenanceTools` for BP graph cleanup — called from editor Python)
 - Console cheats (`DR*` commands): `UDRCheatManager` (`Source/DaeRune/Public/Player/DRCheatManager.h`), development builds only
 
 ### Actors

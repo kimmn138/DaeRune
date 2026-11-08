@@ -12,7 +12,6 @@ class USphereComponent;
 class UStaticMeshComponent;
 class UAudioComponent;
 class USoundBase;
-class UWidgetComponent;
 
 /** 돌진 충돌 델리게이트 — 캐릭터(C++)가 충돌만 감지하고 데미지 처리는 GA가 담당 (Armadillo FOnRollImpact 패턴) */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDashImpact, AActor*, HitActor, const FHitResult&, Hit);
@@ -59,8 +58,15 @@ public:
 	// 하차 실행 (서버 전용). bLaunchOff = 폴짝 뛰어내리는 임펄스 적용 여부
 	void DismountRider(bool bLaunchOff);
 
-	// IDRInteractable — 탑승 프롬프트 UI (로컬 코스메틱)
-	virtual void SetInteractionUIVisible(bool bShow) override;
+	// IDRInteractable — 다른 플레이어가 이 청소기를 볼 때의 화면 안내 ("탑승하기")
+	virtual FText GetInteractionPromptText(const ADRCharacter* Interactor, bool& bOutUsable) const override;
+
+	// 이 청소기에 타고 있는 사람의 화면 안내 ("내리기" — 점프키)
+	const FText& GetDismountPromptText() const { return DismountPromptText; }
+
+	// 오버랩 상태 재평가 후 로컬 PC에 감지 등록/해제.
+	// 오버랩 콜백 외에 ADRCharacter::RefreshNearbyInteractions 도 부른다 — 조종이 붙기 전부터 겹쳐 있던 경우
+	void RefreshMountOverlapStateFor(ADRCharacter* Character);
 
 	// ========== 탑승 칩 (Plan5(탑승칩)) ==========
 
@@ -221,16 +227,17 @@ protected:
 	void OnMountDetectionEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 	                                UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
-	// 오버랩 상태 재평가 후 로컬 PC에 감지 등록/해제
-	void RefreshMountOverlapStateFor(ADRCharacter* Character);
-
 	// 근접 감지 스피어 — 부품 감지 패턴과 동일 (PC가 후보 등록, Phase B에서 오버랩 바인딩)
 	UPROPERTY(VisibleAnywhere, Category = "Mount")
 	TObjectPtr<USphereComponent> MountDetectionSphere;
 
-	// 탑승 프롬프트 위젯 (로컬 코스메틱 — 각 클라이언트 PC가 토글)
-	UPROPERTY(VisibleAnywhere, Category = "Mount")
-	TObjectPtr<UWidgetComponent> MountPromptWidget;
+	// 화면 상호작용 안내 — 이 청소기를 볼 때 (F = 탑승)
+	UPROPERTY(EditDefaultsOnly, Category = "Mount")
+	FText MountPromptText;
+
+	// 화면 상호작용 안내 — 이 청소기에 타고 있을 때 (점프키 = 하차)
+	UPROPERTY(EditDefaultsOnly, Category = "Mount")
+	FText DismountPromptText;
 
 	// 서버: 돌진 버프 활성 중에만 충돌 판정 (1회 발화 후 스스로 해제)
 	bool bDashCollisionArmed = false;

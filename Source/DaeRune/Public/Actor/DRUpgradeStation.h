@@ -18,7 +18,7 @@ class DAERUNE_API ADRUpgradeStation : public ADRLocalInteractStation
 public:
 	ADRUpgradeStation();
 
-	// 업그레이드 시스템이 해금됐는지 (프롬프트 위젯이 잠김 표시를 하는 데 사용)
+	// 업그레이드 시스템이 해금됐는지 (화면 안내가 잠김 문구를 띄우는 데 사용)
 	UFUNCTION(BlueprintPure, Category = "Upgrade")
 	bool IsUpgradeSystemUnlocked() const;
 

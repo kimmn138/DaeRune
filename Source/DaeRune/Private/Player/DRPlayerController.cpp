@@ -11,6 +11,8 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "DRGameplayTags.h"
 #include "EnhancedInputSubsystems.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
 #include "AbilitySystem/DRAbilitySystemComponent.h"
 #include "Input/DRInputComponent.h"
 #include "GameFramework/Character.h"
@@ -688,7 +690,12 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 		bIsCharacterInfoVisible = false;
 	}
 
-	if (bIsSpectating) return;
+	if (bIsSpectating)
+	{
+		// 관전 중에는 감지를 쉰다 — 죽기 직전에 떠 있던 상호작용 안내도 내린다
+		InteractionComponent->HidePrompt();
+		return;
+	}
 
 	// 로컬 컨트롤러에서만 라인트레이스 실행
 	if (!IsLocalController()) return;
@@ -711,9 +718,13 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 	}
 
 	// 로비 시작 연출 중에는 시점이 연출 카메라라 감지를 쉰다
-	if (bIsPlayingLobbyIntro) return;
+	if (bIsPlayingLobbyIntro)
+	{
+		InteractionComponent->HidePrompt();
+		return;
+	}
 
-	// 상호작용 대상 감지 (주기마다 시점 광선 1회 — 부품 · 사이트 · 청소기 · 프롭 · 열차 칸)
+	// 상호작용 대상 감지 + 화면 안내 (주기마다 시점 광선 1회 — 부품 · 사이트 · 청소기 · 프롭 · 열차 칸)
 	InteractionComponent->TickDetection(DeltaTime);
 }
 
@@ -1341,6 +1352,32 @@ void ADRPlayerController::HandleInteract()
 	OnInteractPressed.Broadcast();
 }
 
+FKey ADRPlayerController::GetInteractKey() const
+{
+	return GetMappedKey(InteractAction, EKeys::F);
+}
+
+FKey ADRPlayerController::GetJumpKey() const
+{
+	return GetMappedKey(JumpAction, EKeys::SpaceBar);
+}
+
+FKey ADRPlayerController::GetMappedKey(const UInputAction* Action, const FKey& Fallback) const
+{
+	if (DRContext && Action)
+	{
+		for (const FEnhancedActionKeyMapping& Mapping : DRContext->GetMappings())
+		{
+			// 화면 안내는 키보드 기준이다 (게임패드 매핑이 같이 있어도 키보드 키를 그린다)
+			if (Mapping.Action == Action && Mapping.Key.IsValid() && !Mapping.Key.IsGamepadKey())
+			{
+				return Mapping.Key;
+			}
+		}
+	}
+	return Fallback;
+}
+
 void ADRPlayerController::ToggleSettingsMenu()
 {
 	if (IsSettingsMenuOpen())
@@ -1373,6 +1410,9 @@ bool ADRPlayerController::OpenScreen(EDRScreen Screen, ADRS2SlidePuzzle* Puzzle)
 	// ★상태를 위젯보다 먼저 올린다★ — 위젯 NativeConstruct 가 열림 상태를 볼 수 있게
 	ActiveScreen = Screen;
 
+	// 화면이 떠 있는 동안은 상호작용 안내를 내린다 (닫으면 다시 띄운다)
+	InteractionComponent->RefreshPrompt();
+
 	// ★입력 모드는 여기서만 바꾼다★ (복귀는 CloseScreen → RestoreDefaultInputMode)
 	//  포커스 위젯을 지정하지 않는 이유: 각 화면 위젯이 NativeConstruct(= AddToViewport) 에서
 	//  SetKeyboardFocus 를 부르므로, 순서상 위젯이 마지막에 포커스를 가져간다.
@@ -1400,6 +1440,9 @@ void ADRPlayerController::CloseScreen(EDRScreen Screen, bool bLevelTransition)
 
 	HideScreenWidget(Screen);
 	OnScreenClosed(Screen);   // BP 연출 훅 (선택)
+
+	// 화면이 내려갔다 — 장치 앞에 그대로 서 있으면 안내가 바로 다시 뜬다
+	InteractionComponent->RefreshPrompt();
 
 	// 레벨 이동 정리 — 입력 모드 · 장착 보고는 OnLevelEntered 가 이어서 한다
 	if (bLevelTransition) return;

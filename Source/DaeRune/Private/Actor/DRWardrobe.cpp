@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "Actor/DRWardrobe.h"
@@ -7,9 +7,15 @@
 #include "Game/DRGameInstance.h"
 #include "Kismet/GameplayStatics.h"
 
+#define LOCTEXT_NAMESPACE "DRInteraction"
+
 ADRWardrobe::ADRWardrobe()
 {
 	WardrobeMesh = CreateStationRootMesh(TEXT("WardrobeMesh"));
+
+	// 화면 상호작용 안내 — 이 로봇의 옷이 하나도 없으면 열지 않는다 (CanUseStation)
+	PromptText = LOCTEXT("Wardrobe", "옷장 열기");
+	UnavailablePromptText = LOCTEXT("WardrobeNoSkins", "옷장 준비 중입니다");
 }
 
 bool ADRWardrobe::HasAnySkinAvailable() const
@@ -34,3 +40,5 @@ void ADRWardrobe::OpenStationScreen(ADRPlayerController* PC)
 {
 	PC->OpenWardrobeScreen();
 }
+
+#undef LOCTEXT_NAMESPACE

@@ -7,10 +7,11 @@
 #include "Components/SphereComponent.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRInteractionComponent.h"
-#include "Components/WidgetComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/DRSoundDataAsset.h"
 #include "DRAssetManager.h"
+
+#define LOCTEXT_NAMESPACE "DRInteraction"
 
 ADRCleanserPart::ADRCleanserPart()
 {
@@ -35,14 +36,9 @@ ADRCleanserPart::ADRCleanserPart()
 	DetectionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	DetectionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-	// UI 위젯 생성
-	InteractionWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidget"));
-	InteractionWidget->SetupAttachment(RootComponent);
-	InteractionWidget->SetRelativeLocation(FVector(0.0f, 0.0f, 100.0f));
-	InteractionWidget->SetWidgetSpace(EWidgetSpace::Screen);
-	InteractionWidget->SetDrawSize(FVector2D(300.0f, 100.0f));
-	InteractionWidget->SetVisibility(false);
-	InteractionWidget->SetOwnerNoSee(false);
+	// 화면 상호작용 안내 문구 (UDRInteractionComponent 가 띄운다)
+	PickupPromptText = LOCTEXT("PartPickup", "부품 줍기");
+	DropPromptText = LOCTEXT("PartDrop", "부품 떨어뜨리기");
 
 	// 초기 상태
 	bIsCarried = false;
@@ -102,7 +98,6 @@ void ADRCleanserPart::RefreshCarriedState()
 		PartMesh->SetOwnerNoSee(false);
 		PartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		DetectionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		InteractionWidget->SetVisibility(false);
 
 		if (CarryingCharacter)
 		{
@@ -171,9 +166,9 @@ void ADRCleanserPart::MulticastPlayPickupSound_Implementation()
 	UDRSoundDataAsset::PlayAtLocation(this, &UDRSoundDataAsset::PartPickupSound, GetActorLocation());
 }
 
-void ADRCleanserPart::SetInteractionUIVisible(bool bShow)
+FText ADRCleanserPart::GetInteractionPromptText(const ADRCharacter* Interactor, bool& bOutUsable) const
 {
-	InteractionWidget->SetVisibility(bShow);
+	return PickupPromptText;
 }
 
 void ADRCleanserPart::BeginPlay()
@@ -222,3 +217,5 @@ void ADRCleanserPart::OnRep_bIsCarried()
 	RefreshCarriedState();
 	RefreshFirstPersonPart();
 }
+
+#undef LOCTEXT_NAMESPACE

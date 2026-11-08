@@ -8,7 +8,6 @@
 #include "Net/UnrealNetwork.h"
 #include "GameplayEffectTypes.h"
 #include "Components/BoxComponent.h"
-#include "Components/WidgetComponent.h"
 #include "UI/Widget/DRBillboardWidgetComponent.h"
 #include "Player/DRPlayerController.h"
 #include "Player/DRInteractionComponent.h"
@@ -20,6 +19,8 @@
 #include "DRAssetManager.h"
 #include "UI/Widget/DRUserWidget.h"
 #include "DaeRune/DRLogChannels.h"
+
+#define LOCTEXT_NAMESPACE "DRInteraction"
 
 ADRCleanserSite::ADRCleanserSite()
 {
@@ -56,14 +57,8 @@ ADRCleanserSite::ADRCleanserSite()
 	InteractionBox->SetCollisionResponseToAllChannels(ECR_Ignore);
 	InteractionBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-	// UI 위젯 생성
-	InteractionWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidget"));
-	InteractionWidget->SetupAttachment(RootComponent);
-	InteractionWidget->SetRelativeLocation(FVector(0.0f, 0.0f, 150.0f));
-	InteractionWidget->SetWidgetSpace(EWidgetSpace::Screen);
-	InteractionWidget->SetDrawSize(FVector2D(300.0f, 100.0f));
-	InteractionWidget->SetVisibility(false);
-	InteractionWidget->SetOwnerNoSee(false);
+	// 화면 상호작용 안내 문구 (부품을 든 채 이 사이트를 볼 때 — UDRInteractionComponent 가 띄운다)
+	InstallPromptText = LOCTEXT("SiteInstall", "부품 설치하기");
 
 	// GAS 컴포넌트 생성
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
@@ -210,9 +205,6 @@ void ADRCleanserSite::InstallPart(ADRCharacter* Character)
 	bool bIsComplete = (InstalledPartsCount >= RequiredPartsCount);
 	MulticastPlayInstallSound(bIsComplete);
 
-	// UI 업데이트
-	UpdateInteractionUI();
-
 	// 델리게이트 브로드캐스트
 	OnPartInstalled.Broadcast(this);
 
@@ -243,7 +235,6 @@ ADRCleanserPart* ADRCleanserSite::EjectInstalledPart(TSubclassOf<ADRCleanserPart
 	}
 
 	OnRep_InstalledPartsCount();
-	UpdateInteractionUI();
 
 	// ★설치 완료(PartsCollected) 상태로 남으면 InstallPart 와 상호작용 감지가 Active 를 요구해 재설치가 영영 막힌다★
 	// (스테이지2 설치대는 부품 1개라 설치 즉시 완료 상태가 된다 — 방4 재시도 소프트락의 원인)
@@ -400,29 +391,17 @@ void ADRCleanserSite::RefreshOverlapStateFor(ADRCharacter* Character)
 	const bool bIsOverlapping = InteractionBox->IsOverlappingActor(Character);
 	const bool bShouldDetect =
 		bIsOverlapping &&
-		CurrentState == ECleanserSiteState::Active &&
-		InstalledPartsCount < RequiredPartsCount &&
+		CanAcceptPart() &&
 		Character->IsCarryingPart();
 
 	// 사이트 감지를 토글; 실제 위젯 표시 여부는 PlayerController의 라인트레이스가 결정
 	PC->GetInteractionComponent()->SetSiteDetectionEnabled(bShouldDetect, this);
 }
 
-void ADRCleanserSite::SetInteractionUIVisible(bool bShow)
+FText ADRCleanserSite::GetInteractionPromptText(const ADRCharacter* Interactor, bool& bOutUsable) const
 {
-	if (InteractionWidget)
-	{
-		InteractionWidget->SetVisibility(bShow);
-	}
-}
-
-void ADRCleanserSite::UpdateInteractionUI() const
-{
-	// 부품이 다 설치되었으면 UI 숨김
-	if (InstalledPartsCount >= RequiredPartsCount)
-	{
-		InteractionWidget->SetVisibility(false);
-	}
+	// 감지(FindSite)가 부품을 더 받을 수 있는 사이트만 고르므로 여기 오는 것은 설치할 수 있을 때뿐이다
+	return InstallPromptText;
 }
 
 void ADRCleanserSite::OnRep_CurrentState()
@@ -521,3 +500,5 @@ void ADRCleanserSite::InitAbilityActorInfo()
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
 	}
 }
+
+#undef LOCTEXT_NAMESPACE

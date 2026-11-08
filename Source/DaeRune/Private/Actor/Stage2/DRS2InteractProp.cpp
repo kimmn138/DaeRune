@@ -1,4 +1,4 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 #include "Actor/Stage2/DRS2InteractProp.h"
 
@@ -6,10 +6,11 @@
 #include "Actor/Stage2/DRS2Safe.h"
 #include "Actor/Stage2/DRS2SlidePuzzle.h"
 #include "Character/DRCharacter.h"
-#include "Components/WidgetComponent.h"
 #include "Interaction/CombatInterface.h"
 #include "Net/UnrealNetwork.h"
 #include "DaeRune/DRLogChannels.h"
+
+#define LOCTEXT_NAMESPACE "DRInteraction"
 
 ADRS2InteractProp::ADRS2InteractProp()
 {
@@ -33,11 +34,6 @@ ADRS2InteractProp::ADRS2InteractProp()
 	// 시점 라인트레이스(ECC_Visibility)에 걸려야 감지된다.
 	PropMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	PropMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-
-	InteractionWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidget"));
-	InteractionWidget->SetupAttachment(SceneRoot);
-	InteractionWidget->SetWidgetSpace(EWidgetSpace::Screen);
-	InteractionWidget->SetVisibility(false);
 }
 
 void ADRS2InteractProp::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -86,18 +82,13 @@ void ADRS2InteractProp::SetPropEnabled(bool bNewEnabled)
 
 void ADRS2InteractProp::OnRep_bPropEnabled()
 {
-	if (!bPropEnabled)
-	{
-		InteractionWidget->SetVisibility(false);
-	}
-
+	// 꺼지면 감지(CanInteract)에서 빠지므로 화면 안내도 다음 감지 주기에 내려간다
 	OnPropEnabledChanged(bPropEnabled);
 }
 
-void ADRS2InteractProp::SetInteractionUIVisible(bool bShow)
+FText ADRS2InteractProp::GetInteractionPromptText(const ADRCharacter* Interactor, bool& bOutUsable) const
 {
-	// 로컬 코스메틱 (판정 근거가 전부 복제 프로퍼티라 RPC 불필요)
-	InteractionWidget->SetVisibility(bShow && bPropEnabled);
+	return PromptText;
 }
 
 void ADRS2InteractProp::PlayInteractedVisual()
@@ -119,6 +110,8 @@ ADRS2Lever::ADRS2Lever()
 
 	// 연타로 전구가 정신없이 깜빡이는 것을 막는다. 자세 전환(0.15초)보다 넉넉하게 잡았다.
 	InteractCooldown = 0.4f;
+
+	PromptText = LOCTEXT("LeverPull", "레버 당기기");
 
 	// 설치부 메시. SceneRoot 자식이라 PropMesh 가 회전해도 제자리에 남는다.
 	LeverBaseMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LeverBaseMesh"));
@@ -221,6 +214,26 @@ ADRS2SafeButton::ADRS2SafeButton()
 	PrimaryActorTick.bStartWithTickEnabled = false;
 }
 
+FText ADRS2SafeButton::GetInteractionPromptText(const ADRCharacter* Interactor, bool& bOutUsable) const
+{
+	// 배치한 인스턴스에서 문구를 따로 줬으면 그것을 쓴다
+	if (!PromptText.IsEmpty()) return PromptText;
+
+	// 버튼 종류(ButtonType — 버튼 BP 기본값)대로. 숫자 버튼은 PropIndex 가 그 숫자다
+	switch (ButtonType)
+	{
+	case ES2SafeButtonType::Digit:
+		return FText::Format(LOCTEXT("SafeDigit", "{0} 누르기"), FText::AsNumber(FMath::Clamp(PropIndex, 0, 9)));
+	case ES2SafeButtonType::Delete:
+		return LOCTEXT("SafeDelete", "한 자리 지우기");
+	case ES2SafeButtonType::Reset:
+		return LOCTEXT("SafeReset", "모두 지우기");
+	case ES2SafeButtonType::Enter:
+		return LOCTEXT("SafeEnter", "비밀번호 확인");
+	}
+	return FText::GetEmpty();
+}
+
 void ADRS2SafeButton::BeginPlay()
 {
 	Super::BeginPlay();
@@ -319,6 +332,11 @@ void ADRS2SafeButton::ExecuteInteract(ADRCharacter* /*Character*/)
 
 // ================= ADRS2PuzzleTerminal =================
 
+ADRS2PuzzleTerminal::ADRS2PuzzleTerminal()
+{
+	PromptText = LOCTEXT("TerminalSlidePuzzle", "퍼즐 풀기");
+}
+
 void ADRS2PuzzleTerminal::BeginPlay()
 {
 	Super::BeginPlay();
@@ -352,3 +370,5 @@ void ADRS2PuzzleTerminal::ExecuteInteract(ADRCharacter* Character)
 	Puzzle->RequestOpenUI(Character);
 	Multicast_PlayInteractedVisual();
 }
+
+#undef LOCTEXT_NAMESPACE

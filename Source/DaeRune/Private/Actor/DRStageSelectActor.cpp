@@ -1,15 +1,16 @@
-// Copyright DaeRune
+﻿// Copyright DaeRune
 
 
 #include "Actor/DRStageSelectActor.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Components/WidgetComponent.h"
 #include "GameFramework/Character.h"
 #include "Player/DRPlayerController.h"
+#include "Player/DRInteractionComponent.h"
 #include "Game/DRLobbyGameMode.h"
-#include "TimerManager.h"
 #include "Engine/World.h"
+
+#define LOCTEXT_NAMESPACE "DRInteraction"
 
 ADRStageSelectActor::ADRStageSelectActor()
 {
@@ -29,122 +30,92 @@ ADRStageSelectActor::ADRStageSelectActor()
     InteractionBox->SetCollisionResponseToAllChannels(ECR_Ignore);
     InteractionBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-    // UI 위젯
-    InteractionWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidget"));
-    InteractionWidget->SetupAttachment(RootComponent);
-    InteractionWidget->SetRelativeLocation(FVector(0.0f, 0.0f, 150.0f));
-    InteractionWidget->SetWidgetSpace(EWidgetSpace::Screen);
-    InteractionWidget->SetDrawSize(FVector2D(300.0f, 100.0f));
-    InteractionWidget->SetVisibility(false);
-    InteractionWidget->SetOwnerNoSee(false);
-    InteractionWidget->SetOnlyOwnerSee(true);
-
-    OverlappingHostController = nullptr;
+    // 화면 상호작용 안내 문구 (UDRInteractionComponent 가 띄운다)
+    PromptText = LOCTEXT("StageSelect", "스테이지 선택하기");
+    HostOnlyPromptText = LOCTEXT("StageSelectHostOnly", "방장만 스테이지를 선택할 수 있습니다");
 }
 
 void ADRStageSelectActor::BeginPlay()
 {
 	Super::BeginPlay();
-	
-    // 서버에서만 오버랩 이벤트 처리
-    if (HasAuthority())
-    {
-        InteractionBox->OnComponentBeginOverlap.AddDynamic(this, &ADRStageSelectActor::OnBoxBeginOverlap);
-        InteractionBox->OnComponentEndOverlap.AddDynamic(this, &ADRStageSelectActor::OnBoxEndOverlap);
 
-        // 호스트는 범위와 무관하게 UI가 항상 보이도록 셋업
-        SetupHostWidgetVisibility();
-    }
-}
-
-void ADRStageSelectActor::SetupHostWidgetVisibility()
-{
-    if (!HasAuthority()) return;
-
-    UWorld* World = GetWorld();
-    if (!World) return;
-
-    for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
-    {
-        APlayerController* PC = It->Get();
-        if (!PC || !PC->IsLocalController()) continue;
-
-        APawn* HostPawn = PC->GetPawn();
-        if (!HostPawn) continue;
-
-        HostController = Cast<ADRPlayerController>(PC);
-        SetOwner(HostPawn);
-        InteractionWidget->SetVisibility(true);
-        return;
-    }
-
-    // 호스트의 폰이 아직 준비되지 않은 경우 재시도
-    World->GetTimerManager().SetTimer(
-        HostSetupTimerHandle,
-        this,
-        &ADRStageSelectActor::SetupHostWidgetVisibility,
-        0.5f,
-        false
-    );
+    // 오버랩은 각 머신에서 받는다 — 화면 안내는 참가자에게도 띄우고, F 바인딩은 호스트만 한다
+    InteractionBox->OnComponentBeginOverlap.AddDynamic(this, &ADRStageSelectActor::OnBoxBeginOverlap);
+    InteractionBox->OnComponentEndOverlap.AddDynamic(this, &ADRStageSelectActor::OnBoxEndOverlap);
 }
 
 void ADRStageSelectActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    if (UWorld* World = GetWorld())
-    {
-        World->GetTimerManager().ClearTimer(HostSetupTimerHandle);
-    }
-
-    // 델리게이트 구독 해제
-    if (OverlappingHostController)
-    {
-        OverlappingHostController->OnInteractPressed.RemoveDynamic(this, &ADRStageSelectActor::OnHostInteract);
-        OverlappingHostController = nullptr;
-    }
-
-    HostController = nullptr;
+    ReleaseLocalController();
+    ReleaseHostController();
 
     Super::EndPlay(EndPlayReason);
 }
 
+FText ADRStageSelectActor::GetInteractionPromptText(const ADRCharacter* Interactor, bool& bOutUsable) const
+{
+    // 호스트 = 이 액터의 권한이 있는 머신(리슨 서버)의 로컬 플레이어
+    bOutUsable = HasAuthority();
+    return bOutUsable ? PromptText : HostOnlyPromptText;
+}
+
 void ADRStageSelectActor::OnBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-    if (!HasAuthority()) return;
-
     ACharacter* Character = Cast<ACharacter>(OtherActor);
     if (!Character) return;
 
     ADRPlayerController* DRPC = Cast<ADRPlayerController>(Character->GetController());
-    if (!DRPC) return;
+    if (!DRPC || !DRPC->IsLocalController()) return;
 
-    // 호스트만 상호작용 가능
-    if (!DRPC->IsLocalController()) return;
+    // 화면 안내 — 호스트 · 참가자 모두
+    if (!OverlappingLocalController)
+    {
+        OverlappingLocalController = DRPC;
+        OverlappingLocalController->GetInteractionComponent()->SetStationInRange(this, true);
+    }
 
-    // 이미 다른 호스트가 있으면 무시
-    if (OverlappingHostController) return;
+    // 상호작용은 호스트만 (리슨 서버의 로컬 컨트롤러)
+    if (!HasAuthority() || OverlappingHostController) return;
 
     OverlappingHostController = DRPC;
-
-    // 델리게이트 구독
     OverlappingHostController->OnInteractPressed.AddDynamic(this, &ADRStageSelectActor::OnHostInteract);
 }
 
 void ADRStageSelectActor::OnBoxEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-    if (!HasAuthority()) return;
+    if (!IsPawnInRange(OverlappingLocalController))
+    {
+        ReleaseLocalController();
+    }
 
-    ACharacter* Character = Cast<ACharacter>(OtherActor);
-    if (!Character) return;
+    if (!IsPawnInRange(OverlappingHostController))
+    {
+        ReleaseHostController();
+    }
+}
 
-    ADRPlayerController* DRPC = Cast<ADRPlayerController>(Character->GetController());
-    if (!DRPC) return;
+bool ADRStageSelectActor::IsPawnInRange(const ADRPlayerController* Controller) const
+{
+    const APawn* Pawn = Controller ? Controller->GetPawn() : nullptr;
+    return Pawn && InteractionBox && InteractionBox->IsOverlappingActor(Pawn);
+}
 
-    // 현재 오버랩 중인 호스트가 아니면 무시
-    if (OverlappingHostController != DRPC) return;
+void ADRStageSelectActor::ReleaseLocalController()
+{
+    if (OverlappingLocalController)
+    {
+        OverlappingLocalController->GetInteractionComponent()->SetStationInRange(this, false);
+        OverlappingLocalController = nullptr;
+    }
+}
 
-    // 델리게이트 구독 해제
-    OverlappingHostController->OnInteractPressed.RemoveDynamic(this, &ADRStageSelectActor::OnHostInteract);
-    OverlappingHostController = nullptr;
+void ADRStageSelectActor::ReleaseHostController()
+{
+    if (OverlappingHostController)
+    {
+        OverlappingHostController->OnInteractPressed.RemoveDynamic(this, &ADRStageSelectActor::OnHostInteract);
+        OverlappingHostController = nullptr;
+    }
 }
 
 void ADRStageSelectActor::OnHostInteract()
@@ -162,7 +133,7 @@ void ADRStageSelectActor::OnHostInteract()
 
 void ADRStageSelectActor::ServerRequestTravel_Implementation()
 {
-    if (!HasAuthority()) return;
+	if (!HasAuthority()) return;
 
     // 호스트가 범위 안에 있는지 확인
     if (!OverlappingHostController) return;
@@ -174,3 +145,4 @@ void ADRStageSelectActor::ServerRequestTravel_Implementation()
     LobbyGameMode->TravelToStage(DestinationMapName, OverlappingHostController);
 }
 
+#undef LOCTEXT_NAMESPACE

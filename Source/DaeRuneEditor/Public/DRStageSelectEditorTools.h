@@ -36,7 +36,7 @@ public:
 
 	/**
 	 * WBP 안 TextBlock 하나의 디자이너 글자를 바꾼다 (Python 은 위젯 트리를 못 만진다).
-	 * 예) 포털 안내 WBP_StageSelectInteraction 의 TextBlock_Interaction — 화면이 생기면서 "스테이지1로 가려면" 문구가 틀려졌다.
+	 * (예전에 포털 안내 WBP_StageSelectInteraction 의 문구를 고칠 때 썼다 — 그 위젯은 화면 상호작용 안내로 바뀌어 없어졌다)
 	 * 같은 네임스페이스/키를 유지하므로 번역 수집이 끊기지 않는다(키가 없던 글자는 새 키). 저장은 부른 쪽이 한다.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "DaeRune|Editor")
