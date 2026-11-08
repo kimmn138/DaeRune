@@ -9,6 +9,7 @@
 #include "Engine/AssetManager.h"
 #include "DRAssetManager.h"
 #include "Sound/DRSoundDataAsset.h"
+#include "Game/DRStageGameState.h"
 #include "EngineUtils.h"
 
 ADRBGMActor::ADRBGMActor()
@@ -69,6 +70,28 @@ void ADRBGMActor::BeginPlay()
 		return;
 	}
 
+	// 스테이지 BGM 은 시작 연출(모든 플레이어 로딩 → 멀리서 다가와 1인칭으로)이 끝나 스테이지가 진행될 때 튼다
+	if (BGMSlot == EDRBGMSlot::Stage)
+	{
+		ADRStageGameState* StageGameState = GetWorld()->GetGameState<ADRStageGameState>();
+		if (StageGameState && !StageGameState->HasStageStarted())
+		{
+			StageGameState->OnStageStartStateChanged.AddWeakLambda(this, [this](EDRStageStartState NewState)
+			{
+				if (NewState == EDRStageStartState::Started)
+				{
+					StartAutoPlay();
+				}
+			});
+			return;
+		}
+	}
+
+	StartAutoPlay();
+}
+
+void ADRBGMActor::StartAutoPlay()
+{
 	if (HasAuthority())
 	{
 		PlayBGM();

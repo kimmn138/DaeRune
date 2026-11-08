@@ -48,6 +48,25 @@ enum class EDRLevelContext : uint8
 	GameLevel
 };
 
+// 시작 연출 카메라를 띄운 쪽 — 끝낼 때 갈래가 다르다 (로비: 대기실 카메라로 되돌릴 곳이 있다 / 스테이지: 이 월드의 연출을 끝냈다고 적는다)
+enum class EDRIntroCameraKind : uint8
+{
+	Lobby,		// 로비 Power On — 대기실 카메라에서 출발
+	Stage		// 스테이지 시작 — 바라보는 방향 멀리에서 출발
+};
+
+// 스테이지 시작 연출 진행 (클라이언트마다, 월드마다)
+enum class EDRStageIntroStep : uint8
+{
+	NotStage,			// 스테이지가 아니다
+	WaitingForPawn,		// 내 폰 도착 · BeginPlay 를 기다린다
+	WaitingForRender,	// 연출 카메라를 출발 시점에 세웠다 — 화면 준비(패키지 빌드의 PSO 컴파일)를 기다린다
+	WaitingForPlayers,	// 서버에 로딩 완료를 알렸다 — 다른 플레이어를 기다린다 (서버 진행 Intro 대기)
+	Revealing,			// 모두 마쳤다 — 로딩 화면이 걷히는 동안 출발 시점에 머문다
+	Playing,			// 카메라가 다가오는 중
+	Done				// 이 월드에서 끝났다 — 조작 · HUD 를 돌려줬다
+};
+
 // 전체 화면 UI — 한 번에 하나만 열린다 (하나를 열면 열려 있던 화면은 닫힌다)
 UENUM(BlueprintType)
 enum class EDRScreen : uint8
@@ -312,8 +331,54 @@ public:
 
 	float GetLobbyIntroDuration() const { return LobbyIntroDuration; }
 
-	// 로비 시작 연출 중인가 (폰 도착을 기다리는 동안 포함) — 입력 · HUD 오버레이를 미룬다
-	bool IsPlayingLobbyIntro() const { return bIsPlayingLobbyIntro; }
+	// ========== 스테이지 시작 연출 (모든 플레이어 로딩 → 멀리서 다가와 1인칭으로, 2026-11-08) ==========
+	//
+	// 스테이지에 들어오면 조작 · HUD 를 막는다. 내 폰이 도착하고 화면이 그릴 준비를 마치면 캐릭터가 바라보는 방향 멀리에
+	// 연출 카메라를 세워 두고 서버에 알린다(ServerNotifyStageLoaded) — 로딩 화면은 그대로 덮여 있다.
+	// 모두 알려 오면(GameState 진행 Intro) 로딩 화면을 걷고, 다 걷히면 카메라가 내 캐릭터로 다가와 로비 연출과 같은 길
+	// (얼굴 앞 → 어깨 위 → 눈)로 1인칭에 들어간다. 끝나면 조작 · HUD 를 돌려주고 서버에 알린다(ServerNotifyStageIntroFinished) —
+	// 함께 시작한 플레이어가 모두 끝내면 서버가 진행을 Started 로 바꿔 첫 페이즈와 스테이지 BGM 을 시작한다 (ADRStageGameMode · ADRBGMActor).
+	//  - 어깨는 옆에 선 다른 플레이어가 덜 가까운 쪽으로 넘는다 (출발 시점을 그쪽으로 조금 비켜 둔다)
+	//  - 연출 카메라 · 몸 숨기기 · 팔 올리기는 로비 연출과 같은 코드다 (BeginIntroCamera ~ FinishIntroCamera)
+	//  - 원격 클라는 심리스 트래블 뒤 OnLevelEntered 가 불리지 않는다 — 진행은 월드가 바뀌는 것을 보고 처음부터 시작한다
+
+	// 다가오는 시간 (초)
+	UPROPERTY(EditDefaultsOnly, Category = "Stage|Intro Camera", meta = (ClampMin = "0.5", ClampMax = "10.0"))
+	float StageIntroDuration = 3.f;
+
+	// 모두 로딩을 마친 뒤 출발 시점에 머무는 최소 시간 (초) — 로딩 화면 퇴장 애니(WBP_StageLoading 0.5초)보다 길게.
+	// 걷히는 중에 움직이면 멀리서 다가오는 앞부분이 가려진다. 로딩 화면이 더 늦게 닫히면(최소 표시 시간) 닫힐 때까지 기다린다
+	UPROPERTY(EditDefaultsOnly, Category = "Stage|Intro Camera", meta = (ClampMin = "0.0", ClampMax = "5.0"))
+	float StageIntroHoldTime = 0.6f;
+
+	// 출발 거리 — 캐릭터 가슴에서 바라보는 방향으로 (cm). 벽 · 문 등 보이는 면에 막히면 그 앞에서 출발한다
+	UPROPERTY(EditDefaultsOnly, Category = "Stage|Intro Camera", meta = (ClampMin = "200.0"))
+	float StageIntroStartDistance = 1000.f;
+
+	// 출발 높이 — 캐릭터 가슴보다 이만큼 위 (cm). 내려다보며 다가온다
+	UPROPERTY(EditDefaultsOnly, Category = "Stage|Intro Camera")
+	float StageIntroStartHeight = 120.f;
+
+	// 화면 준비(패키지 빌드에서 메시 PSO 컴파일)를 기다리는 최대 시간 (초) — 넘으면 덜 됐어도 로딩 완료로 알린다
+	UPROPERTY(EditDefaultsOnly, Category = "Stage|Intro Camera", meta = (ClampMin = "0.0"))
+	float StageIntroMaxRenderWaitTime = 10.f;
+
+	float GetStageIntroDuration() const { return StageIntroDuration; }
+	float GetStageIntroHoldTime() const { return StageIntroHoldTime; }
+
+	// 이 월드(스테이지)의 시작 연출이 아직 안 끝났나 — 로딩 · 다른 플레이어 대기 포함. 로컬 컨트롤러만 true
+	bool IsStageIntroPending() const;
+
+	// 시작 연출 중인가 (로비 Power On · 스테이지 시작) — 조작 입력 · 상호작용 감지 · HUD 오버레이를 미룬다
+	bool IsPlayingStartIntro() const { return bIsPlayingLobbyIntro || IsStageIntroPending(); }
+
+	// 클라 → 서버: 이 스테이지의 로딩(폰 도착 · 화면 준비)을 마쳤다 — 모두 알려 오면 서버가 시작 연출을 튼다
+	UFUNCTION(Server, Reliable)
+	void ServerNotifyStageLoaded();
+
+	// 클라 → 서버: 시작 연출이 끝났다 (조작을 돌려받았다) — 모두 알려 오면 서버가 첫 페이즈 · 스테이지 BGM 을 시작한다
+	UFUNCTION(Server, Reliable)
+	void ServerNotifyStageIntroFinished();
 
 	// 모든 액터가 틱한 뒤 카메라를 갱신하기 직전 — 연출 카메라를 여기서 옮긴다 (폰 위치가 이번 프레임 값이다)
 	virtual void UpdateCameraManager(float DeltaSeconds) override;
@@ -556,32 +621,74 @@ protected:
 	// ClientStartCameraTransitionToCharacter 부터 연출이 끝날 때까지 (폰 대기 포함)
 	bool bIsPlayingLobbyIntro = false;
 
+	// ===== 시작 연출 카메라 (로비 · 스테이지 공용, 이 클라이언트에서만 쓴다) =====
+
+	// 지금 (또는 마지막으로) 연출을 맡은 쪽
+	EDRIntroCameraKind IntroCameraKind = EDRIntroCameraKind::Lobby;
+
+	// 연출 카메라가 화면을 잡고 있다 (BeginIntroCamera ~ ResetIntroCamera)
+	bool bIntroCameraActive = false;
+
+	// 카메라가 움직이는 중 — false 면 출발 시점에 멈춰 있다 (스테이지: 다른 플레이어의 로딩을 기다리는 동안)
+	bool bIntroCameraMoving = false;
+
 	// 3인칭 몸을 이미 숨겼는가
-	bool bLobbyIntroBodyHidden = false;
+	bool bIntroBodyHidden = false;
 
-	// 연출 시작 시각 (월드 시간)
-	double LobbyIntroStartTime = 0.0;
+	// 움직이기 시작한 시각 (월드 시간) · 길이 (초)
+	double IntroStartTime = 0.0;
+	float IntroDuration = 0.f;
 
-	// 출발 시점 = 대기실 카메라
-	FMinimalViewInfo LobbyIntroStartView;
+	// 출발 시점 (로비 = 대기실 카메라, 스테이지 = 바라보는 방향 멀리)
+	FMinimalViewInfo IntroStartView;
 
 	// 연출용 카메라 (로컬 스폰, 복제 안 함) · 연출 대상 폰
-	TWeakObjectPtr<ACameraActor> LobbyIntroCamera;
-	TWeakObjectPtr<ADRCharacter> LobbyIntroPawn;
+	TWeakObjectPtr<ACameraActor> IntroCamera;
+	TWeakObjectPtr<ADRCharacter> IntroPawn;
 
 	// 도착 후 1인칭 팔 올리기
 	TWeakObjectPtr<USkeletalMeshComponent> ArmsRaiseMesh;
 	FVector ArmsRaiseBaseLocation = FVector::ZeroVector;
 	double ArmsRaiseStartTime = 0.0;
 
-	// 연출 카메라를 이번 프레임 위치로 옮긴다 (UpdateCameraManager 에서)
-	void TickLobbyIntro();
+	// 연출 카메라를 띄워 출발 시점에 세운다 (아직 움직이지 않는다) — 실패하면 false
+	bool BeginIntroCamera(ADRCharacter* DRCharacter, const FMinimalViewInfo& StartView);
+
+	// 출발 시점에서 1인칭 눈으로 움직이기 시작한다
+	void StartIntroCameraMove(float Duration);
+
+	// 연출 카메라를 이번 프레임 위치로 옮긴다 (UpdateCameraManager 에서) — 도착하면 FinishIntroCamera
+	void TickIntroCamera();
 
 	// 연출을 끝낸다 — 뷰 타깃을 폰으로, 입력 · HUD 복원. 폰이 사라졌거나 끝까지 안 와도 이걸로 정리한다
-	void FinishLobbyIntro();
+	void FinishIntroCamera();
 
-	// 상태만 지운다 (레벨 이동 — 뷰 타깃 · 입력 모드는 OnLevelEntered 가 맞춘다)
+	// 연출 카메라만 지운다 (서버 뷰 타깃 무시도 해제)
+	void ResetIntroCamera();
+
+	// 로비 연출 상태까지 지운다 (레벨 이동 — 뷰 타깃 · 입력 모드는 OnLevelEntered 가 맞춘다)
 	void ResetLobbyIntroState();
+
+	// ===== 스테이지 시작 연출 진행 (이 클라이언트에서만 쓴다) =====
+
+	EDRStageIntroStep StageIntroStep = EDRStageIntroStep::NotStage;
+
+	// StageIntroStep 이 가리키는 월드 — 바뀌면(심리스 트래블) 처음부터
+	TWeakObjectPtr<UWorld> StageIntroWorld;
+
+	// 이 월드에 들어온 시각 · 화면 준비 대기 시작 · 다음 확인 시각 (실시간)
+	double StageIntroEnterTime = 0.0;
+	double StageRenderWaitStartTime = 0.0;
+	double NextStageRenderCheckTime = 0.0;
+
+	// 로딩 화면을 걷기 시작한 시각 (월드 시간)
+	double StageIntroRevealTime = 0.0;
+
+	// 스테이지 시작 연출 진행 (UpdateCameraManager 에서 매 프레임)
+	void TickStageIntro();
+
+	// 출발 시점 — 캐릭터가 바라보는 방향 멀리에서 캐릭터를 본다
+	FMinimalViewInfo MakeStageIntroStartView(ADRCharacter& DRCharacter) const;
 
 	void StartArmsRaise(ADRCharacter* DRCharacter);
 	void TickArmsRaise();

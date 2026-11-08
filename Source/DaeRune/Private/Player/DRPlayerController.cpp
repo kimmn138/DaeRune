@@ -57,19 +57,25 @@
 #include "Tuning/DRTuningSubsystem.h"
 #include "Camera/CameraActor.h"
 #include "Components/CapsuleComponent.h"
+#include "Engine/Level.h"
+#include "EngineUtils.h"
+#include "GameFramework/GameStateBase.h"
+#include "GameFramework/WorldSettings.h"
+#include "UI/Loading/DRLoadingScreenSubsystem.h"
 
 namespace
 {
-	// ========== 로비 시작 연출 경로 (대기실 카메라 → 1인칭 눈) ==========
+	// ========== 시작 연출 경로 (출발 시점 → 1인칭 눈, 로비 Power On · 스테이지 시작 공용) ==========
 	//
-	// 지나는 키: 출발(대기실 카메라) · 접근 중간 · 얼굴 앞 · 어깨 위 · 눈 위 · 눈.
+	// 지나는 키: 출발 · 접근 중간 · 얼굴 앞 · 어깨 위 · 눈 위 · 눈.
+	// 출발은 로비면 대기실 카메라, 스테이지면 캐릭터가 바라보는 방향 멀리 — 둘 다 캐릭터 앞에서 캐릭터를 본다.
 	// 위치는 구심 Catmull-Rom 으로, 보는 방향은 키마다 정한 방향을 Hermite 로 잇는다.
-	//  - 캐릭터들이 대기실 카메라를 보고 서 있고 1인칭도 그쪽(로비)을 봐야 해서 카메라가 180도 돌아야 한다.
-	//    슬롯 간격(~170)이 좁아 옆으로 돌면 벨보이(반지름 85) 같은 이웃과 부딪히므로 어깨 위로 넘는다.
+	//  - 카메라는 캐릭터를 마주 보다가 1인칭(캐릭터가 보는 쪽)으로 들어가야 해서 180도 돌아야 한다.
+	//    로비 슬롯 간격(~170)이 좁아 옆으로 돌면 벨보이(반지름 85) 같은 이웃과 부딪히므로 어깨 위로 넘는다.
 	//  - ★보는 방향을 매 프레임 "캐릭터 바라보기"로 구하면 안 된다★ — 머리 가까이를 지날 때 초당 800도 넘게
 	//    휙 돌았다 (2026-11-08 시뮬레이션). 키에서만 캐릭터를 보고 사이는 부드럽게 잇는다.
 	//  - 진행은 (이동 거리 + 회전량 × DegreeCost) 기준으로 고르게 나눈다 — 많이 도는 어깨 위에서는 그만큼 천천히 간다.
-	namespace LobbyIntro
+	namespace IntroPath
 	{
 		constexpr int32 NumKeys = 6;
 		constexpr int32 NumSegments = NumKeys - 1;
@@ -109,6 +115,13 @@ namespace
 			return ((T2 - TT) * B1 + (TT - T1) * B2) / (T2 - T1);
 		}
 
+		// 가운데 키에서 바라보는 곳 — 캐릭터 가슴 높이
+		FVector GetFocus(const ACharacter& Character)
+		{
+			const UCapsuleComponent* Capsule = Character.GetCapsuleComponent();
+			return Capsule->GetComponentLocation() + FVector::UpVector * (0.55 * Capsule->GetScaledCapsuleHalfHeight());
+		}
+
 		FPath BuildPath(const FMinimalViewInfo& StartView, const FMinimalViewInfo& EyeView, const ACharacter& Character,
 		                float OverheadClearance, float FrontDistance)
 		{
@@ -123,7 +136,7 @@ namespace
 			const FVector Right = FRotationMatrix(FacingYaw).GetUnitAxis(EAxis::Y);
 			const FVector Up = FVector::UpVector;
 
-			// 대기실 카메라가 있는 쪽 어깨 위로 넘는다 — 그쪽이 가장 짧게 돈다
+			// 출발 시점이 있는 쪽 어깨 위로 넘는다 — 그쪽이 가장 짧게 돈다
 			const double Side = FVector::DotProduct(StartView.Location - Center, Right) >= 0.0 ? 1.0 : -1.0;
 			const double OverheadZ = FMath::Max(Center.Z + HalfHeight + OverheadClearance, EyeView.Location.Z);
 
@@ -145,8 +158,8 @@ namespace
 			}
 			Path.Points[NumKeys + 1] = Keys[Eye] * 2.0 - Keys[AboveEye];
 
-			// 가운데 키에서는 캐릭터 상체를 보고, 출발은 대기실 카메라 그대로, 눈 위 · 눈에서는 1인칭 정면을 본다
-			const FVector Focus = Center + Up * (0.55 * HalfHeight);
+			// 가운데 키에서는 캐릭터 상체를 보고, 출발은 출발 시점 그대로, 눈 위 · 눈에서는 1인칭 정면을 본다
+			const FVector Focus = GetFocus(Character);
 			auto LookAtFocus = [&Focus](const FVector& From) { return (Focus - From).GetSafeNormal(); };
 			const FVector EyeDir = EyeView.Rotation.Vector();
 			Path.Dirs[Start] = StartView.Rotation.Vector();
@@ -247,6 +260,65 @@ namespace
 			}
 			return true;
 		}
+	}
+
+	// 스테이지 월드인가 — 클라는 게임스테이트가 복제되기 전에도 알아야 한다
+	// (폰의 PlayerState 가 먼저 오면 InitAbilityActorInfo 가 HUD 를 띄우고, 스테이지 HUD 는 뜨자마자 로딩 화면을 닫는다).
+	// 게임스테이트가 아직 없으면 맵의 게임 모드 설정(World Settings)으로 본다
+	bool IsStageWorld(const UWorld& World)
+	{
+		if (const AGameStateBase* GameState = World.GetGameState())
+		{
+			return GameState->IsA<ADRStageGameState>();
+		}
+
+		const AWorldSettings* WorldSettings = World.GetWorldSettings();
+		return WorldSettings && WorldSettings->DefaultGameMode && WorldSettings->DefaultGameMode->IsChildOf(ADRStageGameMode::StaticClass());
+	}
+
+	// 스테이지 시작 연출이 어깨를 넘을 쪽 (+1 = 오른쪽) — 옆에 선 다른 플레이어가 덜 가까운 쪽.
+	// 이웃 쪽으로 넘으면 카메라가 그 머리를 스친다 (스폰 간격 ~140 — 2026-11-08 PIE 2인에서 60cm 옆을 지났다. 벨보이는 반지름 85)
+	double ChooseIntroSide(const ACharacter& Character, const FVector& Right)
+	{
+		constexpr double NeighborRadius = 400.0;
+		const FVector Center = Character.GetActorLocation();
+		double Crowding = 0.0;	// + 면 오른쪽이 붐빈다 (가까울수록 크게 친다)
+		for (TActorIterator<ADRCharacter> It(Character.GetWorld()); It; ++It)
+		{
+			if (*It == &Character) continue;
+
+			const FVector Offset = It->GetActorLocation() - Center;
+			const double Distance = FVector2D(Offset.X, Offset.Y).Size();
+			if (Distance >= NeighborRadius) continue;
+
+			Crowding += FMath::Sign(FVector::DotProduct(Offset, Right)) * (1.0 - Distance / NeighborRadius);
+		}
+		return Crowding > 0.0 ? -1.0 : 1.0;
+	}
+
+	// 보이는 메시가 모두 그릴 준비를 마쳤는가 — 패키지 빌드는 PSO 컴파일이 끝나야 메시 프록시를 만든다
+	// (r.PSOPrecache.ProxyCreationWhenPSOReady, 메인 메뉴 공개와 같은 확인). 에디터 바이너리는 프리캐싱이 꺼져 있어 늘 true
+	bool IsWorldReadyToRender(const UWorld& World)
+	{
+		for (const ULevel* Level : World.GetLevels())
+		{
+			if (!Level || !Level->bIsVisible) continue;
+
+			for (const AActor* Actor : Level->Actors)
+			{
+				if (!Actor || Actor->IsHidden()) continue;
+
+				const TInlineComponentArray<UPrimitiveComponent*> Primitives(Actor);
+				for (const UPrimitiveComponent* Primitive : Primitives)
+				{
+					if (Primitive->IsRegistered() && Primitive->IsVisible() && Primitive->IsPSOPrecaching())
+					{
+						return false;
+					}
+				}
+			}
+		}
+		return true;
 	}
 }
 
@@ -717,8 +789,8 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 		}
 	}
 
-	// 로비 시작 연출 중에는 시점이 연출 카메라라 감지를 쉰다
-	if (bIsPlayingLobbyIntro)
+	// 시작 연출(로비 · 스테이지) 중에는 시점이 연출 카메라라 감지를 쉰다
+	if (IsPlayingStartIntro())
 	{
 		InteractionComponent->HidePrompt();
 		return;
@@ -1193,8 +1265,8 @@ void ADRPlayerController::OnSpectatedPlayerDied(AActor* DeadActor)
 
 void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 {
-	// 로비 시작 연출 중에는 막는다 — 방향키를 누른 채 Power On 하면 연출 동안 캐릭터가 걸어갔다
-	if (bIsSpectating || bIsPlayingLobbyIntro) return;
+	// 시작 연출(로비 · 스테이지) 중에는 막는다 — 방향키를 누른 채 Power On 하면 연출 동안 캐릭터가 걸어갔다
+	if (bIsSpectating || IsPlayingStartIntro()) return;
 
 	// 입력 블록 상태 확인
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
@@ -1239,7 +1311,7 @@ void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 {
-	if (bIsSpectating || bIsPlayingLobbyIntro) return;
+	if (bIsSpectating || IsPlayingStartIntro()) return;
 
 	// 마우스 시선 처리
 	const FVector2D Axis = InputActionValue.Get<FVector2D>();
@@ -1255,7 +1327,7 @@ void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
 {
-	if (bIsSpectating || bIsPlayingLobbyIntro) return;
+	if (bIsSpectating || IsPlayingStartIntro()) return;
 
 	// 탑승 중이면 점프키 = 하차 (Plan3 §5.3)
 	if (ADRCharacter* DRChar = GetPawn<ADRCharacter>())
@@ -1294,7 +1366,7 @@ void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::HandleInteract()
 {
-	if (bIsSpectating || bIsPlayingLobbyIntro) return;
+	if (bIsSpectating || IsPlayingStartIntro()) return;
 
 	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
 	if (!DRCharacter) return;
@@ -1953,7 +2025,7 @@ void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 		HeldInputTags.Add(InputTag);
 	}
 
-	if (bIsSpectating || bIsPlayingLobbyIntro) return;
+	if (bIsSpectating || IsPlayingStartIntro()) return;
 
 	// 입력 블록 확인 후 어빌리티 입력 처리 (블록 중이면 아래 UI 피드백도 내지 않는다 — 그래서 ASC 가 아니라 여기서 본다)
 	UDRAbilitySystemComponent* ASC = GetASC();
@@ -2003,7 +2075,7 @@ void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 
 void ADRPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
 {
-	if (bIsSpectating || bIsPlayingLobbyIntro) return;
+	if (bIsSpectating || IsPlayingStartIntro()) return;
 
 	// 입력 홀드 블록 확인
 	UDRAbilitySystemComponent* ASC = GetASC();
@@ -2128,7 +2200,7 @@ void ADRPlayerController::ClientSetWaitingRoomView_Implementation(
 	bAutoManageActiveCameraTarget = false; // Pawn 변경 시 자동 ViewTarget 전환 차단
 
 	// 서버가 보내는 뷰 타깃도 무시한다 — 서버 쪽 이 컨트롤러는 자동 관리가 켜져 있어 Power On 빙의 순간
-	// ClientSetViewTarget(폰)을 보내고, 그대로 받으면 원격 클라는 시작 연출 전에 1인칭으로 튄다 (FinishLobbyIntro 에서 해제)
+	// ClientSetViewTarget(폰)을 보내고, 그대로 받으면 원격 클라는 시작 연출 전에 1인칭으로 튄다 (연출이 끝나면 ResetIntroCamera 가 해제)
 	if (PlayerCameraManager)
 	{
 		PlayerCameraManager->bClientSimulatingViewTarget = true;
@@ -2168,6 +2240,7 @@ void ADRPlayerController::ClientStartCameraTransitionToCharacter_Implementation(
 
 	// 폰 도착을 기다리는 동안에도 연출 중으로 친다 — 입력 · HUD 오버레이를 미룬다
 	bIsPlayingLobbyIntro = true;
+	IntroCameraKind = EDRIntroCameraKind::Lobby;
 
 	// 대기실 UI 는 로비 상태(Transitioning)로 이미 닫혔다. 연출 동안 커서는 숨기고 게임 입력으로 둔다 (이동 · 시선은 위 플래그가 막는다)
 	if (ActiveScreen == EDRScreen::None)
@@ -2187,7 +2260,7 @@ void ADRPlayerController::ClientStartCameraTransitionToCharacter_Implementation(
 			{
 				if (bPendingCameraTransition)
 				{
-					FinishLobbyIntro();
+					FinishIntroCamera();
 				}
 			}),
 			5.0f,
@@ -2222,12 +2295,6 @@ void ADRPlayerController::ExecuteCameraTransitionToCharacter()
 
 	bPendingCameraTransition = false;
 	GetWorldTimerManager().ClearTimer(CameraTransitionRetryHandle);
-	UWorld* World = GetWorld();
-	if (!DRCharacter || !World)
-	{
-		FinishLobbyIntro();
-		return;
-	}
 
 	// 출발 시점 = 대기실 카메라 (없으면 지금 화면)
 	FMinimalViewInfo StartView;
@@ -2240,73 +2307,99 @@ void ADRPlayerController::ExecuteCameraTransitionToCharacter()
 		StartView = PlayerCameraManager->GetCameraCacheView();
 	}
 
+	// 시선(컨트롤 회전)은 서버가 PowerOn 에서 ClientSetRotation 으로 스폰 방향에 맞춰 보낸다 — 연출의 도착 방향도 그것이다
+	if (!BeginIntroCamera(DRCharacter, StartView))
+	{
+		FinishIntroCamera();
+		return;
+	}
+	StartIntroCameraMove(LobbyIntroDuration);
+}
+
+bool ADRPlayerController::BeginIntroCamera(ADRCharacter* DRCharacter, const FMinimalViewInfo& StartView)
+{
+	UWorld* World = GetWorld();
+	if (!DRCharacter || !World) return false;
+
 	// 연출용 카메라 — 이 클라이언트에만 있다 (복제 안 함).
 	// ★폰이 아닌 시점이어야 한다★ — 폰(또는 블렌드 중인 폰)이 뷰 타깃이면 주인 시점 규칙이 걸려
 	// 3인칭 몸(OwnerNoSee)이 사라지고 1인칭 팔(OnlyOwnerSee)만 허공에 뜬다
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	SpawnParams.ObjectFlags |= RF_Transient;
-	ACameraActor* IntroCamera = World->SpawnActor<ACameraActor>(StartView.Location, StartView.Rotation, SpawnParams);
-	if (!IntroCamera)
-	{
-		FinishLobbyIntro();
-		return;
-	}
+	ACameraActor* NewCamera = World->SpawnActor<ACameraActor>(StartView.Location, StartView.Rotation, SpawnParams);
+	if (!NewCamera) return false;
 
-	UCameraComponent* IntroCameraComponent = IntroCamera->GetCameraComponent();
-	IntroCameraComponent->SetFieldOfView(StartView.FOV);
-	IntroCameraComponent->SetConstraintAspectRatio(StartView.bConstrainAspectRatio);
-	IntroCameraComponent->SetAspectRatio(StartView.AspectRatio);
-	IntroCameraComponent->PostProcessSettings = StartView.PostProcessSettings;
-	IntroCameraComponent->PostProcessBlendWeight = StartView.PostProcessBlendWeight;
+	UCameraComponent* CameraComponent = NewCamera->GetCameraComponent();
+	CameraComponent->SetFieldOfView(StartView.FOV);
+	CameraComponent->SetConstraintAspectRatio(StartView.bConstrainAspectRatio);
+	CameraComponent->SetAspectRatio(StartView.AspectRatio);
+	CameraComponent->PostProcessSettings = StartView.PostProcessSettings;
+	CameraComponent->PostProcessBlendWeight = StartView.PostProcessBlendWeight;
 
 	// 혹시 남은 이전 연출 카메라는 뷰 타깃을 옮긴 뒤 지운다
-	ACameraActor* PreviousCamera = LobbyIntroCamera.Get();
+	ACameraActor* PreviousCamera = IntroCamera.Get();
 
-	LobbyIntroCamera = IntroCamera;
-	LobbyIntroPawn = DRCharacter;
-	LobbyIntroStartView = StartView;
-	LobbyIntroStartTime = World->GetTimeSeconds();
-	bLobbyIntroBodyHidden = false;
-	bIsPlayingLobbyIntro = true;
+	IntroCamera = NewCamera;
+	IntroPawn = DRCharacter;
+	IntroStartView = StartView;
+	bIntroCameraActive = true;
+	bIntroCameraMoving = false;
+	bIntroBodyHidden = false;
 
-	// 몸은 3인칭으로 보이고 1인칭 팔은 숨긴다 (원격 클라는 폰이 막 도착해 1인칭 상태일 수 있다).
-	// 시선(컨트롤 회전)은 서버가 PowerOn 에서 ClientSetRotation 으로 스폰 방향에 맞춰 보낸다 — 연출의 도착 방향도 그것이다
+	// 몸은 3인칭으로 보이고 1인칭 팔은 숨긴다 (원격 클라는 폰이 막 도착해 1인칭 상태일 수 있다)
 	DRCharacter->SetWaitingRoomVisibility(true);
 
-	SetViewTarget(IntroCamera);
+	SetViewTarget(NewCamera);
 
-	if (PreviousCamera && PreviousCamera != IntroCamera)
+	if (PreviousCamera && PreviousCamera != NewCamera)
 	{
 		PreviousCamera->Destroy();
 	}
+	return true;
+}
+
+void ADRPlayerController::StartIntroCameraMove(float Duration)
+{
+	IntroStartTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	IntroDuration = Duration;
+	bIntroCameraMoving = true;
 }
 
 void ADRPlayerController::UpdateCameraManager(float DeltaSeconds)
 {
 	// 모든 액터가 틱한 뒤라 폰 · 1인칭 카메라 위치가 이번 프레임 값이다
-	TickLobbyIntro();
+	TickStageIntro();
+	TickIntroCamera();
 	TickArmsRaise();
 
 	Super::UpdateCameraManager(DeltaSeconds);
 }
 
-void ADRPlayerController::TickLobbyIntro()
+void ADRPlayerController::TickIntroCamera()
 {
-	// 폰 도착 대기 중이면 아직 시작 전
-	if (!bIsPlayingLobbyIntro || bPendingCameraTransition) return;
+	if (!bIntroCameraActive) return;
 
-	ACameraActor* IntroCamera = LobbyIntroCamera.Get();
-	ADRCharacter* DRCharacter = LobbyIntroPawn.Get();
+	ACameraActor* Camera = IntroCamera.Get();
+	ADRCharacter* DRCharacter = IntroPawn.Get();
 	UWorld* World = GetWorld();
-	if (!IntroCamera || !DRCharacter || !World || GetPawn() != DRCharacter)
+	if (!Camera || !DRCharacter || !World || GetPawn() != DRCharacter)
 	{
 		// 폰이 바뀌었거나 사라졌다 — 연출을 접는다
-		FinishLobbyIntro();
+		FinishIntroCamera();
 		return;
 	}
 
-	const double Alpha = FMath::Clamp((World->GetTimeSeconds() - LobbyIntroStartTime) / FMath::Max(LobbyIntroDuration, 0.01f), 0.0, 1.0);
+	// 뷰 타깃은 끝까지 연출 카메라다 — 도중에 폰으로 옮겨졌으면 되돌린다 (폰 시점이면 3인칭 몸이 사라지고 1인칭 팔만 뜬다)
+	if (GetViewTarget() != Camera)
+	{
+		SetViewTarget(Camera);
+	}
+
+	// 출발 시점에서 기다린다 (스테이지: 다른 플레이어의 로딩)
+	if (!bIntroCameraMoving) return;
+
+	const double Alpha = FMath::Clamp((World->GetTimeSeconds() - IntroStartTime) / FMath::Max(IntroDuration, 0.01f), 0.0, 1.0);
 	// smootherstep — 천천히 출발해 천천히 내려앉는다
 	const double Progress = Alpha * Alpha * Alpha * (Alpha * (Alpha * 6.0 - 15.0) + 10.0);
 
@@ -2318,22 +2411,22 @@ void ADRPlayerController::TickLobbyIntro()
 	FRotator Rotation = EyeView.Rotation;
 	if (Alpha < 1.0)
 	{
-		const LobbyIntro::FPath Path = LobbyIntro::BuildPath(LobbyIntroStartView, EyeView, *DRCharacter,
-		                                                     LobbyIntroOverheadClearance, LobbyIntroFrontDistance);
+		const IntroPath::FPath Path = IntroPath::BuildPath(IntroStartView, EyeView, *DRCharacter,
+		                                                   LobbyIntroOverheadClearance, LobbyIntroFrontDistance);
 		FVector Direction;
-		LobbyIntro::Evaluate(Path, Progress, Location, Direction);
+		IntroPath::Evaluate(Path, Progress, Location, Direction);
 		Rotation = Direction.Rotation();
 	}
-	IntroCamera->SetActorLocationAndRotation(Location, Rotation);
+	Camera->SetActorLocationAndRotation(Location, Rotation);
 
-	UCameraComponent* IntroCameraComponent = IntroCamera->GetCameraComponent();
-	IntroCameraComponent->SetFieldOfView(FMath::Lerp(LobbyIntroStartView.FOV, EyeView.FOV, static_cast<float>(Progress)));
+	UCameraComponent* CameraComponent = Camera->GetCameraComponent();
+	CameraComponent->SetFieldOfView(FMath::Lerp(IntroStartView.FOV, EyeView.FOV, static_cast<float>(Progress)));
 
 	// 3인칭 몸 숨기기 — 머리 위에서 정면을 봐 몸이 화면 아래로 빠졌을 때 (카메라가 몸 속으로 들어가려 하면 그 전에라도)
-	if (!bLobbyIntroBodyHidden)
+	if (!bIntroBodyHidden)
 	{
-		float AspectRatio = IntroCameraComponent->AspectRatio;
-		if (!IntroCameraComponent->bConstrainAspectRatio)
+		float AspectRatio = CameraComponent->AspectRatio;
+		if (!CameraComponent->bConstrainAspectRatio)
 		{
 			int32 ViewportX = 0, ViewportY = 0;
 			GetViewportSize(ViewportX, ViewportY);
@@ -2343,10 +2436,10 @@ void ADRPlayerController::TickLobbyIntro()
 			}
 		}
 
-		if ((Alpha > 0.4 && LobbyIntro::IsBodyBelowView(Location, Rotation, IntroCameraComponent->FieldOfView, AspectRatio, *DRCharacter))
-			|| LobbyIntro::IsInsideCapsule(Location, *DRCharacter))
+		if ((Alpha > 0.4 && IntroPath::IsBodyBelowView(Location, Rotation, CameraComponent->FieldOfView, AspectRatio, *DRCharacter))
+			|| IntroPath::IsInsideCapsule(Location, *DRCharacter))
 		{
-			bLobbyIntroBodyHidden = true;
+			bIntroBodyHidden = true;
 
 			// 1인칭 상태로 — 팔은 주인 시점에서만 보여 이 카메라에는 아직 안 보인다. 머리 위 닉네임은 도착 후에 켠다
 			DRCharacter->SetWaitingRoomVisibility(false);
@@ -2356,13 +2449,13 @@ void ADRPlayerController::TickLobbyIntro()
 
 	if (Alpha >= 1.0)
 	{
-		FinishLobbyIntro();
+		FinishIntroCamera();
 	}
 }
 
-void ADRPlayerController::FinishLobbyIntro()
+void ADRPlayerController::FinishIntroCamera()
 {
-	// 대기실 · 연출 동안 막았던 엔진 카메라 자동 관리 복원
+	// 시작 연출 동안 막았던 엔진 카메라 자동 관리 복원
 	bAutoManageActiveCameraTarget = true;
 
 	APawn* MyPawn = GetPawn();
@@ -2380,14 +2473,38 @@ void ADRPlayerController::FinishLobbyIntro()
 	}
 	else
 	{
-		// 폰이 끝내 안 왔다 — 오면 HandlePossessedPawnChanged 가 시점을 옮긴다. 그동안은 대기실 카메라를 본다
+		// 폰이 끝내 안 왔다 — 오면 HandlePossessedPawnChanged 가 시점을 옮긴다. 그동안은 대기실 카메라(로비)나 컨트롤러를 본다
 		bPendingViewTargetRestore = true;
-		if (LobbyIntroCamera.IsValid() && GetViewTarget() == LobbyIntroCamera.Get())
+		if (IntroCamera.IsValid() && GetViewTarget() == IntroCamera.Get())
 		{
-			SetViewTarget(CachedWaitingRoomCamera.IsValid() ? static_cast<AActor*>(CachedWaitingRoomCamera.Get()) : this);
+			const bool bUseWaitingCamera = IntroCameraKind == EDRIntroCameraKind::Lobby && CachedWaitingRoomCamera.IsValid();
+			SetViewTarget(bUseWaitingCamera ? static_cast<AActor*>(CachedWaitingRoomCamera.Get()) : this);
 		}
 	}
-	ResetLobbyIntroState();
+
+	if (IntroCameraKind == EDRIntroCameraKind::Stage)
+	{
+		// 로딩 완료를 알리기 전에 끝났으면(폰이 바뀜 · 끝내 안 옴) 지금 알린다 — 서버가 기다림 상한까지 붙잡고 있지 않게
+		if (StageIntroStep == EDRStageIntroStep::WaitingForPawn || StageIntroStep == EDRStageIntroStep::WaitingForRender)
+		{
+			ServerNotifyStageLoaded();
+		}
+		StageIntroStep = EDRStageIntroStep::Done;
+		ResetIntroCamera();
+
+		// 함께 시작한 플레이어가 모두 끝내면 서버가 첫 페이즈 · 스테이지 BGM 을 시작한다
+		ServerNotifyStageIntroFinished();
+
+		// 연출 없이 끝났으면 로딩 화면이 아직 덮여 있다 (이미 걷었으면 아무 일도 없다)
+		if (UDRLoadingScreenSubsystem* LoadingScreen = GetGameInstance() ? GetGameInstance()->GetSubsystem<UDRLoadingScreenSubsystem>() : nullptr)
+		{
+			LoadingScreen->FinishLoadingScreen();
+		}
+	}
+	else
+	{
+		ResetLobbyIntroState();
+	}
 
 	// 연출 중 설정 화면 등을 열었으면 입력 모드는 그 화면이 닫힐 때 맞춘다
 	if (ActiveScreen == EDRScreen::None)
@@ -2400,15 +2517,11 @@ void ADRPlayerController::FinishLobbyIntro()
 	InitOverlayForFreeRoam();
 }
 
-void ADRPlayerController::ResetLobbyIntroState()
+void ADRPlayerController::ResetIntroCamera()
 {
-	bIsPlayingLobbyIntro = false;
-	bPendingCameraTransition = false;
-	bLobbyIntroBodyHidden = false;
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(CameraTransitionRetryHandle);
-	}
+	bIntroCameraActive = false;
+	bIntroCameraMoving = false;
+	bIntroBodyHidden = false;
 
 	// 대기실 · 연출 동안 서버가 보내는 뷰 타깃(ClientSetViewTarget)을 무시하던 것 해제
 	if (PlayerCameraManager)
@@ -2416,12 +2529,230 @@ void ADRPlayerController::ResetLobbyIntroState()
 		PlayerCameraManager->bClientSimulatingViewTarget = false;
 	}
 
-	if (ACameraActor* IntroCamera = LobbyIntroCamera.Get())
+	if (ACameraActor* Camera = IntroCamera.Get())
 	{
-		IntroCamera->Destroy();
+		Camera->Destroy();
 	}
-	LobbyIntroCamera.Reset();
-	LobbyIntroPawn.Reset();
+	IntroCamera.Reset();
+	IntroPawn.Reset();
+}
+
+void ADRPlayerController::ResetLobbyIntroState()
+{
+	bIsPlayingLobbyIntro = false;
+	bPendingCameraTransition = false;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(CameraTransitionRetryHandle);
+	}
+
+	ResetIntroCamera();
+}
+
+// ========== 스테이지 시작 연출 ==========
+
+bool ADRPlayerController::IsStageIntroPending() const
+{
+	if (!IsLocalController()) return false;
+
+	const UWorld* World = GetWorld();
+	if (!World) return false;
+
+	// 이 월드에서 진행을 정했으면 그대로 — 아직 첫 틱 전이면(트래블 직후 빙의 · HUD 초기화가 먼저 올 수 있다) 스테이지인지만 본다
+	if (StageIntroWorld.Get() == World)
+	{
+		return StageIntroStep != EDRStageIntroStep::NotStage && StageIntroStep != EDRStageIntroStep::Done;
+	}
+	return IsStageWorld(*World);
+}
+
+void ADRPlayerController::ServerNotifyStageLoaded_Implementation()
+{
+	if (ADRStageGameMode* StageGameMode = GetWorld()->GetAuthGameMode<ADRStageGameMode>())
+	{
+		StageGameMode->NotifyPlayerStageLoaded(this);
+	}
+}
+
+void ADRPlayerController::ServerNotifyStageIntroFinished_Implementation()
+{
+	if (ADRStageGameMode* StageGameMode = GetWorld()->GetAuthGameMode<ADRStageGameMode>())
+	{
+		StageGameMode->NotifyPlayerStageIntroFinished(this);
+	}
+}
+
+void ADRPlayerController::TickStageIntro()
+{
+	if (!IsLocalController()) return;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// 월드가 바뀌었다 (첫 진입 · 심리스 트래블) — 원격 클라는 트래블 뒤 OnLevelEntered 가 불리지 않아 여기서 처음부터 시작한다
+	if (StageIntroWorld.Get() != World)
+	{
+		// 이전 스테이지의 연출을 마치지 못하고 떠났다 (도중에 스테이지가 끝남) — 막아 둔 카메라 관리를 풀고 카메라를 지운다
+		if (StageIntroStep != EDRStageIntroStep::NotStage && StageIntroStep != EDRStageIntroStep::Done)
+		{
+			if (bIntroCameraActive && IntroCameraKind == EDRIntroCameraKind::Stage)
+			{
+				ResetIntroCamera();
+			}
+			bAutoManageActiveCameraTarget = true;
+		}
+		StageIntroWorld = World;
+		StageIntroStep = EDRStageIntroStep::NotStage;
+	}
+
+	if (StageIntroStep == EDRStageIntroStep::NotStage)
+	{
+		if (!IsStageWorld(*World)) return;
+
+		// 스테이지에 들어왔다 — 연출이 끝날 때까지 빙의 · 서버(ClientSetViewTarget)가 뷰 타깃을 폰으로 옮기지 못하게 한다
+		StageIntroStep = EDRStageIntroStep::WaitingForPawn;
+		StageIntroEnterTime = World->GetRealTimeSeconds();
+		IntroCameraKind = EDRIntroCameraKind::Stage;
+		bAutoManageActiveCameraTarget = false;
+		if (PlayerCameraManager)
+		{
+			PlayerCameraManager->bClientSimulatingViewTarget = true;
+		}
+	}
+
+	// 서버가 시작 연출을 틀었는가 — 매번 다시 읽는다 (호스트는 아래에서 알리는 즉시 같은 프레임에 바뀐다)
+	auto HasServerStartedIntro = [World]()
+	{
+		const ADRStageGameState* StageGameState = World->GetGameState<ADRStageGameState>();
+		return StageGameState && StageGameState->GetStageStartState() != EDRStageStartState::WaitingForPlayers;
+	};
+
+	if (StageIntroStep == EDRStageIntroStep::WaitingForPawn)
+	{
+		// ★폰의 BeginPlay 뒤에 시작한다★ — 원격 클라는 빙의가 BeginPlay 보다 먼저 오고,
+		// BeginPlay 의 UpdateMeshVisibility 가 3인칭 몸을 다시 숨긴다 (로비 연출과 같은 이유)
+		ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
+		if (!DRCharacter || !DRCharacter->HasActorBegunPlay() || !GetPlayerState<ADRPlayerState>())
+		{
+			// 폰이 끝내 안 온다 (관전 등) — 서버가 시작하고도 한참이면 연출 없이 끝내 로딩 화면 · 입력이 갇히지 않게 한다
+			constexpr double PawnWaitLimit = 15.0;
+			if (HasServerStartedIntro() && World->GetRealTimeSeconds() - StageIntroEnterTime > PawnWaitLimit)
+			{
+				UE_LOG(LogDR, Warning, TEXT("[StageIntro] 폰이 %.0f초 안에 오지 않아 연출 없이 시작한다"), PawnWaitLimit);
+				FinishIntroCamera();
+			}
+			return;
+		}
+
+		// 연출이 끝나면 스폰 방향을 수평으로 본다 — 출발 시점도 이 방향 멀리다
+		SetControlRotation(FRotator(0.f, DRCharacter->GetActorRotation().Yaw, 0.f));
+		if (!BeginIntroCamera(DRCharacter, MakeStageIntroStartView(*DRCharacter)))
+		{
+			FinishIntroCamera();
+			return;
+		}
+
+		StageIntroStep = EDRStageIntroStep::WaitingForRender;
+		StageRenderWaitStartTime = World->GetRealTimeSeconds();
+		NextStageRenderCheckTime = 0.0;
+	}
+
+	if (StageIntroStep == EDRStageIntroStep::WaitingForRender)
+	{
+		// 로딩 화면 아래에서 메시가 그릴 준비를 마치길 기다린다 — 패키지 빌드는 PSO 컴파일이 끝나야 메시가 보여
+		// 그냥 걷으면 연출 도중 배경 · 캐릭터가 튀어나온다 (메인 메뉴와 같은 문제). 전체 확인이라 0.2초마다
+		const double Now = World->GetRealTimeSeconds();
+		if (Now < NextStageRenderCheckTime) return;
+		NextStageRenderCheckTime = Now + 0.2;
+
+		const double Waited = Now - StageRenderWaitStartTime;
+		const bool bReady = IsWorldReadyToRender(*World);
+		if (!bReady && Waited < StageIntroMaxRenderWaitTime) return;
+
+		if (bReady)
+		{
+			UE_LOG(LogDR, Log, TEXT("[StageIntro] 로딩 완료 (화면 준비 %.2f초) — 서버에 알림"), Waited);
+		}
+		else
+		{
+			UE_LOG(LogDR, Warning, TEXT("[StageIntro] 메시가 %.1f초 안에 그릴 준비를 마치지 못했지만 로딩 완료로 알린다"), Waited);
+		}
+
+		ServerNotifyStageLoaded();
+		StageIntroStep = EDRStageIntroStep::WaitingForPlayers;
+	}
+
+	UDRLoadingScreenSubsystem* LoadingScreen = GetGameInstance() ? GetGameInstance()->GetSubsystem<UDRLoadingScreenSubsystem>() : nullptr;
+
+	if (StageIntroStep == EDRStageIntroStep::WaitingForPlayers)
+	{
+		// 모두 로딩을 마쳤다 (서버 진행 Intro — 늦게 온 플레이어는 이미 Started) — 로딩 화면을 걷는다
+		if (!HasServerStartedIntro()) return;
+
+		if (LoadingScreen)
+		{
+			LoadingScreen->FinishLoadingScreen();
+		}
+		StageIntroRevealTime = World->GetTimeSeconds();
+		StageIntroStep = EDRStageIntroStep::Revealing;
+	}
+
+	if (StageIntroStep == EDRStageIntroStep::Revealing)
+	{
+		// 로딩 화면이 다 걷힐 때까지 출발 시점에 머문다 — 걷히는 동안(퇴장 애니) 움직이면 멀리서 다가오는 앞부분이 가려진다
+		// (2026-11-08 PIE: 최소 표시 시간 + 퇴장 애니가 3초 중 앞 1초를 덮었다). 로딩 화면이 끝내 안 닫혀도 상한 뒤에는 출발한다
+		constexpr double MaxLoadingScreenWait = 3.0;
+		const double Elapsed = World->GetTimeSeconds() - StageIntroRevealTime;
+		const bool bLoadingScreenVisible = LoadingScreen && LoadingScreen->IsLoadingScreenVisible();
+		if (Elapsed < StageIntroHoldTime || (bLoadingScreenVisible && Elapsed < StageIntroHoldTime + MaxLoadingScreenWait)) return;
+
+		StartIntroCameraMove(StageIntroDuration);
+		StageIntroStep = EDRStageIntroStep::Playing;
+	}
+
+	// Playing — TickIntroCamera 가 옮기고, 도착하면 FinishIntroCamera 가 Done 으로 바꾼다
+}
+
+FMinimalViewInfo ADRPlayerController::MakeStageIntroStartView(ADRCharacter& DRCharacter) const
+{
+	// 도착할 1인칭 시점에서 시작한다 — FOV · 후처리가 연출 도중에 바뀌지 않게
+	FMinimalViewInfo View;
+	DRCharacter.CalcCamera(0.f, View);
+
+	const FVector Focus = IntroPath::GetFocus(DRCharacter);
+	const FRotator FacingYaw(0.f, View.Rotation.Yaw, 0.f);
+	const FVector Forward = FacingYaw.Vector();
+	const FVector Right = FRotationMatrix(FacingYaw).GetUnitAxis(EAxis::Y);
+
+	// 정면에서 살짝(거리의 1/10) 비켜 선다 — 경로는 출발 시점이 있는 쪽 어깨로 넘으므로, 이웃이 덜한 쪽으로 비킨다
+	const double Side = ChooseIntroSide(DRCharacter, Right);
+	const FVector Desired = Focus + Forward * StageIntroStartDistance + Right * (Side * 0.1 * StageIntroStartDistance)
+	                      + FVector::UpVector * StageIntroStartHeight;
+
+	// 벽 · 문 등 카메라를 막는 면에 걸리면 그 앞에서 출발한다. Camera 채널이라 트리거 박스 같은 겹침 전용 볼륨은 지나간다
+	// (오브젝트 타입으로 쟀더니 문 · 방 트리거에 걸려 7m 안쪽에서 출발했다). 스테이지 메시는 단순 충돌이 없어
+	// (충돌은 블로킹 볼륨이 맡는다) 보이는 면은 복합 충돌로 잰다. 플레이어 캐릭터들은 무시한다
+	FVector Start = Desired;
+	if (UWorld* World = GetWorld())
+	{
+		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(DRStageIntroStartView), /*bInTraceComplex*/ true);
+		for (TActorIterator<ADRCharacter> It(World); It; ++It)
+		{
+			QueryParams.AddIgnoredActor(*It);
+		}
+
+		FHitResult Hit;
+		if (World->LineTraceSingleByChannel(Hit, Focus, Desired, ECC_Camera, QueryParams))
+		{
+			// 면에서 조금 떨어진 곳. 그래도 경로의 다음 키(얼굴 앞)보다는 멀리 — 더 가까우면 물러났다가 다가온다
+			const double MinDistance = DRCharacter.GetCapsuleComponent()->GetScaledCapsuleRadius() + LobbyIntroFrontDistance + 30.0;
+			Start = Focus + (Desired - Focus).GetSafeNormal() * FMath::Max(Hit.Distance - 30.0, MinDistance);
+		}
+	}
+
+	View.Location = Start;
+	View.Rotation = (Focus - Start).Rotation();
+	return View;
 }
 
 void ADRPlayerController::StartArmsRaise(ADRCharacter* DRCharacter)

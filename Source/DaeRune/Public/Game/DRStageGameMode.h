@@ -32,6 +32,22 @@ public:
 
 	UDRPhaseBase* GetCurrentPhase() { return CurrentPhase; }
 
+	// ========== 스테이지 시작 (모든 플레이어 로딩 → 시작 연출 → 첫 페이즈, 2026-11-08) ==========
+	//
+	// 클라마다 폰이 도착하고 화면이 그릴 준비를 마치면 알려 온다 (ADRPlayerController::ServerNotifyStageLoaded).
+	// 모두 알려 오면 GameState 진행을 Intro 로 바꾸고(각 클라가 로딩 화면을 걷고 시작 연출을 튼다),
+	// 그 플레이어들이 모두 연출을 끝냈다고 알려 오면 Started 로 바꾸며 첫 페이즈를 시작한다.
+	// 스테이지 BGM 은 Started 를 보고 ADRBGMActor 가 튼다
+
+	// 그 플레이어가 로딩을 마쳤다 (서버)
+	void NotifyPlayerStageLoaded(APlayerController* PC);
+
+	// 그 플레이어의 시작 연출이 끝났다 (서버)
+	void NotifyPlayerStageIntroFinished(APlayerController* PC);
+
+	// 로딩 중 나간 플레이어는 더 기다리지 않는다
+	virtual void Logout(AController* Exiting) override;
+
 protected:
 	// 사망/이탈을 현재 페이즈에 전달 (Plan6 §14.3.5)
 	virtual void NotifyPhasePlayerDied(APlayerState* DeadPlayerState) override;
@@ -84,6 +100,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage|Config")
 	FString LobbyMapName = TEXT("LobbyMap");
 
+	// 로딩을 마치지 못한 플레이어를 기다리는 최대 시간 (초, BeginPlay 부터) — 넘으면 마친 플레이어끼리 시작 연출을 튼다.
+	// 늦은 플레이어는 로딩을 마치는 대로 혼자 연출을 본다 (끝까지 안 오는 한 명 때문에 모두가 로딩 화면에 갇히지 않게)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage|Start", meta = (ClampMin = "1.0"))
+	float StageIntroMaxWaitTime = 30.f;
+
 	// ========== 클렌저 사이트 ==========
 
 	// 클렌저 사이트를 찾을 때 사용할 태그
@@ -101,6 +122,36 @@ protected:
 	void EndCurrentPhase();
 
 private:
+	// ===== 스테이지 시작 =====
+
+	// 접속한 플레이어가 모두 로딩을 마쳤으면 시작 연출
+	void TryStartStageIntro();
+
+	// 진행 Intro (클라 시작 연출) — 함께 시작한 플레이어가 모두 끝내면 FinishStageIntro
+	void StartStageIntro();
+
+	// 함께 시작한 플레이어가 모두 연출을 끝냈으면 FinishStageIntro
+	void TryFinishStageIntro();
+
+	// 진행 Started (스테이지 BGM) + 첫 페이즈
+	void FinishStageIntro();
+
+	// 기다림 상한 — 못 온 플레이어를 남기고 시작
+	void HandleStageIntroWaitTimeout();
+
+	// 로딩을 마쳤다고 알려 온 플레이어
+	TSet<TWeakObjectPtr<APlayerController>> StageLoadedPlayers;
+
+	// 시작 연출을 함께 시작한 플레이어 (그때 로딩을 마쳐 있던 플레이어 — 늦게 온 플레이어는 기다리지 않는다) · 그중 연출을 끝낸 플레이어
+	TSet<TWeakObjectPtr<APlayerController>> StageIntroPlayers;
+	TSet<TWeakObjectPtr<APlayerController>> StageIntroFinishedPlayers;
+
+	bool bStageIntroStarted = false;
+	bool bStageIntroFinished = false;
+
+	FTimerHandle StageIntroWaitTimeoutHandle;
+	FTimerHandle StageIntroFinishHandle;
+
 	// 스테이지 종료 (클리어 · 게임 오버 공통): 페이즈 정리 → 결과 사운드 · UI → 잠시 뒤 로비로
 	void EndStage(bool bCleared);
 

@@ -73,6 +73,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Loading")
 	void FinishLoadingScreen();
 
+	// 로딩 화면이 떠 있는가 (등장 · 유지 · 퇴장 애니 포함) — 스테이지 시작 연출은 다 걷힌 뒤 카메라를 움직인다
+	bool IsLoadingScreenVisible() const;
+
 	// 멈춤(블로킹 로드) 구간에서 MoviePlayer 화면이 노출될 최소 시간(초).
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Loading")
 	float MinimumFreezeScreenTime = 0.5f;

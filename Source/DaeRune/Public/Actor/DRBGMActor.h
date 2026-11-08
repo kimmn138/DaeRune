@@ -23,7 +23,8 @@ enum class EDRBGMSlot : uint8
 /**
  * 맵 전체에서 동기화된 BGM을 재생하는 액터
  * - 단일 트랙 슬롯(MainMenu/Lobby/Tutorial): Sound Cue Looping으로 무한 재생
- * - Stage 슬롯: DataAsset의 BGM_StagePlaylist를 순차 재생 + 엘리트 보스 등장 시 BGM_Boss로 크로스페이드
+ * - Stage 슬롯: DataAsset의 BGM_StagePlaylist를 순차 재생 + 엘리트 보스 등장 시 BGM_Boss로 크로스페이드.
+ *   자동 재생은 스테이지 시작 연출이 끝난 뒤부터다 (ADRStageGameState::HasStageStarted)
  */
 UCLASS()
 class DAERUNE_API ADRBGMActor : public AActor
@@ -130,6 +131,9 @@ private:
 
 	// DataAsset에서 사운드 로드
 	void LoadSoundsFromDataAsset();
+
+	// 자동 재생 시작 (BeginPlay — 스테이지 슬롯은 스테이지 시작 연출이 끝난 뒤)
+	void StartAutoPlay();
 
 	// 단일 트랙 재생 (MainMenu/Lobby/Tutorial)
 	void PlaySingleTrackLocal();

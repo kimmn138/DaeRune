@@ -398,6 +398,12 @@ void UDRLoadingScreenSubsystem::FinishLoadingScreen()
 	PlaySeamlessOutro();
 }
 
+bool UDRLoadingScreenSubsystem::IsLoadingScreenVisible() const
+{
+	// 유지 위젯은 뷰포트에 직접 붙어 IsInViewport 가 false 다. 퇴장 위젯은 애니가 끝나 제거될 때 ActiveWidget 이 비워진다
+	return PersistentSlateWidget.IsValid() || (ActiveWidget && ActiveWidget->IsInViewport());
+}
+
 void UDRLoadingScreenSubsystem::PlaySeamlessOutro()
 {
 	if (IsRunningDedicatedServer() || !SeamlessTravelWidgetClass)

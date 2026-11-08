@@ -29,6 +29,21 @@ DECLARE_MULTICAST_DELEGATE(FOnObjectiveCompleted);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWaveDefenseUIActiveSignature, bool, bIsActive);
 
 /**
+ * 스테이지 시작 진행 (2026-11-08) — 모든 플레이어 로딩 → 시작 연출(멀리서 다가와 1인칭으로) → 진행.
+ * 서버(ADRStageGameMode)가 정하고 복제한다. 연출 · 입력 차단은 각 클라의 ADRPlayerController 가 이 값을 보고 한다
+ */
+UENUM()
+enum class EDRStageStartState : uint8
+{
+	WaitingForPlayers,	// 로딩을 마치지 못한 플레이어가 있다 — 먼저 마친 플레이어는 로딩 화면 아래 출발 화면에서 기다린다
+	Intro,				// 모두 로딩을 마쳤다 — 클라마다 시작 연출을 튼다 (조작 · HUD 는 아직)
+	Started				// 연출이 끝났다 — 첫 페이즈 · 스테이지 BGM 시작
+};
+
+// 스테이지 시작 진행 변경 (서버는 바꿀 때, 클라는 복제가 도착할 때 발화)
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnStageStartStateChanged, EDRStageStartState /*NewState*/);
+
+/**
  * 
  */
 UCLASS()
@@ -59,6 +74,17 @@ public:
 
     UFUNCTION(BlueprintPure, Category = "Stage")
     ADRDoorManager* GetDoorManager() const { return DoorManager; }
+
+    // ========== 스테이지 시작 (모든 플레이어 로딩 → 시작 연출 → 진행) ==========
+    EDRStageStartState GetStageStartState() const { return StageStartState; }
+
+    // 시작 연출이 끝나 스테이지가 진행 중인가 (첫 페이즈 · 스테이지 BGM 이 이때 시작한다)
+    bool HasStageStarted() const { return StageStartState == EDRStageStartState::Started; }
+
+    // 서버 전용 (ADRStageGameMode 가 부른다)
+    void SetStageStartState(EDRStageStartState NewState);
+
+    FOnStageStartStateChanged OnStageStartStateChanged;
 
     // ========== 상태 리플리케이션 ==========
     UFUNCTION(BlueprintCallable, Category = "Phase")
@@ -200,6 +226,9 @@ public:
 protected:
     // ========== 리플리케이션 콜백 ==========
     UFUNCTION()
+    void OnRep_StageStartState();
+
+    UFUNCTION()
     void OnRep_CurrentPhaseIndex();
 
     UFUNCTION()
@@ -259,6 +288,9 @@ private:
     int32 InitialPlayerCount = 0;
     
     // ========== 상태 리플리케이션 변수들 ==========
+    UPROPERTY(ReplicatedUsing = OnRep_StageStartState)
+    EDRStageStartState StageStartState = EDRStageStartState::WaitingForPlayers;
+
     UPROPERTY(ReplicatedUsing = OnRep_CurrentPhaseIndex)
     int32 CurrentPhaseIndex;
 

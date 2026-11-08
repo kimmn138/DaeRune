@@ -43,6 +43,7 @@ void ADRStageGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
     // 상태 리플리케이션
+    DOREPLIFETIME(ADRStageGameState, StageStartState);
     DOREPLIFETIME(ADRStageGameState, CurrentPhaseIndex);
 
     // Phase 2
@@ -73,6 +74,19 @@ void ADRStageGameState::RegisterDoorManager(ADRDoorManager* InDoorManager)
     if (!InDoorManager) return;
 
     DoorManager = InDoorManager;
+}
+
+void ADRStageGameState::SetStageStartState(EDRStageStartState NewState)
+{
+    if (!HasAuthority() || StageStartState == NewState) return;
+
+    StageStartState = NewState;
+    OnStageStartStateChanged.Broadcast(StageStartState);
+}
+
+void ADRStageGameState::OnRep_StageStartState()
+{
+    OnStageStartStateChanged.Broadcast(StageStartState);
 }
 
 void ADRStageGameState::SetCurrentPhaseIndex(int32 NewIndex)
