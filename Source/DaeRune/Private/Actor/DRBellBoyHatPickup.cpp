@@ -47,11 +47,20 @@ ADRBellBoyHatPickup* ADRBellBoyHatPickup::SpawnOnGround(UWorld* World, TSubclass
 	ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(BellBoyHatDrop), false, IgnoreActor);
 
-	FHitResult GroundHit;
-	if (World->LineTraceSingleByObjectType(GroundHit, FromLocation + FVector(0.f, 0.f, 50.f),
-			FromLocation - FVector(0.f, 0.f, 5000.f), ObjectParams, QueryParams))
+	// ★Multi 로 모두 받고 "폰이 설 수 있는 표면"의 첫 히트만 바닥으로 친다★ (2026-11-09).
+	// 오브젝트 타입 쿼리는 상대의 채널 응답을 보지 않아, 먼저 떨어진 모자의 PickupSphere(WorldDynamic, r60)에도 맞는다 —
+	// 같은 곳을 계속 맞히면 새 모자가 앞 모자 구 위(+65uu)에 생겨 공중으로 탑이 쌓였다(Stage1 복도 상인방).
+	// 트리거 · 픽업 · 히트박스처럼 Pawn 을 막지 않는 것은 건너뛴다 (투사체의 벽 판정 D-24 와 같은 기준).
+	// 시작점이 이미 도형 안인 히트(bStartPenetrating)도 건너뛴다 — ImpactPoint 가 시작점 자체라 그 자리(+55)에 뜬다
+	TArray<FHitResult> GroundHits;
+	World->LineTraceMultiByObjectType(GroundHits, FromLocation + FVector(0.f, 0.f, 50.f),
+		FromLocation - FVector(0.f, 0.f, 5000.f), ObjectParams, QueryParams);
+	for (const FHitResult& GroundHit : GroundHits)   // 가까운 순으로 정렬돼 온다
 	{
+		if (!IsSurfaceHit(GroundHit)) continue;
+
 		SpawnLocation = GroundHit.ImpactPoint + FVector(0.f, 0.f, GroundOffset);
+		break;
 	}
 
 	const FTransform SpawnTransform(FRotator(0.f, Yaw, 0.f), SpawnLocation);
@@ -63,6 +72,13 @@ ADRBellBoyHatPickup* ADRBellBoyHatPickup::SpawnOnGround(UWorld* World, TSubclass
 	Pickup->InitThrower(InThrower, InThrowerASC);   // 던진 벨보이 본인이면 2회 (D-23)
 	Pickup->FinishSpawning(SpawnTransform);
 	return Pickup;
+}
+
+bool ADRBellBoyHatPickup::IsSurfaceHit(const FHitResult& Hit)
+{
+	// 투사체의 벽 판정(D-24)과 같은 기준 — 폰이 설 수 있는 표면만. 시작부터 겹친 히트는 ImpactPoint 가 시작점 자체라 버린다
+	const UPrimitiveComponent* Comp = Hit.GetComponent();
+	return !Hit.bStartPenetrating && Comp && Comp->GetCollisionResponseToChannel(ECC_Pawn) == ECR_Block;
 }
 
 void ADRBellBoyHatPickup::InitThrower(AActor* InThrower, UAbilitySystemComponent* InThrowerASC)

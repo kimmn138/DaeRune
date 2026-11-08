@@ -54,6 +54,9 @@ private:
 	void HandleEnemyHit(AActor* Target);
 	void DropAsPickup(const FVector& FromLocation);
 
+	// 벽·바닥에 닿았을 때 바닥 모자를 찾기 시작할 자리 — 벽 볼륨 밖(스윕이 처음 닿은 구 중심 / 스폰부터 벽 안이면 던진 벨보이 쪽 벽 앞)
+	FVector GetSurfaceDropLocation(bool bFromSweep, const FHitResult& SweepResult) const;
+
 	// ★Plan5(모자칩)★ ① 아군에게 칩 피해 — 적 피해(SkillDamage 반영)가 아니라 ChipAllyHitDamage 를 기존 피해 경로로 (D-133)
 	void ApplyAllyHitDamage(AActor* Ally);
 

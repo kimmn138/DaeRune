@@ -29,12 +29,20 @@ public:
 	/**
 	 * ★Plan5(가방칩 · 모자칩)★ 바닥 모자를 세우는 유일한 길 — 서버 전용 (Plan5 D-127).
 	 * FromLocation 아래 바닥을 ★오브젝트 타입(WorldStatic/Dynamic)★ 으로 찾아(Plan8 T-17) GroundOffset 만큼 띄운다.
+	 * 바닥 = Pawn 을 막는 첫 표면 — 다른 바닥 모자 · 트리거는 건너뛴다(모자 탑 방지). FromLocation 은 벽 밖이어야 한다
+	 * (벽 안에서 쏘면 그 벽은 건너뛰고 벽 속 아래 바닥에 놓인다).
 	 * Deferred 스폰 사이에 InitThrower 를 불러 칩 규칙(수명 · 2회)을 BeginPlay 전에 정한다 (Plan5 T-142).
 	 * @param IgnoreActor 바닥 트레이스가 무시할 액터(던진 모자 자신 등). 없어도 된다 — 트레이스는 Pawn 을 안 본다
 	 */
 	static ADRBellBoyHatPickup* SpawnOnGround(UWorld* World, TSubclassOf<ADRBellBoyHatPickup> PickupClass,
 		const FVector& FromLocation, float Yaw, AActor* InThrower, UAbilitySystemComponent* InThrowerASC,
 		const AActor* IgnoreActor = nullptr, float GroundOffset = 5.f);
+
+	/**
+	 * 바닥 모자 자리를 정할 때 "표면"으로 칠 히트인가 — Pawn 을 막는 컴포넌트이고 시작부터 겹친 히트가 아니다.
+	 * 오브젝트 타입 쿼리는 채널 응답을 안 봐서 다른 바닥 모자(PickupSphere) · 트리거 · 히트박스에도 맞는다 — 그것들을 거른다
+	 */
+	static bool IsSurfaceHit(const FHitResult& Hit);
 
 	/**
 	 * 스폰 직후(FinishSpawning 전) 부른다. 서버 전용 값이라 복제하지 않는다.

@@ -110,8 +110,39 @@ void ADRBellBoyHatProjectile::OnSphereOverlap(UPrimitiveComponent* OverlappedCom
 	if (OtherComp && OtherComp->GetCollisionResponseToChannel(ECC_Pawn) == ECR_Block)
 	{
 		bResolved = true;
-		DropAsPickup(GetActorLocation());
+		DropAsPickup(GetSurfaceDropLocation(bFromSweep, SweepResult));
 	}
+}
+
+FVector ADRBellBoyHatProjectile::GetSurfaceDropLocation(bool bFromSweep, const FHitResult& SweepResult) const
+{
+	// ★액터 위치가 아니라 표면에 처음 닿은 자리★ (2026-11-09) — 액터 위치는 이번 이동의 끝이라
+	// 한 번 이동(1400uu/s × dt)이 구 반지름(32)보다 길면(서버 ~44fps 미만) 중심이 벽 볼륨 안에 있다 → 바닥 트레이스가 벽 안에서 시작한다
+	if (bFromSweep && !SweepResult.bStartPenetrating)
+	{
+		return SweepResult.Location;   // 스윕이 처음 닿은 순간의 구 중심 — 표면에서 반지름만큼 앞
+	}
+
+	// 처음부터 벽 안이었다 — 벽에 붙어 던지면 릴리스 소켓(손)이 벽 속이라 스폰하자마자 겹친다(스윕이 아니라 접촉점이 없다).
+	// 던진 벨보이(캡슐 중심은 늘 벽 밖)에서 모자까지 같은 구로 쓸어 처음 닿는 표면 앞을 쓴다 — 바닥 모자는 발치에 떨어진다
+	const FVector HatLocation = GetActorLocation();
+	const AActor* Thrower = GetThrower();
+	if (!Thrower) return HatLocation;   // 던진 벨보이가 나갔다
+
+	FCollisionObjectQueryParams ObjectParams;
+	ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
+	ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(BellBoyHatWallContact), false, this);
+	QueryParams.AddIgnoredActor(Thrower);
+
+	TArray<FHitResult> Hits;
+	GetWorld()->SweepMultiByObjectType(Hits, Thrower->GetActorLocation(), HatLocation, FQuat::Identity, ObjectParams,
+		FCollisionShape::MakeSphere(Sphere->GetScaledSphereRadius()), QueryParams);
+	for (const FHitResult& Hit : Hits)
+	{
+		if (ADRBellBoyHatPickup::IsSurfaceHit(Hit)) return Hit.Location;   // 표면에 닿는 순간의 구 중심 — 벽 밖
+	}
+	return HatLocation;   // 사이에 표면이 없다 = 모자가 벽 안이 아니다
 }
 
 void ADRBellBoyHatProjectile::HandleEnemyHit(AActor* Target)
