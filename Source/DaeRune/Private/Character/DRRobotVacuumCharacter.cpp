@@ -21,11 +21,19 @@
 #include "Player/DRInteractionComponent.h"
 #include "Sound/SoundBase.h"
 #include "AbilitySystem/DRAbilitySystemLibrary.h"
+#include "Character/DREnemy.h"
 #include "Game/DRProgressionConfig.h"
 #include "DaeRune/DRLogChannels.h"
 #include "EngineUtils.h"
 
 #define LOCTEXT_NAMESPACE "DRInteraction"
+
+namespace
+{
+	// 지속 돌진 관통 판정 스윕의 최대 길이. 한 틱에 이보다 멀리 옮겨졌으면(텔레포트 게이트 등) 지금 자리만 본다 —
+	// 벽 너머 적까지 쓸지 않게. 지속 돌진 ≈ 1100uu/s 라 0.3초 넘게 끊긴 틱만 걸린다
+	constexpr float PassThroughMaxSweepDistance = 400.f;
+}
 
 ADRRobotVacuumCharacter::ADRRobotVacuumCharacter()
 {
@@ -96,6 +104,7 @@ void ADRRobotVacuumCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 	// ★Plan5(돌진칩)★ 돌진 중 파괴 · 레벨 전환 — 아군 캡슐에 내 이동 무시 항목이 남지 않게 (T-125)
 	ApplyAllyPassThrough(false);
+	ClearEnemyPassThrough();   // 지속 돌진 적 관통도 같은 이유
 
 	StopAllLoopSounds();
 
@@ -154,6 +163,9 @@ void ADRRobotVacuumCharacter::Tick(float DeltaTime)
 	{
 		AddMovementInput(GetActorForwardVector(), 1.f);
 	}
+
+	// 지속 돌진은 적을 막지 않고 관통한다 (이동 무시 = 모든 머신, 관통 피해 판정 = 서버)
+	UpdateEnemyPassThrough();
 
 	// 라이더 좌석 추적: 본 소켓의 '위치'만 매 프레임 따라간다 (회전은 라이더 컨트롤러 소유).
 	// 라이더가 본이 아닌 캡슐에 attach돼 있어 애니메이션 기울기는 전달되지 않고, 높낮이 움직임만 반영된다.
@@ -523,20 +535,12 @@ void ADRRobotVacuumCharacter::OnRep_DashPassThroughAllies()
 
 void ADRRobotVacuumCharacter::ApplyAllyPassThrough(bool bEnable)
 {
-	UCapsuleComponent* MyCapsule = GetCapsuleComponent();
-	if (!MyCapsule) return;
+	if (!GetCapsuleComponent()) return;
 
 	// 먼저 이 머신에서 넣었던 것을 전부 되돌린다 (켜기 · 끄기 공통 — 중복 등록 방지)
 	for (const TWeakObjectPtr<ADRCharacter>& Weak : PassThroughAllies)
 	{
-		if (ADRCharacter* Ally = Weak.Get())
-		{
-			MyCapsule->IgnoreActorWhenMoving(Ally, false);
-			if (UCapsuleComponent* AllyCapsule = Ally->GetCapsuleComponent())
-			{
-				AllyCapsule->IgnoreActorWhenMoving(this, false);
-			}
-		}
+		SetMutualMoveIgnore(Weak.Get(), false);
 	}
 	PassThroughAllies.Reset();
 
@@ -549,12 +553,107 @@ void ADRRobotVacuumCharacter::ApplyAllyPassThrough(bool bEnable)
 		ADRCharacter* Ally = *It;
 		if (Ally == this || UDRAbilitySystemLibrary::IsNotFriend(this, Ally)) continue;   // 플레이어끼리만 (D-116)
 
-		MyCapsule->IgnoreActorWhenMoving(Ally, true);
-		if (UCapsuleComponent* AllyCapsule = Ally->GetCapsuleComponent())
-		{
-			AllyCapsule->IgnoreActorWhenMoving(this, true);
-		}
+		SetMutualMoveIgnore(Ally, true);
 		PassThroughAllies.Add(Ally);
+	}
+}
+
+void ADRRobotVacuumCharacter::SetMutualMoveIgnore(ACharacter* Other, bool bIgnore)
+{
+	if (!Other) return;
+
+	if (UCapsuleComponent* MyCapsule = GetCapsuleComponent())
+	{
+		MyCapsule->IgnoreActorWhenMoving(Other, bIgnore);
+	}
+	if (UCapsuleComponent* OtherCapsule = Other->GetCapsuleComponent())
+	{
+		OtherCapsule->IgnoreActorWhenMoving(this, bIgnore);
+	}
+}
+
+// ========== 지속 돌진 적 관통 ==========
+
+void ADRRobotVacuumCharacter::UpdateEnemyPassThrough()
+{
+	// 지속 돌진이 아니면 넣었던 것을 되돌린다 — bSustainedDash 는 복제되므로 모든 머신이 따라 끈다
+	if (!bSustainedDash || bDead)
+	{
+		ClearEnemyPassThrough();
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	if (!World || !Capsule) return;
+
+	// ① 이동: 아군 통과와 같은 "서로 이동 무시". 서버와 소유 클라가 같아야 위치 보정이 없으므로 모든 머신에서 하고,
+	//    돌진 중에도 웨이브가 계속 나오므로 매 틱 새 적까지 넣는다
+	for (TActorIterator<ADREnemy> It(World); It; ++It)
+	{
+		AddEnemyPassThrough(*It);
+	}
+
+	// ② 피해 판정 (서버): 지난 틱 위치 → 지금 위치를 캡슐로 쓸어 그 사이 지나간 적을 모두 찾는다.
+	//    겹침만 보면 프레임이 끊기거나 원격 클라 이동이 몰려 올 때 적을 건너뛸 수 있다
+	if (!HasAuthority() || !bDashCollisionArmed) return;
+
+	const FVector End = Capsule->GetComponentLocation();
+	FVector Start = bHasPassThroughSweepStart ? PassThroughSweepStart : End;
+	if (FVector::DistSquared(Start, End) > FMath::Square(PassThroughMaxSweepDistance))
+	{
+		Start = End;
+	}
+	PassThroughSweepStart = End;
+	bHasPassThroughSweepStart = true;
+
+	// 폰 이동을 막는 것(= 예전에 돌진을 멈추던 적 캡슐)만 찾되, 첫 적에서 멈추지 않게 전부 겹침으로 받는다.
+	// 길이 0 스윕도 시작 자리의 겹침을 돌려준다
+	TArray<FHitResult> Hits;
+	const FCollisionQueryParams Params(SCENE_QUERY_STAT(VacuumDashPassThrough), false, this);
+	World->SweepMultiByChannel(Hits, Start, End, Capsule->GetComponentQuat(), Capsule->GetCollisionObjectType(),
+		Capsule->GetCollisionShape(), Params, FCollisionResponseParams(ECR_Overlap));
+
+	for (const FHitResult& Hit : Hits)
+	{
+		if (!bSustainedDash || !bDashCollisionArmed) break;   // 앞선 통지 중에 돌진이 끝났다 (사망 등)
+
+		if (ADREnemy* Enemy = Cast<ADREnemy>(Hit.GetActor()))
+		{
+			NotifyDashPassThrough(Enemy, Hit);
+		}
+	}
+}
+
+void ADRRobotVacuumCharacter::AddEnemyPassThrough(ADREnemy* Enemy)
+{
+	bool bAlreadyIgnored = false;
+	PassThroughEnemies.Add(Enemy, &bAlreadyIgnored);
+	if (!bAlreadyIgnored)
+	{
+		SetMutualMoveIgnore(Enemy, true);
+	}
+}
+
+void ADRRobotVacuumCharacter::ClearEnemyPassThrough()
+{
+	for (const TWeakObjectPtr<ADREnemy>& Weak : PassThroughEnemies)
+	{
+		// 파괴 대기 중인 적도 되돌린다 — 내 이동 무시 목록에 남지 않게
+		SetMutualMoveIgnore(Weak.Get(/*bEvenIfPendingKill*/ true), false);
+	}
+	PassThroughEnemies.Reset();
+	DashPassedEnemies.Reset();
+	bHasPassThroughSweepStart = false;
+}
+
+void ADRRobotVacuumCharacter::NotifyDashPassThrough(ADREnemy* Enemy, const FHitResult& Hit)
+{
+	bool bAlreadyPassed = false;
+	DashPassedEnemies.Add(Enemy, &bAlreadyPassed);
+	if (!bAlreadyPassed)
+	{
+		OnDashPassThrough.Broadcast(Enemy, Hit);
 	}
 }
 
@@ -587,6 +686,18 @@ void ADRRobotVacuumCharacter::OnCapsuleHit(UPrimitiveComponent* HitComponent, AA
 	// ★Plan5(돌진칩)★ ② 아군 통과 중이면 아군 충돌은 무시 — 무시 목록에 없던 아군(돌진 중 부활 · 입장)의 안전망.
 	//   피해 · 돌진 종료가 절대 없다 (물리적으로는 막힐 수 있다) (D-115)
 	if (bDashPassThroughAllies && !UDRAbilitySystemLibrary::IsNotFriend(this, OtherActor)) return;
+
+	// 지속 돌진은 적을 관통한다 — 이동 무시에 아직 없던 적(이번 틱에 나타난 적 · 그 적이 나에게 부딪힘)의 안전망.
+	// 막히는 건 이번 한 번뿐이고, 피해는 관통과 같이 적마다 한 번 · 돌진은 멈추지 않는다
+	if (bSustainedDash)
+	{
+		if (ADREnemy* Enemy = Cast<ADREnemy>(OtherActor))
+		{
+			AddEnemyPassThrough(Enemy);
+			NotifyDashPassThrough(Enemy, Hit);
+			return;
+		}
+	}
 
 	// Pawn(적/타 플레이어) 또는 수직면(벽/지형지물 — 바닥 착지는 노말 Z가 커서 제외)
 	const bool bHitPawn = Cast<APawn>(OtherActor) != nullptr;

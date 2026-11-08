@@ -7,6 +7,7 @@
 #include "Interaction/DRInteractable.h"
 #include "DRRobotVacuumCharacter.generated.h"
 
+class ADREnemy;
 class UAnimMontage;
 class USphereComponent;
 class UStaticMeshComponent;
@@ -93,7 +94,11 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Dash")
 	FOnDashImpact OnDashImpact;
 
-	// 지속 돌진 중 (RepNotify: 루프 사운드/VFX — Phase F)
+	// 지속 돌진이 적을 관통할 때 GA에 통지 (서버에서만, 한 번 돌진에 적마다 한 번) — 돌진은 멈추지 않는다
+	UPROPERTY(BlueprintAssignable, Category = "Dash")
+	FOnDashImpact OnDashPassThrough;
+
+	// 지속 돌진 중 — 적을 막지 않고 관통한다(UpdateEnemyPassThrough) (RepNotify: 루프 사운드/VFX — Phase F)
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Dash")
 	bool bSustainedDash = false;
 
@@ -305,6 +310,30 @@ private:
 
 	// ★Plan5(돌진칩)★ 내 캡슐 ↔ 아군 캡슐을 서로 IgnoreActorWhenMoving (켜기 · 끄기 공통, 이 머신에서만)
 	void ApplyAllyPassThrough(bool bEnable);
+
+	// 내 캡슐 ↔ Other 캡슐 서로 이동 무시 켜기/끄기 (이 머신에서만 — 이동 무시는 복제되지 않는다)
+	void SetMutualMoveIgnore(ACharacter* Other, bool bIgnore);
+
+	// ---------- 지속 돌진 적 관통 ----------
+
+	// 이 머신에서 "서로 이동 무시"로 넣은 적 — 지속 돌진이 끝나면 이것만 되돌린다
+	TSet<TWeakObjectPtr<ADREnemy>> PassThroughEnemies;
+
+	// 서버: 이번 지속 돌진에서 이미 관통 피해를 통지한 적 (적마다 한 번)
+	TSet<TWeakObjectPtr<ADREnemy>> DashPassedEnemies;
+
+	// 서버: 관통 판정 스윕의 시작점 = 지난 틱 캡슐 위치
+	FVector PassThroughSweepStart = FVector::ZeroVector;
+	bool bHasPassThroughSweepStart = false;
+
+	// Tick (모든 머신): 지속 돌진이면 새로 나타난 적까지 서로 이동 무시에 넣고, 끝나면 전부 되돌린다.
+	// 서버는 지난 틱 위치 → 지금 위치를 쓸어 지나간 적을 OnDashPassThrough 로 알린다
+	void UpdateEnemyPassThrough();
+	void AddEnemyPassThrough(ADREnemy* Enemy);
+	void ClearEnemyPassThrough();
+
+	// 서버: 이번 지속 돌진에서 처음 지나간 적이면 OnDashPassThrough 를 알린다
+	void NotifyDashPassThrough(ADREnemy* Enemy, const FHitResult& Hit);
 
 	// ---------- 사운드 ----------
 

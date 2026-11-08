@@ -26,10 +26,11 @@ void UDRVacuumDash::StartChargingGauge()
 		return;
 	}
 
-	// 충돌 델리게이트 수신 준비 (해제는 EndAbility)
+	// 충돌 · 적 관통 델리게이트 수신 준비 (해제는 EndAbility)
 	if (!bImpactBound)
 	{
 		Vacuum->OnDashImpact.AddDynamic(this, &UDRVacuumDash::HandleDashImpact);
+		Vacuum->OnDashPassThrough.AddDynamic(this, &UDRVacuumDash::HandleDashPassThrough);
 		bImpactBound = true;
 	}
 
@@ -122,7 +123,8 @@ void UDRVacuumDash::ReleaseGauge()
 
 	if (Gauge >= MaxGauge)
 	{
-		// 지속 돌진: 자동 전진(캐릭터 Tick) + 감쇠 없음. 종료는 충돌/브레이크/강제취소.
+		// 지속 돌진: 자동 전진(캐릭터 Tick) + 감쇠 없음. 종료는 지형 · 아군 충돌/브레이크/강제취소 —
+		// 적은 관통하며 피해만 준다 (캐릭터 UpdateEnemyPassThrough → HandleDashPassThrough).
 		// State.RobotVacuum.SustainedDash 태그도 캐릭터가 함께 부여 (공기탄 반동 예외 판정용)
 		Vacuum->SetSustainedDash(true);
 	}
@@ -200,28 +202,14 @@ void UDRVacuumDash::HandleDashImpact(AActor* HitActor, const FHitResult& Hit)
 	if (!Avatar || !Avatar->HasAuthority()) return;
 	if (!bDashing) return;
 
-	// 판정 시점 게이지 저장 (FinishDash가 0으로 리셋하기 전)
-	const int32 G = Gauge;
-
 	ADRRobotVacuumCharacter* Vacuum = GetVacuum();
 	const bool bWasSustained = Vacuum && Vacuum->bSustainedDash;
 
 	// ★Plan5(돌진칩)★ "지형" = Pawn 이 아닌 충돌 — OnCapsuleHit 의 분류와 같다 (사이트도 여기 든다 — D-112 · T-128)
 	const bool bHitPawn = Cast<APawn>(HitActor) != nullptr;
 
-	// 대상 데미지: 적 = G×10(칩 반영), 타 플레이어 = G×5. 지형(ASC 없음)은 대상 데미지 없음.
-	if (IsValid(HitActor) && UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor))
-	{
-		const bool bEnemy = UDRAbilitySystemLibrary::IsNotFriend(Avatar, HitActor);
-		// ★Plan5(돌진칩)★ ①② 적 충돌 피해만 SkillDamage 를 탄다 — 아군 충돌(칸당 5)은 그대로 (D-113 · T-127)
-		const float DamagePerGauge = bEnemy
-			? GetUpgradedFloat(EDRUpgradeStat::SkillDamage, EnemyDamagePerGauge)
-			: PlayerDamagePerGauge;
-		FDamageEffectParams Params = MakeDamageEffectParamsFromClassDefaults(HitActor);
-		Params.BaseDamage = G * DamagePerGauge;
-		// ApplyDamageEffect 직접 호출 — 아군 필터에 걸리지 않음 (Plan3 §8.2)
-		UDRAbilitySystemLibrary::ApplyDamageEffect(Params);
-	}
+	// 게이지는 FinishDash 가 0 으로 돌리기 전에 판정한다
+	ApplyDashHitDamage(HitActor);
 
 	// ★Plan5(돌진칩)★ 자해 = 지속 돌진 + 지형 충돌만 (사용자 확정 — 적 · 아군 충돌은 자해 없음). 기본 50, 칩① ×2 (D-112 · D-114).
 	//   자해량은 SetByCaller(Data.SelfDamage) — GE 에 값을 박지 않는다 (T-120)
@@ -234,6 +222,32 @@ void UDRVacuumDash::HandleDashImpact(AActor* HitActor, const FHitResult& Hit)
 	}
 
 	FinishDash(true, HitActor);
+}
+
+void UDRVacuumDash::HandleDashPassThrough(AActor* HitActor, const FHitResult& Hit)
+{
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+	if (!Avatar || !Avatar->HasAuthority()) return;
+	if (!bDashing) return;
+
+	// 지속 돌진이 적을 관통했다 — 충돌했을 때와 같은 피해만 준다. 자해 · 충돌 연출 · 돌진 종료는 없다
+	ApplyDashHitDamage(HitActor);
+}
+
+void UDRVacuumDash::ApplyDashHitDamage(AActor* HitActor)
+{
+	// 대상 데미지: 적 = G×10(칩 반영), 타 플레이어 = G×5. 지형(ASC 없음)은 대상 데미지 없음.
+	if (!IsValid(HitActor) || !UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor)) return;
+
+	const bool bEnemy = UDRAbilitySystemLibrary::IsNotFriend(GetAvatarActorFromActorInfo(), HitActor);
+	// ★Plan5(돌진칩)★ ①② 적 충돌 피해만 SkillDamage 를 탄다 — 아군 충돌(칸당 5)은 그대로 (D-113 · T-127)
+	const float DamagePerGauge = bEnemy
+		? GetUpgradedFloat(EDRUpgradeStat::SkillDamage, EnemyDamagePerGauge)
+		: PlayerDamagePerGauge;
+	FDamageEffectParams Params = MakeDamageEffectParamsFromClassDefaults(HitActor);
+	Params.BaseDamage = Gauge * DamagePerGauge;
+	// ApplyDamageEffect 직접 호출 — 아군 필터에 걸리지 않음 (Plan3 §8.2)
+	UDRAbilitySystemLibrary::ApplyDamageEffect(Params);
 }
 
 void UDRVacuumDash::OnBrakePressed()
@@ -346,6 +360,7 @@ void UDRVacuumDash::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 		if (bImpactBound)
 		{
 			Vacuum->OnDashImpact.RemoveDynamic(this, &UDRVacuumDash::HandleDashImpact);
+			Vacuum->OnDashPassThrough.RemoveDynamic(this, &UDRVacuumDash::HandleDashPassThrough);
 			bImpactBound = false;
 		}
 	}

@@ -14,11 +14,13 @@ class UAnimMontage;
  * 로봇 청소기 2번 스킬: 돌진 (RMB, Plan3 §8)
  * 역할 분담 (Armadillo 패턴 이식):
  * - GA(이 클래스): 게이지 충전 타이머, 물 소모, 버프 GE 적용/감쇠, 충돌 델리게이트 수신 후 데미지/자해, 지속 돌진 시작/종료 명령
- * - 캐릭터(ADRRobotVacuumCharacter): 충돌 감지(OnDashImpact 브로드캐스트), 지속 돌진 자동 전진 Tick, bSustainedDash 복제/연출
+ * - 캐릭터(ADRRobotVacuumCharacter): 충돌 감지(OnDashImpact 브로드캐스트), 지속 돌진 적 관통(OnDashPassThrough),
+ *   지속 돌진 자동 전진 Tick, bSustainedDash 복제/연출
  *
  * 게이지: 0.5초당 1칸 (물 20 소모, 부족 시 충전 일시 정지). 해소 시:
  * - 1~4칸: 스택당 이속 +20% 버프, 1초당 1칸 감쇠, 0이 되면 종료
- * - 5칸(최대): 지속 돌진 — 자동 전진 + 감쇠 없음, 충돌 또는 S 브레이크(무피해)로 종료.
+ * - 5칸(최대): 지속 돌진 — 자동 전진 + 감쇠 없음, 지형 · 아군 충돌 또는 S 브레이크(무피해)로 종료.
+ *   적은 멈추지 않고 관통하며 충돌 때와 같은 피해를 적마다 한 번 준다.
  *   ★Plan5(돌진칩)★ 자해(50)는 지형(Pawn 이 아닌 것) 충돌에만 — 적 · 아군 충돌은 자해 없음 (Plan5 D-112)
  */
 UCLASS()
@@ -113,6 +115,13 @@ private:
 	// 캐릭터 OnDashImpact 델리게이트 수신 (서버)
 	UFUNCTION()
 	void HandleDashImpact(AActor* HitActor, const FHitResult& Hit);
+
+	// 캐릭터 OnDashPassThrough 델리게이트 수신 (서버) — 지속 돌진이 적을 관통: 피해만, 돌진은 계속
+	UFUNCTION()
+	void HandleDashPassThrough(AActor* HitActor, const FHitResult& Hit);
+
+	// 충돌 · 관통 공통 대상 피해 (적 = 현재 칸 × EnemyDamagePerGauge(칩 반영), 타 플레이어 = 칸 × PlayerDamagePerGauge)
+	void ApplyDashHitDamage(AActor* HitActor);
 
 	void TickCharge();
 	void TickDecay();
