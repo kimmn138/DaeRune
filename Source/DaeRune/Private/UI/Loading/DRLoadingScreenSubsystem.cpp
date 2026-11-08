@@ -9,6 +9,7 @@
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/UserInterfaceSettings.h"
 #include "TimerManager.h"
 #include "Game/DRStageGameState.h"
 
@@ -108,6 +109,19 @@ void UDRLoadingScreenSubsystem::SetupMoviePlayerBridge(TSubclassOf<UDRLoadingScr
 	Attr.bAutoCompleteWhenLoadingCompletes = true;
 	Attr.MinimumLoadingScreenDisplayTime = MinimumFreezeScreenTime;
 	Attr.WidgetLoadingScreen = FreezeWidget->TakeWidget();
+
+	// MoviePlayer 는 UI 배율을 직접 정하지 않으면 1.0 으로 그린다 — 게임 뷰포트는 DPI 커브(짧은 변 1440 → 1.33)를 쓰므로
+	// 앞뒤의 등장/퇴장 위젯보다 작게 보였다가 다시 커진다. 같은 커브 값을 넘긴다(OS DPI 배율은 엔진이 이때 끈다)
+	if (UGameViewportClient* ViewportClient = GetGameInstance() ? GetGameInstance()->GetGameViewportClient() : nullptr)
+	{
+		FVector2D ViewportSize;
+		ViewportClient->GetViewportSize(ViewportSize);
+		if (ViewportSize.X > 0.0 && ViewportSize.Y > 0.0)
+		{
+			const FIntPoint ViewportPixels(FMath::TruncToInt32(ViewportSize.X), FMath::TruncToInt32(ViewportSize.Y));
+			GetMoviePlayer()->SetViewportDPIScale(GetDefault<UUserInterfaceSettings>()->GetDPIScaleBasedOnSize(ViewportPixels));
+		}
+	}
 
 	GetMoviePlayer()->SetupLoadingScreen(Attr);
 }
