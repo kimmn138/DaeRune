@@ -66,6 +66,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	void TransitionToNextPhase();
 
+	// 현재 페이즈를 클리어로 끝낸다: 목표 완료 연출 → OnPhaseEnd → 다음 페이즈 (ValidatePhaseCompletion · 페이즈 스킵 치트)
+	UFUNCTION(BlueprintCallable, Category = "Phase")
+	void EndCurrentPhase();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void OnTeamWipedOut() override;
@@ -118,9 +122,6 @@ protected:
 
 	UFUNCTION(BlueprintCallable, Category = "Phase")
 	void StartPhase(int32 PhaseIndex);
-
-	UFUNCTION(BlueprintCallable, Category = "Phase")
-	void EndCurrentPhase();
 
 private:
 	// ===== 스테이지 시작 =====

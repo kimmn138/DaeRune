@@ -2127,7 +2127,9 @@ void ADRPlayerController::ServerCheatSkipToNextPhase_Implementation()
 		return;
 	}
 
-	StageGameMode->TransitionToNextPhase();
+	// 정상 클리어와 같은 경로 — 목표 완료 연출(Multicast_ObjectiveCompleted)을 보내야 목표 UI 가 대기 중인 새 목표로 바뀐다.
+	// (TransitionToNextPhase 를 바로 부르면 연출이 없어 이전 목표 제목이 남았다. 첫 페이즈 시작 전에는 아무것도 하지 않는다)
+	StageGameMode->EndCurrentPhase();
 #endif
 }
 
