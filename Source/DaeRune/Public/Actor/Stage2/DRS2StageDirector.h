@@ -146,11 +146,12 @@ public:
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "S2|방6")
 	TArray<TObjectPtr<ADRS2TrainObstacle>> Obstacles;
 
-	// 전방 차단 (Obstacles 와 동일 인덱스). 장애물이 부서지므로 필요하다.
+	// 전방 차단 (Obstacles 와 동일 인덱스, 각 돌 바로 뒤). 장애물이 부서지므로 필요하다.
+	// 방6 페이즈 내내 켜져 있어 걸어서는 돌 너머로 못 간다 — 열차 탑승자만 지난다.
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "S2|방6")
 	TArray<TObjectPtr<ADRS2Barrier>> ForwardBarriers;
 
-	// 후방 차단 (Obstacles 와 동일 인덱스)
+	// 후방 차단 (Obstacles 와 동일 인덱스). [0] 은 출발 지점 앞을 막는 벽을 겸해 페이즈 시작부터 켜진다.
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "S2|방6")
 	TArray<TObjectPtr<ADRS2Barrier>> RearBarriers;
 

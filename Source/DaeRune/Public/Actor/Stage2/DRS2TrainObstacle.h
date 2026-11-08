@@ -66,7 +66,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Obstacle")
 	TObjectPtr<USceneComponent> SceneRoot;
 
-	// 보스가 부수는 선로 차단물
+	// 보스가 부수는 선로 차단물.
+	// ★메시 에셋의 Collision Complexity 가 "Use Complex Collision As Simple" 이어야 플레이어를 막는다 —
+	//   맵 통짜 익스포트 메시는 단순 충돌이 0개라 기본값이면 그냥 통과된다 (Cube_222/163/207 은 설정됨).
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Obstacle")
 	TObjectPtr<UStaticMeshComponent> ObstacleMesh;
 

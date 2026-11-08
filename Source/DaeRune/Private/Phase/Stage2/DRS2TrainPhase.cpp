@@ -41,6 +41,18 @@ void UDRS2TrainPhase::OnPhaseStart()
 	// D5 하강 개방 (멱등)
 	SetBlockerBlocked(Director->Blocker_Room5ToRoom6, false);
 
+	// ★열차를 타야만 앞으로 갈 수 있게 선로를 막는다 — 출발 지점 앞(구간 1 후방 배리어)과 각 돌 뒤(전방 배리어).
+	//   걸어서 선로를 따라가면 보스전을 건너뛰고 종점까지 간다. 전방 배리어는 보스가 도망친 뒤에도 끄지 않는다.
+	//   배리어는 Pawn 만 막고, 탑승자는 칸에 attach(이동 모드 None)되어 스윕 없이 따라가므로 켜진 배리어를 그대로 지난다.
+	if (Director->RearBarriers.IsValidIndex(0) && Director->RearBarriers[0])
+	{
+		Director->RearBarriers[0]->SetBarrierEnabled(true);
+	}
+	for (const TObjectPtr<ADRS2Barrier>& Barrier : Director->ForwardBarriers)
+	{
+		if (Barrier) Barrier->SetBarrierEnabled(true);
+	}
+
 	// 구간별 해제 래치 초기화
 	bSegmentResolved.Init(false, Director->Obstacles.Num());
 	NextObstacleIndex = 0;
@@ -184,6 +196,7 @@ void UDRS2TrainPhase::HandleTrainStopped(int32 ObstacleIndex)
 	Obstacle->BreakByBoss();
 
 	// 장애물이 부서지므로 전방·후방 모두 배리어로 전투 구간을 한정한다 (§14.6.5)
+	// 전방은 페이즈 시작부터 켜져 있다 (멱등 — 배선 누락만 여기서 잡는다)
 	if (Director->ForwardBarriers.IsValidIndex(ObstacleIndex) && Director->ForwardBarriers[ObstacleIndex])
 	{
 		Director->ForwardBarriers[ObstacleIndex]->SetBarrierEnabled(true);
@@ -313,13 +326,10 @@ void UDRS2TrainPhase::ResolveSegment(int32 ObstacleIndex)
 	// ② 도망 = 비활성 보관 (Destroy 금지 - 체력을 유지해야 한다)
 	StashBoss();
 
-	// ③ 전방 배리어 해제 (열차가 통과할 수 있게)
-	if (Director->ForwardBarriers.IsValidIndex(ObstacleIndex) && Director->ForwardBarriers[ObstacleIndex])
-	{
-		Director->ForwardBarriers[ObstacleIndex]->SetBarrierEnabled(false);
-	}
+	// ★전방 배리어는 끄지 않는다 — 부서진 돌 너머로 걸어가지 못하게 막는 벽이다.
+	//   열차(칸)는 Pawn 이 아니고 탑승자는 attach 되어 있어 켜진 채로 지나간다 (OnPhaseStart 참조).
 
-	// ④ 재탑승 목표. 전원 재탑승 시 HandleBoardingChanged 경로로 재출발한다.
+	// ③ 재탑승 목표. 전원 재탑승 시 HandleBoardingChanged 경로로 재출발한다.
 	if (Director->Train)
 	{
 		Director->Train->SetWaitingForBoarding();
