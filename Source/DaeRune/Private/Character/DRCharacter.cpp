@@ -816,6 +816,13 @@ void ADRCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		MountedOn->DismountRider(false);
 	}
 
+	// 접속 종료로 폰이 파괴되면 들고 있던 부품을 그 자리에 내려놓는다 (사망은 Die 가 이미 내려놓았다).
+	// 안 그러면 부품이 "들린 채 · 숨김" 상태로 남아 아무도 줍지 못한다 (스테이지2 방4 예외 B 가 이 부품을 문 앞으로 옮긴다)
+	if (HasAuthority() && EndPlayReason == EEndPlayReason::Destroyed)
+	{
+		ForceDropCarriedPart();
+	}
+
 	StopWaterPumpThirdPersonBeam();
 
 	Super::EndPlay(EndPlayReason);

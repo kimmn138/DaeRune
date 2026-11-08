@@ -373,6 +373,10 @@ void ADRStageGameMode::NotifyPhasePlayerDied(APlayerState* DeadPlayerState)
 
 void ADRStageGameMode::NotifyPhasePlayerLeft(APlayerState* LeftPlayerState)
 {
+	// PIE 종료 · 서버 종료로 월드를 정리할 때도 남은 컨트롤러마다 Logout 이 불린다 — 그건 이탈이 아니다
+	// (스테이지2 방4 재시도가 정리 중에 돌아 "부품을 되돌리지 못했다" 오류를 찍었다)
+	if (GetWorld()->bIsTearingDown) return;
+
 	if (CurrentPhase)
 	{
 		CurrentPhase->NotifyPlayerLeft(LeftPlayerState);

@@ -99,6 +99,22 @@ bool UDRS2DefensePhase::IsPartPresentInRoom3(ADRS2StageDirector* Director) const
 	return false;
 }
 
+ADRCleanserPart* UDRS2DefensePhase::FindUncarriedPart() const
+{
+	UWorld* World = GetPhaseWorld();
+	if (!World) return nullptr;
+
+	for (TActorIterator<ADRCleanserPart> It(World); It; ++It)
+	{
+		if (IsValid(*It) && !It->IsCarriedNow())
+		{
+			return *It;
+		}
+	}
+
+	return nullptr;
+}
+
 void UDRS2DefensePhase::OnRoomAllInside()
 {
 	if (bRoomStarted) return;
@@ -168,7 +184,7 @@ void UDRS2DefensePhase::HandleRoom4Entered(ADRCharacter* Who)
 	ADRS2StageDirector* Director = GetDirector();
 	if (!Director) return;
 
-	Room4Player = Who;
+	Room4PlayerState = Who ? Who->GetPlayerState() : nullptr;
 
 	// 1명만 들어간다. 게이트는 bDeactivateOnUse 로 이미 잠겼지만 명시적으로 한 번 더 보장한다.
 	SetGateActive(Director->Gate_Room3ToRoom4, false);
@@ -370,11 +386,18 @@ void UDRS2DefensePhase::PrepareRoom4Retry(ADRS2StageDirector* Director, bool bEj
 
 	if (!bEjectPartInsideRoom4)
 	{
-		// 접속 종료(B): 방4 안에는 아무도 없으므로 부품을 방3 쪽 문 앞으로 옮긴다
-		if (EjectedPart && Director->Room4EntranceDropPoint)
+		// 접속 종료(B): 방4 안에는 아무도 없으므로 부품을 방3 쪽 문 앞으로 옮긴다.
+		// 설치 전에 나갔으면 설치대에서 나온 부품이 없다 — 들고 있던 부품은 나간 자리(방4)에 떨어져 있다 (ADRCharacter::EndPlay)
+		ADRCleanserPart* PartToReturn = EjectedPart ? EjectedPart : FindUncarriedPart();
+		if (PartToReturn && Director->Room4EntranceDropPoint)
 		{
-			EjectedPart->SetActorLocation(
+			PartToReturn->SetActorLocation(
 				Director->Room4EntranceDropPoint->GetActorLocation(), false, nullptr, ETeleportType::TeleportPhysics);
+		}
+		else
+		{
+			UE_LOG(LogDR, Error, TEXT("[S2P3] 예외 B - 부품을 방3 문 앞으로 되돌리지 못했습니다 (부품 %s · Room4EntranceDropPoint %s)."),
+				PartToReturn ? TEXT("있음") : TEXT("없음"), Director->Room4EntranceDropPoint ? TEXT("있음") : TEXT("없음"));
 		}
 	}
 
@@ -388,7 +411,7 @@ void UDRS2DefensePhase::PrepareRoom4Retry(ADRS2StageDirector* Director, bool bEj
 		Gate->SetGuideHighlight(true);
 	}
 
-	Room4Player = nullptr;
+	Room4PlayerState = nullptr;
 
 	SetupPhaseObjectiveByRow(TEXT("S2P3_Enter4"));
 }
@@ -396,10 +419,10 @@ void UDRS2DefensePhase::PrepareRoom4Retry(ADRS2StageDirector* Director, bool bEj
 void UDRS2DefensePhase::NotifyPlayerDied(APlayerState* DeadPlayerState)
 {
 	if (!bRoomStarted || bMoleGameCleared) return;
-	if (!Room4Player.IsValid() || !DeadPlayerState) return;
+	if (!DeadPlayerState) return;
 
 	// 방4에 들어간 플레이어가 죽은 경우에만 처리한다
-	if (Room4Player->GetPlayerState() != DeadPlayerState) return;
+	if (Room4PlayerState.Get() != DeadPlayerState) return;
 
 	ADRS2StageDirector* Director = GetDirector();
 	if (!Director) return;
@@ -414,9 +437,10 @@ void UDRS2DefensePhase::NotifyPlayerDied(APlayerState* DeadPlayerState)
 void UDRS2DefensePhase::NotifyPlayerLeft(APlayerState* LeftPlayerState)
 {
 	if (!bRoomStarted || bMoleGameCleared) return;
-	if (!Room4Player.IsValid() || !LeftPlayerState) return;
+	if (!LeftPlayerState) return;
 
-	if (Room4Player->GetPlayerState() != LeftPlayerState) return;
+	// 이 시점에 나간 사람의 폰은 이미 파괴됐다 — PlayerState 로 비교한다
+	if (Room4PlayerState.Get() != LeftPlayerState) return;
 
 	ADRS2StageDirector* Director = GetDirector();
 	if (!Director) return;

@@ -10,6 +10,7 @@ class ADRCharacter;
 class ADRCleanserPart;
 class ADRCleanserSite;
 class ADRS2StageDirector;
+class APlayerState;
 
 /**
  * 스테이지2 페이즈 2 - 방3 무한 방어 + 방4 두더지 (Plan6 §14.3 · §14.4)
@@ -97,9 +98,11 @@ protected:
 
 	// ========== 상태 ==========
 
-	// 현재 방4에 들어가 있는 플레이어
+	// 현재 방4에 들어가 있는 플레이어.
+	// ★폰이 아니라 PlayerState 로 기억한다 — 접속 종료 때 엔진은 폰을 먼저 파괴하고(PawnLeavingGame) 그 뒤에
+	//   Logout 을 부르므로, 폰 참조로는 NotifyPlayerLeft 에서 나간 사람을 알아볼 수 없다(예외 B 가 돌지 않았다).
 	UPROPERTY()
-	TWeakObjectPtr<ADRCharacter> Room4Player;
+	TWeakObjectPtr<APlayerState> Room4PlayerState;
 
 	UPROPERTY(BlueprintReadOnly, Category = "S2|Room3")
 	bool bRoomStarted = false;
@@ -115,6 +118,9 @@ private:
 
 	// 부품이 방3에 함께 들어왔는지 검증 (부품을 방1에 두고 오는 소프트락 방지)
 	bool IsPartPresentInRoom3(ADRS2StageDirector* Director) const;
+
+	// 아무도 들고 있지 않은 부품 (스테이지2 부품은 1개다)
+	ADRCleanserPart* FindUncarriedPart() const;
 
 	// 월드에 부품이 하나도 없으면 안전망으로 하나 생성한다.
 	// 정상 흐름에서는 방2를 완료해야(부품 소지자 퇴장) 방3에 오므로 부품이 반드시 존재한다.
