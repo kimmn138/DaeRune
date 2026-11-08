@@ -643,18 +643,22 @@ void ADRRobotVacuumCharacter::ClearEnemyPassThrough()
 		SetMutualMoveIgnore(Weak.Get(/*bEvenIfPendingKill*/ true), false);
 	}
 	PassThroughEnemies.Reset();
-	DashPassedEnemies.Reset();
+	DashPassHitTimes.Reset();
 	bHasPassThroughSweepStart = false;
 }
 
 void ADRRobotVacuumCharacter::NotifyDashPassThrough(ADREnemy* Enemy, const FHitResult& Hit)
 {
-	bool bAlreadyPassed = false;
-	DashPassedEnemies.Add(Enemy, &bAlreadyPassed);
-	if (!bAlreadyPassed)
+	// 같은 적은 마지막 관통 피해 뒤 DashPassThroughRehitInterval 이 지나야 다시 맞는다
+	// (관통하는 동안 여러 틱 겹쳐 있으므로 간격이 없으면 매 틱 맞는다)
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (const double* LastHitTime = DashPassHitTimes.Find(Enemy))
 	{
-		OnDashPassThrough.Broadcast(Enemy, Hit);
+		if (Now - *LastHitTime < DashPassThroughRehitInterval) return;
 	}
+
+	DashPassHitTimes.Add(Enemy, Now);
+	OnDashPassThrough.Broadcast(Enemy, Hit);
 }
 
 void ADRRobotVacuumCharacter::MulticastPlayDashImpactSound_Implementation(FVector_NetQuantize Location)
@@ -688,7 +692,7 @@ void ADRRobotVacuumCharacter::OnCapsuleHit(UPrimitiveComponent* HitComponent, AA
 	if (bDashPassThroughAllies && !UDRAbilitySystemLibrary::IsNotFriend(this, OtherActor)) return;
 
 	// 지속 돌진은 적을 관통한다 — 이동 무시에 아직 없던 적(이번 틱에 나타난 적 · 그 적이 나에게 부딪힘)의 안전망.
-	// 막히는 건 이번 한 번뿐이고, 피해는 관통과 같이 적마다 한 번 · 돌진은 멈추지 않는다
+	// 막히는 건 이번 한 번뿐이고, 피해는 관통과 같은 간격 규칙 · 돌진은 멈추지 않는다
 	if (bSustainedDash)
 	{
 		if (ADREnemy* Enemy = Cast<ADREnemy>(OtherActor))

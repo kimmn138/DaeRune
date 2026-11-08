@@ -94,7 +94,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Dash")
 	FOnDashImpact OnDashImpact;
 
-	// 지속 돌진이 적을 관통할 때 GA에 통지 (서버에서만, 한 번 돌진에 적마다 한 번) — 돌진은 멈추지 않는다
+	// 지속 돌진이 적을 관통할 때 GA에 통지 (서버에서만, 같은 적은 DashPassThroughRehitInterval 마다) — 돌진은 멈추지 않는다
 	UPROPERTY(BlueprintAssignable, Category = "Dash")
 	FOnDashImpact OnDashPassThrough;
 
@@ -253,6 +253,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Dash")
 	float DashImpactMinSpeed = 350.f;
 
+	// 지속 돌진 적 관통: 같은 적에게 다시 피해를 주기까지의 시간(초). 한 번 맞은 적은 이 시간이 지난 뒤
+	// 다시 부딪혀야 또 맞는다 — 계속 겹쳐 있으면 이 간격마다 맞는다
+	UPROPERTY(EditDefaultsOnly, Category = "Dash", meta = (ClampMin = "0.0"))
+	float DashPassThroughRehitInterval = 1.f;
+
 	// 돌진 충돌 임팩트 사운드 (SC_VacuumCrash — BP 기본값)
 	UPROPERTY(EditDefaultsOnly, Category = "Dash")
 	TObjectPtr<USoundBase> DashImpactSound;
@@ -319,8 +324,8 @@ private:
 	// 이 머신에서 "서로 이동 무시"로 넣은 적 — 지속 돌진이 끝나면 이것만 되돌린다
 	TSet<TWeakObjectPtr<ADREnemy>> PassThroughEnemies;
 
-	// 서버: 이번 지속 돌진에서 이미 관통 피해를 통지한 적 (적마다 한 번)
-	TSet<TWeakObjectPtr<ADREnemy>> DashPassedEnemies;
+	// 서버: 이번 지속 돌진에서 적마다 마지막으로 관통 피해를 통지한 시각 (월드 시간)
+	TMap<TWeakObjectPtr<ADREnemy>, double> DashPassHitTimes;
 
 	// 서버: 관통 판정 스윕의 시작점 = 지난 틱 캡슐 위치
 	FVector PassThroughSweepStart = FVector::ZeroVector;
@@ -332,7 +337,7 @@ private:
 	void AddEnemyPassThrough(ADREnemy* Enemy);
 	void ClearEnemyPassThrough();
 
-	// 서버: 이번 지속 돌진에서 처음 지나간 적이면 OnDashPassThrough 를 알린다
+	// 서버: 그 적에게 처음이거나 마지막 관통 피해 뒤 DashPassThroughRehitInterval 이 지났으면 OnDashPassThrough 를 알린다
 	void NotifyDashPassThrough(ADREnemy* Enemy, const FHitResult& Hit);
 
 	// ---------- 사운드 ----------
