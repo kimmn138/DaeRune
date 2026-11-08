@@ -94,6 +94,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Enemies", meta = (EditCondition = "bSpawnEnemiesOnBreak"))
 	float EnemyLaunchUpwardRatio = 0.1f;
 
+	// 적을 벽 뒤에 먼저 스폰하고 이 시간(초) 뒤에 벽을 부순다 — 원격 클라에도 적이 먼저 복제돼 있게. 그동안 적 AI 는 멈춰 둔다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Enemies", meta = (EditCondition = "bSpawnEnemiesOnBreak", ClampMin = "0.0", ClampMax = "2.0"))
+	float EnemySpawnLeadTime = 0.3f;
+
 private:
 	UPROPERTY(ReplicatedUsing = OnRep_IsBroken)
 	bool bIsBroken = false;
@@ -102,7 +106,13 @@ private:
 	TArray<TObjectPtr<UStaticMeshComponent>> DoorPieces;
 
 	FTimerHandle CleanupTimerHandle;
-	bool bShouldSpawnEnemies = true;
+
+	// 적을 스폰해 두고 벽이 부서지기를 기다리는 중 (서버) — 그 사이 Break 재호출은 무시
+	bool bBreakPending = false;
+	FTimerHandle BreakDelayTimerHandle;
+
+	// 벽 뒤에서 기다리는 적 — 벽이 부서질 때 AI 를 다시 켜고 BreakDirection 으로 날린다
+	TArray<TWeakObjectPtr<ADREnemy>> WaitingEnemies;
 
 	// 이 머신에서 파편 연출(물리 · 이펙트)을 이미 재생했는지 — 늦게 들어온 클라만 OnRep 에서 숨김 처리
 	bool bBreakEffectPlayed = false;
@@ -118,6 +128,7 @@ private:
 	void ApplyImpulseToPieces();
 	FVector CalculatePieceImpulse(UStaticMeshComponent* Piece, int32 PieceIndex);
 	void SpawnEnemies();
+	void ReleaseWaitingEnemies();
 	void CleanupPieces();
 	void PlayBreakEffects();
 

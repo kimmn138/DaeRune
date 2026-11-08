@@ -3,6 +3,8 @@
 
 #include "Actor/DRBreakableDoor.h"
 #include "Character/DREnemy.h"
+#include "AIController.h"
+#include "BrainComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Kismet/GameplayStatics.h"
@@ -11,6 +13,23 @@
 #include "NavModifierComponent.h"
 #include "NavAreas/NavArea_Null.h"
 #include "NavAreas/NavArea_Default.h"
+
+namespace
+{
+	// 벽 조각 전체 바운드의 중심 — 조각이 없으면 Fallback
+	FVector GetPiecesCenter(const TArray<TObjectPtr<UStaticMeshComponent>>& Pieces, const FVector& Fallback)
+	{
+		FBox Box(ForceInit);
+		for (const UStaticMeshComponent* Piece : Pieces)
+		{
+			if (Piece)
+			{
+				Box += Piece->Bounds.GetBox();
+			}
+		}
+		return Box.IsValid ? Box.GetCenter() : Fallback;
+	}
+}
 
 ADRBreakableDoor::ADRBreakableDoor()
 {
@@ -68,9 +87,28 @@ void ADRBreakableDoor::Break()
 {
 	if (!HasAuthority()) return;
 
-	if (bIsBroken) return;
+	if (bIsBroken || bBreakPending) return;
 
-	bShouldSpawnEnemies = true;
+	// 적을 먼저 벽 뒤에 스폰하고, 클라에 복제될 시간을 둔 뒤 벽을 부순다
+	// (예전에는 벽을 부순 뒤 스폰해서 원격 클라에서는 벽이 먼저 깨지고 적이 나중에 나타났다)
+	if (bSpawnEnemiesOnBreak)
+	{
+		SpawnEnemies();
+
+		if (EnemySpawnLeadTime > 0.0f && WaitingEnemies.Num() > 0)
+		{
+			bBreakPending = true;
+			GetWorld()->GetTimerManager().SetTimer(
+				BreakDelayTimerHandle,
+				this,
+				&ADRBreakableDoor::ExecuteBreak,
+				EnemySpawnLeadTime,
+				false
+			);
+			return;
+		}
+	}
+
 	ExecuteBreak();
 }
 
@@ -78,14 +116,15 @@ void ADRBreakableDoor::BreakWithoutEnemies()
 {
 	if (!HasAuthority()) return;
 
-	if (bIsBroken) return;
+	// 이미 적을 스폰해 둔 문은 예약된 파괴가 그대로 진행된다
+	if (bIsBroken || bBreakPending) return;
 
-	bShouldSpawnEnemies = false;
 	ExecuteBreak();
 }
 
 void ADRBreakableDoor::ExecuteBreak()
 {
+	bBreakPending = false;
 	bIsBroken = true;
 
 	// NavModifier 영역을 지나갈 수 있게 변경
@@ -101,11 +140,8 @@ void ADRBreakableDoor::ExecuteBreak()
 	// 모든 클라이언트에 파괴 효과 전파
 	Multicast_PlayBreakEffect();
 
-	// 몬스터 스폰
-	if (bSpawnEnemiesOnBreak && bShouldSpawnEnemies)
-	{
-		SpawnEnemies();
-	}
+	// 벽 뒤에서 기다리던 적을 깨운다 (파편이 폰 충돌을 끈 뒤라 그대로 뚫고 나온다)
+	ReleaseWaitingEnemies();
 
 	// 파편 정리 타이머 시작
 	GetWorld()->GetTimerManager().SetTimer(
@@ -150,8 +186,9 @@ void ADRBreakableDoor::PlayBreakSequence()
 		}
 	}
 
-	ApplyImpulseToPieces();
+	// 이펙트 위치를 조각이 날아가기 전에 잰다
 	PlayBreakEffects();
+	ApplyImpulseToPieces();
 }
 
 void ADRBreakableDoor::ApplyImpulseToPieces()
@@ -222,17 +259,14 @@ void ADRBreakableDoor::Multicast_PlayBreakEffect_Implementation()
 
 void ADRBreakableDoor::PlayBreakEffects()
 {
+	// 소리 · 이펙트는 벽 조각들의 중심에서 — 배치된 문은 액터가 월드 원점에 있고 조각이 월드 좌표에 놓여 있다
+	// (예전에는 두 번째 스폰 오프셋에서 냈는데, 오프셋이 하나뿐인 문은 원점에서 나서 방1 에서는 감쇠 거리 밖이었다)
+	const FVector EffectLocation = GetPiecesCenter(DoorPieces, GetActorLocation());
+
 	// 사운드 재생
 	if (BreakSound)
 	{
-		// 소리는 문 뒤편(적이 튀어나오는 두 번째 스폰 오프셋)에서 난다 — 배치된 문들이 이 값에 맞춰져 있다
-		FVector SoundLocation = GetActorLocation();
-		if (EnemySpawnOffsets.IsValidIndex(1))
-		{
-			SoundLocation += GetActorRotation().RotateVector(EnemySpawnOffsets[1]);
-		}
-
-		UGameplayStatics::PlaySoundAtLocation(this, BreakSound, SoundLocation);
+		UGameplayStatics::PlaySoundAtLocation(this, BreakSound, EffectLocation);
 	}
 
 	// 파티클 이펙트
@@ -241,7 +275,7 @@ void ADRBreakableDoor::PlayBreakEffects()
 		UGameplayStatics::SpawnEmitterAtLocation(
 			GetWorld(),
 			BreakParticle,
-			GetActorLocation(),
+			EffectLocation,
 			GetActorRotation()
 		);
 	}
@@ -252,7 +286,7 @@ void ADRBreakableDoor::PlayBreakEffects()
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 			GetWorld(),
 			BreakNiagara,
-			GetActorLocation(),
+			EffectLocation,
 			GetActorRotation()
 		);
 	}
@@ -270,12 +304,6 @@ void ADRBreakableDoor::SpawnEnemies()
 	{
 		SpawnCount = EnemySpawnCount;
 	}
-
-	// Launch 방향 계산
-	FVector LaunchDirection = BreakDirection.GetSafeNormal();
-	LaunchDirection.Z += EnemyLaunchUpwardRatio;
-	LaunchDirection = LaunchDirection.GetSafeNormal();
-	FVector LaunchVelocity = LaunchDirection * EnemyLaunchStrength;
 
 	for (int32 i = 0; i < SpawnCount; i++)
 	{
@@ -306,10 +334,46 @@ void ADRBreakableDoor::SpawnEnemies()
 
 		if (SpawnedEnemy)
 		{
-			// 적을 BreakDirection 방향으로 밀어주기
-			SpawnedEnemy->LaunchCharacter(LaunchVelocity, true, true);
+			// 벽이 부서질 때까지 제자리에서 기다리게 AI 를 멈춘다 (스폰 때 빙의되며 BT 가 이미 돌고 있다) — 벽 너머 공격 방지
+			if (AAIController* AIC = Cast<AAIController>(SpawnedEnemy->GetController()))
+			{
+				if (UBrainComponent* Brain = AIC->GetBrainComponent())
+				{
+					Brain->StopLogic(TEXT("BreakableDoor: Waiting for break"));
+				}
+			}
+
+			WaitingEnemies.Add(SpawnedEnemy);
 		}
 	}
+}
+
+void ADRBreakableDoor::ReleaseWaitingEnemies()
+{
+	// Launch 방향 계산
+	FVector LaunchDirection = BreakDirection.GetSafeNormal();
+	LaunchDirection.Z += EnemyLaunchUpwardRatio;
+	LaunchDirection = LaunchDirection.GetSafeNormal();
+	const FVector LaunchVelocity = LaunchDirection * EnemyLaunchStrength;
+
+	for (const TWeakObjectPtr<ADREnemy>& EnemyPtr : WaitingEnemies)
+	{
+		ADREnemy* Enemy = EnemyPtr.Get();
+		if (!Enemy) continue;
+
+		if (AAIController* AIC = Cast<AAIController>(Enemy->GetController()))
+		{
+			if (UBrainComponent* Brain = AIC->GetBrainComponent())
+			{
+				Brain->RestartLogic();
+			}
+		}
+
+		// 적을 BreakDirection 방향으로 밀어주기
+		Enemy->LaunchCharacter(LaunchVelocity, true, true);
+	}
+
+	WaitingEnemies.Empty();
 }
 
 void ADRBreakableDoor::CleanupPieces()
