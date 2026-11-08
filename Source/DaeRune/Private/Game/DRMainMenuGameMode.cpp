@@ -5,14 +5,17 @@
 #include "Game/DRGameInstance.h"
 #include "UI/Loading/DRLoadingScreenSubsystem.h"
 #include "UI/Loading/DRLoadingScreenWidget.h"
+#include "DaeRune/DRLogChannels.h"
 #include "Camera/CameraActor.h"
-#include "Character/DRCharacter.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Components/PrimitiveComponent.h"
+#include "Engine/Level.h"
+#include "Engine/LevelStreaming.h"
 #include "UI/Widget/DRTutorialStartWidget.h"
 #include "Menu.h"
 #include "Kismet/GameplayStatics.h"
 #include "EngineUtils.h"
-#include "GameFramework/CharacterMovementComponent.h"
-#include "Engine/TargetPoint.h"
+#include "TimerManager.h"
 
 ADRMainMenuGameMode::ADRMainMenuGameMode()
 {
@@ -35,6 +38,12 @@ void ADRMainMenuGameMode::BeginPlay()
 	// 입력 모드: UI Only
 	PC->SetInputMode(FInputModeUIOnly());
 	PC->SetShowMouseCursor(true);
+
+	// 서브레벨 메시가 그릴 준비를 마칠 때까지 검게 덮는다 — RevealMenu 에서 페이드 인
+	if (PC->PlayerCameraManager)
+	{
+		PC->PlayerCameraManager->SetManualCameraFade(1.f, FLinearColor::Black, false);
+	}
 
 	if (bIsTutorialMode)
 	{
@@ -78,11 +87,9 @@ void ADRMainMenuGameMode::OnTutorialPreviewLevelLoaded()
 	// 1. 튜토리얼 프리뷰 카메라 찾아서 ViewTarget 설정
 	SetViewTargetByTag(PC, TutorialCameraTag);
 
-	// 2. 디스플레이 캐릭터 스폰
-	SpawnTutorialDisplayCharacter();
-
-	// 3. 튜토리얼 시작 UI 표시
-	ShowTutorialStartUI(PC);
+	// 2. 메시가 모두 그릴 준비를 마치면 페이드 인 + 튜토리얼 시작 UI
+	//    (보이는 정원로봇은 서브레벨에 놓인 메시다 — 예전의 캐릭터 BP 스폰은 카메라 뒤에 생겨 보이지 않았다)
+	BeginRevealWhenReady(TutorialPreviewLevelName);
 }
 
 void ADRMainMenuGameMode::OnLobbyPreviewLevelLoaded()
@@ -93,8 +100,102 @@ void ADRMainMenuGameMode::OnLobbyPreviewLevelLoaded()
 	// 1. 로비 프리뷰 카메라 찾아서 ViewTarget 설정
 	SetViewTargetByTag(PC, LobbyCameraTag);
 
-	// 2. 기존 UMenu 위젯 표시
-	ShowLobbyMenuUI(PC);
+	// 2. 메시가 모두 그릴 준비를 마치면 페이드 인 + 기존 UMenu 위젯
+	BeginRevealWhenReady(LobbyPreviewLevelName);
+}
+
+void ADRMainMenuGameMode::BeginRevealWhenReady(FName LevelName)
+{
+	RevealLevelName = LevelName;
+	RevealWaitStartTime = FPlatformTime::Seconds();
+	GetWorldTimerManager().SetTimer(RevealTimerHandle, this, &ThisClass::CheckRevealReady, 0.05f, true);
+}
+
+void ADRMainMenuGameMode::CheckRevealReady()
+{
+	const double Waited = FPlatformTime::Seconds() - RevealWaitStartTime;
+	const bool bReady = IsRevealLevelReady();
+	if (!bReady && Waited < MaxRevealWaitTime)
+	{
+		return;
+	}
+
+	if (bReady)
+	{
+		UE_LOG(LogDR, Log, TEXT("[MainMenu] %s 메시 준비까지 %.2f초 — %.1f초 뒤 화면을 엽니다"), *RevealLevelName.ToString(), Waited, RevealHoldTime);
+	}
+	else
+	{
+		UE_LOG(LogDR, Warning, TEXT("[MainMenu] %s 메시가 %.1f초 안에 그릴 준비를 마치지 못해 화면을 엽니다"), *RevealLevelName.ToString(), Waited);
+	}
+
+	// 마지막 PSO 가 끝난 프레임에 프록시가 다시 만들어진다 — 첫 그리기와 조명이 자리 잡을 시간을 조금 더 준다
+	if (RevealHoldTime > 0.f)
+	{
+		GetWorldTimerManager().SetTimer(RevealTimerHandle, this, &ThisClass::RevealMenu, RevealHoldTime, false);
+	}
+	else
+	{
+		RevealMenu();
+	}
+}
+
+bool ADRMainMenuGameMode::IsRevealLevelReady() const
+{
+	const ULevelStreaming* Streaming = UGameplayStatics::GetStreamingLevel(this, RevealLevelName);
+	const ULevel* Level = Streaming ? Streaming->GetLoadedLevel() : nullptr;
+	if (!Level)
+	{
+		return true;
+	}
+
+	for (const AActor* Actor : Level->Actors)
+	{
+		if (!Actor || Actor->IsHidden())
+		{
+			continue;
+		}
+
+		// PSO 를 컴파일하는 동안은 프록시가 없어 그려지지 않는다 (에디터 바이너리는 프리캐싱이 꺼져 있어 항상 false)
+		const TInlineComponentArray<UPrimitiveComponent*> Primitives(Actor);
+		for (const UPrimitiveComponent* Primitive : Primitives)
+		{
+			if (Primitive->IsRegistered() && Primitive->IsVisible() && Primitive->IsPSOPrecaching())
+			{
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+void ADRMainMenuGameMode::RevealMenu()
+{
+	GetWorldTimerManager().ClearTimer(RevealTimerHandle);
+
+	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	if (!PC) return;
+
+	if (PC->PlayerCameraManager)
+	{
+		if (RevealFadeInTime > 0.f)
+		{
+			PC->PlayerCameraManager->StartCameraFade(1.f, 0.f, RevealFadeInTime, FLinearColor::Black, false, false);
+		}
+		else
+		{
+			PC->PlayerCameraManager->StopCameraFade();
+		}
+	}
+
+	if (bIsTutorialMode)
+	{
+		ShowTutorialStartUI(PC);
+	}
+	else
+	{
+		ShowLobbyMenuUI(PC);
+	}
 }
 
 void ADRMainMenuGameMode::SetViewTargetByTag(APlayerController* PC, const FName& Tag)
@@ -118,50 +219,6 @@ void ADRMainMenuGameMode::SetViewTargetByTag(APlayerController* PC, const FName&
 	{
 		PC->SetViewTargetWithBlend(*It, 0.f);
 		return;
-	}
-}
-
-void ADRMainMenuGameMode::SpawnTutorialDisplayCharacter()
-{
-	if (!TutorialCharacterClass) return;
-
-	UWorld* World = GetWorld();
-	if (!World) return;
-
-	// 스폰 위치 탐색 (TutorialCharacterSpawnPoint 태그)
-	FVector SpawnLocation = FVector::ZeroVector;
-	FRotator SpawnRotation = FRotator::ZeroRotator;
-
-	for (TActorIterator<ATargetPoint> It(World); It; ++It)
-	{
-		if (It->ActorHasTag(TutorialCharacterSpawnTag))
-		{
-			SpawnLocation = It->GetActorLocation();
-			SpawnRotation = It->GetActorRotation();
-			break;
-		}
-	}
-
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
-	DisplayCharacter = World->SpawnActor<ADRCharacter>(
-		TutorialCharacterClass,
-		FTransform(SpawnRotation, SpawnLocation),
-		SpawnParams
-	);
-
-	if (DisplayCharacter)
-	{
-		// 이동 비활성화 (디스플레이용)
-		if (UCharacterMovementComponent* CMC = Cast<UCharacterMovementComponent>(DisplayCharacter->GetMovementComponent()))
-		{
-			CMC->StopMovementImmediately();
-			CMC->DisableMovement();
-		}
-
-		// 리플리케이트 이동 비활성화
-		DisplayCharacter->SetReplicateMovement(false);
 	}
 }
 

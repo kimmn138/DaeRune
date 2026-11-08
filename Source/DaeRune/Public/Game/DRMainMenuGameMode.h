@@ -6,7 +6,6 @@
 #include "GameFramework/GameModeBase.h"
 #include "DRMainMenuGameMode.generated.h"
 
-class ADRCharacter;
 class UDRTutorialStartWidget;
 class UDRLoadingScreenWidget;
 class UDRLoadingScreenSubsystem;
@@ -48,10 +47,34 @@ protected:
 	// 태그로 CameraActor를 찾아 ViewTarget 설정
 	void SetViewTargetByTag(APlayerController* PC, const FName& Tag);
 
-	// ========== 튜토리얼 프리뷰 ==========
+	// ========== 첫 화면 공개 ==========
+	// 배경·캐릭터가 전부 서브레벨에 있고, 패키지 빌드에서는 메시가 PSO 컴파일을 마쳐야 그려진다
+	// (r.PSOPrecache.ProxyCreationWhenPSOReady) — 그 전에 보이면 배경 → 캐릭터 순으로 튀어나오므로
+	// BeginPlay 부터 검게 덮어 두고, 서브레벨 메시가 모두 준비되면 페이드 인 + 메뉴 UI 를 띄운다
 
-	// 디스플레이 캐릭터 스폰 (튜토리얼 프리뷰용, 비점유)
-	void SpawnTutorialDisplayCharacter();
+	// 서브레벨이 보이게 된 뒤 준비 확인을 시작한다
+	void BeginRevealWhenReady(FName LevelName);
+
+	// 준비 확인(반복 타이머) — 준비됐거나 MaxRevealWaitTime 이 지나면 RevealHoldTime 뒤 RevealMenu
+	void CheckRevealReady();
+
+	// 서브레벨의 보이는 프리미티브 중 PSO 를 아직 컴파일하는 것이 없으면 true
+	bool IsRevealLevelReady() const;
+
+	// 페이드 인 + 메뉴 UI 표시
+	void RevealMenu();
+
+	// 첫 화면이 검은 화면에서 밝아지는 시간(초)
+	UPROPERTY(EditDefaultsOnly, Category = "Reveal", meta = (ClampMin = "0"))
+	float RevealFadeInTime = 0.5f;
+
+	// 메시가 모두 준비된 뒤 페이드 인 전에 더 기다리는 시간(초) — 다시 만들어진 프록시의 첫 그리기와 조명(GI)이 자리 잡을 시간
+	UPROPERTY(EditDefaultsOnly, Category = "Reveal", meta = (ClampMin = "0"))
+	float RevealHoldTime = 0.3f;
+
+	// 메시가 준비되지 않아도 이 시간(초)이 지나면 화면을 연다(PSO 컴파일이 끝나지 않는 경우의 안전장치)
+	UPROPERTY(EditDefaultsOnly, Category = "Reveal", meta = (ClampMin = "0"))
+	float MaxRevealWaitTime = 5.f;
 
 	// 튜토리얼 시작 UI 표시
 	void ShowTutorialStartUI(APlayerController* PC);
@@ -72,10 +95,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UUserWidget> LobbyMenuWidgetClass;
 
-	// 디스플레이 캐릭터 블루프린트 클래스
-	UPROPERTY(EditDefaultsOnly, Category = "Character")
-	TSubclassOf<ADRCharacter> TutorialCharacterClass;
-
 	// 서브레벨 이름
 	UPROPERTY(EditDefaultsOnly, Category = "Level")
 	FName TutorialPreviewLevelName = TEXT("SL_TutorialPreview");
@@ -89,10 +108,6 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Camera")
 	FName LobbyCameraTag = TEXT("LobbyPreviewCamera");
-
-	// 캐릭터 스폰 위치 태그
-	UPROPERTY(EditDefaultsOnly, Category = "Character")
-	FName TutorialCharacterSpawnTag = TEXT("TutorialCharacterSpawnPoint");
 
 	// 로비(대기실) 맵 경로 · 최대 인원 — 방 만들기 · 참가 메뉴에 넘긴다
 	UPROPERTY(EditDefaultsOnly, Category = "Level")
@@ -130,12 +145,13 @@ private:
 	UPROPERTY()
 	TObjectPtr<UUserWidget> CurrentMenuWidget;
 
-	// 디스플레이 캐릭터
-	UPROPERTY()
-	TObjectPtr<ADRCharacter> DisplayCharacter;
-
 	// 현재 모드
 	bool bIsTutorialMode = false;
+
+	// 첫 화면 공개 대기 중인 서브레벨 · 대기 시작 시각(실시간) · 확인 타이머
+	FName RevealLevelName;
+	double RevealWaitStartTime = 0.0;
+	FTimerHandle RevealTimerHandle;
 
 	// 메뉴 위젯을 닫고 현재 메인 메뉴 맵을 다시 연다 → BeginPlay 가 튜토리얼/로비 분기를 다시 평가
 	void ReloadMenu();
