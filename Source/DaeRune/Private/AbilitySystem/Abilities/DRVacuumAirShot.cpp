@@ -129,33 +129,48 @@ void UDRVacuumAirShot::FireShot(int32 Stage)
 	const bool bMaxStage = (Stage == Stages.Num() - 1);
 
 	const FVector TargetLocation = CalculateTargetLocation();
-	ADRProjectile* Projectile = SpawnProjectile(TargetLocation, FireSocketTag);
+	const FVector SocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(Avatar, FireSocketTag);
+
+	// 단계별 데미지 (Plan3 §6.1)
+	// 단계별 피해량은 CDO 배열에 있어 Damage(FScalableFloat) 경로를 타지 않는다.
+	// 스킬 피해량 칩이 조용히 무효가 되지 않도록 여기서 직접 보정한다. (Plan2.md 8.5)
+	// ★Plan5(공기탄칩)★ ③ 단계 피해 = 0단계 + (그 단계 − 0단계) × 차지 증가 배율 — 0단계는 그대로 (D-100 · T-104)
+	const float Growth = FMath::Max(0.f, GetUpgradedFloat(EDRUpgradeStat::SkillChargeGrowth, 1.f));
+	const float StageDamage = Stages[0].Damage + (StageData.Damage - Stages[0].Damage) * Growth;
+	// ★Plan5(공기탄칩)★ ① 아군에게도 피해 — 스폰 때 1회 해석해 발사체에 싣는다 (D-94). 0~2단계 탄도 아군을 맞힌다
+	const bool bHitsAllies = UDRAbilitySystemLibrary::HasUpgradeFeature(
+		GetAbilitySystemComponentFromActorInfo(), FDRGameplayTags::Get().Upgrade_Feature_Skill_AirShot_FriendlyFire);
+
+	// ★피해 · 강화탄 · 아군 설정은 FinishSpawning 전에 (Configure)★ — 엔진은 FinishSpawning 안(BeginPlay 직후)에서
+	//   스폰 순간 이미 겹친 대상의 오버랩을 처리한다. 판정 박스가 날 크기라 총구 옆 적이 스폰 순간부터 겹치는데,
+	//   스폰 뒤에 넣으면 그 적은 단계 피해 · 강화탄 넉백 없이 GA 기본 피해로 맞는다
+	ADRProjectile* Projectile = SpawnProjectileWithRotation(SocketLocation, (TargetLocation - SocketLocation).Rotation(),
+		[&](ADRProjectile& Spawned)
+		{
+			Spawned.DamageEffectParams.BaseDamage = GetUpgradedFloat(EDRUpgradeStat::SkillDamage, StageDamage);
+			if (bMaxStage)
+			{
+				Spawned.DamageEffectParams.KnockbackChance = 100.f;
+				Spawned.DamageEffectParams.KnockbackForceMagnitude = EnhancedKnockbackForce;
+			}
+			if (ADRVacuumAirProjectile* AirProjectile = Cast<ADRVacuumAirProjectile>(&Spawned))
+			{
+				AirProjectile->bHitsAllies = bHitsAllies;
+				AirProjectile->bEnhanced = bMaxStage;
+			}
+		});
 	if (!Projectile)
 	{
 		UE_LOG(LogDR, Warning, TEXT("[VacuumAirShot] 프로젝타일 스폰 실패 — ProjectileClass/Muzzle 소켓 설정 확인"));
 		return;
 	}
 
-	// 단계별 데미지/탄속 주입 (Plan3 §6.1)
-	// 단계별 피해량은 CDO 배열에 있어 Damage(FScalableFloat) 경로를 타지 않는다.
-	// 스킬 피해량 칩이 조용히 무효가 되지 않도록 여기서 직접 보정한다. (Plan2.md 8.5)
-	// ★Plan5(공기탄칩)★ ③ 단계 피해 = 0단계 + (그 단계 − 0단계) × 차지 증가 배율 — 0단계는 그대로 (D-100 · T-104)
-	const float Growth = FMath::Max(0.f, GetUpgradedFloat(EDRUpgradeStat::SkillChargeGrowth, 1.f));
-	const float StageDamage = Stages[0].Damage + (StageData.Damage - Stages[0].Damage) * Growth;
-	Projectile->DamageEffectParams.BaseDamage = GetUpgradedFloat(EDRUpgradeStat::SkillDamage, StageDamage);
-	if (UProjectileMovementComponent* PM = Projectile->ProjectileMovement)
+	// 단계별 탄속 — 스폰 순간 적에 맞아 이미 파괴됐으면 건너뛴다 (강화탄 몽타주 · 반동은 그대로)
+	if (UProjectileMovementComponent* PM = IsValid(Projectile) ? Projectile->ProjectileMovement.Get() : nullptr)
 	{
 		PM->InitialSpeed = StageData.ProjectileSpeed;
 		PM->MaxSpeed = StageData.ProjectileSpeed;
 		PM->Velocity = Projectile->GetActorForwardVector() * StageData.ProjectileSpeed;
-	}
-
-	// ★Plan5(공기탄칩)★ ① 아군에게도 피해 — 스폰 때 1회 해석해 발사체에 싣는다 (D-94).
-	//   ★강화탄 분기(if (!bMaxStage) return;) 보다 위★ — 0~2단계 탄도 아군을 맞혀야 한다
-	if (ADRVacuumAirProjectile* AirProjectile = Cast<ADRVacuumAirProjectile>(Projectile))
-	{
-		AirProjectile->bHitsAllies = UDRAbilitySystemLibrary::HasUpgradeFeature(
-			GetAbilitySystemComponentFromActorInfo(), FDRGameplayTags::Get().Upgrade_Feature_Skill_AirShot_FriendlyFire);
 	}
 
 	if (!bMaxStage) return;
@@ -178,15 +193,7 @@ void UDRVacuumAirShot::FireShot(int32 Stage)
 		UE_LOG(LogDR, Warning, TEXT("[VacuumAirShot] EnhancedAttackMontage 미지정 — 강화탄 애니 생략"));
 	}
 
-	Projectile->DamageEffectParams.KnockbackChance = 100.f;
-	Projectile->DamageEffectParams.KnockbackForceMagnitude = EnhancedKnockbackForce;
-	if (ADRVacuumAirProjectile* AirProjectile = Cast<ADRVacuumAirProjectile>(Projectile))
-	{
-		AirProjectile->bEnhanced = true;
-	}
-
 	// 시전자 후방 반동 — 발밑 사격 시 로켓 점프
-	const FVector SocketLocation = ICombatInterface::Execute_GetCombatSocketLocation(Avatar, FireSocketTag);
 	const FVector LaunchDir = (TargetLocation - SocketLocation).GetSafeNormal();
 	FVector Recoil = -LaunchDir * RecoilImpulse;
 
