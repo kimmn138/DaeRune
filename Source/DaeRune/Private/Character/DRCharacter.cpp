@@ -1182,8 +1182,9 @@ void ADRCharacter::InitAbilityActorInfo()
 	// 플레이어 컨트롤러에 HUD 초기화 요청
 	if (ADRPlayerController* DRPlayerController = Cast<ADRPlayerController>(GetController()))
 	{
-		// 대기실이면 HUD 오버레이 초기화 스킵 (FreeRoam 진입 시 별도 호출)
-		if (!DRPlayerController->bIsInWaitingRoom)
+		// 대기실 · 로비 시작 연출 중이면 HUD 오버레이 초기화 스킵 (연출이 끝날 때 InitOverlayForFreeRoam 이 한다).
+		// 원격 클라는 폰의 PlayerState 가 연출 도중에 도착해 여기로 오므로, 연출을 안 보면 HUD 가 연출 위에 떴다
+		if (!DRPlayerController->bIsInWaitingRoom && !DRPlayerController->IsPlayingLobbyIntro())
 		{
 			if (ADRHUD* DRHUD = Cast<ADRHUD>(DRPlayerController->GetHUD()))
 			{

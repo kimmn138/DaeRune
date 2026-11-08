@@ -34,6 +34,8 @@ class APlayerState;
 class UDRS2SlidePuzzleWidget;
 class UDRInteractionComponent;
 class UUserWidget;
+class ACameraActor;
+class USkeletalMeshComponent;
 enum class ELobbyState : uint8;
 
 // 현재 레벨 컨텍스트 (레벨 진입 시 1회 판별해 캐시 - 매 프레임 맵 이름 문자열 연산 방지)
@@ -266,12 +268,51 @@ public:
 	UFUNCTION(Client, Reliable)
 	void ClientSetWaitingRoomView(ADRWaitingRoomCameraActor* CameraActor);
 
-	// 서버 → 클라이언트: 카메라를 캐릭터로 부드럽게 전환
+	// 서버 → 클라이언트: 카메라를 캐릭터로 부드럽게 전환 (아래 로비 시작 연출을 시작한다)
 	UFUNCTION(Client, Reliable)
 	void ClientStartCameraTransitionToCharacter();
 
 	// 카메라 전환 로직 (Pawn 존재 보장 후 호출)
 	void ExecuteCameraTransitionToCharacter();
+
+	// ========== 로비 시작 연출 (대기실 카메라 → 1인칭, 2026-11-08) ==========
+	//
+	// Power On 직후 대기실 카메라에서 출발해 내 캐릭터 앞으로 다가가고, 어깨 위로 넘어가며 돌아서
+	// 머리 위에서 정면을 본 뒤 1인칭 눈 위치로 내려앉는다.
+	//  - 연출용 카메라 액터를 이 클라이언트에만 하나 만들어 뷰 타깃으로 쓴다. 폰이 아닌 시점이라
+	//    내 캐릭터도 남이 보는 모습(3인칭)으로 보이고, 주인 전용 1인칭 팔은 보이지 않는다.
+	//    (예전 SetViewTargetWithBlend 는 블렌드 시작 순간부터 폰 시점 규칙이 적용돼 1인칭 팔만 허공에 떠 보였다)
+	//  - 연출 동안 이동 · 시선 · 점프 · 상호작용 · 스킬 입력을 막는다 — 방향키를 누른 채 시작해도 캐릭터가 걸어가지 않는다.
+	//  - 3인칭 몸은 카메라가 머리 위에서 정면을 봐 몸이 화면 아래로 빠진 뒤에 숨긴다 (내려앉는 동안 몸 속이 안 보인다).
+	//  - 도착하면 뷰 타깃을 폰으로 바꾸고 1인칭 팔을 아래에서 올린다.
+
+	// 연출 길이 (초). 서버의 FreeRoam 전환도 이 길이만큼 기다린다
+	UPROPERTY(EditDefaultsOnly, Category = "Lobby|Intro Camera", meta = (ClampMin = "0.5", ClampMax = "10.0"))
+	float LobbyIntroDuration = 3.5f;
+
+	// 어깨 위로 넘어갈 때 캡슐 꼭대기보다 더 올라가는 높이 (cm) — 모자 등 머리 위 장식을 스치지 않게 넉넉히
+	UPROPERTY(EditDefaultsOnly, Category = "Lobby|Intro Camera", meta = (ClampMin = "0.0"))
+	float LobbyIntroOverheadClearance = 50.f;
+
+	// 다가가며 지나는 얼굴 앞 지점 — 캡슐 앞면에서 이만큼 떨어진 곳 (cm)
+	UPROPERTY(EditDefaultsOnly, Category = "Lobby|Intro Camera", meta = (ClampMin = "0.0"))
+	float LobbyIntroFrontDistance = 110.f;
+
+	// 도착 후 1인칭 팔이 아래에서 올라오는 시간 (초, 0 = 바로 제자리)
+	UPROPERTY(EditDefaultsOnly, Category = "Lobby|Intro Camera", meta = (ClampMin = "0.0"))
+	float LobbyIntroArmsRaiseTime = 0.35f;
+
+	// 1인칭 팔이 올라오기 시작하는 깊이 (cm, 카메라 기준 아래쪽)
+	UPROPERTY(EditDefaultsOnly, Category = "Lobby|Intro Camera", meta = (ClampMin = "0.0"))
+	float LobbyIntroArmsRaiseDepth = 40.f;
+
+	float GetLobbyIntroDuration() const { return LobbyIntroDuration; }
+
+	// 로비 시작 연출 중인가 (폰 도착을 기다리는 동안 포함) — 입력 · HUD 오버레이를 미룬다
+	bool IsPlayingLobbyIntro() const { return bIsPlayingLobbyIntro; }
+
+	// 모든 액터가 틱한 뒤 카메라를 갱신하기 직전 — 연출 카메라를 여기서 옮긴다 (폰 위치가 이번 프레임 값이다)
+	virtual void UpdateCameraManager(float DeltaSeconds) override;
 
 	// ========== 대기실 카메라 보호 ==========
 
@@ -505,6 +546,42 @@ protected:
 
 	// Pawn 도착 시 카메라 전환 실행 대기 여부
 	bool bPendingCameraTransition = false;
+
+	// ===== 로비 시작 연출 상태 (이 클라이언트에서만 쓴다) =====
+
+	// ClientStartCameraTransitionToCharacter 부터 연출이 끝날 때까지 (폰 대기 포함)
+	bool bIsPlayingLobbyIntro = false;
+
+	// 3인칭 몸을 이미 숨겼는가
+	bool bLobbyIntroBodyHidden = false;
+
+	// 연출 시작 시각 (월드 시간)
+	double LobbyIntroStartTime = 0.0;
+
+	// 출발 시점 = 대기실 카메라
+	FMinimalViewInfo LobbyIntroStartView;
+
+	// 연출용 카메라 (로컬 스폰, 복제 안 함) · 연출 대상 폰
+	TWeakObjectPtr<ACameraActor> LobbyIntroCamera;
+	TWeakObjectPtr<ADRCharacter> LobbyIntroPawn;
+
+	// 도착 후 1인칭 팔 올리기
+	TWeakObjectPtr<USkeletalMeshComponent> ArmsRaiseMesh;
+	FVector ArmsRaiseBaseLocation = FVector::ZeroVector;
+	double ArmsRaiseStartTime = 0.0;
+
+	// 연출 카메라를 이번 프레임 위치로 옮긴다 (UpdateCameraManager 에서)
+	void TickLobbyIntro();
+
+	// 연출을 끝낸다 — 뷰 타깃을 폰으로, 입력 · HUD 복원. 폰이 사라졌거나 끝까지 안 와도 이걸로 정리한다
+	void FinishLobbyIntro();
+
+	// 상태만 지운다 (레벨 이동 — 뷰 타깃 · 입력 모드는 OnLevelEntered 가 맞춘다)
+	void ResetLobbyIntroState();
+
+	void StartArmsRaise(ADRCharacter* DRCharacter);
+	void TickArmsRaise();
+	void StopArmsRaise();
 
 	// 대기실 위젯 클래스 (블루프린트에서 설정)
 	UPROPERTY(EditDefaultsOnly, Category = "UI|Lobby")

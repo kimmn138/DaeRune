@@ -247,10 +247,13 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 	DestroyAllDisplayCharacters();
 
 	// 4. 모든 플레이어에게 진짜 캐릭터 스폰 + Possess
+	float CameraIntroDuration = 0.f;
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
 		ADRPlayerController* PC = Cast<ADRPlayerController>(It->Get());
 		if (!PC) continue;
+
+		CameraIntroDuration = FMath::Max(CameraIntroDuration, PC->GetLobbyIntroDuration());
 
 		ADRPlayerState* PS = PC->GetPlayerState<ADRPlayerState>();
 		if (!PS) continue;
@@ -275,6 +278,10 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 		// Possess (최초 1회, 깜빡임 없음)
 		PC->Possess(NewPawn);
 
+		// 소유 클라의 시선도 스폰 방향(대기실 카메라 쪽 = 로비)으로 맞춘다 (RespawnPlayerPawn 과 같은 처리).
+		// 원격 클라 컨트롤러에는 대기실 때 회전이 남아 있어, 빙의 확인 직후 FaceRotation 이 몸을 그쪽으로 돌렸다
+		PC->ClientSetRotation(NewPawn->GetActorRotation(), true);
+
 		// 이동 활성화
 		NewPawn->SetReplicateMovement(true);
 		if (UCharacterMovementComponent* CMC = Cast<UCharacterMovementComponent>(NewPawn->GetMovementComponent()))
@@ -282,11 +289,11 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 			CMC->SetMovementMode(MOVE_Walking);
 		}
 
-		// 카메라 전환 명령 (Client RPC)
+		// 카메라 전환 명령 (Client RPC) — 클라가 대기실 카메라에서 1인칭으로 들어가는 연출을 튼다 (그동안 입력은 클라가 막는다)
 		PC->ClientStartCameraTransitionToCharacter();
 	}
 
-	// 5. 전환 완료 후 FreeRoam으로 상태 변경 (카메라 연출 시간만큼 딜레이)
+	// 5. 전환 완료 후 FreeRoam으로 상태 변경 (클라 카메라 연출 길이 + 여유만큼 딜레이)
 	FTimerHandle TransitionTimerHandle;
 	TWeakObjectPtr<ADRLobbyGameState> WeakLGS(LGS);
 	GetWorldTimerManager().SetTimer(
@@ -298,7 +305,7 @@ void ADRLobbyGameMode::PowerOn(ADRPlayerController* Requester)
 				State->SetLobbyState(ELobbyState::FreeRoam);
 			}
 		}),
-		2.0f, // 카메라 전환 시간
+		CameraIntroDuration + 0.3f,
 		false
 	);
 }

@@ -53,6 +53,200 @@
 #include "DaeRune/DRLogChannels.h"
 #include "MultiplayerSessionsSubsystem.h"
 #include "Tuning/DRTuningSubsystem.h"
+#include "Camera/CameraActor.h"
+#include "Components/CapsuleComponent.h"
+
+namespace
+{
+	// ========== 로비 시작 연출 경로 (대기실 카메라 → 1인칭 눈) ==========
+	//
+	// 지나는 키: 출발(대기실 카메라) · 접근 중간 · 얼굴 앞 · 어깨 위 · 눈 위 · 눈.
+	// 위치는 구심 Catmull-Rom 으로, 보는 방향은 키마다 정한 방향을 Hermite 로 잇는다.
+	//  - 캐릭터들이 대기실 카메라를 보고 서 있고 1인칭도 그쪽(로비)을 봐야 해서 카메라가 180도 돌아야 한다.
+	//    슬롯 간격(~170)이 좁아 옆으로 돌면 벨보이(반지름 85) 같은 이웃과 부딪히므로 어깨 위로 넘는다.
+	//  - ★보는 방향을 매 프레임 "캐릭터 바라보기"로 구하면 안 된다★ — 머리 가까이를 지날 때 초당 800도 넘게
+	//    휙 돌았다 (2026-11-08 시뮬레이션). 키에서만 캐릭터를 보고 사이는 부드럽게 잇는다.
+	//  - 진행은 (이동 거리 + 회전량 × DegreeCost) 기준으로 고르게 나눈다 — 많이 도는 어깨 위에서는 그만큼 천천히 간다.
+	namespace LobbyIntro
+	{
+		constexpr int32 NumKeys = 6;
+		constexpr int32 NumSegments = NumKeys - 1;
+		constexpr int32 SamplesPerSegment = 24;
+		constexpr int32 NumSamples = NumSegments * SamplesPerSegment + 1;
+
+		// 회전 1도를 이동 몇 cm 로 칠지 — 클수록 많이 도는 구간을 천천히 지난다
+		constexpr double DegreeCost = 6.0;
+
+		enum EKey : int32 { Start, Approach, Front, Shoulder, AboveEye, Eye };
+
+		struct FPath
+		{
+			FVector Points[NumKeys + 2];		// 앞뒤 유령점 포함 (양 끝 접선용)
+			FVector Dirs[NumKeys];				// 키에서 보는 방향
+			FVector DirTangents[NumKeys];
+		};
+
+		// 구심(alpha 0.5) Catmull-Rom 의 P1→P2 구간 — 키 간격이 들쭉날쭉해도 고리 · 뾰족점이 생기지 않는다
+		FVector CatmullRom(const FVector& P0, const FVector& P1, const FVector& P2, const FVector& P3, double T)
+		{
+			auto NextKnot = [](double Ti, const FVector& A, const FVector& B)
+			{
+				return Ti + FMath::Max(FMath::Sqrt(FVector::Dist(A, B)), 0.01);
+			};
+			const double T0 = 0.0;
+			const double T1 = NextKnot(T0, P0, P1);
+			const double T2 = NextKnot(T1, P1, P2);
+			const double T3 = NextKnot(T2, P2, P3);
+			const double TT = FMath::Lerp(T1, T2, T);
+
+			const FVector A1 = ((T1 - TT) * P0 + (TT - T0) * P1) / (T1 - T0);
+			const FVector A2 = ((T2 - TT) * P1 + (TT - T1) * P2) / (T2 - T1);
+			const FVector A3 = ((T3 - TT) * P2 + (TT - T2) * P3) / (T3 - T2);
+			const FVector B1 = ((T2 - TT) * A1 + (TT - T0) * A2) / (T2 - T0);
+			const FVector B2 = ((T3 - TT) * A2 + (TT - T1) * A3) / (T3 - T1);
+			return ((T2 - TT) * B1 + (TT - T1) * B2) / (T2 - T1);
+		}
+
+		FPath BuildPath(const FMinimalViewInfo& StartView, const FMinimalViewInfo& EyeView, const ACharacter& Character,
+		                float OverheadClearance, float FrontDistance)
+		{
+			const UCapsuleComponent* Capsule = Character.GetCapsuleComponent();
+			const double Radius = Capsule->GetScaledCapsuleRadius();
+			const double HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+			const FVector Center = Capsule->GetComponentLocation();
+
+			// 캐릭터 기준 축 — 1인칭 카메라가 볼 방향(수평)이 정면
+			const FRotator FacingYaw(0.f, EyeView.Rotation.Yaw, 0.f);
+			const FVector Forward = FacingYaw.Vector();
+			const FVector Right = FRotationMatrix(FacingYaw).GetUnitAxis(EAxis::Y);
+			const FVector Up = FVector::UpVector;
+
+			// 대기실 카메라가 있는 쪽 어깨 위로 넘는다 — 그쪽이 가장 짧게 돈다
+			const double Side = FVector::DotProduct(StartView.Location - Center, Right) >= 0.0 ? 1.0 : -1.0;
+			const double OverheadZ = FMath::Max(Center.Z + HalfHeight + OverheadClearance, EyeView.Location.Z);
+
+			FVector Keys[NumKeys];
+			Keys[Start] = StartView.Location;
+			Keys[Front] = Center + Forward * (Radius + FrontDistance) + Right * (Side * 0.5 * Radius)
+			            + Up * (HalfHeight + 0.5 * OverheadClearance);
+			Keys[Approach] = FMath::Lerp(Keys[Start], Keys[Front], 0.5);
+			Keys[Shoulder] = Center + Right * (Side * (0.8 * Radius + 20.0));
+			Keys[Shoulder].Z = OverheadZ;
+			Keys[AboveEye] = FVector(EyeView.Location.X, EyeView.Location.Y, OverheadZ);
+			Keys[Eye] = EyeView.Location;
+
+			FPath Path;
+			Path.Points[0] = Keys[Start] * 2.0 - Keys[Approach];
+			for (int32 i = 0; i < NumKeys; ++i)
+			{
+				Path.Points[i + 1] = Keys[i];
+			}
+			Path.Points[NumKeys + 1] = Keys[Eye] * 2.0 - Keys[AboveEye];
+
+			// 가운데 키에서는 캐릭터 상체를 보고, 출발은 대기실 카메라 그대로, 눈 위 · 눈에서는 1인칭 정면을 본다
+			const FVector Focus = Center + Up * (0.55 * HalfHeight);
+			auto LookAtFocus = [&Focus](const FVector& From) { return (Focus - From).GetSafeNormal(); };
+			const FVector EyeDir = EyeView.Rotation.Vector();
+			Path.Dirs[Start] = StartView.Rotation.Vector();
+			Path.Dirs[Approach] = LookAtFocus(Keys[Approach]);
+			Path.Dirs[Front] = LookAtFocus(Keys[Front]);
+			Path.Dirs[Shoulder] = LookAtFocus(Keys[Shoulder]);
+			Path.Dirs[AboveEye] = EyeDir;
+			Path.Dirs[Eye] = EyeDir;
+
+			// 접선 — 출발에서는 멈춘 채 돌기 시작하고, 눈 위에서 회전을 끝낸 뒤 그대로 내려앉는다 (0). 가운데는 Catmull-Rom
+			for (int32 i = 0; i < NumKeys; ++i)
+			{
+				Path.DirTangents[i] = (i >= Approach && i <= Shoulder) ? (Path.Dirs[i + 1] - Path.Dirs[i - 1]) * 0.5 : FVector::ZeroVector;
+			}
+			return Path;
+		}
+
+		void EvaluateSegment(const FPath& Path, int32 Segment, double T, FVector& OutLocation, FVector& OutDirection)
+		{
+			OutLocation = CatmullRom(Path.Points[Segment], Path.Points[Segment + 1], Path.Points[Segment + 2], Path.Points[Segment + 3], T);
+			OutDirection = FMath::CubicInterp(Path.Dirs[Segment], Path.DirTangents[Segment],
+			                                  Path.Dirs[Segment + 1], Path.DirTangents[Segment + 1], T).GetSafeNormal();
+		}
+
+		// Progress 0~1 (이동 + 회전량 기준) → 카메라 위치 · 보는 방향
+		void Evaluate(const FPath& Path, double Progress, FVector& OutLocation, FVector& OutDirection)
+		{
+			FVector Locations[NumSamples];
+			FVector Directions[NumSamples];
+			double Cost[NumSamples];
+			for (int32 i = 0; i < NumSamples; ++i)
+			{
+				const int32 Segment = FMath::Min(i / SamplesPerSegment, NumSegments - 1);
+				const double T = double(i - Segment * SamplesPerSegment) / SamplesPerSegment;
+				EvaluateSegment(Path, Segment, T, Locations[i], Directions[i]);
+				if (i == 0)
+				{
+					Cost[i] = 0.0;
+					continue;
+				}
+				if (Directions[i].IsNearlyZero())
+				{
+					Directions[i] = Directions[i - 1];
+				}
+				const double TurnDegrees = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Directions[i], Directions[i - 1]), -1.0, 1.0)));
+				Cost[i] = Cost[i - 1] + FVector::Dist(Locations[i], Locations[i - 1]) + DegreeCost * TurnDegrees;
+			}
+
+			const double Target = FMath::Clamp(Progress, 0.0, 1.0) * Cost[NumSamples - 1];
+			int32 Hi = 1;
+			while (Hi < NumSamples - 1 && Cost[Hi] < Target)
+			{
+				++Hi;
+			}
+			const double Span = Cost[Hi] - Cost[Hi - 1];
+			const double Alpha = Span > UE_KINDA_SMALL_NUMBER ? FMath::Clamp((Target - Cost[Hi - 1]) / Span, 0.0, 1.0) : 1.0;
+			OutLocation = FMath::Lerp(Locations[Hi - 1], Locations[Hi], Alpha);
+			OutDirection = FMath::Lerp(Directions[Hi - 1], Directions[Hi], Alpha).GetSafeNormal();
+			if (OutDirection.IsNearlyZero())
+			{
+				OutDirection = Directions[Hi];
+			}
+		}
+
+		// 카메라가 캐릭터 캡슐 안으로 들어갔는가 (몸 속이 보이기 직전)
+		bool IsInsideCapsule(const FVector& CameraLocation, const ACharacter& Character)
+		{
+			const UCapsuleComponent* Capsule = Character.GetCapsuleComponent();
+			const FVector Offset = CameraLocation - Capsule->GetComponentLocation();
+			return FVector2D(Offset.X, Offset.Y).Size() < Capsule->GetScaledCapsuleRadius() + 5.0
+			    && FMath::Abs(Offset.Z) < Capsule->GetScaledCapsuleHalfHeight() + 5.0;
+		}
+
+		// 3인칭 몸(메시 · 캡슐 + 머리 위 장식 여유)이 화면 아래 경계 밖으로 완전히 빠졌는가
+		bool IsBodyBelowView(const FVector& CameraLocation, const FRotator& CameraRotation, float FOVDegrees, float AspectRatio, const ACharacter& Character)
+		{
+			FBox Body = Character.GetCapsuleComponent()->Bounds.GetBox();
+			if (const USkeletalMeshComponent* Mesh = Character.GetMesh())
+			{
+				Body += Mesh->Bounds.GetBox();
+			}
+			Body = Body.ExpandBy(10.0);
+			Body.Max.Z += 25.0;		// 모자 등 머리 위 장식
+
+			// 화면 아래 경계면(카메라를 지나는 면)의 안쪽 법선 — 꼭짓점이 모두 그 바깥이면 몸 전체가 화면 아래에 있다
+			const double HalfVertical = FMath::Atan(FMath::Tan(FMath::DegreesToRadians(FOVDegrees * 0.5)) / FMath::Max(AspectRatio, 0.1f));
+			const FRotationMatrix Axes(CameraRotation);
+			const FVector BottomInward = Axes.GetUnitAxis(EAxis::Z) * FMath::Cos(HalfVertical) + Axes.GetUnitAxis(EAxis::X) * FMath::Sin(HalfVertical);
+
+			FVector Corners[8];
+			Body.GetVertices(Corners);
+			for (const FVector& Corner : Corners)
+			{
+				if (FVector::DotProduct(Corner - CameraLocation, BottomInward) > 0.0)
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+	}
+}
 
 ADRPlayerController::ADRPlayerController()
 {
@@ -516,6 +710,9 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 		}
 	}
 
+	// 로비 시작 연출 중에는 시점이 연출 카메라라 감지를 쉰다
+	if (bIsPlayingLobbyIntro) return;
+
 	// 상호작용 대상 감지 (주기마다 시점 광선 1회 — 부품 · 사이트 · 청소기 · 프롭 · 열차 칸)
 	InteractionComponent->TickDetection(DeltaTime);
 }
@@ -664,6 +861,10 @@ void ADRPlayerController::OnLevelEntered()
 	// 레벨 컨텍스트 캐시 재판별 (ReceivedPlayer/PostSeamlessTravel에서 호출되므로 레벨 이동마다 갱신됨)
 	CachedLevelContext = DetermineLevelContext();
 
+	// 이전 레벨의 로비 시작 연출이 남아 있으면 지운다 (컨트롤러는 심리스 트래블을 건너온다)
+	ResetLobbyIntroState();
+	StopArmsRaise();
+
 	// 현재 레벨 확인
 	UWorld* World = GetWorld();
 	if (!World) return;
@@ -715,6 +916,10 @@ void ADRPlayerController::OnLevelEntered()
 			// GameState 아직 복제 안됨 → 대기실로 가정 (서버 RPC가 이후 교정)
 			bIsInWaitingRoom = true;
 			bAutoManageActiveCameraTarget = false; // Pawn 수신 시 ViewTarget 자동 설정 차단
+			if (PlayerCameraManager)
+			{
+				PlayerCameraManager->bClientSimulatingViewTarget = true;	// 서버 뷰 타깃 무시 (ClientSetWaitingRoomView 참고)
+			}
 			RestoreDefaultInputMode();
 			// WaitingRoom UI는 ClientSetWaitingRoomView RPC에서 생성
 			return;
@@ -725,6 +930,10 @@ void ADRPlayerController::OnLevelEntered()
 		{
 			bIsInWaitingRoom = true;
 			bAutoManageActiveCameraTarget = false; // Pawn 수신 시 ViewTarget 자동 설정 차단
+			if (PlayerCameraManager)
+			{
+				PlayerCameraManager->bClientSimulatingViewTarget = true;	// 서버 뷰 타깃 무시 (ClientSetWaitingRoomView 참고)
+			}
 			RestoreDefaultInputMode();
 			CreateWaitingRoomUI();
 			return;  // ViewTarget은 ClientSetWaitingRoomView RPC가 설정
@@ -973,8 +1182,9 @@ void ADRPlayerController::OnSpectatedPlayerDied(AActor* DeadActor)
 
 void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 {
-	if (bIsSpectating) return;
-	
+	// 로비 시작 연출 중에는 막는다 — 방향키를 누른 채 Power On 하면 연출 동안 캐릭터가 걸어갔다
+	if (bIsSpectating || bIsPlayingLobbyIntro) return;
+
 	// 입력 블록 상태 확인
 	if (GetASC() && GetASC()->HasMatchingGameplayTag(FDRGameplayTags::Get().Player_Block_InputPressed)) return;
 
@@ -1018,8 +1228,8 @@ void ADRPlayerController::Move(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 {
-	if (bIsSpectating) return;
-	
+	if (bIsSpectating || bIsPlayingLobbyIntro) return;
+
 	// 마우스 시선 처리
 	const FVector2D Axis = InputActionValue.Get<FVector2D>();
 
@@ -1034,8 +1244,8 @@ void ADRPlayerController::Look(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::StartJump(const FInputActionValue& InputActionValue)
 {
-	if (bIsSpectating) return;
-	
+	if (bIsSpectating || bIsPlayingLobbyIntro) return;
+
 	// 탑승 중이면 점프키 = 하차 (Plan3 §5.3)
 	if (ADRCharacter* DRChar = GetPawn<ADRCharacter>())
 	{
@@ -1073,7 +1283,7 @@ void ADRPlayerController::StopJump(const FInputActionValue& InputActionValue)
 
 void ADRPlayerController::HandleInteract()
 {
-	if (bIsSpectating) return;
+	if (bIsSpectating || bIsPlayingLobbyIntro) return;
 
 	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
 	if (!DRCharacter) return;
@@ -1591,10 +1801,9 @@ void ADRPlayerController::RestoreDefaultInputMode()
 	}
 	else if (IsInLobby())
 	{
-		// 로비 상태에 따라 분기
-		ADRLobbyGameState* LGS = GetWorld()->GetGameState<ADRLobbyGameState>();
-		if (LGS && (LGS->GetLobbyState() == ELobbyState::WaitingRoom
-				  || LGS->GetLobbyState() == ELobbyState::Transitioning))
+		// ★로비 상태(복제값)가 아니라 이 컨트롤러의 대기실 플래그로 가른다★ — 서버의 FreeRoam 전환은
+		// 시작 연출이 끝난 뒤에 오므로, 그 사이 화면(설정 등)을 닫으면 커서가 다시 켜졌다
+		if (bIsInWaitingRoom)
 		{
 			// 대기실은 GameAndUI 로 통일 (ClientSetWaitingRoomView 와 일치)
 			FInputModeGameAndUI InputMode;
@@ -1701,7 +1910,7 @@ void ADRPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
 		HeldInputTags.Add(InputTag);
 	}
 
-	if (bIsSpectating) return;
+	if (bIsSpectating || bIsPlayingLobbyIntro) return;
 
 	// 입력 블록 확인 후 어빌리티 입력 처리 (블록 중이면 아래 UI 피드백도 내지 않는다 — 그래서 ASC 가 아니라 여기서 본다)
 	UDRAbilitySystemComponent* ASC = GetASC();
@@ -1751,7 +1960,7 @@ void ADRPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
 
 void ADRPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
 {
-	if (bIsSpectating) return;
+	if (bIsSpectating || bIsPlayingLobbyIntro) return;
 
 	// 입력 홀드 블록 확인
 	UDRAbilitySystemComponent* ASC = GetASC();
@@ -1875,6 +2084,13 @@ void ADRPlayerController::ClientSetWaitingRoomView_Implementation(
 	bIsInWaitingRoom = true;
 	bAutoManageActiveCameraTarget = false; // Pawn 변경 시 자동 ViewTarget 전환 차단
 
+	// 서버가 보내는 뷰 타깃도 무시한다 — 서버 쪽 이 컨트롤러는 자동 관리가 켜져 있어 Power On 빙의 순간
+	// ClientSetViewTarget(폰)을 보내고, 그대로 받으면 원격 클라는 시작 연출 전에 1인칭으로 튄다 (FinishLobbyIntro 에서 해제)
+	if (PlayerCameraManager)
+	{
+		PlayerCameraManager->bClientSimulatingViewTarget = true;
+	}
+
 	// 잘못 생성된 LobbyOverlay가 있으면 제거
 	if (ADRHUD* DRHUD = Cast<ADRHUD>(GetHUD()))
 	{
@@ -1907,23 +2123,29 @@ void ADRPlayerController::ClientStartCameraTransitionToCharacter_Implementation(
 {
 	bIsInWaitingRoom = false;
 
-	APawn* MyPawn = GetPawn();
-	if (!MyPawn)
+	// 폰 도착을 기다리는 동안에도 연출 중으로 친다 — 입력 · HUD 오버레이를 미룬다
+	bIsPlayingLobbyIntro = true;
+
+	// 대기실 UI 는 로비 상태(Transitioning)로 이미 닫혔다. 연출 동안 커서는 숨기고 게임 입력으로 둔다 (이동 · 시선은 위 플래그가 막는다)
+	if (ActiveScreen == EDRScreen::None)
 	{
-		// Pawn이 아직 복제되지 않았으면 OnPossessedPawnChanged 이벤트에서 전환 실행 (5초 폴백)
+		SetInputMode(FInputModeGameOnly());
+		SetShowMouseCursor(false);
+	}
+
+	if (!GetPawn())
+	{
+		// Pawn이 아직 복제되지 않았으면 OnPossessedPawnChanged 이벤트에서 전환 실행.
+		// 5초 안에 안 오면 연출 없이 끝내 입력 · HUD 고착을 막는다
 		bPendingCameraTransition = true;
 		GetWorldTimerManager().SetTimer(
 			CameraTransitionRetryHandle,
 			FTimerDelegate::CreateWeakLambda(this, [this]()
 			{
-				if (!bPendingCameraTransition) return;
-				bPendingCameraTransition = false;
-
-				// 최소한 InputMode 전환으로 완전 고착 방지
-				bAutoManageActiveCameraTarget = true;
-				SetInputMode(FInputModeGameOnly());
-				SetShowMouseCursor(false);
-				InitOverlayForFreeRoam();
+				if (bPendingCameraTransition)
+				{
+					FinishLobbyIntro();
+				}
 			}),
 			5.0f,
 			false
@@ -1937,47 +2159,268 @@ void ADRPlayerController::ClientStartCameraTransitionToCharacter_Implementation(
 
 void ADRPlayerController::ExecuteCameraTransitionToCharacter()
 {
-	APawn* MyPawn = GetPawn();
-	if (!MyPawn) return;
+	ADRCharacter* DRCharacter = GetPawn<ADRCharacter>();
 
-	// 메시 가시성 복원 (3P 숨기기, 1P 보이기 — 일반 FPS 모드)
-	if (ADRCharacter* DRCharacter = Cast<ADRCharacter>(MyPawn))
+	// ★폰의 BeginPlay 뒤에 시작한다★ — 원격 클라는 폰 첫 복제의 OnRep_Controller → OnRep_Pawn 으로 BeginPlay 보다
+	// 먼저 여기 들어온다. 그대로 시작하면 곧이은 BeginPlay 의 UpdateMeshVisibility 가 3인칭 몸을 다시 숨겨
+	// 연출 내내 내 캐릭터 자리가 비어 보였다 (2026-11-08 PIE 2인). 다음 틱에 다시 부른다
+	if (DRCharacter && !DRCharacter->HasActorBegunPlay())
 	{
-		DRCharacter->SetWaitingRoomVisibility(false);
+		bPendingCameraTransition = true;
+		GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			if (bPendingCameraTransition)
+			{
+				ExecuteCameraTransitionToCharacter();
+			}
+		}));
+		return;
 	}
 
-	// 고정 카메라 → 캐릭터 카메라로 1.5초간 부드럽게 블렌드
-	SetViewTargetWithBlend(MyPawn, 1.5f, EViewTargetBlendFunction::VTBlend_EaseInOut);
+	bPendingCameraTransition = false;
+	GetWorldTimerManager().ClearTimer(CameraTransitionRetryHandle);
+	UWorld* World = GetWorld();
+	if (!DRCharacter || !World)
+	{
+		FinishLobbyIntro();
+		return;
+	}
 
-	// 전환 완료 후 인풋 모드 변경 + HUD 오버레이 초기화
-	FTimerHandle InputTimerHandle;
-	GetWorldTimerManager().SetTimer(
-		InputTimerHandle,
-		FTimerDelegate::CreateWeakLambda(this, [this]()
+	// 출발 시점 = 대기실 카메라 (없으면 지금 화면)
+	FMinimalViewInfo StartView;
+	if (ADRWaitingRoomCameraActor* WaitingCamera = CachedWaitingRoomCamera.Get(); WaitingCamera && WaitingCamera->CameraComponent)
+	{
+		WaitingCamera->CameraComponent->GetCameraView(0.f, StartView);
+	}
+	else if (PlayerCameraManager)
+	{
+		StartView = PlayerCameraManager->GetCameraCacheView();
+	}
+
+	// 연출용 카메라 — 이 클라이언트에만 있다 (복제 안 함).
+	// ★폰이 아닌 시점이어야 한다★ — 폰(또는 블렌드 중인 폰)이 뷰 타깃이면 주인 시점 규칙이 걸려
+	// 3인칭 몸(OwnerNoSee)이 사라지고 1인칭 팔(OnlyOwnerSee)만 허공에 뜬다
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	SpawnParams.ObjectFlags |= RF_Transient;
+	ACameraActor* IntroCamera = World->SpawnActor<ACameraActor>(StartView.Location, StartView.Rotation, SpawnParams);
+	if (!IntroCamera)
+	{
+		FinishLobbyIntro();
+		return;
+	}
+
+	UCameraComponent* IntroCameraComponent = IntroCamera->GetCameraComponent();
+	IntroCameraComponent->SetFieldOfView(StartView.FOV);
+	IntroCameraComponent->SetConstraintAspectRatio(StartView.bConstrainAspectRatio);
+	IntroCameraComponent->SetAspectRatio(StartView.AspectRatio);
+	IntroCameraComponent->PostProcessSettings = StartView.PostProcessSettings;
+	IntroCameraComponent->PostProcessBlendWeight = StartView.PostProcessBlendWeight;
+
+	// 혹시 남은 이전 연출 카메라는 뷰 타깃을 옮긴 뒤 지운다
+	ACameraActor* PreviousCamera = LobbyIntroCamera.Get();
+
+	LobbyIntroCamera = IntroCamera;
+	LobbyIntroPawn = DRCharacter;
+	LobbyIntroStartView = StartView;
+	LobbyIntroStartTime = World->GetTimeSeconds();
+	bLobbyIntroBodyHidden = false;
+	bIsPlayingLobbyIntro = true;
+
+	// 몸은 3인칭으로 보이고 1인칭 팔은 숨긴다 (원격 클라는 폰이 막 도착해 1인칭 상태일 수 있다).
+	// 시선(컨트롤 회전)은 서버가 PowerOn 에서 ClientSetRotation 으로 스폰 방향에 맞춰 보낸다 — 연출의 도착 방향도 그것이다
+	DRCharacter->SetWaitingRoomVisibility(true);
+
+	SetViewTarget(IntroCamera);
+
+	if (PreviousCamera && PreviousCamera != IntroCamera)
+	{
+		PreviousCamera->Destroy();
+	}
+}
+
+void ADRPlayerController::UpdateCameraManager(float DeltaSeconds)
+{
+	// 모든 액터가 틱한 뒤라 폰 · 1인칭 카메라 위치가 이번 프레임 값이다
+	TickLobbyIntro();
+	TickArmsRaise();
+
+	Super::UpdateCameraManager(DeltaSeconds);
+}
+
+void ADRPlayerController::TickLobbyIntro()
+{
+	// 폰 도착 대기 중이면 아직 시작 전
+	if (!bIsPlayingLobbyIntro || bPendingCameraTransition) return;
+
+	ACameraActor* IntroCamera = LobbyIntroCamera.Get();
+	ADRCharacter* DRCharacter = LobbyIntroPawn.Get();
+	UWorld* World = GetWorld();
+	if (!IntroCamera || !DRCharacter || !World || GetPawn() != DRCharacter)
+	{
+		// 폰이 바뀌었거나 사라졌다 — 연출을 접는다
+		FinishLobbyIntro();
+		return;
+	}
+
+	const double Alpha = FMath::Clamp((World->GetTimeSeconds() - LobbyIntroStartTime) / FMath::Max(LobbyIntroDuration, 0.01f), 0.0, 1.0);
+	// smootherstep — 천천히 출발해 천천히 내려앉는다
+	const double Progress = Alpha * Alpha * Alpha * (Alpha * (Alpha * 6.0 - 15.0) + 10.0);
+
+	// 도착점 = 폰의 1인칭 카메라. 매 프레임 다시 읽는다 (스폰 직후 바닥에 내려앉는 중일 수 있다)
+	FMinimalViewInfo EyeView;
+	DRCharacter->CalcCamera(0.f, EyeView);
+
+	FVector Location = EyeView.Location;
+	FRotator Rotation = EyeView.Rotation;
+	if (Alpha < 1.0)
+	{
+		const LobbyIntro::FPath Path = LobbyIntro::BuildPath(LobbyIntroStartView, EyeView, *DRCharacter,
+		                                                     LobbyIntroOverheadClearance, LobbyIntroFrontDistance);
+		FVector Direction;
+		LobbyIntro::Evaluate(Path, Progress, Location, Direction);
+		Rotation = Direction.Rotation();
+	}
+	IntroCamera->SetActorLocationAndRotation(Location, Rotation);
+
+	UCameraComponent* IntroCameraComponent = IntroCamera->GetCameraComponent();
+	IntroCameraComponent->SetFieldOfView(FMath::Lerp(LobbyIntroStartView.FOV, EyeView.FOV, static_cast<float>(Progress)));
+
+	// 3인칭 몸 숨기기 — 머리 위에서 정면을 봐 몸이 화면 아래로 빠졌을 때 (카메라가 몸 속으로 들어가려 하면 그 전에라도)
+	if (!bLobbyIntroBodyHidden)
+	{
+		float AspectRatio = IntroCameraComponent->AspectRatio;
+		if (!IntroCameraComponent->bConstrainAspectRatio)
 		{
-
-			// (1) 블렌드 완료 후에야 자동 카메라 관리 활성화
-			bAutoManageActiveCameraTarget = true;
-
-			// (2) ViewTarget을 Pawn으로 확정 (블렌드 잔여 상태 정리)
-			if (APawn* FinalPawn = GetPawn())
+			int32 ViewportX = 0, ViewportY = 0;
+			GetViewportSize(ViewportX, ViewportY);
+			if (ViewportX > 0 && ViewportY > 0)
 			{
-				SetViewTarget(FinalPawn);
-
-				// (3) ControlRotation을 Pawn의 현재 회전으로 동기화
-				SetControlRotation(FinalPawn->GetActorRotation());
+				AspectRatio = static_cast<float>(ViewportX) / ViewportY;
 			}
+		}
 
-			// (4) 입력 모드 전환
-			SetInputMode(FInputModeGameOnly());
-			SetShowMouseCursor(false);
+		if ((Alpha > 0.4 && LobbyIntro::IsBodyBelowView(Location, Rotation, IntroCameraComponent->FieldOfView, AspectRatio, *DRCharacter))
+			|| LobbyIntro::IsInsideCapsule(Location, *DRCharacter))
+		{
+			bLobbyIntroBodyHidden = true;
 
-			// (5) HUD 오버레이 초기화 (대기실에서 스킵했으므로)
-			InitOverlayForFreeRoam();
-		}),
-		1.5f,
-		false
-	);
+			// 1인칭 상태로 — 팔은 주인 시점에서만 보여 이 카메라에는 아직 안 보인다. 머리 위 닉네임은 도착 후에 켠다
+			DRCharacter->SetWaitingRoomVisibility(false);
+			DRCharacter->SetOverheadWidgetVisibility(false);
+		}
+	}
+
+	if (Alpha >= 1.0)
+	{
+		FinishLobbyIntro();
+	}
+}
+
+void ADRPlayerController::FinishLobbyIntro()
+{
+	// 대기실 · 연출 동안 막았던 엔진 카메라 자동 관리 복원
+	bAutoManageActiveCameraTarget = true;
+
+	APawn* MyPawn = GetPawn();
+	if (ADRCharacter* DRCharacter = Cast<ADRCharacter>(MyPawn))
+	{
+		// 일반 FPS 가시성 (3P 숨김 · 1P 보임 · 머리 위 닉네임)
+		DRCharacter->SetWaitingRoomVisibility(false);
+		StartArmsRaise(DRCharacter);
+	}
+
+	// ★연출 카메라를 지우기 전에★ 뷰 타깃을 옮긴다 (마지막 프레임의 연출 카메라 = 폰의 1인칭 시점이라 끊김이 없다)
+	if (MyPawn)
+	{
+		SetViewTarget(MyPawn);
+	}
+	else
+	{
+		// 폰이 끝내 안 왔다 — 오면 HandlePossessedPawnChanged 가 시점을 옮긴다. 그동안은 대기실 카메라를 본다
+		bPendingViewTargetRestore = true;
+		if (LobbyIntroCamera.IsValid() && GetViewTarget() == LobbyIntroCamera.Get())
+		{
+			SetViewTarget(CachedWaitingRoomCamera.IsValid() ? static_cast<AActor*>(CachedWaitingRoomCamera.Get()) : this);
+		}
+	}
+	ResetLobbyIntroState();
+
+	// 연출 중 설정 화면 등을 열었으면 입력 모드는 그 화면이 닫힐 때 맞춘다
+	if (ActiveScreen == EDRScreen::None)
+	{
+		SetInputMode(FInputModeGameOnly());
+		SetShowMouseCursor(false);
+	}
+
+	// HUD 오버레이 초기화 (대기실 · 연출 동안 미뤘다)
+	InitOverlayForFreeRoam();
+}
+
+void ADRPlayerController::ResetLobbyIntroState()
+{
+	bIsPlayingLobbyIntro = false;
+	bPendingCameraTransition = false;
+	bLobbyIntroBodyHidden = false;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(CameraTransitionRetryHandle);
+	}
+
+	// 대기실 · 연출 동안 서버가 보내는 뷰 타깃(ClientSetViewTarget)을 무시하던 것 해제
+	if (PlayerCameraManager)
+	{
+		PlayerCameraManager->bClientSimulatingViewTarget = false;
+	}
+
+	if (ACameraActor* IntroCamera = LobbyIntroCamera.Get())
+	{
+		IntroCamera->Destroy();
+	}
+	LobbyIntroCamera.Reset();
+	LobbyIntroPawn.Reset();
+}
+
+void ADRPlayerController::StartArmsRaise(ADRCharacter* DRCharacter)
+{
+	StopArmsRaise();
+
+	USkeletalMeshComponent* Arms = DRCharacter ? DRCharacter->FirstPersonMesh.Get() : nullptr;
+	if (!Arms || !GetWorld() || LobbyIntroArmsRaiseTime <= 0.f || LobbyIntroArmsRaiseDepth <= 0.f) return;
+
+	// 1인칭 메시는 카메라에 붙어 있어 상대 위치의 -Z 가 화면 아래쪽이다
+	ArmsRaiseMesh = Arms;
+	ArmsRaiseBaseLocation = Arms->GetRelativeLocation();
+	ArmsRaiseStartTime = GetWorld()->GetTimeSeconds();
+	Arms->SetRelativeLocation(ArmsRaiseBaseLocation - FVector(0.f, 0.f, LobbyIntroArmsRaiseDepth));
+}
+
+void ADRPlayerController::TickArmsRaise()
+{
+	USkeletalMeshComponent* Arms = ArmsRaiseMesh.Get();
+	if (!Arms || !GetWorld())
+	{
+		ArmsRaiseMesh.Reset();
+		return;
+	}
+
+	const double Alpha = FMath::Clamp((GetWorld()->GetTimeSeconds() - ArmsRaiseStartTime) / FMath::Max(LobbyIntroArmsRaiseTime, 0.01f), 0.0, 1.0);
+	const double Remaining = FMath::Pow(1.0 - Alpha, 3.0);	// ease-out — 빠르게 올라와 부드럽게 멈춘다
+	Arms->SetRelativeLocation(ArmsRaiseBaseLocation - FVector(0.0, 0.0, LobbyIntroArmsRaiseDepth * Remaining));
+
+	if (Alpha >= 1.0)
+	{
+		ArmsRaiseMesh.Reset();
+	}
+}
+
+void ADRPlayerController::StopArmsRaise()
+{
+	if (USkeletalMeshComponent* Arms = ArmsRaiseMesh.Get())
+	{
+		Arms->SetRelativeLocation(ArmsRaiseBaseLocation);
+	}
+	ArmsRaiseMesh.Reset();
 }
 
 void ADRPlayerController::HandlePossessedPawnChanged(APawn* PreviousPawn, APawn* NewPawn)
