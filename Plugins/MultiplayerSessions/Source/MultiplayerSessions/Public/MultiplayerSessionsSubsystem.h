@@ -93,6 +93,10 @@ private:
 
 	bool IsLanSubsystem() const;
 
+	// 이전 세션 정리(Destroy)가 실패했다 — 그 뒤로 미뤄 둔 생성/검색/참가 요청을 실패로 알린다
+	// (안 알리면 메뉴가 버튼을 끈 채 로딩 화면 아래에서 영영 기다린다)
+	void FailRequestsWaitingOnDestroy();
+
 	IOnlineSessionPtr SessionInterface;
 	IOnlineVoicePtr VoiceInterface = nullptr;
 	TSharedPtr<FOnlineSessionSettings> LastSessionSettings;

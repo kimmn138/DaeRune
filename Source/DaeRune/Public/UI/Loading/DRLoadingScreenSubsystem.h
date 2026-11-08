@@ -42,6 +42,13 @@ public:
 	void BeginLoadingScreen(TSubclassOf<UDRLoadingScreenWidget> WidgetClass);
 
 	/**
+	 * BeginLoadingScreen 으로 띄운 로딩 화면을 트래블 없이 닫는다(방 생성 실패 · 방을 못 찾음 · 참가 실패).
+	 * 도착 맵에서 띄울 퇴장 위젯과 멈춤 구간 화면 예약도 지운다. 떠 있는 화면이 없으면 예약만 지운다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Loading")
+	void CancelLoadingScreen();
+
+	/**
 	 * 등장 애니가 끝난 뒤 OpenLevel을 호출하는 로컬 하드 로드용(튜토리얼 등).
 	 * 진짜 "애니 후 로드"가 필요할 때 사용.
 	 */
@@ -107,6 +114,10 @@ private:
 	// 다음 맵 로드 완료 시 띄울 아웃트로 위젯 클래스(없으면 아웃트로 생략).
 	UPROPERTY()
 	TSubclassOf<UDRLoadingScreenWidget> PendingOutroClass;
+
+	// BeginLoadingScreen 이 띄운 등장 위젯과 띄운 프레임 — 트래블이 취소되면 CancelLoadingScreen 이 닫는다
+	TWeakObjectPtr<UDRLoadingScreenWidget> BeginWidget;
+	uint64 BeginWidgetFrame = 0;
 
 	// 심리스 트래블 시 사용할 로딩 위젯 클래스(각 클라이언트가 로비에서 등록).
 	UPROPERTY()

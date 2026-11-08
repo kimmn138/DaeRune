@@ -144,18 +144,13 @@ void UMenu::OnCreateSession(bool bWasSuccessful)
 	else
 	{
 		HostButton->SetIsEnabled(true);
+		OnSessionRequestFailed.Broadcast();
 	}
 }
 
 void UMenu::OnFindSessions(const TArray<FOnlineSessionSearchResult>& SessionResults, bool bWasSuccessful)
 {
-	if (MultiplayerSessionsSubsystem == nullptr)
-	{
-		JoinButton->SetIsEnabled(true);
-		return;
-	}
-
-	if (bWasSuccessful && SessionResults.Num() > 0)
+	if (MultiplayerSessionsSubsystem && bWasSuccessful && SessionResults.Num() > 0)
 	{
 		for (const auto& Result : SessionResults)
 		{
@@ -176,9 +171,7 @@ void UMenu::OnFindSessions(const TArray<FOnlineSessionSearchResult>& SessionResu
 	}
 
 	// 일치하는 방을 찾지 못함 - 사용자 피드백 표시
-	ShowError(NSLOCTEXT("MultiplayerSessions", "RoomNotFound", "해당 룸코드의 방을 찾을 수 없습니다."));
-	JoinButton->SetIsEnabled(true);
-	PendingJoinRoomCode.Empty();
+	FailJoin(NSLOCTEXT("MultiplayerSessions", "RoomNotFound", "해당 룸코드의 방을 찾을 수 없습니다."));
 }
 
 void UMenu::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
@@ -206,24 +199,35 @@ void UMenu::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
 	}
 	else
 	{
-		ShowError(NSLOCTEXT("MultiplayerSessions", "JoinFailed", "방 참가에 실패했습니다."));
-		JoinButton->SetIsEnabled(true);
-		PendingJoinRoomCode.Empty();
+		FailJoin(NSLOCTEXT("MultiplayerSessions", "JoinFailed", "방 참가에 실패했습니다."));
 	}
+}
+
+void UMenu::FailJoin(const FText& Message)
+{
+	ShowError(Message);
+	JoinButton->SetIsEnabled(true);
+	PendingJoinRoomCode.Empty();
+	OnSessionRequestFailed.Broadcast();
 }
 
 void UMenu::HostButtonClicked()
 {
-	HostButton->SetIsEnabled(false);
-	if (MultiplayerSessionsSubsystem)
+	if (!MultiplayerSessionsSubsystem)
 	{
-		MultiplayerSessionsSubsystem->CreateSessionWithRoomCode(NumPublicConnections);
+		return;
 	}
+
+	HostButton->SetIsEnabled(false);
+
+	// 요청보다 먼저 알린다 — 요청이 그 자리에서 실패하면 실패 알림이 같은 프레임에 바로 온다
+	OnHostRequestStarted.Broadcast();
+	MultiplayerSessionsSubsystem->CreateSessionWithRoomCode(NumPublicConnections);
 }
 
 void UMenu::JoinButtonClicked()
 {
-	if (!RoomCodeInputBox || !JoinButton)
+	if (!RoomCodeInputBox || !JoinButton || !MultiplayerSessionsSubsystem)
 	{
 		return;
 	}
@@ -251,10 +255,9 @@ void UMenu::JoinButtonClicked()
 	JoinButton->SetIsEnabled(false);
 	PendingJoinRoomCode = InputRoomCode;
 
-	if (MultiplayerSessionsSubsystem)
-	{
-		MultiplayerSessionsSubsystem->FindSessionByRoomCode(InputRoomCode);
-	}
+	// 검증을 통과한 뒤에만 로딩 화면을 띄운다. 요청보다 먼저 알린다 — 그 자리에서 실패하면 실패 알림이 바로 온다
+	OnJoinRequestStarted.Broadcast();
+	MultiplayerSessionsSubsystem->FindSessionByRoomCode(InputRoomCode);
 }
 
 void UMenu::ShowError(const FText& Message)

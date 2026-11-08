@@ -116,12 +116,77 @@ void UDRLoadingScreenSubsystem::BeginLoadingScreen(TSubclassOf<UDRLoadingScreenW
 {
 	if (UDRLoadingScreenWidget* Widget = CreateAndShow(WidgetClass))
 	{
+		BeginWidget = Widget;
+		BeginWidgetFrame = GFrameCounter;
 		Widget->PlayIntro();
 	}
 
 	// 외부에서 트래블이 일어나므로 멈춤 브리지를 미리 등록하고, 도착 맵에서 아웃트로 예약.
 	PendingOutroClass = WidgetClass;
 	SetupMoviePlayerBridge(WidgetClass);
+}
+
+void UDRLoadingScreenSubsystem::CancelLoadingScreen()
+{
+	// 트래블이 없으니 도착 맵 아웃트로와 멈춤 구간 화면 예약을 지운다
+	// (남겨 두면 나중의 아무 맵 로드에서 엉뚱하게 로딩 화면이 뜬다)
+	PendingOutroClass = nullptr;
+	if (!IsRunningDedicatedServer())
+	{
+		GetMoviePlayer()->SetupLoadingScreen(FLoadingScreenAttributes());
+	}
+
+	UDRLoadingScreenWidget* Widget = BeginWidget.Get();
+	BeginWidget.Reset();
+	if (!Widget || !Widget->IsInViewport())
+	{
+		return;
+	}
+
+	// 띄운 프레임에 바로 실패했으면(요청이 그 자리에서 실패) 아직 그려지지 않았다 — 연출 없이 뗀다
+	if (BeginWidgetFrame == GFrameCounter)
+	{
+		Widget->RemoveFromParent();
+		if (ActiveWidget == Widget)
+		{
+			ActiveWidget = nullptr;
+		}
+		return;
+	}
+
+	// 등장 애니가 아직 돌고 있으면 끝난 뒤 퇴장 — 두 애니가 같은 속성을 동시에 움직이지 않게
+	if (Widget->IsAnyAnimationPlaying())
+	{
+		TWeakObjectPtr<UDRLoadingScreenSubsystem> WeakThis(this);
+		TWeakObjectPtr<UDRLoadingScreenWidget> WeakWidget(Widget);
+		TSharedRef<bool> bTriggered = MakeShared<bool>(false);
+
+		auto CloseAfterIntro = [WeakThis, WeakWidget, bTriggered]()
+		{
+			if (*bTriggered)
+			{
+				return;
+			}
+			*bTriggered = true;
+
+			if (WeakThis.IsValid() && WeakWidget.IsValid())
+			{
+				WeakThis->PlayOutroAndRemove(WeakWidget.Get());
+			}
+		};
+
+		Widget->OnIntroFinished.AddLambda(CloseAfterIntro);
+
+		// 안전장치: WBP 가 NotifyIntroFinished 를 부르지 않아도 닫는다
+		if (UWorld* World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr)
+		{
+			FTimerHandle SafetyHandle;
+			World->GetTimerManager().SetTimer(SafetyHandle, FTimerDelegate::CreateLambda(CloseAfterIntro), MaxIntroWaitTime, false);
+		}
+		return;
+	}
+
+	PlayOutroAndRemove(Widget);
 }
 
 void UDRLoadingScreenSubsystem::OpenLevelWithLoadingScreen(TSubclassOf<UDRLoadingScreenWidget> WidgetClass, FName LevelName, const FString& Options)
@@ -192,6 +257,7 @@ void UDRLoadingScreenSubsystem::HandlePostLoadMap(UWorld* LoadedWorld)
 
 	TSubclassOf<UDRLoadingScreenWidget> OutroClass = PendingOutroClass;
 	PendingOutroClass = nullptr;
+	BeginWidget.Reset();
 
 	UDRLoadingScreenWidget* Widget = CreateAndShow(OutroClass);
 	if (!Widget)

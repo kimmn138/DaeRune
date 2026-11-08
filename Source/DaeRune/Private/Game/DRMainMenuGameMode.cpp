@@ -188,12 +188,48 @@ void ADRMainMenuGameMode::ShowLobbyMenuUI(APlayerController* PC)
 		if (UMenu* Menu = Cast<UMenu>(Widget))
 		{
 			Menu->MenuSetup(MaxPublicConnections, LobbyMapPath);
+
+			// 로딩 화면은 메뉴가 입력을 검증하고 요청을 보낼 때 띄우고, 실패하면 닫는다
+			// (버튼 클릭에 걸면 룸코드가 비어도 뜨고 방을 못 찾아도 닫히지 않는다)
+			Menu->OnHostRequestStarted.AddUniqueDynamic(this, &ThisClass::HandleHostRequestStarted);
+			Menu->OnJoinRequestStarted.AddUniqueDynamic(this, &ThisClass::HandleJoinRequestStarted);
+			Menu->OnSessionRequestFailed.AddUniqueDynamic(this, &ThisClass::HandleSessionRequestFailed);
 		}
 		else
 		{
 			Widget->AddToViewport();
 		}
 		CurrentMenuWidget = Widget;
+	}
+}
+
+UDRLoadingScreenSubsystem* ADRMainMenuGameMode::GetLoadingScreenSubsystem() const
+{
+	const UGameInstance* GI = GetGameInstance();
+	return GI ? GI->GetSubsystem<UDRLoadingScreenSubsystem>() : nullptr;
+}
+
+void ADRMainMenuGameMode::HandleHostRequestStarted()
+{
+	if (UDRLoadingScreenSubsystem* LoadingSubsystem = GetLoadingScreenSubsystem())
+	{
+		LoadingSubsystem->BeginLoadingScreen(CreateRoomLoadingWidgetClass);
+	}
+}
+
+void ADRMainMenuGameMode::HandleJoinRequestStarted()
+{
+	if (UDRLoadingScreenSubsystem* LoadingSubsystem = GetLoadingScreenSubsystem())
+	{
+		LoadingSubsystem->BeginLoadingScreen(JoinRoomLoadingWidgetClass);
+	}
+}
+
+void ADRMainMenuGameMode::HandleSessionRequestFailed()
+{
+	if (UDRLoadingScreenSubsystem* LoadingSubsystem = GetLoadingScreenSubsystem())
+	{
+		LoadingSubsystem->CancelLoadingScreen();
 	}
 }
 

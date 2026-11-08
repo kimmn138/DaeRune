@@ -203,7 +203,35 @@ void UMultiplayerSessionsSubsystem::DestroySession()
 	if (!SessionInterface->DestroySession(NAME_GameSession))
 	{
 		SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegateHandle);
+		FailRequestsWaitingOnDestroy();
 		MultiplayerOnDestroySessionComplete.Broadcast(false);
+	}
+}
+
+void UMultiplayerSessionsSubsystem::FailRequestsWaitingOnDestroy()
+{
+	const bool bCreateWasWaiting = bCreateSessionOnDestroy;
+	const bool bFindWasWaiting = bFindSessionOnDestroy;
+	const bool bJoinWasWaiting = bJoinSessionOnDestroy;
+
+	// 먼저 비운다 — 알림을 받은 메뉴가 그 자리에서 다시 요청해도 이전 상태가 섞이지 않는다
+	bCreateSessionOnDestroy = false;
+	bFindSessionOnDestroy = false;
+	bJoinSessionOnDestroy = false;
+	PendingFindRoomCode.Empty();
+	PendingJoinResult.Reset();
+
+	if (bCreateWasWaiting)
+	{
+		MultiplayerOnCreateSessionComplete.Broadcast(false);
+	}
+	if (bFindWasWaiting)
+	{
+		MultiplayerOnFindSessionsComplete.Broadcast(TArray<FOnlineSessionSearchResult>(), false);
+	}
+	if (bJoinWasWaiting)
+	{
+		MultiplayerOnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::UnknownError);
 	}
 }
 
@@ -412,12 +440,8 @@ void UMultiplayerSessionsSubsystem::OnDestroySessionComplete(FName SessionName, 
 	}
 	else
 	{
-		// Destroy 실패 시 보류 상태 정리하여 데드락 방지
-		bCreateSessionOnDestroy = false;
-		bFindSessionOnDestroy = false;
-		bJoinSessionOnDestroy = false;
-		PendingFindRoomCode.Empty();
-		PendingJoinResult.Reset();
+		// Destroy 실패 시 보류 상태 정리 + 실패 알림으로 데드락 방지
+		FailRequestsWaitingOnDestroy();
 	}
 
 	MultiplayerOnDestroySessionComplete.Broadcast(bWasSuccessful);

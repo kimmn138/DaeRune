@@ -9,6 +9,7 @@
 class ADRCharacter;
 class UDRTutorialStartWidget;
 class UDRLoadingScreenWidget;
+class UDRLoadingScreenSubsystem;
 
 UCLASS()
 class DAERUNE_API ADRMainMenuGameMode : public AGameModeBase
@@ -108,6 +109,22 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UDRLoadingScreenWidget> TutorialLoadingWidgetClass;
 
+	// 방 만들기 / 방 참가 로딩 화면 위젯 클래스(WBP_CreateRoomLoading / WBP_InRoomLoading)
+	// 메뉴가 입력 검증을 통과해 요청을 보낼 때 띄우고, 요청이 실패하면 닫는다
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UDRLoadingScreenWidget> CreateRoomLoadingWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UDRLoadingScreenWidget> JoinRoomLoadingWidgetClass;
+
+	// 로비 메뉴(UMenu)의 방 만들기 · 참가 요청 알림
+	UFUNCTION()
+	void HandleHostRequestStarted();
+	UFUNCTION()
+	void HandleJoinRequestStarted();
+	UFUNCTION()
+	void HandleSessionRequestFailed();
+
 private:
 	// 현재 활성 UI 위젯
 	UPROPERTY()
@@ -122,4 +139,6 @@ private:
 
 	// 메뉴 위젯을 닫고 현재 메인 메뉴 맵을 다시 연다 → BeginPlay 가 튜토리얼/로비 분기를 다시 평가
 	void ReloadMenu();
+
+	UDRLoadingScreenSubsystem* GetLoadingScreenSubsystem() const;
 };
