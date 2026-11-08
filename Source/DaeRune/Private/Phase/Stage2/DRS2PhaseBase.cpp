@@ -322,6 +322,17 @@ void UDRS2PhaseBase::SetGateActive(ADRS2TeleportGate* Gate, bool bActive)
 	Gate->SetGateActive(bActive);
 }
 
+void UDRS2PhaseBase::SetGateGuideHighlight(ADRS2TeleportGate* Gate, bool bHighlight)
+{
+	if (!IsValid(Gate))
+	{
+		UE_LOG(LogDR, Error, TEXT("[S2Phase] 게이트 참조가 없습니다 (Director 배선 확인)."));
+		return;
+	}
+
+	Gate->SetGuideHighlight(bHighlight);
+}
+
 FTimerHandle& UDRS2PhaseBase::AddManagedTimer()
 {
 	return ManagedTimers.AddDefaulted_GetRef();

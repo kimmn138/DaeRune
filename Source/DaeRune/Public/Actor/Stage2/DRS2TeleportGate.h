@@ -7,6 +7,8 @@
 #include "DRS2TeleportGate.generated.h"
 
 class UBoxComponent;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
 class ADRCharacter;
 
 /** 게이트 통과 방식 (Plan6 §4.12) */
@@ -44,6 +46,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnTeamRecalled);
  *   D3 (방3 -> 방4)  : Individual / CarrierOnly + bDeactivateOnUse
  *   R4 (방4 -> 방3)  : Individual / Anyone
  *
+ * 길 안내 강조: 페이즈가 SetGuideHighlight 로 "다음에 갈 문"을 지정하면 그 게이트가 활성인 동안 문이 빛난다.
+ *   D1 = 방1 클리어 ~ 부품 소지자 방2 퇴장, D3 = 방3 입장 ~ 부품 소지자 방4 입장 (방4 실패로 재시도하면 다시)
+ *
  * 위치 이동은 서버 권한으로만 수행한다.
  */
 UCLASS()
@@ -70,6 +75,14 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "S2|Gate")
 	ES2GateEntryRule GetEntryRule() const { return EntryRule; }
+
+	// 길 안내 강조 (서버). 켜 두면 게이트가 활성인 동안 문이 빛나 다음에 갈 곳을 알린다.
+	// 활성과 따로 두는 이유: D3 는 두더지 클리어 뒤에도 다시 켜지지만 그때는 방5로 가야 하므로 빛나면 안 된다.
+	UFUNCTION(BlueprintCallable, Category = "S2|Gate")
+	void SetGuideHighlight(bool bNewHighlight);
+
+	UFUNCTION(BlueprintCallable, Category = "S2|Gate")
+	bool IsGuideHighlighted() const { return bGuideHighlight; }
 
 	// 서버 델리게이트
 	UPROPERTY(BlueprintAssignable, Category = "S2|Gate")
@@ -118,11 +131,25 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "S2|Gate", meta = (ClampMin = "0.0"))
 	float DestinationSpreadRadius = 150.f;
 
+	// 길 안내 강조 오버레이 (MI_GateHighlight). 문 메시 위에 한 겹 더 그리고 GuideHighlightParameterName(0/1)으로 켜고 끈다.
+	// 반투명(After DOF)이라 장난감 화풍 포스트 프로세스를 거치지 않고 그대로 보인다. 비우면 강조 없음.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Gate")
+	TObjectPtr<UMaterialInterface> GuideHighlightMaterial;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|Gate")
+	FName GuideHighlightParameterName = TEXT("Highlight");
+
 	UPROPERTY(ReplicatedUsing = OnRep_bActive, BlueprintReadOnly, Category = "S2|Gate")
 	bool bActive = false;
 
 	UFUNCTION()
 	void OnRep_bActive();
+
+	UPROPERTY(ReplicatedUsing = OnRep_bGuideHighlight, BlueprintReadOnly, Category = "S2|Gate")
+	bool bGuideHighlight = false;
+
+	UFUNCTION()
+	void OnRep_bGuideHighlight();
 
 	// 발광 전환 연출 (머티리얼 파라미터/사운드)
 	UFUNCTION(BlueprintImplementableEvent, Category = "S2|Gate")
@@ -145,4 +172,10 @@ private:
 
 	// 한 명을 목적지로 이동. SlotTotal > 1 이면 원형으로 분산 배치한다.
 	void TeleportOne(ADRCharacter* Character, int32 SlotIndex, int32 SlotTotal);
+
+	// 활성이면서 길 안내 강조일 때만 문을 빛낸다 (서버/클라 공통)
+	void RefreshGuideHighlight();
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> GuideHighlightMID;
 };

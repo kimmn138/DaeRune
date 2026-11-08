@@ -26,6 +26,8 @@ void UDRS2PuzzlePhase::OnPhaseStart()
 	// 이 처리를 방1 페이즈의 OnPhaseEnd 가 아니라 여기서 하는 이유:
 	// TriggerGameOver 도 OnPhaseEnd 를 호출하므로 게임오버 시 게이트가 켜지는 부수효과를 막기 위함.
 	SetGateActive(Director->Gate_Room1ToRoom2, true);
+	// 방2 문을 강조해 다음에 갈 곳을 알린다 (부품 소지자가 방2를 나올 때 끈다)
+	SetGateGuideHighlight(Director->Gate_Room1ToRoom2, true);
 
 	SetupPhaseObjectiveByRow(TEXT("S2P2_Move"));
 
@@ -153,6 +155,7 @@ void UDRS2PuzzlePhase::HandleTeamRecalled()
 	{
 		// 방2 재입장 불가
 		SetGateActive(Director->Gate_Room1ToRoom2, false);
+		SetGateGuideHighlight(Director->Gate_Room1ToRoom2, false);
 	}
 
 	UE_LOG(LogDR, Log, TEXT("[S2P2] 부품 소지자 퇴장 - 전원 방1 회수 완료"));
@@ -185,6 +188,12 @@ void UDRS2PuzzlePhase::OnPhaseEnd()
 		if (ADRS2TeleportGate* ExitGate = Director->Gate_Room2Exit)
 		{
 			ExitGate->OnTeamRecalled.RemoveDynamic(this, &UDRS2PuzzlePhase::HandleTeamRecalled);
+		}
+
+		// 게임오버 · 페이즈 스킵으로 끝나도 방2 문 강조가 다음 페이즈에 남지 않게
+		if (ADRS2TeleportGate* EntryGate = Director->Gate_Room1ToRoom2)
+		{
+			EntryGate->SetGuideHighlight(false);
 		}
 	}
 

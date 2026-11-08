@@ -134,6 +134,8 @@ void UDRS2DefensePhase::OnRoomAllInside()
 		Gate->SetEntryRule(ES2GateEntryRule::CarrierOnly);
 		Gate->OnGateUsed.AddDynamic(this, &UDRS2DefensePhase::HandleRoom4Entered);
 		Gate->SetGateActive(true);
+		// 방4 문을 강조한다 — 부품 소지자가 들어가면 끄고(HandleRoom4Entered), 방4 실패로 재시도하면 다시 켠다
+		Gate->SetGuideHighlight(true);
 	}
 
 	// ⑤ 설치대 / 두더지 게임 바인딩
@@ -170,6 +172,8 @@ void UDRS2DefensePhase::HandleRoom4Entered(ADRCharacter* Who)
 
 	// 1명만 들어간다. 게이트는 bDeactivateOnUse 로 이미 잠겼지만 명시적으로 한 번 더 보장한다.
 	SetGateActive(Director->Gate_Room3ToRoom4, false);
+	// 들어갈 사람이 들어갔으니 강조도 끈다 (두더지 클리어 뒤 D3 가 다시 켜져도 빛나지 않는다)
+	SetGateGuideHighlight(Director->Gate_Room3ToRoom4, false);
 
 	SetupPhaseObjectiveByRow(TEXT("S2P3_Hold"), GetMoleGoalKills(Director));
 
@@ -264,6 +268,7 @@ void UDRS2DefensePhase::HandleMoleGameCleared()
 	{
 		Gate->SetEntryRule(ES2GateEntryRule::Anyone);
 		Gate->SetGateActive(true);
+		// 강조는 켜지 않는다 — 이제 갈 곳은 방5다 (방4 입장 때 이미 꺼졌다)
 	}
 
 	// ② 사망자 전원 부활 (방3에서 체력 50%)
@@ -379,6 +384,8 @@ void UDRS2DefensePhase::PrepareRoom4Retry(ADRS2StageDirector* Director, bool bEj
 		// ★부품이 방4 안에 있으면 "소지자만" 규칙을 유지하면 아무도 들어갈 수 없다.
 		Gate->SetEntryRule(bEjectPartInsideRoom4 ? ES2GateEntryRule::Anyone : ES2GateEntryRule::CarrierOnly);
 		Gate->SetGateActive(true);
+		// 누군가 다시 들어가야 하므로 방4 문 강조를 다시 켠다
+		Gate->SetGuideHighlight(true);
 	}
 
 	Room4Player = nullptr;
@@ -441,6 +448,8 @@ void UDRS2DefensePhase::OnPhaseEnd()
 		if (ADRS2TeleportGate* Gate = Director->Gate_Room3ToRoom4)
 		{
 			Gate->OnGateUsed.RemoveDynamic(this, &UDRS2DefensePhase::HandleRoom4Entered);
+			// 게임오버 · 페이즈 스킵으로 끝나도 방4 문 강조가 다음 페이즈에 남지 않게
+			Gate->SetGuideHighlight(false);
 		}
 		if (ADRCleanserSite* Site = Director->Room4InstallSite)
 		{

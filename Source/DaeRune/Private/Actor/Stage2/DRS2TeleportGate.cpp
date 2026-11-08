@@ -6,6 +6,7 @@
 #include "Character/DRCharacter.h"
 #include "Game/DRGameStateBase.h"
 #include "Interaction/CombatInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "DaeRune/DRLogChannels.h"
 
@@ -22,6 +23,9 @@ ADRS2TeleportGate::ADRS2TeleportGate()
 	GateMesh->SetupAttachment(SceneRoot);
 	GateMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	GateMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+	// 길 안내 강조는 오버레이 머티리얼인데, UE 5.5 Nanite 프록시는 오버레이를 그리지 않는다 → 일반 메시로 그린다
+	// (문 메시가 수십 개 삼각형이라 비용 차이는 없다)
+	GateMesh->bDisallowNanite = true;
 
 	TriggerBox = CreateDefaultSubobject<UBoxComponent>(TEXT("TriggerBox"));
 	TriggerBox->SetupAttachment(SceneRoot);
@@ -41,6 +45,7 @@ void ADRS2TeleportGate::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ADRS2TeleportGate, bActive);
+	DOREPLIFETIME(ADRS2TeleportGate, bGuideHighlight);
 }
 
 void ADRS2TeleportGate::BeginPlay()
@@ -53,8 +58,18 @@ void ADRS2TeleportGate::BeginPlay()
 		TriggerBox->OnComponentBeginOverlap.AddDynamic(this, &ADRS2TeleportGate::HandleBeginOverlap);
 	}
 
+	// 강조 오버레이는 여기서 한 번만 걸고 이후엔 파라미터(0/1)로만 켜고 끈다.
+	// 켤 때 SetOverlayMaterial 을 하면 프록시가 다시 만들어지는데, 패키지 빌드는 새 PSO 가 컴파일될 때까지
+	// 프록시 생성을 미뤄(r.PSOPrecache.ProxyCreationWhenPSOReady) 그동안 문이 사라진다. 지금은 로딩 화면 중이다.
+	if (GuideHighlightMaterial)
+	{
+		GuideHighlightMID = UMaterialInstanceDynamic::Create(GuideHighlightMaterial, this);
+		GateMesh->SetOverlayMaterial(GuideHighlightMID);
+	}
+
 	// 초기 발광 상태 반영 (서버/클라 공통)
 	OnGateActiveChanged(bActive);
+	RefreshGuideHighlight();
 }
 
 void ADRS2TeleportGate::SetGateActive(bool bNewActive)
@@ -70,6 +85,33 @@ void ADRS2TeleportGate::SetGateActive(bool bNewActive)
 void ADRS2TeleportGate::OnRep_bActive()
 {
 	OnGateActiveChanged(bActive);
+	RefreshGuideHighlight();
+}
+
+void ADRS2TeleportGate::SetGuideHighlight(bool bNewHighlight)
+{
+	if (!HasAuthority() || bGuideHighlight == bNewHighlight) return;
+
+	bGuideHighlight = bNewHighlight;
+
+	// 리슨 서버에서도 보이도록 수동 호출
+	OnRep_bGuideHighlight();
+
+	UE_LOG(LogDR, Log, TEXT("[S2Gate] %s 길 안내 강조 %s"), *GetName(), bGuideHighlight ? TEXT("켬") : TEXT("끔"));
+}
+
+void ADRS2TeleportGate::OnRep_bGuideHighlight()
+{
+	RefreshGuideHighlight();
+}
+
+void ADRS2TeleportGate::RefreshGuideHighlight()
+{
+	// 꺼진 게이트가 빛나면 못 쓰는 문으로 안내하게 되므로 활성일 때만 켠다
+	if (GuideHighlightMID)
+	{
+		GuideHighlightMID->SetScalarParameterValue(GuideHighlightParameterName, (bActive && bGuideHighlight) ? 1.f : 0.f);
+	}
 }
 
 void ADRS2TeleportGate::SetEntryRule(ES2GateEntryRule NewRule)

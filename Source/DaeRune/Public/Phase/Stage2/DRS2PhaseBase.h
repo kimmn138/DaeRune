@@ -106,6 +106,8 @@ protected:
 
 	void SetBlockerBlocked(ADRS2PassageBlocker* Blocker, bool bBlocked);
 	void SetGateActive(ADRS2TeleportGate* Gate, bool bActive);
+	// 다음에 갈 문으로 강조 (게이트가 활성인 동안만 빛난다)
+	void SetGateGuideHighlight(ADRS2TeleportGate* Gate, bool bHighlight);
 
 	// ========== 타이머 ==========
 
