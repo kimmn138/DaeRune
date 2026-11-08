@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Response Language
+
+**Always answer the user in Korean only (한국어로만 답한다).** This applies to every reply and progress update, even when the user writes in another language or the work involves English code, logs, or docs. Code identifiers, file paths, commands, and quoted log/error text stay as they are.
+
 ## Project Overview
 
 DaeRune is a multiplayer cooperative PvE action game built with Unreal Engine 5.5, using the Gameplay Ability System (GAS) for combat mechanics. The game features a 2-phase mission structure: players first secure a Cleanser Site and install parts, then defend it against enemy waves.
