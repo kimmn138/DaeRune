@@ -5,6 +5,7 @@
 #include "Actor/Stage2/DRS2CodeScreen.h"
 #include "Actor/Stage2/DRS2InteractProp.h"
 #include "Net/UnrealNetwork.h"
+#include "Rendering/DROutlineHighlightComponent.h"
 #include "DaeRune/DRLogChannels.h"
 
 ADRS2SwitchPuzzle::ADRS2SwitchPuzzle()
@@ -15,6 +16,8 @@ ADRS2SwitchPuzzle::ADRS2SwitchPuzzle()
 
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);
+
+	OutlineHighlight = CreateDefaultSubobject<UDROutlineHighlightComponent>(TEXT("OutlineHighlight"));
 }
 
 void ADRS2SwitchPuzzle::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

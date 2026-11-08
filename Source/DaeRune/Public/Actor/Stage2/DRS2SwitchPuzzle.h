@@ -9,6 +9,7 @@
 
 class ADRS2CodeScreen;
 class ADRS2Lever;
+class UDROutlineHighlightComponent;
 
 /**
  * 레버 1개가 담당하는 전구 목록 (Plan6 §14.2.3)
@@ -131,6 +132,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Puzzle")
 	TObjectPtr<USceneComponent> SceneRoot;
+
+	// 방2 페이즈가 켜는 외곽선 강조 (어떤 물체가 퍼즐 · 금고인지 알린다. 연결된 레버 · 버튼 · 단말기도 함께)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Puzzle")
+	TObjectPtr<UDROutlineHighlightComponent> OutlineHighlight;
 
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "S2|Puzzle")
 	TObjectPtr<ADRS2CodeScreen> CodeScreen;

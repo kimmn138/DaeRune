@@ -7,6 +7,7 @@
 #include "DRS2CctvBoard.generated.h"
 
 class UMaterialInstanceDynamic;
+class UDROutlineHighlightComponent;
 class UTexture;
 class UTexture2D;
 
@@ -94,6 +95,10 @@ protected:
 	//   메시를 6개 두는 대신 슬롯을 나눠 쓰므로 드로우콜과 배치 작업이 줄어든다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|CCTV")
 	TObjectPtr<UStaticMeshComponent> ScreenMesh;
+
+	// 방2 페이즈가 켜는 외곽선 강조 (어떤 물체가 퍼즐 · 금고인지 알린다. 연결된 레버 · 버튼 · 단말기도 함께)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|CCTV")
+	TObjectPtr<UDROutlineHighlightComponent> OutlineHighlight;
 
 	// 화면 개수 (= 사용할 머티리얼 슬롯 수). 스텝마다 서로 다른 화면 2개가 켜져야 하므로 최소 2개.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "S2|CCTV", meta = (ClampMin = "2"))

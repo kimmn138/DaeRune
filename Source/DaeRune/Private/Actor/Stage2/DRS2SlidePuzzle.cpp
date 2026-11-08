@@ -7,6 +7,7 @@
 #include "GameFramework/PlayerState.h"
 #include "Net/UnrealNetwork.h"
 #include "Player/DRPlayerController.h"
+#include "Rendering/DROutlineHighlightComponent.h"
 #include "DaeRune/DRLogChannels.h"
 
 ADRS2SlidePuzzle::ADRS2SlidePuzzle()
@@ -17,6 +18,8 @@ ADRS2SlidePuzzle::ADRS2SlidePuzzle()
 
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);
+
+	OutlineHighlight = CreateDefaultSubobject<UDROutlineHighlightComponent>(TEXT("OutlineHighlight"));
 }
 
 void ADRS2SlidePuzzle::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

@@ -8,6 +8,7 @@
 #include "Character/DRCharacter.h"
 #include "Interaction/CombatInterface.h"
 #include "Net/UnrealNetwork.h"
+#include "Rendering/DROutlineHighlightComponent.h"
 #include "DaeRune/DRLogChannels.h"
 
 #define LOCTEXT_NAMESPACE "DRInteraction"
@@ -41,6 +42,20 @@ void ADRS2InteractProp::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ADRS2InteractProp, bPropEnabled);
+}
+
+void ADRS2InteractProp::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// 소속 퍼즐/금고의 외곽선 강조에 함께 그려지도록 등록한다 (서버 · 클라 각자)
+	if (OwnerPuzzle)
+	{
+		if (UDROutlineHighlightComponent* Outline = OwnerPuzzle->FindComponentByClass<UDROutlineHighlightComponent>())
+		{
+			Outline->AddLinkedActor(this);
+		}
+	}
 }
 
 bool ADRS2InteractProp::CanInteract(const ADRCharacter* Character) const

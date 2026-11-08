@@ -8,6 +8,7 @@
 #include "Actor/Stage2/DRS2InteractProp.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
+#include "Rendering/DROutlineHighlightComponent.h"
 #include "DaeRune/DRLogChannels.h"
 
 ADRS2Safe::ADRS2Safe()
@@ -27,6 +28,8 @@ ADRS2Safe::ADRS2Safe()
 
 	PartSpawnPoint = CreateDefaultSubobject<USceneComponent>(TEXT("PartSpawnPoint"));
 	PartSpawnPoint->SetupAttachment(SceneRoot);
+
+	OutlineHighlight = CreateDefaultSubobject<UDROutlineHighlightComponent>(TEXT("OutlineHighlight"));
 }
 
 void ADRS2Safe::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

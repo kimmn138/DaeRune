@@ -6,6 +6,7 @@
 #include "Game/DRStageGameState.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
+#include "Rendering/DROutlineHighlightComponent.h"
 #include "DaeRune/DRLogChannels.h"
 
 ADRS2CctvBoard::ADRS2CctvBoard()
@@ -26,6 +27,8 @@ ADRS2CctvBoard::ADRS2CctvBoard()
 	HintMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HintMesh"));
 	HintMesh->SetupAttachment(GetRootComponent());
 	HintMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	OutlineHighlight = CreateDefaultSubobject<UDROutlineHighlightComponent>(TEXT("OutlineHighlight"));
 }
 
 void ADRS2CctvBoard::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

@@ -11,6 +11,7 @@ class ADRS2CodeScreen;
 class ADRCleanserPart;
 class ADRS2SafeButton;
 class UMaterialInstanceDynamic;
+class UDROutlineHighlightComponent;
 
 /**
  * 금고 (Plan6 §14.2.5)
@@ -77,6 +78,10 @@ protected:
 	// 개방 연출용 문 메시
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Safe")
 	TObjectPtr<UStaticMeshComponent> DoorMesh;
+
+	// 방2 페이즈가 켜는 외곽선 강조 (어떤 물체가 퍼즐 · 금고인지 알린다. 연결된 레버 · 버튼 · 단말기도 함께)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Safe")
+	TObjectPtr<UDROutlineHighlightComponent> OutlineHighlight;
 
 	// 부품 스폰 위치 (금고 내부)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Safe")

@@ -8,6 +8,7 @@
 
 class ADRCharacter;
 class ADRCleanserPart;
+class ADRS2StageDirector;
 
 /**
  * 스테이지2 페이즈 1 - 방2 퍼즐 3종 + 금고 (Plan6 §14.2)
@@ -72,4 +73,9 @@ protected:
 
 	// 금고에서 나온 부품 (페이즈가 끝날 때 획득 감지 바인딩을 풀기 위해)
 	TWeakObjectPtr<ADRCleanserPart> SafePart;
+
+private:
+	// 퍼즐 3종 + 금고의 외곽선 강조 (어떤 물체가 퍼즐 · 금고인지 가장자리로 알린다)
+	void SetRoom2Outlines(ADRS2StageDirector* Director, bool bOn);
+	static void SetOutline(AActor* Puzzle, bool bOn);
 };

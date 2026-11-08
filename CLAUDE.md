@@ -208,6 +208,14 @@ Designers change gameplay numbers in a packaged Development build without a rebu
 - **Console**: `DRTuningReload`, `DRTuningRevert`, `DRTuningStatus`, `DRTuningExport`; editor: `DRTuningBake [path] [save] [clear]` writes sheet values into the real assets (undoable).
 - **PIE**: off unless `dr.Tuning.ApplyInPIE 1`; reverted when PIE ends (a modified CDO would otherwise be saved into the BP). Not created in Shipping, with `-NoTuning`, or `bEnabled=False`.
 
+### Interactable Outline (`UDROutlineHighlightComponent`)
+Draws only the outer edge of an object to mark it as something to use (Stage2 room 2: switch puzzle, 8-puzzle terminal, CCTV board, safe).
+
+- The component (on `ADRS2SwitchPuzzle` / `SlidePuzzle` / `CctvBoard` / `Safe`) is toggled by the server (`SetHighlighted`, replicated) and puts the owner's meshes plus linked actors into custom depth with **stencil 10** (enemy wave outline uses 1-5). `ADRS2InteractProp::BeginPlay` links each lever / safe button / terminal to its `OwnerPuzzle`'s component.
+- The edge is painted by `MI_PP_InteractOutline` (`Content/Blueprints/VFX/InteractOutline/`, after tonemapping, color/width/pulse are parameters) — it must be in the map: Stage2 has an unbound `PPV_InteractOutline` with only that blendable. Hidden parts (behind walls or in front of the object) are not outlined.
+- `UDRS2PuzzlePhase` turns all four on at phase start, a puzzle off when it is solved, and everything off when the safe opens or the phase ends.
+- Doors use a different look: `ADRS2TeleportGate::SetGuideHighlight` (overlay material over the whole door, "go here") — see the gate header.
+
 ### Toy Style Post Process (`UDRToyStyleSubsystem`)
 A global "toy" art style: `M_PP_ToyStyle` / `MI_PP_ToyStyle` (`Content/Blueprints/VFX/ToyStyle/`) is attached to every game view (PIE, packaged) and the level editor viewport by an engine subsystem + scene view extension (`Source/DaeRune/*/Rendering/`). No map, camera or BP is touched; scene captures (wardrobe icons/previews, reflections) and asset-editor previews are skipped.
 

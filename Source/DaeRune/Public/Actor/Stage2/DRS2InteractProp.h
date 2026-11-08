@@ -48,6 +48,8 @@ public:
 	int32 GetPropIndex() const { return PropIndex; }
 
 protected:
+	virtual void BeginPlay() override;
+
 	// 자식이 구현하는 실제 처리 (서버). 소유 퍼즐에 위임한다.
 	// 쿨다운 통과 후에만 호출된다.
 	virtual void ExecuteInteract(ADRCharacter* Character) {}

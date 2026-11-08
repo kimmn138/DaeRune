@@ -11,6 +11,7 @@
 #include "Actor/Stage2/DRS2Safe.h"
 #include "Game/DRStageGameMode.h"
 #include "Game/DRStageGameState.h"
+#include "Rendering/DROutlineHighlightComponent.h"
 #include "DaeRune/DRLogChannels.h"
 
 void UDRS2PuzzlePhase::OnPhaseStart()
@@ -98,10 +99,36 @@ void UDRS2PuzzlePhase::OnPhaseStart()
 	// 진행도 분모 2 = 스크린에 숫자가 뜨는 퍼즐 수 (8퍼즐 + 스위치). CCTV는 제외한다.
 	SetupPhaseObjectiveByRow(TEXT("S2P2_Puzzle"), 2);
 	GameState->UpdatePhaseObjectiveProgress(0);
+
+	// 퍼즐 3종 + 금고 외곽선 — 풀린 퍼즐은 그것만 끄고, 금고가 열리면 전부 끈다
+	SetRoom2Outlines(Director, true);
 }
 
-void UDRS2PuzzlePhase::HandlePuzzleSolved(AActor* /*Puzzle*/)
+void UDRS2PuzzlePhase::SetRoom2Outlines(ADRS2StageDirector* Director, bool bOn)
 {
+	if (!Director) return;
+
+	SetOutline(Director->Room2SlidePuzzle, bOn);
+	SetOutline(Director->Room2SwitchPuzzle, bOn);
+	SetOutline(Director->Room2CctvBoard, bOn);
+	SetOutline(Director->Room2Safe, bOn);
+}
+
+void UDRS2PuzzlePhase::SetOutline(AActor* Puzzle, bool bOn)
+{
+	if (!IsValid(Puzzle)) return;
+
+	if (UDROutlineHighlightComponent* Outline = Puzzle->FindComponentByClass<UDROutlineHighlightComponent>())
+	{
+		Outline->SetHighlighted(bOn);
+	}
+}
+
+void UDRS2PuzzlePhase::HandlePuzzleSolved(AActor* Puzzle)
+{
+	// 숫자를 공개한 퍼즐은 더 조작할 필요가 없다
+	SetOutline(Puzzle, false);
+
 	if (!GameState) return;
 
 	++DigitsRevealed;
@@ -115,6 +142,9 @@ void UDRS2PuzzlePhase::HandleSafeOpened(AActor* SpawnedPart)
 	if (!GameState) return;
 
 	bSafeOpened = true;
+
+	// 금고가 열렸으니 퍼즐 · CCTV 도 볼 일이 없다 — 이제 볼 것은 부품이다
+	SetRoom2Outlines(GetDirector(), false);
 
 	SetupPhaseObjectiveByRow(TEXT("S2P2_Part"));
 
@@ -190,11 +220,12 @@ void UDRS2PuzzlePhase::OnPhaseEnd()
 			ExitGate->OnTeamRecalled.RemoveDynamic(this, &UDRS2PuzzlePhase::HandleTeamRecalled);
 		}
 
-		// 게임오버 · 페이즈 스킵으로 끝나도 방2 문 강조가 다음 페이즈에 남지 않게
+		// 게임오버 · 페이즈 스킵으로 끝나도 방2 문 강조 · 퍼즐 외곽선이 다음 페이즈에 남지 않게
 		if (ADRS2TeleportGate* EntryGate = Director->Gate_Room1ToRoom2)
 		{
 			EntryGate->SetGuideHighlight(false);
 		}
+		SetRoom2Outlines(Director, false);
 	}
 
 	// 부품은 방3~방4 에서 계속 쓰이므로 이 페이즈의 획득 감지만 푼다

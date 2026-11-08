@@ -10,6 +10,7 @@
 class ADRCharacter;
 class APlayerController;
 class APlayerState;
+class UDROutlineHighlightComponent;
 
 // 보드가 바뀌었다 (이동 / Undo / Reset / 최초 셔플). 열려 있는 위젯이 이걸 받아 화면을 맞춘다.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FDRS2OnSlideBoardChanged, const TArray<int32>&, NewBoard, int32, MoveCount);
@@ -137,6 +138,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Puzzle")
 	TObjectPtr<USceneComponent> SceneRoot;
+
+	// 방2 페이즈가 켜는 외곽선 강조 (어떤 물체가 퍼즐 · 금고인지 알린다. 연결된 레버 · 버튼 · 단말기도 함께)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "S2|Puzzle")
+	TObjectPtr<UDROutlineHighlightComponent> OutlineHighlight;
 
 	/** 정답에서 출발해 합법 이동을 몇 번 무작위로 밟을지. 20 미만이면 눈에 띄게 쉬워진다. */
 	UPROPERTY(EditDefaultsOnly, Category = "S2|Puzzle", meta = (ClampMin = "20", ClampMax = "500"))
