@@ -50,6 +50,10 @@ void ADRTutorialManager::BeginPlay()
 	// 부품 적 AI 비활성화 (시작 타일 밟기 전까지)
 	StopPartEnemyAI();
 
+	// 부품 적을 스테이지1 통로의 부품 운반자처럼 — 등에 부품, 이동 속도 절반, 죽으면 부품을 떨어뜨린다.
+	// 속도 베이스는 각 적의 어트리뷰트 초기화(BeginPlay) 뒤에 고쳐야 하는데 레벨 액터의 BeginPlay 순서는 정해져 있지 않아 한 틱 미룬다
+	GetWorldTimerManager().SetTimerForNextTick(this, &ADRTutorialManager::SetupPartCarriers);
+
 	// 클렌저사이트 델리게이트 바인딩
 	if (TutorialCleanserSite)
 	{
@@ -429,6 +433,19 @@ void ADRTutorialManager::SetupDummyEnemy(ADREnemy* Enemy)
 
 	Enemy->bIsTutorialDummy = true;
 	Enemy->TutorialManagerRef = this;
+}
+
+void ADRTutorialManager::SetupPartCarriers()
+{
+	// BP_Dog_WithPart 는 2026-06 페이즈1·2 통합 때 "부품 들고 도망치는 적"에서 일반 개(부품 없음)로 바뀌었고
+	// 스테이지1은 페이즈1이 런타임에 운반자를 정한다 — 튜토리얼은 아무도 안 정해 부품 없는 개만 남아 있었다
+	for (ADREnemy* Enemy : PartEnemies)
+	{
+		if (IsValid(Enemy))
+		{
+			Enemy->BecomePartCarrier();   // 부품 클래스는 적의 PartActorClass 그대로 (스테이지1 페이즈1과 같은 BP_Part)
+		}
+	}
 }
 
 void ADRTutorialManager::StopPartEnemyAI()

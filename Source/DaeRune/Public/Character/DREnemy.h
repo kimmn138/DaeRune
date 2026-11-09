@@ -117,6 +117,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Part System")
 	void SetCarriesPart(bool bNewCarriesPart);
 
+	// 부품 운반자의 이동 속도 배율
+	static constexpr float PartCarrierMoveSpeedRatio = 0.5f;
+
+	/**
+	 * 부품 운반자로 만든다 (서버 전용) — 등(PartSocket)의 부품 메시가 보이고, 죽으면 PartActorClass 를 떨어뜨리고, 이동 속도 베이스가 절반.
+	 * 스테이지1 페이즈1(통로 그룹마다 하나)과 튜토리얼 구간 3이 같이 쓴다. InPartActorClass 가 비면 이 적의 PartActorClass 그대로.
+	 * 이미 운반자면 아무것도 안 한다(감속이 겹치지 않게). 어트리뷰트 초기화(이 적의 BeginPlay) 뒤에 부를 것
+	 */
+	void BecomePartCarrier(TSubclassOf<AActor> InPartActorClass = nullptr);
+
 	UFUNCTION()
 	void OnRep_bCarriesPart();
 

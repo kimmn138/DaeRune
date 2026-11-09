@@ -30,9 +30,6 @@ public:
 	// 설치해야 하는 부품 수 — 남긴 사이트의 BP 설정을 따른다 (부품 수를 한 곳에서만 정한다). 사이트가 없으면 2.
 	int32 GetRequiredParts() const;
 
-	// 부품 운반자의 이동 속도 배율
-	static constexpr float CarrierMoveSpeedRatio = 0.5f;
-
 	virtual void OnPhaseStart() override;
 	virtual void OnPhaseEnd() override;
 	virtual bool IsCompleted() const override;
@@ -48,7 +45,6 @@ protected:
 	void CollectSpawnGroups();
 	void AssignPartCarriersForAllGroups();
 	ADREnemy* PickPartCarrierFromGroup(ADREnemySpawnGroup* Group) const;
-	void ConfigurePartCarrier(ADREnemy* Carrier) const;
 
 	// ========== Phase1 태그 부여 ==========
 	void ApplyPhase1Tag(ADREnemy* Enemy) const;

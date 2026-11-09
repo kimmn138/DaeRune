@@ -7,7 +7,6 @@
 #include "DRGameplayTags.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
-#include "AbilitySystem/DRAttributeSet.h"
 #include "Actor/DRCleanserSite.h"
 #include "Actor/DRDoorManager.h"
 #include "Actor/DREnemySpawnGroup.h"
@@ -215,7 +214,7 @@ void UDRPhase1::AssignPartCarriersForAllGroups()
 		ADREnemy* Carrier = PickPartCarrierFromGroup(Group);
 		if (Carrier)
 		{
-			ConfigurePartCarrier(Carrier);
+			Carrier->BecomePartCarrier(PartActorClass);   // 등에 부품 · 이동 속도 절반 (튜토리얼 구간 3도 같은 함수)
 			Group->SetPartCarrierEnemy(Carrier);
 			PartCarrierByGroup.Add(Group, Carrier);
 		}
@@ -247,29 +246,6 @@ ADREnemy* UDRPhase1::PickPartCarrierFromGroup(ADREnemySpawnGroup* Group) const
 
 	const int32 PickedIndex = FMath::RandRange(0, Candidates.Num() - 1);
 	return Candidates[PickedIndex];
-}
-
-void UDRPhase1::ConfigurePartCarrier(ADREnemy* Carrier) const
-{
-	if (!Carrier) return;
-
-	// PartActorClass 주입 (DropPart()에서 사용)
-	if (PartActorClass)
-	{
-		Carrier->PartActorClass = PartActorClass;
-	}
-
-	// bCarriesPart=true + PartMesh 가시화 (서버 즉시 + OnRep로 클라이언트 동기화)
-	Carrier->SetCarriesPart(true);
-
-	// 부품 운반자는 이동속도 50% 감속. MoveSpeed 어트리뷰트 베이스를 직접 조정하면
-	// UDRAttributeSet::PostAttributeChange에서 CharacterMovement::MaxWalkSpeed가 자동 동기화됨.
-	// ★현재값(일시 버프·감속 포함)이 아니라 베이스값을 절반으로 한다 — 그 순간 걸려 있던 효과가 베이스에 굳지 않게
-	if (UAbilitySystemComponent* ASC = Carrier->GetAbilitySystemComponent())
-	{
-		const FGameplayAttribute MoveSpeedAttr = UDRAttributeSet::GetMoveSpeedAttribute();
-		ASC->SetNumericAttributeBase(MoveSpeedAttr, ASC->GetNumericAttributeBase(MoveSpeedAttr) * CarrierMoveSpeedRatio);
-	}
 }
 
 void UDRPhase1::ApplyPhase1Tag(ADREnemy* Enemy) const

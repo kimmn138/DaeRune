@@ -128,6 +128,29 @@ void ADREnemy::SetCarriesPart(bool bNewCarriesPart)
 	}
 }
 
+void ADREnemy::BecomePartCarrier(TSubclassOf<AActor> InPartActorClass)
+{
+	if (!HasAuthority() || bCarriesPart) return;
+
+	// PartActorClass 주입 (DropPart()에서 사용)
+	if (InPartActorClass)
+	{
+		PartActorClass = InPartActorClass;
+	}
+
+	// bCarriesPart=true + PartMesh 가시화 (서버 즉시 + OnRep로 클라이언트 동기화)
+	SetCarriesPart(true);
+
+	// 부품 운반자는 이동속도 50% 감속. MoveSpeed 어트리뷰트 베이스를 직접 조정하면
+	// UDRAttributeSet::PostAttributeChange에서 CharacterMovement::MaxWalkSpeed가 자동 동기화됨.
+	// ★현재값(일시 버프·감속 포함)이 아니라 베이스값을 절반으로 한다 — 그 순간 걸려 있던 효과가 베이스에 굳지 않게
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		const FGameplayAttribute MoveSpeedAttr = UDRAttributeSet::GetMoveSpeedAttribute();
+		ASC->SetNumericAttributeBase(MoveSpeedAttr, ASC->GetNumericAttributeBase(MoveSpeedAttr) * PartCarrierMoveSpeedRatio);
+	}
+}
+
 void ADREnemy::OnRep_bCarriesPart()
 {
 	// 클라이언트: 메시 가시화 동기화

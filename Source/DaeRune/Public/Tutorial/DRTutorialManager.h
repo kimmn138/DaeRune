@@ -186,6 +186,7 @@ private:
 	void OnTutorialWaterSourceUsed(AActor* User);
 
 	void SetupDummyEnemy(ADREnemy* Enemy);
+	void SetupPartCarriers();   // 부품 적을 스테이지1 통로의 부품 운반자로 (BeginPlay 다음 틱)
 	void StopPartEnemyAI();
 	void StartPartEnemyAI();
 
