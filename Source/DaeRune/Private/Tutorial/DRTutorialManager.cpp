@@ -476,11 +476,22 @@ void ADRTutorialManager::UpdateObjectiveUI(const FText& Title, const FText& Prog
 	UOverlayWidgetController* WC = GetOverlayWidgetController();
 	if (!WC) return;
 
+	// 목표 위젯(WBP_PhaseObjective)은 제목이 이미 떠 있으면 새 제목을 대기에만 두고 "목표 완료" 연출(OnObjectiveCompleted)이
+	// 끝날 때 띄운다. 스테이지는 페이즈 끝 · 서브 목표 교체 때 그 연출이 오지만 튜토리얼은 아무도 틀지 않아
+	// 첫 목표 제목이 끝까지 남고 진행 숫자만 바뀌었다 → 제목이 바뀌면 여기서 튼다 (스테이지 서브 목표와 같은 방식)
+	const bool bTitleChanged = !LastObjectiveTitle.IsEmpty() && !Title.EqualTo(LastObjectiveTitle);
+	LastObjectiveTitle = Title;
+
 	// 스테이지와 동일한 형식: Title + ProgressFormat(라벨), 숫자는 별도 전달
 	WC->OnObjectiveTextChanged.Broadcast(Title, ProgressFormat);
 	WC->OnObjectiveProgressChanged.Broadcast(Current, Max);
 	// Max==0인 경우(진행 숫자가 무의미한 단계) 진행도 텍스트 숨김
 	WC->OnObjectiveProgressVisibilityChanged.Broadcast(Max > 0);
+
+	if (bTitleChanged)
+	{
+		WC->OnObjectiveCompleted.Broadcast();
+	}
 }
 
 UOverlayWidgetController* ADRTutorialManager::GetOverlayWidgetController() const

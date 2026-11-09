@@ -191,6 +191,9 @@ private:
 
 	void UpdateObjectiveUI(const FText& Title, const FText& ProgressFormat, int32 Current, int32 Max);
 
+	// 마지막으로 보낸 목표 제목 — 바뀌면 "목표 완료" 연출을 틀어 위젯이 대기 중인 새 제목을 띄우게 한다
+	FText LastObjectiveTitle;
+
 	UOverlayWidgetController* GetOverlayWidgetController() const;
 
 	// 첫 목표 UI — HUD 오버레이 컨트롤러가 준비될 때까지 잠시 간격으로 다시 시도한다
