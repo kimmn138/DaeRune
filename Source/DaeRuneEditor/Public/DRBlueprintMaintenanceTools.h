@@ -39,4 +39,13 @@ public:
 	/** BP 멤버 변수를 지운다 (그 변수를 읽고 쓰는 노드는 먼저 지울 것). 없으면 false */
 	UFUNCTION(BlueprintCallable, Category = "DaeRune|Editor")
 	static bool RemoveMemberVariable(UBlueprint* Blueprint, FName VariableName);
+
+	/**
+	 * "Set <VariableName>" 노드를 ExecFromNode 의 실행 출력 핀(ExecFromPin, 보통 then) 뒤에 끼우고
+	 * 값 입력을 ValueFromNode 의 출력 핀(ValueFromPin)에 잇는다. 그 실행 핀에 원래 이어져 있던 것은 새 노드 뒤로 옮긴다.
+	 * 만든 노드 이름을 돌려준다(실패면 빈 문자열). 두 노드는 같은 그래프여야 한다 (컴파일 · 저장은 따로)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "DaeRune|Editor")
+	static FString AddVariableSetNode(UBlueprint* Blueprint, FName VariableName,
+		const FString& ExecFromNode, FName ExecFromPin, const FString& ValueFromNode, FName ValueFromPin);
 };

@@ -5,8 +5,10 @@
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
+#include "EdGraphSchema_K2.h"
 #include "Engine/Blueprint.h"
 #include "K2Node_CallFunction.h"
+#include "K2Node_VariableSet.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "DaeRune/DRLogChannels.h"
 
@@ -20,6 +22,19 @@ namespace
 			Blueprint->GetAllGraphs(Graphs);
 		}
 		return Graphs;
+	}
+
+	UEdGraphNode* FindNodeByName(UBlueprint* Blueprint, const FString& NodeName)
+	{
+		for (UEdGraph* Graph : GetGraphs(Blueprint))
+		{
+			if (!Graph) continue;
+			for (UEdGraphNode* Node : Graph->Nodes)
+			{
+				if (Node && Node->GetName() == NodeName) return Node;
+			}
+		}
+		return nullptr;
 	}
 }
 
@@ -119,4 +134,56 @@ bool UDRBlueprintMaintenanceTools::RemoveMemberVariable(UBlueprint* Blueprint, F
 	FBlueprintEditorUtils::RemoveMemberVariable(Blueprint, VariableName);
 	UE_LOG(LogDR, Display, TEXT("[BPMaintenance] %s: 변수 %s 삭제"), *Blueprint->GetName(), *VariableName.ToString());
 	return true;
+}
+
+FString UDRBlueprintMaintenanceTools::AddVariableSetNode(UBlueprint* Blueprint, FName VariableName,
+	const FString& ExecFromNode, FName ExecFromPin, const FString& ValueFromNode, FName ValueFromPin)
+{
+	if (!Blueprint || FBlueprintEditorUtils::FindNewVariableIndex(Blueprint, VariableName) == INDEX_NONE) return FString();
+
+	UEdGraphNode* ExecNode = FindNodeByName(Blueprint, ExecFromNode);
+	UEdGraphNode* ValueNode = FindNodeByName(Blueprint, ValueFromNode);
+	if (!ExecNode || !ValueNode || ExecNode->GetGraph() != ValueNode->GetGraph()) return FString();
+
+	UEdGraphPin* ExecOut = ExecNode->FindPin(ExecFromPin, EGPD_Output);
+	UEdGraphPin* ValueOut = ValueNode->FindPin(ValueFromPin, EGPD_Output);
+	if (!ExecOut || !ValueOut) return FString();
+
+	UEdGraph* Graph = ExecNode->GetGraph();
+	const UEdGraphSchema* Schema = Graph->GetSchema();
+
+	// 변수 참조를 먼저 정해야 Finalize(AllocateDefaultPins)가 그 변수 타입의 값 핀을 만든다
+	FGraphNodeCreator<UK2Node_VariableSet> Creator(*Graph);
+	UK2Node_VariableSet* SetNode = Creator.CreateNode();
+	SetNode->VariableReference.SetSelfMember(VariableName);
+	SetNode->NodePosX = ExecNode->NodePosX + 320;
+	SetNode->NodePosY = ExecNode->NodePosY;
+	Creator.Finalize();
+
+	// 실행 출력은 한 줄만 이을 수 있다 — 원래 뒤에 있던 것은 새 노드의 then 으로 옮긴다
+	const TArray<UEdGraphPin*> OldExecTargets = ExecOut->LinkedTo;
+
+	UEdGraphPin* ExecIn = SetNode->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+	UEdGraphPin* ThenOut = SetNode->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+	UEdGraphPin* ValueIn = SetNode->FindPin(VariableName, EGPD_Input);
+	bool bLinked = ExecIn && ThenOut && ValueIn
+		&& Schema->TryCreateConnection(ExecOut, ExecIn)
+		&& Schema->TryCreateConnection(ValueOut, ValueIn);
+	for (UEdGraphPin* Target : OldExecTargets)
+	{
+		bLinked = bLinked && Schema->TryCreateConnection(ThenOut, Target);
+	}
+
+	if (!bLinked)
+	{
+		UE_LOG(LogDR, Warning, TEXT("[BPMaintenance] %s: Set %s 연결 실패 — 노드를 지운다 (원래 연결은 복구되지 않을 수 있다)"),
+			*Blueprint->GetName(), *VariableName.ToString());
+		FBlueprintEditorUtils::RemoveNode(Blueprint, SetNode, /*bDontRecompile*/ true);
+		return FString();
+	}
+
+	UE_LOG(LogDR, Display, TEXT("[BPMaintenance] %s: %s(Set %s) 추가 — %s.%s 뒤, 값 %s.%s"), *Blueprint->GetName(), *SetNode->GetName(),
+		*VariableName.ToString(), *ExecFromNode, *ExecFromPin.ToString(), *ValueFromNode, *ValueFromPin.ToString());
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+	return SetNode->GetName();
 }
