@@ -10,10 +10,11 @@
  * 스테이지2 페이즈 0 - 방1 전투 (Plan6 §14.1)
  *
  * 흐름:
- *   전원 방1 입장 -> D0 구조물 상승 봉쇄 -> 웨이브1 즉시 -> 30초 후 웨이브2 -> 전멸 -> 완료
+ *   전원 방1 입장 -> D0 구조물 상승 봉쇄 -> 웨이브1 즉시 -> 웨이브2 -> 전멸 -> 완료
  *
- * 웨이브 진행은 시간 기반이다. 웨이브1을 30초 안에 전멸시켜도 웨이브2가 예약되어 있어
- * PendingSpawnCount 가 0이 아니므로 페이즈가 조기 종료되지 않는다.
+ * 다음 웨이브는 예약 시각(StartDelaySeconds, 30초)과 "나온 적 전멸" 중 먼저 오는 쪽에 나온다.
+ * 웨이브1을 30초 안에 다 잡으면 기다리지 않고 바로 웨이브2가 나온다. 30초가 먼저 오면 웨이브1이 남아 있어도 나온다.
+ * 남은 웨이브는 PendingSpawnCount 에 들어 있으므로 웨이브1 전멸이 방 완료로 오인되지 않는다.
  *
  * 적은 레벨에 배치한 ADRS2EnemySpawnPoint(RoomID = SpawnPointRoomID) 위치에서 스폰된다.
  */
@@ -58,4 +59,19 @@ protected:
 	// 전원 입장 후 전투가 시작되었는지 (입장 전 전멸 판정이 성립하는 것을 막는 래치)
 	UPROPERTY(BlueprintReadOnly, Category = "S2|Room1")
 	bool bCombatStarted = false;
+
+private:
+	// 웨이브 하나를 내보낸다 (예약 타이머 또는 앞 웨이브 전멸). 이미 나온 웨이브면 무시한다
+	void StartWave(int32 WaveIndex);
+
+	// 아직 안 나온 웨이브 중 가장 앞 번호 (없으면 INDEX_NONE)
+	int32 FindNextUnstartedWave() const;
+
+	// 웨이브별 예약 타이머 · 마리 수 · 나왔는지 (인덱스 = 웨이브 세트 순서)
+	TArray<FTimerHandle> WaveTimers;
+	TArray<int32> WaveSpawnCounts;
+	TArray<bool> WaveStarted;
+
+	// 아직 안 나온 웨이브들의 마리 수 합. PendingSpawnCount 가 이보다 크면 나오는 중인 적이 있다
+	int32 UnstartedSpawnCount = 0;
 };

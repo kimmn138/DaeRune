@@ -71,9 +71,6 @@ protected:
 
 	// ========== 웨이브 스폰 ==========
 
-	// 세트 안의 모든 웨이브를 StartDelaySeconds에 맞춰 예약한다. (InitSpawnPoints 선행 필요)
-	void ScheduleWaveSet(const FS2WaveSet& WaveSet);
-
 	// 웨이브 1개를 스폰한다 (마리 단위 셔플 후 PerEnemySpawnInterval 간격으로 순차 스폰).
 	void SpawnComposition(FS2WaveComposition Composition);
 

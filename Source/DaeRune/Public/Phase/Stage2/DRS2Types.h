@@ -44,7 +44,7 @@ struct FS2WaveComposition
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "S2|Spawn", meta = (TitleProperty = "EnemyClass"))
 	TArray<FS2EnemyCount> Enemies;
 
-	// 방 전투 시작 시점 기준 스폰 지연. 방1은 [0초, 30초] 두 웨이브를 시간 기반으로 예약한다.
+	// 방 전투 시작 시점 기준 스폰 지연. 방1은 [0초, 30초] — 앞 웨이브를 그 전에 전멸시키면 기다리지 않고 바로 나온다.
 	// 방5처럼 페이즈가 전환 시점을 직접 제어하는 경우에는 사용하지 않는다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "S2|Spawn", meta = (ClampMin = "0.0"))
 	float StartDelaySeconds = 0.f;

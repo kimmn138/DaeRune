@@ -163,28 +163,6 @@ AActor* UDRS2PhaseBase::SelectNextSpawnPoint()
 	return SpawnPoints.IsValidIndex(SpawnPointIndex) ? SpawnPoints[SpawnPointIndex].Get() : nullptr;
 }
 
-void UDRS2PhaseBase::ScheduleWaveSet(const FS2WaveSet& WaveSet)
-{
-	UWorld* World = GetPhaseWorld();
-	if (!World) return;
-
-	for (const FS2WaveComposition& Composition : WaveSet.Waves)
-	{
-		if (Composition.StartDelaySeconds <= 0.f)
-		{
-			SpawnComposition(Composition);
-		}
-		else
-		{
-			FTimerDelegate Delegate = FTimerDelegate::CreateUObject(
-				this, &UDRS2PhaseBase::SpawnComposition, Composition);
-
-			World->GetTimerManager().SetTimer(
-				AddManagedTimer(), Delegate, Composition.StartDelaySeconds, false);
-		}
-	}
-}
-
 void UDRS2PhaseBase::SpawnComposition(FS2WaveComposition Composition)
 {
 	UWorld* World = GetPhaseWorld();
