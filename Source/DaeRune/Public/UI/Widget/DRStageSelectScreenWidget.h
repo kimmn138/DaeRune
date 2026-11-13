@@ -18,8 +18,8 @@ class UButton;
  *
  * 선택 규칙 (시안의 세 화면 모두 "선택된 카드 하나" 가 있다):
  *   - 열면 카드 하나가 이미 선택돼 있다 — InitialSelectedIndex, 없으면 아직 안 깬 첫 스테이지, 다 깼으면 마지막 스테이지
- *   - ←/→ · 마우스 올리기 · 클릭으로 선택을 옮긴다. 잠긴 카드는 건너뛰고, 누르면 흔들린다
- *   - Enter(또는 START 클릭 · 카드 더블클릭)로 선택한 스테이지로 출발, ESC(또는 BACK 클릭)로 닫는다
+ *   - ←/→ · 마우스 올리기로 선택을 옮긴다. 잠긴 카드는 건너뛰고, 누르면 흔들린다
+ *   - 카드 클릭 한 번(또는 Enter · START 클릭)으로 그 스테이지로 출발, ESC(또는 BACK 클릭)로 닫는다
  *
  * 디자이너 위젯 (이름 고정, 전부 Optional):
  *   Box_Cards  [Panel]   카드가 들어갈 패널. HorizontalBox 면 카드를 아래쪽에 맞춰 CardSpacing 간격으로 늘어놓는다
@@ -79,7 +79,6 @@ public:
 
 	void NotifyCardHovered(int32 Index);
 	void NotifyCardClicked(int32 Index);
-	void NotifyCardDoubleClicked(int32 Index);
 
 protected:
 	virtual void NativeConstruct() override;

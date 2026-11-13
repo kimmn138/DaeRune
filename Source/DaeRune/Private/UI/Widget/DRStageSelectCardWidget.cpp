@@ -286,13 +286,7 @@ FReply UDRStageSelectCardWidget::NativeOnMouseButtonDown(const FGeometry& InGeom
 {
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
-		// 카드는 버튼(SButton)이 아니라 전역 클릭음(UDRUIClickSoundSubsystem)이 잡지 못한다 — 같은 소리를 직접 낸다
-		UDRSoundDataAsset::Play2D(this, &UDRSoundDataAsset::UIButtonClickSound);
-
-		if (UDRStageSelectScreenWidget* Screen = OwnerScreen.Get())
-		{
-			Screen->NotifyCardClicked(ViewModel.Index);
-		}
+		HandleLeftClick();
 		return FReply::Handled();
 	}
 
@@ -301,19 +295,26 @@ FReply UDRStageSelectCardWidget::NativeOnMouseButtonDown(const FGeometry& InGeom
 
 FReply UDRStageSelectCardWidget::NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	// Slate 는 두 번째 클릭을 ButtonDown 대신 DoubleClick 으로 보낸다 — 첫 클릭에서 선택은 이미 됐다
+	// Slate 는 빠른 두 번째 클릭을 ButtonDown 대신 DoubleClick 으로 보낸다 — 같은 클릭으로 받는다
+	// (첫 클릭에 이미 출발했으면 화면이 무시하고, 잠긴 카드면 다시 흔들린다)
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
-		UDRSoundDataAsset::Play2D(this, &UDRSoundDataAsset::UIButtonClickSound);
-
-		if (UDRStageSelectScreenWidget* Screen = OwnerScreen.Get())
-		{
-			Screen->NotifyCardDoubleClicked(ViewModel.Index);
-		}
+		HandleLeftClick();
 		return FReply::Handled();
 	}
 
 	return Super::NativeOnMouseButtonDoubleClick(InGeometry, InMouseEvent);
+}
+
+void UDRStageSelectCardWidget::HandleLeftClick()
+{
+	// 카드는 버튼(SButton)이 아니라 전역 클릭음(UDRUIClickSoundSubsystem)이 잡지 못한다 — 같은 소리를 직접 낸다
+	UDRSoundDataAsset::Play2D(this, &UDRSoundDataAsset::UIButtonClickSound);
+
+	if (UDRStageSelectScreenWidget* Screen = OwnerScreen.Get())
+	{
+		Screen->NotifyCardClicked(ViewModel.Index);
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

@@ -300,12 +300,7 @@ void UDRStageSelectScreenWidget::NotifyCardHovered(int32 Index)
 
 void UDRStageSelectScreenWidget::NotifyCardClicked(int32 Index)
 {
-	SelectStage(Index);
-}
-
-void UDRStageSelectScreenWidget::NotifyCardDoubleClicked(int32 Index)
-{
-	// 잠긴 카드는 더블클릭해도 시작하지 않는다 (SelectStage 가 거절)
+	// 클릭 한 번으로 출발한다. 잠긴 카드는 SelectStage 가 거절하고 흔든다
 	if (SelectStage(Index))
 	{
 		StartSelectedStage();

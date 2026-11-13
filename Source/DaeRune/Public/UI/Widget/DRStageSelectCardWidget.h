@@ -39,8 +39,8 @@ class UMaterialInstanceDynamic;
  *   Txt_Mission     [Text]    임무 설명
  *   Panel_Locked    [아무 위젯] 자물쇠 — 잠겼을 때만
  *
- * 입력: 마우스 호버 / 클릭 / 더블클릭을 소속 화면에 넘긴다 (선택 규칙은 화면이 정한다).
- * ★카드 안에 Button 을 두지 말 것★ — Button 이 마우스를 먼저 먹어 더블클릭/호버가 카드까지 오지 않는다.
+ * 입력: 마우스 호버(= 선택) / 클릭(= 출발)을 소속 화면에 넘긴다 (선택 규칙은 화면이 정한다).
+ * ★카드 안에 Button 을 두지 말 것★ — Button 이 마우스를 먼저 먹어 클릭/호버가 카드까지 오지 않는다.
  */
 UCLASS(Abstract)
 class DAERUNE_API UDRStageSelectCardWidget : public UDRUserWidget
@@ -183,6 +183,9 @@ private:
 
 	// 잠금 효과 머티리얼로 그린다 (머티리얼이 없으면 텍스처 그대로). Mid 는 처음 한 번 만든다.
 	void SetLockBlendImage(UImage* Image, TObjectPtr<UMaterialInstanceDynamic>& Mid, UTexture2D* Texture);
+
+	// 왼쪽 클릭 (누름 · 빠른 두 번째 클릭) — 클릭음 + 화면에 알림
+	void HandleLeftClick();
 
 	TWeakObjectPtr<UDRStageSelectScreenWidget> OwnerScreen;
 
