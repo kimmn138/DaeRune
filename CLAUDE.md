@@ -248,6 +248,9 @@ Entering a stage (`ADRStageGameMode`), every client keeps input/HUD blocked and 
 
 ## Important Implementation Details
 
+### Stage Lighting and Graphics Quality
+Stage1 and Stage2 have no light actors: they are lit only by emissive materials through Lumen GI. The engine's `BaseScalability.ini` turns Lumen GI off at GI quality 0-1 (graphics quality Low/Medium), which made everything except emissives black. `Config/DefaultScalability.ini` keeps Lumen GI on at those levels with the engine's GI quality 2 (High) Lumen values.
+
 ### Container Health System
 Players have 4 health containers (100 HP each by default):
 
