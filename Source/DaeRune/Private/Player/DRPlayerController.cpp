@@ -762,6 +762,9 @@ void ADRPlayerController::PlayerTick(float DeltaTime)
 		bIsCharacterInfoVisible = false;
 	}
 
+	// 관전 중에도 설정 화면은 열 수 있으니 아래 조기 반환보다 먼저
+	KeepSettingsScreenFocus();
+
 	if (bIsSpectating)
 	{
 		// 관전 중에는 감지를 쉰다 — 죽기 직전에 떠 있던 상호작용 안내도 내린다
@@ -1701,6 +1704,30 @@ void ADRPlayerController::HideScreenWidget(EDRScreen Screen)
 	default:
 		break;
 	}
+}
+
+void ADRPlayerController::KeepSettingsScreenFocus()
+{
+	if (!IsLocalController() || ActiveScreen != EDRScreen::Settings || !IsValid(SettingsScreenWidget)) return;
+
+	// 설정 화면의 키(A 적용 · R 초기화 · ESC · M)는 전부 WBP_SettingsScreen 의 BP OnKeyDown 이 받는다.
+	// 키 이벤트는 포커스된 위젯에서 부모 쪽으로만 올라가므로, 포커스가 화면 밖에 있으면 화면이 키를 못 받는다.
+	//
+	// 그렇게 되는 경로: 드롭다운 목록(WBP_SciFiDropdownOptionList)은 설정 화면 안이 아니라 뷰포트에 따로 붙는다
+	// (WBP_SciFiDropdown::OpenDropdown → AddToViewport(100)). 목록의 항목을 클릭하면 Slate 가 포커스를 그 버튼에 주고,
+	// 선택과 동시에 목록이 닫혀(RemoveFromParent) 포커스가 화면에서 빠진 버튼에 남는다
+	// → 화면 빈 곳을 한 번 클릭해 포커스를 되찾기 전까지 A 를 눌러도 적용되지 않았다.
+	if (SettingsScreenWidget->HasKeyboardFocus() || SettingsScreenWidget->HasFocusedDescendants()) return;
+
+	// 목록이 열려 있는 동안은 건드리지 않는다 — 항목을 누른 채(마우스 업 전) 포커스를 뺏으면
+	// SButton 이 OnFocusLost 에서 눌림을 풀어 클릭(= 항목 선택)이 사라진다.
+	if (const UGameInstance* GI = GetGameInstance())
+	{
+		const UDRSettingsManager* Manager = GI->GetSubsystem<UDRSettingsManager>();
+		if (Manager && IsValid(Manager->ActiveDropdownWidget)) return;
+	}
+
+	SettingsScreenWidget->SetKeyboardFocus();
 }
 
 void ADRPlayerController::ClientCloseSettingsMenu_Implementation()

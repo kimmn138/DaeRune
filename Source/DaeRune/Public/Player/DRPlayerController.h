@@ -992,4 +992,7 @@ private:
 	// 화면 위젯 생성 · 표시 (실패하면 false) / 제거
 	bool ShowScreenWidget(EDRScreen Screen, ADRS2SlidePuzzle* Puzzle);
 	void HideScreenWidget(EDRScreen Screen);
+
+	// 설정 화면이 열려 있는데 키보드 포커스가 화면 밖에 남아 있으면 화면으로 되돌린다 (매 틱)
+	void KeepSettingsScreenFocus();
 };
