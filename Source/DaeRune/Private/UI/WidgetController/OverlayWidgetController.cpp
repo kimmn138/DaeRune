@@ -18,8 +18,32 @@
 #include "Player/DRPlayerController.h"
 #include "Player/DRPlayerState.h"
 #include "UI/Widget/DRUserWidget.h"
+#include "Engine/Texture2D.h"
+#if WITH_EDITOR
+#include "TextureCompiler.h"
+#endif
 
 #define LOCTEXT_NAMESPACE "DROverlay"
+
+namespace DRCrosshair
+{
+	// 높이를 Height 로 두고 가로는 그림 비율대로. 그림이 없거나 크기를 모르면 정사각형
+	FVector2D SizeForHeight(const UTexture2D* Texture, float Height)
+	{
+		if (!Texture) return FVector2D(Height, Height);
+
+#if WITH_EDITOR
+		// 에디터는 텍스처를 비동기로 컴파일한다 — 끝나기 전엔 크기가 자리표시 그림 크기로 나온다 (쿡된 게임은 해당 없다)
+		if (Texture->IsCompiling())
+		{
+			FTextureCompilingManager::Get().FinishCompilation({ const_cast<UTexture2D*>(Texture) });
+		}
+#endif
+		const float Width = Texture->GetSurfaceWidth();
+		const float TextureHeight = Texture->GetSurfaceHeight();
+		return TextureHeight > 0.f ? FVector2D(Height * Width / TextureHeight, Height) : FVector2D(Height, Height);
+	}
+}
 
 void UOverlayWidgetController::BroadcastInitialValues()
 {
@@ -619,17 +643,32 @@ void UOverlayWidgetController::BroadcastSkillIconWidgetClass()
 void UOverlayWidgetController::BroadcastCrosshairImages()
 {
 	ADRPlayerState* PS = GetDRPS();
-	if (!PS) return;
-
 	UPlayerCharacterClassInfo* ClassInfo = UDRAbilitySystemLibrary::GetPlayerCharacterClassInfo(GetWorld());
-	if (!ClassInfo) return;
+	if (PS && ClassInfo)
+	{
+		const FCharacterClassDefaultInfo& DefaultInfo = ClassInfo->GetClassDefaultInfo(PS->GetSelectedPlayerClass());
 
-	const FCharacterClassDefaultInfo& DefaultInfo = ClassInfo->GetClassDefaultInfo(PS->GetSelectedPlayerClass());
-	OnCrosshairImagesChanged.Broadcast(
-		DefaultInfo.CrosshairTexture,
-		ClassInfo->CrosshairDisabledTexture,
-		DefaultInfo.CrosshairInstallReadyTexture,
-		DefaultInfo.CrosshairSize);
+		// 위젯(WBP_*Overlay)은 조준선 칸 크기를 이 이벤트에서만 정하고, 상태가 바뀌면 그림만 갈아 끼운다.
+		// 기본 조준선은 캐릭터마다 비율이 다르지만(청소기 280x32) 운반 중 그림은 거의 정사각형이라,
+		// 지금 상태 그림에 맞는 크기를 보낸다 — 운반 중 그림은 공통 높이에 그림 비율대로
+		FVector2D DrawSize = DefaultInfo.CrosshairSize;
+		if (CachedCrosshairState != EDRCrosshairState::Normal)
+		{
+			const UTexture2D* CarryingTexture = CachedCrosshairState == EDRCrosshairState::InstallReady
+				? DefaultInfo.CrosshairInstallReadyTexture.Get()
+				: ClassInfo->CrosshairDisabledTexture.Get();
+			DrawSize = DRCrosshair::SizeForHeight(CarryingTexture, ClassInfo->CarryingCrosshairHeight);
+		}
+
+		OnCrosshairImagesChanged.Broadcast(
+			DefaultInfo.CrosshairTexture,
+			ClassInfo->CrosshairDisabledTexture,
+			DefaultInfo.CrosshairInstallReadyTexture,
+			DrawSize);
+	}
+
+	// 위의 이벤트가 위젯 그림을 기본 조준선으로 되돌린다 — 지금 상태를 이어서 다시 보낸다
+	OnCrosshairStateChanged.Broadcast(CachedCrosshairState);
 }
 
 void UOverlayWidgetController::NotifyCrosshairEnemyHit()
@@ -737,8 +776,9 @@ void UOverlayWidgetController::UpdateCrosshairState(bool bForceBroadcast)
 
 	if (!bForceBroadcast && NewState == CachedCrosshairState) return;
 
+	// 상태마다 그림 비율이 달라 조준선 칸 크기도 같이 다시 보낸다 (상태 브로드캐스트도 이 안에서)
 	CachedCrosshairState = NewState;
-	OnCrosshairStateChanged.Broadcast(NewState);
+	BroadcastCrosshairImages();
 }
 
 #undef LOCTEXT_NAMESPACE

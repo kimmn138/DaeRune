@@ -75,7 +75,8 @@ struct FCharacterClassDefaultInfo
 	UPROPERTY(EditDefaultsOnly, Category = "UI|Crosshair")
 	TObjectPtr<UTexture2D> CrosshairInstallReadyTexture;
 
-	// 캐릭터 전용 조준선 표시 크기 (0,0 이면 위젯에서 텍스처 원본 크기 사용)
+	// 기본 조준선(CrosshairTexture) 표시 크기 (0,0 이면 위젯에서 텍스처 원본 크기 사용).
+	// 부품 운반 중 조준선은 이 크기가 아니라 UPlayerCharacterClassInfo::CarryingCrosshairHeight 를 쓴다
 	UPROPERTY(EditDefaultsOnly, Category = "UI|Crosshair")
 	FVector2D CrosshairSize = FVector2D(32.f, 32.f);
 };
@@ -121,6 +122,12 @@ public:
 	// 부품 운반 중(공격 불가) 조준선 텍스처 - 모든 플레이어 캐릭터 공통
 	UPROPERTY(EditDefaultsOnly, Category = "Common Class Defaults")
 	TObjectPtr<UTexture2D> CrosshairDisabledTexture;
+
+	// 부품 운반 중 조준선(공격 불가 · 설치 가능) 표시 높이 — 가로는 그림 비율대로. 모든 플레이어 캐릭터 공통.
+	// 캐릭터별 CrosshairSize 를 그대로 쓰면 가로로 긴 기본 조준선 칸(청소기 280x32 · 벨보이 126x44)에
+	// 거의 정사각형인 운반 중 그림(89x86)이 눌려 찌그러졌다
+	UPROPERTY(EditDefaultsOnly, Category = "Common Class Defaults", meta = (ClampMin = "1"))
+	float CarryingCrosshairHeight = 50.f;
 
 	// 클래스 기본 정보. 표에 없으면 경고 후 빈 기본값 (예전엔 FindChecked 로 크래시)
 	const FCharacterClassDefaultInfo& GetClassDefaultInfo(EPlayerCharacterClass CharacterClass) const;

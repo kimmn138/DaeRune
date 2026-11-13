@@ -75,7 +75,9 @@ enum class EDRCrosshairState : uint8
 	InstallReady	// 부품 운반 중 + 설치 가능한 사이트 조준 중 (캐릭터 전용 이미지)
 };
 
-// 조준선 텍스처 세트 전달 델리게이트 (캐릭터 클래스 확정/변경 시 1회 브로드캐스트)
+// 조준선 텍스처 세트 전달 델리게이트 (캐릭터 클래스 확정/변경 · 조준선 상태가 바뀔 때).
+// 위젯은 여기서 그림을 기본 조준선으로 되돌리고 조준선 칸을 CrosshairSize 로 맞춘다 — CrosshairSize 는 ★지금 상태 그림의 표시 크기★다
+// (상태마다 그림 비율이 달라서). 그래서 바로 뒤에 OnCrosshairStateChanged 가 지금 상태로 다시 온다.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnCrosshairImagesChangedSignature, UTexture2D*, NormalTexture, UTexture2D*, DisabledTexture, UTexture2D*, InstallReadyTexture, FVector2D, CrosshairSize);
 // 조준선 상태 변경 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCrosshairStateChangedSignature, EDRCrosshairState, NewState);
@@ -222,7 +224,8 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "UI|Crosshair")
 	FOnCrosshairHitConfirmedSignature OnCrosshairHitConfirmed;
 
-	// 캐릭터 클래스에 맞는 조준선 텍스처 세트를 브로드캐스트 (HUD 초기화 시 호출)
+	// 캐릭터 클래스에 맞는 조준선 텍스처 세트 + 지금 상태 그림의 크기, 이어서 지금 상태를 브로드캐스트
+	// (HUD 초기화 시 · 조준선 상태가 바뀔 때)
 	void BroadcastCrosshairImages();
 
 	// 적 타격 확인 알림 (PlayerController 의 데미지 확인 Client RPC 에서 호출)
