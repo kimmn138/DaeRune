@@ -22,6 +22,11 @@ public:
 		return FPrimaryAssetId(TEXT("SoundData"), GetFName());
 	}
 
+#if WITH_EDITOR
+	// BGM 사운드의 Virtualization Mode 가 Play When Silent 가 아니면 저장 · 데이터 검증 때 알린다
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+#endif
+
 	// ===== 공용 재생 헬퍼 — "에셋 매니저 → SoundData → 사운드 확인 → 재생" 반복을 한 줄로 =====
 
 	using FSoundMember = TObjectPtr<USoundBase> UDRSoundDataAsset::*;
@@ -106,7 +111,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Enemy|Armadillo")
 	TObjectPtr<USoundBase> ArmadilloImpactSound;
 
-	// BGM
+	// BGM — 사운드 큐의 Virtualization Mode 는 Play When Silent 여야 한다 (IsDataValid 참고)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "BGM")
 	TObjectPtr<USoundBase> BGM_MainMenu;
 
