@@ -8,6 +8,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Button.h"
+#include "Components/ButtonSlot.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
@@ -17,6 +18,7 @@
 #include "Components/OverlaySlot.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
+#include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Components/UniformGridPanel.h"
 #include "Components/VerticalBox.h"
@@ -61,7 +63,12 @@ namespace DRWardrobeEditor
 	const TCHAR* SlotNormalTexPath = TEXT("/Game/DaeRuneAssets/UI/Closet/Slot/속성_1_기본.속성_1_기본");
 	const TCHAR* SlotHoveredTexPath = TEXT("/Game/DaeRuneAssets/UI/Closet/Slot/속성_1_호버.속성_1_호버");
 	const TCHAR* SlotSelectedTexPath = TEXT("/Game/DaeRuneAssets/UI/Closet/Slot/속성_1_선택.속성_1_선택");
-	const TCHAR* ClearAllTexPath = TEXT("/Game/DaeRuneAssets/UI/Settimgs/clear_all.clear_all");
+	const TCHAR* ClearAllTexPath = TEXT("/Game/DaeRuneAssets/UI/Settimgs/clear_all.clear_all");	// C 키 그림 (T_Key_* 와 같은 모양)
+	const TCHAR* BackKeyTexPath = TEXT("/Game/DaeRuneAssets/UI/Settimgs/T_Key_ESC.T_Key_ESC");
+
+	// 키 안내 칸 — 설정 · 업그레이드 화면의 키 안내 막대가 쓰는 것과 같다
+	const TCHAR* KeyHintWBPPath = TEXT("/Game/Blueprints/UI/Settings/Contents/Key/WBP_KeyHint.WBP_KeyHint");
+	const TCHAR* KeyHintWideWBPPath = TEXT("/Game/Blueprints/UI/Settings/Contents/Key/WBP_KeyHint_Wide.WBP_KeyHint_Wide");
 
 	const TCHAR* GlowMIPath = TEXT("/Game/Blueprints/UI/Closet/Material/MI_UI_Wardrobe_BGGlow.MI_UI_Wardrobe_BGGlow");
 	const TCHAR* CharBackMIPath = TEXT("/Game/Blueprints/UI/Closet/Material/MI_UI_Wardrobe_CharBack.MI_UI_Wardrobe_CharBack");
@@ -448,6 +455,7 @@ bool UDRWardrobeEditorTools::BuildWardrobeScreenWidget(FString& OutLog)
 	UTexture2D* PanelTexture = Load<UTexture2D>(PanelTexPath, Log);
 	UTexture2D* TabBarTexture = Load<UTexture2D>(TabBarTexPath, Log);
 	UTexture2D* ClearAllTexture = Load<UTexture2D>(ClearAllTexPath, Log);
+	UTexture2D* BackKeyTexture = Load<UTexture2D>(BackKeyTexPath, Log);
 	UMaterialInterface* GlowMaterial = Load<UMaterialInterface>(GlowMIPath, Log);
 	UMaterialInterface* CharBackMaterial = Load<UMaterialInterface>(CharBackMIPath, Log);
 	UMaterialInterface* ScreenFXMaterial = Load<UMaterialInterface>(ScreenFXMIPath, Log);
@@ -607,25 +615,88 @@ bool UDRWardrobeEditorTools::BuildWardrobeScreenWidget(FString& OutLog)
 		Grid->bIsVariable = true;	// BindWidgetOptional — C++ 이 칸을 채운다
 	}
 
-	// 5-5) Clear All — 화면 우하단 (업그레이드 화면 키 힌트 바와 같은 앵커 · 오프셋, D-17)
-	UButton* ClearAll = Cast<UButton>(Tree->FindWidget(TEXT("Btn_ClearAll")));
-	if (!ClearAll)
+	// 5-5) 키 안내 [C] CLEAR · [ESC] BACK — 화면 우하단. 업그레이드 화면의 WBP_KeyHintBar_2 와 같은 구조 · 앵커 · 오프셋:
+	//      SizeBox 390x60 → HorizontalBox { [C] 칸 (세로 가운데) · Spacer 42 · [ESC] 칸 } (설정 · 업그레이드처럼 ESC 가 맨 오른쪽).
+	//      칸은 같은 WBP_KeyHint / WBP_KeyHint_Wide 이고, 키 그림 · 글자는 런타임에 UDRWardrobeScreenWidget 이 넣는다.
+	//      예전 Clear All 버튼(C 키 그림만 있던 것)의 클릭을 잇도록 칸마다 투명 버튼으로 감싼다
 	{
-		ClearAll = Tree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("Btn_ClearAll"));
-		Content->AddChild(ClearAll);
-		Log.Add(TEXT("Btn_ClearAll 추가"));
-	}
-	{
-		FButtonStyle Style = ClearAll->GetStyle();
-		const FSlateBrush Normal = MakeImageBrush(ClearAllTexture, FVector2D(112.0, 117.0));
-		FSlateBrush Pressed = Normal;
-		Pressed.TintColor = FSlateColor(FLinearColor(0.8f, 0.8f, 0.8f, 1.0f));
-		Style.SetNormal(Normal).SetHovered(Normal).SetPressed(Pressed).SetDisabled(Normal);
-		Style.SetNormalPadding(FMargin(0.0f)).SetPressedPadding(FMargin(0.0f));
-		ClearAll->SetStyle(Style);
-		ClearAll->SetToolTipText(NSLOCTEXT("DRWardrobe", "ClearAllTooltip", "전부 벗기 (C)"));
-		ClearAll->bIsVariable = true;
-		PlaceOnCanvas(ClearAll, BottomRight, FVector2D(1.0, 1.0), FVector2D(-100.0, -60.0), FVector2D(112.0, 117.0));
+		UWidgetBlueprint* KeyHintBlueprint = Load<UWidgetBlueprint>(KeyHintWBPPath, Log);
+		UWidgetBlueprint* KeyHintWideBlueprint = Load<UWidgetBlueprint>(KeyHintWideWBPPath, Log);
+
+		USizeBox* HintBar = Cast<USizeBox>(Tree->FindWidget(TEXT("SizeBox_KeyHints")));
+		if (!HintBar)
+		{
+			HintBar = Tree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("SizeBox_KeyHints"));
+			Content->AddChild(HintBar);
+			Log.Add(TEXT("SizeBox_KeyHints 추가"));
+		}
+		HintBar->SetWidthOverride(390.0f);
+		HintBar->SetHeightOverride(60.0f);
+		HintBar->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		PlaceOnCanvas(HintBar, BottomRight, FVector2D(1.0, 1.0), FVector2D(-100.0, -60.0), FVector2D::ZeroVector, true);
+
+		UHorizontalBox* Hints = Cast<UHorizontalBox>(Tree->FindWidget(TEXT("HorizontalBox_KeyHints")));
+		if (!Hints)
+		{
+			Hints = Tree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("HorizontalBox_KeyHints"));
+		}
+		HintBar->SetContent(Hints);
+		Hints->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+
+		// 칸 하나 = 투명 버튼 { 키 안내 칸 }. 다시 지어도 같은 이름을 재사용한다
+		auto MakeHintButton = [&](const TCHAR* ButtonName, const TCHAR* HintName, UWidgetBlueprint* HintBlueprint) -> UButton*
+		{
+			UButton* Button = Cast<UButton>(Tree->FindWidget(ButtonName));
+			if (!Button)
+			{
+				Button = Tree->ConstructWidget<UButton>(UButton::StaticClass(), ButtonName);
+				Log.Add(FString::Printf(TEXT("%s 추가"), ButtonName));
+			}
+			Button->RemoveFromParent();
+			MakeTransparentButton(Button);
+			Button->SetToolTipText(FText::GetEmpty());
+			Button->bIsVariable = true;
+
+			UUserWidget* Hint = Cast<UUserWidget>(Tree->FindWidget(HintName));
+			if (!Hint && HintBlueprint)
+			{
+				Hint = Tree->ConstructWidget<UUserWidget>(TSubclassOf<UUserWidget>(HintBlueprint->GeneratedClass.Get()), HintName);
+				Log.Add(FString::Printf(TEXT("%s 추가"), HintName));
+			}
+			if (Hint)
+			{
+				Hint->SetVisibility(ESlateVisibility::HitTestInvisible);
+				Hint->bIsVariable = true;
+				if (UButtonSlot* ContentSlot = Cast<UButtonSlot>(Button->SetContent(Hint)))
+				{
+					ContentSlot->SetPadding(FMargin(0.0f));	// 기본 (4,2) — 칸 크기를 막대와 같게
+					ContentSlot->SetHorizontalAlignment(HAlign_Fill);
+					ContentSlot->SetVerticalAlignment(VAlign_Fill);
+				}
+			}
+			return Button;
+		};
+
+		UButton* ClearAll = MakeHintButton(TEXT("Btn_ClearAll"), TEXT("WBPKeyHint_C"), KeyHintBlueprint);
+		UButton* Back = MakeHintButton(TEXT("Btn_Back"), TEXT("WBPKeyHint_ESC"), KeyHintWideBlueprint);
+
+		USpacer* Gap = Cast<USpacer>(Tree->FindWidget(TEXT("Spacer_KeyHints")));
+		if (!Gap)
+		{
+			Gap = Tree->ConstructWidget<USpacer>(USpacer::StaticClass(), TEXT("Spacer_KeyHints"));
+		}
+		Gap->RemoveFromParent();
+		Gap->SetSize(FVector2D(42.0, 1.0));
+
+		// WBP_KeyHintBar_2 와 같은 슬롯: 앞 칸만 세로 가운데, 나머지는 기본(채움)
+		Hints->ClearChildren();
+		if (UHorizontalBoxSlot* HintSlot = Hints->AddChildToHorizontalBox(ClearAll))
+		{
+			HintSlot->SetVerticalAlignment(VAlign_Center);
+		}
+		Hints->AddChildToHorizontalBox(Gap);
+		Hints->AddChildToHorizontalBox(Back);
+		Log.Add(TEXT("키 안내 [C] CLEAR · [ESC] BACK 배치"));
 	}
 
 	// 6) 화면효과 — 중앙 1613x914 (원본의 92% — 시안 스캔라인 간격 실측), Modulate. ★클릭을 먹지 않게★
@@ -643,6 +714,8 @@ bool UDRWardrobeEditorTools::BuildWardrobeScreenWidget(FString& OutLog)
 	{
 		SetObjectProperty(GetCDO(Blueprint), TEXT("SlotWidgetClass"), SlotBlueprint->GeneratedClass.Get(), Log);
 	}
+	SetObjectProperty(GetCDO(Blueprint), TEXT("ClearAllKeyIcon"), ClearAllTexture, Log);
+	SetObjectProperty(GetCDO(Blueprint), TEXT("BackKeyIcon"), BackKeyTexture, Log);
 	return CompileAndMark(Blueprint, Log);	// CDO 를 고쳤으면 다시 컴파일 (T-32)
 #else
 	return false;

@@ -13,6 +13,7 @@ class UDRGameInstance;
 class UDRWardrobeSlotWidget;
 class UUniformGridPanel;
 class UButton;
+class UTexture2D;
 
 /**
  * 로비 옷장 화면의 C++ 베이스. (Plan(옷장))
@@ -25,7 +26,7 @@ class UButton;
  *   4) 키 입력 처리 (ESC 닫기 / C 전체 해제)
  *
  *   5) ★칸 목록 그리기★ — UniformGridPanel_Slots + SlotWidgetClass 가 있으면 C++ 이 칸을 만든다
- *   6) Btn_ClearAll 버튼 연결
+ *   6) 우하단 키 안내 [C] CLEAR · [ESC] BACK 채우기 + Btn_ClearAll · Btn_Back 버튼 연결
  *
  * 레이아웃(위젯 배치 · 좌표 · 브러시)은 BP(WBP_Wardrobe)가 한다. BP 그래프 배선은 필요 없다.
  *
@@ -141,9 +142,39 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "Cosmetic|Widgets")
 	TObjectPtr<UUniformGridPanel> UniformGridPanel_Slots;
 
-	// 화면 우하단 Clear All 버튼. ★이름 고정★ — 있으면 클릭이 ClearAll() 로 연결된다.
+	// ===== 화면 우하단 키 안내 [C] CLEAR · [ESC] BACK =====
+	// 설정 · 업그레이드 화면의 키 안내 막대(WBP_KeyHintBar*)와 같은 칸(WBP_KeyHint / WBP_KeyHint_Wide)이다.
+	// 그 막대들은 Construct 그래프에서 칸마다 SetTextAndImage 를 부르는데, 옷장은 여기 값으로 C++ 이 같은 함수를 부른다.
+	// 칸은 투명 버튼으로 감싸 누를 수도 있다 (WBP 트리는 DRWardrobeEditorTools 가 짓는다)
+
+	// [C] 칸을 감싼 버튼. ★이름 고정★ — 있으면 클릭이 ClearAll() 로 연결된다.
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "Cosmetic|Widgets")
 	TObjectPtr<UButton> Btn_ClearAll;
+
+	// [ESC] 칸을 감싼 버튼. ★이름 고정★ — 있으면 클릭이 RequestClose() 로 연결된다.
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "Cosmetic|Widgets")
+	TObjectPtr<UButton> Btn_Back;
+
+	// 키 안내 칸 (WBP_KeyHint · WBP_KeyHint_Wide). ★이름 고정★
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "Cosmetic|Widgets")
+	TObjectPtr<UUserWidget> WBPKeyHint_C;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "Cosmetic|Widgets")
+	TObjectPtr<UUserWidget> WBPKeyHint_ESC;
+
+	// 키 그림 (clear_all · T_Key_ESC — 도구가 WBP 기본값에 넣는다)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cosmetic|KeyHint")
+	TObjectPtr<UTexture2D> ClearAllKeyIcon;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cosmetic|KeyHint")
+	TObjectPtr<UTexture2D> BackKeyIcon;
+
+	// 키 옆 글자 (다른 화면처럼 영어 한 단어)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cosmetic|KeyHint")
+	FText ClearAllKeyLabel = NSLOCTEXT("DRWardrobe", "KeyHintClearAll", "CLEAR");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cosmetic|KeyHint")
+	FText BackKeyLabel = NSLOCTEXT("DRWardrobe", "KeyHintBack", "BACK");
 
 private:
 	UFUNCTION()
@@ -154,6 +185,9 @@ private:
 
 	UFUNCTION()
 	void HandleClearAllClicked();
+
+	UFUNCTION()
+	void HandleBackClicked();
 
 	// 현재 탭의 칸을 다시 만든다 (그리드나 칸 클래스가 없으면 아무 것도 하지 않는다)
 	void RebuildSlotGrid();

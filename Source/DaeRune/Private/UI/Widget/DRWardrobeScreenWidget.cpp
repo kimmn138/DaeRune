@@ -14,7 +14,38 @@
 #include "Components/UniformGridPanel.h"
 #include "Components/UniformGridSlot.h"
 #include "Components/Button.h"
+#include "Engine/Texture2D.h"
+#include "UObject/StructOnScope.h"
 #include "DaeRune/DRLogChannels.h"
+
+namespace DRWardrobeKeyHint
+{
+	// 키 안내 칸(WBP_KeyHint)의 BP 함수 SetTextAndImage(InImage, InText) — 설정 · 업그레이드 막대의 Construct 가 부르는 것과 같다
+	void Set(UUserWidget* Hint, UTexture2D* Icon, const FText& Label)
+	{
+		static const FName FunctionName(TEXT("SetTextAndImage"));
+		UFunction* Function = Hint ? Hint->FindFunction(FunctionName) : nullptr;
+		if (!Function)
+		{
+			if (Hint)
+			{
+				UE_LOG(LogDR, Warning, TEXT("[Cosmetic] 키 안내 %s 에 SetTextAndImage 가 없다 — WBP_KeyHint 가 아닌가?"), *Hint->GetName());
+			}
+			return;
+		}
+
+		FStructOnScope Params(Function);
+		if (const FObjectPropertyBase* ImageParam = CastField<FObjectPropertyBase>(Function->FindPropertyByName(TEXT("InImage"))))
+		{
+			ImageParam->SetObjectPropertyValue_InContainer(Params.GetStructMemory(), Icon);
+		}
+		if (const FTextProperty* TextParam = CastField<FTextProperty>(Function->FindPropertyByName(TEXT("InText"))))
+		{
+			TextParam->SetPropertyValue_InContainer(Params.GetStructMemory(), Label);
+		}
+		Hint->ProcessEvent(Function, Params.GetStructMemory());
+	}
+}
 
 EPlayerCharacterClass UDRWardrobeScreenWidget::GetViewedClass() const
 {
@@ -106,6 +137,11 @@ void UDRWardrobeScreenWidget::RebuildSlotGrid()
 void UDRWardrobeScreenWidget::HandleClearAllClicked()
 {
 	ClearAll();
+}
+
+void UDRWardrobeScreenWidget::HandleBackClicked()
+{
+	RequestClose();
 }
 
 void UDRWardrobeScreenWidget::GetCurrentSkinViewModels(TArray<FDRSkinViewModel>& OutViewModels) const
@@ -216,6 +252,14 @@ void UDRWardrobeScreenWidget::NativeConstruct()
 	{
 		Btn_ClearAll->OnClicked.AddUniqueDynamic(this, &UDRWardrobeScreenWidget::HandleClearAllClicked);
 	}
+	if (Btn_Back)
+	{
+		Btn_Back->OnClicked.AddUniqueDynamic(this, &UDRWardrobeScreenWidget::HandleBackClicked);
+	}
+
+	// 우하단 키 안내 — 칸 자신의 Construct 가 끝난 뒤라 여기서 넣은 값이 남는다
+	DRWardrobeKeyHint::Set(WBPKeyHint_C, ClearAllKeyIcon, ClearAllKeyLabel);
+	DRWardrobeKeyHint::Set(WBPKeyHint_ESC, BackKeyIcon, BackKeyLabel);
 
 	CurrentCategory = DRIsValidCosmeticCategory(DefaultCategory)
 		? DefaultCategory
@@ -263,6 +307,10 @@ void UDRWardrobeScreenWidget::NativeDestruct()
 	if (Btn_ClearAll)
 	{
 		Btn_ClearAll->OnClicked.RemoveDynamic(this, &UDRWardrobeScreenWidget::HandleClearAllClicked);
+	}
+	if (Btn_Back)
+	{
+		Btn_Back->OnClicked.RemoveDynamic(this, &UDRWardrobeScreenWidget::HandleBackClicked);
 	}
 
 	// GameInstance 는 레벨 전환에도 살아남는다. 해제하지 않으면 죽은 위젯이 델리게이트에 남는다.

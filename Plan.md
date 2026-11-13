@@ -135,7 +135,7 @@ C  콘텐츠 (9장) — 소켓 · 위치 눈 다듬기(디자이너) · FACE 옷
 | D-14 | **잠긴 칸도 버튼을 활성으로 둔다.** 클릭은 `TryEquip` 이 거절하고 `OnEquipRejected(SkinId, UnlockHint)` 를 발행 | 비활성 버튼은 툴팁 · 호버를 못 받아 "왜 잠겼는지"를 못 보여준다 |
 | D-15 | 탭 선택 표시는 **화면이 WidgetTree 를 돌며 일괄로** 넣는다 (`UpdateTabSelection` → 탭 `SetSelected` → 필 · 라벨 색은 탭 C++ 이 그린다, `OnSelectionChanged` 는 연출용) | 탭을 추가하고 배선을 잊으면 그 탭만 조용히 고장 난다 |
 | D-16 | 화면이 `FInputModeUIOnly` 라 **ESC · C 는 위젯 `NativeOnKeyDown` 이 받는다**(+ 컨트롤러 `HandleToggleSettings` 에도 ESC 분기). **마우스 닫기 버튼 없음** | 다른 창들과 같은 조작. 포커스를 잃은 경우도 대비 |
-| D-17 | Clear All = **4부위 전부 해제, 확인 창 없음**, 위치는 **화면 우하단**(업그레이드 화면 키 힌트와 같은 자리) | 되돌리기가 클릭 한 번이라 확인 창은 과하다 |
+| D-17 | Clear All = **4부위 전부 해제, 확인 창 없음**, 위치는 **화면 우하단**(업그레이드 화면 키 힌트와 같은 자리). 2026-11-13: 설정 · 업그레이드와 같은 키 안내 칸 `[C] CLEAR · [ESC] BACK` 로 | 되돌리기가 클릭 한 번이라 확인 창은 과하다 |
 | D-18 | 아트 미정 — 탭 호버 연출 없음 · 스크롤바 없음 · 썸네일/자물쇠 아트는 추후. **위젯만 두고 브러시는 비운다, 없으면 숨긴다** | 아트가 나오면 브러시만 채우면 된다 |
 | D-19 | 그 로봇의 옷이 **하나도 정의되지 않았으면 옷장이 열리지 않는다** (`OnInteractBlocked`). 치트 `DROpenWardrobe` 는 우회 | "기본" 칸만 있는 화면은 버그처럼 보인다 |
 | D-20 | 스팀 파트너 사이트 등록은 **M6 에서 한 번에**. `SteamApiName` 이 비면 로컬 전용 업적 | 출시 후 도전과제 삭제는 비가역. 게임 쪽 업적 정의는 지금부터 자유롭게 늘려도 된다 |
@@ -350,7 +350,9 @@ CanvasPanel_Root
  │   │                         Category = Head/Face/Body/Tail · LabelText = HEAD/FACE/BODY/TAIL
  │   ├─ ScrollBox_Slots    왼쪽 위 · ★(218, 221) · 684×689★ · Vertical · 스크롤바 Collapsed · Overscroll ✖ · 휠 = When Scrolling Possible
  │   │   └─ UniformGridPanel_Slots   Slot Padding 6 (사방) → 칸 왼쪽 위가 (224, 227), 3 × (216 + 12) = 684
- │   └─ Btn_ClearAll       Anchor 오른쪽 아래 · Alignment (1,1) · (-100, -60) · 112×117 · clear_all (눌림 Tint 0.8) · 툴팁 "전부 벗기 (C)"
+ │   └─ SizeBox_KeyHints   Anchor 오른쪽 아래 · Alignment (1,1) · (-100, -60) · 390×60 · Auto Size — ★2026-11-13 업그레이드 화면 WBP_KeyHintBar_2 와 같은 구조★
+ │       └─ HorizontalBox_KeyHints  Btn_ClearAll{WBPKeyHint_C [WBP_KeyHint] · 세로 가운데} · Spacer 42 · Btn_Back{WBPKeyHint_ESC [WBP_KeyHint_Wide]}
+ │                          투명 버튼(누르면 전부 벗기 / 닫기) · 키 그림 clear_all · T_Key_ESC + 글자 CLEAR · BACK 은 C++ 이 SetTextAndImage 로 넣는다
  └─ Image_ScreenFX       Anchor 중앙 · Alignment (0.5,0.5) · 1613×914 (원본의 92%) · MI_UI_Wardrobe_ScreenFX · Not Hit-Testable
 ```
 
@@ -365,7 +367,7 @@ CanvasPanel_Root
 | 화면효과 92% | 스캔라인 줄 간격 상관 0.95~0.98 (두 시안 · 여러 구역 일치). 원본 크기면 줄 간격이 9% 넓어진다 |
 | 프리뷰 (938,0) 781×1080 | 시안의 피그마 선택 상자 |
 | 그리드 | **시안에 칸이 없어 검증 못 함.** 가로 224 는 패널 안쪽 중앙과 정확히 일치. 칸 배치 시안 `image_1.png` 가 원본 폴더에 없다 — 받으면 같은 방법으로 잰다 |
-| Clear All (-100,-60) | `WBP_UpgradeScreen` 의 키 힌트 바와 같은 앵커 · 오프셋 (D-17) |
+| 키 안내 (-100,-60) 390×60 | `WBP_UpgradeScreen` 의 키 힌트 바(`WBP_KeyHintBar_2`)와 같은 앵커 · 오프셋 · 크기 (D-17). 2026-11-13 전엔 C 키캡(112×117)만 있었다 |
 
 #### 7.1-2 테스트 카탈로그 6벌 (`DA_CosmeticCatalog` — ★2026-10-20 전부 지웠다★, 기록용)
 
