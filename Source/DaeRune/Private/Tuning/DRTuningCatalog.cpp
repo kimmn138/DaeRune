@@ -174,12 +174,14 @@ namespace
 	}
 
 	// 엔진 컴포넌트 중 기획자가 만질 만한 값만 (이동 속도는 MoveSpeed 어트리뷰트가 덮어쓰므로 MaxWalkSpeed 는 뺀다)
+	// 공중 감속(BrakingDecelerationFalling · FallingLateralFriction, 엔진 기본 0): 점프 중 방향키를 떼면 속도가 그대로라 QA 가 조절을 요청했다
 	const TSet<FName>* EngineComponentWhitelist(const UClass* Class)
 	{
 		static const TSet<FName> CharacterMovement =
 		{
 			TEXT("JumpZVelocity"), TEXT("AirControl"), TEXT("GravityScale"), TEXT("MaxAcceleration"),
 			TEXT("BrakingDecelerationWalking"), TEXT("GroundFriction"), TEXT("MaxFlySpeed"), TEXT("MaxStepHeight"),
+			TEXT("BrakingDecelerationFalling"), TEXT("FallingLateralFriction"),
 		};
 		static const TSet<FName> ProjectileMovement =
 		{
