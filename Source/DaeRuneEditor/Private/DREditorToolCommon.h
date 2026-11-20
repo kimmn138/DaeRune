@@ -27,15 +27,28 @@ namespace DREditorToolCommon
 		return Color;
 	}
 
-	inline FName PickTypeface(const UObject* FontObject)
+	// 영어 · 숫자만 쓰는 글자(체력 · 비용 · 옷장 탭)의 폰트. 한글 폰트들도 라틴 글자는 하위 폰트로 Montserrat 를 쓴다
+	inline const TCHAR* LatinFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/Montserrat/Montserrat_Font.Montserrat_Font");
+	inline const FName LatinTypeface(TEXT("SemiBold"));
+
+	// 제목 · 큰 글자의 폰트 — 학교안심 운동장 그대로(영문도 학교안심, Montserrat 하위 폰트 없음)
+	inline const TCHAR* TitleFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/HakgyoansimUndongjangL_Title_Font.HakgyoansimUndongjangL_Title_Font");
+
+	// Preferred 서체가 폰트에 있으면 그것, 없으면 첫 서체
+	inline FName PickTypeface(const UObject* FontObject, FName Preferred = NAME_None)
 	{
 		if (const UFont* Font = Cast<UFont>(FontObject))
 		{
 			if (const FCompositeFont* Composite = Font->GetCompositeFont())
 			{
-				if (Composite->DefaultTypeface.Fonts.Num() > 0)
+				const TArray<FTypefaceEntry>& Fonts = Composite->DefaultTypeface.Fonts;
+				if (!Preferred.IsNone() && Fonts.ContainsByPredicate([Preferred](const FTypefaceEntry& Entry) { return Entry.Name == Preferred; }))
 				{
-					return Composite->DefaultTypeface.Fonts[0].Name;
+					return Preferred;
+				}
+				if (Fonts.Num() > 0)
+				{
+					return Fonts[0].Name;
 				}
 			}
 		}

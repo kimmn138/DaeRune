@@ -75,8 +75,8 @@ namespace DRWardrobeEditor
 	const TCHAR* ScreenFXMIPath = TEXT("/Game/Blueprints/UI/Closet/Material/MI_UI_Wardrobe_ScreenFX.MI_UI_Wardrobe_ScreenFX");
 	const TCHAR* PreviewMaterialPath = TEXT("/Game/Blueprints/UI/Closet/Material/M_CosmeticPreview.M_CosmeticPreview");
 
-	const TCHAR* TitleFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/HakgyoansimUndongjangL_Font.HakgyoansimUndongjangL_Font");
-	const TCHAR* LabelFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/BrunoAceSC-Regular_Font.BrunoAceSC-Regular_Font");
+	const TCHAR* TitleFontPath = DREditorToolCommon::TitleFontPath;	// WARDROBE 제목 → 학교안심 그대로
+	const TCHAR* LabelFontPath = DREditorToolCommon::LatinFontPath;	// 탭 라벨(영문 대문자) → Montserrat SemiBold
 	const TCHAR* BodyFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/Pretendard-SemiBold__1__Font.Pretendard-SemiBold__1__Font");
 
 	struct FLog
@@ -92,9 +92,9 @@ namespace DRWardrobeEditor
 
 
 
-	FSlateFontInfo MakeFont(const UObject* FontObject, float Size)
+	FSlateFontInfo MakeFont(const UObject* FontObject, float Size, FName Typeface = NAME_None)
 	{
-		return FSlateFontInfo(FontObject, Size, PickTypeface(FontObject));
+		return FSlateFontInfo(FontObject, Size, PickTypeface(FontObject, Typeface));
 	}
 
 	FSlateBrush MakeImageBrush(UObject* Resource, const FVector2D& Size)
@@ -284,7 +284,7 @@ bool UDRWardrobeEditorTools::BuildWardrobeTabWidget(FString& OutLog)
 	{
 		// 실제 글자는 인스턴스의 LabelText 가 덮어쓴다. 대문자 (T-19)
 		Label->SetText(FText::AsCultureInvariant(TEXT("HEAD")));
-		Label->SetFont(MakeFont(LabelFont, 14.4f));	// 19.2px (D-24)
+		Label->SetFont(MakeFont(LabelFont, 14.4f, DREditorToolCommon::LatinTypeface));	// 19.2px (D-24)
 		Label->SetColorAndOpacity(FSlateColor(SRGB(0x66, 0x76, 0xB8)));
 		Label->SetJustification(ETextJustify::Center);
 		Label->SetVisibility(ESlateVisibility::HitTestInvisible);	// 버튼 위에 있으므로 클릭을 통과시킨다 (T-41)
@@ -371,7 +371,7 @@ bool UDRWardrobeEditorTools::BuildWardrobeSlotWidget(FString& OutLog)
 		NameSlot->SetPadding(FMargin(0.0f, 6.0f, 0.0f, 0.0f));
 	}
 	NameText->SetText(FText::AsCultureInvariant(TEXT("Name")));
-	NameText->SetFont(MakeFont(BodyFont, 13.5f));	// 한글 → Pretendard (BrunoAce 에는 한글이 없다)
+	NameText->SetFont(MakeFont(BodyFont, 13.5f));	// 한글 → Pretendard (영문은 그 폰트의 하위 폰트 Montserrat 가 그린다)
 	NameText->SetColorAndOpacity(FSlateColor(SRGB(0xDD, 0xF7, 0xFF)));
 	NameText->SetJustification(ETextJustify::Center);
 	NameText->SetAutoWrapText(true);

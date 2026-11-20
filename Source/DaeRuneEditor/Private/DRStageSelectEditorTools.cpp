@@ -56,7 +56,9 @@ namespace DRStageSelectEditor
 	const TCHAR* KeyEnterPath = TEXT("/Game/DaeRuneAssets/UI/Settimgs/T_Key_ENTER.T_Key_ENTER");
 
 	// 스테이지 이름 · "스테이지 N" · 제목 · 키 안내는 학교안심 운동장, 임무 설명은 Pretendard (Figma 글꼴을 렌더링해 맞춰 봤다)
+	// 화면 제목 · 스테이지 이름은 제목용(영문도 학교안심), 나머지는 영문을 Montserrat 로 그리는 기본 학교안심
 	const TCHAR* HakgyoansimFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/HakgyoansimUndongjangL_Font.HakgyoansimUndongjangL_Font");
+	const TCHAR* TitleFontPath = DREditorToolCommon::TitleFontPath;
 	const TCHAR* PretendardFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/Pretendard-SemiBold__1__Font.Pretendard-SemiBold__1__Font");
 
 	struct FLog
@@ -296,6 +298,7 @@ bool UDRStageSelectEditorTools::BuildStageSelectCardWidget(FString& OutLog)
 	UTexture2D* LockTexture = Load<UTexture2D>(LockIconPath, Log);
 	UTexture2D* StampTexture = Load<UTexture2D>(ClearedStampPath, Log);
 	UObject* Hakgyoansim = Load<UObject>(HakgyoansimFontPath, Log);
+	UObject* TitleFont = Load<UObject>(TitleFontPath, Log);
 	UObject* Pretendard = Load<UObject>(PretendardFontPath, Log);
 	if (!Blueprint || !Blueprint->WidgetTree) return false;
 
@@ -350,7 +353,7 @@ bool UDRStageSelectEditorTools::BuildStageSelectCardWidget(FString& OutLog)
 		AddToVBox(TextBlock, NameRow, HAlign_Left);
 
 		// 런타임 글자는 C++ 이 넣는다 — 미리보기 글자는 번역 수집에서 빠지도록 CultureInvariant
-		AddToHBox(NameRow, MakeText(Tree, TEXT("Txt_Title"), FText::AsCultureInvariant(TEXT("연구 격납고")), Hakgyoansim, Spec::TitlePx, true), VAlign_Center);
+		AddToHBox(NameRow, MakeText(Tree, TEXT("Txt_Title"), FText::AsCultureInvariant(TEXT("연구 격납고")), TitleFont, Spec::TitlePx, true), VAlign_Center);
 
 		UOverlay* Badge = Make<UOverlay>(Tree, TEXT("Overlay_Badge"));
 		Badge->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -388,6 +391,7 @@ bool UDRStageSelectEditorTools::BuildStageSelectScreenWidget(FString& OutLog)
 	UTexture2D* KeyEscTexture = Load<UTexture2D>(KeyEscPath, Log);
 	UTexture2D* KeyEnterTexture = Load<UTexture2D>(KeyEnterPath, Log);
 	UObject* Hakgyoansim = Load<UObject>(HakgyoansimFontPath, Log);
+	UObject* TitleFont = Load<UObject>(TitleFontPath, Log);
 	if (!Blueprint || !Blueprint->WidgetTree) return false;
 
 	Blueprint->Modify();
@@ -413,7 +417,7 @@ bool UDRStageSelectEditorTools::BuildStageSelectScreenWidget(FString& OutLog)
 	AddToCanvas(Root, Dim, Stretch, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 
 	// 2) 제목 — 가운데, 학교안심 55px
-	UTextBlock* Title = MakeText(Tree, TEXT("Txt_ScreenTitle"), NSLOCTEXT("DRStageSelect", "ScreenTitle", "스테이지 선택"), Hakgyoansim, Spec::ScreenTitlePx, false);
+	UTextBlock* Title = MakeText(Tree, TEXT("Txt_ScreenTitle"), NSLOCTEXT("DRStageSelect", "ScreenTitle", "스테이지 선택"), TitleFont, Spec::ScreenTitlePx, false);
 	Title->SetJustification(ETextJustify::Center);
 	AddToCanvas(Root, Title, TopCenter, FVector2D(0.5, 0.0), FVector2D(0.0, Spec::ScreenTitleTop), true);
 

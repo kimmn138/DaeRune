@@ -45,9 +45,9 @@ namespace DRCharacterInfoEditor
 	using DREditorToolCommon::CompileAndMark;
 	using DREditorToolCommon::SetObjectProperty;
 
-	const TCHAR* TitleFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/HakgyoansimUndongjangL_Font.HakgyoansimUndongjangL_Font");
+	const TCHAR* TitleFontPath = DREditorToolCommon::TitleFontPath;	// 캐릭터 이름 → 학교안심 그대로
 	const TCHAR* BodyFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/HakgyoansimUndongjangL_Font.HakgyoansimUndongjangL_Font");
-	const TCHAR* NumberFontPath = TEXT("/Game/DaeRuneAssets/UI/Font/BrunoAceSC-Regular_Font.BrunoAceSC-Regular_Font");
+	const TCHAR* NumberFontPath = DREditorToolCommon::LatinFontPath;	// 숫자 → Montserrat SemiBold
 
 	// ===== 배경 그림 배치 =====
 	// 예전 그림(테두리만, 4386×2256)을 1536×790 에 그렸다 → 배율 1536/4386.
@@ -333,7 +333,7 @@ namespace DRCharacterInfoEditor
 		{
 			UTextBlock* TextBlock = Make<UTextBlock>(Tree, Name);
 			TextBlock->SetText(Text);
-			TextBlock->SetFont(FSlateFontInfo(Font, Size, PickTypeface(Font)));
+			TextBlock->SetFont(FSlateFontInfo(Font, Size, PickTypeface(Font, Font == NumberFont ? DREditorToolCommon::LatinTypeface : NAME_None)));
 			TextBlock->SetColorAndOpacity(FSlateColor(Color));
 			return TextBlock;
 		}
