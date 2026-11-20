@@ -296,6 +296,13 @@ Enemies can be stunned by knockback into walls:
 
 **Execution**: `ADREnemy::OnHit()` callback applies stun GE via ASC
 
+### Enemy Facing (AI focus → `ADREnemy::Tick`)
+Enemies turn only on the server: `ADREnemy::Tick` moves the actor yaw toward the AI ControlRotation (`RotationInterpSpeed` proportional step, capped at `MaxTurnRate` deg/s = 720 so a 180° turn is not a one-frame snap). They do not turn at all while stunned. ControlRotation follows the AI focus priorities: Gameplay (taunt, first attacker, the DragonFly/Mole services, BT tasks) > Move (path following while moving) > Default.
+
+- **Default focus = combat target**: every tick `ADRAIController::UpdateCombatFacingFocus` (from `UpdateControlRotation`) puts BB `TargetToFollow` (or Phase3 `TargetCleanserSite` when there is none) in the Default slot. It clears the slot while `ADREnemy::ShouldFaceCombatTarget()` is false: dead, stunned, or an `Abilities.Attack/Skill1/Skill2` ability active. The attack direction is fixed when the attack starts, so side-stepping still dodges. Before 2026-11-20 nothing was focused once the target was inside the "Get Close" MoveTo radius (`BTT_Attack_*` call `SetFocus` and `ClearFocus` in the same frame, and the attack montages have no motion-warping window), so a dog with the player at its back kept biting forward.
+- **Turn before attacking**: `UDRBTTask_FaceTarget` ("Face Target (DR)", Precision 30°, MaxDuration 1s) sits between "Get Close" and the melee attack task in the player and site branches of `BT_EnemyBehaviorTree_Dog/Armadillo/Armadillo_Phase1/Phase3_Common/Phase3_Elite`. On timeout it fails, so the tree picks again instead of attacking the air. New melee BTs need it too. Insert it with `unreal.DRBehaviorTreeEditorTools.insert_task_before` (Python cannot create BT graph nodes).
+- The mole boss (`RotationInterpSpeed` 4, Gameplay focus from its service) and dragonflies behave as before. `BTT_RotateToFaceTarget` is an old broken BP that calls removed C++ functions and is used by no BT.
+
 ### Character Class System
 Two separate class enums (both in `AbilitySystem/Data/CharacterClassInfo.h`):
 
@@ -375,7 +382,7 @@ Enhanced Input System with GAS integration:
 - Widgets (Blueprint): `Content/Blueprints/UI/`
 
 ### Editor Tools
-- Editor-only module `DaeRuneEditor`: `Source/DaeRuneEditor/` (WBP generators incl. `UDRInteractionPromptEditorTools`, texture/VFX tools, `UDRBlueprintMaintenanceTools` for BP graph cleanup — called from editor Python)
+- Editor-only module `DaeRuneEditor`: `Source/DaeRuneEditor/` (WBP generators incl. `UDRInteractionPromptEditorTools`, texture/VFX tools, `UDRBlueprintMaintenanceTools` for BP graph cleanup, `UDRBehaviorTreeEditorTools` for inserting BT task nodes — called from editor Python)
 - Console cheats (`DR*` commands): `UDRCheatManager` (`Source/DaeRune/Public/Player/DRCheatManager.h`), development builds only
 
 ### Actors

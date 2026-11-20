@@ -50,6 +50,9 @@ protected:
 
 	virtual void BeginPlay() override;
 
+	// 매 틱 ControlRotation 을 포커스로 맞추기 직전에 전투 대상 기본 포커스를 갱신한다
+	virtual void UpdateControlRotation(float DeltaTime, bool bUpdatePawn = true) override;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI|Perception")
 	TObjectPtr<UAIPerceptionComponent> AIPerceptionComponent;
 
@@ -72,4 +75,13 @@ private:
 
 	// 플레이어 제거
 	void RemovePlayer(AActor* Player);
+
+	/**
+	 * 전투 대상(블랙보드 TargetToFollow, 없으면 페이즈3 TargetCleanserSite)을 Default 우선순위 포커스로 건다.
+	 * 이동 중에는 길찾기의 Move 포커스, 도발 · 첫 공격자 · BT 태스크는 Gameplay 포커스가 이긴다 —
+	 * 그 둘이 없을 때(공격 사이 대기, 대상이 MoveTo 도달 반경 안에 있어 움직이지 않을 때) 대상 쪽으로 돈다.
+	 * 예전에는 이때 걸린 포커스가 없어 ControlRotation 이 자기 방향에 머물렀고, 등 뒤에 붙은 플레이어를 두고 앞만 공격했다.
+	 * 공격 · 스킬 중이거나 기절 · 사망이면 비운다 (ADREnemy::ShouldFaceCombatTarget)
+	 */
+	void UpdateCombatFacingFocus();
 };

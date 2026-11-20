@@ -31,6 +31,8 @@ namespace DRBlackboardKeys
 	inline const FName DistanceToTarget = TEXT("DistanceToTarget");
 	// ★Plan8(시선집중)★ BTS_CheckValidTarget 의 "벽에 가림" 타이머 — 도발 동안 0 으로 되돌린다 (Plan8 D-16)
 	inline const FName UnreachableSince = TEXT("UnreachableSince");
+	// 페이즈3 공격 사이트 (BTS_FindNearestCleanserSite 가 채운다 — BB_EnemyBlackboard_Phase3 에만 있다)
+	inline const FName TargetCleanserSite = TEXT("TargetCleanserSite");
 
 	// DragonFly 전용
 	inline const FName IsLockedDown = TEXT("IsLockedDown");

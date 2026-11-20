@@ -88,15 +88,38 @@ void ADREnemy::Tick(float DeltaTime)
 	// 사망 상태 또는 튜토리얼 더미는 회전 처리하지 않음
 	if (bDead || bIsTutorialDummy) return;
 
-	if (HasAuthority())
+	// 기절 중에는 어떤 포커스(도발 · 첫 공격자 포함)로도 돌지 않는다
+	if (HasAuthority() && !bIsStunned)
 	{
-		// 서버: ControlRotation(SetFocus)을 향해 직접 회전
+		// 서버: ControlRotation(AI 포커스 — 전투 대상은 ADRAIController 가 기본 포커스로 건다)을 향해 직접 회전
 		// (클라이언트는 ReplicatedMovement의 Rotation + CharacterMovement 회전 스무딩으로 따라가므로 별도 복제 불필요)
-		FRotator CurrentControlRot = GetControlRotation();
-		FRotator CurrentActorRot = GetActorRotation();
-		FRotator NewRotation = FMath::RInterpTo(CurrentActorRot, CurrentControlRot, DeltaTime, RotationInterpSpeed);
-		SetActorRotation(FRotator(0.f, NewRotation.Yaw, 0.f));
+		const float CurrentYaw = GetActorRotation().Yaw;
+		const float DeltaYaw = FMath::FindDeltaAngleDegrees(CurrentYaw, GetControlRotation().Yaw);
+
+		// 예전 RInterpTo 와 같은 비례 회전에 초당 상한만 건다
+		float Step = DeltaYaw * FMath::Clamp(DeltaTime * RotationInterpSpeed, 0.f, 1.f);
+		if (MaxTurnRate > 0.f)
+		{
+			const float MaxStep = MaxTurnRate * DeltaTime;
+			Step = FMath::Clamp(Step, -MaxStep, MaxStep);
+		}
+		SetActorRotation(FRotator(0.f, FRotator::NormalizeAxis(CurrentYaw + Step), 0.f));
 	}
+}
+
+bool ADREnemy::IsCommittedToAttack() const
+{
+	if (!AbilitySystemComponent) return false;
+
+	const FDRGameplayTags& GameplayTags = FDRGameplayTags::Get();
+	return AbilitySystemComponent->HasMatchingGameplayTag(GameplayTags.Abilities_Attack)
+		|| AbilitySystemComponent->HasMatchingGameplayTag(GameplayTags.Abilities_Skill1)
+		|| AbilitySystemComponent->HasMatchingGameplayTag(GameplayTags.Abilities_Skill2);
+}
+
+bool ADREnemy::ShouldFaceCombatTarget() const
+{
+	return !bDead && !bIsTutorialDummy && !bIsStunned && !IsCommittedToAttack();
 }
 
 void ADREnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

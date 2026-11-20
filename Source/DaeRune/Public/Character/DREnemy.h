@@ -158,6 +158,15 @@ public:
 	// ★Plan5(공기탄칩)★ 보스 여부(bIsBoss) 읽기 전용 — 공기탄칩② 흡착이 보스를 거른다 (Plan5 T-100)
 	bool IsBoss() const { return bIsBoss; }
 
+	/**
+	 * 공격 · 스킬 어빌리티가 도는 중인가 (그 어빌리티의 ActivationOwnedTags = Abilities.Attack / Skill1 / Skill2).
+	 * 이 동안은 전투 대상을 따라 돌지 않는다 — 공격 방향은 시작할 때 정해지고, 옆으로 피하면 빗나간다.
+	 */
+	bool IsCommittedToAttack() const;
+
+	/** 지금 전투 대상(블랙보드 TargetToFollow 등) 쪽으로 돌아도 되는가 — ADRAIController 가 기본 포커스를 걸지 정한다 */
+	bool ShouldFaceCombatTarget() const;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void InitAbilityActorInfo() override;
@@ -194,6 +203,11 @@ protected:
 	// 두더지 보스처럼 "느리게 도는" 연출이 필요한 적만 BP 에서 낮춘다. (Plan7 §5.2)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "0.1"))
 	float RotationInterpSpeed = 10.f;
+
+	// 회전 속도 상한(도/초, 0 = 상한 없음). RInterpTo 는 남은 각도에 비례해 돌아 180° 를 돌 때 첫 프레임이
+	// 초당 1800° 로 홱 꺾였다 — 큰 회전만 이 속도로 눌러 돌아서는 동작이 보이게 하고, 작은 보정은 그대로 둔다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = "0.0"))
+	float MaxTurnRate = 720.f;
 
 	// AI 비헤이비어 트리
 	UPROPERTY(EditAnywhere, Category = "AI")

@@ -12,6 +12,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Character/DREnemy.h"
 
 ADRAIController::ADRAIController()
 {
@@ -107,6 +108,41 @@ void ADRAIController::BeginPlay()
 		AIPerceptionComponent->OnTargetPerceptionUpdated.AddDynamic(this, &ADRAIController::OnTargetPerceptionUpdated);
 	}
 
+}
+
+void ADRAIController::UpdateControlRotation(float DeltaTime, bool bUpdatePawn)
+{
+	UpdateCombatFacingFocus();
+	Super::UpdateControlRotation(DeltaTime, bUpdatePawn);
+}
+
+void ADRAIController::UpdateCombatFacingFocus()
+{
+	AActor* NewTarget = nullptr;
+
+	const ADREnemy* Enemy = Cast<ADREnemy>(GetPawn());
+	if (Enemy && Blackboard && Enemy->ShouldFaceCombatTarget())
+	{
+		NewTarget = Cast<AActor>(Blackboard->GetValueAsObject(DRBlackboardKeys::TargetToFollow));
+
+		// 페이즈3 에서 플레이어 대상이 없으면 BT 가 사이트를 치러 간다 — 도착하면 사이트를 본다 (키가 없는 BB 면 null)
+		if (!NewTarget)
+		{
+			NewTarget = Cast<AActor>(Blackboard->GetValueAsObject(DRBlackboardKeys::TargetCleanserSite));
+		}
+	}
+
+	// Default 칸은 여기서만 쓴다 — 대상이 바뀔 때만 다시 건다
+	if (NewTarget == GetFocusActorForPriority(EAIFocusPriority::Default)) return;
+
+	if (NewTarget)
+	{
+		SetFocus(NewTarget, EAIFocusPriority::Default);
+	}
+	else
+	{
+		ClearFocus(EAIFocusPriority::Default);
+	}
 }
 
 void ADRAIController::OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
